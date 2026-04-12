@@ -24,18 +24,18 @@ class EmbyAuthController extends Controller
             ->first();
 
         if (! $connection) {
-            return redirect()->route('login')->withErrors(['username' => __('Emby authentication is not available.')]);
+            return to_route('login')->withErrors(['username' => __('Emby authentication is not available.')]);
         }
 
         $response = Http::withHeaders([
             'X-Emby-Token' => $connection->api_key,
-        ])->post("{$connection->url}/Users/AuthenticateByName", [
+        ])->post($connection->url . '/Users/AuthenticateByName', [
             'Username' => $request->input('username'),
             'Pw' => $request->input('password'),
         ]);
 
         if (! $response->successful()) {
-            return redirect()->route('login')->withErrors(['username' => __('Invalid Emby credentials.')]);
+            return to_route('login')->withErrors(['username' => __('Invalid Emby credentials.')]);
         }
 
         $embyUserId = $response->json('User.Id');
