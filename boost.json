@@ -1,0 +1,15 @@
+{
+    "agents": [
+        "claude_code"
+    ],
+    "guidelines": true,
+    "mcp": true,
+    "nightwatch_mcp": false,
+    "sail": true,
+    "skills": [
+        "fortify-development",
+        "laravel-best-practices",
+        "wayfinder-development",
+        "pest-testing"
+    ]
+}
