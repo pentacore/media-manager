@@ -3,12 +3,12 @@
 use App\Models\ServiceConnection;
 use App\Models\User;
 
-test('guests cannot access service connections', function () {
+test('guests cannot access service connections', function (): void {
     $this->get(route('admin.connections.index'))
         ->assertRedirect(route('login'));
 });
 
-test('non-admin users cannot access service connections', function () {
+test('non-admin users cannot access service connections', function (): void {
     $user = User::factory()->member()->create();
 
     $this->actingAs($user)
@@ -16,7 +16,7 @@ test('non-admin users cannot access service connections', function () {
         ->assertForbidden();
 });
 
-test('admin can list service connections', function () {
+test('admin can list service connections', function (): void {
     $admin = User::factory()->admin()->create();
     ServiceConnection::factory()->sonarr()->create();
     ServiceConnection::factory()->radarr()->create();
@@ -30,7 +30,7 @@ test('admin can list service connections', function () {
         );
 });
 
-test('admin can view create form', function () {
+test('admin can view create form', function (): void {
     $admin = User::factory()->admin()->create();
 
     $this->actingAs($admin)
@@ -42,7 +42,7 @@ test('admin can view create form', function () {
         );
 });
 
-test('admin can store a service connection', function () {
+test('admin can store a service connection', function (): void {
     $admin = User::factory()->admin()->create();
 
     $this->actingAs($admin)
@@ -66,7 +66,7 @@ test('admin can store a service connection', function () {
     expect($connection->webhook_token)->toBe('my-webhook-secret');
 });
 
-test('store validates required fields', function () {
+test('store validates required fields', function (): void {
     $admin = User::factory()->admin()->create();
 
     $this->actingAs($admin)
@@ -74,7 +74,7 @@ test('store validates required fields', function () {
         ->assertSessionHasErrors(['type', 'name', 'url', 'api_key', 'webhook_token']);
 });
 
-test('store validates service type', function () {
+test('store validates service type', function (): void {
     $admin = User::factory()->admin()->create();
 
     $this->actingAs($admin)
@@ -88,7 +88,7 @@ test('store validates service type', function () {
         ->assertSessionHasErrors('type');
 });
 
-test('store validates url format', function () {
+test('store validates url format', function (): void {
     $admin = User::factory()->admin()->create();
 
     $this->actingAs($admin)
@@ -102,7 +102,7 @@ test('store validates url format', function () {
         ->assertSessionHasErrors('url');
 });
 
-test('admin can view edit form', function () {
+test('admin can view edit form', function (): void {
     $admin = User::factory()->admin()->create();
     $connection = ServiceConnection::factory()->sonarr()->create();
 
@@ -116,7 +116,7 @@ test('admin can view edit form', function () {
         );
 });
 
-test('admin can update a service connection', function () {
+test('admin can update a service connection', function (): void {
     $admin = User::factory()->admin()->create();
     $connection = ServiceConnection::factory()->sonarr()->create();
 
@@ -135,7 +135,7 @@ test('admin can update a service connection', function () {
     expect($connection->url)->toBe('http://new-sonarr.local:8989');
 });
 
-test('admin can delete a service connection', function () {
+test('admin can delete a service connection', function (): void {
     $admin = User::factory()->admin()->create();
     $connection = ServiceConnection::factory()->sonarr()->create();
 
@@ -146,7 +146,7 @@ test('admin can delete a service connection', function () {
     $this->assertDatabaseMissing('service_connections', ['id' => $connection->id]);
 });
 
-test('admin can toggle connection active status', function () {
+test('admin can toggle connection active status', function (): void {
     $admin = User::factory()->admin()->create();
     $connection = ServiceConnection::factory()->sonarr()->create(['is_active' => true]);
 

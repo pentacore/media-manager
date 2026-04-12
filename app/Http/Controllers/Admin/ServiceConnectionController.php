@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Http\Controllers\Admin;
 
 use App\Enums\ServiceType;
@@ -19,7 +21,7 @@ class ServiceConnectionController extends Controller
             'connections' => ServiceConnection::query()
                 ->orderBy('name')
                 ->get()
-                ->map(fn (ServiceConnection $connection) => [
+                ->map(fn (ServiceConnection $connection): array => [
                     'id' => $connection->id,
                     'type' => $connection->type,
                     'name' => $connection->name,
@@ -34,9 +36,9 @@ class ServiceConnectionController extends Controller
     public function create(): Response
     {
         return Inertia::render('Admin/Connections/Create', [
-            'serviceTypes' => collect(ServiceType::cases())->map(fn (ServiceType $type) => [
-                'value' => $type->value,
-                'label' => $type->label(),
+            'serviceTypes' => collect(ServiceType::cases())->map(fn (ServiceType $serviceType): array => [
+                'value' => $serviceType->value,
+                'label' => $serviceType->label(),
             ]),
         ]);
     }
@@ -62,9 +64,9 @@ class ServiceConnectionController extends Controller
                 'webhook_token' => $connection->webhook_token,
                 'is_active' => $connection->is_active,
             ],
-            'serviceTypes' => collect(ServiceType::cases())->map(fn (ServiceType $type) => [
-                'value' => $type->value,
-                'label' => $type->label(),
+            'serviceTypes' => collect(ServiceType::cases())->map(fn (ServiceType $serviceType): array => [
+                'value' => $serviceType->value,
+                'label' => $serviceType->label(),
             ]),
         ]);
     }
@@ -92,7 +94,7 @@ class ServiceConnectionController extends Controller
         $connection->update(['is_active' => ! $connection->is_active]);
 
         $status = $connection->is_active ? 'enabled' : 'disabled';
-        Inertia::flash('toast', ['type' => 'success', 'message' => __("Connection {$status}.")]);
+        Inertia::flash('toast', ['type' => 'success', 'message' => __(sprintf('Connection %s.', $status))]);
 
         return to_route('admin.connections.index');
     }

@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Http\Controllers\Settings;
 
 use App\Http\Controllers\Controller;
@@ -28,16 +30,16 @@ class SecurityController extends Controller implements HasMiddleware
     /**
      * Show the user's security settings page.
      */
-    public function edit(TwoFactorAuthenticationRequest $request): Response
+    public function edit(TwoFactorAuthenticationRequest $twoFactorAuthenticationRequest): Response
     {
         $props = [
             'canManageTwoFactor' => Features::canManageTwoFactorAuthentication(),
         ];
 
         if (Features::canManageTwoFactorAuthentication()) {
-            $request->ensureStateIsValid();
+            $twoFactorAuthenticationRequest->ensureStateIsValid();
 
-            $props['twoFactorEnabled'] = $request->user()->hasEnabledTwoFactorAuthentication();
+            $props['twoFactorEnabled'] = $twoFactorAuthenticationRequest->user()->hasEnabledTwoFactorAuthentication();
             $props['requiresConfirmation'] = Features::optionEnabled(Features::twoFactorAuthentication(), 'confirm');
         }
 
@@ -47,10 +49,10 @@ class SecurityController extends Controller implements HasMiddleware
     /**
      * Update the user's password.
      */
-    public function update(PasswordUpdateRequest $request): RedirectResponse
+    public function update(PasswordUpdateRequest $passwordUpdateRequest): RedirectResponse
     {
-        $request->user()->update([
-            'password' => $request->password,
+        $passwordUpdateRequest->user()->update([
+            'password' => $passwordUpdateRequest->password,
         ]);
 
         Inertia::flash('toast', ['type' => 'success', 'message' => __('Password updated.')]);

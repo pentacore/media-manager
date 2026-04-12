@@ -1,6 +1,5 @@
 <?php
 
-use App\Enums\ServiceType;
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
@@ -9,18 +8,18 @@ return new class extends Migration
 {
     public function up(): void
     {
-        Schema::create('service_connections', function (Blueprint $table) {
-            $table->id();
-            $table->string('type');
-            $table->string('name');
-            $table->string('url');
-            $table->text('api_key');
-            $table->text('webhook_token');
-            $table->boolean('is_active')->default(true);
-            $table->timestamp('last_seen_at')->nullable();
-            $table->string('version')->nullable();
-            $table->json('settings')->nullable();
-            $table->timestamps();
+        Schema::create('service_connections', function (Blueprint $blueprint): void {
+            $blueprint->id();
+            $blueprint->string('type');
+            $blueprint->string('name');
+            $blueprint->string('url');
+            $blueprint->text('api_key');
+            $blueprint->text('webhook_token');
+            $blueprint->boolean('is_active')->default(true);
+            $blueprint->timestamp('last_seen_at')->nullable();
+            $blueprint->string('version')->nullable();
+            $blueprint->json('settings')->nullable();
+            $blueprint->timestamps();
         });
     }
 

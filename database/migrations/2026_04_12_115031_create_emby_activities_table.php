@@ -8,18 +8,18 @@ return new class extends Migration
 {
     public function up(): void
     {
-        Schema::create('emby_activities', function (Blueprint $table) {
-            $table->id();
-            $table->foreignId('emby_user_link_id')->constrained()->cascadeOnDelete();
-            $table->string('media_type');
-            $table->string('media_title');
-            $table->string('series_title')->nullable();
-            $table->string('emby_item_id');
-            $table->string('action');
-            $table->bigInteger('duration_ticks')->nullable();
-            $table->bigInteger('play_position')->nullable();
-            $table->timestamps();
-            $table->index(['emby_user_link_id', 'created_at']);
+        Schema::create('emby_activities', function (Blueprint $blueprint): void {
+            $blueprint->id();
+            $blueprint->foreignId('emby_user_link_id')->constrained()->cascadeOnDelete();
+            $blueprint->string('media_type');
+            $blueprint->string('media_title');
+            $blueprint->string('series_title')->nullable();
+            $blueprint->string('emby_item_id');
+            $blueprint->string('action');
+            $blueprint->bigInteger('duration_ticks')->nullable();
+            $blueprint->bigInteger('play_position')->nullable();
+            $blueprint->timestamps();
+            $blueprint->index(['emby_user_link_id', 'created_at']);
         });
     }
 

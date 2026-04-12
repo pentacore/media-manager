@@ -8,14 +8,14 @@ return new class extends Migration
 {
     public function up(): void
     {
-        Schema::create('action_type_configs', function (Blueprint $table) {
-            $table->id();
-            $table->string('type')->unique();
-            $table->string('label');
-            $table->text('description')->nullable();
-            $table->boolean('requires_approval')->default(true);
-            $table->boolean('is_enabled')->default(true);
-            $table->timestamps();
+        Schema::create('action_type_configs', function (Blueprint $blueprint): void {
+            $blueprint->id();
+            $blueprint->string('type')->unique();
+            $blueprint->string('label');
+            $blueprint->text('description')->nullable();
+            $blueprint->boolean('requires_approval')->default(true);
+            $blueprint->boolean('is_enabled')->default(true);
+            $blueprint->timestamps();
         });
     }
 

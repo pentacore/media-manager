@@ -8,14 +8,14 @@ return new class extends Migration
 {
     public function up(): void
     {
-        Schema::create('webhook_events', function (Blueprint $table) {
-            $table->id();
-            $table->foreignId('service_connection_id')->constrained()->cascadeOnDelete();
-            $table->string('event_type');
-            $table->json('payload');
-            $table->timestamp('processed_at')->nullable();
-            $table->timestamps();
-            $table->index('event_type');
+        Schema::create('webhook_events', function (Blueprint $blueprint): void {
+            $blueprint->id();
+            $blueprint->foreignId('service_connection_id')->constrained()->cascadeOnDelete();
+            $blueprint->string('event_type');
+            $blueprint->json('payload');
+            $blueprint->timestamp('processed_at')->nullable();
+            $blueprint->timestamps();
+            $blueprint->index('event_type');
         });
     }
 

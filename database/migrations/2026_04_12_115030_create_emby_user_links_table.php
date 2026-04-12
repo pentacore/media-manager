@@ -8,13 +8,13 @@ return new class extends Migration
 {
     public function up(): void
     {
-        Schema::create('emby_user_links', function (Blueprint $table) {
-            $table->id();
-            $table->foreignId('user_id')->constrained()->cascadeOnDelete();
-            $table->string('emby_user_id');
-            $table->string('emby_username');
-            $table->timestamps();
-            $table->unique(['user_id', 'emby_user_id']);
+        Schema::create('emby_user_links', function (Blueprint $blueprint): void {
+            $blueprint->id();
+            $blueprint->foreignId('user_id')->constrained()->cascadeOnDelete();
+            $blueprint->string('emby_user_id');
+            $blueprint->string('emby_username');
+            $blueprint->timestamps();
+            $blueprint->unique(['user_id', 'emby_user_id']);
         });
     }
 

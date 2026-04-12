@@ -8,18 +8,18 @@ return new class extends Migration
 {
     public function up(): void
     {
-        Schema::create('activity_logs', function (Blueprint $table) {
-            $table->id();
-            $table->foreignId('user_id')->nullable()->constrained()->nullOnDelete();
-            $table->foreignId('service_connection_id')->nullable()->constrained()->nullOnDelete();
-            $table->string('action');
-            $table->string('subject_type')->nullable();
-            $table->unsignedBigInteger('subject_id')->nullable();
-            $table->string('description');
-            $table->json('metadata')->nullable();
-            $table->timestamps();
-            $table->index(['subject_type', 'subject_id']);
-            $table->index('action');
+        Schema::create('activity_logs', function (Blueprint $blueprint): void {
+            $blueprint->id();
+            $blueprint->foreignId('user_id')->nullable()->constrained()->nullOnDelete();
+            $blueprint->foreignId('service_connection_id')->nullable()->constrained()->nullOnDelete();
+            $blueprint->string('action');
+            $blueprint->string('subject_type')->nullable();
+            $blueprint->unsignedBigInteger('subject_id')->nullable();
+            $blueprint->string('description');
+            $blueprint->json('metadata')->nullable();
+            $blueprint->timestamps();
+            $blueprint->index(['subject_type', 'subject_id']);
+            $blueprint->index('action');
         });
     }
 

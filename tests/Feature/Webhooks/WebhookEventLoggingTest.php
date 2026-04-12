@@ -3,7 +3,7 @@
 use App\Models\ServiceConnection;
 use App\Models\WebhookEvent;
 
-test('webhook stores event in database', function () {
+test('webhook stores event in database', function (): void {
     $connection = ServiceConnection::factory()->sonarr()->create([
         'webhook_token' => 'test-token',
     ]);
@@ -15,7 +15,7 @@ test('webhook stores event in database', function () {
     ];
 
     $this->postJson(
-        "/api/webhooks/sonarr/{$connection->id}",
+        '/api/webhooks/sonarr/'.$connection->id,
         $payload,
         ['X-Webhook-Token' => 'test-token']
     )->assertOk();
@@ -30,13 +30,13 @@ test('webhook stores event in database', function () {
     expect($event->processed_at)->toBeNull();
 });
 
-test('webhook stores event with unknown type when eventType missing', function () {
+test('webhook stores event with unknown type when eventType missing', function (): void {
     $connection = ServiceConnection::factory()->emby()->create([
         'webhook_token' => 'test-token',
     ]);
 
     $this->postJson(
-        "/api/webhooks/emby/{$connection->id}",
+        '/api/webhooks/emby/'.$connection->id,
         ['some' => 'data'],
         ['X-Webhook-Token' => 'test-token']
     )->assertOk();
@@ -47,15 +47,15 @@ test('webhook stores event with unknown type when eventType missing', function (
     ]);
 });
 
-test('multiple webhooks create separate events', function () {
+test('multiple webhooks create separate events', function (): void {
     $connection = ServiceConnection::factory()->radarr()->create([
         'webhook_token' => 'test-token',
     ]);
 
     $headers = ['X-Webhook-Token' => 'test-token'];
 
-    $this->postJson("/api/webhooks/radarr/{$connection->id}", ['eventType' => 'Grab'], $headers);
-    $this->postJson("/api/webhooks/radarr/{$connection->id}", ['eventType' => 'Download'], $headers);
+    $this->postJson('/api/webhooks/radarr/'.$connection->id, ['eventType' => 'Grab'], $headers);
+    $this->postJson('/api/webhooks/radarr/'.$connection->id, ['eventType' => 'Download'], $headers);
 
     expect(WebhookEvent::count())->toBe(2);
     expect(WebhookEvent::pluck('event_type')->toArray())->toBe(['Grab', 'Download']);
