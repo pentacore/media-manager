@@ -2,7 +2,6 @@
 import { Form, Head, router, usePage } from '@inertiajs/vue3'
 import UserController from '@/actions/App/Http/Controllers/Admin/UserController'
 import InputError from '@/components/InputError.vue'
-import PasswordInput from '@/components/PasswordInput.vue'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -115,13 +114,13 @@ function deleteUser(user: UserItem) {
 
             <Dialog v-model:open="showCreateDialog">
                 <DialogTrigger as-child>
-                    <Button>Create User</Button>
+                    <Button>Invite User</Button>
                 </DialogTrigger>
                 <DialogContent>
                     <DialogHeader>
-                        <DialogTitle>Create User</DialogTitle>
+                        <DialogTitle>Invite User</DialogTitle>
                         <DialogDescription>
-                            Create a new local user account. They can log in with the email and password you set.
+                            Send an invitation email. They'll set their own password when they accept.
                         </DialogDescription>
                     </DialogHeader>
 
@@ -141,17 +140,6 @@ function deleteUser(user: UserItem) {
                             <Label for="create-email">Email</Label>
                             <Input id="create-email" name="email" type="email" required placeholder="email@example.com" />
                             <InputError :message="errors.email" />
-                        </div>
-
-                        <div class="space-y-2">
-                            <Label for="create-password">Password</Label>
-                            <PasswordInput id="create-password" name="password" required placeholder="Password" />
-                            <InputError :message="errors.password" />
-                        </div>
-
-                        <div class="space-y-2">
-                            <Label for="create-password-confirmation">Confirm Password</Label>
-                            <PasswordInput id="create-password-confirmation" name="password_confirmation" required placeholder="Confirm password" />
                         </div>
 
                         <div class="space-y-2">
@@ -175,7 +163,7 @@ function deleteUser(user: UserItem) {
 
                         <DialogFooter>
                             <Button type="button" variant="outline" @click="showCreateDialog = false">Cancel</Button>
-                            <Button type="submit" :disabled="processing">Create User</Button>
+                            <Button type="submit" :disabled="processing">Send Invitation</Button>
                         </DialogFooter>
                     </Form>
                 </DialogContent>

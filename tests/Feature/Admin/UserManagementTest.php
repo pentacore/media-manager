@@ -1,7 +1,10 @@
 <?php
 
 use App\Enums\UserRole;
+use App\Mail\UserInvitation;
 use App\Models\User;
+use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Facades\URL;
 
 test('guests cannot access user management', function (): void {
     $this->get(route('admin.users.index'))
@@ -84,15 +87,15 @@ test('admin cannot delete themselves', function (): void {
         ->assertForbidden();
 });
 
-test('admin can create a local user', function (): void {
+test('admin can invite a user', function (): void {
+    Mail::fake();
+
     $admin = User::factory()->admin()->create();
 
     $this->actingAs($admin)
         ->post(route('admin.users.store'), [
             'name' => 'New User',
             'email' => 'newuser@example.com',
-            'password' => 'Password123!',
-            'password_confirmation' => 'Password123!',
             'role' => 'member',
         ])
         ->assertRedirect(route('admin.users.index'));
@@ -101,18 +104,21 @@ test('admin can create a local user', function (): void {
     expect($user)->not->toBeNull();
     expect($user->name)->toBe('New User');
     expect($user->role)->toBe(UserRole::Member);
+    expect($user->password)->toBeNull();
     expect($user->email_verified_at)->not->toBeNull();
+
+    Mail::assertSent(UserInvitation::class, fn (UserInvitation $mail) => $mail->hasTo('newuser@example.com'));
 });
 
-test('create user validates required fields', function (): void {
+test('invite validates required fields', function (): void {
     $admin = User::factory()->admin()->create();
 
     $this->actingAs($admin)
         ->post(route('admin.users.store'), [])
-        ->assertSessionHasErrors(['name', 'email', 'password', 'role']);
+        ->assertSessionHasErrors(['name', 'email', 'role']);
 });
 
-test('create user rejects duplicate email', function (): void {
+test('invite rejects duplicate email', function (): void {
     $admin = User::factory()->admin()->create();
     User::factory()->create(['email' => 'taken@example.com']);
 
@@ -120,23 +126,57 @@ test('create user rejects duplicate email', function (): void {
         ->post(route('admin.users.store'), [
             'name' => 'Duplicate',
             'email' => 'taken@example.com',
-            'password' => 'Password123!',
-            'password_confirmation' => 'Password123!',
             'role' => 'viewer',
         ])
         ->assertSessionHasErrors('email');
 });
 
-test('non-admin cannot create users', function (): void {
+test('non-admin cannot invite users', function (): void {
     $member = User::factory()->member()->create();
 
     $this->actingAs($member)
         ->post(route('admin.users.store'), [
             'name' => 'Sneaky',
             'email' => 'sneaky@example.com',
-            'password' => 'Password123!',
-            'password_confirmation' => 'Password123!',
             'role' => 'admin',
         ])
         ->assertForbidden();
+});
+
+test('invited user can accept invite and set password', function (): void {
+    $user = User::factory()->create(['password' => null]);
+
+    $url = URL::temporarySignedRoute('auth.invite.accept', now()->addHours(48), ['user' => $user->id]);
+
+    $this->get($url)
+        ->assertOk();
+
+    $this->assertAuthenticated();
+
+    $this->post(route('auth.set-password.store'), [
+        'password' => 'NewPassword123!',
+        'password_confirmation' => 'NewPassword123!',
+    ])->assertRedirect(route('dashboard'));
+
+    $user->refresh();
+    expect($user->password)->not->toBeNull();
+});
+
+test('expired invite link is rejected', function (): void {
+    $user = User::factory()->create(['password' => null]);
+
+    $url = URL::temporarySignedRoute('auth.invite.accept', now()->subHour(), ['user' => $user->id]);
+
+    $this->get($url)
+        ->assertRedirect(route('login'));
+
+    $this->assertGuest();
+});
+
+test('users without password are redirected to set password', function (): void {
+    $user = User::factory()->create(['password' => null]);
+
+    $this->actingAs($user)
+        ->get(route('dashboard'))
+        ->assertRedirect(route('auth.set-password'));
 });
