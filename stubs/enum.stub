@@ -2,7 +2,10 @@
 
 namespace {{ namespace }};
 
+use App\Concerns\EnumUtils;
+
 enum {{ class }}
 {
+    use EnumUtils;
     //
 }

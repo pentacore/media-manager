@@ -4,8 +4,12 @@ declare(strict_types=1);
 
 namespace App\Enums;
 
+use App\Concerns\EnumUtils;
+
 enum UserRole: string
 {
+    use EnumUtils;
+
     case Admin = 'admin';
     case Member = 'member';
     case Viewer = 'viewer';
