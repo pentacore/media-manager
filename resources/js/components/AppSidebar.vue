@@ -1,10 +1,10 @@
 <script setup lang="ts">
-import { Link } from '@inertiajs/vue3';
-import { BookOpen, FolderGit2, LayoutGrid } from 'lucide-vue-next';
-import AppLogo from '@/components/AppLogo.vue';
-import NavFooter from '@/components/NavFooter.vue';
-import NavMain from '@/components/NavMain.vue';
-import NavUser from '@/components/NavUser.vue';
+import { Link, usePage } from '@inertiajs/vue3'
+import { LayoutGrid, Link as LinkIcon, Settings, Users } from 'lucide-vue-next'
+import AppLogo from '@/components/AppLogo.vue'
+import NavFooter from '@/components/NavFooter.vue'
+import NavMain from '@/components/NavMain.vue'
+import NavUser from '@/components/NavUser.vue'
 import {
     Sidebar,
     SidebarContent,
@@ -13,9 +13,21 @@ import {
     SidebarMenu,
     SidebarMenuButton,
     SidebarMenuItem,
-} from '@/components/ui/sidebar';
-import { dashboard } from '@/routes';
-import type { NavItem } from '@/types';
+} from '@/components/ui/sidebar'
+import { dashboard } from '@/routes'
+import ServiceConnectionController from '@/actions/App/Http/Controllers/Admin/ServiceConnectionController'
+import UserController from '@/actions/App/Http/Controllers/Admin/UserController'
+import type { NavItem } from '@/types'
+import { computed } from 'vue'
+
+const page = usePage()
+
+const isAdmin = computed(() => {
+    const role = page.props.auth.user?.role
+    if (!role) return false
+    const value = typeof role === 'string' ? role : role.value
+    return value === 'admin'
+})
 
 const mainNavItems: NavItem[] = [
     {
@@ -23,20 +35,20 @@ const mainNavItems: NavItem[] = [
         href: dashboard(),
         icon: LayoutGrid,
     },
-];
+]
 
-const footerNavItems: NavItem[] = [
+const adminNavItems: NavItem[] = [
     {
-        title: 'Repository',
-        href: 'https://github.com/laravel/vue-starter-kit',
-        icon: FolderGit2,
+        title: 'Connections',
+        href: ServiceConnectionController.index.url(),
+        icon: LinkIcon,
     },
     {
-        title: 'Documentation',
-        href: 'https://laravel.com/docs/starter-kits#vue',
-        icon: BookOpen,
+        title: 'Users',
+        href: UserController.index.url(),
+        icon: Users,
     },
-];
+]
 </script>
 
 <template>
@@ -55,10 +67,10 @@ const footerNavItems: NavItem[] = [
 
         <SidebarContent>
             <NavMain :items="mainNavItems" />
+            <NavMain v-if="isAdmin" :items="adminNavItems" label="Admin" />
         </SidebarContent>
 
         <SidebarFooter>
-            <NavFooter :items="footerNavItems" />
             <NavUser />
         </SidebarFooter>
     </Sidebar>
