@@ -1,9 +1,22 @@
 <script setup lang="ts">
-import { Head, router, usePage } from '@inertiajs/vue3'
+import { Form, Head, router, usePage } from '@inertiajs/vue3'
 import UserController from '@/actions/App/Http/Controllers/Admin/UserController'
+import InputError from '@/components/InputError.vue'
+import PasswordInput from '@/components/PasswordInput.vue'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import {
+    Dialog,
+    DialogContent,
+    DialogDescription,
+    DialogFooter,
+    DialogHeader,
+    DialogTitle,
+    DialogTrigger,
+} from '@/components/ui/dialog'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
 import {
     Select,
     SelectContent,
@@ -19,7 +32,12 @@ import {
     TableHeader,
     TableRow,
 } from '@/components/ui/table'
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
+
+interface RoleOption {
+    value: string
+    label: string
+}
 
 interface UserItem {
     id: number
@@ -31,8 +49,9 @@ interface UserItem {
     created_at: string
 }
 
-defineProps<{
+const props = defineProps<{
     users: UserItem[]
+    roles: RoleOption[]
 }>()
 
 defineOptions({
@@ -46,6 +65,7 @@ defineOptions({
 
 const page = usePage()
 const currentUserId = computed(() => page.props.auth.user?.id)
+const showCreateDialog = ref(false)
 
 function roleValue(role: UserItem['role']): string {
     return typeof role === 'string' ? role : role.value
@@ -87,9 +107,79 @@ function deleteUser(user: UserItem) {
     <Head title="User Management" />
 
     <div class="space-y-6 p-6">
-        <div>
-            <h2 class="text-2xl font-bold tracking-tight">Users</h2>
-            <p class="text-muted-foreground">Manage user accounts and roles.</p>
+        <div class="flex items-center justify-between">
+            <div>
+                <h2 class="text-2xl font-bold tracking-tight">Users</h2>
+                <p class="text-muted-foreground">Manage user accounts and roles.</p>
+            </div>
+
+            <Dialog v-model:open="showCreateDialog">
+                <DialogTrigger as-child>
+                    <Button>Create User</Button>
+                </DialogTrigger>
+                <DialogContent>
+                    <DialogHeader>
+                        <DialogTitle>Create User</DialogTitle>
+                        <DialogDescription>
+                            Create a new local user account. They can log in with the email and password you set.
+                        </DialogDescription>
+                    </DialogHeader>
+
+                    <Form
+                        v-bind="UserController.store.post()"
+                        v-slot="{ errors, processing }"
+                        class="space-y-4"
+                        @success="showCreateDialog = false"
+                    >
+                        <div class="space-y-2">
+                            <Label for="create-name">Name</Label>
+                            <Input id="create-name" name="name" required placeholder="Full name" />
+                            <InputError :message="errors.name" />
+                        </div>
+
+                        <div class="space-y-2">
+                            <Label for="create-email">Email</Label>
+                            <Input id="create-email" name="email" type="email" required placeholder="email@example.com" />
+                            <InputError :message="errors.email" />
+                        </div>
+
+                        <div class="space-y-2">
+                            <Label for="create-password">Password</Label>
+                            <PasswordInput id="create-password" name="password" required placeholder="Password" />
+                            <InputError :message="errors.password" />
+                        </div>
+
+                        <div class="space-y-2">
+                            <Label for="create-password-confirmation">Confirm Password</Label>
+                            <PasswordInput id="create-password-confirmation" name="password_confirmation" required placeholder="Confirm password" />
+                        </div>
+
+                        <div class="space-y-2">
+                            <Label for="create-role">Role</Label>
+                            <Select name="role" default-value="viewer">
+                                <SelectTrigger>
+                                    <SelectValue placeholder="Select a role" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem
+                                        v-for="role in roles"
+                                        :key="role.value"
+                                        :value="role.value"
+                                    >
+                                        {{ role.label }}
+                                    </SelectItem>
+                                </SelectContent>
+                            </Select>
+                            <InputError :message="errors.role" />
+                        </div>
+
+                        <DialogFooter>
+                            <Button type="button" variant="outline" @click="showCreateDialog = false">Cancel</Button>
+                            <Button type="submit" :disabled="processing">Create User</Button>
+                        </DialogFooter>
+                    </Form>
+                </DialogContent>
+            </Dialog>
         </div>
 
         <Table>
@@ -125,9 +215,13 @@ function deleteUser(user: UserItem) {
                                 <SelectValue />
                             </SelectTrigger>
                             <SelectContent>
-                                <SelectItem value="admin">Admin</SelectItem>
-                                <SelectItem value="member">Member</SelectItem>
-                                <SelectItem value="viewer">Viewer</SelectItem>
+                                <SelectItem
+                                    v-for="role in roles"
+                                    :key="role.value"
+                                    :value="role.value"
+                                >
+                                    {{ role.label }}
+                                </SelectItem>
                             </SelectContent>
                         </Select>
                         <Badge v-else variant="outline">{{ roleLabel(user.role) }}</Badge>

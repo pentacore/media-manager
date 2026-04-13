@@ -83,3 +83,60 @@ test('admin cannot delete themselves', function (): void {
         ->delete(route('admin.users.destroy', $admin))
         ->assertForbidden();
 });
+
+test('admin can create a local user', function (): void {
+    $admin = User::factory()->admin()->create();
+
+    $this->actingAs($admin)
+        ->post(route('admin.users.store'), [
+            'name' => 'New User',
+            'email' => 'newuser@example.com',
+            'password' => 'Password123!',
+            'password_confirmation' => 'Password123!',
+            'role' => 'member',
+        ])
+        ->assertRedirect(route('admin.users.index'));
+
+    $user = User::where('email', 'newuser@example.com')->first();
+    expect($user)->not->toBeNull();
+    expect($user->name)->toBe('New User');
+    expect($user->role)->toBe(UserRole::Member);
+    expect($user->email_verified_at)->not->toBeNull();
+});
+
+test('create user validates required fields', function (): void {
+    $admin = User::factory()->admin()->create();
+
+    $this->actingAs($admin)
+        ->post(route('admin.users.store'), [])
+        ->assertSessionHasErrors(['name', 'email', 'password', 'role']);
+});
+
+test('create user rejects duplicate email', function (): void {
+    $admin = User::factory()->admin()->create();
+    User::factory()->create(['email' => 'taken@example.com']);
+
+    $this->actingAs($admin)
+        ->post(route('admin.users.store'), [
+            'name' => 'Duplicate',
+            'email' => 'taken@example.com',
+            'password' => 'Password123!',
+            'password_confirmation' => 'Password123!',
+            'role' => 'viewer',
+        ])
+        ->assertSessionHasErrors('email');
+});
+
+test('non-admin cannot create users', function (): void {
+    $member = User::factory()->member()->create();
+
+    $this->actingAs($member)
+        ->post(route('admin.users.store'), [
+            'name' => 'Sneaky',
+            'email' => 'sneaky@example.com',
+            'password' => 'Password123!',
+            'password_confirmation' => 'Password123!',
+            'role' => 'admin',
+        ])
+        ->assertForbidden();
+});

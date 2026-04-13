@@ -4,7 +4,9 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers\Admin;
 
+use App\Enums\UserRole;
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Admin\CreateUserRequest;
 use App\Http\Requests\Admin\UpdateUserRoleRequest;
 use App\Models\User;
 use Illuminate\Http\RedirectResponse;
@@ -28,7 +30,21 @@ class UserController extends Controller
                     'avatar_url' => $user->avatar_url,
                     'created_at' => $user->created_at->diffForHumans(),
                 ]),
+            'roles' => collect(UserRole::cases())->map(fn (UserRole $role): array => [
+                'value' => $role->value,
+                'label' => $role->label(),
+            ]),
         ]);
+    }
+
+    public function store(CreateUserRequest $request): RedirectResponse
+    {
+        $user = User::create($request->safe()->only(['name', 'email', 'password', 'role']));
+        $user->forceFill(['email_verified_at' => now()])->save();
+
+        Inertia::flash('toast', ['type' => 'success', 'message' => __('User created.')]);
+
+        return to_route('admin.users.index');
     }
 
     public function updateRole(UpdateUserRoleRequest $request, User $user): RedirectResponse
