@@ -11,6 +11,7 @@ trait EnumUtils
 {
     /**
      * Returns an array of the enum case names.
+     *
      * @return array<int, string>
      */
     public static function names(): array
@@ -20,6 +21,7 @@ trait EnumUtils
 
     /**
      * Returns an array of the enum values.
+     *
      * @return array<int, int|string>
      */
     public static function values(): array
@@ -29,6 +31,7 @@ trait EnumUtils
 
     /**
      * Returns an associative array of enum values as keys and their corresponding names as values.
+     *
      * @return array<int|string, string>
      */
     public static function array(): array
@@ -68,15 +71,27 @@ trait EnumUtils
      *
      * @return array<int, array{name: string, value: int|string}>
      */
-    public static function mapForSelect(bool $withNull = false): array
+    public static function mapForSelect(bool $withNull = false, string $labelKey = 'name'): array
     {
         $arr = [];
         if ($withNull) {
-            $arr[] = ['name' => 'None', 'value' => null];
+            $arr[] = [$labelKey => 'None', 'value' => null];
         }
 
-        $values = array_map(static fn ($name, $value): array => ['name' => ucwords(str_replace('_', ' ', $value)), 'value' => $value], self::names(), self::values());
-        usort($values, static fn (array $a, array $b): int => strcmp($a['name'], $b['name']));
+        $values = array_map(
+            static fn ($case): array => [
+                $labelKey => method_exists($case, 'label') ? $case->label() : $case->name
+                        |> (static fn ($str) => str_replace('_', ' ', $str))
+                        |> ucwords(...),
+                'value' => $case->value,
+            ],
+            self::cases()
+        );
+
+        usort(
+            $values,
+            static fn (array $a, array $b): int => strcmp($a[$labelKey], $b[$labelKey])
+        );
 
         return array_merge($arr, $values);
     }

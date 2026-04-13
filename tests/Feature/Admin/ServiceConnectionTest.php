@@ -2,6 +2,7 @@
 
 use App\Models\ServiceConnection;
 use App\Models\User;
+use Illuminate\Support\Facades\Http;
 
 test('guests cannot access service connections', function (): void {
     $this->get(route('admin.connections.index'))
@@ -156,4 +157,87 @@ test('admin can toggle connection active status', function (): void {
 
     $connection->refresh();
     expect($connection->is_active)->toBeFalse();
+});
+
+test('admin can test a sonarr connection successfully', function (): void {
+    Http::preventStrayRequests();
+    Http::fake([
+        'sonarr.local:8989/api/v3/system/status' => Http::response([
+            'appName' => 'Sonarr',
+            'version' => '4.0.0.1',
+        ]),
+    ]);
+
+    $admin = User::factory()->admin()->create();
+
+    $this->actingAs($admin)
+        ->postJson(route('admin.connections.test'), [
+            'type' => 'sonarr',
+            'url' => 'http://sonarr.local:8989',
+            'api_key' => 'test-key',
+        ])
+        ->assertSuccessful()
+        ->assertJson([
+            'success' => true,
+            'version' => '4.0.0.1',
+        ]);
+});
+
+test('admin can test an emby connection successfully', function (): void {
+    Http::preventStrayRequests();
+    Http::fake([
+        'emby.local:8096/System/Info' => Http::response([
+            'ServerName' => 'MyEmby',
+            'Version' => '4.8.0.0',
+        ]),
+    ]);
+
+    $admin = User::factory()->admin()->create();
+
+    $this->actingAs($admin)
+        ->postJson(route('admin.connections.test'), [
+            'type' => 'emby',
+            'url' => 'http://emby.local:8096',
+            'api_key' => 'test-key',
+        ])
+        ->assertSuccessful()
+        ->assertJson([
+            'success' => true,
+            'version' => '4.8.0.0',
+        ]);
+});
+
+test('test connection returns failure on unreachable service', function (): void {
+    Http::preventStrayRequests();
+    Http::fake([
+        'sonarr.local:8989/api/v3/system/status' => Http::response([], 500),
+    ]);
+
+    $admin = User::factory()->admin()->create();
+
+    $this->actingAs($admin)
+        ->postJson(route('admin.connections.test'), [
+            'type' => 'sonarr',
+            'url' => 'http://sonarr.local:8989',
+            'api_key' => 'bad-key',
+        ])
+        ->assertUnprocessable()
+        ->assertJson(['success' => false]);
+});
+
+test('test connection validates required fields', function (): void {
+    $admin = User::factory()->admin()->create();
+
+    $this->actingAs($admin)
+        ->postJson(route('admin.connections.test'), [])
+        ->assertUnprocessable()
+        ->assertJsonValidationErrors(['type', 'url', 'api_key']);
+});
+
+test('guests cannot test connections', function (): void {
+    $this->postJson(route('admin.connections.test'), [
+        'type' => 'sonarr',
+        'url' => 'http://sonarr.local:8989',
+        'api_key' => 'key',
+    ])->assertUnauthorized();
 });

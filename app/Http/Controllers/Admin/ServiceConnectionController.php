@@ -9,7 +9,13 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\Admin\ServiceConnectionStoreRequest;
 use App\Http\Requests\Admin\ServiceConnectionUpdateRequest;
 use App\Models\ServiceConnection;
+use App\Services\Emby\EmbyClient;
+use App\Services\Jellyseerr\JellyseerrClient;
+use App\Services\Radarr\RadarrClient;
+use App\Services\Sonarr\SonarrClient;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
+use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -36,10 +42,7 @@ class ServiceConnectionController extends Controller
     public function create(): Response
     {
         return Inertia::render('Admin/Connections/Create', [
-            'serviceTypes' => collect(ServiceType::cases())->map(fn (ServiceType $serviceType): array => [
-                'value' => $serviceType->value,
-                'label' => $serviceType->label(),
-            ]),
+            'serviceTypes' => ServiceType::mapForSelect(labelKey: 'label'),
         ]);
     }
 
@@ -64,10 +67,7 @@ class ServiceConnectionController extends Controller
                 'webhook_token' => $connection->webhook_token,
                 'is_active' => $connection->is_active,
             ],
-            'serviceTypes' => collect(ServiceType::cases())->map(fn (ServiceType $serviceType): array => [
-                'value' => $serviceType->value,
-                'label' => $serviceType->label(),
-            ]),
+            'serviceTypes' => ServiceType::mapForSelect(labelKey: 'label'),
         ]);
     }
 
@@ -97,5 +97,48 @@ class ServiceConnectionController extends Controller
         Inertia::flash('toast', ['type' => 'success', 'message' => __(sprintf('Connection %s.', $status))]);
 
         return to_route('admin.connections.index');
+    }
+
+    public function test(Request $request): JsonResponse
+    {
+        $request->validate([
+            'type' => ['required', 'string', ServiceType::validationRule()],
+            'url' => ['required', 'url', 'max:500'],
+            'api_key' => ['required', 'string', 'max:500'],
+        ]);
+
+        $connection = new ServiceConnection([
+            'type' => $request->input('type'),
+            'url' => $request->input('url'),
+            'api_key' => $request->input('api_key'),
+        ]);
+
+        try {
+            $client = match ($connection->type) {
+                ServiceType::Sonarr => new SonarrClient($connection),
+                ServiceType::Radarr => new RadarrClient($connection),
+                ServiceType::Emby => new EmbyClient($connection),
+                ServiceType::Jellyseerr => new JellyseerrClient($connection),
+            };
+
+            $result = match ($connection->type) {
+                ServiceType::Emby => $client->getSystemInfo(),
+                ServiceType::Jellyseerr => $client->getStatus(),
+                default => $client->getSystemStatus(),
+            };
+
+            $version = $result['version'] ?? $result['Version'] ?? null;
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Connection successful.',
+                'version' => $version,
+            ]);
+        } catch (\Throwable $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Connection failed: '.$e->getMessage(),
+            ], 422);
+        }
     }
 }

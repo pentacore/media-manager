@@ -10,6 +10,8 @@ Route::middleware(['auth', 'verified', 'password.set', 'role:admin'])->prefix('a
     Route::resource('connections', ServiceConnectionController::class)->except(['show']);
     Route::patch('connections/{connection}/toggle', [ServiceConnectionController::class, 'toggle'])
         ->name('connections.toggle');
+    Route::post('connections/test', [ServiceConnectionController::class, 'test'])
+        ->name('connections.test');
 
     Route::get('users', [UserController::class, 'index'])->name('users.index');
     Route::post('users', [UserController::class, 'store'])->name('users.store');

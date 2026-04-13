@@ -8,7 +8,6 @@ use App\Concerns\PasswordValidationRules;
 use App\Enums\UserRole;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
-use Illuminate\Validation\Rule;
 
 class CreateUserRequest extends FormRequest
 {
@@ -22,7 +21,7 @@ class CreateUserRequest extends FormRequest
         $rules = [
             'name' => ['required', 'string', 'max:255'],
             'email' => ['required', 'email', 'max:255', 'unique:users,email'],
-            'role' => ['required', 'string', Rule::enum(UserRole::class)],
+            'role' => ['required', 'string', UserRole::validationRule()],
             'set_password' => ['boolean'],
         ];
 

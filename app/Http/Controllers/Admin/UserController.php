@@ -33,10 +33,7 @@ class UserController extends Controller
                     'avatar_url' => $user->avatar_url,
                     'created_at' => $user->created_at->diffForHumans(),
                 ]),
-            'roles' => collect(UserRole::cases())->map(fn (UserRole $role): array => [
-                'value' => $role->value,
-                'label' => $role->label(),
-            ]),
+            'roles' => UserRole::mapForSelect(labelKey: 'label'),
         ]);
     }
 

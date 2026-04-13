@@ -7,7 +7,6 @@ namespace App\Http\Requests\Admin;
 use App\Enums\ServiceType;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
-use Illuminate\Validation\Rule;
 
 class ServiceConnectionStoreRequest extends FormRequest
 {
@@ -17,7 +16,7 @@ class ServiceConnectionStoreRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'type' => ['required', 'string', Rule::enum(ServiceType::class)],
+            'type' => ['required', 'string', ServiceType::validationRule()],
             'name' => ['required', 'string', 'max:255'],
             'url' => ['required', 'url', 'max:500'],
             'api_key' => ['required', 'string', 'max:500'],
