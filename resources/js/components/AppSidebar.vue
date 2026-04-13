@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { Link, usePage } from '@inertiajs/vue3'
-import { LayoutGrid, Link as LinkIcon, Settings, Users } from 'lucide-vue-next'
+import { Film, Inbox, LayoutGrid, Link as LinkIcon, Search, Tv, Users } from 'lucide-vue-next'
 import AppLogo from '@/components/AppLogo.vue'
 import NavFooter from '@/components/NavFooter.vue'
 import NavMain from '@/components/NavMain.vue'
@@ -17,6 +17,10 @@ import {
 import { dashboard } from '@/routes'
 import ServiceConnectionController from '@/actions/App/Http/Controllers/Admin/ServiceConnectionController'
 import UserController from '@/actions/App/Http/Controllers/Admin/UserController'
+import SeriesController from '@/actions/App/Http/Controllers/Media/SeriesController'
+import MovieController from '@/actions/App/Http/Controllers/Media/MovieController'
+import RequestController from '@/actions/App/Http/Controllers/Media/RequestController'
+import SearchController from '@/actions/App/Http/Controllers/Media/SearchController'
 import type { NavItem } from '@/types'
 import { computed } from 'vue'
 
@@ -34,6 +38,29 @@ const mainNavItems: NavItem[] = [
         title: 'Dashboard',
         href: dashboard(),
         icon: LayoutGrid,
+    },
+    {
+        title: 'Search',
+        href: SearchController.index.url(),
+        icon: Search,
+    },
+]
+
+const mediaNavItems: NavItem[] = [
+    {
+        title: 'Series',
+        href: SeriesController.index.url(),
+        icon: Tv,
+    },
+    {
+        title: 'Movies',
+        href: MovieController.index.url(),
+        icon: Film,
+    },
+    {
+        title: 'Requests',
+        href: RequestController.index.url(),
+        icon: Inbox,
     },
 ]
 
@@ -67,6 +94,7 @@ const adminNavItems: NavItem[] = [
 
         <SidebarContent>
             <NavMain :items="mainNavItems" />
+            <NavMain :items="mediaNavItems" label="Media" />
             <NavMain v-if="isAdmin" :items="adminNavItems" label="Admin" />
         </SidebarContent>
 

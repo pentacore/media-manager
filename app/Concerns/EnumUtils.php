@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Concerns;
 
 use Generator;
@@ -81,7 +83,7 @@ trait EnumUtils
         $values = array_map(
             static fn ($case): array => [
                 $labelKey => method_exists($case, 'label') ? $case->label() : $case->name
-                        |> (static fn ($str) => str_replace('_', ' ', $str))
+                        |> (static fn ($str): string|array => str_replace('_', ' ', $str))
                         |> ucwords(...),
                 'value' => $case->value,
             ],
@@ -90,7 +92,7 @@ trait EnumUtils
 
         usort(
             $values,
-            static fn (array $a, array $b): int => strcmp($a[$labelKey], $b[$labelKey])
+            static fn (array $a, array $b): int => strcmp((string) $a[$labelKey], (string) $b[$labelKey])
         );
 
         return array_merge($arr, $values);

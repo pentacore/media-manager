@@ -9,6 +9,7 @@ use Database\Factories\ServiceConnectionFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
 #[Fillable(['type', 'name', 'url', 'api_key', 'webhook_token', 'is_active', 'version', 'settings'])]
@@ -47,5 +48,13 @@ class ServiceConnection extends Model
     public function activityLogs(): HasMany
     {
         return $this->hasMany(ActivityLog::class);
+    }
+
+    /**
+     * @throws ModelNotFoundException
+     */
+    public static function resolveActive(ServiceType $serviceType): self
+    {
+        return self::where('type', $serviceType)->where('is_active', true)->firstOrFail();
     }
 }

@@ -12,7 +12,8 @@ use Illuminate\Queue\SerializesModels;
 
 class UserInvitation extends Mailable
 {
-    use Queueable, SerializesModels;
+    use Queueable;
+    use SerializesModels;
 
     public function __construct(
         public User $user,
@@ -22,7 +23,7 @@ class UserInvitation extends Mailable
     public function envelope(): Envelope
     {
         return new Envelope(
-            subject: sprintf('You\'ve been invited to %s', config('app.name')),
+            subject: sprintf("You've been invited to %s", config('app.name')),
         );
     }
 

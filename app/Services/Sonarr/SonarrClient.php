@@ -70,4 +70,17 @@ class SonarrClient extends ArrClient
     {
         return $this->buildClient()->get(sprintf('/api/%s/series/lookup', $this->apiVersion), ['term' => $query])->throw()->json();
     }
+
+    /**
+     * @return array<int, array<string, mixed>>
+     *
+     * @throws RequestException|ConnectionException
+     */
+    public function getEpisodesBySeries(int $seriesId): array
+    {
+        return $this->buildClient()
+            ->get(sprintf('/api/%s/episode', $this->apiVersion), ['seriesId' => $seriesId])
+            ->throw()
+            ->json();
+    }
 }

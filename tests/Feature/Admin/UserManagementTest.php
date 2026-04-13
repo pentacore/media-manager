@@ -107,7 +107,7 @@ test('admin can invite a user', function (): void {
     expect($user->password)->toBeNull();
     expect($user->email_verified_at)->not->toBeNull();
 
-    Mail::assertSent(UserInvitation::class, fn (UserInvitation $mail) => $mail->hasTo('newuser@example.com'));
+    Mail::assertSent(UserInvitation::class, fn (UserInvitation $userInvitation) => $userInvitation->hasTo('newuser@example.com'));
 });
 
 test('invite validates required fields', function (): void {
