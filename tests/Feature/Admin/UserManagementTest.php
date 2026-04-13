@@ -131,6 +131,39 @@ test('invite rejects duplicate email', function (): void {
         ->assertSessionHasErrors('email');
 });
 
+test('admin can create user with password directly', function (): void {
+    $admin = User::factory()->admin()->create();
+
+    $this->actingAs($admin)
+        ->post(route('admin.users.store'), [
+            'name' => 'Direct User',
+            'email' => 'direct@example.com',
+            'role' => 'member',
+            'set_password' => true,
+            'password' => 'Password123!',
+            'password_confirmation' => 'Password123!',
+        ])
+        ->assertRedirect(route('admin.users.index'));
+
+    $user = User::where('email', 'direct@example.com')->first();
+    expect($user)->not->toBeNull();
+    expect($user->password)->not->toBeNull();
+    expect($user->role)->toBe(UserRole::Member);
+});
+
+test('set_password requires password fields', function (): void {
+    $admin = User::factory()->admin()->create();
+
+    $this->actingAs($admin)
+        ->post(route('admin.users.store'), [
+            'name' => 'No Pass',
+            'email' => 'nopass@example.com',
+            'role' => 'viewer',
+            'set_password' => true,
+        ])
+        ->assertSessionHasErrors('password');
+});
+
 test('non-admin cannot invite users', function (): void {
     $member = User::factory()->member()->create();
 

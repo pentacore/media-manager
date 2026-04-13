@@ -2,6 +2,7 @@
 import { Form, Head, router, usePage } from '@inertiajs/vue3'
 import UserController from '@/actions/App/Http/Controllers/Admin/UserController'
 import InputError from '@/components/InputError.vue'
+import PasswordInput from '@/components/PasswordInput.vue'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -65,6 +66,7 @@ defineOptions({
 const page = usePage()
 const currentUserId = computed(() => page.props.auth.user?.id)
 const showCreateDialog = ref(false)
+const setPassword = ref(false)
 
 function roleValue(role: UserItem['role']): string {
     return typeof role === 'string' ? role : role.value
@@ -118,9 +120,9 @@ function deleteUser(user: UserItem) {
                 </DialogTrigger>
                 <DialogContent>
                     <DialogHeader>
-                        <DialogTitle>Invite User</DialogTitle>
+                        <DialogTitle>{{ setPassword ? 'Create User' : 'Invite User' }}</DialogTitle>
                         <DialogDescription>
-                            Send an invitation email. They'll set their own password when they accept.
+                            {{ setPassword ? 'Create a user account with a password.' : 'Send an invitation email. They\'ll set their own password when they accept.' }}
                         </DialogDescription>
                     </DialogHeader>
 
@@ -128,8 +130,10 @@ function deleteUser(user: UserItem) {
                         v-bind="UserController.store.post()"
                         v-slot="{ errors, processing }"
                         class="space-y-4"
-                        @success="showCreateDialog = false"
+                        @success="showCreateDialog = false; setPassword = false"
                     >
+                        <input type="hidden" name="set_password" :value="setPassword ? '1' : '0'" />
+
                         <div class="space-y-2">
                             <Label for="create-name">Name</Label>
                             <Input id="create-name" name="name" required placeholder="Full name" />
@@ -161,9 +165,28 @@ function deleteUser(user: UserItem) {
                             <InputError :message="errors.role" />
                         </div>
 
+                        <template v-if="setPassword">
+                            <div class="space-y-2">
+                                <Label for="create-password">Password</Label>
+                                <PasswordInput id="create-password" name="password" required placeholder="Password" />
+                                <InputError :message="errors.password" />
+                            </div>
+
+                            <div class="space-y-2">
+                                <Label for="create-password-confirmation">Confirm Password</Label>
+                                <PasswordInput id="create-password-confirmation" name="password_confirmation" required placeholder="Confirm password" />
+                            </div>
+                        </template>
+
+                        <button type="button" class="text-sm text-muted-foreground underline underline-offset-4 hover:text-foreground" @click="setPassword = !setPassword">
+                            {{ setPassword ? 'Send invite instead' : 'Set password manually' }}
+                        </button>
+
                         <DialogFooter>
-                            <Button type="button" variant="outline" @click="showCreateDialog = false">Cancel</Button>
-                            <Button type="submit" :disabled="processing">Send Invitation</Button>
+                            <Button type="button" variant="outline" @click="showCreateDialog = false; setPassword = false">Cancel</Button>
+                            <Button type="submit" :disabled="processing">
+                                {{ setPassword ? 'Create User' : 'Send Invitation' }}
+                            </Button>
                         </DialogFooter>
                     </Form>
                 </DialogContent>

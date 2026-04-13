@@ -42,18 +42,28 @@ class UserController extends Controller
 
     public function store(CreateUserRequest $request): RedirectResponse
     {
-        $user = User::create($request->safe()->only(['name', 'email', 'role']));
+        $fields = ['name', 'email', 'role'];
+
+        if ($request->boolean('set_password')) {
+            $fields[] = 'password';
+        }
+
+        $user = User::create($request->safe()->only($fields));
         $user->forceFill(['email_verified_at' => now()])->save();
 
-        $inviteUrl = URL::temporarySignedRoute(
-            'auth.invite.accept',
-            now()->addHours(48),
-            ['user' => $user->id],
-        );
+        if (! $request->boolean('set_password')) {
+            $inviteUrl = URL::temporarySignedRoute(
+                'auth.invite.accept',
+                now()->addHours(48),
+                ['user' => $user->id],
+            );
 
-        Mail::to($user)->send(new UserInvitation($user, $inviteUrl));
+            Mail::to($user)->send(new UserInvitation($user, $inviteUrl));
 
-        Inertia::flash('toast', ['type' => 'success', 'message' => __('Invitation sent to :email.', ['email' => $user->email])]);
+            Inertia::flash('toast', ['type' => 'success', 'message' => __('Invitation sent to :email.', ['email' => $user->email])]);
+        } else {
+            Inertia::flash('toast', ['type' => 'success', 'message' => __('User created.')]);
+        }
 
         return to_route('admin.users.index');
     }
