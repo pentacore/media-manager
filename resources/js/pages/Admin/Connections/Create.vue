@@ -13,6 +13,7 @@ import {
     SelectTrigger,
     SelectValue,
 } from '@/components/ui/select'
+import { computed, ref } from 'vue'
 
 interface ServiceTypeOption {
     value: string
@@ -31,6 +32,21 @@ defineOptions({
             { title: 'Add Connection', href: ServiceConnectionController.create.url() },
         ],
     },
+})
+
+const selectedType = ref('')
+
+const servicePlaceholders = {
+    sonarr: { name: 'My Sonarr', url: 'http://sonarr.local:8989', apiKey: 'Sonarr API key (Settings → General)' },
+    radarr: { name: 'My Radarr', url: 'http://radarr.local:7878', apiKey: 'Radarr API key (Settings → General)' },
+    emby: { name: 'My Emby', url: 'http://emby.local:8096', apiKey: 'Emby API key (Dashboard → API Keys)' },
+    jellyseerr: { name: 'My Jellyseerr', url: 'http://jellyseerr.local:5055', apiKey: 'Jellyseerr API key (Settings → General)' },
+} as Record<string, { name: string; url: string; apiKey: string }>
+
+const placeholders = computed(() => servicePlaceholders[selectedType.value] ?? {
+    name: 'Display name',
+    url: 'http://service.local:port',
+    apiKey: 'Enter API key',
 })
 </script>
 
@@ -51,7 +67,7 @@ defineOptions({
                 >
                     <div class="space-y-2">
                         <Label for="type">Service Type</Label>
-                        <Select name="type">
+                        <Select name="type" v-model="selectedType">
                             <SelectTrigger>
                                 <SelectValue placeholder="Select a service type" />
                             </SelectTrigger>
@@ -70,19 +86,19 @@ defineOptions({
 
                     <div class="space-y-2">
                         <Label for="name">Display Name</Label>
-                        <Input id="name" name="name" placeholder="My Sonarr" />
+                        <Input id="name" name="name" :placeholder="placeholders.name" />
                         <InputError :message="errors.name" />
                     </div>
 
                     <div class="space-y-2">
                         <Label for="url">URL</Label>
-                        <Input id="url" name="url" placeholder="http://sonarr.local:8989" />
+                        <Input id="url" name="url" :placeholder="placeholders.url" />
                         <InputError :message="errors.url" />
                     </div>
 
                     <div class="space-y-2">
                         <Label for="api_key">API Key</Label>
-                        <Input id="api_key" name="api_key" type="password" placeholder="Enter API key" />
+                        <Input id="api_key" name="api_key" type="password" :placeholder="placeholders.apiKey" />
                         <InputError :message="errors.api_key" />
                     </div>
 
