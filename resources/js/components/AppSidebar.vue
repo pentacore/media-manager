@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { Link, usePage } from '@inertiajs/vue3'
-import { Activity as ActivityIcon, Film, History, Inbox, LayoutGrid, Link2, Link as LinkIcon, Search, Tv, Users } from 'lucide-vue-next'
+import { Activity as ActivityIcon, Film, History, Inbox, LayoutGrid, Link2, Link as LinkIcon, Search, Shield, Tv, Users, Zap } from 'lucide-vue-next'
 import AppLogo from '@/components/AppLogo.vue'
 import NavFooter from '@/components/NavFooter.vue'
 import NavMain from '@/components/NavMain.vue'
@@ -24,6 +24,8 @@ import SearchController from '@/actions/App/Http/Controllers/Media/SearchControl
 import NowPlayingController from '@/actions/App/Http/Controllers/Emby/NowPlayingController'
 import WatchHistoryController from '@/actions/App/Http/Controllers/Emby/WatchHistoryController'
 import UserLinkController from '@/actions/App/Http/Controllers/Emby/UserLinkController'
+import ActionRequestController from '@/actions/App/Http/Controllers/Actions/ActionRequestController'
+import ActionTypeConfigController from '@/actions/App/Http/Controllers/Actions/ActionTypeConfigController'
 import type { NavItem } from '@/types'
 import { computed } from 'vue'
 
@@ -80,6 +82,14 @@ const monitoringNavItems: NavItem[] = [
     },
 ]
 
+const automationNavItems: NavItem[] = [
+    {
+        title: 'Action Requests',
+        href: ActionRequestController.index.url(),
+        icon: Zap,
+    },
+]
+
 const adminNavItems: NavItem[] = [
     {
         title: 'Connections',
@@ -95,6 +105,11 @@ const adminNavItems: NavItem[] = [
         title: 'Emby Links',
         href: UserLinkController.index.url(),
         icon: Link2,
+    },
+    {
+        title: 'Action Rules',
+        href: ActionTypeConfigController.index.url(),
+        icon: Shield,
     },
 ]
 </script>
@@ -117,6 +132,7 @@ const adminNavItems: NavItem[] = [
             <NavMain :items="mainNavItems" />
             <NavMain :items="mediaNavItems" label="Media" />
             <NavMain :items="monitoringNavItems" label="Monitoring" />
+            <NavMain :items="automationNavItems" label="Automation" />
             <NavMain v-if="isAdmin" :items="adminNavItems" label="Admin" />
         </SidebarContent>
 

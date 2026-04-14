@@ -33,7 +33,7 @@ test('playback.start creates an in-progress activity row', function (): void {
         'PlaybackInfo' => ['PositionTicks' => 0, 'PlayedToCompletion' => false],
     ]);
 
-    (new EmbyWebhookHandler)->handle($webhookEvent);
+    resolve(EmbyWebhookHandler::class)->handle($webhookEvent);
 
     $this->assertDatabaseHas('emby_activities', [
         'emby_user_link_id' => $this->userLink->id,
@@ -56,9 +56,9 @@ test('playback.start upserts an existing in-progress row instead of duplicating'
         'PlaybackInfo' => ['PositionTicks' => 1000000000, 'PlayedToCompletion' => false],
     ];
 
-    (new EmbyWebhookHandler)->handle(makeWebhookEvent($this->connection, $payload));
+    resolve(EmbyWebhookHandler::class)->handle(makeWebhookEvent($this->connection, $payload));
     $payload['PlaybackInfo']['PositionTicks'] = 2000000000;
-    (new EmbyWebhookHandler)->handle(makeWebhookEvent($this->connection, $payload));
+    resolve(EmbyWebhookHandler::class)->handle(makeWebhookEvent($this->connection, $payload));
 
     expect(EmbyActivity::where('emby_item_id', 'item-1')->count())->toBe(1);
     expect(EmbyActivity::where('emby_item_id', 'item-1')->first()->play_position)->toBe(2000000000);
@@ -72,7 +72,7 @@ test('playback.stop with PlayedToCompletion=true produces a finished row', funct
         'PlaybackInfo' => ['PositionTicks' => 9000000000, 'PlayedToCompletion' => true],
     ]);
 
-    (new EmbyWebhookHandler)->handle($webhookEvent);
+    resolve(EmbyWebhookHandler::class)->handle($webhookEvent);
 
     $this->assertDatabaseHas('emby_activities', [
         'emby_user_link_id' => $this->userLink->id,
@@ -88,7 +88,7 @@ test('playback.stop without completion produces a stopped row', function (): voi
         'PlaybackInfo' => ['PositionTicks' => 1000, 'PlayedToCompletion' => false],
     ]);
 
-    (new EmbyWebhookHandler)->handle($webhookEvent);
+    resolve(EmbyWebhookHandler::class)->handle($webhookEvent);
 
     $this->assertDatabaseHas('emby_activities', [
         'action' => 'stopped',
@@ -102,7 +102,7 @@ test('item.markplayed produces a finished row', function (): void {
         'Item' => ['Id' => 'item-1', 'Type' => 'Movie', 'Name' => 'Movie 1'],
     ]);
 
-    (new EmbyWebhookHandler)->handle($webhookEvent);
+    resolve(EmbyWebhookHandler::class)->handle($webhookEvent);
 
     $this->assertDatabaseHas('emby_activities', ['action' => 'finished']);
 });
@@ -115,8 +115,8 @@ test('terminal events insert new rows (do not upsert)', function (): void {
         'PlaybackInfo' => ['PositionTicks' => 100, 'PlayedToCompletion' => false],
     ];
 
-    (new EmbyWebhookHandler)->handle(makeWebhookEvent($this->connection, $payload));
-    (new EmbyWebhookHandler)->handle(makeWebhookEvent($this->connection, $payload));
+    resolve(EmbyWebhookHandler::class)->handle(makeWebhookEvent($this->connection, $payload));
+    resolve(EmbyWebhookHandler::class)->handle(makeWebhookEvent($this->connection, $payload));
 
     expect(EmbyActivity::where('emby_item_id', 'item-1')->where('action', 'stopped')->count())->toBe(2);
 });
@@ -128,7 +128,7 @@ test('handler skips when no EmbyUserLink exists for the Emby user', function ():
         'Item' => ['Id' => 'item-1', 'Type' => 'Movie', 'Name' => 'X'],
     ]);
 
-    (new EmbyWebhookHandler)->handle($webhookEvent);
+    resolve(EmbyWebhookHandler::class)->handle($webhookEvent);
 
     expect(EmbyActivity::count())->toBe(0);
     Event::assertNotDispatched(EmbyPlaybackUpdated::class);
@@ -142,7 +142,7 @@ test('handler ignores unsupported event types', function (): void {
         'Item' => ['Id' => 'item-1', 'Type' => 'Movie', 'Name' => 'X'],
     ]);
 
-    (new EmbyWebhookHandler)->handle($webhookEvent);
+    resolve(EmbyWebhookHandler::class)->handle($webhookEvent);
 
     expect(EmbyActivity::count())->toBe(0);
     Event::assertNotDispatched(EmbyPlaybackUpdated::class);
@@ -156,7 +156,7 @@ test('handler ignores unsupported media types', function (): void {
         'Item' => ['Id' => 'item-1', 'Type' => 'MusicAlbum', 'Name' => 'X'],
     ]);
 
-    (new EmbyWebhookHandler)->handle($webhookEvent);
+    resolve(EmbyWebhookHandler::class)->handle($webhookEvent);
 
     expect(EmbyActivity::count())->toBe(0);
     Event::assertNotDispatched(EmbyPlaybackUpdated::class);

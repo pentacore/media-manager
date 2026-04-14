@@ -8,6 +8,7 @@ use App\Events\EmbyPlaybackUpdated;
 use App\Models\EmbyActivity;
 use App\Models\EmbyUserLink;
 use App\Models\WebhookEvent;
+use App\Services\Actions\ActionOrchestrator;
 use App\Services\Webhook\WebhookHandler;
 use Illuminate\Support\Facades\Log;
 
@@ -15,9 +16,18 @@ class EmbyWebhookHandler implements WebhookHandler
 {
     private const array TERMINAL_ACTIONS = ['stopped', 'finished'];
 
+    public function __construct(private readonly ActionOrchestrator $actionOrchestrator) {}
+
     public function handle(WebhookEvent $webhookEvent): void
     {
         $payload = $webhookEvent->payload;
+
+        if (($payload['Event'] ?? null) === 'library.deleted') {
+            $this->handleLibraryDeleted($webhookEvent, $payload);
+            $webhookEvent->markProcessed();
+
+            return;
+        }
 
         $embyEvent = $payload['Event'] ?? null;
         $action = $this->mapAction($embyEvent, $payload);
@@ -129,5 +139,61 @@ class EmbyWebhookHandler implements WebhookHandler
             'Episode' => 'episode',
             default => null,
         };
+    }
+
+    /**
+     * @param  array<string, mixed>  $payload
+     */
+    private function handleLibraryDeleted(WebhookEvent $webhookEvent, array $payload): void
+    {
+        $itemType = $payload['Item']['Type'] ?? null;
+        $providerIds = $payload['Item']['ProviderIds'] ?? [];
+
+        if ($itemType === 'Series') {
+            $sonarrId = isset($providerIds['SonarrSeriesId']) ? (int) $providerIds['SonarrSeriesId'] : null;
+            if ($sonarrId === null || $sonarrId <= 0) {
+                Log::info('EmbyWebhookHandler: library.deleted for Series without SonarrSeriesId — skipping', [
+                    'webhook_event_id' => $webhookEvent->id,
+                ]);
+
+                return;
+            }
+
+            $this->actionOrchestrator->dispatch(
+                type: 'delete_series',
+                sourceService: 'emby',
+                targetService: 'sonarr',
+                payload: ['sonarr_series_id' => $sonarrId, 'delete_files' => true],
+                webhookEvent: $webhookEvent,
+            );
+
+            return;
+        }
+
+        if ($itemType === 'Movie') {
+            $radarrId = isset($providerIds['RadarrMovieId']) ? (int) $providerIds['RadarrMovieId'] : null;
+            if ($radarrId === null || $radarrId <= 0) {
+                Log::info('EmbyWebhookHandler: library.deleted for Movie without RadarrMovieId — skipping', [
+                    'webhook_event_id' => $webhookEvent->id,
+                ]);
+
+                return;
+            }
+
+            $this->actionOrchestrator->dispatch(
+                type: 'delete_movie',
+                sourceService: 'emby',
+                targetService: 'radarr',
+                payload: ['radarr_movie_id' => $radarrId, 'delete_files' => true],
+                webhookEvent: $webhookEvent,
+            );
+
+            return;
+        }
+
+        Log::info('EmbyWebhookHandler: library.deleted for unsupported item type — skipping', [
+            'webhook_event_id' => $webhookEvent->id,
+            'item_type' => $itemType,
+        ]);
     }
 }

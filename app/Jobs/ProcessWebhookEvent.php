@@ -7,6 +7,7 @@ namespace App\Jobs;
 use App\Enums\ServiceType;
 use App\Models\WebhookEvent;
 use App\Services\Emby\EmbyWebhookHandler;
+use App\Services\Sonarr\SonarrWebhookHandler;
 use App\Services\Webhook\WebhookHandler;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -59,6 +60,7 @@ class ProcessWebhookEvent implements ShouldQueue
     {
         $class = match ($serviceType) {
             ServiceType::Emby => EmbyWebhookHandler::class,
+            ServiceType::Sonarr => SonarrWebhookHandler::class,
             default => null,
         };
 

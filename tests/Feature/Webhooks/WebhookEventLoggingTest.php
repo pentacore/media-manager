@@ -27,7 +27,7 @@ test('webhook stores event in database', function (): void {
 
     $event = WebhookEvent::first();
     expect($event->payload)->toMatchArray($payload);
-    expect($event->processed_at)->toBeNull();
+    expect($event->processed_at)->not->toBeNull();
 });
 
 test('webhook stores event with unknown type when eventType missing', function (): void {

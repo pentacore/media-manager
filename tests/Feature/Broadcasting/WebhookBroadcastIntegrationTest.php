@@ -28,7 +28,7 @@ test('webhook controller dispatches WebhookReceived event', function (): void {
     Event::assertDispatched(fn (WebhookReceived $webhookReceived): bool => $webhookReceived->webhookEvent->service_connection_id === $connection->id
         && $webhookReceived->webhookEvent->event_type === 'grab');
 
-    Queue::assertPushed(ProcessWebhookEvent::class, fn (ProcessWebhookEvent $job): bool => $job->webhookEvent->service_connection_id === $connection->id);
+    Queue::assertPushed(ProcessWebhookEvent::class, fn (ProcessWebhookEvent $processWebhookEvent): bool => $processWebhookEvent->webhookEvent->service_connection_id === $connection->id);
 });
 
 test('broadcast dashboard stats command dispatches DashboardStatsUpdated event', function (): void {
