@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { Link, usePage } from '@inertiajs/vue3'
-import { Activity as ActivityIcon, Film, History, Inbox, LayoutGrid, Link2, Link as LinkIcon, Search, Shield, Tv, Users, Zap } from 'lucide-vue-next'
+import { Activity as ActivityIcon, Film, HeartPulse, History, Inbox, LayoutGrid, Link2, Link as LinkIcon, Search, Shield, Tv, Users, Zap } from 'lucide-vue-next'
 import AppLogo from '@/components/AppLogo.vue'
 import NavFooter from '@/components/NavFooter.vue'
 import NavMain from '@/components/NavMain.vue'
@@ -23,6 +23,7 @@ import RequestController from '@/actions/App/Http/Controllers/Media/RequestContr
 import SearchController from '@/actions/App/Http/Controllers/Media/SearchController'
 import NowPlayingController from '@/actions/App/Http/Controllers/Emby/NowPlayingController'
 import WatchHistoryController from '@/actions/App/Http/Controllers/Emby/WatchHistoryController'
+import ServiceHealthController from '@/actions/App/Http/Controllers/Monitoring/ServiceHealthController'
 import UserLinkController from '@/actions/App/Http/Controllers/Emby/UserLinkController'
 import ActionRequestController from '@/actions/App/Http/Controllers/Actions/ActionRequestController'
 import ActionTypeConfigController from '@/actions/App/Http/Controllers/Actions/ActionTypeConfigController'
@@ -79,6 +80,11 @@ const monitoringNavItems: NavItem[] = [
         title: 'Watch History',
         href: WatchHistoryController().url,
         icon: History,
+    },
+    {
+        title: 'Service Health',
+        href: ServiceHealthController().url,
+        icon: HeartPulse,
     },
 ]
 
