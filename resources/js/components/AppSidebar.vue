@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { Link, usePage } from '@inertiajs/vue3'
-import { Film, Inbox, LayoutGrid, Link as LinkIcon, Search, Tv, Users } from 'lucide-vue-next'
+import { Activity as ActivityIcon, Film, History, Inbox, LayoutGrid, Link2, Link as LinkIcon, Search, Tv, Users } from 'lucide-vue-next'
 import AppLogo from '@/components/AppLogo.vue'
 import NavFooter from '@/components/NavFooter.vue'
 import NavMain from '@/components/NavMain.vue'
@@ -21,6 +21,9 @@ import SeriesController from '@/actions/App/Http/Controllers/Media/SeriesControl
 import MovieController from '@/actions/App/Http/Controllers/Media/MovieController'
 import RequestController from '@/actions/App/Http/Controllers/Media/RequestController'
 import SearchController from '@/actions/App/Http/Controllers/Media/SearchController'
+import NowPlayingController from '@/actions/App/Http/Controllers/Emby/NowPlayingController'
+import WatchHistoryController from '@/actions/App/Http/Controllers/Emby/WatchHistoryController'
+import UserLinkController from '@/actions/App/Http/Controllers/Emby/UserLinkController'
 import type { NavItem } from '@/types'
 import { computed } from 'vue'
 
@@ -64,6 +67,19 @@ const mediaNavItems: NavItem[] = [
     },
 ]
 
+const monitoringNavItems: NavItem[] = [
+    {
+        title: 'Now Playing',
+        href: NowPlayingController().url,
+        icon: ActivityIcon,
+    },
+    {
+        title: 'Watch History',
+        href: WatchHistoryController().url,
+        icon: History,
+    },
+]
+
 const adminNavItems: NavItem[] = [
     {
         title: 'Connections',
@@ -74,6 +90,11 @@ const adminNavItems: NavItem[] = [
         title: 'Users',
         href: UserController.index.url(),
         icon: Users,
+    },
+    {
+        title: 'Emby Links',
+        href: UserLinkController.index.url(),
+        icon: Link2,
     },
 ]
 </script>
@@ -95,6 +116,7 @@ const adminNavItems: NavItem[] = [
         <SidebarContent>
             <NavMain :items="mainNavItems" />
             <NavMain :items="mediaNavItems" label="Media" />
+            <NavMain :items="monitoringNavItems" label="Monitoring" />
             <NavMain v-if="isAdmin" :items="adminNavItems" label="Admin" />
         </SidebarContent>
 

@@ -78,7 +78,7 @@ test('EmbyPlaybackUpdated broadcasts on emby activity channel', function (): voi
     expect($event->broadcastOn())->toEqual(new PrivateChannel('emby.activity'));
 
     $payload = $event->broadcastWith();
-    expect($payload)->toHaveKeys(['id', 'media_type', 'media_title', 'series_title', 'action', 'emby_username', 'updated_at']);
+    expect($payload)->toHaveKeys(['id', 'emby_user_link_id', 'media_type', 'media_title', 'series_title', 'action', 'play_position', 'duration_ticks', 'emby_username', 'updated_at']);
 });
 
 test('DashboardStatsUpdated broadcasts immediately on dashboard channel', function (): void {

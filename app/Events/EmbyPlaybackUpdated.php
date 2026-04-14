@@ -31,12 +31,15 @@ class EmbyPlaybackUpdated implements ShouldBroadcast
     {
         return [
             'id' => $this->embyActivity->id,
+            'emby_user_link_id' => $this->embyActivity->emby_user_link_id,
             'media_type' => $this->embyActivity->media_type,
             'media_title' => $this->embyActivity->media_title,
             'series_title' => $this->embyActivity->series_title,
             'action' => $this->embyActivity->action,
-            'emby_username' => $this->embyActivity->embyUserLink->emby_username,
-            'updated_at' => $this->embyActivity->updated_at->toISOString(),
+            'play_position' => $this->embyActivity->play_position,
+            'duration_ticks' => $this->embyActivity->duration_ticks,
+            'emby_username' => $this->embyActivity->embyUserLink?->emby_username,
+            'updated_at' => $this->embyActivity->updated_at?->toISOString(),
         ];
     }
 }

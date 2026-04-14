@@ -5,13 +5,16 @@ declare(strict_types=1);
 use App\Enums\ActionRequestStatus;
 use App\Events\DashboardStatsUpdated;
 use App\Events\WebhookReceived;
+use App\Jobs\ProcessWebhookEvent;
 use App\Models\ActionRequest;
 use App\Models\ServiceConnection;
 use App\Models\WebhookEvent;
 use Illuminate\Support\Facades\Event;
+use Illuminate\Support\Facades\Queue;
 
 test('webhook controller dispatches WebhookReceived event', function (): void {
     Event::fake([WebhookReceived::class]);
+    Queue::fake();
 
     $connection = ServiceConnection::factory()->sonarr()->create();
 
@@ -24,6 +27,8 @@ test('webhook controller dispatches WebhookReceived event', function (): void {
 
     Event::assertDispatched(fn (WebhookReceived $webhookReceived): bool => $webhookReceived->webhookEvent->service_connection_id === $connection->id
         && $webhookReceived->webhookEvent->event_type === 'grab');
+
+    Queue::assertPushed(ProcessWebhookEvent::class, fn (ProcessWebhookEvent $job): bool => $job->webhookEvent->service_connection_id === $connection->id);
 });
 
 test('broadcast dashboard stats command dispatches DashboardStatsUpdated event', function (): void {

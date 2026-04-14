@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Http\Controllers;
 
 use App\Events\WebhookReceived;
+use App\Jobs\ProcessWebhookEvent;
 use App\Models\ServiceConnection;
 use App\Models\WebhookEvent;
 use Illuminate\Http\JsonResponse;
@@ -26,6 +27,7 @@ class WebhookController extends Controller
         $webhookEvent->setRelation('serviceConnection', $connection);
 
         event(new WebhookReceived($webhookEvent));
+        dispatch(new ProcessWebhookEvent($webhookEvent));
 
         return response()->json(['status' => 'received']);
     }
