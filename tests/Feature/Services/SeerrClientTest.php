@@ -121,3 +121,54 @@ test('throws on server error', function (): void {
 
     $this->client->getStatus();
 })->throws(RequestException::class);
+
+test('updateRequestStatus sends POST to approve or decline path', function (): void {
+    Http::fake([
+        'seerr.local:5055/api/v1/request/42/approve' => Http::response(['id' => 42, 'status' => 2]),
+    ]);
+
+    $result = $this->client->updateRequestStatus(42, 'approve');
+
+    Http::assertSent(fn (Request $request): bool => $request->method() === 'POST'
+        && str_ends_with($request->url(), '/api/v1/request/42/approve'));
+
+    expect($result['id'])->toBe(42);
+});
+
+test('updateRequestStatus rejects invalid status values', function (): void {
+    expect(fn () => $this->client->updateRequestStatus(42, 'bogus'))
+        ->toThrow(InvalidArgumentException::class);
+});
+
+test('retryRequest sends POST to retry endpoint', function (): void {
+    Http::fake([
+        'seerr.local:5055/api/v1/request/42/retry' => Http::response(['id' => 42, 'status' => 1]),
+    ]);
+
+    $result = $this->client->retryRequest(42);
+
+    Http::assertSent(fn (Request $request): bool => $request->method() === 'POST'
+        && str_ends_with($request->url(), '/api/v1/request/42/retry'));
+
+    expect($result['id'])->toBe(42);
+});
+
+test('getRequestCount returns count summary', function (): void {
+    Http::fake([
+        'seerr.local:5055/api/v1/request/count' => Http::response([
+            'total' => 10,
+            'movie' => 4,
+            'tv' => 6,
+            'pending' => 2,
+            'approved' => 3,
+        ]),
+    ]);
+
+    $result = $this->client->getRequestCount();
+
+    Http::assertSent(fn (Request $request): bool => $request->method() === 'GET'
+        && str_ends_with($request->url(), '/api/v1/request/count'));
+
+    expect($result['total'])->toBe(10);
+    expect($result['pending'])->toBe(2);
+});

@@ -10,6 +10,10 @@ use Illuminate\Http\Client\PendingRequest;
 use Illuminate\Http\Client\RequestException;
 use Illuminate\Support\Facades\Http;
 
+/**
+ * @see https://github.com/seerr-team/seerr — canonical Seerr repo
+ * @see https://raw.githubusercontent.com/electather/seerr/develop/seerr-api.yml — OpenAPI spec (pending publication at seerr-team)
+ */
 class SeerrClient
 {
     protected string $apiVersion = 'v1';
@@ -69,6 +73,55 @@ class SeerrClient
     public function deleteRequest(int $id): void
     {
         $this->buildClient()->delete(sprintf('/api/%s/request/%d', $this->apiVersion, $id))->throw();
+    }
+
+    /**
+     * Update a request's status to approve or decline.
+     *
+     * @return array<string, mixed>
+     *
+     * @throws RequestException|ConnectionException
+     */
+    public function updateRequestStatus(int $id, string $status): array
+    {
+        if (! in_array($status, ['approve', 'decline'], true)) {
+            throw new \InvalidArgumentException(sprintf('Invalid request status "%s". Expected "approve" or "decline".', $status));
+        }
+
+        return $this->buildClient()
+            ->post(sprintf('/api/%s/request/%d/%s', $this->apiVersion, $id, $status))
+            ->throw()
+            ->json();
+    }
+
+    /**
+     * Retry a failed request by resending it to Sonarr/Radarr.
+     *
+     * @return array<string, mixed>
+     *
+     * @throws RequestException|ConnectionException
+     */
+    public function retryRequest(int $id): array
+    {
+        return $this->buildClient()
+            ->post(sprintf('/api/%s/request/%d/retry', $this->apiVersion, $id))
+            ->throw()
+            ->json();
+    }
+
+    /**
+     * Get the request count summary.
+     *
+     * @return array<string, mixed>
+     *
+     * @throws RequestException|ConnectionException
+     */
+    public function getRequestCount(): array
+    {
+        return $this->buildClient()
+            ->get(sprintf('/api/%s/request/count', $this->apiVersion))
+            ->throw()
+            ->json();
     }
 
     /**

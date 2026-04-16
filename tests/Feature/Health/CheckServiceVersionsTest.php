@@ -17,7 +17,7 @@ test('fetches latest release from GitHub for sonarr/radarr/seerr', function (): 
     Http::fake([
         'api.github.com/repos/Sonarr/Sonarr/releases/latest' => Http::response(['tag_name' => 'v4.0.5.1710']),
         'api.github.com/repos/Radarr/Radarr/releases/latest' => Http::response(['tag_name' => 'v5.3.6.8612']),
-        'api.github.com/repos/Fallenbagel/jellyseerr/releases/latest' => Http::response(['tag_name' => 'v2.0.0']),
+        'api.github.com/repos/seerr-team/seerr/releases/latest' => Http::response(['tag_name' => 'v2.0.0']),
     ]);
 
     $this->artisan('services:check-versions')->assertSuccessful();
