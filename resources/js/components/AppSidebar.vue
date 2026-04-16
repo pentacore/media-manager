@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { Link, usePage } from '@inertiajs/vue3'
-import { Activity as ActivityIcon, Film, HeartPulse, History, Inbox, LayoutGrid, Link2, Link as LinkIcon, Search, Shield, Tv, Users, Zap } from 'lucide-vue-next'
+import { Activity as ActivityIcon, Film, HeartPulse, History, Inbox, LayoutGrid, Link2, Link as LinkIcon, Search, Shield, Sparkles, Tv, Users, Zap } from 'lucide-vue-next'
 import AppLogo from '@/components/AppLogo.vue'
 import NavFooter from '@/components/NavFooter.vue'
 import NavMain from '@/components/NavMain.vue'
@@ -27,6 +27,7 @@ import ServiceHealthController from '@/actions/App/Http/Controllers/Monitoring/S
 import UserLinkController from '@/actions/App/Http/Controllers/Emby/UserLinkController'
 import ActionRequestController from '@/actions/App/Http/Controllers/Actions/ActionRequestController'
 import ActionTypeConfigController from '@/actions/App/Http/Controllers/Actions/ActionTypeConfigController'
+import AIChatController from '@/actions/App/Http/Controllers/AI/ChatController'
 import type { NavItem } from '@/types'
 import { computed } from 'vue'
 
@@ -38,6 +39,8 @@ const isAdmin = computed(() => {
     const value = typeof role === 'string' ? role : role.value
     return value === 'admin'
 })
+
+const aiEnabled = computed(() => Boolean((page.props as unknown as { ai?: { enabled?: boolean } }).ai?.enabled))
 
 const mainNavItems: NavItem[] = [
     {
@@ -96,6 +99,14 @@ const automationNavItems: NavItem[] = [
     },
 ]
 
+const aiNavItems: NavItem[] = [
+    {
+        title: 'AI Assistant',
+        href: AIChatController.index.url(),
+        icon: Sparkles,
+    },
+]
+
 const adminNavItems: NavItem[] = [
     {
         title: 'Connections',
@@ -139,6 +150,7 @@ const adminNavItems: NavItem[] = [
             <NavMain :items="mediaNavItems" label="Media" />
             <NavMain :items="monitoringNavItems" label="Monitoring" />
             <NavMain :items="automationNavItems" label="Automation" />
+            <NavMain v-if="aiEnabled && isAdmin" :items="aiNavItems" label="AI" />
             <NavMain v-if="isAdmin" :items="adminNavItems" label="Admin" />
         </SidebarContent>
 

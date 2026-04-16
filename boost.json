@@ -7,12 +7,14 @@
     "nightwatch_mcp": false,
     "sail": true,
     "skills": [
+        "ai-sdk-development",
         "fortify-development",
         "laravel-best-practices",
         "socialite-development",
         "wayfinder-development",
         "pest-testing",
         "inertia-vue-development",
+        "echo-development",
         "tailwindcss-development"
     ]
 }
