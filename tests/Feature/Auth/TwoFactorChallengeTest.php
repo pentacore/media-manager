@@ -36,7 +36,7 @@ test('two factor challenge can be rendered', function (): void {
 
     $this->get(route('two-factor.login'))
         ->assertOk()
-        ->assertInertia(fn (Assert $assert): AssertableInertia => $assert
+        ->assertInertia(fn (Assert $assert): Assert => $assert
             ->component('auth/TwoFactorChallenge'),
         );
 });

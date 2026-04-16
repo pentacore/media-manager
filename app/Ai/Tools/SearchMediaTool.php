@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Ai\Tools;
 
+use Illuminate\JsonSchema\Types\StringType;
 use App\Enums\ServiceType;
 use App\Models\ServiceConnection;
 use App\Services\Radarr\RadarrClient;
@@ -40,6 +41,9 @@ class SearchMediaTool implements Tool
         return json_encode($results);
     }
 
+    /**
+     * @return StringType[]
+     */
     public function schema(JsonSchema $schema): array
     {
         return [

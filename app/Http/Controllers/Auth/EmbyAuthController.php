@@ -17,7 +17,7 @@ use Illuminate\Support\Facades\Http;
 
 class EmbyAuthController extends Controller
 {
-    public function store(EmbyLoginRequest $request): RedirectResponse
+    public function store(EmbyLoginRequest $embyLoginRequest): RedirectResponse
     {
         $connection = ServiceConnection::where('type', ServiceType::Emby)
             ->where('is_active', true)
@@ -30,8 +30,8 @@ class EmbyAuthController extends Controller
         $response = Http::withHeaders([
             'X-Emby-Token' => $connection->api_key,
         ])->post($connection->url . '/Users/AuthenticateByName', [
-            'Username' => $request->input('username'),
-            'Pw' => $request->input('password'),
+            'Username' => $embyLoginRequest->input('username'),
+            'Pw' => $embyLoginRequest->input('password'),
         ]);
 
         if (! $response->successful()) {
@@ -51,11 +51,11 @@ class EmbyAuthController extends Controller
         }
 
         // New Emby user — require email
-        if (! $request->filled('email')) {
+        if (! $embyLoginRequest->filled('email')) {
             return back()->withErrors(['email' => __('Email is required for first-time Emby login.')]);
         }
 
-        $email = $request->input('email');
+        $email = $embyLoginRequest->input('email');
 
         // Find existing user by email or create new one
         $user = User::where('email', $email)->first();

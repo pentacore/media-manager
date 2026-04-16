@@ -4,6 +4,10 @@ declare(strict_types=1);
 
 namespace App\Models;
 
+use Override;
+use Carbon\CarbonImmutable;
+use Illuminate\Database\Eloquent\Collection;
+use Illuminate\Database\Eloquent\Builder;
 use Database\Factories\WebhookEventFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -16,23 +20,23 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
  * @property int $service_connection_id
  * @property string $event_type
  * @property array<array-key, mixed> $payload
- * @property \Carbon\CarbonImmutable|null $processed_at
- * @property \Carbon\CarbonImmutable|null $created_at
- * @property \Carbon\CarbonImmutable|null $updated_at
- * @property-read \Illuminate\Database\Eloquent\Collection<int, \App\Models\ActionRequest> $actionRequests
+ * @property CarbonImmutable|null $processed_at
+ * @property CarbonImmutable|null $created_at
+ * @property CarbonImmutable|null $updated_at
+ * @property-read Collection<int, ActionRequest> $actionRequests
  * @property-read int|null $action_requests_count
- * @property-read \App\Models\ServiceConnection $serviceConnection
- * @method static \Database\Factories\WebhookEventFactory factory($count = null, $state = [])
- * @method static \Illuminate\Database\Eloquent\Builder<static>|WebhookEvent newModelQuery()
- * @method static \Illuminate\Database\Eloquent\Builder<static>|WebhookEvent newQuery()
- * @method static \Illuminate\Database\Eloquent\Builder<static>|WebhookEvent query()
- * @method static \Illuminate\Database\Eloquent\Builder<static>|WebhookEvent whereCreatedAt($value)
- * @method static \Illuminate\Database\Eloquent\Builder<static>|WebhookEvent whereEventType($value)
- * @method static \Illuminate\Database\Eloquent\Builder<static>|WebhookEvent whereId($value)
- * @method static \Illuminate\Database\Eloquent\Builder<static>|WebhookEvent wherePayload($value)
- * @method static \Illuminate\Database\Eloquent\Builder<static>|WebhookEvent whereProcessedAt($value)
- * @method static \Illuminate\Database\Eloquent\Builder<static>|WebhookEvent whereServiceConnectionId($value)
- * @method static \Illuminate\Database\Eloquent\Builder<static>|WebhookEvent whereUpdatedAt($value)
+ * @property-read ServiceConnection $serviceConnection
+ * @method static WebhookEventFactory factory($count = null, $state = [])
+ * @method static Builder<static>|WebhookEvent newModelQuery()
+ * @method static Builder<static>|WebhookEvent newQuery()
+ * @method static Builder<static>|WebhookEvent query()
+ * @method static Builder<static>|WebhookEvent whereCreatedAt($value)
+ * @method static Builder<static>|WebhookEvent whereEventType($value)
+ * @method static Builder<static>|WebhookEvent whereId($value)
+ * @method static Builder<static>|WebhookEvent wherePayload($value)
+ * @method static Builder<static>|WebhookEvent whereProcessedAt($value)
+ * @method static Builder<static>|WebhookEvent whereServiceConnectionId($value)
+ * @method static Builder<static>|WebhookEvent whereUpdatedAt($value)
  * @mixin \Eloquent
  */
 #[Fillable(['service_connection_id', 'event_type', 'payload', 'processed_at'])]
@@ -44,7 +48,7 @@ class WebhookEvent extends Model
     /**
      * @return array<string, string>
      */
-    #[\Override]
+    #[Override]
     protected function casts(): array
     {
         return [

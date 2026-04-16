@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers\Media;
 
+use Throwable;
 use App\Enums\ServiceType;
 use App\Http\Controllers\Controller;
 use App\Models\ServiceConnection;
@@ -47,7 +48,7 @@ class SearchController extends Controller
                 'overview' => $item['overview'] ?? null,
                 'remote_poster' => $item['remotePoster'] ?? null,
             ], $sonarrClient->searchSeries($term));
-        } catch (\Throwable) {
+        } catch (Throwable) {
             $errors[] = 'sonarr';
         }
 
@@ -60,7 +61,7 @@ class SearchController extends Controller
                 'overview' => $item['overview'] ?? null,
                 'remote_poster' => $item['remotePoster'] ?? null,
             ], $radarrClient->searchMovies($term));
-        } catch (\Throwable) {
+        } catch (Throwable) {
             $errors[] = 'radarr';
         }
 
@@ -75,7 +76,7 @@ class SearchController extends Controller
                 'overview' => $item['overview'] ?? null,
                 'poster_path' => $item['posterPath'] ?? null,
             ], is_array($seerrResults) ? $seerrResults : []);
-        } catch (\Throwable) {
+        } catch (Throwable) {
             $errors[] = 'seerr';
         }
 

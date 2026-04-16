@@ -16,6 +16,9 @@ beforeEach(function (): void {
     ActionTypeConfig::factory()->create(['type' => 'delete_movie', 'requires_approval' => true, 'is_enabled' => true]);
 });
 
+/**
+ * @param array<string, mixed> $payload
+ */
 function makeEmbyWebhookEvent(ServiceConnection $serviceConnection, array $payload): WebhookEvent
 {
     return WebhookEvent::factory()->create([

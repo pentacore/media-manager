@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Services\Emby;
 
+use Throwable;
 use App\Models\ServiceConnection;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\PendingRequest;
@@ -28,7 +29,7 @@ class EmbyClient
             ->retry(
                 times: 3,
                 sleepMilliseconds: fn (int $attempt): int => $attempt * 500,
-                when: fn (\Throwable $throwable): bool => $throwable instanceof ConnectionException
+                when: fn (Throwable $throwable): bool => $throwable instanceof ConnectionException
                     || ($throwable instanceof RequestException && $throwable->response->serverError()),
                 throw: false,
             );

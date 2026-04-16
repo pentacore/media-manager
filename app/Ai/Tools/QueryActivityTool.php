@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Ai\Tools;
 
+use Illuminate\JsonSchema\Types\Type;
 use App\Models\ActivityLog;
 use App\Models\EmbyActivity;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
@@ -70,6 +71,9 @@ class QueryActivityTool implements Tool
         return json_encode(['scope' => 'emby', 'entries' => $activities]);
     }
 
+    /**
+     * @return array<string, Type>
+     */
     public function schema(JsonSchema $schema): array
     {
         return [

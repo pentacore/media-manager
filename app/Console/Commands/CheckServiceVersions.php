@@ -4,16 +4,17 @@ declare(strict_types=1);
 
 namespace App\Console\Commands;
 
+use Override;
 use App\Jobs\FetchLatestServiceVersion;
 use App\Models\ServiceConnection;
 use Illuminate\Console\Command;
 
 class CheckServiceVersions extends Command
 {
-    #[\Override]
+    #[Override]
     protected $signature = 'services:check-versions';
 
-    #[\Override]
+    #[Override]
     protected $description = 'Check upstream GitHub releases for each service type and store latest_version.';
 
     public function handle(): int
@@ -27,7 +28,7 @@ class CheckServiceVersions extends Command
             }
 
             app()->call([new FetchLatestServiceVersion($connection), 'handle']);
-            $checked++;
+            ++$checked;
         }
 
         $this->info(sprintf('Updated latest_version for %d service(s).', $checked));

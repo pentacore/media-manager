@@ -121,6 +121,9 @@ class EmbyWebhookHandler implements WebhookHandler
         $webhookEvent->markProcessed();
     }
 
+    /**
+     * @param array<string, mixed> $payload
+     */
     private function mapAction(?string $embyEvent, array $payload): ?string
     {
         return match ($embyEvent) {

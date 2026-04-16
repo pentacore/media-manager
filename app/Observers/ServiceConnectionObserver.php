@@ -19,8 +19,8 @@ class ServiceConnectionObserver
             return;
         }
 
-        PingServiceHealth::dispatch($serviceConnection);
-        FetchLatestServiceVersion::dispatch($serviceConnection);
+        dispatch(new PingServiceHealth($serviceConnection));
+        dispatch(new FetchLatestServiceVersion($serviceConnection));
     }
 
     /**
@@ -42,7 +42,7 @@ class ServiceConnectionObserver
             return;
         }
 
-        PingServiceHealth::dispatch($serviceConnection);
-        FetchLatestServiceVersion::dispatch($serviceConnection);
+        dispatch(new PingServiceHealth($serviceConnection));
+        dispatch(new FetchLatestServiceVersion($serviceConnection));
     }
 }

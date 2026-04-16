@@ -16,6 +16,9 @@ beforeEach(function (): void {
     $this->userLink = EmbyUserLink::factory()->create(['emby_user_id' => 'emby-user-1']);
 });
 
+/**
+ * @param array<string, mixed> $payload
+ */
 function makeWebhookEvent(ServiceConnection $serviceConnection, array $payload): WebhookEvent
 {
     return WebhookEvent::factory()->create([

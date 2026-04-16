@@ -26,7 +26,7 @@ class InviteController extends Controller
         Auth::login($user);
 
         if ($user->password) {
-            return redirect()->route('dashboard');
+            return to_route('dashboard');
         }
 
         return Inertia::render('auth/SetPassword');

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Http\Middleware;
 
+use Override;
 use App\Providers\AIServiceProvider;
 use Illuminate\Http\Request;
 use Inertia\Middleware;
@@ -17,7 +18,7 @@ class HandleInertiaRequests extends Middleware
      *
      * @var string
      */
-    #[\Override]
+    #[Override]
     protected $rootView = 'app';
 
     /**
@@ -25,7 +26,7 @@ class HandleInertiaRequests extends Middleware
      *
      * @see https://inertiajs.com/asset-versioning
      */
-    #[\Override]
+    #[Override]
     public function version(Request $request): ?string
     {
         return parent::version($request);
@@ -38,7 +39,7 @@ class HandleInertiaRequests extends Middleware
      *
      * @return array<string, mixed>
      */
-    #[\Override]
+    #[Override]
     public function share(Request $request): array
     {
         return [

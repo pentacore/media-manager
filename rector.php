@@ -14,15 +14,19 @@ return RectorConfig::configure()
         codeQuality: true,
         codingStyle: true,
         typeDeclarations: true,
+        typeDeclarationDocblocks: true,
         privatization: true,
         naming: true,
         instanceOf: true,
         earlyReturn: true,
         carbon: true,
         rectorPreset: true,
+        phpunitCodeQuality: true,
     )
     ->withSetProviders(LaravelSetProvider::class)
-    ->withComposerBased(laravel: true)
+    ->withComposerBased(phpunit: true, laravel: true)
+    ->withImportNames()
+    ->withAttributesSets()
     ->withSets(
         [
             LaravelSetList::LARAVEL_CODE_QUALITY,
@@ -33,7 +37,7 @@ return RectorConfig::configure()
             LaravelSetList::LARAVEL_TESTING,
             LaravelSetList::LARAVEL_FACTORIES,
             LaravelSetList::LARAVEL_ARRAYACCESS_TO_METHOD_CALL,
-            LaravelSetList::LARAVEL_ARRAY_STR_FUNCTION_TO_STATIC_CALL
+            LaravelSetList::LARAVEL_ARRAY_STR_FUNCTION_TO_STATIC_CALL,
         ]
     )
     ->withConfiguredRule(

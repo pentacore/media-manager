@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Console\Commands;
 
+use Override;
 use App\Enums\ActionRequestStatus;
 use App\Events\DashboardStatsUpdated;
 use App\Models\ActionRequest;
@@ -13,10 +14,10 @@ use Illuminate\Console\Command;
 
 class BroadcastDashboardStats extends Command
 {
-    #[\Override]
+    #[Override]
     protected $signature = 'dashboard:broadcast-stats';
 
-    #[\Override]
+    #[Override]
     protected $description = 'Broadcast current dashboard statistics via WebSocket';
 
     public function handle(): void

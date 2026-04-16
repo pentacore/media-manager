@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Services\Seerr;
 
+use Throwable;
+use InvalidArgumentException;
 use App\Models\ServiceConnection;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\PendingRequest;
@@ -31,7 +33,7 @@ class SeerrClient
             ->retry(
                 times: 3,
                 sleepMilliseconds: fn (int $attempt): int => $attempt * 500,
-                when: fn (\Throwable $throwable): bool => $throwable instanceof ConnectionException
+                when: fn (Throwable $throwable): bool => $throwable instanceof ConnectionException
                     || ($throwable instanceof RequestException && $throwable->response->serverError()),
                 throw: false,
             );
@@ -85,7 +87,7 @@ class SeerrClient
     public function updateRequestStatus(int $id, string $status): array
     {
         if (! in_array($status, ['approve', 'decline'], true)) {
-            throw new \InvalidArgumentException(sprintf('Invalid request status "%s". Expected "approve" or "decline".', $status));
+            throw new InvalidArgumentException(sprintf('Invalid request status "%s". Expected "approve" or "decline".', $status));
         }
 
         return $this->buildClient()

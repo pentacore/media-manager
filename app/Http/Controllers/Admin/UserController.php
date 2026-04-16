@@ -37,18 +37,18 @@ class UserController extends Controller
         ]);
     }
 
-    public function store(CreateUserRequest $request): RedirectResponse
+    public function store(CreateUserRequest $createUserRequest): RedirectResponse
     {
         $fields = ['name', 'email', 'role'];
 
-        if ($request->boolean('set_password')) {
+        if ($createUserRequest->boolean('set_password')) {
             $fields[] = 'password';
         }
 
-        $user = User::create($request->safe()->only($fields));
+        $user = User::create($createUserRequest->safe()->only($fields));
         $user->forceFill(['email_verified_at' => now()])->save();
 
-        if (! $request->boolean('set_password')) {
+        if (! $createUserRequest->boolean('set_password')) {
             $inviteUrl = URL::temporarySignedRoute(
                 'auth.invite.accept',
                 now()->addHours(48),
@@ -65,11 +65,11 @@ class UserController extends Controller
         return to_route('admin.users.index');
     }
 
-    public function updateRole(UpdateUserRoleRequest $request, User $user): RedirectResponse
+    public function updateRole(UpdateUserRoleRequest $updateUserRoleRequest, User $user): RedirectResponse
     {
-        abort_if($user->id === $request->user()->id, 403);
+        abort_if($user->id === $updateUserRoleRequest->user()->id, 403);
 
-        $user->update(['role' => $request->validated('role')]);
+        $user->update(['role' => $updateUserRoleRequest->validated('role')]);
 
         Inertia::flash('toast', ['type' => 'success', 'message' => __('User role updated.')]);
 

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Ai\Tools;
 
+use Illuminate\JsonSchema\Types\Type;
 use App\Models\ActionRequest;
 use App\Services\Actions\ActionOrchestrator;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
@@ -60,6 +61,9 @@ class CreateActionRequestTool implements Tool
         ]);
     }
 
+    /**
+     * @return array<string, Type>
+     */
     public function schema(JsonSchema $schema): array
     {
         return [

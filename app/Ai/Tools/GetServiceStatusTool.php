@@ -39,6 +39,9 @@ class GetServiceStatusTool implements Tool
         return json_encode(['services' => $data]);
     }
 
+    /**
+     * @return array{}
+     */
     public function schema(JsonSchema $schema): array
     {
         return [];

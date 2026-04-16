@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers\Auth;
 
+use Throwable;
 use App\Actions\FindOrCreateSsoUser;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\RedirectResponse;
@@ -21,7 +22,7 @@ class AuthentikController extends Controller
     {
         try {
             $socialiteUser = Socialite::driver('authentik')->user();
-        } catch (\Throwable) {
+        } catch (Throwable) {
             return to_route('login')->with('status', __('Authentication failed. Please try again.'));
         }
 

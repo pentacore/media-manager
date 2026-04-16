@@ -4,6 +4,9 @@ declare(strict_types=1);
 
 namespace App\Models;
 
+use Carbon\CarbonImmutable;
+use Illuminate\Database\Eloquent\Collection;
+use Illuminate\Database\Eloquent\Builder;
 use Database\Factories\EmbyUserLinkFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -16,21 +19,21 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
  * @property int $user_id
  * @property string $emby_user_id
  * @property string $emby_username
- * @property \Carbon\CarbonImmutable|null $created_at
- * @property \Carbon\CarbonImmutable|null $updated_at
- * @property-read \Illuminate\Database\Eloquent\Collection<int, \App\Models\EmbyActivity> $activities
+ * @property CarbonImmutable|null $created_at
+ * @property CarbonImmutable|null $updated_at
+ * @property-read Collection<int, EmbyActivity> $activities
  * @property-read int|null $activities_count
- * @property-read \App\Models\User $user
- * @method static \Database\Factories\EmbyUserLinkFactory factory($count = null, $state = [])
- * @method static \Illuminate\Database\Eloquent\Builder<static>|EmbyUserLink newModelQuery()
- * @method static \Illuminate\Database\Eloquent\Builder<static>|EmbyUserLink newQuery()
- * @method static \Illuminate\Database\Eloquent\Builder<static>|EmbyUserLink query()
- * @method static \Illuminate\Database\Eloquent\Builder<static>|EmbyUserLink whereCreatedAt($value)
- * @method static \Illuminate\Database\Eloquent\Builder<static>|EmbyUserLink whereEmbyUserId($value)
- * @method static \Illuminate\Database\Eloquent\Builder<static>|EmbyUserLink whereEmbyUsername($value)
- * @method static \Illuminate\Database\Eloquent\Builder<static>|EmbyUserLink whereId($value)
- * @method static \Illuminate\Database\Eloquent\Builder<static>|EmbyUserLink whereUpdatedAt($value)
- * @method static \Illuminate\Database\Eloquent\Builder<static>|EmbyUserLink whereUserId($value)
+ * @property-read User $user
+ * @method static EmbyUserLinkFactory factory($count = null, $state = [])
+ * @method static Builder<static>|EmbyUserLink newModelQuery()
+ * @method static Builder<static>|EmbyUserLink newQuery()
+ * @method static Builder<static>|EmbyUserLink query()
+ * @method static Builder<static>|EmbyUserLink whereCreatedAt($value)
+ * @method static Builder<static>|EmbyUserLink whereEmbyUserId($value)
+ * @method static Builder<static>|EmbyUserLink whereEmbyUsername($value)
+ * @method static Builder<static>|EmbyUserLink whereId($value)
+ * @method static Builder<static>|EmbyUserLink whereUpdatedAt($value)
+ * @method static Builder<static>|EmbyUserLink whereUserId($value)
  * @mixin \Eloquent
  */
 #[Fillable(['user_id', 'emby_user_id', 'emby_username'])]
