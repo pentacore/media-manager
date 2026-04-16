@@ -8,6 +8,8 @@ use App\Enums\ServiceType;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Admin\ServiceConnectionStoreRequest;
 use App\Http\Requests\Admin\ServiceConnectionUpdateRequest;
+use App\Jobs\FetchLatestServiceVersion;
+use App\Jobs\PingServiceHealth;
 use App\Models\ServiceConnection;
 use App\Services\Emby\EmbyClient;
 use App\Services\Radarr\RadarrClient;
@@ -33,8 +35,13 @@ class ServiceConnectionController extends Controller
                     'name' => $connection->name,
                     'url' => $connection->url,
                     'is_active' => $connection->is_active,
+                    'health_status' => $connection->health_status?->value,
                     'last_seen_at' => $connection->last_seen_at?->diffForHumans(),
                     'version' => $connection->version,
+                    'latest_version' => $connection->latest_version,
+                    'update_available' => $connection->latest_version !== null
+                        && $connection->version !== null
+                        && $connection->latest_version !== $connection->version,
                 ]),
         ]);
     }
@@ -97,6 +104,30 @@ class ServiceConnectionController extends Controller
         Inertia::flash('toast', ['type' => 'success', 'message' => __(sprintf('Connection %s.', $status))]);
 
         return to_route('admin.connections.index');
+    }
+
+    public function checkHealth(ServiceConnection $connection): RedirectResponse
+    {
+        PingServiceHealth::dispatch($connection);
+
+        Inertia::flash('toast', [
+            'type' => 'success',
+            'message' => __('Health check queued for :name.', ['name' => $connection->name]),
+        ]);
+
+        return back();
+    }
+
+    public function checkVersion(ServiceConnection $connection): RedirectResponse
+    {
+        FetchLatestServiceVersion::dispatch($connection);
+
+        Inertia::flash('toast', [
+            'type' => 'success',
+            'message' => __('Version check queued for :name.', ['name' => $connection->name]),
+        ]);
+
+        return back();
     }
 
     public function test(Request $request): JsonResponse

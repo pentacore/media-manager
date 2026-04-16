@@ -2,7 +2,10 @@
 
 declare(strict_types=1);
 
+use App\Jobs\FetchLatestServiceVersion;
+use App\Jobs\PingServiceHealth;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Queue;
 use Tests\TestCase;
 
 /*
@@ -18,6 +21,15 @@ use Tests\TestCase;
 
 pest()->extend(TestCase::class)
     ->use(RefreshDatabase::class)
+    ->beforeEach(function (): void {
+        // The ServiceConnection observer dispatches PingServiceHealth and
+        // FetchLatestServiceVersion on create / identity-update. In tests
+        // (sync queue) those jobs would run real HTTP inside factory create,
+        // which conflicts with Http::preventStrayRequests() in many suites.
+        // Fake only those two jobs by default — other jobs (webhook handlers,
+        // etc.) keep their normal sync dispatch behaviour.
+        Queue::fake([PingServiceHealth::class, FetchLatestServiceVersion::class]);
+    })
     ->in('Feature');
 
 /*

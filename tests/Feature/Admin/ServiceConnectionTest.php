@@ -1,8 +1,11 @@
 <?php
 
+use App\Jobs\FetchLatestServiceVersion;
+use App\Jobs\PingServiceHealth;
 use App\Models\ServiceConnection;
 use App\Models\User;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Queue;
 
 test('guests cannot access service connections', function (): void {
     $this->get(route('admin.connections.index'))
@@ -240,4 +243,50 @@ test('guests cannot test connections', function (): void {
         'url' => 'http://sonarr.local:8989',
         'api_key' => 'key',
     ])->assertUnauthorized();
+});
+
+test('admin can dispatch a health check for a connection', function (): void {
+    Queue::fake();
+    $admin = User::factory()->admin()->create();
+    $connection = ServiceConnection::factory()->sonarr()->create();
+    Queue::fake();
+
+    $this->actingAs($admin)
+        ->from(route('admin.connections.index'))
+        ->post(route('admin.connections.check-health', $connection))
+        ->assertRedirect(route('admin.connections.index'));
+
+    Queue::assertPushed(PingServiceHealth::class, 1);
+});
+
+test('admin can dispatch a version check for a connection', function (): void {
+    Queue::fake();
+    $admin = User::factory()->admin()->create();
+    $connection = ServiceConnection::factory()->sonarr()->create();
+    Queue::fake();
+
+    $this->actingAs($admin)
+        ->from(route('admin.connections.index'))
+        ->post(route('admin.connections.check-version', $connection))
+        ->assertRedirect(route('admin.connections.index'));
+
+    Queue::assertPushed(FetchLatestServiceVersion::class, 1);
+});
+
+test('non-admin cannot dispatch health check', function (): void {
+    $member = User::factory()->member()->create();
+    $connection = ServiceConnection::factory()->sonarr()->create();
+
+    $this->actingAs($member)
+        ->post(route('admin.connections.check-health', $connection))
+        ->assertForbidden();
+});
+
+test('non-admin cannot dispatch version check', function (): void {
+    $member = User::factory()->member()->create();
+    $connection = ServiceConnection::factory()->sonarr()->create();
+
+    $this->actingAs($member)
+        ->post(route('admin.connections.check-version', $connection))
+        ->assertForbidden();
 });

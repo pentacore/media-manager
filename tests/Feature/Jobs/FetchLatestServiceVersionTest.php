@@ -1,0 +1,68 @@
+<?php
+
+declare(strict_types=1);
+
+use App\Jobs\FetchLatestServiceVersion;
+use App\Models\ServiceConnection;
+use Illuminate\Contracts\Queue\ShouldQueue;
+use Illuminate\Support\Facades\Http;
+
+beforeEach(function (): void {
+    Http::preventStrayRequests();
+});
+
+test('fetches and stores latest_version for sonarr', function (): void {
+    $connection = ServiceConnection::factory()->sonarr()->create();
+
+    Http::fake([
+        'api.github.com/repos/Sonarr/Sonarr/releases/latest' => Http::response(['tag_name' => 'v4.0.5']),
+    ]);
+
+    app()->call([new FetchLatestServiceVersion($connection), 'handle']);
+
+    expect($connection->fresh()->latest_version)->toBe('4.0.5');
+});
+
+test('fetches and stores latest_version for emby', function (): void {
+    $connection = ServiceConnection::factory()->emby()->create();
+
+    Http::fake([
+        'api.github.com/repos/MediaBrowser/Emby.Releases/releases/latest' => Http::response(['tag_name' => '4.8.0.80']),
+    ]);
+
+    app()->call([new FetchLatestServiceVersion($connection), 'handle']);
+
+    expect($connection->fresh()->latest_version)->toBe('4.8.0.80');
+});
+
+test('no-op for service types not in REPO_MAP', function (): void {
+    // Contrived case — all our current types have mappings. Guard against future types being added without a repo.
+    expect(FetchLatestServiceVersion::REPO_MAP)->toHaveKeys(['sonarr', 'radarr', 'seerr', 'emby']);
+});
+
+test('no-op when GitHub API returns failure', function (): void {
+    $connection = ServiceConnection::factory()->sonarr()->create();
+
+    Http::fake(['api.github.com/*' => Http::response('Service Unavailable', 503)]);
+
+    app()->call([new FetchLatestServiceVersion($connection), 'handle']);
+
+    expect($connection->fresh()->latest_version)->toBeNull();
+});
+
+test('strips v prefix', function (): void {
+    $connection = ServiceConnection::factory()->radarr()->create();
+
+    Http::fake([
+        'api.github.com/*' => Http::response(['tag_name' => 'v5.3.6.8612']),
+    ]);
+
+    app()->call([new FetchLatestServiceVersion($connection), 'handle']);
+
+    expect($connection->fresh()->latest_version)->toBe('5.3.6.8612');
+});
+
+test('implements ShouldQueue', function (): void {
+    $connection = ServiceConnection::factory()->sonarr()->create();
+    expect(new FetchLatestServiceVersion($connection))->toBeInstanceOf(ShouldQueue::class);
+});

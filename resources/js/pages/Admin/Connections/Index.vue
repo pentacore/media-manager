@@ -1,8 +1,31 @@
 <script setup lang="ts">
 import { Head, Link, router } from '@inertiajs/vue3'
+import {
+    ArrowUpCircle,
+    Briefcase,
+    HeartPulse,
+    Pencil,
+    Power,
+    RefreshCw,
+    Trash2,
+} from 'lucide-vue-next'
 import ServiceConnectionController from '@/actions/App/Http/Controllers/Admin/ServiceConnectionController'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
+import {
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuLabel,
+    DropdownMenuSeparator,
+    DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
+import {
+    Tooltip,
+    TooltipContent,
+    TooltipProvider,
+    TooltipTrigger,
+} from '@/components/ui/tooltip'
 import {
     Table,
     TableBody,
@@ -18,8 +41,11 @@ interface Connection {
     name: string
     url: string
     is_active: boolean
+    health_status: string | null
     last_seen_at: string | null
     version: string | null
+    latest_version: string | null
+    update_available: boolean
 }
 
 defineProps<{
@@ -42,9 +68,40 @@ function typeLabel(type: Connection['type']): string {
     return type.label ?? type.value
 }
 
+function statusBadgeVariant(
+    connection: Connection,
+): 'default' | 'destructive' | 'secondary' | 'outline' {
+    if (!connection.is_active) {
+        return 'secondary'
+    }
+    switch (connection.health_status) {
+        case 'healthy':
+            return 'default'
+        case 'unhealthy':
+            return 'destructive'
+        default:
+            return 'outline'
+    }
+}
+
+function statusLabel(connection: Connection): string {
+    if (!connection.is_active) {
+        return 'Inactive'
+    }
+    switch (connection.health_status) {
+        case 'healthy':
+            return 'Healthy'
+        case 'unhealthy':
+            return 'Unhealthy'
+        default:
+            return 'Unknown'
+    }
+}
+
 function toggleConnection(connection: Connection) {
     router.visit(ServiceConnectionController.toggle.url(connection.id), {
         method: 'patch',
+        preserveScroll: true,
     })
 }
 
@@ -54,6 +111,20 @@ function deleteConnection(connection: Connection) {
             method: 'delete',
         })
     }
+}
+
+function checkHealth(connection: Connection) {
+    router.visit(ServiceConnectionController.checkHealth.url(connection.id), {
+        method: 'post',
+        preserveScroll: true,
+    })
+}
+
+function checkVersion(connection: Connection) {
+    router.visit(ServiceConnectionController.checkVersion.url(connection.id), {
+        method: 'post',
+        preserveScroll: true,
+    })
 }
 </script>
 
@@ -71,54 +142,121 @@ function deleteConnection(connection: Connection) {
             </Link>
         </div>
 
-        <Table>
-            <TableHeader>
-                <TableRow>
-                    <TableHead>Name</TableHead>
-                    <TableHead>Type</TableHead>
-                    <TableHead>URL</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead>Last Seen</TableHead>
-                    <TableHead>Version</TableHead>
-                    <TableHead class="text-right">Actions</TableHead>
-                </TableRow>
-            </TableHeader>
-            <TableBody>
-                <TableRow v-for="connection in connections" :key="connection.id">
-                    <TableCell class="font-medium">{{ connection.name }}</TableCell>
-                    <TableCell>
-                        <Badge variant="outline">{{ typeLabel(connection.type) }}</Badge>
-                    </TableCell>
-                    <TableCell class="text-muted-foreground">{{ connection.url }}</TableCell>
-                    <TableCell>
-                        <Badge :variant="connection.is_active ? 'default' : 'secondary'">
-                            {{ connection.is_active ? 'Active' : 'Inactive' }}
-                        </Badge>
-                    </TableCell>
-                    <TableCell class="text-muted-foreground">
-                        {{ connection.last_seen_at ?? 'Never' }}
-                    </TableCell>
-                    <TableCell class="text-muted-foreground">
-                        {{ connection.version ?? '-' }}
-                    </TableCell>
-                    <TableCell class="text-right space-x-2">
-                        <Link :href="ServiceConnectionController.edit.url(connection.id)">
-                            <Button variant="ghost" size="sm">Edit</Button>
-                        </Link>
-                        <Button variant="ghost" size="sm" @click="toggleConnection(connection)">
-                            {{ connection.is_active ? 'Disable' : 'Enable' }}
-                        </Button>
-                        <Button variant="ghost" size="sm" class="text-destructive" @click="deleteConnection(connection)">
-                            Delete
-                        </Button>
-                    </TableCell>
-                </TableRow>
-                <TableRow v-if="connections.length === 0">
-                    <TableCell :colspan="7" class="text-center text-muted-foreground py-8">
-                        No connections configured yet. Add one to get started.
-                    </TableCell>
-                </TableRow>
-            </TableBody>
-        </Table>
+        <TooltipProvider :delay-duration="200">
+            <Table>
+                <TableHeader>
+                    <TableRow>
+                        <TableHead>Name</TableHead>
+                        <TableHead>Type</TableHead>
+                        <TableHead>URL</TableHead>
+                        <TableHead>Status</TableHead>
+                        <TableHead>Last Seen</TableHead>
+                        <TableHead>Version</TableHead>
+                        <TableHead class="text-right">Actions</TableHead>
+                    </TableRow>
+                </TableHeader>
+                <TableBody>
+                    <TableRow v-for="connection in connections" :key="connection.id">
+                        <TableCell class="font-medium">{{ connection.name }}</TableCell>
+                        <TableCell>
+                            <Badge variant="outline">{{ typeLabel(connection.type) }}</Badge>
+                        </TableCell>
+                        <TableCell class="text-muted-foreground">{{ connection.url }}</TableCell>
+                        <TableCell>
+                            <Badge :variant="statusBadgeVariant(connection)">
+                                {{ statusLabel(connection) }}
+                            </Badge>
+                        </TableCell>
+                        <TableCell class="text-muted-foreground">
+                            {{ connection.last_seen_at ?? 'Never' }}
+                        </TableCell>
+                        <TableCell>
+                            <div class="flex flex-col gap-1 text-sm">
+                                <span class="font-mono">{{ connection.version ?? '—' }}</span>
+                                <span
+                                    v-if="connection.update_available"
+                                    class="inline-flex items-center gap-1 text-xs text-amber-600 dark:text-amber-400"
+                                >
+                                    <ArrowUpCircle class="size-3" />
+                                    {{ connection.latest_version }} available
+                                </span>
+                                <span
+                                    v-else-if="connection.latest_version && !connection.version"
+                                    class="text-xs text-muted-foreground font-mono"
+                                >
+                                    latest: {{ connection.latest_version }}
+                                </span>
+                            </div>
+                        </TableCell>
+                        <TableCell class="text-right">
+                            <div class="inline-flex items-center gap-1">
+                                <Tooltip>
+                                    <TooltipTrigger as-child>
+                                        <Link :href="ServiceConnectionController.edit.url(connection.id)">
+                                            <Button variant="ghost" size="icon">
+                                                <Pencil class="size-4" />
+                                                <span class="sr-only">Edit</span>
+                                            </Button>
+                                        </Link>
+                                    </TooltipTrigger>
+                                    <TooltipContent>Edit</TooltipContent>
+                                </Tooltip>
+
+                                <Tooltip>
+                                    <TooltipTrigger as-child>
+                                        <Button variant="ghost" size="icon" @click="toggleConnection(connection)">
+                                            <Power class="size-4" />
+                                            <span class="sr-only">{{ connection.is_active ? 'Disable' : 'Enable' }}</span>
+                                        </Button>
+                                    </TooltipTrigger>
+                                    <TooltipContent>{{ connection.is_active ? 'Disable' : 'Enable' }}</TooltipContent>
+                                </Tooltip>
+
+                                <DropdownMenu>
+                                    <DropdownMenuTrigger as-child>
+                                        <Button variant="ghost" size="icon" title="Jobs">
+                                            <Briefcase class="size-4" />
+                                            <span class="sr-only">Jobs</span>
+                                        </Button>
+                                    </DropdownMenuTrigger>
+                                    <DropdownMenuContent align="end" class="w-48">
+                                        <DropdownMenuLabel>Jobs</DropdownMenuLabel>
+                                        <DropdownMenuSeparator />
+                                        <DropdownMenuItem @click="checkHealth(connection)">
+                                            <HeartPulse class="mr-2 size-4" />
+                                            Check health
+                                        </DropdownMenuItem>
+                                        <DropdownMenuItem @click="checkVersion(connection)">
+                                            <RefreshCw class="mr-2 size-4" />
+                                            Check version
+                                        </DropdownMenuItem>
+                                    </DropdownMenuContent>
+                                </DropdownMenu>
+
+                                <Tooltip>
+                                    <TooltipTrigger as-child>
+                                        <Button
+                                            variant="ghost"
+                                            size="icon"
+                                            class="text-destructive hover:text-destructive"
+                                            @click="deleteConnection(connection)"
+                                        >
+                                            <Trash2 class="size-4" />
+                                            <span class="sr-only">Delete</span>
+                                        </Button>
+                                    </TooltipTrigger>
+                                    <TooltipContent>Delete</TooltipContent>
+                                </Tooltip>
+                            </div>
+                        </TableCell>
+                    </TableRow>
+                    <TableRow v-if="connections.length === 0">
+                        <TableCell :colspan="7" class="text-center text-muted-foreground py-8">
+                            No connections configured yet. Add one to get started.
+                        </TableCell>
+                    </TableRow>
+                </TableBody>
+            </Table>
+        </TooltipProvider>
     </div>
 </template>

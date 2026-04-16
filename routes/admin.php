@@ -12,6 +12,10 @@ Route::middleware(['auth', 'verified', 'password.set', 'role:admin'])->prefix('a
         ->name('connections.toggle');
     Route::post('connections/test', [ServiceConnectionController::class, 'test'])
         ->name('connections.test');
+    Route::post('connections/{connection}/check-health', [ServiceConnectionController::class, 'checkHealth'])
+        ->name('connections.check-health');
+    Route::post('connections/{connection}/check-version', [ServiceConnectionController::class, 'checkVersion'])
+        ->name('connections.check-version');
 
     Route::get('users', [UserController::class, 'index'])->name('users.index');
     Route::post('users', [UserController::class, 'store'])->name('users.store');

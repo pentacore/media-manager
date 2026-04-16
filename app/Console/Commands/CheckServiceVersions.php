@@ -4,8 +4,8 @@ declare(strict_types=1);
 
 namespace App\Console\Commands;
 
+use App\Jobs\FetchLatestServiceVersion;
 use App\Models\ServiceConnection;
-use App\Services\GitHub\GitHubReleaseClient;
 use Illuminate\Console\Command;
 
 class CheckServiceVersions extends Command
@@ -16,35 +16,17 @@ class CheckServiceVersions extends Command
     #[\Override]
     protected $description = 'Check upstream GitHub releases for each service type and store latest_version.';
 
-    private const array REPO_MAP = [
-        'sonarr' => 'Sonarr/Sonarr',
-        'radarr' => 'Radarr/Radarr',
-        'seerr' => 'seerr-team/seerr',
-        'emby' => 'MediaBrowser/Emby.Releases', // Emby is closed-source, but this is the canonical repo and latest release should be correct
-    ];
-
-    public function handle(GitHubReleaseClient $gitHubReleaseClient): int
+    public function handle(): int
     {
         $connections = ServiceConnection::where('is_active', true)->get();
         $checked = 0;
 
         foreach ($connections as $connection) {
-            $repo = self::REPO_MAP[$connection->type->value] ?? null;
-
-            if ($repo === null) {
-                // Emby is closed-source — skip silently
+            if (! array_key_exists((string) $connection->type->value, FetchLatestServiceVersion::REPO_MAP)) {
                 continue;
             }
 
-            $latest = $gitHubReleaseClient->latestRelease($repo);
-
-            if ($latest === null) {
-                $this->warn(sprintf('Could not fetch latest release for %s (%s).', $connection->name, $repo));
-
-                continue;
-            }
-
-            $connection->forceFill(['latest_version' => $latest])->save();
+            app()->call([new FetchLatestServiceVersion($connection), 'handle']);
             $checked++;
         }
 
