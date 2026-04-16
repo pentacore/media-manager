@@ -10,6 +10,9 @@ use Illuminate\Http\Client\PendingRequest;
 use Illuminate\Http\Client\RequestException;
 use Illuminate\Support\Facades\Http;
 
+/**
+ * @see https://swagger.emby.media/openapi.json for up-to-date openApi Spec
+ */
 class EmbyClient
 {
     public function __construct(

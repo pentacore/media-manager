@@ -8,6 +8,10 @@ use App\Services\Arr\ArrClient;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\RequestException;
 
+/**
+ * @see https://sonarr.tv/docs/api/#v3 for API Spec
+ * @see {@link open-api.2026-04-16.yaml} for up-to-date openApi Spec
+ */
 class SonarrClient extends ArrClient
 {
     /**

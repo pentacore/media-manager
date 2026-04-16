@@ -8,6 +8,9 @@ use App\Services\Arr\ArrClient;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\RequestException;
 
+/**
+ * @see https://raw.githubusercontent.com/Radarr/Radarr/develop/src/Radarr.Api.V3/openapi.json for up-to-date openApi Spec
+ */
 class RadarrClient extends ArrClient
 {
     /**
