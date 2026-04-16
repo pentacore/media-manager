@@ -20,6 +20,7 @@ class CheckServiceVersions extends Command
         'sonarr' => 'Sonarr/Sonarr',
         'radarr' => 'Radarr/Radarr',
         'seerr' => 'seerr-team/seerr',
+        'emby' => 'MediaBrowser/Emby.Releases', // Emby is closed-source, but this is the canonical repo and latest release should be correct
     ];
 
     public function handle(GitHubReleaseClient $gitHubReleaseClient): int

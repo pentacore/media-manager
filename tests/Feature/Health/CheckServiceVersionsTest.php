@@ -27,13 +27,16 @@ test('fetches latest release from GitHub for sonarr/radarr/seerr', function (): 
     expect($seerr->fresh()->latest_version)->toBe('2.0.0');
 });
 
-test('skips emby (closed-source)', function (): void {
+test('checks emby version via MediaBrowser/Emby.Releases mirror', function (): void {
     $emby = ServiceConnection::factory()->emby()->create();
 
-    // No Http::fake needed — emby should be skipped without any HTTP call
+    Http::fake([
+        'api.github.com/repos/MediaBrowser/Emby.Releases/releases/latest' => Http::response(['tag_name' => '4.8.0.80']),
+    ]);
+
     $this->artisan('services:check-versions')->assertSuccessful();
 
-    expect($emby->fresh()->latest_version)->toBeNull();
+    expect($emby->fresh()->latest_version)->toBe('4.8.0.80');
 });
 
 test('handles GitHub API failure gracefully', function (): void {
