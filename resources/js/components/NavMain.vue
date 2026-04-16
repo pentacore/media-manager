@@ -10,12 +10,15 @@ import {
 import { useCurrentUrl } from '@/composables/useCurrentUrl';
 import type { NavItem } from '@/types';
 
-withDefaults(defineProps<{
-    items: NavItem[];
-    label?: string;
-}>(), {
-    label: 'Platform',
-});
+withDefaults(
+    defineProps<{
+        items: NavItem[];
+        label?: string;
+    }>(),
+    {
+        label: 'Platform',
+    },
+);
 
 const { isCurrentUrl } = useCurrentUrl();
 </script>

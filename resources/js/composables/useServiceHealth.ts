@@ -21,9 +21,12 @@ export function useServiceHealth(): UseServiceHealth {
     const services = reactive<Record<number, ServiceStatus>>({});
 
     function subscribe(): void {
-        privateChannel('services').listen('.ServiceHealthChanged', (event: ServiceStatus) => {
-            services[event.id] = event;
-        });
+        privateChannel('services').listen(
+            '.ServiceHealthChanged',
+            (event: ServiceStatus) => {
+                services[event.id] = event;
+            },
+        );
     }
 
     function unsubscribe(): void {

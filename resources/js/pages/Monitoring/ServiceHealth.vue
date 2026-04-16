@@ -1,37 +1,51 @@
 <script setup lang="ts">
-import { computed, onMounted } from 'vue'
-import { Head } from '@inertiajs/vue3'
-import { ArrowUp, CircleCheck, CircleHelp, CircleX, HardDrive, HeartPulse, Server } from 'lucide-vue-next'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Badge } from '@/components/ui/badge'
-import { useServiceHealth } from '@/composables/useServiceHealth'
-import { dashboard } from '@/routes'
-import ServiceHealthController from '@/actions/App/Http/Controllers/Monitoring/ServiceHealthController'
+import { Head } from '@inertiajs/vue3';
+import {
+    ArrowUp,
+    CircleCheck,
+    CircleHelp,
+    CircleX,
+    HardDrive,
+    HeartPulse,
+    Server,
+} from 'lucide-vue-next';
+import { computed, onMounted } from 'vue';
+import ServiceHealthController from '@/actions/App/Http/Controllers/Monitoring/ServiceHealthController';
+import { Badge } from '@/components/ui/badge';
+import {
+    Card,
+    CardContent,
+    CardDescription,
+    CardHeader,
+    CardTitle,
+} from '@/components/ui/card';
+import { useServiceHealth } from '@/composables/useServiceHealth';
+import { dashboard } from '@/routes';
 
 interface DiskSpace {
-    path: string | null
-    label: string | null
-    free_space: number | null
-    total_space: number | null
+    path: string | null;
+    label: string | null;
+    free_space: number | null;
+    total_space: number | null;
 }
 
 interface Connection {
-    id: number
-    name: string
-    type: string
-    url: string
-    is_active: boolean
-    health_status: string
-    version: string | null
-    latest_version: string | null
-    update_available: boolean
-    last_seen_at: string | null
-    disk_space: DiskSpace[] | null
+    id: number;
+    name: string;
+    type: string;
+    url: string;
+    is_active: boolean;
+    health_status: string;
+    version: string | null;
+    latest_version: string | null;
+    update_available: boolean;
+    last_seen_at: string | null;
+    disk_space: DiskSpace[] | null;
 }
 
 const props = defineProps<{
-    connections: Connection[]
-}>()
+    connections: Connection[];
+}>();
 
 defineOptions({
     layout: {
@@ -40,90 +54,113 @@ defineOptions({
             { title: 'Service Health', href: ServiceHealthController().url },
         ],
     },
-})
+});
 
-const { services: liveServices, subscribe } = useServiceHealth()
+const { services: liveServices, subscribe } = useServiceHealth();
 
 onMounted(() => {
-    subscribe()
-})
+    subscribe();
+});
 
 const mergedConnections = computed(() =>
     props.connections.map((connection) => {
-        const live = liveServices[connection.id]
+        const live = liveServices[connection.id];
+
         if (live) {
             return {
                 ...connection,
                 health_status: live.status,
                 last_seen_at: live.last_seen_at,
-            }
+            };
         }
-        return connection
+
+        return connection;
     }),
-)
+);
 
 const healthyCount = computed(
-    () => mergedConnections.value.filter((c) => c.is_active && c.health_status === 'healthy').length,
-)
+    () =>
+        mergedConnections.value.filter(
+            (c) => c.is_active && c.health_status === 'healthy',
+        ).length,
+);
 
 function typeLabel(type: string): string {
-    return type.charAt(0).toUpperCase() + type.slice(1)
+    return type.charAt(0).toUpperCase() + type.slice(1);
 }
 
 function formatSize(bytes: number | null): string {
     if (bytes === null || bytes === undefined) {
-        return '—'
+        return '—';
     }
+
     if (bytes === 0) {
-        return '0 B'
+        return '0 B';
     }
-    const units = ['B', 'KB', 'MB', 'GB', 'TB', 'PB']
-    const i = Math.floor(Math.log(bytes) / Math.log(1024))
-    const value = bytes / Math.pow(1024, i)
-    return `${value.toFixed(1)} ${units[i]}`
+
+    const units = ['B', 'KB', 'MB', 'GB', 'TB', 'PB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(1024));
+    const value = bytes / Math.pow(1024, i);
+
+    return `${value.toFixed(1)} ${units[i]}`;
 }
 
 function formatTime(iso: string | null): string {
     if (!iso) {
-        return 'never'
+        return 'never';
     }
-    const date = new Date(iso)
-    const now = new Date()
-    const diffMs = now.getTime() - date.getTime()
-    const diffMins = Math.floor(diffMs / 60000)
+
+    const date = new Date(iso);
+    const now = new Date();
+    const diffMs = now.getTime() - date.getTime();
+    const diffMins = Math.floor(diffMs / 60000);
 
     if (diffMins < 1) {
-        return 'just now'
+        return 'just now';
     }
+
     if (diffMins < 60) {
-        return `${diffMins} min ago`
+        return `${diffMins} min ago`;
     }
-    const diffHours = Math.floor(diffMins / 60)
+
+    const diffHours = Math.floor(diffMins / 60);
+
     if (diffHours < 24) {
-        return `${diffHours}h ago`
+        return `${diffHours}h ago`;
     }
-    const diffDays = Math.floor(diffHours / 24)
-    return `${diffDays}d ago`
+
+    const diffDays = Math.floor(diffHours / 24);
+
+    return `${diffDays}d ago`;
 }
 
-function healthBadgeVariant(connection: Connection): 'default' | 'destructive' | 'secondary' {
+function healthBadgeVariant(
+    connection: Connection,
+): 'default' | 'destructive' | 'secondary' {
     if (!connection.is_active) {
-        return 'secondary'
+        return 'secondary';
     }
+
     if (connection.health_status === 'healthy') {
-        return 'default'
+        return 'default';
     }
+
     if (connection.health_status === 'unhealthy') {
-        return 'destructive'
+        return 'destructive';
     }
-    return 'secondary'
+
+    return 'secondary';
 }
 
 function healthLabel(connection: Connection): string {
     if (!connection.is_active) {
-        return 'Inactive'
+        return 'Inactive';
     }
-    return connection.health_status.charAt(0).toUpperCase() + connection.health_status.slice(1)
+
+    return (
+        connection.health_status.charAt(0).toUpperCase() +
+        connection.health_status.slice(1)
+    );
 }
 </script>
 
@@ -134,17 +171,25 @@ function healthLabel(connection: Connection): string {
         <div class="flex items-center gap-3">
             <HeartPulse class="size-6 text-muted-foreground" />
             <div>
-                <h2 class="text-2xl font-bold tracking-tight">Service Health</h2>
+                <h2 class="text-2xl font-bold tracking-tight">
+                    Service Health
+                </h2>
                 <p class="text-sm text-muted-foreground">
-                    {{ mergedConnections.length }} service{{ mergedConnections.length === 1 ? '' : 's' }},
-                    {{ healthyCount }} healthy
+                    {{ mergedConnections.length }} service{{
+                        mergedConnections.length === 1 ? '' : 's'
+                    }}, {{ healthyCount }} healthy
                 </p>
             </div>
         </div>
 
-        <div v-if="mergedConnections.length === 0" class="flex flex-col items-center justify-center py-16 text-center">
+        <div
+            v-if="mergedConnections.length === 0"
+            class="flex flex-col items-center justify-center py-16 text-center"
+        >
             <Server class="mb-3 size-10 text-muted-foreground/50" />
-            <p class="text-sm text-muted-foreground">No service connections configured.</p>
+            <p class="text-sm text-muted-foreground">
+                No service connections configured.
+            </p>
         </div>
 
         <div v-else class="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
@@ -152,23 +197,38 @@ function healthLabel(connection: Connection): string {
                 <CardHeader>
                     <div class="flex items-start justify-between gap-2">
                         <div class="min-w-0 flex-1">
-                            <CardTitle class="truncate">{{ connection.name }}</CardTitle>
-                            <CardDescription class="truncate">{{ connection.url }}</CardDescription>
+                            <CardTitle class="truncate">{{
+                                connection.name
+                            }}</CardTitle>
+                            <CardDescription class="truncate">{{
+                                connection.url
+                            }}</CardDescription>
                         </div>
-                        <Badge variant="outline">{{ typeLabel(connection.type) }}</Badge>
+                        <Badge variant="outline">{{
+                            typeLabel(connection.type)
+                        }}</Badge>
                     </div>
                 </CardHeader>
                 <CardContent class="space-y-3">
                     <div class="flex items-center gap-2">
                         <CircleCheck
-                            v-if="connection.is_active && connection.health_status === 'healthy'"
+                            v-if="
+                                connection.is_active &&
+                                connection.health_status === 'healthy'
+                            "
                             class="size-4 text-green-600 dark:text-green-400"
                         />
                         <CircleX
-                            v-else-if="connection.is_active && connection.health_status === 'unhealthy'"
+                            v-else-if="
+                                connection.is_active &&
+                                connection.health_status === 'unhealthy'
+                            "
                             class="size-4 text-destructive"
                         />
-                        <CircleHelp v-else class="size-4 text-muted-foreground" />
+                        <CircleHelp
+                            v-else
+                            class="size-4 text-muted-foreground"
+                        />
                         <Badge :variant="healthBadgeVariant(connection)">
                             {{ healthLabel(connection) }}
                         </Badge>
@@ -176,10 +236,20 @@ function healthLabel(connection: Connection): string {
 
                     <div class="flex flex-wrap items-center gap-2 text-sm">
                         <span class="text-muted-foreground">Version:</span>
-                        <span class="font-medium">{{ connection.version ?? '—' }}</span>
-                        <Badge v-if="connection.update_available" variant="outline" class="gap-1">
+                        <span class="font-medium">{{
+                            connection.version ?? '—'
+                        }}</span>
+                        <Badge
+                            v-if="connection.update_available"
+                            variant="outline"
+                            class="gap-1"
+                        >
                             <ArrowUp class="size-3" />
-                            Update available{{ connection.latest_version ? ` → ${connection.latest_version}` : '' }}
+                            Update available{{
+                                connection.latest_version
+                                    ? ` → ${connection.latest_version}`
+                                    : ''
+                            }}
                         </Badge>
                     </div>
 
@@ -188,10 +258,15 @@ function healthLabel(connection: Connection): string {
                     </div>
 
                     <div
-                        v-if="connection.disk_space && connection.disk_space.length > 0"
+                        v-if="
+                            connection.disk_space &&
+                            connection.disk_space.length > 0
+                        "
                         class="space-y-1 border-t pt-3"
                     >
-                        <div class="flex items-center gap-2 text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                        <div
+                            class="flex items-center gap-2 text-xs font-medium tracking-wider text-muted-foreground uppercase"
+                        >
                             <HardDrive class="size-3" />
                             Disk Space
                         </div>
@@ -204,7 +279,8 @@ function healthLabel(connection: Connection): string {
                                 {{ disk.label ?? disk.path ?? 'Unknown' }}
                             </span>
                             <span class="shrink-0 tabular-nums">
-                                {{ formatSize(disk.free_space) }} / {{ formatSize(disk.total_space) }}
+                                {{ formatSize(disk.free_space) }} /
+                                {{ formatSize(disk.total_space) }}
                             </span>
                         </div>
                     </div>

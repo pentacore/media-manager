@@ -1,17 +1,17 @@
 <script setup lang="ts">
-import { Form, Head } from '@inertiajs/vue3'
-import InputError from '@/components/InputError.vue'
-import PasswordInput from '@/components/PasswordInput.vue'
-import { Button } from '@/components/ui/button'
-import { Label } from '@/components/ui/label'
-import { Spinner } from '@/components/ui/spinner'
+import { Form, Head } from '@inertiajs/vue3';
+import InputError from '@/components/InputError.vue';
+import PasswordInput from '@/components/PasswordInput.vue';
+import { Button } from '@/components/ui/button';
+import { Label } from '@/components/ui/label';
+import { Spinner } from '@/components/ui/spinner';
 
 defineOptions({
     layout: {
         title: 'Set your password',
         description: 'Choose a password to complete your account setup',
     },
-})
+});
 </script>
 
 <template>

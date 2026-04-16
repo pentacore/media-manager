@@ -1,10 +1,35 @@
 <script setup lang="ts">
-import { Link, usePage } from '@inertiajs/vue3'
-import { Activity as ActivityIcon, Film, HeartPulse, History, Inbox, LayoutGrid, Link2, Link as LinkIcon, Search, Shield, Sparkles, Tv, Users, Zap } from 'lucide-vue-next'
-import AppLogo from '@/components/AppLogo.vue'
-import NavFooter from '@/components/NavFooter.vue'
-import NavMain from '@/components/NavMain.vue'
-import NavUser from '@/components/NavUser.vue'
+import { Link, usePage } from '@inertiajs/vue3';
+import {
+    Activity as ActivityIcon,
+    Film,
+    HeartPulse,
+    History,
+    Inbox,
+    LayoutGrid,
+    Link2,
+    Link as LinkIcon,
+    Search,
+    Shield,
+    Sparkles,
+    Tv,
+    Users,
+    Zap,
+} from 'lucide-vue-next';
+import { computed } from 'vue';
+import ActionRequestController from '@/actions/App/Http/Controllers/Actions/ActionRequestController';
+import ActionTypeConfigController from '@/actions/App/Http/Controllers/Actions/ActionTypeConfigController';
+import ServiceConnectionController from '@/actions/App/Http/Controllers/Admin/ServiceConnectionController';
+import UserController from '@/actions/App/Http/Controllers/Admin/UserController';
+import AIChatController from '@/actions/App/Http/Controllers/AI/ChatController';
+import NowPlayingController from '@/actions/App/Http/Controllers/Emby/NowPlayingController';
+import WatchHistoryController from '@/actions/App/Http/Controllers/Emby/WatchHistoryController';
+import MovieController from '@/actions/App/Http/Controllers/Media/MovieController';
+import SeriesController from '@/actions/App/Http/Controllers/Media/SeriesController';
+import AppLogo from '@/components/AppLogo.vue';
+import NavFooter from '@/components/NavFooter.vue';
+import NavMain from '@/components/NavMain.vue';
+import NavUser from '@/components/NavUser.vue';
 import {
     Sidebar,
     SidebarContent,
@@ -13,34 +38,33 @@ import {
     SidebarMenu,
     SidebarMenuButton,
     SidebarMenuItem,
-} from '@/components/ui/sidebar'
-import { dashboard } from '@/routes'
-import ServiceConnectionController from '@/actions/App/Http/Controllers/Admin/ServiceConnectionController'
-import UserController from '@/actions/App/Http/Controllers/Admin/UserController'
-import SeriesController from '@/actions/App/Http/Controllers/Media/SeriesController'
-import MovieController from '@/actions/App/Http/Controllers/Media/MovieController'
-import RequestController from '@/actions/App/Http/Controllers/Media/RequestController'
-import SearchController from '@/actions/App/Http/Controllers/Media/SearchController'
-import NowPlayingController from '@/actions/App/Http/Controllers/Emby/NowPlayingController'
-import WatchHistoryController from '@/actions/App/Http/Controllers/Emby/WatchHistoryController'
-import ServiceHealthController from '@/actions/App/Http/Controllers/Monitoring/ServiceHealthController'
-import UserLinkController from '@/actions/App/Http/Controllers/Emby/UserLinkController'
-import ActionRequestController from '@/actions/App/Http/Controllers/Actions/ActionRequestController'
-import ActionTypeConfigController from '@/actions/App/Http/Controllers/Actions/ActionTypeConfigController'
-import AIChatController from '@/actions/App/Http/Controllers/AI/ChatController'
-import type { NavItem } from '@/types'
-import { computed } from 'vue'
+} from '@/components/ui/sidebar';
+import { dashboard } from '@/routes';
+import RequestController from '@/actions/App/Http/Controllers/Media/RequestController';
+import SearchController from '@/actions/App/Http/Controllers/Media/SearchController';
+import ServiceHealthController from '@/actions/App/Http/Controllers/Monitoring/ServiceHealthController';
+import UserLinkController from '@/actions/App/Http/Controllers/Emby/UserLinkController';
+import type { NavItem } from '@/types';
 
-const page = usePage()
+const page = usePage();
 
 const isAdmin = computed(() => {
-    const role = page.props.auth.user?.role
-    if (!role) return false
-    const value = typeof role === 'string' ? role : role.value
-    return value === 'admin'
-})
+    const role = page.props.auth.user?.role;
 
-const aiEnabled = computed(() => Boolean((page.props as unknown as { ai?: { enabled?: boolean } }).ai?.enabled))
+    if (!role) {
+return false;
+}
+
+    const value = typeof role === 'string' ? role : role.value;
+
+    return value === 'admin';
+});
+
+const aiEnabled = computed(() =>
+    Boolean(
+        (page.props as unknown as { ai?: { enabled?: boolean } }).ai?.enabled,
+    ),
+);
 
 const mainNavItems: NavItem[] = [
     {
@@ -53,7 +77,7 @@ const mainNavItems: NavItem[] = [
         href: SearchController.index.url(),
         icon: Search,
     },
-]
+];
 
 const mediaNavItems: NavItem[] = [
     {
@@ -71,7 +95,7 @@ const mediaNavItems: NavItem[] = [
         href: RequestController.index.url(),
         icon: Inbox,
     },
-]
+];
 
 const monitoringNavItems: NavItem[] = [
     {
@@ -89,7 +113,7 @@ const monitoringNavItems: NavItem[] = [
         href: ServiceHealthController().url,
         icon: HeartPulse,
     },
-]
+];
 
 const automationNavItems: NavItem[] = [
     {
@@ -97,7 +121,7 @@ const automationNavItems: NavItem[] = [
         href: ActionRequestController.index.url(),
         icon: Zap,
     },
-]
+];
 
 const aiNavItems: NavItem[] = [
     {
@@ -105,7 +129,7 @@ const aiNavItems: NavItem[] = [
         href: AIChatController.index.url(),
         icon: Sparkles,
     },
-]
+];
 
 const adminNavItems: NavItem[] = [
     {
@@ -128,7 +152,7 @@ const adminNavItems: NavItem[] = [
         href: ActionTypeConfigController.index.url(),
         icon: Shield,
     },
-]
+];
 </script>
 
 <template>
@@ -150,7 +174,11 @@ const adminNavItems: NavItem[] = [
             <NavMain :items="mediaNavItems" label="Media" />
             <NavMain :items="monitoringNavItems" label="Monitoring" />
             <NavMain :items="automationNavItems" label="Automation" />
-            <NavMain v-if="aiEnabled && isAdmin" :items="aiNavItems" label="AI" />
+            <NavMain
+                v-if="aiEnabled && isAdmin"
+                :items="aiNavItems"
+                label="AI"
+            />
             <NavMain v-if="isAdmin" :items="adminNavItems" label="Admin" />
         </SidebarContent>
 

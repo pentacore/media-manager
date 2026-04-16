@@ -1,29 +1,29 @@
 <script setup lang="ts">
-import { Head } from '@inertiajs/vue3'
-import { computed, nextTick, ref, useTemplateRef } from 'vue'
-import { Bot, Send, User as UserIcon } from 'lucide-vue-next'
-import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Badge } from '@/components/ui/badge'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { dashboard } from '@/routes'
-import AIChatController from '@/actions/App/Http/Controllers/AI/ChatController'
+import { Head } from '@inertiajs/vue3';
+import { Bot, Send, User as UserIcon } from 'lucide-vue-next';
+import { computed, nextTick, ref, useTemplateRef } from 'vue';
+import AIChatController from '@/actions/App/Http/Controllers/AI/ChatController';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
+import { dashboard } from '@/routes';
 
 interface AgentOption {
-    value: string
-    label: string
+    value: string;
+    label: string;
 }
 
 interface ChatMessage {
-    role: 'user' | 'assistant'
-    text: string
-    ts: number
+    role: 'user' | 'assistant';
+    text: string;
+    ts: number;
 }
 
 defineProps<{
-    agents: AgentOption[]
-    defaultAgent: string
-}>()
+    agents: AgentOption[];
+    defaultAgent: string;
+}>();
 
 defineOptions({
     layout: {
@@ -32,29 +32,33 @@ defineOptions({
             { title: 'AI Assistant', href: AIChatController.index.url() },
         ],
     },
-})
+});
 
-const messages = ref<ChatMessage[]>([])
-const input = ref('')
-const sending = ref(false)
-const error = ref<string | null>(null)
-const selectedAgent = ref('')
-const conversationId = ref<string | null>(null)
-const scrollRef = useTemplateRef<HTMLDivElement>('scroll')
+const messages = ref<ChatMessage[]>([]);
+const input = ref('');
+const sending = ref(false);
+const error = ref<string | null>(null);
+const selectedAgent = ref('');
+const conversationId = ref<string | null>(null);
+const scrollRef = useTemplateRef<HTMLDivElement>('scroll');
 
 async function sendMessage() {
-    const text = input.value.trim()
+    const text = input.value.trim();
+
     if (!text || sending.value) {
-        return
+        return;
     }
 
-    messages.value.push({ role: 'user', text, ts: Date.now() })
-    input.value = ''
-    sending.value = true
-    error.value = null
+    messages.value.push({ role: 'user', text, ts: Date.now() });
+    input.value = '';
+    sending.value = true;
+    error.value = null;
 
-    await nextTick()
-    scrollRef.value?.scrollTo({ top: scrollRef.value.scrollHeight, behavior: 'smooth' })
+    await nextTick();
+    scrollRef.value?.scrollTo({
+        top: scrollRef.value.scrollHeight,
+        behavior: 'smooth',
+    });
 
     try {
         const response = await fetch(AIChatController.send.url(), {
@@ -64,42 +68,62 @@ async function sendMessage() {
                 'Content-Type': 'application/json',
                 Accept: 'application/json',
                 'X-Requested-With': 'XMLHttpRequest',
-                'X-CSRF-TOKEN': (document.querySelector('meta[name="csrf-token"]') as HTMLMetaElement | null)?.content ?? '',
+                'X-CSRF-TOKEN':
+                    (
+                        document.querySelector(
+                            'meta[name="csrf-token"]',
+                        ) as HTMLMetaElement | null
+                    )?.content ?? '',
             },
             body: JSON.stringify({
                 message: text,
                 agent: selectedAgent.value || undefined,
                 conversation_id: conversationId.value,
             }),
-        })
+        });
 
         if (!response.ok) {
-            const data = await response.json().catch(() => ({}))
-            throw new Error(data.error ?? `Request failed (${response.status})`)
+            const data = await response.json().catch(() => ({}));
+
+            throw new Error(
+                data.error ?? `Request failed (${response.status})`,
+            );
         }
 
-        const data = (await response.json()) as { text: string; conversation_id: string | null; agent: string }
-        conversationId.value = data.conversation_id
-        messages.value.push({ role: 'assistant', text: data.text, ts: Date.now() })
+        const data = (await response.json()) as {
+            text: string;
+            conversation_id: string | null;
+            agent: string;
+        };
+        conversationId.value = data.conversation_id;
+        messages.value.push({
+            role: 'assistant',
+            text: data.text,
+            ts: Date.now(),
+        });
     } catch (e) {
-        error.value = e instanceof Error ? e.message : 'Unknown error'
+        error.value = e instanceof Error ? e.message : 'Unknown error';
     } finally {
-        sending.value = false
-        await nextTick()
-        scrollRef.value?.scrollTo({ top: scrollRef.value.scrollHeight, behavior: 'smooth' })
+        sending.value = false;
+        await nextTick();
+        scrollRef.value?.scrollTo({
+            top: scrollRef.value.scrollHeight,
+            behavior: 'smooth',
+        });
     }
 }
 
 function newConversation() {
-    conversationId.value = null
-    messages.value = []
-    error.value = null
+    conversationId.value = null;
+    messages.value = [];
+    error.value = null;
 }
 
 const activeAgentLabel = computed(() => {
-    const current = selectedAgent.value || 'command'
-    return current === 'advisor' ? 'Advisor' : 'Command'
-})
+    const current = selectedAgent.value || 'command';
+
+    return current === 'advisor' ? 'Advisor' : 'Command';
+});
 </script>
 
 <template>
@@ -120,11 +144,20 @@ const activeAgentLabel = computed(() => {
                     :disabled="sending"
                 >
                     <option value="">Default ({{ defaultAgent }})</option>
-                    <option v-for="opt in agents" :key="opt.value" :value="opt.value">
+                    <option
+                        v-for="opt in agents"
+                        :key="opt.value"
+                        :value="opt.value"
+                    >
                         {{ opt.label }}
                     </option>
                 </select>
-                <Button variant="outline" size="sm" :disabled="sending || messages.length === 0" @click="newConversation">
+                <Button
+                    variant="outline"
+                    size="sm"
+                    :disabled="sending || messages.length === 0"
+                    @click="newConversation"
+                >
                     New conversation
                 </Button>
             </div>
@@ -135,7 +168,11 @@ const activeAgentLabel = computed(() => {
                 <CardTitle class="flex items-center gap-2 text-base">
                     <Bot class="size-4 text-muted-foreground" />
                     {{ activeAgentLabel }}
-                    <Badge v-if="conversationId" variant="outline" class="ml-auto font-mono text-xs">
+                    <Badge
+                        v-if="conversationId"
+                        variant="outline"
+                        class="ml-auto font-mono text-xs"
+                    >
                         {{ conversationId.slice(0, 8) }}
                     </Badge>
                 </CardTitle>
@@ -145,37 +182,63 @@ const activeAgentLabel = computed(() => {
                     ref="scroll"
                     class="min-h-0 flex-1 space-y-4 overflow-y-auto rounded-md border bg-muted/20 p-4"
                 >
-                    <div v-if="messages.length === 0" class="flex h-full flex-col items-center justify-center text-center text-muted-foreground">
+                    <div
+                        v-if="messages.length === 0"
+                        class="flex h-full flex-col items-center justify-center text-center text-muted-foreground"
+                    >
                         <Bot class="mb-2 size-8 opacity-50" />
-                        <p class="text-sm">Ask about your library, request actions, or check service health.</p>
+                        <p class="text-sm">
+                            Ask about your library, request actions, or check
+                            service health.
+                        </p>
                     </div>
 
-                    <div v-for="m in messages" :key="m.ts" class="flex gap-3" :class="m.role === 'user' ? 'justify-end' : 'justify-start'">
+                    <div
+                        v-for="m in messages"
+                        :key="m.ts"
+                        class="flex gap-3"
+                        :class="
+                            m.role === 'user' ? 'justify-end' : 'justify-start'
+                        "
+                    >
                         <div
                             class="flex max-w-[80%] gap-2 rounded-lg px-4 py-3 text-sm"
-                            :class="m.role === 'user'
-                                ? 'flex-row-reverse bg-primary text-primary-foreground'
-                                : 'bg-background border'"
+                            :class="
+                                m.role === 'user'
+                                    ? 'flex-row-reverse bg-primary text-primary-foreground'
+                                    : 'border bg-background'
+                            "
                         >
                             <component
                                 :is="m.role === 'user' ? UserIcon : Bot"
                                 class="size-4 shrink-0 opacity-70"
                             />
-                            <div class="whitespace-pre-wrap break-words">{{ m.text }}</div>
+                            <div class="break-words whitespace-pre-wrap">
+                                {{ m.text }}
+                            </div>
                         </div>
                     </div>
 
-                    <div v-if="sending" class="flex items-center gap-2 text-sm text-muted-foreground">
+                    <div
+                        v-if="sending"
+                        class="flex items-center gap-2 text-sm text-muted-foreground"
+                    >
                         <Bot class="size-4 animate-pulse" />
                         Thinking…
                     </div>
                 </div>
 
-                <div v-if="error" class="rounded-md border border-destructive/50 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+                <div
+                    v-if="error"
+                    class="rounded-md border border-destructive/50 bg-destructive/10 px-3 py-2 text-sm text-destructive"
+                >
                     {{ error }}
                 </div>
 
-                <form class="flex items-center gap-2" @submit.prevent="sendMessage">
+                <form
+                    class="flex items-center gap-2"
+                    @submit.prevent="sendMessage"
+                >
                     <Input
                         v-model="input"
                         placeholder="Ask something…"

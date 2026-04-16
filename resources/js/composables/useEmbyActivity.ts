@@ -1,4 +1,5 @@
-import { ref, onUnmounted, type Ref } from 'vue';
+import { ref, onUnmounted  } from 'vue';
+import type {Ref} from 'vue';
 import { useWebSocket } from '@/composables/useWebSocket';
 
 export interface NowPlayingItem {
@@ -22,17 +23,24 @@ export function useEmbyActivity(): UseEmbyActivity {
     const nowPlaying = ref<NowPlayingItem[]>([]);
 
     function subscribe(): void {
-        privateChannel('emby.activity').listen('.EmbyPlaybackUpdated', (event: NowPlayingItem) => {
-            const index = nowPlaying.value.findIndex((item) => item.id === event.id);
-            if (index >= 0) {
-                nowPlaying.value[index] = event;
-            } else {
-                nowPlaying.value.unshift(event);
-                if (nowPlaying.value.length > 10) {
-                    nowPlaying.value.pop();
+        privateChannel('emby.activity').listen(
+            '.EmbyPlaybackUpdated',
+            (event: NowPlayingItem) => {
+                const index = nowPlaying.value.findIndex(
+                    (item) => item.id === event.id,
+                );
+
+                if (index >= 0) {
+                    nowPlaying.value[index] = event;
+                } else {
+                    nowPlaying.value.unshift(event);
+
+                    if (nowPlaying.value.length > 10) {
+                        nowPlaying.value.pop();
+                    }
                 }
-            }
-        });
+            },
+        );
     }
 
     function unsubscribe(): void {

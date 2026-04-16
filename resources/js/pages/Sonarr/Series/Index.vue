@@ -1,10 +1,9 @@
 <script setup lang="ts">
-import { Head, Link } from '@inertiajs/vue3'
-import { Tv, Plus } from 'lucide-vue-next'
-import SeriesController from '@/actions/App/Http/Controllers/Media/SeriesController'
-import { dashboard } from '@/routes'
-import { Button } from '@/components/ui/button'
-import { Badge } from '@/components/ui/badge'
+import { Head, Link } from '@inertiajs/vue3';
+import { Tv, Plus } from 'lucide-vue-next';
+import SeriesController from '@/actions/App/Http/Controllers/Media/SeriesController';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import {
     Table,
     TableBody,
@@ -12,37 +11,38 @@ import {
     TableHead,
     TableHeader,
     TableRow,
-} from '@/components/ui/table'
+} from '@/components/ui/table';
+import { dashboard } from '@/routes';
 
 interface QualityProfile {
-    id: number
-    name: string
+    id: number;
+    name: string;
 }
 
 interface SeriesImage {
-    coverType: string
-    remoteUrl?: string
-    url?: string
+    coverType: string;
+    remoteUrl?: string;
+    url?: string;
 }
 
 interface Series {
-    id: number
-    title: string
-    year: number | null
-    status: string | null
-    monitored: boolean
-    quality_profile_id: number | null
-    season_count: number
-    size_on_disk: number
-    episode_file_count: number
-    episode_count: number
-    images: SeriesImage[]
+    id: number;
+    title: string;
+    year: number | null;
+    status: string | null;
+    monitored: boolean;
+    quality_profile_id: number | null;
+    season_count: number;
+    size_on_disk: number;
+    episode_file_count: number;
+    episode_count: number;
+    images: SeriesImage[];
 }
 
 const props = defineProps<{
-    series: Series[]
-    qualityProfiles: QualityProfile[]
-}>()
+    series: Series[];
+    qualityProfiles: QualityProfile[];
+}>();
 
 defineOptions({
     layout: {
@@ -51,40 +51,52 @@ defineOptions({
             { title: 'Series', href: SeriesController.index.url() },
         ],
     },
-})
+});
 
 function formatSize(bytes: number): string {
     if (!bytes || bytes <= 0) {
-        return '-'
+        return '-';
     }
-    const gb = bytes / 1024 ** 3
+
+    const gb = bytes / 1024 ** 3;
+
     if (gb >= 1) {
-        return `${gb.toFixed(1)} GB`
+        return `${gb.toFixed(1)} GB`;
     }
-    const mb = bytes / 1024 ** 2
-    return `${mb.toFixed(0)} MB`
+
+    const mb = bytes / 1024 ** 2;
+
+    return `${mb.toFixed(0)} MB`;
 }
 
 function qualityName(id: number | null): string {
     if (id === null) {
-        return '-'
+        return '-';
     }
-    const profile = props.qualityProfiles.find((qualityProfile) => qualityProfile.id === id)
-    return profile?.name ?? '-'
+
+    const profile = props.qualityProfiles.find(
+        (qualityProfile) => qualityProfile.id === id,
+    );
+
+    return profile?.name ?? '-';
 }
 
-function statusVariant(status: string | null): 'default' | 'secondary' | 'outline' {
+function statusVariant(
+    status: string | null,
+): 'default' | 'secondary' | 'outline' {
     if (status === 'continuing') {
-        return 'default'
+        return 'default';
     }
+
     if (status === 'ended') {
-        return 'secondary'
+        return 'secondary';
     }
-    return 'outline'
+
+    return 'outline';
 }
 
 function monitoredCount(): number {
-    return props.series.filter((s) => s.monitored).length
+    return props.series.filter((s) => s.monitored).length;
 }
 </script>
 
@@ -94,7 +106,9 @@ function monitoredCount(): number {
     <div class="space-y-6 p-6">
         <div class="flex items-center justify-between">
             <div>
-                <h2 class="flex items-center gap-2 text-2xl font-bold tracking-tight">
+                <h2
+                    class="flex items-center gap-2 text-2xl font-bold tracking-tight"
+                >
                     <Tv class="size-6" />
                     Series
                 </h2>
@@ -127,11 +141,21 @@ function monitoredCount(): number {
                 <TableRow v-for="item in series" :key="item.id">
                     <TableCell class="font-medium">
                         {{ item.title }}
-                        <Badge v-if="item.monitored" variant="outline" class="ml-2">Monitored</Badge>
+                        <Badge
+                            v-if="item.monitored"
+                            variant="outline"
+                            class="ml-2"
+                            >Monitored</Badge
+                        >
                     </TableCell>
-                    <TableCell class="text-muted-foreground">{{ item.year ?? '-' }}</TableCell>
+                    <TableCell class="text-muted-foreground">{{
+                        item.year ?? '-'
+                    }}</TableCell>
                     <TableCell>
-                        <Badge v-if="item.status" :variant="statusVariant(item.status)">
+                        <Badge
+                            v-if="item.status"
+                            :variant="statusVariant(item.status)"
+                        >
                             {{ item.status }}
                         </Badge>
                         <span v-else class="text-muted-foreground">-</span>
@@ -139,11 +163,15 @@ function monitoredCount(): number {
                     <TableCell class="text-muted-foreground">
                         {{ qualityName(item.quality_profile_id) }}
                     </TableCell>
-                    <TableCell class="text-muted-foreground">{{ item.season_count }}</TableCell>
+                    <TableCell class="text-muted-foreground">{{
+                        item.season_count
+                    }}</TableCell>
                     <TableCell class="text-muted-foreground">
                         {{ item.episode_file_count }} / {{ item.episode_count }}
                     </TableCell>
-                    <TableCell class="text-muted-foreground">{{ formatSize(item.size_on_disk) }}</TableCell>
+                    <TableCell class="text-muted-foreground">{{
+                        formatSize(item.size_on_disk)
+                    }}</TableCell>
                     <TableCell class="text-right">
                         <Link :href="SeriesController.show.url(item.id)">
                             <Button variant="ghost" size="sm">View</Button>
@@ -151,7 +179,10 @@ function monitoredCount(): number {
                     </TableCell>
                 </TableRow>
                 <TableRow v-if="series.length === 0">
-                    <TableCell :colspan="8" class="py-8 text-center text-muted-foreground">
+                    <TableCell
+                        :colspan="8"
+                        class="py-8 text-center text-muted-foreground"
+                    >
                         No series yet. Add one to get started.
                     </TableCell>
                 </TableRow>

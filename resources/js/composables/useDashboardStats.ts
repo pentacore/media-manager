@@ -1,4 +1,5 @@
-import { ref, onUnmounted, type Ref } from 'vue';
+import { ref, onUnmounted  } from 'vue';
+import type {Ref} from 'vue';
 import { useWebSocket } from '@/composables/useWebSocket';
 
 export interface DashboardStats {
@@ -20,9 +21,12 @@ export function useDashboardStats(): UseDashboardStats {
     const stats = ref<DashboardStats | null>(null);
 
     function subscribe(): void {
-        privateChannel('dashboard').listen('.DashboardStatsUpdated', (event: DashboardStats) => {
-            stats.value = event;
-        });
+        privateChannel('dashboard').listen(
+            '.DashboardStatsUpdated',
+            (event: DashboardStats) => {
+                stats.value = event;
+            },
+        );
     }
 
     function unsubscribe(): void {

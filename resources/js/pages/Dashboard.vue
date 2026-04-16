@@ -1,9 +1,15 @@
 <script setup lang="ts">
-import { computed, onMounted } from 'vue';
 import { Head } from '@inertiajs/vue3';
 import { Activity, Clock, Radio, Server, Webhook } from 'lucide-vue-next';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { computed, onMounted } from 'vue';
 import { Badge } from '@/components/ui/badge';
+import {
+    Card,
+    CardContent,
+    CardDescription,
+    CardHeader,
+    CardTitle,
+} from '@/components/ui/card';
 import { useDashboardStats } from '@/composables/useDashboardStats';
 import { useEmbyActivity } from '@/composables/useEmbyActivity';
 import { useNotifications } from '@/composables/useNotifications';
@@ -61,13 +67,22 @@ defineOptions({
 });
 
 const { stats: liveStats, subscribe: subscribeStats } = useDashboardStats();
-const { nowPlaying: liveNowPlaying, subscribe: subscribeEmby } = useEmbyActivity();
+const { nowPlaying: liveNowPlaying, subscribe: subscribeEmby } =
+    useEmbyActivity();
 const { subscribe: subscribeNotifications } = useNotifications();
 
-const activeServices = computed(() => liveStats.value?.activeServices ?? props.stats.activeServices);
-const totalServices = computed(() => liveStats.value?.totalServices ?? props.stats.totalServices);
-const recentWebhooks = computed(() => liveStats.value?.recentWebhooks ?? props.stats.recentWebhooks);
-const pendingActions = computed(() => liveStats.value?.pendingActions ?? props.stats.pendingActions);
+const activeServices = computed(
+    () => liveStats.value?.activeServices ?? props.stats.activeServices,
+);
+const totalServices = computed(
+    () => liveStats.value?.totalServices ?? props.stats.totalServices,
+);
+const recentWebhooks = computed(
+    () => liveStats.value?.recentWebhooks ?? props.stats.recentWebhooks,
+);
+const pendingActions = computed(
+    () => liveStats.value?.pendingActions ?? props.stats.pendingActions,
+);
 
 const currentNowPlaying = computed(() => {
     if (liveNowPlaying.value.length > 0) {
@@ -123,7 +138,9 @@ onMounted(() => {
                     </div>
                     <CardTitle class="text-2xl tabular-nums">
                         {{ activeServices }}
-                        <span class="text-sm font-normal text-muted-foreground">/ {{ totalServices }}</span>
+                        <span class="text-sm font-normal text-muted-foreground"
+                            >/ {{ totalServices }}</span
+                        >
                     </CardTitle>
                 </CardHeader>
             </Card>
@@ -136,7 +153,9 @@ onMounted(() => {
                     </div>
                     <CardTitle class="text-2xl tabular-nums">
                         {{ recentWebhooks }}
-                        <span class="text-sm font-normal text-muted-foreground">Last 24h</span>
+                        <span class="text-sm font-normal text-muted-foreground"
+                            >Last 24h</span
+                        >
                     </CardTitle>
                 </CardHeader>
             </Card>
@@ -166,11 +185,18 @@ onMounted(() => {
                 </CardHeader>
                 <CardContent>
                     <div
-                        v-if="recentActivity.length === 0 && recentWebhookEvents.length === 0"
+                        v-if="
+                            recentActivity.length === 0 &&
+                            recentWebhookEvents.length === 0
+                        "
                         class="flex flex-col items-center justify-center py-8 text-center"
                     >
-                        <Activity class="mb-2 size-8 text-muted-foreground/50" />
-                        <p class="text-sm text-muted-foreground">No recent activity</p>
+                        <Activity
+                            class="mb-2 size-8 text-muted-foreground/50"
+                        />
+                        <p class="text-sm text-muted-foreground">
+                            No recent activity
+                        </p>
                     </div>
 
                     <div v-else class="space-y-4">
@@ -180,18 +206,40 @@ onMounted(() => {
                             class="flex items-start justify-between gap-4"
                         >
                             <div class="min-w-0 flex-1">
-                                <p class="text-sm font-medium leading-none">{{ item.description }}</p>
+                                <p class="text-sm leading-none font-medium">
+                                    {{ item.description }}
+                                </p>
                                 <p class="mt-1 text-xs text-muted-foreground">
-                                    <span v-if="item.user_name">{{ item.user_name }}</span>
-                                    <span v-if="item.user_name && item.service_name"> &middot; </span>
-                                    <span v-if="item.service_name">{{ item.service_name }}</span>
+                                    <span v-if="item.user_name">{{
+                                        item.user_name
+                                    }}</span>
+                                    <span
+                                        v-if="
+                                            item.user_name && item.service_name
+                                        "
+                                    >
+                                        &middot;
+                                    </span>
+                                    <span v-if="item.service_name">{{
+                                        item.service_name
+                                    }}</span>
                                 </p>
                             </div>
-                            <span class="shrink-0 text-xs text-muted-foreground">{{ formatTime(item.created_at) }}</span>
+                            <span
+                                class="shrink-0 text-xs text-muted-foreground"
+                                >{{ formatTime(item.created_at) }}</span
+                            >
                         </div>
 
-                        <div v-if="recentWebhookEvents.length > 0" class="border-t pt-4">
-                            <p class="mb-3 text-xs font-medium uppercase tracking-wider text-muted-foreground">Recent Webhooks</p>
+                        <div
+                            v-if="recentWebhookEvents.length > 0"
+                            class="border-t pt-4"
+                        >
+                            <p
+                                class="mb-3 text-xs font-medium tracking-wider text-muted-foreground uppercase"
+                            >
+                                Recent Webhooks
+                            </p>
                             <div
                                 v-for="event in recentWebhookEvents"
                                 :key="`webhook-${event.id}`"
@@ -199,16 +247,33 @@ onMounted(() => {
                             >
                                 <div class="min-w-0 flex-1">
                                     <div class="flex items-center gap-2">
-                                        <p class="text-sm font-medium leading-none">{{ event.event_type }}</p>
-                                        <Badge variant="outline" class="text-xs">
-                                            {{ event.processed ? 'Processed' : 'Pending' }}
+                                        <p
+                                            class="text-sm leading-none font-medium"
+                                        >
+                                            {{ event.event_type }}
+                                        </p>
+                                        <Badge
+                                            variant="outline"
+                                            class="text-xs"
+                                        >
+                                            {{
+                                                event.processed
+                                                    ? 'Processed'
+                                                    : 'Pending'
+                                            }}
                                         </Badge>
                                     </div>
-                                    <p v-if="event.service_name" class="mt-1 text-xs text-muted-foreground">
+                                    <p
+                                        v-if="event.service_name"
+                                        class="mt-1 text-xs text-muted-foreground"
+                                    >
                                         {{ event.service_name }}
                                     </p>
                                 </div>
-                                <span class="shrink-0 text-xs text-muted-foreground">{{ formatTime(event.created_at) }}</span>
+                                <span
+                                    class="shrink-0 text-xs text-muted-foreground"
+                                    >{{ formatTime(event.created_at) }}</span
+                                >
                             </div>
                         </div>
                     </div>
@@ -229,21 +294,37 @@ onMounted(() => {
                         class="flex flex-col items-center justify-center py-8 text-center"
                     >
                         <Radio class="mb-2 size-8 text-muted-foreground/50" />
-                        <p class="text-sm text-muted-foreground">No active playback sessions</p>
+                        <p class="text-sm text-muted-foreground">
+                            No active playback sessions
+                        </p>
                     </div>
 
                     <div v-else class="space-y-4">
-                        <div v-for="item in currentNowPlaying" :key="item.id" class="flex items-start gap-3">
+                        <div
+                            v-for="item in currentNowPlaying"
+                            :key="item.id"
+                            class="flex items-start gap-3"
+                        >
                             <div class="min-w-0 flex-1">
-                                <p class="text-sm font-medium leading-none">{{ item.media_title }}</p>
-                                <p v-if="item.series_title" class="mt-1 text-xs text-muted-foreground">
+                                <p class="text-sm leading-none font-medium">
+                                    {{ item.media_title }}
+                                </p>
+                                <p
+                                    v-if="item.series_title"
+                                    class="mt-1 text-xs text-muted-foreground"
+                                >
                                     {{ item.series_title }}
                                 </p>
-                                <p v-if="item.emby_username" class="mt-1 text-xs text-muted-foreground">
+                                <p
+                                    v-if="item.emby_username"
+                                    class="mt-1 text-xs text-muted-foreground"
+                                >
                                     {{ item.emby_username }}
                                 </p>
                             </div>
-                            <Badge variant="outline" class="shrink-0 text-xs">{{ item.media_type }}</Badge>
+                            <Badge variant="outline" class="shrink-0 text-xs">{{
+                                item.media_type
+                            }}</Badge>
                         </div>
                     </div>
                 </CardContent>

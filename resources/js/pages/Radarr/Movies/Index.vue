@@ -1,9 +1,9 @@
 <script setup lang="ts">
-import { Head, Link } from '@inertiajs/vue3'
-import MovieController from '@/actions/App/Http/Controllers/Media/MovieController'
-import { dashboard } from '@/routes'
-import { Button } from '@/components/ui/button'
-import { Badge } from '@/components/ui/badge'
+import { Head, Link } from '@inertiajs/vue3';
+import { Plus } from 'lucide-vue-next';
+import MovieController from '@/actions/App/Http/Controllers/Media/MovieController';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import {
     Table,
     TableBody,
@@ -11,36 +11,36 @@ import {
     TableHead,
     TableHeader,
     TableRow,
-} from '@/components/ui/table'
-import { Plus } from 'lucide-vue-next'
+} from '@/components/ui/table';
+import { dashboard } from '@/routes';
 
 interface QualityProfile {
-    id: number
-    name: string
+    id: number;
+    name: string;
 }
 
 interface MovieImage {
-    coverType: string
-    remoteUrl?: string
-    url?: string
+    coverType: string;
+    remoteUrl?: string;
+    url?: string;
 }
 
 interface Movie {
-    id: number
-    title: string
-    year: number | null
-    status: string | null
-    monitored: boolean
-    has_file: boolean
-    quality_profile_id: number | null
-    size_on_disk: number
-    images: MovieImage[]
+    id: number;
+    title: string;
+    year: number | null;
+    status: string | null;
+    monitored: boolean;
+    has_file: boolean;
+    quality_profile_id: number | null;
+    size_on_disk: number;
+    images: MovieImage[];
 }
 
 const props = defineProps<{
-    movies: Movie[]
-    qualityProfiles: QualityProfile[]
-}>()
+    movies: Movie[];
+    qualityProfiles: QualityProfile[];
+}>();
 
 defineOptions({
     layout: {
@@ -49,36 +49,36 @@ defineOptions({
             { title: 'Movies', href: MovieController.index.url() },
         ],
     },
-})
+});
 
 function formatSize(bytes: number): string {
     if (!bytes || bytes <= 0) {
-        return '0 GB'
+        return '0 GB';
     }
 
-    const gb = bytes / (1024 * 1024 * 1024)
+    const gb = bytes / (1024 * 1024 * 1024);
 
     if (gb < 1) {
-        const mb = bytes / (1024 * 1024)
+        const mb = bytes / (1024 * 1024);
 
-        return `${mb.toFixed(0)} MB`
+        return `${mb.toFixed(0)} MB`;
     }
 
-    return `${gb.toFixed(2)} GB`
+    return `${gb.toFixed(2)} GB`;
 }
 
 function qualityName(id: number | null): string {
     if (id === null) {
-        return '-'
+        return '-';
     }
 
-    const profile = props.qualityProfiles.find((p) => p.id === id)
+    const profile = props.qualityProfiles.find((p) => p.id === id);
 
-    return profile?.name ?? '-'
+    return profile?.name ?? '-';
 }
 
 function monitoredCount(): number {
-    return props.movies.filter((m) => m.monitored).length
+    return props.movies.filter((m) => m.monitored).length;
 }
 </script>
 
@@ -116,15 +116,21 @@ function monitoredCount(): number {
             <TableBody>
                 <TableRow v-for="movie in movies" :key="movie.id">
                     <TableCell class="font-medium">{{ movie.title }}</TableCell>
-                    <TableCell class="text-muted-foreground">{{ movie.year ?? '-' }}</TableCell>
+                    <TableCell class="text-muted-foreground">{{
+                        movie.year ?? '-'
+                    }}</TableCell>
                     <TableCell>
-                        <Badge variant="outline">{{ movie.status ?? 'unknown' }}</Badge>
+                        <Badge variant="outline">{{
+                            movie.status ?? 'unknown'
+                        }}</Badge>
                     </TableCell>
                     <TableCell class="text-muted-foreground">
                         {{ qualityName(movie.quality_profile_id) }}
                     </TableCell>
                     <TableCell>
-                        <Badge :variant="movie.has_file ? 'default' : 'secondary'">
+                        <Badge
+                            :variant="movie.has_file ? 'default' : 'secondary'"
+                        >
                             {{ movie.has_file ? 'Yes' : 'No' }}
                         </Badge>
                     </TableCell>
@@ -138,7 +144,10 @@ function monitoredCount(): number {
                     </TableCell>
                 </TableRow>
                 <TableRow v-if="movies.length === 0">
-                    <TableCell :colspan="7" class="py-8 text-center text-muted-foreground">
+                    <TableCell
+                        :colspan="7"
+                        class="py-8 text-center text-muted-foreground"
+                    >
                         No movies yet. Add one to get started.
                     </TableCell>
                 </TableRow>

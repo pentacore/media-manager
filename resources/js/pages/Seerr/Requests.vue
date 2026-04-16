@@ -1,11 +1,10 @@
 <script setup lang="ts">
-import { computed } from 'vue'
-import { Head, router, usePage } from '@inertiajs/vue3'
-import RequestController from '@/actions/App/Http/Controllers/Media/RequestController'
-import { dashboard } from '@/routes'
-import { Trash2 } from 'lucide-vue-next'
-import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
+import { Head, router, usePage } from '@inertiajs/vue3';
+import { Trash2 } from 'lucide-vue-next';
+import { computed } from 'vue';
+import RequestController from '@/actions/App/Http/Controllers/Media/RequestController';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import {
     Table,
     TableBody,
@@ -13,21 +12,22 @@ import {
     TableHead,
     TableHeader,
     TableRow,
-} from '@/components/ui/table'
+} from '@/components/ui/table';
+import { dashboard } from '@/routes';
 
 interface SeerrRequest {
-    id: number
-    status: number | null
-    media_type: string | null
-    media_title: string | null
-    tmdb_id: number | null
-    tvdb_id: number | null
-    requester: string | null
-    created_at: string | null
-    updated_at: string | null
+    id: number;
+    status: number | null;
+    media_type: string | null;
+    media_title: string | null;
+    tmdb_id: number | null;
+    tvdb_id: number | null;
+    requester: string | null;
+    created_at: string | null;
+    updated_at: string | null;
 }
 
-const props = defineProps<{ requests: SeerrRequest[] }>()
+const props = defineProps<{ requests: SeerrRequest[] }>();
 
 defineOptions({
     layout: {
@@ -36,86 +36,108 @@ defineOptions({
             { title: 'Requests', href: RequestController.index.url() },
         ],
     },
-})
+});
 
-const page = usePage()
+const page = usePage();
 
 const isAdmin = computed(() => {
-    const role = page.props.auth.user?.role
-    if (!role) {
-        return false
-    }
-    const value = typeof role === 'string' ? role : role.value
-    return value === 'admin'
-})
+    const role = page.props.auth.user?.role;
 
-const pendingCount = computed(() => props.requests.filter((r) => r.status === 1).length)
+    if (!role) {
+        return false;
+    }
+
+    const value = typeof role === 'string' ? role : role.value;
+
+    return value === 'admin';
+});
+
+const pendingCount = computed(
+    () => props.requests.filter((r) => r.status === 1).length,
+);
 
 function statusLabel(status: number | null): string {
     switch (status) {
         case 1:
-            return 'Pending'
+            return 'Pending';
         case 2:
-            return 'Approved'
+            return 'Approved';
         case 3:
-            return 'Declined'
+            return 'Declined';
         default:
-            return 'Unknown'
+            return 'Unknown';
     }
 }
 
-function statusVariant(status: number | null): 'secondary' | 'default' | 'destructive' | 'outline' {
+function statusVariant(
+    status: number | null,
+): 'secondary' | 'default' | 'destructive' | 'outline' {
     switch (status) {
         case 1:
-            return 'secondary'
+            return 'secondary';
         case 2:
-            return 'default'
+            return 'default';
         case 3:
-            return 'destructive'
+            return 'destructive';
         default:
-            return 'outline'
+            return 'outline';
     }
 }
 
 function mediaTypeLabel(type: string | null): string {
     if (type === 'movie') {
-        return 'Movie'
+        return 'Movie';
     }
+
     if (type === 'tv') {
-        return 'TV'
+        return 'TV';
     }
-    return type ?? 'Unknown'
+
+    return type ?? 'Unknown';
 }
 
 function formatTime(iso: string | null): string {
     if (!iso) {
-        return '-'
+        return '-';
     }
-    const date = new Date(iso)
-    const now = new Date()
-    const diffMs = now.getTime() - date.getTime()
-    const diffMins = Math.floor(diffMs / 60000)
+
+    const date = new Date(iso);
+    const now = new Date();
+    const diffMs = now.getTime() - date.getTime();
+    const diffMins = Math.floor(diffMs / 60000);
 
     if (diffMins < 1) {
-        return 'Just now'
+        return 'Just now';
     }
+
     if (diffMins < 60) {
-        return `${diffMins}m ago`
+        return `${diffMins}m ago`;
     }
-    const diffHours = Math.floor(diffMins / 60)
+
+    const diffHours = Math.floor(diffMins / 60);
+
     if (diffHours < 24) {
-        return `${diffHours}h ago`
+        return `${diffHours}h ago`;
     }
-    const diffDays = Math.floor(diffHours / 24)
+
+    const diffDays = Math.floor(diffHours / 24);
+
     if (diffDays < 30) {
-        return `${diffDays}d ago`
+        return `${diffDays}d ago`;
     }
-    return date.toISOString().slice(0, 10)
+
+    return date.toISOString().slice(0, 10);
 }
 
 function deleteRequest(req: SeerrRequest) {
-    if (confirm(`Delete request for "${req.media_title ?? 'Unknown'}"? This cannot be undone.`)) {
-        router.delete(RequestController.destroy.url(req.id), { preserveScroll: true })
+    if (
+        confirm(
+            `Delete request for "${req.media_title ?? 'Unknown'}"? This cannot be undone.`,
+        )
+    ) {
+        router.delete(RequestController.destroy.url(req.id), {
+            preserveScroll: true,
+        });
     }
 }
 </script>
@@ -126,7 +148,9 @@ function deleteRequest(req: SeerrRequest) {
     <div class="space-y-6 p-6">
         <div>
             <h2 class="text-2xl font-bold tracking-tight">Media Requests</h2>
-            <p class="text-muted-foreground">{{ requests.length }} total, {{ pendingCount }} pending</p>
+            <p class="text-muted-foreground">
+                {{ requests.length }} total, {{ pendingCount }} pending
+            </p>
         </div>
 
         <Table>
@@ -137,20 +161,32 @@ function deleteRequest(req: SeerrRequest) {
                     <TableHead>Title</TableHead>
                     <TableHead>Requester</TableHead>
                     <TableHead>Created</TableHead>
-                    <TableHead v-if="isAdmin" class="text-right">Actions</TableHead>
+                    <TableHead v-if="isAdmin" class="text-right"
+                        >Actions</TableHead
+                    >
                 </TableRow>
             </TableHeader>
             <TableBody>
                 <TableRow v-for="req in requests" :key="req.id">
                     <TableCell>
-                        <Badge :variant="statusVariant(req.status)">{{ statusLabel(req.status) }}</Badge>
+                        <Badge :variant="statusVariant(req.status)">{{
+                            statusLabel(req.status)
+                        }}</Badge>
                     </TableCell>
                     <TableCell>
-                        <Badge variant="outline">{{ mediaTypeLabel(req.media_type) }}</Badge>
+                        <Badge variant="outline">{{
+                            mediaTypeLabel(req.media_type)
+                        }}</Badge>
                     </TableCell>
-                    <TableCell class="font-medium">{{ req.media_title ?? 'Unknown' }}</TableCell>
-                    <TableCell class="text-muted-foreground">{{ req.requester ?? '-' }}</TableCell>
-                    <TableCell class="text-muted-foreground">{{ formatTime(req.created_at) }}</TableCell>
+                    <TableCell class="font-medium">{{
+                        req.media_title ?? 'Unknown'
+                    }}</TableCell>
+                    <TableCell class="text-muted-foreground">{{
+                        req.requester ?? '-'
+                    }}</TableCell>
+                    <TableCell class="text-muted-foreground">{{
+                        formatTime(req.created_at)
+                    }}</TableCell>
                     <TableCell v-if="isAdmin" class="text-right">
                         <Button
                             variant="ghost"
@@ -164,7 +200,10 @@ function deleteRequest(req: SeerrRequest) {
                     </TableCell>
                 </TableRow>
                 <TableRow v-if="requests.length === 0">
-                    <TableCell :colspan="isAdmin ? 6 : 5" class="py-8 text-center text-muted-foreground">
+                    <TableCell
+                        :colspan="isAdmin ? 6 : 5"
+                        class="py-8 text-center text-muted-foreground"
+                    >
                         No requests found.
                     </TableCell>
                 </TableRow>
