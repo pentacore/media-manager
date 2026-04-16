@@ -11,6 +11,30 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
+/**
+ * @property int $id
+ * @property int $service_connection_id
+ * @property string $event_type
+ * @property array<array-key, mixed> $payload
+ * @property \Carbon\CarbonImmutable|null $processed_at
+ * @property \Carbon\CarbonImmutable|null $created_at
+ * @property \Carbon\CarbonImmutable|null $updated_at
+ * @property-read \Illuminate\Database\Eloquent\Collection<int, \App\Models\ActionRequest> $actionRequests
+ * @property-read int|null $action_requests_count
+ * @property-read \App\Models\ServiceConnection $serviceConnection
+ * @method static \Database\Factories\WebhookEventFactory factory($count = null, $state = [])
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|WebhookEvent newModelQuery()
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|WebhookEvent newQuery()
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|WebhookEvent query()
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|WebhookEvent whereCreatedAt($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|WebhookEvent whereEventType($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|WebhookEvent whereId($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|WebhookEvent wherePayload($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|WebhookEvent whereProcessedAt($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|WebhookEvent whereServiceConnectionId($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|WebhookEvent whereUpdatedAt($value)
+ * @mixin \Eloquent
+ */
 #[Fillable(['service_connection_id', 'event_type', 'payload', 'processed_at'])]
 class WebhookEvent extends Model
 {
