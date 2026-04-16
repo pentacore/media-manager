@@ -26,7 +26,7 @@ Route::middleware(['auth', 'verified', 'password.set', 'role:member'])
         Route::get('movies/{id}', [MovieController::class, 'show'])->whereNumber('id')->name('movies.show');
         Route::delete('movies/{id}', [MovieController::class, 'destroy'])->whereNumber('id')->name('movies.destroy');
 
-        // Jellyseerr requests
+        // Seerr requests
         Route::get('requests', [RequestController::class, 'index'])->name('requests.index');
         Route::delete('requests/{id}', [RequestController::class, 'destroy'])
             ->whereNumber('id')

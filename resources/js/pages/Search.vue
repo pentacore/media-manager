@@ -118,7 +118,7 @@ onMounted(() => {
             class="flex flex-col items-center justify-center py-20 text-center"
         >
             <SearchIcon class="mb-4 size-16 text-muted-foreground/50" />
-            <p class="text-lg font-medium">Search across Sonarr, Radarr, and Jellyseerr</p>
+            <p class="text-lg font-medium">Search across Sonarr, Radarr, and Seerr</p>
             <p class="mt-1 text-sm text-muted-foreground">
                 Type above to find series, movies, and existing media requests.
             </p>
@@ -206,7 +206,7 @@ onMounted(() => {
         <section v-if="results.requests.length > 0" class="space-y-3">
             <div class="flex items-center gap-2">
                 <Inbox class="size-5 text-muted-foreground" />
-                <h3 class="text-lg font-semibold">Requests (Jellyseerr)</h3>
+                <h3 class="text-lg font-semibold">Requests (Seerr)</h3>
                 <Badge variant="secondary">{{ results.requests.length }}</Badge>
             </div>
             <div class="grid grid-cols-1 gap-4 md:grid-cols-4">

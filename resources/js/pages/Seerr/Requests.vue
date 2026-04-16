@@ -15,7 +15,7 @@ import {
     TableRow,
 } from '@/components/ui/table'
 
-interface JellyseerrRequest {
+interface SeerrRequest {
     id: number
     status: number | null
     media_type: string | null
@@ -27,7 +27,7 @@ interface JellyseerrRequest {
     updated_at: string | null
 }
 
-const props = defineProps<{ requests: JellyseerrRequest[] }>()
+const props = defineProps<{ requests: SeerrRequest[] }>()
 
 defineOptions({
     layout: {
@@ -113,7 +113,7 @@ function formatTime(iso: string | null): string {
     return date.toISOString().slice(0, 10)
 }
 
-function deleteRequest(req: JellyseerrRequest) {
+function deleteRequest(req: SeerrRequest) {
     if (confirm(`Delete request for "${req.media_title ?? 'Unknown'}"? This cannot be undone.`)) {
         router.delete(RequestController.destroy.url(req.id), { preserveScroll: true })
     }

@@ -40,7 +40,7 @@ test('search with empty query returns empty results', function (): void {
 test('search queries all configured services in parallel', function (): void {
     ServiceConnection::factory()->sonarr()->create(['url' => 'http://sonarr.local:8989', 'api_key' => 'sk']);
     ServiceConnection::factory()->radarr()->create(['url' => 'http://radarr.local:7878', 'api_key' => 'rk']);
-    ServiceConnection::factory()->jellyseerr()->create(['url' => 'http://jellyseerr.local:5055', 'api_key' => 'jk']);
+    ServiceConnection::factory()->seerr()->create(['url' => 'http://seerr.local:5055', 'api_key' => 'jk']);
 
     $member = User::factory()->member()->create();
 
@@ -51,7 +51,7 @@ test('search queries all configured services in parallel', function (): void {
         'radarr.local:7878/api/v3/movie/lookup*' => Http::response([
             ['tmdbId' => 2, 'title' => 'Found Movie', 'year' => 2023],
         ]),
-        'jellyseerr.local:5055/api/v1/search*' => Http::response([
+        'seerr.local:5055/api/v1/search*' => Http::response([
             'results' => [
                 ['id' => 3, 'mediaType' => 'tv', 'title' => 'Found Show'],
             ],
@@ -92,7 +92,7 @@ test('search continues when one service is unavailable', function (): void {
         ->assertInertia(fn ($page) => $page
             ->has('results.series', 1)
             ->where('results.movies', [])
-            ->where('errors', ['radarr', 'jellyseerr'])
+            ->where('errors', ['radarr', 'seerr'])
         );
 });
 
@@ -107,6 +107,6 @@ test('search works when no services are configured', function (): void {
             ->where('results.series', [])
             ->where('results.movies', [])
             ->where('results.requests', [])
-            ->where('errors', ['sonarr', 'radarr', 'jellyseerr'])
+            ->where('errors', ['sonarr', 'radarr', 'seerr'])
         );
 });

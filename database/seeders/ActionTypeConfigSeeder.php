@@ -27,9 +27,9 @@ class ActionTypeConfigSeeder extends Seeder
                 'is_enabled' => true,
             ],
             [
-                'type' => 'cleanup_jellyseerr_request',
-                'label' => 'Clean up Jellyseerr request',
-                'description' => 'Delete the matching Jellyseerr request when media is removed.',
+                'type' => 'cleanup_seerr_request',
+                'label' => 'Clean up Seerr request',
+                'description' => 'Delete the matching Seerr request when media is removed.',
                 'requires_approval' => false,
                 'is_enabled' => true,
             ],

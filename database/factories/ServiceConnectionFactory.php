@@ -56,11 +56,11 @@ class ServiceConnectionFactory extends Factory
         ]);
     }
 
-    public function jellyseerr(): static
+    public function seerr(): static
     {
         return $this->state(fn (array $attributes): array => [
-            'type' => ServiceType::Jellyseerr,
-            'name' => 'Jellyseerr',
+            'type' => ServiceType::Seerr,
+            'name' => 'Seerr',
         ]);
     }
 

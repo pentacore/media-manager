@@ -8,7 +8,7 @@ use Database\Seeders\ActionTypeConfigSeeder;
 test('seeder creates all baseline action types', function (): void {
     $this->seed(ActionTypeConfigSeeder::class);
 
-    $types = ['delete_series', 'delete_movie', 'cleanup_jellyseerr_request', 'emby_library_scan'];
+    $types = ['delete_series', 'delete_movie', 'cleanup_seerr_request', 'emby_library_scan'];
 
     foreach ($types as $type) {
         $config = ActionTypeConfig::where('type', $type)->first();
@@ -35,5 +35,5 @@ test('safe types default to requires_approval=false', function (): void {
     $this->seed(ActionTypeConfigSeeder::class);
 
     expect(ActionTypeConfig::where('type', 'emby_library_scan')->first()->requires_approval)->toBeFalse();
-    expect(ActionTypeConfig::where('type', 'cleanup_jellyseerr_request')->first()->requires_approval)->toBeFalse();
+    expect(ActionTypeConfig::where('type', 'cleanup_seerr_request')->first()->requires_approval)->toBeFalse();
 });

@@ -9,8 +9,8 @@ use App\Enums\ServiceType;
 use App\Events\ServiceHealthChanged;
 use App\Models\ServiceConnection;
 use App\Services\Emby\EmbyClient;
-use App\Services\Jellyseerr\JellyseerrClient;
 use App\Services\Radarr\RadarrClient;
+use App\Services\Seerr\SeerrClient;
 use App\Services\Sonarr\SonarrClient;
 use Illuminate\Console\Command;
 use Throwable;
@@ -68,12 +68,12 @@ class CheckServiceHealth extends Command
             ServiceType::Sonarr => new SonarrClient($serviceConnection),
             ServiceType::Radarr => new RadarrClient($serviceConnection),
             ServiceType::Emby => new EmbyClient($serviceConnection),
-            ServiceType::Jellyseerr => new JellyseerrClient($serviceConnection),
+            ServiceType::Seerr => new SeerrClient($serviceConnection),
         };
 
         return match ($serviceConnection->type) {
             ServiceType::Emby => $client->getSystemInfo(),
-            ServiceType::Jellyseerr => $client->getStatus(),
+            ServiceType::Seerr => $client->getStatus(),
             default => $client->getSystemStatus(),
         };
     }

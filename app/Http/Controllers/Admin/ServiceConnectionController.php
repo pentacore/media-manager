@@ -10,8 +10,8 @@ use App\Http\Requests\Admin\ServiceConnectionStoreRequest;
 use App\Http\Requests\Admin\ServiceConnectionUpdateRequest;
 use App\Models\ServiceConnection;
 use App\Services\Emby\EmbyClient;
-use App\Services\Jellyseerr\JellyseerrClient;
 use App\Services\Radarr\RadarrClient;
+use App\Services\Seerr\SeerrClient;
 use App\Services\Sonarr\SonarrClient;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
@@ -118,12 +118,12 @@ class ServiceConnectionController extends Controller
                 ServiceType::Sonarr => new SonarrClient($connection),
                 ServiceType::Radarr => new RadarrClient($connection),
                 ServiceType::Emby => new EmbyClient($connection),
-                ServiceType::Jellyseerr => new JellyseerrClient($connection),
+                ServiceType::Seerr => new SeerrClient($connection),
             };
 
             $result = match ($connection->type) {
                 ServiceType::Emby => $client->getSystemInfo(),
-                ServiceType::Jellyseerr => $client->getStatus(),
+                ServiceType::Seerr => $client->getStatus(),
                 default => $client->getSystemStatus(),
             };
 

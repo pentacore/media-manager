@@ -37,9 +37,9 @@ test('members and admins can access service health page', function (): void {
 test('renders persisted connection state including health_status and version info', function (): void {
     $user = User::factory()->create();
 
-    ServiceConnection::factory()->jellyseerr()->create([
-        'name' => 'Jellyseerr Prod',
-        'url' => 'http://jellyseerr.local:5055',
+    ServiceConnection::factory()->seerr()->create([
+        'name' => 'Seerr Prod',
+        'url' => 'http://seerr.local:5055',
         'version' => '2.0.0',
         'latest_version' => '2.1.0',
         'health_status' => HealthStatus::Healthy,
@@ -52,7 +52,7 @@ test('renders persisted connection state including health_status and version inf
         ->assertInertia(fn ($page) => $page
             ->component('Monitoring/ServiceHealth')
             ->has('connections', 1)
-            ->where('connections.0.name', 'Jellyseerr Prod')
+            ->where('connections.0.name', 'Seerr Prod')
             ->where('connections.0.health_status', 'healthy')
             ->where('connections.0.version', '2.0.0')
             ->where('connections.0.latest_version', '2.1.0')
@@ -83,7 +83,7 @@ test('update_available is false when versions match', function (): void {
 test('health_status defaults to "unknown" when null', function (): void {
     $user = User::factory()->create();
 
-    ServiceConnection::factory()->jellyseerr()->create([
+    ServiceConnection::factory()->seerr()->create([
         'health_status' => null,
     ]);
 
@@ -139,7 +139,7 @@ test('non-arr services have null disk_space without making HTTP calls', function
     $user = User::factory()->create();
 
     ServiceConnection::factory()->emby()->create();
-    ServiceConnection::factory()->jellyseerr()->create();
+    ServiceConnection::factory()->seerr()->create();
 
     $this->actingAs($user)
         ->get(route('monitoring.service-health'))

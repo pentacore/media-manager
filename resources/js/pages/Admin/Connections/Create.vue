@@ -82,7 +82,7 @@ const servicePlaceholders = {
     sonarr: { name: 'My Sonarr', url: 'http://sonarr.local:8989', apiKey: 'Sonarr API key (Settings → General)' },
     radarr: { name: 'My Radarr', url: 'http://radarr.local:7878', apiKey: 'Radarr API key (Settings → General)' },
     emby: { name: 'My Emby', url: 'http://emby.local:8096', apiKey: 'Emby API key (Dashboard → API Keys)' },
-    jellyseerr: { name: 'My Jellyseerr', url: 'http://jellyseerr.local:5055', apiKey: 'Jellyseerr API key (Settings → General)' },
+    seerr: { name: 'My Seerr', url: 'http://seerr.local:5055', apiKey: 'Seerr API key (Settings → General)' },
 } as Record<string, { name: string; url: string; apiKey: string }>
 
 const placeholders = computed(() => servicePlaceholders[selectedType.value] ?? {

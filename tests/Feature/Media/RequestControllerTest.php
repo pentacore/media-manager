@@ -10,8 +10,8 @@ beforeEach(function (): void {
     config()->set('inertia.ssr.enabled', false);
     config()->set('inertia.testing.ensure_pages_exist', false);
     Http::preventStrayRequests();
-    $this->connection = ServiceConnection::factory()->jellyseerr()->create([
-        'url' => 'http://jellyseerr.local:5055',
+    $this->connection = ServiceConnection::factory()->seerr()->create([
+        'url' => 'http://seerr.local:5055',
         'api_key' => 'test-api-key',
     ]);
 });
@@ -29,7 +29,7 @@ test('members can list requests', function (): void {
     $member = User::factory()->member()->create();
 
     Http::fake([
-        'jellyseerr.local:5055/api/v1/request*' => Http::response([
+        'seerr.local:5055/api/v1/request*' => Http::response([
             'results' => [
                 [
                     'id' => 1,
@@ -47,14 +47,14 @@ test('members can list requests', function (): void {
         ->get(route('media.requests.index'))
         ->assertOk()
         ->assertInertia(fn ($page) => $page
-            ->component('Jellyseerr/Requests')
+            ->component('Seerr/Requests')
             ->has('requests', 1)
             ->where('requests.0.media_title', 'My Movie')
             ->where('requests.0.requester', 'Alice')
         );
 });
 
-test('requests index redirects when no active jellyseerr connection', function (): void {
+test('requests index redirects when no active seerr connection', function (): void {
     $this->connection->update(['is_active' => false]);
     $member = User::factory()->member()->create();
 
@@ -74,7 +74,7 @@ test('members cannot delete requests', function (): void {
 test('admins can delete requests', function (): void {
     $admin = User::factory()->admin()->create();
 
-    Http::fake(['jellyseerr.local:5055/api/v1/request/42' => Http::response(null, 200)]);
+    Http::fake(['seerr.local:5055/api/v1/request/42' => Http::response(null, 200)]);
 
     $this->actingAs($admin)
         ->delete(route('media.requests.destroy', 42))
@@ -88,7 +88,7 @@ test('admins can delete requests', function (): void {
 test('admin delete handles connection failure gracefully', function (): void {
     $admin = User::factory()->admin()->create();
 
-    Http::fake(['jellyseerr.local:5055/api/v1/request/42' => Http::response('Server Error', 500)]);
+    Http::fake(['seerr.local:5055/api/v1/request/42' => Http::response('Server Error', 500)]);
 
     $this->actingAs($admin)
         ->from(route('media.requests.index'))

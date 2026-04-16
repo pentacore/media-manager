@@ -9,10 +9,10 @@ beforeEach(function (): void {
     Http::preventStrayRequests();
 });
 
-test('fetches latest release from GitHub for sonarr/radarr/jellyseerr', function (): void {
+test('fetches latest release from GitHub for sonarr/radarr/seerr', function (): void {
     $sonarr = ServiceConnection::factory()->sonarr()->create();
     $radarr = ServiceConnection::factory()->radarr()->create();
-    $jellyseerr = ServiceConnection::factory()->jellyseerr()->create();
+    $seerr = ServiceConnection::factory()->seerr()->create();
 
     Http::fake([
         'api.github.com/repos/Sonarr/Sonarr/releases/latest' => Http::response(['tag_name' => 'v4.0.5.1710']),
@@ -24,7 +24,7 @@ test('fetches latest release from GitHub for sonarr/radarr/jellyseerr', function
 
     expect($sonarr->fresh()->latest_version)->toBe('4.0.5.1710');
     expect($radarr->fresh()->latest_version)->toBe('5.3.6.8612');
-    expect($jellyseerr->fresh()->latest_version)->toBe('2.0.0');
+    expect($seerr->fresh()->latest_version)->toBe('2.0.0');
 });
 
 test('skips emby (closed-source)', function (): void {

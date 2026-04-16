@@ -7,8 +7,8 @@ namespace App\Http\Controllers\Media;
 use App\Enums\ServiceType;
 use App\Http\Controllers\Controller;
 use App\Models\ServiceConnection;
-use App\Services\Jellyseerr\JellyseerrClient;
 use App\Services\Radarr\RadarrClient;
+use App\Services\Seerr\SeerrClient;
 use App\Services\Sonarr\SonarrClient;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -65,18 +65,18 @@ class SearchController extends Controller
         }
 
         try {
-            $jellyseerrClient = new JellyseerrClient(ServiceConnection::resolveActive(ServiceType::Jellyseerr));
-            $jellyseerrResponse = $jellyseerrClient->search($term);
-            $jellyseerrResults = $jellyseerrResponse['results'] ?? $jellyseerrResponse;
+            $seerrClient = new SeerrClient(ServiceConnection::resolveActive(ServiceType::Seerr));
+            $seerrResponse = $seerrClient->search($term);
+            $seerrResults = $seerrResponse['results'] ?? $seerrResponse;
             $results['requests'] = array_map(fn (array $item): array => [
                 'id' => $item['id'] ?? null,
                 'media_type' => $item['mediaType'] ?? null,
                 'title' => $item['title'] ?? ($item['name'] ?? null),
                 'overview' => $item['overview'] ?? null,
                 'poster_path' => $item['posterPath'] ?? null,
-            ], is_array($jellyseerrResults) ? $jellyseerrResults : []);
+            ], is_array($seerrResults) ? $seerrResults : []);
         } catch (\Throwable) {
-            $errors[] = 'jellyseerr';
+            $errors[] = 'seerr';
         }
 
         return Inertia::render('Search', [

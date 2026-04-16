@@ -7,7 +7,7 @@ namespace App\Http\Controllers\Media;
 use App\Enums\ServiceType;
 use App\Http\Controllers\Controller;
 use App\Models\ServiceConnection;
-use App\Services\Jellyseerr\JellyseerrClient;
+use App\Services\Seerr\SeerrClient;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\RequestException;
@@ -29,7 +29,7 @@ class RequestController extends Controller
 
         $results = $response['results'] ?? $response;
 
-        return Inertia::render('Jellyseerr/Requests', [
+        return Inertia::render('Seerr/Requests', [
             'requests' => array_map(fn (array $req): array => [
                 'id' => $req['id'] ?? null,
                 'status' => $req['status'] ?? null,
@@ -61,21 +61,21 @@ class RequestController extends Controller
         return to_route('media.requests.index');
     }
 
-    private function client(): JellyseerrClient
+    private function client(): SeerrClient
     {
-        return new JellyseerrClient(ServiceConnection::resolveActive(ServiceType::Jellyseerr));
+        return new SeerrClient(ServiceConnection::resolveActive(ServiceType::Seerr));
     }
 
     private function noConnectionRedirect(): RedirectResponse
     {
-        Inertia::flash('toast', ['type' => 'error', 'message' => __('No active Jellyseerr connection configured.')]);
+        Inertia::flash('toast', ['type' => 'error', 'message' => __('No active Seerr connection configured.')]);
 
         return to_route('dashboard');
     }
 
     private function connectionFailedRedirect(): RedirectResponse
     {
-        Inertia::flash('toast', ['type' => 'error', 'message' => __('Failed to connect to Jellyseerr.')]);
+        Inertia::flash('toast', ['type' => 'error', 'message' => __('Failed to connect to Seerr.')]);
 
         return to_route('dashboard');
     }

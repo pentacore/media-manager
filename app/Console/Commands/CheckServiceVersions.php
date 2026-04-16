@@ -19,7 +19,8 @@ class CheckServiceVersions extends Command
     private const array REPO_MAP = [
         'sonarr' => 'Sonarr/Sonarr',
         'radarr' => 'Radarr/Radarr',
-        'jellyseerr' => 'Fallenbagel/jellyseerr',
+        // TODO: verify Seerr repo location (Jellyseerr + Overseerr merger)
+        'seerr' => 'Fallenbagel/jellyseerr',
     ];
 
     public function handle(GitHubReleaseClient $gitHubReleaseClient): int

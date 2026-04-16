@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace App\Services\Jellyseerr;
+namespace App\Services\Seerr;
 
 use App\Models\ServiceConnection;
 use Illuminate\Http\Client\ConnectionException;
@@ -10,7 +10,7 @@ use Illuminate\Http\Client\PendingRequest;
 use Illuminate\Http\Client\RequestException;
 use Illuminate\Support\Facades\Http;
 
-class JellyseerrClient
+class SeerrClient
 {
     protected string $apiVersion = 'v1';
 

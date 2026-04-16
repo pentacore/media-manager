@@ -9,8 +9,8 @@ use App\Events\ActionRequestStatusChanged;
 use App\Models\ActionRequest;
 use App\Services\Actions\ActionExecutor;
 use App\Services\Emby\EmbyActions;
-use App\Services\Jellyseerr\JellyseerrActions;
 use App\Services\Radarr\RadarrActions;
+use App\Services\Seerr\SeerrActions;
 use App\Services\Sonarr\SonarrActions;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -109,7 +109,7 @@ class ExecuteActionRequest implements ShouldQueue
         $class = match ($type) {
             'delete_series' => SonarrActions::class,
             'delete_movie' => RadarrActions::class,
-            'cleanup_jellyseerr_request' => JellyseerrActions::class,
+            'cleanup_seerr_request' => SeerrActions::class,
             'emby_library_scan' => EmbyActions::class,
             default => null,
         };
