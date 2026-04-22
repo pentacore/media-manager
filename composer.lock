@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "a8026d6fe00eb1805cef3826a6b8a714",
+    "content-hash": "1541d11fde0f8fb3eb0b533e7f231711",
     "packages": [
         {
             "name": "bacon/bacon-qr-code",
@@ -3591,16 +3591,16 @@
         },
         {
             "name": "pentacore/laravel-typefinder",
-            "version": "4.0.2",
+            "version": "4.2.0",
             "source": {
                 "type": "git",
                 "url": "https://github.com/pentacore/Laravel-Typefinder.git",
-                "reference": "272cf148118a2fca6ba03ee831603013f0d68b33"
+                "reference": "5ff66524c911ebf9e944e44666491f8cd4950b59"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/pentacore/Laravel-Typefinder/zipball/272cf148118a2fca6ba03ee831603013f0d68b33",
-                "reference": "272cf148118a2fca6ba03ee831603013f0d68b33",
+                "url": "https://api.github.com/repos/pentacore/Laravel-Typefinder/zipball/5ff66524c911ebf9e944e44666491f8cd4950b59",
+                "reference": "5ff66524c911ebf9e944e44666491f8cd4950b59",
                 "shasum": ""
             },
             "require": {
@@ -3655,7 +3655,7 @@
                 "issues": "https://github.com/pentacore/laravel-typefinder/issues",
                 "source": "https://github.com/pentacore/laravel-typefinder"
             },
-            "time": "2026-04-16T10:13:23+00:00"
+            "time": "2026-04-17T09:35:06+00:00"
         },
         {
             "name": "phpoption/phpoption",

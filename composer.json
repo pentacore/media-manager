@@ -18,7 +18,7 @@
         "laravel/socialite": "^5.26",
         "laravel/tinker": "^3.0",
         "laravel/wayfinder": "^0.1.14",
-        "pentacore/laravel-typefinder": "^4.0",
+        "pentacore/laravel-typefinder": "^4.2",
         "socialiteproviders/authentik": "^5.3"
     },
     "require-dev": {
