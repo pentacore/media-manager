@@ -1,0 +1,12 @@
+{
+    "Event": "library.deleted",
+    "Item": {
+        "Id": "emby-item-002",
+        "Type": "Series",
+        "Name": "Deleted Show",
+        "ProviderIds": {
+            "SonarrSeriesId": "999999",
+            "Tvdb": "0"
+        }
+    }
+}

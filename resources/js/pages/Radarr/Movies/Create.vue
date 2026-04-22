@@ -14,6 +14,7 @@ import {
     SelectTrigger,
     SelectValue,
 } from '@/components/ui/select';
+import { Skeleton } from '@/components/ui/skeleton';
 import { dashboard } from '@/routes';
 
 interface QualityProfile {
@@ -43,10 +44,11 @@ interface LookupResult {
 }
 
 const props = defineProps<{
-    qualityProfiles: QualityProfile[];
-    rootFolders: RootFolder[];
+    connection: { url: string };
     searchTerm: string;
-    searchResults: LookupResult[];
+    qualityProfiles?: QualityProfile[];
+    rootFolders?: RootFolder[];
+    searchResults?: LookupResult[];
 }>();
 
 defineOptions({
@@ -94,8 +96,8 @@ function startAdd(result: LookupResult) {
     form.tmdbId = result.tmdb_id;
     form.year = result.year;
     form.images = result.images;
-    form.qualityProfileId = props.qualityProfiles[0]?.id ?? null;
-    form.rootFolderPath = props.rootFolders[0]?.path ?? '';
+    form.qualityProfileId = props.qualityProfiles?.[0]?.id ?? null;
+    form.rootFolderPath = props.rootFolders?.[0]?.path ?? '';
 }
 
 function cancelAdd() {
@@ -137,146 +139,184 @@ function submitAdd() {
             Search for a movie to add.
         </div>
 
-        <div
-            v-else-if="searchResults.length === 0"
-            class="rounded-md border border-dashed p-10 text-center text-muted-foreground"
-        >
-            No results found for "{{ searchTerm }}".
-        </div>
-
-        <div
-            v-else
-            class="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3"
-        >
-            <Card
-                v-for="result in searchResults"
-                :key="result.tmdb_id ?? result.title ?? ''"
+        <template v-else>
+            <div
+                v-if="searchResults === undefined"
+                class="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3"
             >
-                <CardContent class="p-4">
-                    <div class="flex gap-4">
-                        <div
-                            class="w-24 shrink-0 overflow-hidden rounded border bg-muted"
-                        >
-                            <img
-                                v-if="result.remote_poster"
-                                :src="result.remote_poster"
-                                :alt="result.title ?? ''"
-                                class="aspect-[2/3] w-full object-cover"
-                            />
-                            <div
-                                v-else
-                                class="flex aspect-[2/3] w-full items-center justify-center text-muted-foreground"
-                            >
-                                <Film class="size-8" />
+                <Card v-for="i in 6" :key="`skeleton-${i}`">
+                    <CardContent class="p-4">
+                        <div class="flex gap-4">
+                            <Skeleton class="aspect-[2/3] w-24 shrink-0" />
+                            <div class="min-w-0 flex-1 space-y-2">
+                                <Skeleton class="h-5 w-3/4" />
+                                <Skeleton class="h-3 w-12" />
+                                <Skeleton class="h-3 w-full" />
+                                <Skeleton class="h-3 w-full" />
+                                <Skeleton class="h-3 w-2/3" />
                             </div>
                         </div>
-                        <div class="min-w-0 flex-1">
-                            <h3 class="leading-tight font-medium">
-                                {{ result.title }}
-                            </h3>
-                            <p
-                                v-if="result.year"
-                                class="text-xs text-muted-foreground"
-                            >
-                                {{ result.year }}
-                            </p>
-                            <p
-                                v-if="result.overview"
-                                class="mt-2 line-clamp-3 text-sm text-muted-foreground"
-                            >
-                                {{ result.overview }}
-                            </p>
+                        <div class="mt-4">
+                            <Skeleton class="h-8 w-16" />
                         </div>
-                    </div>
+                    </CardContent>
+                </Card>
+            </div>
 
-                    <div
-                        v-if="selectedTmdbId === result.tmdb_id"
-                        class="mt-4 space-y-3 border-t pt-4"
-                    >
-                        <div class="space-y-2">
-                            <Label>Quality Profile</Label>
-                            <Select
-                                :model-value="
-                                    form.qualityProfileId !== null
-                                        ? String(form.qualityProfileId)
-                                        : ''
-                                "
-                                @update:model-value="
-                                    (value) =>
-                                        (form.qualityProfileId = value
-                                            ? Number(value)
-                                            : null)
-                                "
+            <div
+                v-else-if="searchResults.length === 0"
+                class="rounded-md border border-dashed p-10 text-center text-muted-foreground"
+            >
+                No results found for "{{ searchTerm }}".
+            </div>
+
+            <div
+                v-else
+                class="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3"
+            >
+                <Card
+                    v-for="result in searchResults"
+                    :key="result.tmdb_id ?? result.title ?? ''"
+                >
+                    <CardContent class="p-4">
+                        <div class="flex gap-4">
+                            <div
+                                class="w-24 shrink-0 overflow-hidden rounded border bg-muted"
                             >
-                                <SelectTrigger>
-                                    <SelectValue
-                                        placeholder="Select quality profile"
-                                    />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    <SelectItem
-                                        v-for="profile in qualityProfiles"
-                                        :key="profile.id"
-                                        :value="String(profile.id)"
-                                    >
-                                        {{ profile.name }}
-                                    </SelectItem>
-                                </SelectContent>
-                            </Select>
-                        </div>
-
-                        <div class="space-y-2">
-                            <Label>Root Folder</Label>
-                            <Select v-model="form.rootFolderPath">
-                                <SelectTrigger>
-                                    <SelectValue
-                                        placeholder="Select root folder"
-                                    />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    <SelectItem
-                                        v-for="folder in rootFolders"
-                                        :key="folder.id"
-                                        :value="folder.path"
-                                    >
-                                        {{ folder.path }}
-                                    </SelectItem>
-                                </SelectContent>
-                            </Select>
+                                <img
+                                    v-if="result.remote_poster"
+                                    :src="result.remote_poster"
+                                    :alt="result.title ?? ''"
+                                    class="aspect-[2/3] w-full object-cover"
+                                />
+                                <div
+                                    v-else
+                                    class="flex aspect-[2/3] w-full items-center justify-center text-muted-foreground"
+                                >
+                                    <Film class="size-8" />
+                                </div>
+                            </div>
+                            <div class="min-w-0 flex-1">
+                                <h3 class="leading-tight font-medium">
+                                    {{ result.title }}
+                                </h3>
+                                <p
+                                    v-if="result.year"
+                                    class="text-xs text-muted-foreground"
+                                >
+                                    {{ result.year }}
+                                </p>
+                                <p
+                                    v-if="result.overview"
+                                    class="mt-2 line-clamp-3 text-sm text-muted-foreground"
+                                >
+                                    {{ result.overview }}
+                                </p>
+                            </div>
                         </div>
 
-                        <div class="flex gap-2">
-                            <Button
-                                type="button"
-                                :disabled="
-                                    form.processing ||
-                                    !form.qualityProfileId ||
-                                    !form.rootFolderPath
-                                "
-                                @click="submitAdd"
-                            >
-                                {{ form.processing ? 'Adding...' : 'Add' }}
-                            </Button>
+                        <div
+                            v-if="selectedTmdbId === result.tmdb_id"
+                            class="mt-4 space-y-3 border-t pt-4"
+                        >
+                            <div class="space-y-2">
+                                <Label>Quality Profile</Label>
+                                <Select
+                                    :disabled="qualityProfiles === undefined"
+                                    :model-value="
+                                        form.qualityProfileId !== null
+                                            ? String(form.qualityProfileId)
+                                            : ''
+                                    "
+                                    @update:model-value="
+                                        (value) =>
+                                            (form.qualityProfileId = value
+                                                ? Number(value)
+                                                : null)
+                                    "
+                                >
+                                    <SelectTrigger>
+                                        <SelectValue
+                                            :placeholder="
+                                                qualityProfiles === undefined
+                                                    ? 'Loading options…'
+                                                    : 'Select quality profile'
+                                            "
+                                        />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem
+                                            v-for="profile in qualityProfiles ??
+                                            []"
+                                            :key="profile.id"
+                                            :value="String(profile.id)"
+                                        >
+                                            {{ profile.name }}
+                                        </SelectItem>
+                                    </SelectContent>
+                                </Select>
+                            </div>
+
+                            <div class="space-y-2">
+                                <Label>Root Folder</Label>
+                                <Select
+                                    v-model="form.rootFolderPath"
+                                    :disabled="rootFolders === undefined"
+                                >
+                                    <SelectTrigger>
+                                        <SelectValue
+                                            :placeholder="
+                                                rootFolders === undefined
+                                                    ? 'Loading options…'
+                                                    : 'Select root folder'
+                                            "
+                                        />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem
+                                            v-for="folder in rootFolders ?? []"
+                                            :key="folder.id"
+                                            :value="folder.path"
+                                        >
+                                            {{ folder.path }}
+                                        </SelectItem>
+                                    </SelectContent>
+                                </Select>
+                            </div>
+
+                            <div class="flex gap-2">
+                                <Button
+                                    type="button"
+                                    :disabled="
+                                        form.processing ||
+                                        !form.qualityProfileId ||
+                                        !form.rootFolderPath
+                                    "
+                                    @click="submitAdd"
+                                >
+                                    {{ form.processing ? 'Adding...' : 'Add' }}
+                                </Button>
+                                <Button
+                                    type="button"
+                                    variant="outline"
+                                    @click="cancelAdd"
+                                    >Cancel</Button
+                                >
+                            </div>
+                        </div>
+                        <div v-else class="mt-4">
                             <Button
                                 type="button"
                                 variant="outline"
-                                @click="cancelAdd"
-                                >Cancel</Button
+                                size="sm"
+                                @click="startAdd(result)"
                             >
+                                Add
+                            </Button>
                         </div>
-                    </div>
-                    <div v-else class="mt-4">
-                        <Button
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            @click="startAdd(result)"
-                        >
-                            Add
-                        </Button>
-                    </div>
-                </CardContent>
-            </Card>
-        </div>
+                    </CardContent>
+                </Card>
+            </div>
+        </template>
     </div>
 </template>

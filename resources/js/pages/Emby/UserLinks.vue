@@ -3,6 +3,7 @@ import { Form, Head, router, usePage } from '@inertiajs/vue3';
 import { Link2, Trash2 } from 'lucide-vue-next';
 import { computed } from 'vue';
 import UserLinkController from '@/actions/App/Http/Controllers/Emby/UserLinkController';
+import type { EmbyUserLinkResource } from '@/typefinder/resources/EmbyUserLinkResource';
 import InputError from '@/components/InputError.vue';
 import PasswordInput from '@/components/PasswordInput.vue';
 import { Badge } from '@/components/ui/badge';
@@ -26,19 +27,7 @@ import {
 } from '@/components/ui/table';
 import { dashboard } from '@/routes';
 
-interface UserBrief {
-    id: number;
-    name: string;
-    email: string;
-}
-
-interface UserLink {
-    id: number;
-    emby_user_id: string;
-    emby_username: string;
-    created_at: string | null;
-    user: UserBrief | null;
-}
+type UserLink = EmbyUserLinkResource;
 
 const props = defineProps<{ links?: UserLink[] }>();
 

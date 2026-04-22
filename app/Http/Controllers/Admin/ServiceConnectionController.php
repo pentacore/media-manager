@@ -4,11 +4,11 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers\Admin;
 
-use Throwable;
 use App\Enums\ServiceType;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Admin\ServiceConnectionStoreRequest;
 use App\Http\Requests\Admin\ServiceConnectionUpdateRequest;
+use App\Http\Resources\ServiceConnectionResource;
 use App\Jobs\FetchLatestServiceVersion;
 use App\Jobs\PingServiceHealth;
 use App\Models\ServiceConnection;
@@ -21,29 +21,16 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
+use Throwable;
 
 class ServiceConnectionController extends Controller
 {
-    public function index(): Response
+    public function index(Request $request): Response
     {
         return Inertia::render('Admin/Connections/Index', [
-            'connections' => ServiceConnection::query()
-                ->orderBy('name')
-                ->get()
-                ->map(fn (ServiceConnection $serviceConnection): array => [
-                    'id' => $serviceConnection->id,
-                    'type' => $serviceConnection->type,
-                    'name' => $serviceConnection->name,
-                    'url' => $serviceConnection->url,
-                    'is_active' => $serviceConnection->is_active,
-                    'health_status' => $serviceConnection->health_status?->value,
-                    'last_seen_at' => $serviceConnection->last_seen_at?->diffForHumans(),
-                    'version' => $serviceConnection->version,
-                    'latest_version' => $serviceConnection->latest_version,
-                    'update_available' => $serviceConnection->latest_version !== null
-                        && $serviceConnection->version !== null
-                        && $serviceConnection->latest_version !== $serviceConnection->version,
-                ]),
+            'connections' => ServiceConnectionResource::collection(
+                ServiceConnection::query()->orderBy('name')->get()
+            )->toArray($request),
         ]);
     }
 

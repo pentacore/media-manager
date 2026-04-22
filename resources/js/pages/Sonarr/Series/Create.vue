@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { Head, Link, router, useForm } from '@inertiajs/vue3';
 import { Search, Plus, ArrowLeft } from 'lucide-vue-next';
-import { ref } from 'vue';
+import { computed, ref } from 'vue';
 import SeriesController from '@/actions/App/Http/Controllers/Media/SeriesController';
 import InputError from '@/components/InputError.vue';
 import { Button } from '@/components/ui/button';
@@ -15,6 +15,7 @@ import {
     SelectTrigger,
     SelectValue,
 } from '@/components/ui/select';
+import { Skeleton } from '@/components/ui/skeleton';
 import { dashboard } from '@/routes';
 
 interface QualityProfile {
@@ -38,10 +39,11 @@ interface LookupResult {
 }
 
 const props = defineProps<{
-    qualityProfiles: QualityProfile[];
-    rootFolders: RootFolder[];
+    connection: { url: string };
+    qualityProfiles?: QualityProfile[];
+    rootFolders?: RootFolder[];
     searchTerm: string;
-    searchResults: LookupResult[];
+    searchResults?: LookupResult[];
 }>();
 
 defineOptions({
@@ -65,6 +67,16 @@ const form = useForm({
     monitored: true,
 });
 
+const isSearchLoading = computed(
+    () => props.searchTerm !== '' && props.searchResults === undefined,
+);
+
+const qualityProfilesLoading = computed(
+    () => props.qualityProfiles === undefined,
+);
+
+const rootFoldersLoading = computed(() => props.rootFolders === undefined);
+
 function search() {
     router.get(
         SeriesController.create.url(),
@@ -77,8 +89,8 @@ function selectResult(result: LookupResult) {
     selectedTvdbId.value = result.tvdb_id;
     form.title = result.title ?? '';
     form.tvdbId = result.tvdb_id;
-    form.qualityProfileId = props.qualityProfiles[0]?.id ?? null;
-    form.rootFolderPath = props.rootFolders[0]?.path ?? '';
+    form.qualityProfileId = props.qualityProfiles?.[0]?.id ?? null;
+    form.rootFolderPath = props.rootFolders?.[0]?.path ?? '';
     form.monitored = true;
 }
 
@@ -134,14 +146,35 @@ function formatFreeSpace(bytes: number | null): string {
         </form>
 
         <div
-            v-if="!searchTerm && searchResults.length === 0"
+            v-if="!searchTerm && (searchResults?.length ?? 0) === 0"
             class="rounded-md border bg-muted/30 p-8 text-center text-muted-foreground"
         >
             Search for a series to add.
         </div>
 
         <div
-            v-else-if="searchResults.length === 0"
+            v-else-if="isSearchLoading"
+            class="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3"
+        >
+            <Card v-for="n in 6" :key="`skeleton-${n}`" class="overflow-hidden">
+                <div class="flex gap-3 p-4">
+                    <Skeleton class="h-32 w-20 shrink-0 rounded-sm" />
+                    <div class="min-w-0 flex-1 space-y-2">
+                        <Skeleton class="h-5 w-3/4" />
+                        <Skeleton class="h-4 w-12" />
+                        <Skeleton class="h-3 w-full" />
+                        <Skeleton class="h-3 w-11/12" />
+                        <Skeleton class="h-3 w-2/3" />
+                    </div>
+                </div>
+                <CardContent class="pt-0">
+                    <Skeleton class="h-9 w-full" />
+                </CardContent>
+            </Card>
+        </div>
+
+        <div
+            v-else-if="(searchResults?.length ?? 0) === 0"
             class="rounded-md border bg-muted/30 p-8 text-center text-muted-foreground"
         >
             No results found for "{{ searchTerm }}".
@@ -211,15 +244,22 @@ function formatFreeSpace(bytes: number | null): string {
                         <Label :for="`quality-${result.tvdb_id}`"
                             >Quality Profile</Label
                         >
-                        <Select v-model="form.qualityProfileId">
+                        <Select
+                            v-model="form.qualityProfileId"
+                            :disabled="qualityProfilesLoading"
+                        >
                             <SelectTrigger :id="`quality-${result.tvdb_id}`">
                                 <SelectValue
-                                    placeholder="Select quality profile"
+                                    :placeholder="
+                                        qualityProfilesLoading
+                                            ? 'Loading options…'
+                                            : 'Select quality profile'
+                                    "
                                 />
                             </SelectTrigger>
                             <SelectContent>
                                 <SelectItem
-                                    v-for="profile in qualityProfiles"
+                                    v-for="profile in qualityProfiles ?? []"
                                     :key="profile.id"
                                     :value="profile.id"
                                 >
@@ -234,13 +274,22 @@ function formatFreeSpace(bytes: number | null): string {
                         <Label :for="`root-${result.tvdb_id}`"
                             >Root Folder</Label
                         >
-                        <Select v-model="form.rootFolderPath">
+                        <Select
+                            v-model="form.rootFolderPath"
+                            :disabled="rootFoldersLoading"
+                        >
                             <SelectTrigger :id="`root-${result.tvdb_id}`">
-                                <SelectValue placeholder="Select root folder" />
+                                <SelectValue
+                                    :placeholder="
+                                        rootFoldersLoading
+                                            ? 'Loading options…'
+                                            : 'Select root folder'
+                                    "
+                                />
                             </SelectTrigger>
                             <SelectContent>
                                 <SelectItem
-                                    v-for="folder in rootFolders"
+                                    v-for="folder in rootFolders ?? []"
                                     :key="folder.id"
                                     :value="folder.path"
                                 >

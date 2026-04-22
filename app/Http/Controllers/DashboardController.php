@@ -5,11 +5,16 @@ declare(strict_types=1);
 namespace App\Http\Controllers;
 
 use App\Enums\ActionRequestStatus;
+use App\Enums\ServiceType;
+use App\Http\Resources\ActivityLogResource;
 use App\Models\ActionRequest;
 use App\Models\ActivityLog;
-use App\Models\EmbyActivity;
 use App\Models\ServiceConnection;
 use App\Models\WebhookEvent;
+use App\Services\Emby\EmbyClient;
+use Illuminate\Database\Eloquent\ModelNotFoundException;
+use Illuminate\Http\Client\ConnectionException;
+use Illuminate\Http\Client\RequestException;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -25,19 +30,12 @@ class DashboardController extends Controller
                 'recentWebhooks' => WebhookEvent::where('created_at', '>=', now()->subDay())->count(),
                 'pendingActions' => ActionRequest::where('status', ActionRequestStatus::Pending)->count(),
             ],
-            'recentActivity' => ActivityLog::with(['user:id,name', 'serviceConnection:id,name,type'])
-                ->latest()
-                ->take(10)
-                ->get()
-                ->map(fn (ActivityLog $activityLog): array => [
-                    'id' => $activityLog->id,
-                    'action' => $activityLog->action,
-                    'description' => $activityLog->description,
-                    'user_name' => $activityLog->user?->name,
-                    'service_name' => $activityLog->serviceConnection?->name,
-                    'service_type' => $activityLog->serviceConnection?->type->value,
-                    'created_at' => $activityLog->created_at?->toISOString(),
-                ]),
+            'recentActivity' => ActivityLogResource::collection(
+                ActivityLog::with(['user:id,name', 'serviceConnection:id,name,type'])
+                    ->latest()
+                    ->take(10)
+                    ->get()
+            )->toArray($request),
             'recentWebhookEvents' => WebhookEvent::with('serviceConnection:id,name,type')
                 ->latest()
                 ->take(5)
@@ -50,19 +48,38 @@ class DashboardController extends Controller
                     'processed' => $webhookEvent->processed_at !== null,
                     'created_at' => $webhookEvent->created_at?->toISOString(),
                 ]),
-            'nowPlaying' => Inertia::optional(fn (): array => EmbyActivity::with('embyUserLink:id,emby_username')
-                ->latest()
-                ->take(5)
-                ->get()
-                ->map(fn (EmbyActivity $embyActivity): array => [
-                    'id' => $embyActivity->id,
-                    'media_type' => $embyActivity->media_type,
-                    'media_title' => $embyActivity->media_title,
-                    'series_title' => $embyActivity->series_title,
-                    'action' => $embyActivity->action,
-                    'emby_username' => $embyActivity->embyUserLink?->emby_username,
-                ])
-                ->all()),
+            'nowPlaying' => Inertia::defer(fn (): array => $this->loadNowPlaying()),
         ]);
+    }
+
+    /**
+     * @return array<int, array<string, mixed>>
+     */
+    private function loadNowPlaying(): array
+    {
+        try {
+            $connection = ServiceConnection::resolveActive(ServiceType::Emby);
+        } catch (ModelNotFoundException) {
+            return [];
+        }
+
+        try {
+            $sessions = new EmbyClient($connection)->getActiveSessions();
+        } catch (RequestException|ConnectionException) {
+            return [];
+        }
+
+        return array_values(array_map(
+            fn (array $session): array => [
+                'media_title' => $session['NowPlayingItem']['Name'] ?? null,
+                'series_title' => $session['NowPlayingItem']['SeriesName'] ?? null,
+                'emby_username' => $session['UserName'] ?? null,
+                'media_type' => strtolower((string) ($session['NowPlayingItem']['Type'] ?? '')),
+                'action' => ($session['PlayState']['IsPaused'] ?? false) ? 'paused' : 'playing',
+                'play_position' => $session['PlayState']['PositionTicks'] ?? null,
+                'duration_ticks' => $session['NowPlayingItem']['RunTimeTicks'] ?? null,
+            ],
+            array_filter($sessions, static fn (array $session): bool => isset($session['NowPlayingItem'])),
+        ));
     }
 }

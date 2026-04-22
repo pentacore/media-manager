@@ -6,6 +6,7 @@ namespace App\Http\Controllers\Emby;
 
 use App\Enums\UserRole;
 use App\Http\Controllers\Controller;
+use App\Http\Resources\EmbyActivityResource;
 use App\Models\EmbyActivity;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -33,17 +34,7 @@ class WatchHistoryController extends Controller
 
         return Inertia::render('Emby/WatchHistory', [
             'activities' => [
-                'data' => $lengthAwarePaginator->getCollection()->map(fn (EmbyActivity $embyActivity): array => [
-                    'id' => $embyActivity->id,
-                    'media_type' => $embyActivity->media_type,
-                    'media_title' => $embyActivity->media_title,
-                    'series_title' => $embyActivity->series_title,
-                    'action' => $embyActivity->action,
-                    'play_position' => $embyActivity->play_position,
-                    'duration_ticks' => $embyActivity->duration_ticks,
-                    'emby_username' => $embyActivity->embyUserLink?->emby_username,
-                    'created_at' => $embyActivity->created_at?->toISOString(),
-                ])->all(),
+                'data' => EmbyActivityResource::collection($lengthAwarePaginator->getCollection())->toArray($request),
                 'links' => $lengthAwarePaginator->linkCollection()->toArray(),
                 'meta' => [
                     'current_page' => $lengthAwarePaginator->currentPage(),

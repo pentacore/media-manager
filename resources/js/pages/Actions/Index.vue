@@ -3,6 +3,7 @@ import { Head, router, usePage } from '@inertiajs/vue3';
 import { Zap } from 'lucide-vue-next';
 import { computed } from 'vue';
 import ActionRequestController from '@/actions/App/Http/Controllers/Actions/ActionRequestController';
+import type { ActionRequestResource } from '@/typefinder/resources/ActionRequestResource';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
@@ -22,20 +23,7 @@ import {
 } from '@/components/ui/table';
 import { dashboard } from '@/routes';
 
-interface ActionRequestRow {
-    id: number;
-    type: string;
-    source_service: string;
-    target_service: string;
-    status: string;
-    requires_approval: boolean;
-    payload: Record<string, unknown>;
-    result: Record<string, unknown> | null;
-    approved_by: string | null;
-    webhook_source: string | null;
-    created_at: string | null;
-    updated_at: string | null;
-}
+type ActionRequestRow = ActionRequestResource;
 
 interface PaginatorLink {
     url: string | null;

@@ -2,6 +2,7 @@
 import { Head, router } from '@inertiajs/vue3';
 import { History } from 'lucide-vue-next';
 import WatchHistoryController from '@/actions/App/Http/Controllers/Emby/WatchHistoryController';
+import type { EmbyActivityResource } from '@/typefinder/resources/EmbyActivityResource';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
@@ -21,17 +22,7 @@ import {
 } from '@/components/ui/table';
 import { dashboard } from '@/routes';
 
-interface Activity {
-    id: number;
-    media_type: string | null;
-    media_title: string | null;
-    series_title: string | null;
-    action: string | null;
-    play_position: number | null;
-    duration_ticks: number | null;
-    emby_username: string | null;
-    created_at: string | null;
-}
+type Activity = EmbyActivityResource;
 
 interface PaginatorLink {
     url: string | null;

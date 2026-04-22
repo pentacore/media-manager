@@ -22,32 +22,46 @@ class MovieController extends Controller
     public function index(): Response|RedirectResponse
     {
         try {
-            $client = $this->client();
-            $movies = $client->getMovies();
-            $qualityProfiles = $client->getQualityProfiles();
+            $connection = ServiceConnection::resolveActive(ServiceType::Radarr);
         } catch (ModelNotFoundException) {
             return $this->noConnectionRedirect();
-        } catch (RequestException|ConnectionException) {
-            return $this->connectionFailedRedirect();
         }
 
         return Inertia::render('Radarr/Movies/Index', [
-            'movies' => array_map(fn (array $item): array => $this->mapMovie($item), $movies),
-            'qualityProfiles' => $this->mapQualityProfiles($qualityProfiles),
+            'connection' => ['url' => rtrim($connection->url, '/')],
+            'movies' => Inertia::defer(function () use ($connection): array {
+                try {
+                    return array_map(fn (array $item): array => $this->mapMovie($item), new RadarrClient($connection)->getMovies());
+                } catch (RequestException|ConnectionException) {
+                    return [];
+                }
+            }),
+            'qualityProfiles' => Inertia::defer(function () use ($connection): array {
+                try {
+                    return $this->mapQualityProfiles(new RadarrClient($connection)->getQualityProfiles());
+                } catch (RequestException|ConnectionException) {
+                    return [];
+                }
+            }),
         ]);
     }
 
     public function show(int $id): Response|RedirectResponse
     {
         try {
-            $movie = $this->client()->getMovieById($id);
+            $connection = ServiceConnection::resolveActive(ServiceType::Radarr);
         } catch (ModelNotFoundException) {
             return $this->noConnectionRedirect();
+        }
+
+        try {
+            $movie = new RadarrClient($connection)->getMovieById($id);
         } catch (RequestException|ConnectionException) {
             return $this->connectionFailedRedirect();
         }
 
         return Inertia::render('Radarr/Movies/Show', [
+            'connection' => ['url' => rtrim($connection->url, '/')],
             'movie' => $this->mapMovie($movie, detailed: true),
         ]);
     }
@@ -55,36 +69,52 @@ class MovieController extends Controller
     public function create(Request $request): Response|RedirectResponse
     {
         try {
-            $client = $this->client();
-            $qualityProfiles = $client->getQualityProfiles();
-            $rootFolders = $client->getRootFolders();
-            $lookup = [];
-            $term = trim((string) $request->query('q', ''));
-            if ($term !== '') {
-                $lookup = $client->searchMovies($term);
-            }
+            $connection = ServiceConnection::resolveActive(ServiceType::Radarr);
         } catch (ModelNotFoundException) {
             return $this->noConnectionRedirect();
-        } catch (RequestException|ConnectionException) {
-            return $this->connectionFailedRedirect();
         }
 
+        $term = trim((string) $request->query('q', ''));
+
         return Inertia::render('Radarr/Movies/Create', [
-            'qualityProfiles' => $this->mapQualityProfiles($qualityProfiles),
-            'rootFolders' => array_map(fn (array $f): array => [
-                'id' => $f['id'] ?? null,
-                'path' => $f['path'] ?? '',
-                'free_space' => $f['freeSpace'] ?? null,
-            ], $rootFolders),
+            'connection' => ['url' => rtrim($connection->url, '/')],
             'searchTerm' => $term,
-            'searchResults' => array_map(fn (array $item): array => [
-                'tmdb_id' => $item['tmdbId'] ?? null,
-                'title' => $item['title'] ?? null,
-                'year' => $item['year'] ?? null,
-                'overview' => $item['overview'] ?? null,
-                'remote_poster' => $item['remotePoster'] ?? null,
-                'images' => $item['images'] ?? [],
-            ], $lookup),
+            'qualityProfiles' => Inertia::defer(function () use ($connection): array {
+                try {
+                    return $this->mapQualityProfiles(new RadarrClient($connection)->getQualityProfiles());
+                } catch (RequestException|ConnectionException) {
+                    return [];
+                }
+            }),
+            'rootFolders' => Inertia::defer(function () use ($connection): array {
+                try {
+                    return array_map(fn (array $f): array => [
+                        'id' => $f['id'] ?? null,
+                        'path' => $f['path'] ?? '',
+                        'free_space' => $f['freeSpace'] ?? null,
+                    ], new RadarrClient($connection)->getRootFolders());
+                } catch (RequestException|ConnectionException) {
+                    return [];
+                }
+            }),
+            'searchResults' => Inertia::defer(function () use ($connection, $term): array {
+                if ($term === '') {
+                    return [];
+                }
+
+                try {
+                    return array_map(fn (array $item): array => [
+                        'tmdb_id' => $item['tmdbId'] ?? null,
+                        'title' => $item['title'] ?? null,
+                        'year' => $item['year'] ?? null,
+                        'overview' => $item['overview'] ?? null,
+                        'remote_poster' => $item['remotePoster'] ?? null,
+                        'images' => $item['images'] ?? [],
+                    ], new RadarrClient($connection)->searchMovies($term));
+                } catch (RequestException|ConnectionException) {
+                    return [];
+                }
+            }),
         ]);
     }
 
@@ -138,6 +168,7 @@ class MovieController extends Controller
         $base = [
             'id' => $item['id'] ?? null,
             'title' => $item['title'] ?? null,
+            'title_slug' => $item['titleSlug'] ?? null,
             'year' => $item['year'] ?? null,
             'status' => $item['status'] ?? null,
             'monitored' => $item['monitored'] ?? false,

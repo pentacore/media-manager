@@ -20,7 +20,19 @@ test('guests are redirected to login from now playing', function (): void {
     $this->get(route('monitoring.now-playing'))->assertRedirect(route('login'));
 });
 
-test('authenticated users can see now playing sessions', function (): void {
+test('now playing page renders shell with deferred sessions', function (): void {
+    $user = User::factory()->create();
+
+    $this->actingAs($user)
+        ->get(route('monitoring.now-playing'))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->component('Emby/NowPlaying')
+            ->missing('sessions')
+        );
+});
+
+test('authenticated users can see now playing sessions via deferred prop', function (): void {
     $user = User::factory()->create();
 
     Http::fake([
@@ -51,9 +63,11 @@ test('authenticated users can see now playing sessions', function (): void {
         ->assertOk()
         ->assertInertia(fn ($page) => $page
             ->component('Emby/NowPlaying')
-            ->has('sessions', 1)
-            ->where('sessions.0.user_name', 'alice')
-            ->where('sessions.0.now_playing.name', 'Pilot')
+            ->loadDeferredProps(fn ($page) => $page
+                ->has('sessions', 1)
+                ->where('sessions.0.user_name', 'alice')
+                ->where('sessions.0.now_playing.name', 'Pilot')
+            )
         );
 });
 
@@ -66,12 +80,18 @@ test('now playing redirects when no active emby connection', function (): void {
         ->assertRedirect(route('dashboard'));
 });
 
-test('now playing handles connection failure gracefully', function (): void {
+test('now playing handles connection failure gracefully in deferred prop', function (): void {
     $user = User::factory()->create();
 
     Http::fake(fn () => Http::response('Service Unavailable', 503));
 
     $this->actingAs($user)
         ->get(route('monitoring.now-playing'))
-        ->assertRedirect(route('dashboard'));
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->component('Emby/NowPlaying')
+            ->loadDeferredProps(fn ($page) => $page
+                ->where('sessions', [])
+            )
+        );
 });

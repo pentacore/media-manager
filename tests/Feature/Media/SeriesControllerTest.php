@@ -25,12 +25,26 @@ test('viewers cannot access series index', function (): void {
     $this->actingAs($viewer)->get(route('media.series.index'))->assertForbidden();
 });
 
-test('members can list series', function (): void {
+test('series index shell renders with connection url before deferred data loads', function (): void {
+    $member = User::factory()->member()->create();
+
+    $this->actingAs($member)
+        ->get(route('media.series.index'))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->component('Sonarr/Series/Index')
+            ->where('connection.url', 'http://sonarr.local:8989')
+            ->missing('series')
+            ->missing('qualityProfiles')
+        );
+});
+
+test('members can list series via deferred props', function (): void {
     $member = User::factory()->member()->create();
 
     Http::fake([
         'sonarr.local:8989/api/v3/series' => Http::response([
-            ['id' => 1, 'title' => 'Test Show', 'year' => 2024, 'status' => 'continuing', 'monitored' => true, 'qualityProfileId' => 1, 'seasons' => [['seasonNumber' => 1]], 'statistics' => ['sizeOnDisk' => 1024, 'episodeCount' => 10, 'episodeFileCount' => 8], 'images' => []],
+            ['id' => 1, 'title' => 'Test Show', 'titleSlug' => 'test-show', 'year' => 2024, 'status' => 'continuing', 'monitored' => true, 'qualityProfileId' => 1, 'seasons' => [['seasonNumber' => 1]], 'statistics' => ['sizeOnDisk' => 1024, 'episodeCount' => 10, 'episodeFileCount' => 8], 'images' => []],
         ]),
         'sonarr.local:8989/api/v3/qualityprofile' => Http::response([
             ['id' => 1, 'name' => 'HD-1080p'],
@@ -42,10 +56,13 @@ test('members can list series', function (): void {
         ->assertOk()
         ->assertInertia(fn ($page) => $page
             ->component('Sonarr/Series/Index')
-            ->has('series', 1)
-            ->has('qualityProfiles', 1)
-            ->where('series.0.title', 'Test Show')
-            ->where('qualityProfiles.0.name', 'HD-1080p')
+            ->reloadOnly(['series', 'qualityProfiles'], fn ($reload) => $reload
+                ->has('series', 1)
+                ->has('qualityProfiles', 1)
+                ->where('series.0.title', 'Test Show')
+                ->where('series.0.title_slug', 'test-show')
+                ->where('qualityProfiles.0.name', 'HD-1080p')
+            )
         );
 });
 
@@ -69,22 +86,28 @@ test('series index redirects when no active sonarr connection', function (): voi
         ->assertRedirect(route('dashboard'));
 });
 
-test('series index handles connection failure gracefully', function (): void {
+test('series index deferred props return empty arrays on connection failure', function (): void {
     $member = User::factory()->member()->create();
 
     Http::fake(fn () => Http::response('Service Unavailable', 503));
 
     $this->actingAs($member)
         ->get(route('media.series.index'))
-        ->assertRedirect(route('dashboard'));
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->reloadOnly(['series', 'qualityProfiles'], fn ($reload) => $reload
+                ->where('series', [])
+                ->where('qualityProfiles', [])
+            )
+        );
 });
 
-test('members can view a single series with episodes', function (): void {
+test('members can view a single series with deferred episodes', function (): void {
     $member = User::factory()->member()->create();
 
     Http::fake([
         'sonarr.local:8989/api/v3/series/42' => Http::response([
-            'id' => 42, 'title' => 'My Show', 'year' => 2024, 'overview' => 'A show', 'status' => 'ended', 'monitored' => true, 'qualityProfileId' => 1, 'seasons' => [], 'statistics' => ['sizeOnDisk' => 0, 'episodeCount' => 0, 'episodeFileCount' => 0], 'images' => [], 'network' => 'HBO', 'runtime' => 60, 'rootFolderPath' => '/tv',
+            'id' => 42, 'title' => 'My Show', 'titleSlug' => 'my-show', 'year' => 2024, 'overview' => 'A show', 'status' => 'ended', 'monitored' => true, 'qualityProfileId' => 1, 'seasons' => [], 'statistics' => ['sizeOnDisk' => 0, 'episodeCount' => 0, 'episodeFileCount' => 0], 'images' => [], 'network' => 'HBO', 'runtime' => 60, 'rootFolderPath' => '/tv',
         ]),
         'sonarr.local:8989/api/v3/episode*' => Http::response([
             ['id' => 1, 'seasonNumber' => 1, 'episodeNumber' => 1, 'title' => 'Pilot', 'airDate' => '2024-01-01', 'hasFile' => true, 'monitored' => true],
@@ -96,14 +119,45 @@ test('members can view a single series with episodes', function (): void {
         ->assertOk()
         ->assertInertia(fn ($page) => $page
             ->component('Sonarr/Series/Show')
+            ->where('connection.url', 'http://sonarr.local:8989')
             ->where('series.id', 42)
             ->where('series.title', 'My Show')
-            ->has('episodes', 1)
-            ->where('episodes.0.title', 'Pilot')
+            ->where('series.title_slug', 'my-show')
+            ->missing('episodes')
+            ->reloadOnly(['episodes'], fn ($reload) => $reload
+                ->has('episodes', 1)
+                ->where('episodes.0.title', 'Pilot')
+            )
         );
 });
 
-test('members can view create form with quality profiles and root folders', function (): void {
+test('series show redirects when series fetch fails', function (): void {
+    $member = User::factory()->member()->create();
+
+    Http::fake(['sonarr.local:8989/api/v3/series/42' => Http::response('Service Unavailable', 503)]);
+
+    $this->actingAs($member)
+        ->get(route('media.series.show', 42))
+        ->assertRedirect(route('dashboard'));
+});
+
+test('members can view create form shell with connection url', function (): void {
+    $member = User::factory()->member()->create();
+
+    $this->actingAs($member)
+        ->get(route('media.series.create'))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->component('Sonarr/Series/Create')
+            ->where('connection.url', 'http://sonarr.local:8989')
+            ->where('searchTerm', '')
+            ->missing('qualityProfiles')
+            ->missing('rootFolders')
+            ->missing('searchResults')
+        );
+});
+
+test('create form loads quality profiles and root folders via deferred props', function (): void {
     $member = User::factory()->member()->create();
 
     Http::fake([
@@ -116,13 +170,17 @@ test('members can view create form with quality profiles and root folders', func
         ->assertOk()
         ->assertInertia(fn ($page) => $page
             ->component('Sonarr/Series/Create')
-            ->has('qualityProfiles', 1)
-            ->has('rootFolders', 1)
-            ->where('searchResults', [])
+            ->reloadOnly(
+                ['qualityProfiles', 'rootFolders', 'searchResults'],
+                fn ($reload) => $reload
+                    ->has('qualityProfiles', 1)
+                    ->has('rootFolders', 1)
+                    ->where('searchResults', []),
+            )
         );
 });
 
-test('create form returns lookup results when q is provided', function (): void {
+test('create form returns lookup results via deferred prop when q is provided', function (): void {
     $member = User::factory()->member()->create();
 
     Http::fake([
@@ -137,8 +195,31 @@ test('create form returns lookup results when q is provided', function (): void 
         ->get(route('media.series.create', ['q' => 'found']))
         ->assertOk()
         ->assertInertia(fn ($page) => $page
-            ->has('searchResults', 1)
-            ->where('searchResults.0.title', 'Found Show')
+            ->component('Sonarr/Series/Create')
+            ->reloadOnly(['searchResults'], fn ($reload) => $reload
+                ->has('searchResults', 1)
+                ->where('searchResults.0.title', 'Found Show')
+            )
+        );
+});
+
+test('title slug is mapped from sonarr response', function (): void {
+    $member = User::factory()->member()->create();
+
+    Http::fake([
+        'sonarr.local:8989/api/v3/series' => Http::response([
+            ['id' => 7, 'title' => 'Slugged', 'titleSlug' => 'slugged-42', 'seasons' => [], 'statistics' => [], 'images' => []],
+        ]),
+        'sonarr.local:8989/api/v3/qualityprofile' => Http::response([]),
+    ]);
+
+    $this->actingAs($member)
+        ->get(route('media.series.index'))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->reloadOnly(['series'], fn ($reload) => $reload
+                ->where('series.0.title_slug', 'slugged-42')
+            )
         );
 });
 

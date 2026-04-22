@@ -7,6 +7,7 @@ namespace App\Http\Controllers\Actions;
 use App\Enums\ActionRequestStatus;
 use App\Events\ActionRequestStatusChanged;
 use App\Http\Controllers\Controller;
+use App\Http\Resources\ActionRequestResource;
 use App\Jobs\ExecuteActionRequest;
 use App\Models\ActionRequest;
 use Illuminate\Http\RedirectResponse;
@@ -33,20 +34,7 @@ class ActionRequestController extends Controller
 
         return Inertia::render('Actions/Index', [
             'requests' => [
-                'data' => $lengthAwarePaginator->getCollection()->map(fn (ActionRequest $actionRequest): array => [
-                    'id' => $actionRequest->id,
-                    'type' => $actionRequest->type,
-                    'source_service' => $actionRequest->source_service,
-                    'target_service' => $actionRequest->target_service,
-                    'status' => $actionRequest->status->value,
-                    'requires_approval' => $actionRequest->requires_approval,
-                    'payload' => $actionRequest->payload,
-                    'result' => $actionRequest->result,
-                    'approved_by' => $actionRequest->approvedByUser?->name,
-                    'webhook_source' => $actionRequest->webhookEvent?->serviceConnection?->name,
-                    'created_at' => $actionRequest->created_at?->toISOString(),
-                    'updated_at' => $actionRequest->updated_at?->toISOString(),
-                ])->all(),
+                'data' => ActionRequestResource::collection($lengthAwarePaginator->getCollection())->toArray($request),
                 'links' => $lengthAwarePaginator->linkCollection()->toArray(),
                 'meta' => [
                     'current_page' => $lengthAwarePaginator->currentPage(),

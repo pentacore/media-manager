@@ -4,41 +4,45 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers\Monitoring;
 
-use App\Enums\HealthStatus;
 use App\Enums\ServiceType;
 use App\Http\Controllers\Controller;
+use App\Http\Resources\ServiceConnectionResource;
 use App\Models\ServiceConnection;
 use App\Services\Radarr\RadarrClient;
 use App\Services\Sonarr\SonarrClient;
+use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\RequestException;
+use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
 use Throwable;
 
 class ServiceHealthController extends Controller
 {
-    public function __invoke(): Response
+    public function __invoke(Request $request): Response
     {
         $connections = ServiceConnection::orderBy('type')->orderBy('name')->get();
 
         return Inertia::render('Monitoring/ServiceHealth', [
-            'connections' => $connections->map(fn (ServiceConnection $serviceConnection): array => [
-                'id' => $serviceConnection->id,
-                'name' => $serviceConnection->name,
-                'type' => $serviceConnection->type->value,
-                'url' => $serviceConnection->url,
-                'is_active' => $serviceConnection->is_active,
-                'health_status' => ($serviceConnection->health_status ?? HealthStatus::Unknown)->value,
-                'version' => $serviceConnection->version,
-                'latest_version' => $serviceConnection->latest_version,
-                'update_available' => $serviceConnection->latest_version !== null
-                    && $serviceConnection->version !== null
-                    && $serviceConnection->latest_version !== $serviceConnection->version,
-                'last_seen_at' => $serviceConnection->last_seen_at?->toISOString(),
-                'disk_space' => $this->diskSpaceFor($serviceConnection),
-            ])->all(),
+            'connections' => ServiceConnectionResource::collection($connections)->toArray($request),
+            'diskSpace' => Inertia::defer(fn (): array => $this->loadDiskSpaceForAll($connections)),
         ]);
+    }
+
+    /**
+     * @param  Collection<int, ServiceConnection>  $connections
+     * @return array<int, array<int, array<string, mixed>>>
+     */
+    private function loadDiskSpaceForAll(Collection $connections): array
+    {
+        $result = [];
+
+        foreach ($connections as $connection) {
+            $result[$connection->id] = $this->diskSpaceFor($connection) ?? [];
+        }
+
+        return $result;
     }
 
     /**

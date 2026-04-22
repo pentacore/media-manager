@@ -8,37 +8,26 @@ use App\Enums\ServiceType;
 use App\Enums\UserRole;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Emby\StoreUserLinkRequest;
+use App\Http\Resources\EmbyUserLinkResource;
 use App\Models\EmbyUserLink;
 use App\Models\ServiceConnection;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\RequestException;
 use Illuminate\Http\RedirectResponse;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Http;
 use Inertia\Inertia;
 use Inertia\Response;
 
 class UserLinkController extends Controller
 {
-    public function index(): Response
+    public function index(Request $request): Response
     {
-        $links = EmbyUserLink::with('user:id,name,email')
-            ->latest()
-            ->get()
-            ->map(fn (EmbyUserLink $embyUserLink): array => [
-                'id' => $embyUserLink->id,
-                'emby_user_id' => $embyUserLink->emby_user_id,
-                'emby_username' => $embyUserLink->emby_username,
-                'created_at' => $embyUserLink->created_at?->toISOString(),
-                'user' => $embyUserLink->user ? [
-                    'id' => $embyUserLink->user->id,
-                    'name' => $embyUserLink->user->name,
-                    'email' => $embyUserLink->user->email,
-                ] : null,
-            ]);
-
         return Inertia::render('Emby/UserLinks', [
-            'links' => $links,
+            'links' => EmbyUserLinkResource::collection(
+                EmbyUserLink::with('user:id,name,email')->latest()->get()
+            )->toArray($request),
         ]);
     }
 

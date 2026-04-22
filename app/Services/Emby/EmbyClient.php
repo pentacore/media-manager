@@ -72,7 +72,7 @@ class EmbyClient
      */
     public function getActiveSessions(): array
     {
-        return $this->buildClient()->get('/Sessions')->throw()->json();
+        return $this->buildClient()->get('/Sessions')->throw()->json() ?? [];
     }
 
     /**

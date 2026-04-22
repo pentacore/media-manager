@@ -25,17 +25,30 @@ test('viewers cannot access requests index', function (): void {
     $this->actingAs($viewer)->get(route('media.requests.index'))->assertForbidden();
 });
 
-test('members can list requests', function (): void {
+test('members can list requests with title enrichment and summary', function (): void {
     $member = User::factory()->member()->create();
 
     Http::fake([
+        'seerr.local:5055/api/v1/request/count' => Http::response([
+            'total' => 75,
+            'pending' => 5,
+            'approved' => 60,
+            'declined' => 10,
+            'movie' => 40,
+            'tv' => 35,
+        ]),
+        'seerr.local:5055/api/v1/movie/603' => Http::response([
+            'id' => 603,
+            'title' => 'The Matrix',
+        ]),
         'seerr.local:5055/api/v1/request*' => Http::response([
+            'pageInfo' => ['page' => 1, 'pages' => 2, 'pageSize' => 50, 'results' => 75],
             'results' => [
                 [
                     'id' => 1,
                     'status' => 1,
                     'type' => 'movie',
-                    'media' => ['mediaType' => 'movie', 'title' => 'My Movie', 'tmdbId' => 555],
+                    'media' => ['mediaType' => 'movie', 'tmdbId' => 603],
                     'requestedBy' => ['displayName' => 'Alice'],
                     'createdAt' => '2026-04-01T00:00:00Z',
                 ],
@@ -48,9 +61,165 @@ test('members can list requests', function (): void {
         ->assertOk()
         ->assertInertia(fn ($page) => $page
             ->component('Seerr/Requests')
-            ->has('requests', 1)
-            ->where('requests.0.media_title', 'My Movie')
-            ->where('requests.0.requester', 'Alice')
+            ->has('connection.url')
+            ->has('filters.page')
+            ->loadDeferredProps('default', function ($page): void {
+                $page
+                    ->has('requests.data', 1)
+                    ->where('requests.data.0.media_title', 'The Matrix')
+                    ->where('requests.data.0.requester', 'Alice')
+                    ->where('requests.meta.total', 75)
+                    ->where('requests.meta.current_page', 1)
+                    ->where('requests.meta.last_page', 2)
+                    ->where('summary.total', 75)
+                    ->where('summary.pending', 5)
+                    ->where('summary.approved', 60)
+                    ->where('summary.declined', 10);
+            })
+        );
+});
+
+test('tv requests resolve titles via /tv detail endpoint', function (): void {
+    $member = User::factory()->member()->create();
+
+    Http::fake([
+        'seerr.local:5055/api/v1/tv/1396' => Http::response([
+            'id' => 1396,
+            'name' => 'Breaking Bad',
+        ]),
+        'seerr.local:5055/api/v1/request*' => Http::response([
+            'pageInfo' => ['page' => 1, 'pages' => 1, 'pageSize' => 50, 'results' => 1],
+            'results' => [
+                [
+                    'id' => 7,
+                    'status' => 2,
+                    'type' => 'tv',
+                    'media' => ['mediaType' => 'tv', 'tmdbId' => 1396, 'tvdbId' => 81189],
+                    'requestedBy' => ['username' => 'bob'],
+                    'createdAt' => '2026-04-10T00:00:00Z',
+                ],
+            ],
+        ]),
+        'seerr.local:5055/api/v1/request/count' => Http::response([
+            'total' => 1, 'pending' => 0, 'approved' => 1, 'declined' => 0,
+        ]),
+    ]);
+
+    $this->actingAs($member)
+        ->get(route('media.requests.index'))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->loadDeferredProps('default', function ($page): void {
+                $page
+                    ->where('requests.data.0.media_title', 'Breaking Bad')
+                    ->where('requests.data.0.media_type', 'tv')
+                    ->where('requests.data.0.requester', 'bob');
+            })
+        );
+});
+
+test('pagination sends skip based on page query', function (): void {
+    $member = User::factory()->member()->create();
+
+    Http::fake([
+        'seerr.local:5055/api/v1/request*' => Http::response([
+            'pageInfo' => ['page' => 2, 'pages' => 3, 'pageSize' => 50, 'results' => 120],
+            'results' => [],
+        ]),
+        'seerr.local:5055/api/v1/request/count' => Http::response([
+            'total' => 120, 'pending' => 0, 'approved' => 120, 'declined' => 0,
+        ]),
+    ]);
+
+    $this->actingAs($member)
+        ->get(route('media.requests.index', ['page' => 2]))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->where('filters.page', 2)
+            ->loadDeferredProps('default', function ($page): void {
+                $page
+                    ->where('requests.meta.current_page', 2)
+                    ->where('requests.meta.last_page', 3)
+                    ->where('requests.meta.total', 120);
+            })
+        );
+
+    Http::assertSent(fn ($request): bool => str_contains((string) $request->url(), '/api/v1/request')
+        && str_contains((string) $request->url(), 'skip=50')
+        && str_contains((string) $request->url(), 'take=50')
+    );
+});
+
+test('empty results render without errors', function (): void {
+    $member = User::factory()->member()->create();
+
+    Http::fake([
+        'seerr.local:5055/api/v1/request/count' => Http::response([
+            'total' => 0, 'pending' => 0, 'approved' => 0, 'declined' => 0,
+        ]),
+        'seerr.local:5055/api/v1/request*' => Http::response([
+            'pageInfo' => ['page' => 1, 'pages' => 1, 'pageSize' => 50, 'results' => 0],
+            'results' => [],
+        ]),
+    ]);
+
+    $this->actingAs($member)
+        ->get(route('media.requests.index'))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->loadDeferredProps('default', function ($page): void {
+                $page
+                    ->has('requests.data', 0)
+                    ->where('requests.meta.total', 0)
+                    ->where('summary.total', 0);
+            })
+        );
+});
+
+test('summary falls back to zeros when count endpoint fails', function (): void {
+    $member = User::factory()->member()->create();
+
+    Http::fake([
+        'seerr.local:5055/api/v1/request/count' => Http::response('Server Error', 500),
+        'seerr.local:5055/api/v1/request*' => Http::response([
+            'pageInfo' => ['page' => 1, 'pages' => 1, 'pageSize' => 50, 'results' => 0],
+            'results' => [],
+        ]),
+    ]);
+
+    $this->actingAs($member)
+        ->get(route('media.requests.index'))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->loadDeferredProps('default', function ($page): void {
+                $page
+                    ->where('summary.total', 0)
+                    ->where('summary.pending', 0)
+                    ->where('summary.approved', 0)
+                    ->where('summary.declined', 0);
+            })
+        );
+});
+
+test('requests list falls back to empty when list endpoint fails', function (): void {
+    $member = User::factory()->member()->create();
+
+    Http::fake([
+        'seerr.local:5055/api/v1/request/count' => Http::response([
+            'total' => 10, 'pending' => 1, 'approved' => 9, 'declined' => 0,
+        ]),
+        'seerr.local:5055/api/v1/request*' => Http::response('Server Error', 500),
+    ]);
+
+    $this->actingAs($member)
+        ->get(route('media.requests.index'))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->loadDeferredProps('default', function ($page): void {
+                $page
+                    ->has('requests.data', 0)
+                    ->where('requests.meta.total', 0);
+            })
         );
 });
 
@@ -93,5 +262,94 @@ test('admin delete handles connection failure gracefully', function (): void {
     $this->actingAs($admin)
         ->from(route('media.requests.index'))
         ->delete(route('media.requests.destroy', 42))
+        ->assertRedirect(route('media.requests.index'));
+});
+
+test('member can approve a pending request', function (): void {
+    $member = User::factory()->member()->create();
+
+    Http::fake(['seerr.local:5055/api/v1/request/42/approve' => Http::response([], 200)]);
+
+    $this->actingAs($member)
+        ->from(route('media.requests.index'))
+        ->post(route('media.requests.approve', 42))
+        ->assertRedirect(route('media.requests.index'));
+
+    Http::assertSent(fn ($request): bool => $request->method() === 'POST'
+        && str_ends_with((string) $request->url(), '/api/v1/request/42/approve')
+    );
+});
+
+test('member can decline a pending request', function (): void {
+    $member = User::factory()->member()->create();
+
+    Http::fake(['seerr.local:5055/api/v1/request/42/decline' => Http::response([], 200)]);
+
+    $this->actingAs($member)
+        ->from(route('media.requests.index'))
+        ->post(route('media.requests.decline', 42))
+        ->assertRedirect(route('media.requests.index'));
+
+    Http::assertSent(fn ($request): bool => $request->method() === 'POST'
+        && str_ends_with((string) $request->url(), '/api/v1/request/42/decline')
+    );
+});
+
+test('admin can retry a request', function (): void {
+    $admin = User::factory()->admin()->create();
+
+    Http::fake(['seerr.local:5055/api/v1/request/42/retry' => Http::response([], 200)]);
+
+    $this->actingAs($admin)
+        ->from(route('media.requests.index'))
+        ->post(route('media.requests.retry', 42))
+        ->assertRedirect(route('media.requests.index'));
+
+    Http::assertSent(fn ($request): bool => $request->method() === 'POST'
+        && str_ends_with((string) $request->url(), '/api/v1/request/42/retry')
+    );
+});
+
+test('member cannot retry a request', function (): void {
+    $member = User::factory()->member()->create();
+
+    $this->actingAs($member)
+        ->post(route('media.requests.retry', 42))
+        ->assertForbidden();
+});
+
+test('viewer cannot approve decline or retry requests', function (): void {
+    $viewer = User::factory()->create();
+
+    $this->actingAs($viewer)
+        ->post(route('media.requests.approve', 42))
+        ->assertForbidden();
+
+    $this->actingAs($viewer)
+        ->post(route('media.requests.decline', 42))
+        ->assertForbidden();
+
+    $this->actingAs($viewer)
+        ->post(route('media.requests.retry', 42))
+        ->assertForbidden();
+});
+
+test('approve redirects when no active seerr connection', function (): void {
+    $this->connection->update(['is_active' => false]);
+    $member = User::factory()->member()->create();
+
+    $this->actingAs($member)
+        ->post(route('media.requests.approve', 42))
+        ->assertRedirect(route('dashboard'));
+});
+
+test('approve handles connection failure gracefully', function (): void {
+    $member = User::factory()->member()->create();
+
+    Http::fake(['seerr.local:5055/api/v1/request/42/approve' => Http::response('Server Error', 500)]);
+
+    $this->actingAs($member)
+        ->from(route('media.requests.index'))
+        ->post(route('media.requests.approve', 42))
         ->assertRedirect(route('media.requests.index'));
 });

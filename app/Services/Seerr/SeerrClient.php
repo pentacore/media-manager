@@ -4,13 +4,13 @@ declare(strict_types=1);
 
 namespace App\Services\Seerr;
 
-use Throwable;
-use InvalidArgumentException;
 use App\Models\ServiceConnection;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\PendingRequest;
 use Illuminate\Http\Client\RequestException;
 use Illuminate\Support\Facades\Http;
+use InvalidArgumentException;
+use Throwable;
 
 /**
  * @see https://github.com/seerr-team/seerr — canonical Seerr repo
@@ -107,6 +107,36 @@ class SeerrClient
     {
         return $this->buildClient()
             ->post(sprintf('/api/%s/request/%d/retry', $this->apiVersion, $id))
+            ->throw()
+            ->json();
+    }
+
+    /**
+     * Fetch full movie details (title, overview, etc) by TMDB id.
+     *
+     * @return array<string, mixed>
+     *
+     * @throws RequestException|ConnectionException
+     */
+    public function getMovieDetails(int $tmdbId): array
+    {
+        return $this->buildClient()
+            ->get(sprintf('/api/%s/movie/%d', $this->apiVersion, $tmdbId))
+            ->throw()
+            ->json();
+    }
+
+    /**
+     * Fetch full TV show details (name, overview, etc) by TMDB id.
+     *
+     * @return array<string, mixed>
+     *
+     * @throws RequestException|ConnectionException
+     */
+    public function getTvDetails(int $tmdbId): array
+    {
+        return $this->buildClient()
+            ->get(sprintf('/api/%s/tv/%d', $this->apiVersion, $tmdbId))
             ->throw()
             ->json();
     }

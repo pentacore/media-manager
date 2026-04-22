@@ -21,7 +21,7 @@ test('viewers cannot access search', function (): void {
     $this->actingAs($viewer)->get(route('media.search.index'))->assertForbidden();
 });
 
-test('search with empty query returns empty results', function (): void {
+test('search with empty query returns empty results immediately', function (): void {
     $member = User::factory()->member()->create();
 
     $this->actingAs($member)
@@ -30,30 +30,80 @@ test('search with empty query returns empty results', function (): void {
         ->assertInertia(fn ($page) => $page
             ->component('Search')
             ->where('query', '')
-            ->where('results.series', [])
-            ->where('results.movies', [])
-            ->where('results.requests', [])
-            ->where('errors', [])
+            ->where('seriesResults.results', [])
+            ->where('seriesResults.error', null)
+            ->where('movieResults.results', [])
+            ->where('movieResults.error', null)
+            ->where('requestResults.results', [])
+            ->where('requestResults.error', null)
         );
 });
 
-test('search queries all configured services in parallel', function (): void {
+test('search exposes connection urls as a non-deferred prop', function (): void {
     ServiceConnection::factory()->sonarr()->create(['url' => 'http://sonarr.local:8989', 'api_key' => 'sk']);
     ServiceConnection::factory()->radarr()->create(['url' => 'http://radarr.local:7878', 'api_key' => 'rk']);
     ServiceConnection::factory()->seerr()->create(['url' => 'http://seerr.local:5055', 'api_key' => 'jk']);
 
     $member = User::factory()->member()->create();
 
+    $this->actingAs($member)
+        ->get(route('media.search.index'))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->component('Search')
+            ->where('connections.sonarr.url', 'http://sonarr.local:8989')
+            ->where('connections.radarr.url', 'http://radarr.local:7878')
+            ->where('connections.seerr.url', 'http://seerr.local:5055')
+        );
+});
+
+test('search reports null connection entries when services are not configured', function (): void {
+    $member = User::factory()->member()->create();
+
+    $this->actingAs($member)
+        ->get(route('media.search.index'))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->where('connections.sonarr', null)
+            ->where('connections.radarr', null)
+            ->where('connections.seerr', null)
+        );
+});
+
+test('search defers per-service props on initial render', function (): void {
+    ServiceConnection::factory()->sonarr()->create(['url' => 'http://sonarr.local:8989', 'api_key' => 'sk']);
+    ServiceConnection::factory()->radarr()->create(['url' => 'http://radarr.local:7878', 'api_key' => 'rk']);
+    ServiceConnection::factory()->seerr()->create(['url' => 'http://seerr.local:5055', 'api_key' => 'jk']);
+
+    $member = User::factory()->member()->create();
+
+    $this->actingAs($member)
+        ->get(route('media.search.index', ['q' => 'anything']))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->component('Search')
+            ->where('query', 'anything')
+            ->missing('seriesResults')
+            ->missing('movieResults')
+            ->missing('requestResults')
+        );
+});
+
+test('search resolves deferred series results from Sonarr library', function (): void {
+    ServiceConnection::factory()->sonarr()->create(['url' => 'http://sonarr.local:8989', 'api_key' => 'sk']);
+
+    $member = User::factory()->member()->create();
+
     Http::fake([
-        'sonarr.local:8989/api/v3/series/lookup*' => Http::response([
-            ['tvdbId' => 1, 'title' => 'Found Series', 'year' => 2024],
-        ]),
-        'radarr.local:7878/api/v3/movie/lookup*' => Http::response([
-            ['tmdbId' => 2, 'title' => 'Found Movie', 'year' => 2023],
-        ]),
-        'seerr.local:5055/api/v1/search*' => Http::response([
-            'results' => [
-                ['id' => 3, 'mediaType' => 'tv', 'title' => 'Found Show'],
+        'sonarr.local:8989/api/v3/series' => Http::response([
+            [
+                'id' => 10,
+                'tvdbId' => 1,
+                'title' => 'Found Series',
+                'year' => 2024,
+                'titleSlug' => 'found-series',
+                'status' => 'continuing',
+                'monitored' => true,
             ],
         ]),
     ]);
@@ -62,41 +112,170 @@ test('search queries all configured services in parallel', function (): void {
         ->get(route('media.search.index', ['q' => 'found']))
         ->assertOk()
         ->assertInertia(fn ($page) => $page
-            ->where('query', 'found')
-            ->has('results.series', 1)
-            ->has('results.movies', 1)
-            ->has('results.requests', 1)
-            ->where('results.series.0.title', 'Found Series')
-            ->where('results.movies.0.title', 'Found Movie')
-            ->where('results.requests.0.title', 'Found Show')
-            ->where('errors', [])
+            ->loadDeferredProps(fn ($page) => $page
+                ->where('seriesResults.error', null)
+                ->has('seriesResults.results', 1)
+                ->where('seriesResults.results.0.id', 10)
+                ->where('seriesResults.results.0.title', 'Found Series')
+                ->where('seriesResults.results.0.tvdb_id', 1)
+                ->where('seriesResults.results.0.title_slug', 'found-series')
+                ->where('seriesResults.results.0.monitored', true)
+            )
         );
 });
 
-test('search continues when one service is unavailable', function (): void {
+test('search resolves deferred movie results from Radarr library', function (): void {
+    ServiceConnection::factory()->radarr()->create(['url' => 'http://radarr.local:7878', 'api_key' => 'rk']);
+
+    $member = User::factory()->member()->create();
+
+    Http::fake([
+        'radarr.local:7878/api/v3/movie' => Http::response([
+            [
+                'id' => 22,
+                'tmdbId' => 2,
+                'title' => 'Found Movie',
+                'year' => 2023,
+                'titleSlug' => 'found-movie',
+                'status' => 'released',
+                'monitored' => true,
+                'hasFile' => true,
+            ],
+        ]),
+    ]);
+
+    $this->actingAs($member)
+        ->get(route('media.search.index', ['q' => 'found']))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->loadDeferredProps(fn ($page) => $page
+                ->where('movieResults.error', null)
+                ->has('movieResults.results', 1)
+                ->where('movieResults.results.0.id', 22)
+                ->where('movieResults.results.0.title', 'Found Movie')
+                ->where('movieResults.results.0.tmdb_id', 2)
+                ->where('movieResults.results.0.title_slug', 'found-movie')
+                ->where('movieResults.results.0.monitored', true)
+                ->where('movieResults.results.0.has_file', true)
+            )
+        );
+});
+
+test('search resolves deferred request results from Seerr with title enrichment', function (): void {
+    ServiceConnection::factory()->seerr()->create(['url' => 'http://seerr.local:5055', 'api_key' => 'jk']);
+
+    $member = User::factory()->member()->create();
+
+    Http::fake([
+        'seerr.local:5055/api/v1/tv/1396' => Http::response([
+            'id' => 1396,
+            'name' => 'Found Show',
+        ]),
+        'seerr.local:5055/api/v1/request*' => Http::response([
+            'pageInfo' => ['page' => 1, 'pages' => 1, 'pageSize' => 100, 'results' => 1],
+            'results' => [
+                [
+                    'id' => 3,
+                    'status' => 2,
+                    'type' => 'tv',
+                    'media' => ['mediaType' => 'tv', 'tmdbId' => 1396, 'tvdbId' => 81189],
+                ],
+            ],
+        ]),
+    ]);
+
+    $this->actingAs($member)
+        ->get(route('media.search.index', ['q' => 'found']))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->loadDeferredProps(fn ($page) => $page
+                ->where('requestResults.error', null)
+                ->has('requestResults.results', 1)
+                ->where('requestResults.results.0.id', 3)
+                ->where('requestResults.results.0.title', 'Found Show')
+                ->where('requestResults.results.0.media_type', 'tv')
+                ->where('requestResults.results.0.tmdb_id', 1396)
+            )
+        );
+});
+
+test('sonarr library results are filtered by case-insensitive title substring', function (): void {
+    ServiceConnection::factory()->sonarr()->create(['url' => 'http://sonarr.local:8989', 'api_key' => 'sk']);
+
+    $member = User::factory()->member()->create();
+
+    Http::fake([
+        'sonarr.local:8989/api/v3/series' => Http::response([
+            ['id' => 1, 'tvdbId' => 101, 'title' => 'Breaking Bad', 'year' => 2008, 'titleSlug' => 'breaking-bad'],
+            ['id' => 2, 'tvdbId' => 102, 'title' => 'Better Call Saul', 'year' => 2015, 'titleSlug' => 'better-call-saul'],
+            ['id' => 3, 'tvdbId' => 103, 'title' => 'The Wire', 'year' => 2002, 'titleSlug' => 'the-wire'],
+        ]),
+    ]);
+
+    $this->actingAs($member)
+        ->get(route('media.search.index', ['q' => 'breaking']))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->loadDeferredProps(fn ($page) => $page
+                ->has('seriesResults.results', 1)
+                ->where('seriesResults.results.0.title', 'Breaking Bad')
+            )
+        );
+});
+
+test('radarr library results are filtered by case-insensitive title substring', function (): void {
+    ServiceConnection::factory()->radarr()->create(['url' => 'http://radarr.local:7878', 'api_key' => 'rk']);
+
+    $member = User::factory()->member()->create();
+
+    Http::fake([
+        'radarr.local:7878/api/v3/movie' => Http::response([
+            ['id' => 1, 'tmdbId' => 201, 'title' => 'Inception', 'year' => 2010, 'titleSlug' => 'inception'],
+            ['id' => 2, 'tmdbId' => 202, 'title' => 'Interstellar', 'year' => 2014, 'titleSlug' => 'interstellar'],
+            ['id' => 3, 'tmdbId' => 203, 'title' => 'Tenet', 'year' => 2020, 'titleSlug' => 'tenet'],
+        ]),
+    ]);
+
+    $this->actingAs($member)
+        ->get(route('media.search.index', ['q' => 'INTER']))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->loadDeferredProps(fn ($page) => $page
+                ->has('movieResults.results', 1)
+                ->where('movieResults.results.0.title', 'Interstellar')
+            )
+        );
+});
+
+test('search surfaces per-service error message when a service fails', function (): void {
     ServiceConnection::factory()->sonarr()->create(['url' => 'http://sonarr.local:8989', 'api_key' => 'sk']);
     ServiceConnection::factory()->radarr()->create(['url' => 'http://radarr.local:7878', 'api_key' => 'rk']);
 
     $member = User::factory()->member()->create();
 
     Http::fake([
-        'sonarr.local:8989/api/v3/series/lookup*' => Http::response([
-            ['tvdbId' => 1, 'title' => 'OK Series', 'year' => 2024],
+        'sonarr.local:8989/api/v3/series' => Http::response([
+            ['id' => 1, 'tvdbId' => 1, 'title' => 'Test Series', 'year' => 2024, 'titleSlug' => 'test-series'],
         ]),
-        'radarr.local:7878/api/v3/movie/lookup*' => Http::response('boom', 500),
+        'radarr.local:7878/api/v3/movie' => Http::response('boom', 500),
     ]);
 
     $this->actingAs($member)
         ->get(route('media.search.index', ['q' => 'test']))
         ->assertOk()
         ->assertInertia(fn ($page) => $page
-            ->has('results.series', 1)
-            ->where('results.movies', [])
-            ->where('errors', ['radarr', 'seerr'])
+            ->loadDeferredProps(fn ($page) => $page
+                ->has('seriesResults.results', 1)
+                ->where('seriesResults.error', null)
+                ->where('movieResults.results', [])
+                ->where('movieResults.error', fn ($value): bool => is_string($value) && $value !== '')
+                ->where('requestResults.results', [])
+                ->where('requestResults.error', 'No active Seerr connection configured.')
+            )
         );
 });
 
-test('search works when no services are configured', function (): void {
+test('search reports no-connection errors when services are not configured', function (): void {
     $member = User::factory()->member()->create();
 
     $this->actingAs($member)
@@ -104,9 +283,13 @@ test('search works when no services are configured', function (): void {
         ->assertOk()
         ->assertInertia(fn ($page) => $page
             ->where('query', 'test')
-            ->where('results.series', [])
-            ->where('results.movies', [])
-            ->where('results.requests', [])
-            ->where('errors', ['sonarr', 'radarr', 'seerr'])
+            ->loadDeferredProps(fn ($page) => $page
+                ->where('seriesResults.results', [])
+                ->where('seriesResults.error', 'No active Sonarr connection configured.')
+                ->where('movieResults.results', [])
+                ->where('movieResults.error', 'No active Radarr connection configured.')
+                ->where('requestResults.results', [])
+                ->where('requestResults.error', 'No active Seerr connection configured.')
+            )
         );
 });

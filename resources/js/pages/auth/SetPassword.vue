@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { Form, Head } from '@inertiajs/vue3';
+import InviteController from '@/actions/App/Http/Controllers/Auth/InviteController';
 import InputError from '@/components/InputError.vue';
 import PasswordInput from '@/components/PasswordInput.vue';
 import { Button } from '@/components/ui/button';
@@ -18,8 +19,7 @@ defineOptions({
     <Head title="Set Password" />
 
     <Form
-        method="post"
-        :url="route('auth.set-password.store')"
+        v-bind="InviteController.setPassword.form()"
         v-slot="{ errors, processing }"
         class="flex flex-col gap-6"
     >

@@ -172,3 +172,29 @@ test('getRequestCount returns count summary', function (): void {
     expect($result['total'])->toBe(10);
     expect($result['pending'])->toBe(2);
 });
+
+test('getMovieDetails GETs /movie/{tmdbId}', function (): void {
+    Http::fake([
+        'seerr.local:5055/api/v1/movie/603' => Http::response(['id' => 603, 'title' => 'The Matrix']),
+    ]);
+
+    $result = $this->client->getMovieDetails(603);
+
+    Http::assertSent(fn (Request $request): bool => $request->method() === 'GET'
+        && str_ends_with($request->url(), '/api/v1/movie/603'));
+
+    expect($result['title'])->toBe('The Matrix');
+});
+
+test('getTvDetails GETs /tv/{tmdbId}', function (): void {
+    Http::fake([
+        'seerr.local:5055/api/v1/tv/1396' => Http::response(['id' => 1396, 'name' => 'Breaking Bad']),
+    ]);
+
+    $result = $this->client->getTvDetails(1396);
+
+    Http::assertSent(fn (Request $request): bool => $request->method() === 'GET'
+        && str_ends_with($request->url(), '/api/v1/tv/1396'));
+
+    expect($result['name'])->toBe('Breaking Bad');
+});

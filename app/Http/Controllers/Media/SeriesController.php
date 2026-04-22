@@ -22,81 +22,124 @@ class SeriesController extends Controller
     public function index(): Response|RedirectResponse
     {
         try {
-            $client = $this->client();
-            $series = $client->getSeries();
-            $qualityProfiles = $client->getQualityProfiles();
+            $connection = ServiceConnection::resolveActive(ServiceType::Sonarr);
         } catch (ModelNotFoundException) {
             return $this->noConnectionRedirect();
-        } catch (RequestException|ConnectionException) {
-            return $this->connectionFailedRedirect();
         }
 
         return Inertia::render('Sonarr/Series/Index', [
-            'series' => array_map(fn (array $item): array => $this->mapSeries($item), $series),
-            'qualityProfiles' => $this->mapQualityProfiles($qualityProfiles),
+            'connection' => ['url' => rtrim($connection->url, '/')],
+            'series' => Inertia::defer(function () use ($connection): array {
+                try {
+                    return array_map(
+                        fn (array $item): array => $this->mapSeries($item),
+                        new SonarrClient($connection)->getSeries(),
+                    );
+                } catch (RequestException|ConnectionException) {
+                    return [];
+                }
+            }),
+            'qualityProfiles' => Inertia::defer(function () use ($connection): array {
+                try {
+                    return $this->mapQualityProfiles(
+                        new SonarrClient($connection)->getQualityProfiles(),
+                    );
+                } catch (RequestException|ConnectionException) {
+                    return [];
+                }
+            }),
         ]);
     }
 
     public function show(int $id): Response|RedirectResponse
     {
         try {
-            $client = $this->client();
-            $series = $client->getSeriesById($id);
-            $episodes = $client->getEpisodesBySeries($id);
+            $connection = ServiceConnection::resolveActive(ServiceType::Sonarr);
         } catch (ModelNotFoundException) {
             return $this->noConnectionRedirect();
+        }
+
+        try {
+            $series = new SonarrClient($connection)->getSeriesById($id);
         } catch (RequestException|ConnectionException) {
             return $this->connectionFailedRedirect();
         }
 
         return Inertia::render('Sonarr/Series/Show', [
+            'connection' => ['url' => rtrim($connection->url, '/')],
             'series' => $this->mapSeries($series, detailed: true),
-            'episodes' => array_map(fn (array $ep): array => [
-                'id' => $ep['id'] ?? null,
-                'season_number' => $ep['seasonNumber'] ?? 0,
-                'episode_number' => $ep['episodeNumber'] ?? 0,
-                'title' => $ep['title'] ?? null,
-                'air_date' => $ep['airDate'] ?? null,
-                'has_file' => $ep['hasFile'] ?? false,
-                'monitored' => $ep['monitored'] ?? false,
-                'overview' => $ep['overview'] ?? null,
-            ], $episodes),
+            'episodes' => Inertia::defer(function () use ($connection, $id): array {
+                try {
+                    $episodes = new SonarrClient($connection)->getEpisodesBySeries($id);
+
+                    return array_map(fn (array $ep): array => [
+                        'id' => $ep['id'] ?? null,
+                        'season_number' => $ep['seasonNumber'] ?? 0,
+                        'episode_number' => $ep['episodeNumber'] ?? 0,
+                        'title' => $ep['title'] ?? null,
+                        'air_date' => $ep['airDate'] ?? null,
+                        'has_file' => $ep['hasFile'] ?? false,
+                        'monitored' => $ep['monitored'] ?? false,
+                        'overview' => $ep['overview'] ?? null,
+                    ], $episodes);
+                } catch (RequestException|ConnectionException) {
+                    return [];
+                }
+            }),
         ]);
     }
 
     public function create(Request $request): Response|RedirectResponse
     {
         try {
-            $client = $this->client();
-            $qualityProfiles = $client->getQualityProfiles();
-            $rootFolders = $client->getRootFolders();
-            $lookup = [];
-            $term = trim((string) $request->query('q', ''));
-            if ($term !== '') {
-                $lookup = $client->searchSeries($term);
-            }
+            $connection = ServiceConnection::resolveActive(ServiceType::Sonarr);
         } catch (ModelNotFoundException) {
             return $this->noConnectionRedirect();
-        } catch (RequestException|ConnectionException) {
-            return $this->connectionFailedRedirect();
         }
 
+        $term = trim((string) $request->query('q', ''));
+
         return Inertia::render('Sonarr/Series/Create', [
-            'qualityProfiles' => $this->mapQualityProfiles($qualityProfiles),
-            'rootFolders' => array_map(fn (array $f): array => [
-                'id' => $f['id'] ?? null,
-                'path' => $f['path'] ?? '',
-                'free_space' => $f['freeSpace'] ?? null,
-            ], $rootFolders),
+            'connection' => ['url' => rtrim($connection->url, '/')],
             'searchTerm' => $term,
-            'searchResults' => array_map(fn (array $item): array => [
-                'tvdb_id' => $item['tvdbId'] ?? null,
-                'title' => $item['title'] ?? null,
-                'year' => $item['year'] ?? null,
-                'overview' => $item['overview'] ?? null,
-                'remote_poster' => $item['remotePoster'] ?? null,
-                'images' => $item['images'] ?? [],
-            ], $lookup),
+            'qualityProfiles' => Inertia::defer(function () use ($connection): array {
+                try {
+                    return $this->mapQualityProfiles(
+                        new SonarrClient($connection)->getQualityProfiles(),
+                    );
+                } catch (RequestException|ConnectionException) {
+                    return [];
+                }
+            }),
+            'rootFolders' => Inertia::defer(function () use ($connection): array {
+                try {
+                    return array_map(fn (array $f): array => [
+                        'id' => $f['id'] ?? null,
+                        'path' => $f['path'] ?? '',
+                        'free_space' => $f['freeSpace'] ?? null,
+                    ], new SonarrClient($connection)->getRootFolders());
+                } catch (RequestException|ConnectionException) {
+                    return [];
+                }
+            }),
+            'searchResults' => Inertia::defer(function () use ($connection, $term): array {
+                if ($term === '') {
+                    return [];
+                }
+
+                try {
+                    return array_map(fn (array $item): array => [
+                        'tvdb_id' => $item['tvdbId'] ?? null,
+                        'title' => $item['title'] ?? null,
+                        'year' => $item['year'] ?? null,
+                        'overview' => $item['overview'] ?? null,
+                        'remote_poster' => $item['remotePoster'] ?? null,
+                        'images' => $item['images'] ?? [],
+                    ], new SonarrClient($connection)->searchSeries($term));
+                } catch (RequestException|ConnectionException) {
+                    return [];
+                }
+            }),
         ]);
     }
 
@@ -150,6 +193,7 @@ class SeriesController extends Controller
         $base = [
             'id' => $item['id'] ?? null,
             'title' => $item['title'] ?? null,
+            'title_slug' => $item['titleSlug'] ?? null,
             'year' => $item['year'] ?? null,
             'status' => $item['status'] ?? null,
             'monitored' => $item['monitored'] ?? false,

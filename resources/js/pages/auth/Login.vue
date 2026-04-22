@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { Form, Head } from '@inertiajs/vue3';
 import { ref } from 'vue';
+import AuthentikController from '@/actions/App/Http/Controllers/Auth/AuthentikController';
+import EmbyAuthController from '@/actions/App/Http/Controllers/Auth/EmbyAuthController';
 import InputError from '@/components/InputError.vue';
 import PasswordInput from '@/components/PasswordInput.vue';
 import TextLink from '@/components/TextLink.vue';
@@ -52,7 +54,7 @@ const showLocalForm = ref(false);
         <!-- Authentik SSO -->
         <a
             v-if="authentikEnabled"
-            :href="route('auth.authentik')"
+            :href="AuthentikController.redirect.url()"
             class="w-full"
         >
             <Button variant="default" class="w-full" size="lg">
@@ -84,8 +86,7 @@ const showLocalForm = ref(false);
                 </div>
 
                 <Form
-                    method="post"
-                    :url="route('auth.emby')"
+                    v-bind="EmbyAuthController.store.form()"
                     v-slot="{ errors, processing }"
                     class="space-y-4"
                 >

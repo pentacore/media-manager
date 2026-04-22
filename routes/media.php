@@ -28,6 +28,16 @@ Route::middleware(['auth', 'verified', 'password.set', 'role:member'])
 
         // Seerr requests
         Route::get('requests', [RequestController::class, 'index'])->name('requests.index');
+        Route::post('requests/{id}/approve', [RequestController::class, 'approve'])
+            ->whereNumber('id')
+            ->name('requests.approve');
+        Route::post('requests/{id}/decline', [RequestController::class, 'decline'])
+            ->whereNumber('id')
+            ->name('requests.decline');
+        Route::post('requests/{id}/retry', [RequestController::class, 'retry'])
+            ->whereNumber('id')
+            ->middleware('role:admin')
+            ->name('requests.retry');
         Route::delete('requests/{id}', [RequestController::class, 'destroy'])
             ->whereNumber('id')
             ->middleware('role:admin')

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Http\Controllers\Actions;
 
 use App\Http\Controllers\Controller;
+use App\Http\Resources\ActionTypeConfigResource;
 use App\Models\ActionTypeConfig;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -13,19 +14,12 @@ use Inertia\Response;
 
 class ActionTypeConfigController extends Controller
 {
-    public function index(): Response
+    public function index(Request $request): Response
     {
         return Inertia::render('Actions/Rules', [
-            'rules' => ActionTypeConfig::orderBy('type')
-                ->get()
-                ->map(fn (ActionTypeConfig $actionTypeConfig): array => [
-                    'id' => $actionTypeConfig->id,
-                    'type' => $actionTypeConfig->type,
-                    'label' => $actionTypeConfig->label,
-                    'description' => $actionTypeConfig->description,
-                    'requires_approval' => $actionTypeConfig->requires_approval,
-                    'is_enabled' => $actionTypeConfig->is_enabled,
-                ]),
+            'rules' => ActionTypeConfigResource::collection(
+                ActionTypeConfig::orderBy('type')->get()
+            )->toArray($request),
         ]);
     }
 

@@ -11,6 +11,7 @@ import {
 } from 'lucide-vue-next';
 import { computed, onMounted } from 'vue';
 import ServiceHealthController from '@/actions/App/Http/Controllers/Monitoring/ServiceHealthController';
+import type { ServiceConnectionResource } from '@/typefinder/resources/ServiceConnectionResource';
 import { Badge } from '@/components/ui/badge';
 import {
     Card,
@@ -29,22 +30,11 @@ interface DiskSpace {
     total_space: number | null;
 }
 
-interface Connection {
-    id: number;
-    name: string;
-    type: string;
-    url: string;
-    is_active: boolean;
-    health_status: string;
-    version: string | null;
-    latest_version: string | null;
-    update_available: boolean;
-    last_seen_at: string | null;
-    disk_space: DiskSpace[] | null;
-}
+type Connection = ServiceConnectionResource;
 
 const props = defineProps<{
     connections: Connection[];
+    diskSpace?: Record<number, DiskSpace[]>;
 }>();
 
 defineOptions({
@@ -62,14 +52,14 @@ onMounted(() => {
     subscribe();
 });
 
-const mergedConnections = computed(() =>
+const mergedConnections = computed<Connection[]>(() =>
     props.connections.map((connection) => {
         const live = liveServices[connection.id];
 
         if (live) {
             return {
                 ...connection,
-                health_status: live.status,
+                health_status: live.status as Connection['health_status'],
                 last_seen_at: live.last_seen_at,
             };
         }
@@ -161,6 +151,10 @@ function healthLabel(connection: Connection): string {
         connection.health_status.charAt(0).toUpperCase() +
         connection.health_status.slice(1)
     );
+}
+
+function diskSpaceFor(connectionId: number): DiskSpace[] | undefined {
+    return props.diskSpace?.[connectionId];
 }
 </script>
 
@@ -259,8 +253,20 @@ function healthLabel(connection: Connection): string {
 
                     <div
                         v-if="
-                            connection.disk_space &&
-                            connection.disk_space.length > 0
+                            !props.diskSpace &&
+                            (connection.type === 'sonarr' ||
+                                connection.type === 'radarr') &&
+                            connection.is_active
+                        "
+                        class="flex items-center gap-2 border-t pt-3 text-xs text-muted-foreground"
+                    >
+                        <HardDrive class="size-3" />
+                        Loading disk space…
+                    </div>
+                    <div
+                        v-else-if="
+                            diskSpaceFor(connection.id) &&
+                            diskSpaceFor(connection.id)!.length > 0
                         "
                         class="space-y-1 border-t pt-3"
                     >
@@ -271,7 +277,7 @@ function healthLabel(connection: Connection): string {
                             Disk Space
                         </div>
                         <div
-                            v-for="(disk, index) in connection.disk_space"
+                            v-for="(disk, index) in diskSpaceFor(connection.id)"
                             :key="`${connection.id}-disk-${index}`"
                             class="flex items-center justify-between text-sm"
                         >

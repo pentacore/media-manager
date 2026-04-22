@@ -1,0 +1,55 @@
+<?php
+
+declare(strict_types=1);
+
+namespace App\Http\Resources;
+
+use Override;
+use App\Models\ActionRequest;
+use Illuminate\Http\Request;
+use Illuminate\Http\Resources\Json\JsonResource;
+use Pentacore\Typefinder\Attributes\TypefinderResource;
+
+/**
+ * @mixin ActionRequest
+ */
+#[TypefinderResource(shape: [
+    'id' => 'number',
+    'type' => 'string',
+    'source_service' => 'string',
+    'target_service' => 'string',
+    'status' => "'pending' | 'approved' | 'executing' | 'completed' | 'failed' | 'rejected'",
+    'requires_approval' => 'boolean',
+    'payload' => 'Record<string, unknown>',
+    'result' => 'Record<string, unknown> | null',
+    'approved_by' => 'string | null',
+    'webhook_source' => 'string | null',
+    'created_at' => 'string | null',
+    'updated_at' => 'string | null',
+])]
+class ActionRequestResource extends JsonResource
+{
+    /**
+     * Transform the resource into an array.
+     *
+     * @return array<string, mixed>
+     */
+    #[Override]
+    public function toArray(Request $request): array
+    {
+        return [
+            'id' => $this->id,
+            'type' => $this->type,
+            'source_service' => $this->source_service,
+            'target_service' => $this->target_service,
+            'status' => $this->status->value,
+            'requires_approval' => $this->requires_approval,
+            'payload' => $this->payload,
+            'result' => $this->result,
+            'approved_by' => $this->whenLoaded('approvedByUser', fn () => $this->approvedByUser?->name),
+            'webhook_source' => $this->whenLoaded('webhookEvent', fn () => $this->webhookEvent?->serviceConnection?->name),
+            'created_at' => $this->created_at?->toISOString(),
+            'updated_at' => $this->updated_at?->toISOString(),
+        ];
+    }
+}

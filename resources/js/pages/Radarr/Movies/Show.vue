@@ -1,6 +1,13 @@
 <script setup lang="ts">
 import { Head, Link, router } from '@inertiajs/vue3';
-import { Calendar, Clock, Film, HardDrive, Trash2 } from 'lucide-vue-next';
+import {
+    Calendar,
+    Clock,
+    ExternalLink,
+    Film,
+    HardDrive,
+    Trash2,
+} from 'lucide-vue-next';
 import { ref } from 'vue';
 import MovieController from '@/actions/App/Http/Controllers/Media/MovieController';
 import { Badge } from '@/components/ui/badge';
@@ -33,6 +40,7 @@ interface MovieFile {
 interface MovieDetail {
     id: number;
     title: string;
+    title_slug: string | null;
     year: number | null;
     status: string | null;
     monitored: boolean;
@@ -48,6 +56,7 @@ interface MovieDetail {
 }
 
 const props = defineProps<{
+    connection: { url: string };
     movie: MovieDetail;
 }>();
 
@@ -213,6 +222,17 @@ function confirmDelete() {
                 <Link :href="MovieController.index.url()">
                     <Button variant="outline">Back</Button>
                 </Link>
+                <a
+                    v-if="props.movie.title_slug"
+                    :href="`${props.connection.url}/movie/${props.movie.title_slug}`"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                >
+                    <Button variant="outline" size="sm">
+                        <ExternalLink class="mr-2 size-4" />
+                        Open in Radarr
+                    </Button>
+                </a>
                 <Dialog v-model:open="deleteDialogOpen">
                     <DialogTrigger as-child>
                         <Button variant="destructive">

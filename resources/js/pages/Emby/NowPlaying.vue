@@ -4,6 +4,7 @@ import { Film, Monitor, Pause, Play, Radio, Tv } from 'lucide-vue-next';
 import { onMounted } from 'vue';
 import NowPlayingController from '@/actions/App/Http/Controllers/Emby/NowPlayingController';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Skeleton } from '@/components/ui/skeleton';
 import { useEmbyActivity } from '@/composables/useEmbyActivity';
 import { dashboard } from '@/routes';
 
@@ -29,7 +30,7 @@ interface Session {
     play_state: PlayState | null;
 }
 
-defineProps<{ sessions: Session[] }>();
+const props = defineProps<{ sessions?: Session[] }>();
 
 defineOptions({
     layout: {
@@ -94,14 +95,26 @@ function mediaIcon(type: string | null) {
                 <Radio class="size-6" />
                 Now Playing
             </h2>
-            <p class="text-muted-foreground">
-                {{ sessions.length }} active
-                {{ sessions.length === 1 ? 'session' : 'sessions' }}
+            <p v-if="props.sessions" class="text-muted-foreground">
+                {{ props.sessions.length }} active
+                {{ props.sessions.length === 1 ? 'session' : 'sessions' }}
             </p>
+            <p v-else class="text-muted-foreground">Loading sessions…</p>
         </div>
 
         <div
-            v-if="sessions.length === 0"
+            v-if="!props.sessions"
+            class="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3"
+        >
+            <Skeleton
+                v-for="i in 4"
+                :key="`session-skel-${i}`"
+                class="h-40 w-full"
+            />
+        </div>
+
+        <div
+            v-else-if="props.sessions.length === 0"
             class="flex flex-col items-center justify-center rounded-md border border-dashed py-16 text-center"
         >
             <Radio class="mb-3 size-10 text-muted-foreground/50" />
@@ -114,7 +127,7 @@ function mediaIcon(type: string | null) {
             v-else
             class="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3"
         >
-            <Card v-for="session in sessions" :key="session.id ?? ''">
+            <Card v-for="session in props.sessions" :key="session.id ?? ''">
                 <CardHeader>
                     <div class="flex items-start justify-between gap-3">
                         <div class="min-w-0 flex-1">

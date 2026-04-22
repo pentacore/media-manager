@@ -10,6 +10,7 @@ import {
     Trash2,
 } from 'lucide-vue-next';
 import ServiceConnectionController from '@/actions/App/Http/Controllers/Admin/ServiceConnectionController';
+import type { ServiceConnectionResource } from '@/typefinder/resources/ServiceConnectionResource';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
@@ -35,18 +36,7 @@ import {
     TooltipTrigger,
 } from '@/components/ui/tooltip';
 
-interface Connection {
-    id: number;
-    type: { value: string; label?: string } | string;
-    name: string;
-    url: string;
-    is_active: boolean;
-    health_status: string | null;
-    last_seen_at: string | null;
-    version: string | null;
-    latest_version: string | null;
-    update_available: boolean;
-}
+type Connection = ServiceConnectionResource;
 
 defineProps<{
     connections: Connection[];
@@ -65,11 +55,7 @@ defineOptions({
 });
 
 function typeLabel(type: Connection['type']): string {
-    if (typeof type === 'string') {
-        return type.charAt(0).toUpperCase() + type.slice(1);
-    }
-
-    return type.label ?? type.value;
+    return type.charAt(0).toUpperCase() + type.slice(1);
 }
 
 function statusBadgeVariant(
@@ -187,7 +173,7 @@ function checkVersion(connection: Connection) {
                             </Badge>
                         </TableCell>
                         <TableCell class="text-muted-foreground">
-                            {{ connection.last_seen_at ?? 'Never' }}
+                            {{ connection.last_seen_human ?? 'Never' }}
                         </TableCell>
                         <TableCell>
                             <div class="flex flex-col gap-1 text-sm">

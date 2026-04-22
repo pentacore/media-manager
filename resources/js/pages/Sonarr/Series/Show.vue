@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Head, Link, router } from '@inertiajs/vue3';
+import { Head, Link, router, WhenVisible } from '@inertiajs/vue3';
 import {
     Calendar,
     HardDrive,
@@ -7,6 +7,7 @@ import {
     Trash2,
     ChevronRight,
     ArrowLeft,
+    ExternalLink,
 } from 'lucide-vue-next';
 import { ref } from 'vue';
 import SeriesController from '@/actions/App/Http/Controllers/Media/SeriesController';
@@ -29,6 +30,7 @@ import {
     DialogTrigger,
 } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
+import { Skeleton } from '@/components/ui/skeleton';
 import { dashboard } from '@/routes';
 
 interface QualityProfile {
@@ -64,6 +66,7 @@ interface Season {
 interface SeriesDetail {
     id: number;
     title: string;
+    title_slug: string | null;
     year: number | null;
     status: string | null;
     monitored: boolean;
@@ -81,8 +84,9 @@ interface SeriesDetail {
 }
 
 const props = defineProps<{
+    connection: { url: string };
     series: SeriesDetail;
-    episodes: Episode[];
+    episodes?: Episode[];
     qualityProfiles?: QualityProfile[];
 }>();
 
@@ -136,7 +140,7 @@ function qualityName(): string {
 }
 
 function episodesForSeason(seasonNumber: number): Episode[] {
-    return props.episodes
+    return (props.episodes ?? [])
         .filter((episode) => episode.season_number === seasonNumber)
         .sort((a, b) => a.episode_number - b.episode_number);
 }
@@ -154,6 +158,14 @@ function confirmDelete() {
         },
     });
 }
+
+function sonarrSeriesUrl(): string | null {
+    if (!props.series.title_slug) {
+        return null;
+    }
+
+    return `${props.connection.url}/series/${props.series.title_slug}`;
+}
 </script>
 
 <template>
@@ -167,39 +179,52 @@ function confirmDelete() {
                     Back to Series
                 </Button>
             </Link>
-            <Dialog v-model:open="deleteDialogOpen">
-                <DialogTrigger as-child>
-                    <Button variant="destructive" size="sm">
-                        <Trash2 class="mr-2 size-4" />
-                        Delete
+            <div class="flex items-center gap-2">
+                <a
+                    v-if="series.title_slug"
+                    :href="sonarrSeriesUrl() ?? undefined"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                >
+                    <Button variant="outline" size="sm">
+                        <ExternalLink class="mr-2 size-4" />
+                        Open in Sonarr
                     </Button>
-                </DialogTrigger>
-                <DialogContent>
-                    <DialogHeader>
-                        <DialogTitle>Delete {{ series.title }}?</DialogTitle>
-                        <DialogDescription>
-                            This will remove the series from Sonarr. This action
-                            cannot be undone.
-                        </DialogDescription>
-                    </DialogHeader>
-                    <div class="flex items-center gap-2 py-2">
-                        <Checkbox id="delete_files" v-model="deleteFiles" />
-                        <Label for="delete_files"
-                            >Also delete files on disk</Label
-                        >
-                    </div>
-                    <DialogFooter>
-                        <Button
-                            variant="outline"
-                            @click="deleteDialogOpen = false"
-                            >Cancel</Button
-                        >
-                        <Button variant="destructive" @click="confirmDelete"
-                            >Delete</Button
-                        >
-                    </DialogFooter>
-                </DialogContent>
-            </Dialog>
+                </a>
+                <Dialog v-model:open="deleteDialogOpen">
+                    <DialogTrigger as-child>
+                        <Button variant="destructive" size="sm">
+                            <Trash2 class="mr-2 size-4" />
+                            Delete
+                        </Button>
+                    </DialogTrigger>
+                    <DialogContent>
+                        <DialogHeader>
+                            <DialogTitle>Delete {{ series.title }}?</DialogTitle>
+                            <DialogDescription>
+                                This will remove the series from Sonarr. This
+                                action cannot be undone.
+                            </DialogDescription>
+                        </DialogHeader>
+                        <div class="flex items-center gap-2 py-2">
+                            <Checkbox id="delete_files" v-model="deleteFiles" />
+                            <Label for="delete_files"
+                                >Also delete files on disk</Label
+                            >
+                        </div>
+                        <DialogFooter>
+                            <Button
+                                variant="outline"
+                                @click="deleteDialogOpen = false"
+                                >Cancel</Button
+                            >
+                            <Button variant="destructive" @click="confirmDelete"
+                                >Delete</Button
+                            >
+                        </DialogFooter>
+                    </DialogContent>
+                </Dialog>
+            </div>
         </div>
 
         <div class="flex flex-col gap-6 md:flex-row">
@@ -301,23 +326,16 @@ function confirmDelete() {
         <div class="space-y-3">
             <h2 class="text-xl font-semibold tracking-tight">Seasons</h2>
 
-            <Card v-for="season in series.seasons" :key="season.season_number">
-                <Collapsible :open="openSeasons[season.season_number] ?? false">
-                    <CollapsibleTrigger as-child>
-                        <CardHeader
-                            class="cursor-pointer hover:bg-muted/50"
-                            @click="toggleSeason(season.season_number)"
-                        >
+            <WhenVisible data="episodes">
+                <template #fallback>
+                    <Card
+                        v-for="season in series.seasons"
+                        :key="`skeleton-${season.season_number}`"
+                    >
+                        <CardHeader>
                             <div class="flex items-center justify-between">
                                 <div class="flex items-center gap-3">
-                                    <ChevronRight
-                                        class="size-4 transition-transform"
-                                        :class="
-                                            openSeasons[season.season_number]
-                                                ? 'rotate-90'
-                                                : ''
-                                        "
-                                    />
+                                    <ChevronRight class="size-4" />
                                     <CardTitle class="text-base">
                                         {{
                                             season.season_number === 0
@@ -325,103 +343,152 @@ function confirmDelete() {
                                                 : `Season ${season.season_number}`
                                         }}
                                     </CardTitle>
-                                    <Badge
-                                        :variant="
-                                            season.monitored
-                                                ? 'default'
-                                                : 'secondary'
-                                        "
-                                    >
-                                        {{
-                                            season.monitored
-                                                ? 'Monitored'
-                                                : 'Unmonitored'
-                                        }}
-                                    </Badge>
+                                    <Skeleton class="h-5 w-20 rounded-full" />
                                 </div>
-                                <div
-                                    class="flex items-center gap-4 text-sm text-muted-foreground"
-                                >
-                                    <span class="flex items-center gap-1">
-                                        <Activity class="size-4" />
-                                        {{ season.episode_file_count }} /
-                                        {{ season.episode_count }}
-                                    </span>
-                                    <span class="flex items-center gap-1">
-                                        <HardDrive class="size-4" />
-                                        {{ formatSize(season.size_on_disk) }}
-                                    </span>
-                                </div>
+                                <Skeleton class="h-4 w-32" />
                             </div>
                         </CardHeader>
-                    </CollapsibleTrigger>
-                    <CollapsibleContent>
-                        <CardContent>
-                            <div class="space-y-2">
-                                <div
-                                    v-for="episode in episodesForSeason(
-                                        season.season_number,
-                                    )"
-                                    :key="`${episode.season_number}-${episode.episode_number}`"
-                                    class="flex items-center justify-between rounded-md border p-3"
-                                >
-                                    <div class="min-w-0 flex-1">
-                                        <p class="font-medium">
-                                            <span class="text-muted-foreground"
-                                                >{{
-                                                    episode.episode_number
-                                                }}.</span
-                                            >
-                                            {{ episode.title ?? 'TBA' }}
-                                        </p>
-                                        <p
-                                            v-if="episode.overview"
-                                            class="truncate text-sm text-muted-foreground"
-                                        >
-                                            {{ episode.overview }}
-                                        </p>
-                                    </div>
+                    </Card>
+                    <p
+                        v-if="series.seasons.length === 0"
+                        class="text-muted-foreground"
+                    >
+                        No seasons available.
+                    </p>
+                </template>
+
+                <Card
+                    v-for="season in series.seasons"
+                    :key="season.season_number"
+                >
+                    <Collapsible
+                        :open="openSeasons[season.season_number] ?? false"
+                    >
+                        <CollapsibleTrigger as-child>
+                            <CardHeader
+                                class="cursor-pointer hover:bg-muted/50"
+                                @click="toggleSeason(season.season_number)"
+                            >
+                                <div class="flex items-center justify-between">
                                     <div class="flex items-center gap-3">
-                                        <span
-                                            v-if="episode.air_date"
-                                            class="flex items-center gap-1 text-sm text-muted-foreground"
-                                        >
-                                            <Calendar class="size-4" />
-                                            {{ episode.air_date }}
-                                        </span>
+                                        <ChevronRight
+                                            class="size-4 transition-transform"
+                                            :class="
+                                                openSeasons[season.season_number]
+                                                    ? 'rotate-90'
+                                                    : ''
+                                            "
+                                        />
+                                        <CardTitle class="text-base">
+                                            {{
+                                                season.season_number === 0
+                                                    ? 'Specials'
+                                                    : `Season ${season.season_number}`
+                                            }}
+                                        </CardTitle>
                                         <Badge
                                             :variant="
-                                                episode.has_file
+                                                season.monitored
                                                     ? 'default'
-                                                    : 'outline'
+                                                    : 'secondary'
                                             "
                                         >
                                             {{
-                                                episode.has_file
-                                                    ? 'Downloaded'
-                                                    : 'Missing'
+                                                season.monitored
+                                                    ? 'Monitored'
+                                                    : 'Unmonitored'
                                             }}
                                         </Badge>
                                     </div>
+                                    <div
+                                        class="flex items-center gap-4 text-sm text-muted-foreground"
+                                    >
+                                        <span class="flex items-center gap-1">
+                                            <Activity class="size-4" />
+                                            {{ season.episode_file_count }} /
+                                            {{ season.episode_count }}
+                                        </span>
+                                        <span class="flex items-center gap-1">
+                                            <HardDrive class="size-4" />
+                                            {{ formatSize(season.size_on_disk) }}
+                                        </span>
+                                    </div>
                                 </div>
-                                <p
-                                    v-if="
-                                        episodesForSeason(season.season_number)
-                                            .length === 0
-                                    "
-                                    class="py-4 text-center text-sm text-muted-foreground"
-                                >
-                                    No episodes available.
-                                </p>
-                            </div>
-                        </CardContent>
-                    </CollapsibleContent>
-                </Collapsible>
-            </Card>
+                            </CardHeader>
+                        </CollapsibleTrigger>
+                        <CollapsibleContent>
+                            <CardContent>
+                                <div class="space-y-2">
+                                    <div
+                                        v-for="episode in episodesForSeason(
+                                            season.season_number,
+                                        )"
+                                        :key="`${episode.season_number}-${episode.episode_number}`"
+                                        class="flex items-center justify-between rounded-md border p-3"
+                                    >
+                                        <div class="min-w-0 flex-1">
+                                            <p class="font-medium">
+                                                <span
+                                                    class="text-muted-foreground"
+                                                    >{{
+                                                        episode.episode_number
+                                                    }}.</span
+                                                >
+                                                {{ episode.title ?? 'TBA' }}
+                                            </p>
+                                            <p
+                                                v-if="episode.overview"
+                                                class="truncate text-sm text-muted-foreground"
+                                            >
+                                                {{ episode.overview }}
+                                            </p>
+                                        </div>
+                                        <div class="flex items-center gap-3">
+                                            <span
+                                                v-if="episode.air_date"
+                                                class="flex items-center gap-1 text-sm text-muted-foreground"
+                                            >
+                                                <Calendar class="size-4" />
+                                                {{ episode.air_date }}
+                                            </span>
+                                            <Badge
+                                                :variant="
+                                                    episode.has_file
+                                                        ? 'default'
+                                                        : 'outline'
+                                                "
+                                            >
+                                                {{
+                                                    episode.has_file
+                                                        ? 'Downloaded'
+                                                        : 'Missing'
+                                                }}
+                                            </Badge>
+                                        </div>
+                                    </div>
+                                    <p
+                                        v-if="
+                                            episodesForSeason(
+                                                season.season_number,
+                                            ).length === 0
+                                        "
+                                        class="py-4 text-center text-sm text-muted-foreground"
+                                    >
+                                        No episodes available.
+                                    </p>
+                                </div>
+                            </CardContent>
+                        </CollapsibleContent>
+                    </Collapsible>
+                </Card>
 
-            <p v-if="series.seasons.length === 0" class="text-muted-foreground">
-                No seasons available.
-            </p>
+                <p
+                    v-if="series.seasons.length === 0"
+                    class="text-muted-foreground"
+                >
+                    No seasons available.
+                </p>
+            </WhenVisible>
         </div>
     </div>
 </template>

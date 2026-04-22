@@ -1,0 +1,12 @@
+{
+    "Event": "library.deleted",
+    "Item": {
+        "Id": "emby-item-003",
+        "Type": "Movie",
+        "Name": "Deleted Movie",
+        "ProviderIds": {
+            "RadarrMovieId": "999999",
+            "Tmdb": "0"
+        }
+    }
+}

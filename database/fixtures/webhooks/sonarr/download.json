@@ -1,0 +1,15 @@
+{
+    "eventType": "Download",
+    "series": {
+        "id": 42,
+        "title": "Test Show",
+        "titleSlug": "test-show"
+    },
+    "episodes": [
+        {
+            "seasonNumber": 1,
+            "episodeNumber": 1,
+            "title": "Pilot"
+        }
+    ]
+}

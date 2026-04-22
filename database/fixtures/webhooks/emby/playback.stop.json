@@ -1,0 +1,18 @@
+{
+    "Event": "playback.stop",
+    "User": {
+        "Id": "REPLACE_WITH_REAL_EMBY_USER_ID",
+        "Name": "alice"
+    },
+    "Item": {
+        "Id": "emby-item-001",
+        "Type": "Episode",
+        "Name": "Pilot",
+        "SeriesName": "Breaking Bad",
+        "RunTimeTicks": 35800000000
+    },
+    "PlaybackInfo": {
+        "PositionTicks": 35800000000,
+        "PlayedToCompletion": true
+    }
+}

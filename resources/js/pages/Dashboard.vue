@@ -10,20 +10,13 @@ import {
     CardHeader,
     CardTitle,
 } from '@/components/ui/card';
+import { Skeleton } from '@/components/ui/skeleton';
+import type { ActivityLogResource } from '@/typefinder/resources/ActivityLogResource';
 import { useDashboardStats } from '@/composables/useDashboardStats';
-import { useEmbyActivity } from '@/composables/useEmbyActivity';
 import { useNotifications } from '@/composables/useNotifications';
 import { dashboard } from '@/routes';
 
-interface ActivityItem {
-    id: number;
-    action: string;
-    description: string;
-    user_name: string | null;
-    service_name: string | null;
-    service_type: string | null;
-    created_at: string;
-}
+type ActivityItem = ActivityLogResource;
 
 interface WebhookEventItem {
     id: number;
@@ -35,12 +28,13 @@ interface WebhookEventItem {
 }
 
 interface NowPlayingItem {
-    id: number;
-    media_type: string;
-    media_title: string;
+    media_title: string | null;
     series_title: string | null;
-    action: string;
     emby_username: string | null;
+    media_type: string;
+    action: string;
+    play_position: number | null;
+    duration_ticks: number | null;
 }
 
 const props = defineProps<{
@@ -67,8 +61,6 @@ defineOptions({
 });
 
 const { stats: liveStats, subscribe: subscribeStats } = useDashboardStats();
-const { nowPlaying: liveNowPlaying, subscribe: subscribeEmby } =
-    useEmbyActivity();
 const { subscribe: subscribeNotifications } = useNotifications();
 
 const activeServices = computed(
@@ -84,15 +76,14 @@ const pendingActions = computed(
     () => liveStats.value?.pendingActions ?? props.stats.pendingActions,
 );
 
-const currentNowPlaying = computed(() => {
-    if (liveNowPlaying.value.length > 0) {
-        return liveNowPlaying.value;
+const isLoadingNowPlaying = computed(() => props.nowPlaying === undefined);
+const currentNowPlaying = computed(() => props.nowPlaying ?? []);
+
+function formatTime(isoString: string | null): string {
+    if (!isoString) {
+        return '-';
     }
 
-    return props.nowPlaying ?? [];
-});
-
-function formatTime(isoString: string): string {
     const date = new Date(isoString);
     const now = new Date();
     const diffMs = now.getTime() - date.getTime();
@@ -119,7 +110,6 @@ function formatTime(isoString: string): string {
 
 onMounted(() => {
     subscribeStats();
-    subscribeEmby();
     subscribeNotifications();
 });
 </script>
@@ -290,7 +280,25 @@ onMounted(() => {
                 </CardHeader>
                 <CardContent>
                     <div
-                        v-if="currentNowPlaying.length === 0"
+                        v-if="isLoadingNowPlaying"
+                        class="space-y-4"
+                        data-testid="now-playing-skeleton"
+                    >
+                        <div
+                            v-for="index in 2"
+                            :key="`skeleton-${index}`"
+                            class="flex items-start gap-3"
+                        >
+                            <div class="min-w-0 flex-1 space-y-2">
+                                <Skeleton class="h-4 w-3/4" />
+                                <Skeleton class="h-3 w-1/2" />
+                            </div>
+                            <Skeleton class="h-5 w-16 shrink-0" />
+                        </div>
+                    </div>
+
+                    <div
+                        v-else-if="currentNowPlaying.length === 0"
                         class="flex flex-col items-center justify-center py-8 text-center"
                     >
                         <Radio class="mb-2 size-8 text-muted-foreground/50" />
@@ -301,13 +309,13 @@ onMounted(() => {
 
                     <div v-else class="space-y-4">
                         <div
-                            v-for="item in currentNowPlaying"
-                            :key="item.id"
+                            v-for="(item, index) in currentNowPlaying"
+                            :key="`${item.emby_username ?? 'unknown'}-${item.media_title ?? index}`"
                             class="flex items-start gap-3"
                         >
                             <div class="min-w-0 flex-1">
                                 <p class="text-sm leading-none font-medium">
-                                    {{ item.media_title }}
+                                    {{ item.media_title ?? 'Unknown' }}
                                 </p>
                                 <p
                                     v-if="item.series_title"
@@ -319,12 +327,16 @@ onMounted(() => {
                                     v-if="item.emby_username"
                                     class="mt-1 text-xs text-muted-foreground"
                                 >
-                                    {{ item.emby_username }}
+                                    {{ item.emby_username }} &middot;
+                                    {{ item.action }}
                                 </p>
                             </div>
-                            <Badge variant="outline" class="shrink-0 text-xs">{{
-                                item.media_type
-                            }}</Badge>
+                            <Badge
+                                v-if="item.media_type"
+                                variant="outline"
+                                class="shrink-0 text-xs"
+                                >{{ item.media_type }}</Badge
+                            >
                         </div>
                     </div>
                 </CardContent>
