@@ -1,4 +1,3 @@
-import { usePage } from '@inertiajs/vue3';
 import { onUnmounted } from 'vue';
 import { toast } from 'vue-sonner';
 import { useWebSocket } from '@/composables/useWebSocket';
@@ -10,17 +9,13 @@ export interface UseNotifications {
 
 export function useNotifications(): UseNotifications {
     const { privateChannel, leaveChannel } = useWebSocket();
-    const page = usePage();
-    let channelName = '';
+    const channelName = 'dashboard';
+    let subscribed = false;
 
     function subscribe(): void {
-        const userId = page.props.auth.user?.id;
-
-        if (!userId) {
+        if (subscribed) {
             return;
         }
-
-        channelName = `App.Models.User.${userId}`;
 
         privateChannel(channelName)
             .listen(
@@ -46,12 +41,14 @@ export function useNotifications(): UseNotifications {
                     });
                 },
             );
+
+        subscribed = true;
     }
 
     function unsubscribe(): void {
-        if (channelName) {
+        if (subscribed) {
             leaveChannel(channelName);
-            channelName = '';
+            subscribed = false;
         }
     }
 
