@@ -4,12 +4,12 @@ declare(strict_types=1);
 
 namespace App\Services\Arr;
 
-use Throwable;
 use App\Models\ServiceConnection;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\PendingRequest;
 use Illuminate\Http\Client\RequestException;
 use Illuminate\Support\Facades\Http;
+use Throwable;
 
 abstract class ArrClient
 {
@@ -41,7 +41,7 @@ abstract class ArrClient
      */
     public function getSystemStatus(): array
     {
-        return $this->buildClient()->get(sprintf('/api/%s/system/status', $this->apiVersion))->throw()->json();
+        return $this->buildClient()->get(sprintf('/api/%s/system/status', $this->apiVersion))->throw()->json() ?? [];
     }
 
     /**
@@ -51,7 +51,7 @@ abstract class ArrClient
      */
     public function getQualityProfiles(): array
     {
-        return $this->buildClient()->get(sprintf('/api/%s/qualityprofile', $this->apiVersion))->throw()->json();
+        return $this->buildClient()->get(sprintf('/api/%s/qualityprofile', $this->apiVersion))->throw()->json() ?? [];
     }
 
     /**
@@ -61,7 +61,7 @@ abstract class ArrClient
      */
     public function getRootFolders(): array
     {
-        return $this->buildClient()->get(sprintf('/api/%s/rootfolder', $this->apiVersion))->throw()->json();
+        return $this->buildClient()->get(sprintf('/api/%s/rootfolder', $this->apiVersion))->throw()->json() ?? [];
     }
 
     /**
@@ -71,7 +71,7 @@ abstract class ArrClient
      */
     public function getDiskSpace(): array
     {
-        return $this->buildClient()->get(sprintf('/api/%s/diskspace', $this->apiVersion))->throw()->json();
+        return $this->buildClient()->get(sprintf('/api/%s/diskspace', $this->apiVersion))->throw()->json() ?? [];
     }
 
     /**
@@ -84,6 +84,6 @@ abstract class ArrClient
         return $this->buildClient()->post(sprintf('/api/%s/command', $this->apiVersion), [
             'name' => $name,
             ...$params,
-        ])->throw()->json();
+        ])->throw()->json() ?? [];
     }
 }

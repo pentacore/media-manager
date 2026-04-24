@@ -21,7 +21,7 @@ class SonarrClient extends ArrClient
      */
     public function getSeries(): array
     {
-        return $this->buildClient()->get(sprintf('/api/%s/series', $this->apiVersion))->throw()->json();
+        return $this->buildClient()->get(sprintf('/api/%s/series', $this->apiVersion))->throw()->json() ?? [];
     }
 
     /**
@@ -31,7 +31,7 @@ class SonarrClient extends ArrClient
      */
     public function getSeriesById(int $id): array
     {
-        return $this->buildClient()->get(sprintf('/api/%s/series/%d', $this->apiVersion, $id))->throw()->json();
+        return $this->buildClient()->get(sprintf('/api/%s/series/%d', $this->apiVersion, $id))->throw()->json() ?? [];
     }
 
     /**
@@ -41,7 +41,7 @@ class SonarrClient extends ArrClient
      */
     public function addSeries(array $data): array
     {
-        return $this->buildClient()->post(sprintf('/api/%s/series', $this->apiVersion), $data)->throw()->json();
+        return $this->buildClient()->post(sprintf('/api/%s/series', $this->apiVersion), $data)->throw()->json() ?? [];
     }
 
     /**
@@ -51,7 +51,7 @@ class SonarrClient extends ArrClient
      */
     public function updateSeries(int $id, array $data): array
     {
-        return $this->buildClient()->put(sprintf('/api/%s/series/%d', $this->apiVersion, $id), $data)->throw()->json();
+        return $this->buildClient()->put(sprintf('/api/%s/series/%d', $this->apiVersion, $id), $data)->throw()->json() ?? [];
     }
 
     /**
@@ -72,7 +72,7 @@ class SonarrClient extends ArrClient
      */
     public function searchSeries(string $query): array
     {
-        return $this->buildClient()->get(sprintf('/api/%s/series/lookup', $this->apiVersion), ['term' => $query])->throw()->json();
+        return $this->buildClient()->get(sprintf('/api/%s/series/lookup', $this->apiVersion), ['term' => $query])->throw()->json() ?? [];
     }
 
     /**
@@ -85,6 +85,6 @@ class SonarrClient extends ArrClient
         return $this->buildClient()
             ->get(sprintf('/api/%s/episode', $this->apiVersion), ['seriesId' => $seriesId])
             ->throw()
-            ->json();
+            ->json() ?? [];
     }
 }

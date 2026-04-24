@@ -46,7 +46,7 @@ class SeerrClient
      */
     public function getStatus(): array
     {
-        return $this->buildClient()->get(sprintf('/api/%s/status', $this->apiVersion))->throw()->json();
+        return $this->buildClient()->get(sprintf('/api/%s/status', $this->apiVersion))->throw()->json() ?? [];
     }
 
     /**
@@ -56,7 +56,7 @@ class SeerrClient
      */
     public function getRequests(array $params = []): array
     {
-        return $this->buildClient()->get(sprintf('/api/%s/request', $this->apiVersion), $params)->throw()->json();
+        return $this->buildClient()->get(sprintf('/api/%s/request', $this->apiVersion), $params)->throw()->json() ?? [];
     }
 
     /**
@@ -66,7 +66,7 @@ class SeerrClient
      */
     public function getRequestById(int $id): array
     {
-        return $this->buildClient()->get(sprintf('/api/%s/request/%d', $this->apiVersion, $id))->throw()->json();
+        return $this->buildClient()->get(sprintf('/api/%s/request/%d', $this->apiVersion, $id))->throw()->json() ?? [];
     }
 
     /**
@@ -93,7 +93,7 @@ class SeerrClient
         return $this->buildClient()
             ->post(sprintf('/api/%s/request/%d/%s', $this->apiVersion, $id, $status))
             ->throw()
-            ->json();
+            ->json() ?? [];
     }
 
     /**
@@ -108,7 +108,7 @@ class SeerrClient
         return $this->buildClient()
             ->post(sprintf('/api/%s/request/%d/retry', $this->apiVersion, $id))
             ->throw()
-            ->json();
+            ->json() ?? [];
     }
 
     /**
@@ -123,7 +123,7 @@ class SeerrClient
         return $this->buildClient()
             ->get(sprintf('/api/%s/movie/%d', $this->apiVersion, $tmdbId))
             ->throw()
-            ->json();
+            ->json() ?? [];
     }
 
     /**
@@ -138,7 +138,7 @@ class SeerrClient
         return $this->buildClient()
             ->get(sprintf('/api/%s/tv/%d', $this->apiVersion, $tmdbId))
             ->throw()
-            ->json();
+            ->json() ?? [];
     }
 
     /**
@@ -153,7 +153,7 @@ class SeerrClient
         return $this->buildClient()
             ->get(sprintf('/api/%s/request/count', $this->apiVersion))
             ->throw()
-            ->json();
+            ->json() ?? [];
     }
 
     /**
@@ -163,7 +163,7 @@ class SeerrClient
      */
     public function search(string $query): array
     {
-        return $this->buildClient()->get(sprintf('/api/%s/search', $this->apiVersion), ['query' => $query])->throw()->json();
+        return $this->buildClient()->get(sprintf('/api/%s/search', $this->apiVersion), ['query' => $query])->throw()->json() ?? [];
     }
 
     /**
@@ -173,6 +173,6 @@ class SeerrClient
      */
     public function getUsers(array $params = []): array
     {
-        return $this->buildClient()->get(sprintf('/api/%s/user', $this->apiVersion), $params)->throw()->json();
+        return $this->buildClient()->get(sprintf('/api/%s/user', $this->apiVersion), $params)->throw()->json() ?? [];
     }
 }

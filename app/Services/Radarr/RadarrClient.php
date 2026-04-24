@@ -20,7 +20,7 @@ class RadarrClient extends ArrClient
      */
     public function getMovies(): array
     {
-        return $this->buildClient()->get(sprintf('/api/%s/movie', $this->apiVersion))->throw()->json();
+        return $this->buildClient()->get(sprintf('/api/%s/movie', $this->apiVersion))->throw()->json() ?? [];
     }
 
     /**
@@ -30,7 +30,7 @@ class RadarrClient extends ArrClient
      */
     public function getMovieById(int $id): array
     {
-        return $this->buildClient()->get(sprintf('/api/%s/movie/%d', $this->apiVersion, $id))->throw()->json();
+        return $this->buildClient()->get(sprintf('/api/%s/movie/%d', $this->apiVersion, $id))->throw()->json() ?? [];
     }
 
     /**
@@ -40,7 +40,7 @@ class RadarrClient extends ArrClient
      */
     public function addMovie(array $data): array
     {
-        return $this->buildClient()->post(sprintf('/api/%s/movie', $this->apiVersion), $data)->throw()->json();
+        return $this->buildClient()->post(sprintf('/api/%s/movie', $this->apiVersion), $data)->throw()->json() ?? [];
     }
 
     /**
@@ -50,7 +50,7 @@ class RadarrClient extends ArrClient
      */
     public function updateMovie(int $id, array $data): array
     {
-        return $this->buildClient()->put(sprintf('/api/%s/movie/%d', $this->apiVersion, $id), $data)->throw()->json();
+        return $this->buildClient()->put(sprintf('/api/%s/movie/%d', $this->apiVersion, $id), $data)->throw()->json() ?? [];
     }
 
     /**
@@ -71,6 +71,6 @@ class RadarrClient extends ArrClient
      */
     public function searchMovies(string $query): array
     {
-        return $this->buildClient()->get(sprintf('/api/%s/movie/lookup', $this->apiVersion), ['term' => $query])->throw()->json();
+        return $this->buildClient()->get(sprintf('/api/%s/movie/lookup', $this->apiVersion), ['term' => $query])->throw()->json() ?? [];
     }
 }

@@ -4,12 +4,12 @@ declare(strict_types=1);
 
 namespace App\Services\Emby;
 
-use Throwable;
 use App\Models\ServiceConnection;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\PendingRequest;
 use Illuminate\Http\Client\RequestException;
 use Illuminate\Support\Facades\Http;
+use Throwable;
 
 /**
  * @see https://swagger.emby.media/openapi.json for up-to-date openApi Spec
@@ -42,7 +42,7 @@ class EmbyClient
      */
     public function getSystemInfo(): array
     {
-        return $this->buildClient()->get('/System/Info')->throw()->json();
+        return $this->buildClient()->get('/System/Info')->throw()->json() ?? [];
     }
 
     /**
@@ -52,7 +52,7 @@ class EmbyClient
      */
     public function getUsers(): array
     {
-        return $this->buildClient()->get('/Users')->throw()->json();
+        return $this->buildClient()->get('/Users')->throw()->json() ?? [];
     }
 
     /**
@@ -62,7 +62,7 @@ class EmbyClient
      */
     public function getUserItems(string $userId, array $params = []): array
     {
-        return $this->buildClient()->get(sprintf('/Users/%s/Items', $userId), $params)->throw()->json();
+        return $this->buildClient()->get(sprintf('/Users/%s/Items', $userId), $params)->throw()->json() ?? [];
     }
 
     /**
