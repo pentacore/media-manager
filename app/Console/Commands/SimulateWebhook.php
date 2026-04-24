@@ -4,14 +4,14 @@ declare(strict_types=1);
 
 namespace App\Console\Commands;
 
-use Illuminate\Support\Facades\Date;
 use App\Enums\ServiceType;
 use App\Models\ActionRequest;
 use App\Models\ServiceConnection;
 use App\Models\WebhookEvent;
+use Carbon\CarbonInterface;
 use Illuminate\Console\Command;
 use Illuminate\Support\Arr;
-use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Date;
 use Illuminate\Support\Facades\Http;
 use Override;
 
@@ -202,7 +202,7 @@ class SimulateWebhook extends Command
             ->first();
     }
 
-    private function reportOutcome(ServiceConnection $serviceConnection, Carbon $firedAt): void
+    private function reportOutcome(ServiceConnection $serviceConnection, CarbonInterface $firedAt): void
     {
         $webhookEvent = WebhookEvent::query()
             ->where('service_connection_id', $serviceConnection->id)

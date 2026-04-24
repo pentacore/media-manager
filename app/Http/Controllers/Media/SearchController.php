@@ -202,6 +202,7 @@ class SearchController extends Controller
             if ($mediaType === null) {
                 continue;
             }
+
             if ($tmdbId === null) {
                 continue;
             }

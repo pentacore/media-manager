@@ -97,7 +97,7 @@ class DebugEmbySessions extends Command
         $this->line('');
         $this->info(sprintf('%d total session(s), %d with NowPlayingItem.', count($raw), count($playing)));
 
-        if (count($raw) > 0 && count($playing) === 0) {
+        if ($raw !== [] && $playing === []) {
             $this->warn('All sessions are idle. If something IS playing, Emby may be returning stale sessions.');
             $this->line('Try adding a query param: --raw shows full payload for inspection.');
         }
