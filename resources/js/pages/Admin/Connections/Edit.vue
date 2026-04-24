@@ -30,8 +30,8 @@ interface Connection {
     type: { value: string } | string;
     name: string;
     url: string;
-    api_key: string;
-    webhook_token: string;
+    api_key_set: boolean;
+    webhook_token_set: boolean;
     is_active: boolean;
 }
 
@@ -69,8 +69,8 @@ const typeValue =
 
 const selectedType = ref(typeValue);
 const serviceUrl = ref(props.connection.url);
-const apiKey = ref(props.connection.api_key);
-const webhookToken = ref(props.connection.webhook_token ?? '');
+const apiKey = ref('');
+const webhookToken = ref('');
 const copied = ref(false);
 const tokenVisible = ref(false);
 
@@ -191,8 +191,16 @@ return;
                             v-model="apiKey"
                             name="api_key"
                             type="password"
-                            :default-value="connection.api_key"
+                            autocomplete="new-password"
+                            :placeholder="
+                                connection.api_key_set
+                                    ? '•••••••• (set — leave blank to keep)'
+                                    : 'Enter API key'
+                            "
                         />
+                        <p class="text-sm text-muted-foreground">
+                            Leave blank to keep the existing value.
+                        </p>
                         <InputError :message="errors.api_key" />
                     </div>
 
@@ -215,6 +223,12 @@ return;
                                     : 'Test Connection'
                             }}
                         </Button>
+                        <p
+                            v-if="connection.api_key_set && !apiKey"
+                            class="text-sm text-muted-foreground"
+                        >
+                            Enter the API key above to test the connection.
+                        </p>
                         <p
                             v-if="testResult?.success"
                             class="text-sm text-green-600 dark:text-green-400"
@@ -239,7 +253,13 @@ return;
                                 id="webhook_token"
                                 v-model="webhookToken"
                                 name="webhook_token"
+                                autocomplete="new-password"
                                 :type="tokenVisible ? 'text' : 'password'"
+                                :placeholder="
+                                    connection.webhook_token_set
+                                        ? '•••••••• (set — leave blank to keep)'
+                                        : 'Enter webhook token'
+                                "
                             />
                             <TooltipProvider :delay-duration="0">
                                 <Tooltip>
@@ -301,7 +321,8 @@ return;
                         </div>
                         <p class="text-sm text-muted-foreground">
                             Configure this token in the service's webhook
-                            settings as the X-Webhook-Token header.
+                            settings as the X-Webhook-Token header. Leave blank
+                            to keep the existing value.
                         </p>
                         <InputError :message="errors.webhook_token" />
                     </div>

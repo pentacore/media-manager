@@ -4,21 +4,21 @@ declare(strict_types=1);
 
 namespace App\Models;
 
-use Override;
-use Carbon\CarbonImmutable;
-use Illuminate\Database\Eloquent\Collection;
-use Illuminate\Notifications\DatabaseNotificationCollection;
-use Illuminate\Notifications\DatabaseNotification;
-use Database\Factories\UserFactory;
-use Illuminate\Database\Eloquent\Builder;
 use App\Enums\UserRole;
+use Carbon\CarbonImmutable;
+use Database\Factories\UserFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\Hidden;
+use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Foundation\Auth\User as Authenticatable;
+use Illuminate\Notifications\DatabaseNotification;
+use Illuminate\Notifications\DatabaseNotificationCollection;
 use Illuminate\Notifications\Notifiable;
 use Laravel\Fortify\TwoFactorAuthenticatable;
+use Override;
 
 /**
  * @property int $id
@@ -36,12 +36,14 @@ use Laravel\Fortify\TwoFactorAuthenticatable;
  * @property string|null $sso_id
  * @property UserRole $role
  * @property string|null $avatar_url
+ * @property CarbonImmutable|null $invite_accepted_at
  * @property-read Collection<int, ActivityLog> $activityLogs
  * @property-read int|null $activity_logs_count
  * @property-read Collection<int, EmbyUserLink> $embyUserLinks
  * @property-read int|null $emby_user_links_count
  * @property-read DatabaseNotificationCollection<int, DatabaseNotification> $notifications
  * @property-read int|null $notifications_count
+ *
  * @method static UserFactory factory($count = null, $state = [])
  * @method static Builder<static>|User newModelQuery()
  * @method static Builder<static>|User newQuery()
@@ -61,9 +63,10 @@ use Laravel\Fortify\TwoFactorAuthenticatable;
  * @method static Builder<static>|User whereTwoFactorRecoveryCodes($value)
  * @method static Builder<static>|User whereTwoFactorSecret($value)
  * @method static Builder<static>|User whereUpdatedAt($value)
+ *
  * @mixin \Eloquent
  */
-#[Fillable(['name', 'email', 'password', 'sso_provider', 'sso_id', 'role', 'avatar_url'])]
+#[Fillable(['name', 'email', 'password', 'sso_provider', 'sso_id', 'role', 'avatar_url', 'invite_accepted_at'])]
 #[Hidden(['password', 'two_factor_secret', 'two_factor_recovery_codes', 'remember_token'])]
 class User extends Authenticatable
 {
@@ -82,6 +85,7 @@ class User extends Authenticatable
             'password' => 'hashed',
             'role' => UserRole::class,
             'two_factor_confirmed_at' => 'datetime',
+            'invite_accepted_at' => 'datetime',
         ];
     }
 

@@ -7,6 +7,8 @@ use App\Models\User;
 use Illuminate\Support\Facades\Http;
 
 beforeEach(function (): void {
+    Http::preventStrayRequests();
+
     $this->embyConnection = ServiceConnection::factory()->emby()->create([
         'url' => 'http://emby.local:8096',
         'api_key' => 'emby-api-key',
@@ -124,4 +126,57 @@ test('emby second user gets viewer role', function (): void {
 
     $user = User::where('email', 'second@example.com')->first();
     expect($user->role)->toBe(UserRole::Viewer);
+});
+
+test('emby login does not auto-link to existing local user by email match', function (): void {
+    $victim = User::factory()->create([
+        'email' => 'victim@example.com',
+        'role' => UserRole::Admin,
+    ]);
+
+    Http::fake([
+        'emby.local:8096/Users/AuthenticateByName' => Http::response([
+            'User' => ['Id' => 'attacker-emby-id', 'Name' => 'Attacker'],
+            'AccessToken' => 'token',
+        ]),
+    ]);
+
+    $this->post(route('auth.emby'), [
+        'username' => 'Attacker',
+        'password' => 'pass',
+        'email' => 'victim@example.com',
+    ])->assertSessionHasErrors('email');
+
+    $this->assertGuest();
+
+    expect(EmbyUserLink::where('emby_user_id', 'attacker-emby-id')->exists())->toBeFalse();
+    expect(EmbyUserLink::where('user_id', $victim->id)->exists())->toBeFalse();
+    expect(User::count())->toBe(1);
+});
+
+test('emby login with linked account logs in regardless of email field', function (): void {
+    $user = User::factory()->create(['email' => 'stored@example.com']);
+    EmbyUserLink::factory()->create([
+        'user_id' => $user->id,
+        'emby_user_id' => 'emby-linked-7',
+        'emby_username' => 'LinkedUser',
+    ]);
+
+    Http::fake([
+        'emby.local:8096/Users/AuthenticateByName' => Http::response([
+            'User' => ['Id' => 'emby-linked-7', 'Name' => 'LinkedUser'],
+            'AccessToken' => 'token',
+        ]),
+    ]);
+
+    $this->post(route('auth.emby'), [
+        'username' => 'LinkedUser',
+        'password' => 'pass',
+        // Even if an attacker spoofs some arbitrary email, the already-linked account wins.
+        'email' => 'different@example.com',
+    ])->assertRedirect(route('dashboard'));
+
+    $this->assertAuthenticatedAs($user);
+    expect(User::count())->toBe(1);
+    expect(EmbyUserLink::count())->toBe(1);
 });

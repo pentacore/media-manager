@@ -176,23 +176,66 @@ test('non-admin cannot invite users', function (): void {
         ->assertForbidden();
 });
 
-test('invited user can accept invite and set password', function (): void {
-    $user = User::factory()->create(['password' => null]);
+test('invite accept does not log user in without setting password', function (): void {
+    $user = User::factory()->create(['password' => null, 'invite_accepted_at' => null]);
 
     $url = URL::temporarySignedRoute('auth.invite.accept', now()->addHours(48), ['user' => $user->id]);
 
     $this->get($url)
-        ->assertOk();
+        ->assertRedirect(route('auth.set-password'));
 
-    $this->assertAuthenticated();
+    // Critically, the user is NOT authenticated just from clicking the link.
+    $this->assertGuest();
+
+    // And nothing is stamped yet.
+    $user->refresh();
+    expect($user->invite_accepted_at)->toBeNull();
+    expect($user->password)->toBeNull();
+});
+
+test('set-password after accept logs user in and stamps invite_accepted_at', function (): void {
+    $user = User::factory()->create(['password' => null, 'invite_accepted_at' => null]);
+
+    $url = URL::temporarySignedRoute('auth.invite.accept', now()->addHours(48), ['user' => $user->id]);
+
+    $this->get($url)->assertRedirect(route('auth.set-password'));
+
+    // Page load works (session key is present) while still guest.
+    $this->assertGuest();
+    $this->get(route('auth.set-password'))->assertOk();
 
     $this->post(route('auth.set-password.store'), [
         'password' => 'NewPassword123!',
         'password_confirmation' => 'NewPassword123!',
     ])->assertRedirect(route('dashboard'));
 
+    $this->assertAuthenticatedAs($user->fresh());
+
     $user->refresh();
     expect($user->password)->not->toBeNull();
+    expect($user->invite_accepted_at)->not->toBeNull();
+});
+
+test('reusing an already-accepted invite link rejects', function (): void {
+    $user = User::factory()->create(['password' => 'hashed-already', 'invite_accepted_at' => now()]);
+
+    $url = URL::temporarySignedRoute('auth.invite.accept', now()->addHours(48), ['user' => $user->id]);
+
+    $this->get($url)->assertRedirect(route('login'));
+
+    $this->assertGuest();
+});
+
+test('accessing set-password without going through accept first rejects', function (): void {
+    User::factory()->create(['password' => null, 'invite_accepted_at' => null]);
+
+    // No signed-link visit first → no session key → flow rejects.
+    $this->get(route('auth.set-password'))->assertRedirect(route('login'));
+
+    $this->post(route('auth.set-password.store'), [
+        'password' => 'NewPassword123!',
+        'password_confirmation' => 'NewPassword123!',
+    ])->assertRedirect(route('login'));
 });
 
 test('expired invite link is rejected', function (): void {

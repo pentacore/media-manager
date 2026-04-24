@@ -108,7 +108,10 @@ test('store validates url format', function (): void {
 
 test('admin can view edit form', function (): void {
     $admin = User::factory()->admin()->create();
-    $connection = ServiceConnection::factory()->sonarr()->create();
+    $connection = ServiceConnection::factory()->sonarr()->create([
+        'api_key' => 'secret-api-key',
+        'webhook_token' => 'secret-webhook-token',
+    ]);
 
     $this->actingAs($admin)
         ->get(route('admin.connections.edit', $connection))
@@ -117,6 +120,27 @@ test('admin can view edit form', function (): void {
             ->component('Admin/Connections/Edit')
             ->has('connection')
             ->has('serviceTypes')
+            // Secrets must NOT be passed as raw strings to the client.
+            ->missing('connection.api_key')
+            ->missing('connection.webhook_token')
+            ->where('connection.api_key_set', true)
+            ->where('connection.webhook_token_set', true)
+        );
+});
+
+test('edit form exposes has-value booleans when secrets are empty', function (): void {
+    $admin = User::factory()->admin()->create();
+    $connection = ServiceConnection::factory()->sonarr()->create([
+        'api_key' => '',
+        'webhook_token' => '',
+    ]);
+
+    $this->actingAs($admin)
+        ->get(route('admin.connections.edit', $connection))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->where('connection.api_key_set', false)
+            ->where('connection.webhook_token_set', false)
         );
 });
 
@@ -137,6 +161,51 @@ test('admin can update a service connection', function (): void {
     $connection->refresh();
     expect($connection->name)->toBe('Updated Sonarr');
     expect($connection->url)->toBe('http://new-sonarr.local:8989');
+    expect($connection->api_key)->toBe('new-key');
+    expect($connection->webhook_token)->toBe('new-token-12345');
+});
+
+test('update with blank api_key keeps the existing value', function (): void {
+    $admin = User::factory()->admin()->create();
+    $connection = ServiceConnection::factory()->sonarr()->create([
+        'api_key' => 'original-api-key',
+        'webhook_token' => 'original-webhook-token',
+    ]);
+
+    $this->actingAs($admin)
+        ->put(route('admin.connections.update', $connection), [
+            'type' => 'sonarr',
+            'name' => 'Renamed',
+            'url' => 'http://sonarr.local:8989',
+            'api_key' => '',
+            'webhook_token' => '',
+        ])
+        ->assertRedirect(route('admin.connections.index'));
+
+    $connection->refresh();
+    expect($connection->name)->toBe('Renamed');
+    expect($connection->api_key)->toBe('original-api-key');
+    expect($connection->webhook_token)->toBe('original-webhook-token');
+});
+
+test('update with missing secret keys keeps the existing values', function (): void {
+    $admin = User::factory()->admin()->create();
+    $connection = ServiceConnection::factory()->sonarr()->create([
+        'api_key' => 'original-api-key',
+        'webhook_token' => 'original-webhook-token',
+    ]);
+
+    $this->actingAs($admin)
+        ->put(route('admin.connections.update', $connection), [
+            'type' => 'sonarr',
+            'name' => 'Still Working',
+            'url' => 'http://sonarr.local:8989',
+        ])
+        ->assertRedirect(route('admin.connections.index'));
+
+    $connection->refresh();
+    expect($connection->api_key)->toBe('original-api-key');
+    expect($connection->webhook_token)->toBe('original-webhook-token');
 });
 
 test('admin can delete a service connection', function (): void {

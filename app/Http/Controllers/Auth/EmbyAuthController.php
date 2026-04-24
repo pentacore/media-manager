@@ -11,8 +11,10 @@ use App\Http\Requests\Auth\EmbyLoginRequest;
 use App\Models\EmbyUserLink;
 use App\Models\ServiceConnection;
 use App\Models\User;
+use Illuminate\Database\QueryException;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 
 class EmbyAuthController extends Controller
@@ -29,7 +31,7 @@ class EmbyAuthController extends Controller
 
         $response = Http::withHeaders([
             'X-Emby-Token' => $connection->api_key,
-        ])->post($connection->url . '/Users/AuthenticateByName', [
+        ])->post($connection->url.'/Users/AuthenticateByName', [
             'Username' => $embyLoginRequest->input('username'),
             'Pw' => $embyLoginRequest->input('password'),
         ]);
@@ -57,25 +59,41 @@ class EmbyAuthController extends Controller
 
         $email = $embyLoginRequest->input('email');
 
-        // Find existing user by email or create new one
-        $user = User::where('email', $email)->first();
-
-        if (! $user) {
-            $role = User::count() === 0 ? UserRole::Admin : UserRole::Viewer;
-
-            $user = User::create([
-                'name' => $embyUsername,
-                'email' => $email,
-                'role' => $role,
-                'email_verified_at' => now(),
+        // Reject when the email matches an existing local account that isn't Emby-linked.
+        // Auto-linking by email match would allow an attacker with any Emby account to
+        // hijack a local account by submitting the victim's email address.
+        if (User::where('email', $email)->exists()) {
+            return back()->withErrors([
+                'email' => __('This email is already registered. Sign in with your original method first, then link your Emby account in Settings.'),
             ]);
         }
 
-        EmbyUserLink::create([
-            'user_id' => $user->id,
-            'emby_user_id' => $embyUserId,
-            'emby_username' => $embyUsername,
-        ]);
+        $role = User::count() === 0 ? UserRole::Admin : UserRole::Viewer;
+
+        // Create the user + link atomically and rely on the unique constraint
+        // on emby_user_id as the final authority against races.
+        try {
+            $user = DB::transaction(function () use ($email, $embyUsername, $embyUserId, $role): User {
+                $user = User::create([
+                    'name' => $embyUsername,
+                    'email' => $email,
+                    'role' => $role,
+                    'email_verified_at' => now(),
+                ]);
+
+                EmbyUserLink::create([
+                    'user_id' => $user->id,
+                    'emby_user_id' => $embyUserId,
+                    'emby_username' => $embyUsername,
+                ]);
+
+                return $user;
+            });
+        } catch (QueryException) {
+            return back()->withErrors([
+                'username' => __('Unable to complete Emby sign-in. Please try again.'),
+            ]);
+        }
 
         Auth::login($user, remember: true);
 

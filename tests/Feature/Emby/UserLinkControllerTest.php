@@ -5,7 +5,10 @@ declare(strict_types=1);
 use App\Models\EmbyUserLink;
 use App\Models\ServiceConnection;
 use App\Models\User;
+use Illuminate\Database\QueryException;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Schema;
 
 beforeEach(function (): void {
     config()->set('inertia.ssr.enabled', false);
@@ -140,6 +143,58 @@ test('store rejects emby account already linked to another user', function (): v
         ->assertRedirect();
 
     $this->assertDatabaseMissing('emby_user_links', ['user_id' => $user->id]);
+});
+
+test('emby_user_links has a unique index on emby_user_id alone', function (): void {
+    $indexes = Schema::getIndexes('emby_user_links');
+
+    $hasSingleColumnUnique = collect($indexes)->contains(
+        fn (array $index): bool => $index['unique']
+            && $index['columns'] === ['emby_user_id']
+    );
+
+    $hasOldCompoundUnique = collect($indexes)->contains(
+        fn (array $index): bool => $index['unique']
+            && $index['columns'] === ['user_id', 'emby_user_id']
+    );
+
+    expect($hasSingleColumnUnique)->toBeTrue(
+        'Expected a unique index on emby_user_id alone to prevent two users linking the same Emby account.'
+    );
+    expect($hasOldCompoundUnique)->toBeFalse(
+        'The old (user_id, emby_user_id) compound unique must have been dropped.'
+    );
+});
+
+test('unique constraint on emby_user_id throws QueryException on duplicate insert', function (): void {
+    // Direct DB-level check that the unique constraint is enforced. We wrap
+    // the conflicting insert in a nested transaction so the QueryException
+    // rolls back via SAVEPOINT and does not poison the outer RefreshDatabase
+    // transaction.
+    $first = User::factory()->create();
+    $second = User::factory()->create();
+
+    EmbyUserLink::create([
+        'user_id' => $first->id,
+        'emby_user_id' => 'unique-test-id',
+        'emby_username' => 'Alice',
+    ]);
+
+    $caught = false;
+    try {
+        DB::transaction(function () use ($second): void {
+            EmbyUserLink::create([
+                'user_id' => $second->id,
+                'emby_user_id' => 'unique-test-id',
+                'emby_username' => 'Alice',
+            ]);
+        });
+    } catch (QueryException) {
+        $caught = true;
+    }
+
+    expect($caught)->toBeTrue();
+    expect(EmbyUserLink::where('emby_user_id', 'unique-test-id')->count())->toBe(1);
 });
 
 test('store fails gracefully when no active emby connection', function (): void {

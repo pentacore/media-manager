@@ -5,7 +5,6 @@ use App\Http\Controllers\Auth\EmbyAuthController;
 use App\Http\Controllers\Auth\InviteController;
 use App\Http\Controllers\DashboardController;
 use Illuminate\Support\Facades\Route;
-use Inertia\Inertia;
 use Laravel\Fortify\Features;
 
 Route::inertia('/', 'Welcome', [
@@ -23,10 +22,8 @@ Route::middleware('guest')->group(function (): void {
 });
 
 Route::get('invite/{user}/accept', [InviteController::class, 'accept'])->name('auth.invite.accept');
-Route::middleware('auth')->group(function (): void {
-    Route::get('set-password', fn () => Inertia::render('auth/SetPassword'))->name('auth.set-password');
-    Route::post('set-password', [InviteController::class, 'setPassword'])->name('auth.set-password.store');
-});
+Route::get('set-password', [InviteController::class, 'showSetPassword'])->name('auth.set-password');
+Route::post('set-password', [InviteController::class, 'setPassword'])->name('auth.set-password.store');
 
 require __DIR__.'/settings.php';
 require __DIR__.'/admin.php';

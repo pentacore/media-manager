@@ -15,6 +15,7 @@ use App\Models\WebhookEvent;
 use Illuminate\Broadcasting\PrivateChannel;
 use Illuminate\Contracts\Broadcasting\ShouldBroadcast;
 use Illuminate\Contracts\Broadcasting\ShouldBroadcastNow;
+use Illuminate\Database\QueryException;
 
 test('ActionRequestCreated broadcasts on dashboard channel with correct payload', function (): void {
     $actionRequest = ActionRequest::factory()->create();
@@ -40,6 +41,30 @@ test('ActionRequestStatusChanged broadcasts on dashboard channel with correct pa
     $payload = $event->broadcastWith();
     expect($payload)->toHaveKeys(['id', 'status', 'result', 'updated_at']);
     expect($payload['status'])->toBe('completed');
+
+    // Result payload is narrowed to safe fields — exception/message are stripped.
+    expect($payload['result'])->toHaveKeys(['success', 'reason']);
+    expect($payload['result'])->not->toHaveKey('message');
+    expect($payload['result'])->not->toHaveKey('exception');
+});
+
+test('ActionRequestStatusChanged strips sensitive detail from broadcast payload', function (): void {
+    $actionRequest = ActionRequest::factory()->create([
+        'result' => [
+            'success' => false,
+            'reason' => 'execution_failed',
+            'message' => 'SQLSTATE leaking /var/www secrets',
+            'exception' => QueryException::class,
+        ],
+    ]);
+
+    $event = new ActionRequestStatusChanged($actionRequest);
+    $payload = $event->broadcastWith();
+
+    expect($payload['result'])->toEqual([
+        'success' => false,
+        'reason' => 'execution_failed',
+    ]);
 });
 
 test('WebhookReceived broadcasts on dashboard channel with service info', function (): void {

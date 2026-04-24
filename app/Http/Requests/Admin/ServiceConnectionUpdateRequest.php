@@ -19,8 +19,10 @@ class ServiceConnectionUpdateRequest extends FormRequest
             'type' => ['required', 'string', ServiceType::validationRule()],
             'name' => ['required', 'string', 'max:255'],
             'url' => ['required', 'url', 'max:500'],
-            'api_key' => ['required', 'string', 'max:500'],
-            'webhook_token' => ['required', 'string', 'min:10', 'max:500'],
+            // Secrets are optional on update: blank means "keep existing value".
+            // The controller filters empty strings so they never overwrite state.
+            'api_key' => ['nullable', 'string', 'max:500'],
+            'webhook_token' => ['nullable', 'string', 'min:10', 'max:500'],
         ];
     }
 }

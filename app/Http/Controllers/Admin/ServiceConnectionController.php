@@ -58,8 +58,8 @@ class ServiceConnectionController extends Controller
                 'type' => $serviceConnection->type,
                 'name' => $serviceConnection->name,
                 'url' => $serviceConnection->url,
-                'api_key' => $serviceConnection->api_key,
-                'webhook_token' => $serviceConnection->webhook_token,
+                'api_key_set' => $serviceConnection->api_key !== '' && $serviceConnection->api_key !== null,
+                'webhook_token_set' => $serviceConnection->webhook_token !== '' && $serviceConnection->webhook_token !== null,
                 'is_active' => $serviceConnection->is_active,
             ],
             'serviceTypes' => ServiceType::mapForSelect(labelKey: 'label'),
@@ -68,7 +68,19 @@ class ServiceConnectionController extends Controller
 
     public function update(ServiceConnectionUpdateRequest $serviceConnectionUpdateRequest, ServiceConnection $serviceConnection): RedirectResponse
     {
-        $serviceConnection->update($serviceConnectionUpdateRequest->validated());
+        $validated = $serviceConnectionUpdateRequest->validated();
+
+        // Do not wipe existing secrets when the admin submits the form without
+        // retyping them (blank/null means "keep existing value").
+        foreach (['api_key', 'webhook_token'] as $secretField) {
+            $value = $validated[$secretField] ?? null;
+
+            if (! is_string($value) || trim($value) === '') {
+                unset($validated[$secretField]);
+            }
+        }
+
+        $serviceConnection->update($validated);
 
         Inertia::flash('toast', ['type' => 'success', 'message' => __('Connection updated.')]);
 

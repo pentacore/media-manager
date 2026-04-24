@@ -29,10 +29,19 @@ class ActionRequestStatusChanged implements ShouldBroadcast
      */
     public function broadcastWith(): array
     {
+        // Do NOT broadcast raw exception messages or stack traces — those can
+        // leak sensitive paths, tokens, or server-internal details. Full context
+        // remains in the DB for admins viewing the Actions page.
+        $result = $this->actionRequest->result ?? [];
+        $safeResult = [
+            'success' => $result['success'] ?? null,
+            'reason' => $result['reason'] ?? null,
+        ];
+
         return [
             'id' => $this->actionRequest->id,
             'status' => $this->actionRequest->status->value,
-            'result' => $this->actionRequest->result,
+            'result' => $safeResult,
             'updated_at' => $this->actionRequest->updated_at->toISOString(),
         ];
     }

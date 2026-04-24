@@ -12,6 +12,7 @@ use App\Http\Resources\EmbyUserLinkResource;
 use App\Models\EmbyUserLink;
 use App\Models\ServiceConnection;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
+use Illuminate\Database\QueryException;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\RequestException;
 use Illuminate\Http\RedirectResponse;
@@ -88,11 +89,19 @@ class UserLinkController extends Controller
             return back();
         }
 
-        EmbyUserLink::create([
-            'user_id' => $user->id,
-            'emby_user_id' => $embyUserId,
-            'emby_username' => $embyUsername,
-        ]);
+        // Rely on the database unique constraint on emby_user_id as a second
+        // line of defence against races between the check-exists and insert.
+        try {
+            EmbyUserLink::create([
+                'user_id' => $user->id,
+                'emby_user_id' => $embyUserId,
+                'emby_username' => $embyUsername,
+            ]);
+        } catch (QueryException) {
+            Inertia::flash('toast', ['type' => 'error', 'message' => __('That Emby account is already linked to another user.')]);
+
+            return back();
+        }
 
         Inertia::flash('toast', ['type' => 'success', 'message' => __('Emby account linked.')]);
 

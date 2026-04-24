@@ -26,7 +26,10 @@ class VerifyWebhookToken
 
         $token = $request->header('X-Webhook-Token');
 
-        abort_if(! $token || $token !== $connection->webhook_token, 401);
+        abort_if(
+            ! is_string($token) || $token === '' || ! hash_equals((string) $connection->webhook_token, $token),
+            401
+        );
 
         $request->attributes->set('service_connection', $connection);
 

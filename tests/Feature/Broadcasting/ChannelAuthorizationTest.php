@@ -45,8 +45,8 @@ test('user cannot authenticate another users private channel', function (): void
         ->assertForbidden();
 });
 
-test('authenticated users can join shared channels', function (): void {
-    $user = User::factory()->create();
+test('members can join shared channels', function (): void {
+    $user = User::factory()->member()->create();
 
     $channels = ['private-services', 'private-emby.activity', 'private-dashboard'];
 
@@ -58,4 +58,45 @@ test('authenticated users can join shared channels', function (): void {
             ])
             ->assertOk();
     }
+});
+
+test('admins can join shared channels', function (): void {
+    $user = User::factory()->admin()->create();
+
+    $channels = ['private-services', 'private-emby.activity', 'private-dashboard'];
+
+    foreach ($channels as $channel) {
+        $this->actingAs($user)
+            ->post('/broadcasting/auth', [
+                'socket_id' => '1234.1234567',
+                'channel_name' => $channel,
+            ])
+            ->assertOk();
+    }
+});
+
+test('viewers cannot join shared channels', function (): void {
+    $viewer = User::factory()->create(); // default role is Viewer
+
+    $channels = ['private-services', 'private-emby.activity', 'private-dashboard'];
+
+    foreach ($channels as $channel) {
+        $this->actingAs($viewer)
+            ->post('/broadcasting/auth', [
+                'socket_id' => '1234.1234567',
+                'channel_name' => $channel,
+            ])
+            ->assertForbidden();
+    }
+});
+
+test('viewer can still join their own private user channel', function (): void {
+    $viewer = User::factory()->create();
+
+    $this->actingAs($viewer)
+        ->post('/broadcasting/auth', [
+            'socket_id' => '1234.1234567',
+            'channel_name' => 'private-App.Models.User.'.$viewer->id,
+        ])
+        ->assertOk();
 });
