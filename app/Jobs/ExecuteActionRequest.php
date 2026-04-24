@@ -15,6 +15,8 @@ use App\Services\Sonarr\SonarrActions;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
+use Illuminate\Http\Client\ConnectionException;
+use Illuminate\Http\Client\RequestException;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
 use Illuminate\Support\Facades\Log;
@@ -53,17 +55,37 @@ class ExecuteActionRequest implements ShouldQueue
         $executor = $this->resolveExecutor($this->actionRequest->type);
 
         if (! $executor instanceof ActionExecutor) {
-            $this->fail('no_executor', ['message' => sprintf('No executor registered for type "%s"', $this->actionRequest->type)]);
+            $this->markFailed([
+                'reason' => 'no_executor',
+                'message' => sprintf('No executor registered for type "%s"', $this->actionRequest->type),
+            ]);
 
             return;
         }
 
         try {
             $result = $executor->execute($this->actionRequest);
-        } catch (Throwable $throwable) {
-            $this->fail('execution_failed', [
-                'message' => $throwable->getMessage(),
-                'exception' => $throwable::class,
+        } catch (ConnectionException|RequestException $transient) {
+            // Transient failure: rethrow so Laravel retries per $tries + $backoff.
+            // On the final attempt, persist Failed state and return without throwing
+            // (preventing double-handling in failed()).
+            if ($this->attempts() >= $this->tries) {
+                $this->markFailed([
+                    'reason' => 'retries_exhausted',
+                    'message' => $transient->getMessage(),
+                    'exception' => $transient::class,
+                ]);
+
+                return;
+            }
+
+            throw $transient;
+        } catch (Throwable $permanent) {
+            // Permanent failure: mark Failed immediately — no retry.
+            $this->markFailed([
+                'reason' => 'execution_failed',
+                'message' => $permanent->getMessage(),
+                'exception' => $permanent::class,
             ]);
 
             return;
@@ -78,28 +100,27 @@ class ExecuteActionRequest implements ShouldQueue
 
     public function failed(?Throwable $throwable): void
     {
-        // Called by Laravel when all retries are exhausted OR `$this->fail()` is called.
-        // If we already wrote the result via fail(), don't overwrite.
+        // Called by Laravel when retries are exhausted via a rethrown exception.
+        // If handle() already persisted Failed state, short-circuit.
         $this->actionRequest->refresh();
         if ($this->actionRequest->status === ActionRequestStatus::Failed) {
             return;
         }
 
-        $this->actionRequest->update([
-            'status' => ActionRequestStatus::Failed,
-            'result' => ['success' => false, 'message' => $throwable?->getMessage() ?? 'Job failed'],
+        $this->markFailed([
+            'reason' => 'job_failed',
+            'message' => $throwable?->getMessage() ?? 'Job failed',
         ]);
-        event(new ActionRequestStatusChanged($this->actionRequest));
     }
 
     /**
-     * @param  array<string, mixed>  $extra
+     * @param  array<string, mixed>  $result
      */
-    private function fail(string $reason, array $extra = []): void
+    private function markFailed(array $result): void
     {
         $this->actionRequest->update([
             'status' => ActionRequestStatus::Failed,
-            'result' => ['success' => false, 'reason' => $reason, ...$extra],
+            'result' => ['success' => false, ...$result],
         ]);
         event(new ActionRequestStatusChanged($this->actionRequest));
     }
