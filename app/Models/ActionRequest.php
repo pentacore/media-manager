@@ -4,15 +4,17 @@ declare(strict_types=1);
 
 namespace App\Models;
 
-use Override;
-use Carbon\CarbonImmutable;
-use Illuminate\Database\Eloquent\Builder;
 use App\Enums\ActionRequestStatus;
+use App\Observers\ActionRequestObserver;
+use Carbon\CarbonImmutable;
 use Database\Factories\ActionRequestFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
+use Illuminate\Database\Eloquent\Attributes\ObservedBy;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Override;
 
 /**
  * @property int $id
@@ -29,6 +31,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  * @property CarbonImmutable|null $updated_at
  * @property-read User|null $approvedByUser
  * @property-read WebhookEvent|null $webhookEvent
+ *
  * @method static ActionRequestFactory factory($count = null, $state = [])
  * @method static Builder<static>|ActionRequest newModelQuery()
  * @method static Builder<static>|ActionRequest newQuery()
@@ -45,8 +48,10 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  * @method static Builder<static>|ActionRequest whereType($value)
  * @method static Builder<static>|ActionRequest whereUpdatedAt($value)
  * @method static Builder<static>|ActionRequest whereWebhookEventId($value)
+ *
  * @mixin \Eloquent
  */
+#[ObservedBy(ActionRequestObserver::class)]
 #[Fillable(['webhook_event_id', 'type', 'source_service', 'target_service', 'status', 'requires_approval', 'approved_by', 'payload', 'result'])]
 class ActionRequest extends Model
 {
