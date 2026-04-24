@@ -7,6 +7,8 @@ namespace App\Jobs;
 use App\Enums\ServiceType;
 use App\Models\WebhookEvent;
 use App\Services\Emby\EmbyWebhookHandler;
+use App\Services\Radarr\RadarrWebhookHandler;
+use App\Services\Seerr\SeerrWebhookHandler;
 use App\Services\Sonarr\SonarrWebhookHandler;
 use App\Services\Webhook\WebhookHandler;
 use Illuminate\Bus\Queueable;
@@ -31,6 +33,17 @@ class ProcessWebhookEvent implements ShouldQueue
 
     public function handle(): void
     {
+        $this->webhookEvent->refresh();
+
+        // Idempotency: if the handler already ran to completion, don't retry.
+        if ($this->webhookEvent->processed_at !== null) {
+            Log::info('ProcessWebhookEvent: already processed, skipping', [
+                'webhook_event_id' => $this->webhookEvent->id,
+            ]);
+
+            return;
+        }
+
         $this->webhookEvent->loadMissing('serviceConnection');
         $connection = $this->webhookEvent->serviceConnection;
 
@@ -61,6 +74,8 @@ class ProcessWebhookEvent implements ShouldQueue
         $class = match ($serviceType) {
             ServiceType::Emby => EmbyWebhookHandler::class,
             ServiceType::Sonarr => SonarrWebhookHandler::class,
+            ServiceType::Radarr => RadarrWebhookHandler::class,
+            ServiceType::Seerr => SeerrWebhookHandler::class,
             default => null,
         };
 

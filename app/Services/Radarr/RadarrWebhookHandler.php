@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace App\Services\Sonarr;
+namespace App\Services\Radarr;
 
 use App\Models\ActivityLog;
 use App\Models\WebhookEvent;
@@ -10,7 +10,7 @@ use App\Services\Actions\ActionOrchestrator;
 use App\Services\Webhook\WebhookHandler;
 use Illuminate\Support\Facades\Log;
 
-class SonarrWebhookHandler implements WebhookHandler
+class RadarrWebhookHandler implements WebhookHandler
 {
     public function __construct(private readonly ActionOrchestrator $actionOrchestrator) {}
 
@@ -24,13 +24,13 @@ class SonarrWebhookHandler implements WebhookHandler
             'Grab' => $this->handleGrab($webhookEvent, $payload),
             'Download' => $this->handleDownload($webhookEvent, $payload),
             'Rename' => $this->handleRename($webhookEvent, $payload),
-            'SeriesAdd' => $this->handleSeriesAdd($webhookEvent, $payload),
-            'SeriesDelete' => $this->handleSeriesDelete($webhookEvent, $payload),
-            'EpisodeFileDelete' => $this->handleEpisodeFileDelete($webhookEvent, $payload),
+            'MovieAdded' => $this->handleMovieAdded($webhookEvent, $payload),
+            'MovieDelete' => $this->handleMovieDelete($webhookEvent, $payload),
+            'MovieFileDelete' => $this->handleMovieFileDelete($webhookEvent, $payload),
             'Health' => $this->handleHealth($webhookEvent, $payload, 'health'),
             'HealthRestored' => $this->handleHealth($webhookEvent, $payload, 'health_restored'),
             'ApplicationUpdate' => $this->handleApplicationUpdate($webhookEvent, $payload),
-            default => Log::info('SonarrWebhookHandler: ignoring event', [
+            default => Log::info('RadarrWebhookHandler: ignoring event', [
                 'webhook_event_id' => $webhookEvent->id,
                 'event_type' => $eventType,
             ]),
@@ -47,10 +47,10 @@ class SonarrWebhookHandler implements WebhookHandler
         ActivityLog::create([
             'user_id' => null,
             'service_connection_id' => $webhookEvent->service_connection_id,
-            'action' => 'webhook.sonarr.test',
+            'action' => 'webhook.radarr.test',
             'subject_type' => null,
             'subject_id' => null,
-            'description' => 'Sonarr webhook test received.',
+            'description' => 'Radarr webhook test received.',
             'metadata' => [
                 'instance_name' => $payload['instanceName'] ?? null,
                 'application_url' => $payload['applicationUrl'] ?? null,
@@ -63,21 +63,18 @@ class SonarrWebhookHandler implements WebhookHandler
      */
     private function handleGrab(WebhookEvent $webhookEvent, array $payload): void
     {
-        $seriesTitle = $payload['series']['title'] ?? 'Unknown series';
-        $episodes = $payload['episodes'] ?? [];
-        $episodeCount = is_array($episodes) ? count($episodes) : 0;
+        $movieTitle = $payload['movie']['title'] ?? 'Unknown movie';
 
         ActivityLog::create([
             'user_id' => null,
             'service_connection_id' => $webhookEvent->service_connection_id,
-            'action' => 'webhook.sonarr.grab',
+            'action' => 'webhook.radarr.grab',
             'subject_type' => null,
-            'subject_id' => $payload['series']['id'] ?? null,
-            'description' => sprintf('Sonarr grabbed %d episode(s) for "%s".', $episodeCount, $seriesTitle),
+            'subject_id' => $payload['movie']['id'] ?? null,
+            'description' => sprintf('Radarr grabbed "%s".', $movieTitle),
             'metadata' => [
-                'series_id' => $payload['series']['id'] ?? null,
-                'tvdb_id' => $payload['series']['tvdbId'] ?? null,
-                'episodes' => $episodes,
+                'movie_id' => $payload['movie']['id'] ?? null,
+                'tmdb_id' => $payload['movie']['tmdbId'] ?? null,
                 'release' => $payload['release'] ?? null,
             ],
         ]);
@@ -88,33 +85,30 @@ class SonarrWebhookHandler implements WebhookHandler
      */
     private function handleDownload(WebhookEvent $webhookEvent, array $payload): void
     {
-        $seriesTitle = $payload['series']['title'] ?? 'Unknown series';
-        $episodes = $payload['episodes'] ?? [];
-        $episodeCount = is_array($episodes) ? count($episodes) : 0;
+        $movieTitle = $payload['movie']['title'] ?? 'Unknown movie';
 
         ActivityLog::create([
             'user_id' => null,
             'service_connection_id' => $webhookEvent->service_connection_id,
-            'action' => 'webhook.sonarr.download',
+            'action' => 'webhook.radarr.download',
             'subject_type' => null,
-            'subject_id' => $payload['series']['id'] ?? null,
-            'description' => sprintf('Sonarr imported %d episode(s) for "%s".', $episodeCount, $seriesTitle),
+            'subject_id' => $payload['movie']['id'] ?? null,
+            'description' => sprintf('Radarr imported "%s".', $movieTitle),
             'metadata' => [
-                'series_id' => $payload['series']['id'] ?? null,
-                'tvdb_id' => $payload['series']['tvdbId'] ?? null,
-                'episodes' => $episodes,
-                'episode_file' => $payload['episodeFile'] ?? null,
+                'movie_id' => $payload['movie']['id'] ?? null,
+                'tmdb_id' => $payload['movie']['tmdbId'] ?? null,
+                'movie_file' => $payload['movieFile'] ?? null,
                 'is_upgrade' => $payload['isUpgrade'] ?? null,
             ],
         ]);
 
         $this->actionOrchestrator->dispatch(
             type: 'emby_library_scan',
-            sourceService: 'sonarr',
+            sourceService: 'radarr',
             targetService: 'emby',
             payload: [
-                'trigger' => 'sonarr_download',
-                'series_title' => $payload['series']['title'] ?? null,
+                'trigger' => 'radarr_download',
+                'movie_title' => $movieTitle,
             ],
             webhookEvent: $webhookEvent,
         );
@@ -125,19 +119,19 @@ class SonarrWebhookHandler implements WebhookHandler
      */
     private function handleRename(WebhookEvent $webhookEvent, array $payload): void
     {
-        $seriesTitle = $payload['series']['title'] ?? 'Unknown series';
+        $movieTitle = $payload['movie']['title'] ?? 'Unknown movie';
 
         ActivityLog::create([
             'user_id' => null,
             'service_connection_id' => $webhookEvent->service_connection_id,
-            'action' => 'webhook.sonarr.rename',
+            'action' => 'webhook.radarr.rename',
             'subject_type' => null,
-            'subject_id' => $payload['series']['id'] ?? null,
-            'description' => sprintf('Sonarr renamed files for "%s".', $seriesTitle),
+            'subject_id' => $payload['movie']['id'] ?? null,
+            'description' => sprintf('Radarr renamed files for "%s".', $movieTitle),
             'metadata' => [
-                'series_id' => $payload['series']['id'] ?? null,
-                'tvdb_id' => $payload['series']['tvdbId'] ?? null,
-                'renamed_episode_files' => $payload['renamedEpisodeFiles'] ?? null,
+                'movie_id' => $payload['movie']['id'] ?? null,
+                'tmdb_id' => $payload['movie']['tmdbId'] ?? null,
+                'renamed_movie_files' => $payload['renamedMovieFiles'] ?? null,
             ],
         ]);
     }
@@ -145,21 +139,21 @@ class SonarrWebhookHandler implements WebhookHandler
     /**
      * @param  array<string, mixed>  $payload
      */
-    private function handleSeriesAdd(WebhookEvent $webhookEvent, array $payload): void
+    private function handleMovieAdded(WebhookEvent $webhookEvent, array $payload): void
     {
-        $seriesTitle = $payload['series']['title'] ?? 'Unknown series';
+        $movieTitle = $payload['movie']['title'] ?? 'Unknown movie';
 
         ActivityLog::create([
             'user_id' => null,
             'service_connection_id' => $webhookEvent->service_connection_id,
-            'action' => 'webhook.sonarr.series_added',
+            'action' => 'webhook.radarr.movie_added',
             'subject_type' => null,
-            'subject_id' => $payload['series']['id'] ?? null,
-            'description' => sprintf('Sonarr added series "%s".', $seriesTitle),
+            'subject_id' => $payload['movie']['id'] ?? null,
+            'description' => sprintf('Radarr added movie "%s".', $movieTitle),
             'metadata' => [
-                'series_id' => $payload['series']['id'] ?? null,
-                'tvdb_id' => $payload['series']['tvdbId'] ?? null,
-                'path' => $payload['series']['path'] ?? null,
+                'movie_id' => $payload['movie']['id'] ?? null,
+                'tmdb_id' => $payload['movie']['tmdbId'] ?? null,
+                'folder_path' => $payload['movie']['folderPath'] ?? null,
             ],
         ]);
     }
@@ -167,31 +161,31 @@ class SonarrWebhookHandler implements WebhookHandler
     /**
      * @param  array<string, mixed>  $payload
      */
-    private function handleSeriesDelete(WebhookEvent $webhookEvent, array $payload): void
+    private function handleMovieDelete(WebhookEvent $webhookEvent, array $payload): void
     {
-        $seriesTitle = $payload['series']['title'] ?? 'Unknown series';
+        $movieTitle = $payload['movie']['title'] ?? 'Unknown movie';
 
         ActivityLog::create([
             'user_id' => null,
             'service_connection_id' => $webhookEvent->service_connection_id,
-            'action' => 'webhook.sonarr.series_deleted',
+            'action' => 'webhook.radarr.movie_deleted',
             'subject_type' => null,
-            'subject_id' => $payload['series']['id'] ?? null,
-            'description' => sprintf('Sonarr deleted series "%s".', $seriesTitle),
+            'subject_id' => $payload['movie']['id'] ?? null,
+            'description' => sprintf('Radarr deleted movie "%s".', $movieTitle),
             'metadata' => [
-                'series_id' => $payload['series']['id'] ?? null,
-                'tvdb_id' => $payload['series']['tvdbId'] ?? null,
+                'movie_id' => $payload['movie']['id'] ?? null,
+                'tmdb_id' => $payload['movie']['tmdbId'] ?? null,
                 'deleted_files' => $payload['deletedFiles'] ?? null,
             ],
         ]);
 
         $this->actionOrchestrator->dispatch(
             type: 'emby_library_scan',
-            sourceService: 'sonarr',
+            sourceService: 'radarr',
             targetService: 'emby',
             payload: [
-                'trigger' => 'sonarr_series_deleted',
-                'series_title' => $seriesTitle,
+                'trigger' => 'radarr_movie_deleted',
+                'movie_title' => $movieTitle,
             ],
             webhookEvent: $webhookEvent,
         );
@@ -200,22 +194,21 @@ class SonarrWebhookHandler implements WebhookHandler
     /**
      * @param  array<string, mixed>  $payload
      */
-    private function handleEpisodeFileDelete(WebhookEvent $webhookEvent, array $payload): void
+    private function handleMovieFileDelete(WebhookEvent $webhookEvent, array $payload): void
     {
-        $seriesTitle = $payload['series']['title'] ?? 'Unknown series';
+        $movieTitle = $payload['movie']['title'] ?? 'Unknown movie';
 
         ActivityLog::create([
             'user_id' => null,
             'service_connection_id' => $webhookEvent->service_connection_id,
-            'action' => 'webhook.sonarr.episode_file_deleted',
+            'action' => 'webhook.radarr.movie_file_deleted',
             'subject_type' => null,
-            'subject_id' => $payload['series']['id'] ?? null,
-            'description' => sprintf('Sonarr deleted an episode file for "%s".', $seriesTitle),
+            'subject_id' => $payload['movie']['id'] ?? null,
+            'description' => sprintf('Radarr deleted a movie file for "%s".', $movieTitle),
             'metadata' => [
-                'series_id' => $payload['series']['id'] ?? null,
-                'tvdb_id' => $payload['series']['tvdbId'] ?? null,
-                'episodes' => $payload['episodes'] ?? null,
-                'episode_file' => $payload['episodeFile'] ?? null,
+                'movie_id' => $payload['movie']['id'] ?? null,
+                'tmdb_id' => $payload['movie']['tmdbId'] ?? null,
+                'movie_file' => $payload['movieFile'] ?? null,
                 'delete_reason' => $payload['deleteReason'] ?? null,
             ],
         ]);
@@ -231,7 +224,7 @@ class SonarrWebhookHandler implements WebhookHandler
         ActivityLog::create([
             'user_id' => null,
             'service_connection_id' => $webhookEvent->service_connection_id,
-            'action' => 'webhook.sonarr.'.$kind,
+            'action' => 'webhook.radarr.'.$kind,
             'subject_type' => null,
             'subject_id' => null,
             'description' => $message,
@@ -254,11 +247,11 @@ class SonarrWebhookHandler implements WebhookHandler
         ActivityLog::create([
             'user_id' => null,
             'service_connection_id' => $webhookEvent->service_connection_id,
-            'action' => 'webhook.sonarr.updated',
+            'action' => 'webhook.radarr.updated',
             'subject_type' => null,
             'subject_id' => null,
             'description' => sprintf(
-                'Sonarr updated from %s to %s.',
+                'Radarr updated from %s to %s.',
                 $previousVersion ?? 'unknown',
                 $newVersion ?? 'unknown',
             ),

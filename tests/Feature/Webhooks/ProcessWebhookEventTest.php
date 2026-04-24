@@ -6,6 +6,7 @@ use App\Jobs\ProcessWebhookEvent;
 use App\Models\ServiceConnection;
 use App\Models\WebhookEvent;
 use App\Services\Emby\EmbyWebhookHandler;
+use App\Services\Sonarr\SonarrWebhookHandler;
 use App\Services\Webhook\WebhookHandler;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Support\Facades\Log;
@@ -25,11 +26,13 @@ test('job is a no-op when service connection is missing', function (): void {
     new ProcessWebhookEvent($event)->handle();
 })->skip('skipped: foreign key cascade prevents orphaned webhook events');
 
-test('job logs and skips when no handler is registered for service type', function (): void {
+test('job invokes SonarrWebhookHandler for sonarr service connections when handler exists', function (): void {
     $connection = ServiceConnection::factory()->sonarr()->create();
     $event = WebhookEvent::factory()->create(['service_connection_id' => $connection->id]);
 
-    Log::shouldReceive('info')->once();
+    $mock = Mockery::mock(WebhookHandler::class);
+    $mock->shouldReceive('handle')->once()->with($event);
+    $this->app->bind(SonarrWebhookHandler::class, fn (): WebhookHandler => $mock);
 
     new ProcessWebhookEvent($event)->handle();
 });
@@ -45,6 +48,22 @@ test('job invokes EmbyWebhookHandler for emby service connections when handler e
     $mock = Mockery::mock(WebhookHandler::class);
     $mock->shouldReceive('handle')->once()->with($event);
     $this->app->bind(EmbyWebhookHandler::class, fn (): WebhookHandler => $mock);
+
+    new ProcessWebhookEvent($event)->handle();
+});
+
+test('already-processed events are skipped without invoking the handler', function (): void {
+    $connection = ServiceConnection::factory()->sonarr()->create();
+    $event = WebhookEvent::factory()->processed()->create(['service_connection_id' => $connection->id]);
+
+    $mock = Mockery::mock(WebhookHandler::class);
+    $mock->shouldNotReceive('handle');
+
+    $this->app->bind(SonarrWebhookHandler::class, fn (): WebhookHandler => $mock);
+
+    Log::shouldReceive('info')
+        ->once()
+        ->withArgs(fn (string $message, array $context): bool => str_contains($message, 'already processed'));
 
     new ProcessWebhookEvent($event)->handle();
 });
