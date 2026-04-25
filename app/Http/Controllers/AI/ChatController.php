@@ -10,6 +10,7 @@ use App\Http\Controllers\Controller;
 use App\Models\User;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
 use Inertia\Inertia;
 use Inertia\Response;
 use Laravel\Ai\Contracts\Agent;
@@ -45,10 +46,20 @@ class ChatController extends Controller
             $agent = $this->resolveAgent($agentKey, $user, $conversationId);
             $response = $agent->prompt($validated['message']);
         } catch (Throwable $throwable) {
-            return response()->json([
-                'error' => 'The AI assistant is unavailable right now.',
+            Log::error('AI request failed.', [
+                'user_id' => $user?->id,
+                'agent' => $agentKey,
+                'exception' => $throwable::class,
                 'message' => $throwable->getMessage(),
-            ], 502);
+            ]);
+
+            $payload = ['error' => 'AI request failed.'];
+
+            if (app()->isLocal()) {
+                $payload['message'] = $throwable->getMessage();
+            }
+
+            return response()->json($payload, 500);
         }
 
         return response()->json([

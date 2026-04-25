@@ -44,4 +44,8 @@ return [
         'base_url' => env('AUTHENTIK_BASE_URL'),
     ],
 
+    'github' => [
+        'token' => env('GITHUB_TOKEN'),
+    ],
+
 ];

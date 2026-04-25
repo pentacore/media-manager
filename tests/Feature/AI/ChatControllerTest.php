@@ -5,6 +5,8 @@ declare(strict_types=1);
 use App\Ai\Agents\CommandAgent;
 use App\Ai\Agents\MediaAdvisorAgent;
 use App\Models\User;
+use Illuminate\Foundation\Http\Middleware\PreventRequestForgery;
+use Illuminate\Support\Facades\Log;
 
 beforeEach(function (): void {
     config()->set('inertia.ssr.enabled', false);
@@ -93,4 +95,51 @@ test('agent value is validated to allowed options', function (): void {
         ])
         ->assertUnprocessable()
         ->assertJsonValidationErrors(['agent']);
+});
+
+test('exception messages are not leaked to the client outside local env', function (): void {
+    Log::spy();
+    $this->app['env'] = 'production';
+    $this->withoutMiddleware(PreventRequestForgery::class);
+
+    CommandAgent::fake(fn (): never => throw new RuntimeException('LEAKED-PROVIDER-SECRET-https://api.example.com?token=abc'));
+
+    $admin = User::factory()->admin()->create();
+
+    $response = $this->actingAs($admin)
+        ->postJson(route('ai.chat.send'), [
+            'message' => 'Delete Breaking Bad',
+            'agent' => 'command',
+        ])
+        ->assertStatus(500);
+
+    expect($response->json('error'))->toBe('AI request failed.');
+    expect($response->json('message'))->toBeNull();
+    expect($response->getContent())->not->toContain('LEAKED-PROVIDER-SECRET');
+
+    Log::shouldHaveReceived('error')->once()->withArgs(
+        fn (string $message, array $context): bool => $message === 'AI request failed.'
+            && ($context['user_id'] ?? null) === $admin->id
+            && ($context['agent'] ?? null) === 'command'
+            && str_contains((string) ($context['message'] ?? ''), 'LEAKED-PROVIDER-SECRET')
+    );
+});
+
+test('exception messages are surfaced to the client in local env', function (): void {
+    $this->app['env'] = 'local';
+    $this->withoutMiddleware(PreventRequestForgery::class);
+
+    CommandAgent::fake(fn (): never => throw new RuntimeException('LOCAL-DEBUG-DETAIL'));
+
+    $admin = User::factory()->admin()->create();
+
+    $response = $this->actingAs($admin)
+        ->postJson(route('ai.chat.send'), [
+            'message' => 'Delete Breaking Bad',
+            'agent' => 'command',
+        ])
+        ->assertStatus(500);
+
+    expect($response->json('error'))->toBe('AI request failed.');
+    expect($response->json('message'))->toBe('LOCAL-DEBUG-DETAIL');
 });

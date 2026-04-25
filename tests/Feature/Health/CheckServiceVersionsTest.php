@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use App\Models\ServiceConnection;
+use Illuminate\Http\Client\Request;
 use Illuminate\Support\Facades\Http;
 
 beforeEach(function (): void {
@@ -67,4 +68,33 @@ test('strips v prefix from tag name', function (): void {
     $this->artisan('services:check-versions')->assertSuccessful();
 
     expect($sonarr->fresh()->latest_version)->toBe('1.2.3');
+});
+
+test('attaches Authorization header when github token is configured', function (): void {
+    config()->set('services.github.token', 'fake-token');
+
+    ServiceConnection::factory()->sonarr()->create();
+
+    Http::fake([
+        'api.github.com/*' => Http::response(['tag_name' => 'v1.2.3']),
+    ]);
+
+    $this->artisan('services:check-versions')->assertSuccessful();
+
+    Http::assertSent(fn (Request $request): bool => $request->hasHeader('Authorization', 'Bearer fake-token')
+        && $request->hasHeader('X-GitHub-Api-Version', '2022-11-28'));
+});
+
+test('omits Authorization header when github token is empty', function (): void {
+    config()->set('services.github.token');
+
+    ServiceConnection::factory()->sonarr()->create();
+
+    Http::fake([
+        'api.github.com/*' => Http::response(['tag_name' => 'v1.2.3']),
+    ]);
+
+    $this->artisan('services:check-versions')->assertSuccessful();
+
+    Http::assertSent(fn (Request $request): bool => ! $request->hasHeader('Authorization'));
 });

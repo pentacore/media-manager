@@ -19,12 +19,21 @@ class GitHubReleaseClient
      */
     public function latestRelease(string $repo): ?string
     {
+        $headers = [
+            'Accept' => 'application/vnd.github+json',
+            'User-Agent' => 'MediaManager',
+            'X-GitHub-Api-Version' => '2022-11-28',
+        ];
+
+        $token = config('services.github.token');
+
+        if (is_string($token) && $token !== '') {
+            $headers['Authorization'] = 'Bearer '.$token;
+        }
+
         try {
             $response = Http::baseUrl(self::BASE_URL)
-                ->withHeaders([
-                    'Accept' => 'application/vnd.github+json',
-                    'User-Agent' => 'MediaManager',
-                ])
+                ->withHeaders($headers)
                 ->timeout(10)
                 ->connectTimeout(3)
                 ->retry(2, 500, throw: false)
