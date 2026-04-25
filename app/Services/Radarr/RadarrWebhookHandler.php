@@ -4,15 +4,19 @@ declare(strict_types=1);
 
 namespace App\Services\Radarr;
 
-use App\Models\ActivityLog;
 use App\Models\WebhookEvent;
 use App\Services\Actions\ActionOrchestrator;
-use App\Services\Webhook\WebhookHandler;
+use App\Services\Webhook\AbstractWebhookHandler;
 use Illuminate\Support\Facades\Log;
 
-class RadarrWebhookHandler implements WebhookHandler
+class RadarrWebhookHandler extends AbstractWebhookHandler
 {
     public function __construct(private readonly ActionOrchestrator $actionOrchestrator) {}
+
+    protected function serviceSlug(): string
+    {
+        return 'radarr';
+    }
 
     public function handle(WebhookEvent $webhookEvent): void
     {
@@ -44,18 +48,15 @@ class RadarrWebhookHandler implements WebhookHandler
      */
     private function handleTest(WebhookEvent $webhookEvent, array $payload): void
     {
-        ActivityLog::create([
-            'user_id' => null,
-            'service_connection_id' => $webhookEvent->service_connection_id,
-            'action' => 'webhook.radarr.test',
-            'subject_type' => null,
-            'subject_id' => null,
-            'description' => 'Radarr webhook test received.',
-            'metadata' => [
+        $this->logActivity(
+            $webhookEvent,
+            'test',
+            'Radarr webhook test received.',
+            metadata: [
                 'instance_name' => $payload['instanceName'] ?? null,
                 'application_url' => $payload['applicationUrl'] ?? null,
             ],
-        ]);
+        );
     }
 
     /**
@@ -65,19 +66,17 @@ class RadarrWebhookHandler implements WebhookHandler
     {
         $movieTitle = $payload['movie']['title'] ?? 'Unknown movie';
 
-        ActivityLog::create([
-            'user_id' => null,
-            'service_connection_id' => $webhookEvent->service_connection_id,
-            'action' => 'webhook.radarr.grab',
-            'subject_type' => null,
-            'subject_id' => $payload['movie']['id'] ?? null,
-            'description' => sprintf('Radarr grabbed "%s".', $movieTitle),
-            'metadata' => [
+        $this->logActivity(
+            $webhookEvent,
+            'grab',
+            sprintf('Radarr grabbed "%s".', $movieTitle),
+            metadata: [
                 'movie_id' => $payload['movie']['id'] ?? null,
                 'tmdb_id' => $payload['movie']['tmdbId'] ?? null,
                 'release' => $payload['release'] ?? null,
             ],
-        ]);
+            subjectId: $payload['movie']['id'] ?? null,
+        );
     }
 
     /**
@@ -87,20 +86,18 @@ class RadarrWebhookHandler implements WebhookHandler
     {
         $movieTitle = $payload['movie']['title'] ?? 'Unknown movie';
 
-        ActivityLog::create([
-            'user_id' => null,
-            'service_connection_id' => $webhookEvent->service_connection_id,
-            'action' => 'webhook.radarr.download',
-            'subject_type' => null,
-            'subject_id' => $payload['movie']['id'] ?? null,
-            'description' => sprintf('Radarr imported "%s".', $movieTitle),
-            'metadata' => [
+        $this->logActivity(
+            $webhookEvent,
+            'download',
+            sprintf('Radarr imported "%s".', $movieTitle),
+            metadata: [
                 'movie_id' => $payload['movie']['id'] ?? null,
                 'tmdb_id' => $payload['movie']['tmdbId'] ?? null,
                 'movie_file' => $payload['movieFile'] ?? null,
                 'is_upgrade' => $payload['isUpgrade'] ?? null,
             ],
-        ]);
+            subjectId: $payload['movie']['id'] ?? null,
+        );
 
         $this->actionOrchestrator->dispatch(
             type: 'emby_library_scan',
@@ -121,19 +118,17 @@ class RadarrWebhookHandler implements WebhookHandler
     {
         $movieTitle = $payload['movie']['title'] ?? 'Unknown movie';
 
-        ActivityLog::create([
-            'user_id' => null,
-            'service_connection_id' => $webhookEvent->service_connection_id,
-            'action' => 'webhook.radarr.rename',
-            'subject_type' => null,
-            'subject_id' => $payload['movie']['id'] ?? null,
-            'description' => sprintf('Radarr renamed files for "%s".', $movieTitle),
-            'metadata' => [
+        $this->logActivity(
+            $webhookEvent,
+            'rename',
+            sprintf('Radarr renamed files for "%s".', $movieTitle),
+            metadata: [
                 'movie_id' => $payload['movie']['id'] ?? null,
                 'tmdb_id' => $payload['movie']['tmdbId'] ?? null,
                 'renamed_movie_files' => $payload['renamedMovieFiles'] ?? null,
             ],
-        ]);
+            subjectId: $payload['movie']['id'] ?? null,
+        );
     }
 
     /**
@@ -143,19 +138,17 @@ class RadarrWebhookHandler implements WebhookHandler
     {
         $movieTitle = $payload['movie']['title'] ?? 'Unknown movie';
 
-        ActivityLog::create([
-            'user_id' => null,
-            'service_connection_id' => $webhookEvent->service_connection_id,
-            'action' => 'webhook.radarr.movie_added',
-            'subject_type' => null,
-            'subject_id' => $payload['movie']['id'] ?? null,
-            'description' => sprintf('Radarr added movie "%s".', $movieTitle),
-            'metadata' => [
+        $this->logActivity(
+            $webhookEvent,
+            'movie_added',
+            sprintf('Radarr added movie "%s".', $movieTitle),
+            metadata: [
                 'movie_id' => $payload['movie']['id'] ?? null,
                 'tmdb_id' => $payload['movie']['tmdbId'] ?? null,
                 'folder_path' => $payload['movie']['folderPath'] ?? null,
             ],
-        ]);
+            subjectId: $payload['movie']['id'] ?? null,
+        );
     }
 
     /**
@@ -165,19 +158,17 @@ class RadarrWebhookHandler implements WebhookHandler
     {
         $movieTitle = $payload['movie']['title'] ?? 'Unknown movie';
 
-        ActivityLog::create([
-            'user_id' => null,
-            'service_connection_id' => $webhookEvent->service_connection_id,
-            'action' => 'webhook.radarr.movie_deleted',
-            'subject_type' => null,
-            'subject_id' => $payload['movie']['id'] ?? null,
-            'description' => sprintf('Radarr deleted movie "%s".', $movieTitle),
-            'metadata' => [
+        $this->logActivity(
+            $webhookEvent,
+            'movie_deleted',
+            sprintf('Radarr deleted movie "%s".', $movieTitle),
+            metadata: [
                 'movie_id' => $payload['movie']['id'] ?? null,
                 'tmdb_id' => $payload['movie']['tmdbId'] ?? null,
                 'deleted_files' => $payload['deletedFiles'] ?? null,
             ],
-        ]);
+            subjectId: $payload['movie']['id'] ?? null,
+        );
 
         $this->actionOrchestrator->dispatch(
             type: 'emby_library_scan',
@@ -198,20 +189,18 @@ class RadarrWebhookHandler implements WebhookHandler
     {
         $movieTitle = $payload['movie']['title'] ?? 'Unknown movie';
 
-        ActivityLog::create([
-            'user_id' => null,
-            'service_connection_id' => $webhookEvent->service_connection_id,
-            'action' => 'webhook.radarr.movie_file_deleted',
-            'subject_type' => null,
-            'subject_id' => $payload['movie']['id'] ?? null,
-            'description' => sprintf('Radarr deleted a movie file for "%s".', $movieTitle),
-            'metadata' => [
+        $this->logActivity(
+            $webhookEvent,
+            'movie_file_deleted',
+            sprintf('Radarr deleted a movie file for "%s".', $movieTitle),
+            metadata: [
                 'movie_id' => $payload['movie']['id'] ?? null,
                 'tmdb_id' => $payload['movie']['tmdbId'] ?? null,
                 'movie_file' => $payload['movieFile'] ?? null,
                 'delete_reason' => $payload['deleteReason'] ?? null,
             ],
-        ]);
+            subjectId: $payload['movie']['id'] ?? null,
+        );
     }
 
     /**
@@ -221,19 +210,16 @@ class RadarrWebhookHandler implements WebhookHandler
     {
         $message = (string) ($payload['message'] ?? 'Unknown health event');
 
-        ActivityLog::create([
-            'user_id' => null,
-            'service_connection_id' => $webhookEvent->service_connection_id,
-            'action' => 'webhook.radarr.'.$kind,
-            'subject_type' => null,
-            'subject_id' => null,
-            'description' => $message,
-            'metadata' => [
+        $this->logActivity(
+            $webhookEvent,
+            $kind,
+            $message,
+            metadata: [
                 'level' => $payload['level'] ?? null,
                 'type' => $payload['type'] ?? null,
                 'wiki_url' => $payload['wikiUrl'] ?? null,
             ],
-        ]);
+        );
     }
 
     /**
@@ -244,22 +230,19 @@ class RadarrWebhookHandler implements WebhookHandler
         $previousVersion = $payload['previousVersion'] ?? null;
         $newVersion = $payload['newVersion'] ?? null;
 
-        ActivityLog::create([
-            'user_id' => null,
-            'service_connection_id' => $webhookEvent->service_connection_id,
-            'action' => 'webhook.radarr.updated',
-            'subject_type' => null,
-            'subject_id' => null,
-            'description' => sprintf(
+        $this->logActivity(
+            $webhookEvent,
+            'updated',
+            sprintf(
                 'Radarr updated from %s to %s.',
                 $previousVersion ?? 'unknown',
                 $newVersion ?? 'unknown',
             ),
-            'metadata' => [
+            metadata: [
                 'previous_version' => $previousVersion,
                 'new_version' => $newVersion,
                 'message' => $payload['message'] ?? null,
             ],
-        ]);
+        );
     }
 }

@@ -4,15 +4,19 @@ declare(strict_types=1);
 
 namespace App\Services\Seerr;
 
-use App\Models\ActivityLog;
 use App\Models\WebhookEvent;
 use App\Services\Actions\ActionOrchestrator;
-use App\Services\Webhook\WebhookHandler;
+use App\Services\Webhook\AbstractWebhookHandler;
 use Illuminate\Support\Facades\Log;
 
-class SeerrWebhookHandler implements WebhookHandler
+class SeerrWebhookHandler extends AbstractWebhookHandler
 {
     public function __construct(private readonly ActionOrchestrator $actionOrchestrator) {}
+
+    protected function serviceSlug(): string
+    {
+        return 'seerr';
+    }
 
     public function handle(WebhookEvent $webhookEvent): void
     {
@@ -45,15 +49,12 @@ class SeerrWebhookHandler implements WebhookHandler
      */
     private function handleTest(WebhookEvent $webhookEvent, array $payload): void
     {
-        ActivityLog::create([
-            'user_id' => null,
-            'service_connection_id' => $webhookEvent->service_connection_id,
-            'action' => 'webhook.seerr.test',
-            'subject_type' => null,
-            'subject_id' => null,
-            'description' => (string) ($payload['message'] ?? 'Seerr test notification received.'),
-            'metadata' => ['subject' => $payload['subject'] ?? null],
-        ]);
+        $this->logActivity(
+            $webhookEvent,
+            'test',
+            (string) ($payload['message'] ?? 'Seerr test notification received.'),
+            metadata: ['subject' => $payload['subject'] ?? null],
+        );
     }
 
     /**
@@ -68,14 +69,11 @@ class SeerrWebhookHandler implements WebhookHandler
             ? sprintf('%s: "%s" (by %s)', $verb, $subject, $username)
             : sprintf('%s: "%s"', $verb, $subject);
 
-        ActivityLog::create([
-            'user_id' => null,
-            'service_connection_id' => $webhookEvent->service_connection_id,
-            'action' => 'webhook.seerr.'.$action,
-            'subject_type' => null,
-            'subject_id' => isset($payload['request']['request_id']) ? (int) $payload['request']['request_id'] : null,
-            'description' => $description,
-            'metadata' => [
+        $this->logActivity(
+            $webhookEvent,
+            $action,
+            $description,
+            metadata: [
                 'subject' => $subject,
                 'media_type' => $payload['media']['media_type'] ?? null,
                 'tmdb_id' => $payload['media']['tmdbId'] ?? null,
@@ -84,7 +82,8 @@ class SeerrWebhookHandler implements WebhookHandler
                 'requester' => $username,
                 'message' => $payload['message'] ?? null,
             ],
-        ]);
+            subjectId: isset($payload['request']['request_id']) ? (int) $payload['request']['request_id'] : null,
+        );
     }
 
     /**
@@ -116,21 +115,18 @@ class SeerrWebhookHandler implements WebhookHandler
         $subject = (string) ($payload['subject'] ?? 'Unknown');
         $reporter = $payload['request']['requestedBy_username'] ?? null;
 
-        ActivityLog::create([
-            'user_id' => null,
-            'service_connection_id' => $webhookEvent->service_connection_id,
-            'action' => 'webhook.seerr.'.$action,
-            'subject_type' => null,
-            'subject_id' => null,
-            'description' => $reporter !== null
+        $this->logActivity(
+            $webhookEvent,
+            $action,
+            $reporter !== null
                 ? sprintf('%s on "%s" (by %s)', $verb, $subject, $reporter)
                 : sprintf('%s on "%s"', $verb, $subject),
-            'metadata' => [
+            metadata: [
                 'subject' => $subject,
                 'issue' => $payload['issue'] ?? null,
                 'comment' => $payload['comment'] ?? null,
                 'reporter' => $reporter,
             ],
-        ]);
+        );
     }
 }

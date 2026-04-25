@@ -9,14 +9,19 @@ use App\Models\EmbyActivity;
 use App\Models\EmbyUserLink;
 use App\Models\WebhookEvent;
 use App\Services\Actions\ActionOrchestrator;
-use App\Services\Webhook\WebhookHandler;
+use App\Services\Webhook\AbstractWebhookHandler;
 use Illuminate\Support\Facades\Log;
 
-class EmbyWebhookHandler implements WebhookHandler
+class EmbyWebhookHandler extends AbstractWebhookHandler
 {
     private const array TERMINAL_ACTIONS = ['stopped', 'finished'];
 
     public function __construct(private readonly ActionOrchestrator $actionOrchestrator) {}
+
+    protected function serviceSlug(): string
+    {
+        return 'emby';
+    }
 
     public function handle(WebhookEvent $webhookEvent): void
     {
@@ -122,7 +127,7 @@ class EmbyWebhookHandler implements WebhookHandler
     }
 
     /**
-     * @param array<string, mixed> $payload
+     * @param  array<string, mixed>  $payload
      */
     private function mapAction(?string $embyEvent, array $payload): ?string
     {
