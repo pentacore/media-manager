@@ -3,10 +3,10 @@ import { Head, router } from '@inertiajs/vue3';
 import { Shield } from 'lucide-vue-next';
 import { ref, watch } from 'vue';
 import ActionTypeConfigController from '@/actions/App/Http/Controllers/Actions/ActionTypeConfigController';
-import type { ActionTypeConfigResource } from '@/typefinder/resources/ActionTypeConfigResource';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Checkbox } from '@/components/ui/checkbox';
 import { dashboard } from '@/routes';
+import type { ActionTypeConfigResource } from '@/typefinder/resources/ActionTypeConfigResource';
 
 type RuleRow = ActionTypeConfigResource;
 

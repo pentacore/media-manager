@@ -24,6 +24,11 @@ class ActionRequestCreated implements ShouldBroadcast
         return new PrivateChannel('dashboard');
     }
 
+    public function broadcastAs(): string
+    {
+        return 'ActionRequestCreated';
+    }
+
     /**
      * @return array<string, mixed>
      */

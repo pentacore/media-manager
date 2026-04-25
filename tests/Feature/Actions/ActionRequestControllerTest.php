@@ -36,6 +36,29 @@ test('members can list action requests', function (): void {
         );
 });
 
+test('members see sanitized action results in request listings', function (): void {
+    $member = User::factory()->member()->create();
+    ActionRequest::factory()->create([
+        'status' => ActionRequestStatus::Failed,
+        'result' => [
+            'success' => false,
+            'reason' => 'execution_failed',
+            'message' => 'LEAKED-PROVIDER-SECRET',
+            'exception' => RuntimeException::class,
+        ],
+    ]);
+
+    $this->actingAs($member)
+        ->get(route('actions.requests.index'))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->where('requests.data.0.result', [
+                'success' => false,
+                'reason' => 'execution_failed',
+            ])
+        );
+});
+
 test('status filter narrows results', function (): void {
     $member = User::factory()->member()->create();
     ActionRequest::factory()->count(2)->create(['status' => ActionRequestStatus::Pending]);

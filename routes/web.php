@@ -20,7 +20,9 @@ Route::middleware(['auth', 'verified', 'password.set'])->group(function (): void
 Route::middleware('guest')->group(function (): void {
     Route::get('auth/authentik', [AuthentikController::class, 'redirect'])->name('auth.authentik');
     Route::get('auth/authentik/callback', [AuthentikController::class, 'callback'])->name('auth.authentik.callback');
-    Route::post('auth/emby', [EmbyAuthController::class, 'store'])->name('auth.emby');
+    Route::post('auth/emby', [EmbyAuthController::class, 'store'])
+        ->middleware('throttle:emby-login')
+        ->name('auth.emby');
 });
 
 Route::get('invite/{user}/accept', [InviteController::class, 'accept'])->name('auth.invite.accept');

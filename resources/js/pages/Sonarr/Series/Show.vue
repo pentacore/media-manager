@@ -200,7 +200,9 @@ function sonarrSeriesUrl(): string | null {
                     </DialogTrigger>
                     <DialogContent>
                         <DialogHeader>
-                            <DialogTitle>Delete {{ series.title }}?</DialogTitle>
+                            <DialogTitle
+                                >Delete {{ series.title }}?</DialogTitle
+                            >
                             <DialogDescription>
                                 This will remove the series from Sonarr. This
                                 action cannot be undone.
@@ -374,7 +376,9 @@ function sonarrSeriesUrl(): string | null {
                                         <ChevronRight
                                             class="size-4 transition-transform"
                                             :class="
-                                                openSeasons[season.season_number]
+                                                openSeasons[
+                                                    season.season_number
+                                                ]
                                                     ? 'rotate-90'
                                                     : ''
                                             "
@@ -410,7 +414,9 @@ function sonarrSeriesUrl(): string | null {
                                         </span>
                                         <span class="flex items-center gap-1">
                                             <HardDrive class="size-4" />
-                                            {{ formatSize(season.size_on_disk) }}
+                                            {{
+                                                formatSize(season.size_on_disk)
+                                            }}
                                         </span>
                                     </div>
                                 </div>

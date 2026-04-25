@@ -1,5 +1,7 @@
 <script setup lang="ts">
 import { Form, Head, Link, useHttp } from '@inertiajs/vue3';
+import { ClipboardCopy, Eye, EyeOff, Plug, RefreshCw } from 'lucide-vue-next';
+import { ref } from 'vue';
 import ServiceConnectionController from '@/actions/App/Http/Controllers/Admin/ServiceConnectionController';
 import InputError from '@/components/InputError.vue';
 import { Button } from '@/components/ui/button';
@@ -19,6 +21,12 @@ import {
     SelectTrigger,
     SelectValue,
 } from '@/components/ui/select';
+import {
+    Tooltip,
+    TooltipContent,
+    TooltipProvider,
+    TooltipTrigger,
+} from '@/components/ui/tooltip';
 
 interface ServiceTypeOption {
     value: string;
@@ -52,15 +60,6 @@ defineOptions({
         ],
     },
 });
-
-import {
-    Tooltip,
-    TooltipContent,
-    TooltipProvider,
-    TooltipTrigger,
-} from '@/components/ui/tooltip';
-import { ClipboardCopy, Eye, EyeOff, Plug, RefreshCw } from 'lucide-vue-next';
-import { ref } from 'vue';
 
 const typeValue =
     typeof props.connection.type === 'string'
@@ -114,8 +113,8 @@ function generateWebhookToken() {
 
 function copyWebhookToken() {
     if (!webhookToken.value) {
-return;
-}
+        return;
+    }
 
     navigator.clipboard.writeText(webhookToken.value);
     copied.value = true;

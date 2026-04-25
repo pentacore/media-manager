@@ -1,13 +1,6 @@
 <script setup lang="ts">
 import { Head, Link, router } from '@inertiajs/vue3';
-import {
-    Calendar,
-    Clock,
-    ExternalLink,
-    Film,
-    HardDrive,
-    Trash2,
-} from 'lucide-vue-next';
+import { Clock, ExternalLink, Film, HardDrive, Trash2 } from 'lucide-vue-next';
 import { ref } from 'vue';
 import MovieController from '@/actions/App/Http/Controllers/Media/MovieController';
 import { Badge } from '@/components/ui/badge';

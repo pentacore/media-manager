@@ -49,7 +49,7 @@ interface UserItem {
     created_at: string;
 }
 
-const props = defineProps<{
+defineProps<{
     users: UserItem[];
     roles: RoleOption[];
 }>();
@@ -82,8 +82,8 @@ function roleLabel(role: UserItem['role']): string {
 
 function authMethod(ssoProvider: string | null): string {
     if (!ssoProvider) {
-return 'Local';
-}
+        return 'Local';
+    }
 
     return ssoProvider.charAt(0).toUpperCase() + ssoProvider.slice(1);
 }

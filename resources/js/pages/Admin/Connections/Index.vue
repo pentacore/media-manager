@@ -10,7 +10,6 @@ import {
     Trash2,
 } from 'lucide-vue-next';
 import ServiceConnectionController from '@/actions/App/Http/Controllers/Admin/ServiceConnectionController';
-import type { ServiceConnectionResource } from '@/typefinder/resources/ServiceConnectionResource';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
@@ -35,6 +34,7 @@ import {
     TooltipProvider,
     TooltipTrigger,
 } from '@/components/ui/tooltip';
+import type { ServiceConnectionResource } from '@/typefinder/resources/ServiceConnectionResource';
 
 type Connection = ServiceConnectionResource;
 

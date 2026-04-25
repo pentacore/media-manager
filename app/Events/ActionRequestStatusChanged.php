@@ -24,6 +24,11 @@ class ActionRequestStatusChanged implements ShouldBroadcast
         return new PrivateChannel('dashboard');
     }
 
+    public function broadcastAs(): string
+    {
+        return 'ActionRequestStatusChanged';
+    }
+
     /**
      * @return array<string, mixed>
      */

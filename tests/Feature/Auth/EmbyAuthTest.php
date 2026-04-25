@@ -4,6 +4,7 @@ use App\Enums\UserRole;
 use App\Models\EmbyUserLink;
 use App\Models\ServiceConnection;
 use App\Models\User;
+use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Support\Facades\Http;
 
 beforeEach(function (): void {
@@ -80,6 +81,39 @@ test('emby login fails with invalid credentials', function (): void {
         'email' => 'bad@example.com',
     ])->assertRedirect(route('login'))
         ->assertSessionHasErrors('username');
+});
+
+test('emby login is rate limited', function (): void {
+    Http::fake([
+        'emby.local:8096/Users/AuthenticateByName' => Http::response([], 401),
+    ]);
+
+    for ($attempt = 1; $attempt <= 5; $attempt++) {
+        $this->post(route('auth.emby'), [
+            'username' => 'RateLimitedUser',
+            'password' => 'wrongpass',
+            'email' => 'rate-limited@example.com',
+        ])->assertRedirect(route('login'));
+    }
+
+    $this->post(route('auth.emby'), [
+        'username' => 'RateLimitedUser',
+        'password' => 'wrongpass',
+        'email' => 'rate-limited@example.com',
+    ])->assertStatus(429);
+});
+
+test('emby login handles connection failures', function (): void {
+    Http::fake(fn (): never => throw new ConnectionException('connection refused'));
+
+    $this->post(route('auth.emby'), [
+        'username' => 'UnavailableUser',
+        'password' => 'embypass',
+        'email' => 'unavailable@example.com',
+    ])->assertRedirect(route('login'))
+        ->assertSessionHasErrors('username');
+
+    $this->assertGuest();
 });
 
 test('emby login fails when no active emby connection exists', function (): void {

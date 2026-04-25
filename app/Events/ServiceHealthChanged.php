@@ -27,6 +27,11 @@ class ServiceHealthChanged implements ShouldBroadcast
         return new PrivateChannel('services');
     }
 
+    public function broadcastAs(): string
+    {
+        return 'ServiceHealthChanged';
+    }
+
     /**
      * @return array<string, mixed>
      */

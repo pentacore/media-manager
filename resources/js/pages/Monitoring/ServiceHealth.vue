@@ -11,7 +11,6 @@ import {
 } from 'lucide-vue-next';
 import { computed, onMounted } from 'vue';
 import ServiceHealthController from '@/actions/App/Http/Controllers/Monitoring/ServiceHealthController';
-import type { ServiceConnectionResource } from '@/typefinder/resources/ServiceConnectionResource';
 import { Badge } from '@/components/ui/badge';
 import {
     Card,
@@ -22,6 +21,7 @@ import {
 } from '@/components/ui/card';
 import { useServiceHealth } from '@/composables/useServiceHealth';
 import { dashboard } from '@/routes';
+import type { ServiceConnectionResource } from '@/typefinder/resources/ServiceConnectionResource';
 
 interface DiskSpace {
     path: string | null;

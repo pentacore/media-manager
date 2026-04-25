@@ -1,6 +1,16 @@
 <script setup lang="ts">
 import { Head, router, usePage } from '@inertiajs/vue3';
-import { Check, ChevronLeft, ChevronRight, Database, ExternalLink, RefreshCw, Trash2, Tv, X } from 'lucide-vue-next';
+import {
+    Check,
+    ChevronLeft,
+    ChevronRight,
+    Database,
+    ExternalLink,
+    RefreshCw,
+    Trash2,
+    Tv,
+    X,
+} from 'lucide-vue-next';
 import { computed } from 'vue';
 import RequestController from '@/actions/App/Http/Controllers/Media/RequestController';
 import { Badge } from '@/components/ui/badge';
@@ -264,10 +274,7 @@ const rangeText = computed(() => {
                 </TableHeader>
                 <TableBody>
                     <template v-if="requests">
-                        <TableRow
-                            v-for="req in requests.data"
-                            :key="req.id"
-                        >
+                        <TableRow v-for="req in requests.data" :key="req.id">
                             <TableCell>
                                 <Badge :variant="statusVariant(req.status)">{{
                                     statusLabel(req.status)
@@ -324,9 +331,7 @@ const rangeText = computed(() => {
                                                     variant="ghost"
                                                     size="icon"
                                                 >
-                                                    <Database
-                                                        class="size-4"
-                                                    />
+                                                    <Database class="size-4" />
                                                     <span class="sr-only"
                                                         >Open on TMDB</span
                                                     >
@@ -439,28 +444,14 @@ const rangeText = computed(() => {
                         </TableRow>
                     </template>
                     <template v-else>
-                        <TableRow
-                            v-for="i in 8"
-                            :key="`skeleton-${i}`"
-                        >
-                            <TableCell
-                                ><Skeleton class="h-5 w-16"
-                            /></TableCell>
-                            <TableCell
-                                ><Skeleton class="h-5 w-12"
-                            /></TableCell>
-                            <TableCell
-                                ><Skeleton class="h-5 w-48"
-                            /></TableCell>
-                            <TableCell
-                                ><Skeleton class="h-5 w-24"
-                            /></TableCell>
-                            <TableCell
-                                ><Skeleton class="h-5 w-16"
-                            /></TableCell>
+                        <TableRow v-for="i in 8" :key="`skeleton-${i}`">
+                            <TableCell><Skeleton class="h-5 w-16" /></TableCell>
+                            <TableCell><Skeleton class="h-5 w-12" /></TableCell>
+                            <TableCell><Skeleton class="h-5 w-48" /></TableCell>
+                            <TableCell><Skeleton class="h-5 w-24" /></TableCell>
+                            <TableCell><Skeleton class="h-5 w-16" /></TableCell>
                             <TableCell class="text-right"
-                                ><Skeleton
-                                    class="inline-block h-8 w-32"
+                                ><Skeleton class="inline-block h-8 w-32"
                             /></TableCell>
                         </TableRow>
                     </template>

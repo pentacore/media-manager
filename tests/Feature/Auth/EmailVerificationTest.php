@@ -18,6 +18,14 @@ test('email verification screen can be rendered', function (): void {
     $response->assertOk();
 });
 
+test('unverified users are redirected away from verified routes', function (): void {
+    $user = User::factory()->unverified()->create();
+
+    $this->actingAs($user)
+        ->get(route('dashboard'))
+        ->assertRedirect(route('verification.notice', absolute: false));
+});
+
 test('email can be verified', function (): void {
     $user = User::factory()->unverified()->create();
 

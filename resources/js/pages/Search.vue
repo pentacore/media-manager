@@ -275,7 +275,8 @@ function radarrMovieUrl(slug: string | null): string | null {
                                                     </a>
                                                 </TooltipTrigger>
                                                 <TooltipContent
-                                                    >Open in Sonarr</TooltipContent
+                                                    >Open in
+                                                    Sonarr</TooltipContent
                                                 >
                                             </Tooltip>
                                         </div>
@@ -414,7 +415,8 @@ function radarrMovieUrl(slug: string | null): string | null {
                                                     </a>
                                                 </TooltipTrigger>
                                                 <TooltipContent
-                                                    >Open in Radarr</TooltipContent
+                                                    >Open in
+                                                    Radarr</TooltipContent
                                                 >
                                             </Tooltip>
                                         </div>

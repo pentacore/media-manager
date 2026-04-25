@@ -1,7 +1,9 @@
 <?php
 
+use App\Jobs\ProcessWebhookEvent;
 use App\Models\ServiceConnection;
 use App\Models\WebhookEvent;
+use Illuminate\Support\Facades\Queue;
 
 test('webhook stores event in database', function (): void {
     $connection = ServiceConnection::factory()->sonarr()->create([
@@ -59,4 +61,22 @@ test('multiple webhooks create separate events', function (): void {
 
     expect(WebhookEvent::count())->toBe(2);
     expect(WebhookEvent::pluck('event_type')->toArray())->toBe(['Grab', 'Download']);
+});
+
+test('duplicate webhook deliveries are idempotent', function (): void {
+    Queue::fake();
+    $connection = ServiceConnection::factory()->sonarr()->create([
+        'webhook_token' => 'test-token',
+    ]);
+    $headers = ['X-Webhook-Token' => 'test-token'];
+    $payload = [
+        'eventType' => 'Download',
+        'series' => ['id' => 123, 'title' => 'Breaking Bad'],
+    ];
+
+    $this->postJson('/api/webhooks/sonarr/'.$connection->id, $payload, $headers)->assertOk();
+    $this->postJson('/api/webhooks/sonarr/'.$connection->id, $payload, $headers)->assertOk();
+
+    expect(WebhookEvent::count())->toBe(1);
+    Queue::assertPushed(ProcessWebhookEvent::class, 1);
 });

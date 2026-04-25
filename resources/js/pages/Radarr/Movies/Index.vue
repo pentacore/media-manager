@@ -180,7 +180,9 @@ function monitoredCount(): number {
                                         >
                                     </Tooltip>
                                     <Link
-                                        :href="MovieController.show.url(movie.id)"
+                                        :href="
+                                            MovieController.show.url(movie.id)
+                                        "
                                     >
                                         <Button variant="ghost" size="sm"
                                             >View</Button

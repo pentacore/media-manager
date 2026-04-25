@@ -12,6 +12,7 @@ use App\Models\EmbyUserLink;
 use App\Models\ServiceConnection;
 use App\Models\User;
 use Illuminate\Database\QueryException;
+use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
@@ -29,12 +30,20 @@ class EmbyAuthController extends Controller
             return to_route('login')->withErrors(['username' => __('Emby authentication is not available.')]);
         }
 
-        $response = Http::withHeaders([
-            'X-Emby-Token' => $connection->api_key,
-        ])->post($connection->url.'/Users/AuthenticateByName', [
-            'Username' => $embyLoginRequest->input('username'),
-            'Pw' => $embyLoginRequest->input('password'),
-        ]);
+        try {
+            $response = Http::baseUrl($connection->url)
+                ->withHeaders([
+                    'X-Emby-Token' => $connection->api_key,
+                ])
+                ->timeout(10)
+                ->connectTimeout(3)
+                ->post('/Users/AuthenticateByName', [
+                    'Username' => $embyLoginRequest->input('username'),
+                    'Pw' => $embyLoginRequest->input('password'),
+                ]);
+        } catch (ConnectionException) {
+            return to_route('login')->withErrors(['username' => __('Emby authentication is temporarily unavailable.')]);
+        }
 
         if (! $response->successful()) {
             return to_route('login')->withErrors(['username' => __('Invalid Emby credentials.')]);

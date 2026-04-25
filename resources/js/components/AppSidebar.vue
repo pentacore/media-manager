@@ -23,11 +23,14 @@ import ServiceConnectionController from '@/actions/App/Http/Controllers/Admin/Se
 import UserController from '@/actions/App/Http/Controllers/Admin/UserController';
 import AIChatController from '@/actions/App/Http/Controllers/AI/ChatController';
 import NowPlayingController from '@/actions/App/Http/Controllers/Emby/NowPlayingController';
+import UserLinkController from '@/actions/App/Http/Controllers/Emby/UserLinkController';
 import WatchHistoryController from '@/actions/App/Http/Controllers/Emby/WatchHistoryController';
 import MovieController from '@/actions/App/Http/Controllers/Media/MovieController';
+import RequestController from '@/actions/App/Http/Controllers/Media/RequestController';
+import SearchController from '@/actions/App/Http/Controllers/Media/SearchController';
 import SeriesController from '@/actions/App/Http/Controllers/Media/SeriesController';
+import ServiceHealthController from '@/actions/App/Http/Controllers/Monitoring/ServiceHealthController';
 import AppLogo from '@/components/AppLogo.vue';
-import NavFooter from '@/components/NavFooter.vue';
 import NavMain from '@/components/NavMain.vue';
 import NavUser from '@/components/NavUser.vue';
 import {
@@ -40,10 +43,6 @@ import {
     SidebarMenuItem,
 } from '@/components/ui/sidebar';
 import { dashboard } from '@/routes';
-import RequestController from '@/actions/App/Http/Controllers/Media/RequestController';
-import SearchController from '@/actions/App/Http/Controllers/Media/SearchController';
-import ServiceHealthController from '@/actions/App/Http/Controllers/Monitoring/ServiceHealthController';
-import UserLinkController from '@/actions/App/Http/Controllers/Emby/UserLinkController';
 import type { NavItem } from '@/types';
 
 const page = usePage();
@@ -52,8 +51,8 @@ const isAdmin = computed(() => {
     const role = page.props.auth.user?.role;
 
     if (!role) {
-return false;
-}
+        return false;
+    }
 
     const value = typeof role === 'string' ? role : role.value;
 

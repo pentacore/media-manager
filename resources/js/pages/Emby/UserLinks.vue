@@ -3,7 +3,6 @@ import { Form, Head, router, usePage } from '@inertiajs/vue3';
 import { Link2, Trash2 } from 'lucide-vue-next';
 import { computed } from 'vue';
 import UserLinkController from '@/actions/App/Http/Controllers/Emby/UserLinkController';
-import type { EmbyUserLinkResource } from '@/typefinder/resources/EmbyUserLinkResource';
 import InputError from '@/components/InputError.vue';
 import PasswordInput from '@/components/PasswordInput.vue';
 import { Badge } from '@/components/ui/badge';
@@ -26,6 +25,7 @@ import {
     TableRow,
 } from '@/components/ui/table';
 import { dashboard } from '@/routes';
+import type { EmbyUserLinkResource } from '@/typefinder/resources/EmbyUserLinkResource';
 
 type UserLink = EmbyUserLinkResource;
 

@@ -4,10 +4,10 @@ declare(strict_types=1);
 
 namespace App\Http\Resources;
 
-use Override;
 use App\Models\ActionRequest;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
+use Override;
 use Pentacore\Typefinder\Attributes\TypefinderResource;
 
 /**
@@ -45,11 +45,26 @@ class ActionRequestResource extends JsonResource
             'status' => $this->status->value,
             'requires_approval' => $this->requires_approval,
             'payload' => $this->payload,
-            'result' => $this->result,
+            'result' => $request->user()?->isAdmin() ? $this->result : $this->safeResult(),
             'approved_by' => $this->whenLoaded('approvedByUser', fn () => $this->approvedByUser?->name),
             'webhook_source' => $this->whenLoaded('webhookEvent', fn () => $this->webhookEvent?->serviceConnection?->name),
             'created_at' => $this->created_at?->toISOString(),
             'updated_at' => $this->updated_at?->toISOString(),
+        ];
+    }
+
+    /**
+     * @return array<string, mixed>|null
+     */
+    private function safeResult(): ?array
+    {
+        if ($this->result === null) {
+            return null;
+        }
+
+        return [
+            'success' => $this->result['success'] ?? null,
+            'reason' => $this->result['reason'] ?? null,
         ];
     }
 }

@@ -229,7 +229,9 @@ function sonarrSeriesUrl(slug: string | null): string | null {
                                         >
                                     </Tooltip>
                                     <Link
-                                        :href="SeriesController.show.url(item.id)"
+                                        :href="
+                                            SeriesController.show.url(item.id)
+                                        "
                                     >
                                         <Button variant="ghost" size="sm"
                                             >View</Button

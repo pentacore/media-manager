@@ -24,6 +24,7 @@ test('ActionRequestCreated broadcasts on dashboard channel with correct payload'
 
     expect($event)->toBeInstanceOf(ShouldBroadcast::class);
     expect($event->broadcastOn())->toEqual(new PrivateChannel('dashboard'));
+    expect($event->broadcastAs())->toBe('ActionRequestCreated');
 
     $payload = $event->broadcastWith();
     expect($payload)->toHaveKeys(['id', 'type', 'source_service', 'target_service', 'status', 'requires_approval', 'created_at']);
@@ -37,6 +38,7 @@ test('ActionRequestStatusChanged broadcasts on dashboard channel with correct pa
 
     expect($event)->toBeInstanceOf(ShouldBroadcast::class);
     expect($event->broadcastOn())->toEqual(new PrivateChannel('dashboard'));
+    expect($event->broadcastAs())->toBe('ActionRequestStatusChanged');
 
     $payload = $event->broadcastWith();
     expect($payload)->toHaveKeys(['id', 'status', 'result', 'updated_at']);
@@ -87,6 +89,7 @@ test('ServiceHealthChanged broadcasts on services channel with status', function
 
     expect($event)->toBeInstanceOf(ShouldBroadcast::class);
     expect($event->broadcastOn())->toEqual(new PrivateChannel('services'));
+    expect($event->broadcastAs())->toBe('ServiceHealthChanged');
 
     $payload = $event->broadcastWith();
     expect($payload)->toHaveKeys(['id', 'name', 'type', 'is_active', 'status', 'last_seen_at']);
@@ -101,6 +104,7 @@ test('EmbyPlaybackUpdated broadcasts on emby activity channel', function (): voi
 
     expect($event)->toBeInstanceOf(ShouldBroadcast::class);
     expect($event->broadcastOn())->toEqual(new PrivateChannel('emby.activity'));
+    expect($event->broadcastAs())->toBe('EmbyPlaybackUpdated');
 
     $payload = $event->broadcastWith();
     expect($payload)->toHaveKeys(['id', 'emby_user_link_id', 'media_type', 'media_title', 'series_title', 'action', 'play_position', 'duration_ticks', 'emby_username', 'updated_at']);
@@ -116,6 +120,7 @@ test('DashboardStatsUpdated broadcasts immediately on dashboard channel', functi
 
     expect($event)->toBeInstanceOf(ShouldBroadcastNow::class);
     expect($event->broadcastOn())->toEqual(new PrivateChannel('dashboard'));
+    expect($event->broadcastAs())->toBe('DashboardStatsUpdated');
 
     $payload = $event->broadcastWith();
     expect($payload)->toHaveKeys(['activeServices', 'totalServices', 'recentWebhooks', 'pendingActions', 'updatedAt']);

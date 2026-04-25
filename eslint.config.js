@@ -86,6 +86,7 @@ export default defineConfigWithVueTs(
             'resources/js/actions/**',
             'resources/js/components/ui/*',
             'resources/js/routes/**',
+            'resources/js/typefinder/**',
             'resources/js/wayfinder/**',
         ],
     },

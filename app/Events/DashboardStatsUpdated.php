@@ -28,6 +28,11 @@ class DashboardStatsUpdated implements ShouldBroadcastNow
         return new PrivateChannel('dashboard');
     }
 
+    public function broadcastAs(): string
+    {
+        return 'DashboardStatsUpdated';
+    }
+
     /**
      * @return array<string, mixed>
      */

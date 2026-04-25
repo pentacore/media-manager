@@ -1,5 +1,5 @@
-import { ref, onUnmounted  } from 'vue';
-import type {Ref} from 'vue';
+import { ref, onUnmounted } from 'vue';
+import type { Ref } from 'vue';
 import { useWebSocket } from '@/composables/useWebSocket';
 
 export interface DashboardStats {

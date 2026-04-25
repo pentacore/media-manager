@@ -6,6 +6,7 @@ use App\Ai\Agents\CommandAgent;
 use App\Ai\Agents\MediaAdvisorAgent;
 use App\Models\User;
 use Illuminate\Foundation\Http\Middleware\PreventRequestForgery;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
 beforeEach(function (): void {
@@ -59,6 +60,30 @@ test('admin can send a message to CommandAgent', function (): void {
 
     expect($response->json('text'))->toBe('Action queued.');
     expect($response->json('agent'))->toBe('command');
+});
+
+test('admin cannot continue another users AI conversation', function (): void {
+    CommandAgent::fake(['Action queued.']);
+    $owner = User::factory()->admin()->create();
+    $admin = User::factory()->admin()->create();
+
+    DB::table('agent_conversations')->insert([
+        'id' => '018f7cf5-3b26-72c8-93e5-6dc5b44f2472',
+        'user_id' => $owner->id,
+        'title' => 'Private conversation',
+        'created_at' => now(),
+        'updated_at' => now(),
+    ]);
+
+    $this->actingAs($admin)
+        ->postJson(route('ai.chat.send'), [
+            'message' => 'Continue this',
+            'agent' => 'command',
+            'conversation_id' => '018f7cf5-3b26-72c8-93e5-6dc5b44f2472',
+        ])
+        ->assertNotFound();
+
+    CommandAgent::assertNeverPrompted();
 });
 
 test('admin can send a message to MediaAdvisorAgent', function (): void {

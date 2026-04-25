@@ -13,6 +13,7 @@ use App\Services\Radarr\RadarrActions;
 use App\Services\Seerr\SeerrActions;
 use App\Services\Sonarr\SonarrActions;
 use Illuminate\Bus\Queueable;
+use Illuminate\Contracts\Queue\ShouldBeUnique;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Http\Client\ConnectionException;
@@ -22,7 +23,7 @@ use Illuminate\Queue\SerializesModels;
 use Illuminate\Support\Facades\Log;
 use Throwable;
 
-class ExecuteActionRequest implements ShouldQueue
+class ExecuteActionRequest implements ShouldBeUnique, ShouldQueue
 {
     use Dispatchable;
     use InteractsWithQueue;
@@ -37,20 +38,9 @@ class ExecuteActionRequest implements ShouldQueue
 
     public function handle(): void
     {
-        $this->actionRequest->refresh();
-
-        // Guard: only run when Approved (either auto or post-approval).
-        if ($this->actionRequest->status !== ActionRequestStatus::Approved) {
-            Log::info('ExecuteActionRequest: skipping — not approved', [
-                'action_request_id' => $this->actionRequest->id,
-                'status' => $this->actionRequest->status->value,
-            ]);
-
+        if (! $this->claimForExecution()) {
             return;
         }
-
-        $this->actionRequest->update(['status' => ActionRequestStatus::Executing]);
-        event(new ActionRequestStatusChanged($this->actionRequest));
 
         $executor = $this->resolveExecutor($this->actionRequest->type);
 
@@ -98,6 +88,11 @@ class ExecuteActionRequest implements ShouldQueue
         event(new ActionRequestStatusChanged($this->actionRequest));
     }
 
+    public function uniqueId(): string
+    {
+        return (string) $this->actionRequest->id;
+    }
+
     public function failed(?Throwable $throwable): void
     {
         // Called by Laravel when retries are exhausted via a rethrown exception.
@@ -123,6 +118,33 @@ class ExecuteActionRequest implements ShouldQueue
             'result' => ['success' => false, ...$result],
         ]);
         event(new ActionRequestStatusChanged($this->actionRequest));
+    }
+
+    private function claimForExecution(): bool
+    {
+        $claimed = ActionRequest::query()
+            ->whereKey($this->actionRequest->id)
+            ->where('status', ActionRequestStatus::Approved->value)
+            ->update(['status' => ActionRequestStatus::Executing]);
+
+        $this->actionRequest->refresh();
+
+        if ($claimed === 1) {
+            event(new ActionRequestStatusChanged($this->actionRequest));
+
+            return true;
+        }
+
+        if ($this->actionRequest->status === ActionRequestStatus::Executing && $this->attempts() > 1) {
+            return true;
+        }
+
+        Log::info('ExecuteActionRequest: skipping — not approved', [
+            'action_request_id' => $this->actionRequest->id,
+            'status' => $this->actionRequest->status->value,
+        ]);
+
+        return false;
     }
 
     private function resolveExecutor(string $type): ?ActionExecutor

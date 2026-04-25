@@ -10,6 +10,7 @@ use App\Http\Controllers\Controller;
 use App\Models\User;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -41,6 +42,10 @@ class ChatController extends Controller
         $agentKey = $validated['agent'] ?? config('mediamanager.ai.default_agent', 'command');
         $conversationId = $validated['conversation_id'] ?? null;
         $user = $request->user();
+
+        if ($conversationId !== null && ! $this->conversationBelongsToUser($conversationId, $user)) {
+            return response()->json(['message' => 'Conversation not found.'], 404);
+        }
 
         try {
             $agent = $this->resolveAgent($agentKey, $user, $conversationId);
@@ -82,5 +87,17 @@ class ChatController extends Controller
         return $conversationId
             ? $agent->continue($conversationId, as: $user)
             : $agent->forUser($user);
+    }
+
+    private function conversationBelongsToUser(string $conversationId, ?User $user): bool
+    {
+        if (! $user instanceof User) {
+            return false;
+        }
+
+        return DB::table('agent_conversations')
+            ->where('id', $conversationId)
+            ->where('user_id', $user->id)
+            ->exists();
     }
 }

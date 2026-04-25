@@ -2,7 +2,6 @@
 import { Head, router } from '@inertiajs/vue3';
 import { History } from 'lucide-vue-next';
 import WatchHistoryController from '@/actions/App/Http/Controllers/Emby/WatchHistoryController';
-import type { EmbyActivityResource } from '@/typefinder/resources/EmbyActivityResource';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
@@ -21,6 +20,7 @@ import {
     TableRow,
 } from '@/components/ui/table';
 import { dashboard } from '@/routes';
+import type { EmbyActivityResource } from '@/typefinder/resources/EmbyActivityResource';
 
 type Activity = EmbyActivityResource;
 

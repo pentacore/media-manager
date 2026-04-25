@@ -2,6 +2,7 @@
 
 use App\Enums\UserRole;
 use App\Models\User;
+use Illuminate\Database\QueryException;
 use Laravel\Socialite\Facades\Socialite;
 use Laravel\Socialite\Two\User as SocialiteUser;
 
@@ -77,6 +78,18 @@ test('authentik callback logs in returning SSO user', function (): void {
 
     $this->assertAuthenticated();
     expect(User::count())->toBe(1);
+});
+
+test('sso provider identities must be unique', function (): void {
+    User::factory()->create([
+        'sso_provider' => 'authentik',
+        'sso_id' => 'duplicate-provider-id',
+    ]);
+
+    expect(fn () => User::factory()->create([
+        'sso_provider' => 'authentik',
+        'sso_id' => 'duplicate-provider-id',
+    ]))->toThrow(QueryException::class);
 });
 
 test('authentik callback handles provider error gracefully', function (): void {

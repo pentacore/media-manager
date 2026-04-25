@@ -17,17 +17,23 @@ class WebhookController extends Controller
     {
         /** @var ServiceConnection $connection */
         $connection = $request->attributes->get('service_connection');
+        $payload = $request->all();
+        $eventType = (string) $request->input('eventType', 'unknown');
 
-        $webhookEvent = WebhookEvent::create([
+        $webhookEvent = WebhookEvent::firstOrCreate([
             'service_connection_id' => $connection->id,
-            'event_type' => $request->input('eventType', 'unknown'),
-            'payload' => $request->all(),
+            'event_type' => $eventType,
+            'payload_hash' => WebhookEvent::payloadHash($payload),
+        ], [
+            'payload' => $payload,
         ]);
 
         $webhookEvent->setRelation('serviceConnection', $connection);
 
-        event(new WebhookReceived($webhookEvent));
-        dispatch(new ProcessWebhookEvent($webhookEvent));
+        if ($webhookEvent->wasRecentlyCreated) {
+            event(new WebhookReceived($webhookEvent));
+            dispatch(new ProcessWebhookEvent($webhookEvent));
+        }
 
         return response()->json(['status' => 'received']);
     }

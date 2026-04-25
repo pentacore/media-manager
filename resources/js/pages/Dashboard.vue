@@ -11,10 +11,10 @@ import {
     CardTitle,
 } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
-import type { ActivityLogResource } from '@/typefinder/resources/ActivityLogResource';
 import { useDashboardStats } from '@/composables/useDashboardStats';
 import { useNotifications } from '@/composables/useNotifications';
 import { dashboard } from '@/routes';
+import type { ActivityLogResource } from '@/typefinder/resources/ActivityLogResource';
 
 type ActivityItem = ActivityLogResource;
 

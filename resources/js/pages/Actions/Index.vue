@@ -3,7 +3,6 @@ import { Head, router, usePage } from '@inertiajs/vue3';
 import { Zap } from 'lucide-vue-next';
 import { computed } from 'vue';
 import ActionRequestController from '@/actions/App/Http/Controllers/Actions/ActionRequestController';
-import type { ActionRequestResource } from '@/typefinder/resources/ActionRequestResource';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
@@ -22,6 +21,7 @@ import {
     TableRow,
 } from '@/components/ui/table';
 import { dashboard } from '@/routes';
+import type { ActionRequestResource } from '@/typefinder/resources/ActionRequestResource';
 
 type ActionRequestRow = ActionRequestResource;
 

@@ -24,6 +24,11 @@ class EmbyPlaybackUpdated implements ShouldBroadcast
         return new PrivateChannel('emby.activity');
     }
 
+    public function broadcastAs(): string
+    {
+        return 'EmbyPlaybackUpdated';
+    }
+
     /**
      * @return array<string, mixed>
      */
