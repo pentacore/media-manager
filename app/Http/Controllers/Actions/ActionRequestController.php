@@ -12,6 +12,7 @@ use App\Jobs\ExecuteActionRequest;
 use App\Models\ActionRequest;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -55,12 +56,14 @@ class ActionRequestController extends Controller
             return back();
         }
 
-        $actionRequest->update([
-            'status' => ActionRequestStatus::Approved,
-            'approved_by' => $request->user()->id,
-        ]);
-        event(new ActionRequestStatusChanged($actionRequest));
-        dispatch(new ExecuteActionRequest($actionRequest));
+        DB::transaction(function () use ($request, $actionRequest): void {
+            $actionRequest->update([
+                'status' => ActionRequestStatus::Approved,
+                'approved_by' => $request->user()->id,
+            ]);
+            event(new ActionRequestStatusChanged($actionRequest));
+            dispatch(new ExecuteActionRequest($actionRequest))->afterCommit();
+        });
 
         Inertia::flash('toast', ['type' => 'success', 'message' => __('Action approved and queued.')]);
 
@@ -75,11 +78,13 @@ class ActionRequestController extends Controller
             return back();
         }
 
-        $actionRequest->update([
-            'status' => ActionRequestStatus::Rejected,
-            'approved_by' => $request->user()->id,
-        ]);
-        event(new ActionRequestStatusChanged($actionRequest));
+        DB::transaction(function () use ($request, $actionRequest): void {
+            $actionRequest->update([
+                'status' => ActionRequestStatus::Rejected,
+                'approved_by' => $request->user()->id,
+            ]);
+            event(new ActionRequestStatusChanged($actionRequest));
+        });
 
         Inertia::flash('toast', ['type' => 'success', 'message' => __('Action rejected.')]);
 
@@ -94,12 +99,14 @@ class ActionRequestController extends Controller
             return back();
         }
 
-        $actionRequest->update([
-            'status' => ActionRequestStatus::Approved,
-            'result' => null,
-        ]);
-        event(new ActionRequestStatusChanged($actionRequest));
-        dispatch(new ExecuteActionRequest($actionRequest));
+        DB::transaction(function () use ($actionRequest): void {
+            $actionRequest->update([
+                'status' => ActionRequestStatus::Approved,
+                'result' => null,
+            ]);
+            event(new ActionRequestStatusChanged($actionRequest));
+            dispatch(new ExecuteActionRequest($actionRequest))->afterCommit();
+        });
 
         Inertia::flash('toast', ['type' => 'success', 'message' => __('Action requeued for execution.')]);
 

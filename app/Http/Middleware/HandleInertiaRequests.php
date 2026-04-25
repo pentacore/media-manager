@@ -4,10 +4,11 @@ declare(strict_types=1);
 
 namespace App\Http\Middleware;
 
-use Override;
+use App\Http\Resources\SharedUserResource;
 use App\Providers\AIServiceProvider;
 use Illuminate\Http\Request;
 use Inertia\Middleware;
+use Override;
 
 class HandleInertiaRequests extends Middleware
 {
@@ -42,11 +43,13 @@ class HandleInertiaRequests extends Middleware
     #[Override]
     public function share(Request $request): array
     {
+        $user = $request->user();
+
         return [
             ...parent::share($request),
             'name' => config('app.name'),
             'auth' => [
-                'user' => $request->user(),
+                'user' => $user ? new SharedUserResource($user)->toArray($request) : null,
             ],
             'ai' => [
                 'enabled' => AIServiceProvider::enabled(),
