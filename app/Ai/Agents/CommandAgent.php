@@ -9,7 +9,6 @@ use App\Ai\Tools\GetServiceStatusTool;
 use App\Ai\Tools\QueryActivityTool;
 use App\Ai\Tools\SearchMediaTool;
 use Laravel\Ai\Attributes\MaxSteps;
-use Laravel\Ai\Attributes\Model;
 use Laravel\Ai\Attributes\Provider;
 use Laravel\Ai\Concerns\RemembersConversations;
 use Laravel\Ai\Contracts\Agent;
@@ -21,12 +20,19 @@ use Laravel\Ai\Promptable;
 use Stringable;
 
 #[Provider(Lab::Anthropic)]
-#[Model('claude-sonnet-4-5')]
 #[MaxSteps(12)]
 class CommandAgent implements Agent, Conversational, HasTools
 {
     use Promptable;
     use RemembersConversations;
+
+    /**
+     * Get the model that the agent should use.
+     */
+    public function model(): string
+    {
+        return (string) config('mediamanager.ai.model', 'claude-sonnet-4-5');
+    }
 
     /**
      * Get the instructions that the agent should follow.

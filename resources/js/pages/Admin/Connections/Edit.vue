@@ -74,12 +74,17 @@ const webhookToken = ref('');
 const copied = ref(false);
 const tokenVisible = ref(false);
 
-const testResult = ref<{
+interface TestConnectionResponse {
     success: boolean;
     message: string;
     version?: string;
-} | null>(null);
-const testHttp = useHttp({ type: '', url: '', api_key: '' });
+}
+
+const testResult = ref<TestConnectionResponse | null>(null);
+const testHttp = useHttp<
+    { type: string; url: string; api_key: string },
+    TestConnectionResponse
+>({ type: '', url: '', api_key: '' });
 
 function testConnection() {
     testResult.value = null;
@@ -87,11 +92,11 @@ function testConnection() {
     testHttp.url = serviceUrl.value;
     testHttp.api_key = apiKey.value;
     testHttp.post(ServiceConnectionController.test.url(), {
-        onSuccess: (response: any) => {
-            testResult.value = response.data ?? response;
+        onSuccess: (response) => {
+            testResult.value = response;
         },
-        onError: (error: any) => {
-            testResult.value = error?.data ?? {
+        onError: () => {
+            testResult.value = {
                 success: false,
                 message: 'Connection failed.',
             };

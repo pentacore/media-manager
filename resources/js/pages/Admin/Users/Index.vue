@@ -296,7 +296,9 @@ function deleteUser(user: UserItem) {
                             v-if="user.id !== currentUserId"
                             :default-value="roleValue(user.role)"
                             @update:model-value="
-                                (val: string) => updateRole(user, val)
+                                (val) =>
+                                    typeof val === 'string' &&
+                                    updateRole(user, val)
                             "
                         >
                             <SelectTrigger class="w-28">

@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 use App\Http\Controllers\Auth\AuthentikController;
 use App\Http\Controllers\Auth\EmbyAuthController;
 use App\Http\Controllers\Auth\InviteController;

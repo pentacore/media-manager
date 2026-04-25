@@ -4,9 +4,9 @@ declare(strict_types=1);
 
 namespace App\Providers;
 
-use Override;
 use Illuminate\Contracts\Foundation\Application;
 use Illuminate\Support\ServiceProvider;
+use Override;
 
 class AIServiceProvider extends ServiceProvider
 {
@@ -19,11 +19,7 @@ class AIServiceProvider extends ServiceProvider
     public function boot(): void
     {
         if (! $this->aiEnabled()) {
-            return;
         }
-
-        // Future tasks (Phase 9 Tasks 2-4) will register agents and tools here,
-        // e.g. via Laravel AI SDK's agent/tool registry. Nothing to wire yet.
     }
 
     public static function enabled(): bool

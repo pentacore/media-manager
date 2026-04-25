@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use App\Console\Commands\BroadcastDashboardStats;
 use Illuminate\Foundation\Inspiring;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Schedule;
@@ -17,4 +18,8 @@ Schedule::command('services:check-health')
 
 Schedule::command('services:check-versions')
     ->daily()
+    ->withoutOverlapping();
+
+Schedule::command(BroadcastDashboardStats::class)
+    ->everyFiveMinutes()
     ->withoutOverlapping();
