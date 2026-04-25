@@ -91,7 +91,7 @@ test('fires the webhook and shows the resulting WebhookEvent', function (): void
 
     // Fake the outbound POST but have it forward directly to our route
     // so the real controller/middleware run.
-    Http::fake(fn($request) => Http::response(
+    Http::fake(fn ($request) => Http::response(
         $this->postJson(
             '/api/webhooks/sonarr/'.$connection->id,
             $request->data(),

@@ -4,15 +4,15 @@ declare(strict_types=1);
 
 namespace App\Models;
 
-use Override;
 use Carbon\CarbonImmutable;
-use Illuminate\Database\Eloquent\Builder;
 use Database\Factories\ActivityLogFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\MorphTo;
+use Override;
 use Pentacore\Typefinder\Attributes\TypefinderOverrides;
 
 /**
@@ -29,6 +29,7 @@ use Pentacore\Typefinder\Attributes\TypefinderOverrides;
  * @property-read ServiceConnection|null $serviceConnection
  * @property-read Model|\Eloquent|null $subject
  * @property-read User|null $user
+ *
  * @method static ActivityLogFactory factory($count = null, $state = [])
  * @method static Builder<static>|ActivityLog newModelQuery()
  * @method static Builder<static>|ActivityLog newQuery()
@@ -43,6 +44,7 @@ use Pentacore\Typefinder\Attributes\TypefinderOverrides;
  * @method static Builder<static>|ActivityLog whereSubjectType($value)
  * @method static Builder<static>|ActivityLog whereUpdatedAt($value)
  * @method static Builder<static>|ActivityLog whereUserId($value)
+ *
  * @mixin \Eloquent
  */
 #[Fillable(['user_id', 'service_connection_id', 'action', 'subject_type', 'subject_id', 'description', 'metadata'])]

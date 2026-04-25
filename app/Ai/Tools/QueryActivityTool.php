@@ -4,10 +4,10 @@ declare(strict_types=1);
 
 namespace App\Ai\Tools;
 
-use Illuminate\JsonSchema\Types\Type;
 use App\Models\ActivityLog;
 use App\Models\EmbyActivity;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
+use Illuminate\JsonSchema\Types\Type;
 use Laravel\Ai\Contracts\Tool;
 use Laravel\Ai\Tools\Request;
 use Stringable;

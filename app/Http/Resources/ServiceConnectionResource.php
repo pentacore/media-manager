@@ -4,11 +4,11 @@ declare(strict_types=1);
 
 namespace App\Http\Resources;
 
-use Override;
 use App\Enums\HealthStatus;
 use App\Models\ServiceConnection;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
+use Override;
 use Pentacore\Typefinder\Attributes\TypefinderResource;
 
 /**

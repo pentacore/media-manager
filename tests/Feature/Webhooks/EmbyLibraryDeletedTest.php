@@ -17,7 +17,7 @@ beforeEach(function (): void {
 });
 
 /**
- * @param array<string, mixed> $payload
+ * @param  array<string, mixed>  $payload
  */
 function makeEmbyWebhookEvent(ServiceConnection $serviceConnection, array $payload): WebhookEvent
 {

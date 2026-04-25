@@ -4,20 +4,20 @@ declare(strict_types=1);
 
 namespace App\Models;
 
-use Override;
-use Carbon\CarbonImmutable;
-use Illuminate\Database\Eloquent\Collection;
-use Illuminate\Database\Eloquent\Builder;
 use App\Enums\HealthStatus;
 use App\Enums\ServiceType;
 use App\Observers\ServiceConnectionObserver;
+use Carbon\CarbonImmutable;
 use Database\Factories\ServiceConnectionFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\ObservedBy;
+use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Override;
 
 /**
  * @property int $id
@@ -38,6 +38,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
  * @property-read int|null $activity_logs_count
  * @property-read Collection<int, WebhookEvent> $webhookEvents
  * @property-read int|null $webhook_events_count
+ *
  * @method static ServiceConnectionFactory factory($count = null, $state = [])
  * @method static Builder<static>|ServiceConnection newModelQuery()
  * @method static Builder<static>|ServiceConnection newQuery()
@@ -56,6 +57,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
  * @method static Builder<static>|ServiceConnection whereUrl($value)
  * @method static Builder<static>|ServiceConnection whereVersion($value)
  * @method static Builder<static>|ServiceConnection whereWebhookToken($value)
+ *
  * @mixin \Eloquent
  */
 #[ObservedBy(ServiceConnectionObserver::class)]

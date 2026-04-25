@@ -4,10 +4,10 @@ declare(strict_types=1);
 
 namespace App\Console\Commands;
 
-use Override;
 use App\Jobs\PingServiceHealth;
 use App\Models\ServiceConnection;
 use Illuminate\Console\Command;
+use Override;
 
 class CheckServiceHealth extends Command
 {

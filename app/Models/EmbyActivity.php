@@ -5,9 +5,9 @@ declare(strict_types=1);
 namespace App\Models;
 
 use Carbon\CarbonImmutable;
-use Illuminate\Database\Eloquent\Builder;
 use Database\Factories\EmbyActivityFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -25,6 +25,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  * @property CarbonImmutable|null $created_at
  * @property CarbonImmutable|null $updated_at
  * @property-read EmbyUserLink $embyUserLink
+ *
  * @method static EmbyActivityFactory factory($count = null, $state = [])
  * @method static Builder<static>|EmbyActivity newModelQuery()
  * @method static Builder<static>|EmbyActivity newQuery()
@@ -40,6 +41,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  * @method static Builder<static>|EmbyActivity wherePlayPosition($value)
  * @method static Builder<static>|EmbyActivity whereSeriesTitle($value)
  * @method static Builder<static>|EmbyActivity whereUpdatedAt($value)
+ *
  * @mixin \Eloquent
  */
 #[Fillable(['emby_user_link_id', 'media_type', 'media_title', 'series_title', 'emby_item_id', 'action', 'duration_ticks', 'play_position'])]

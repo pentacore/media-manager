@@ -5,10 +5,10 @@ declare(strict_types=1);
 namespace App\Models;
 
 use Carbon\CarbonImmutable;
-use Illuminate\Database\Eloquent\Collection;
-use Illuminate\Database\Eloquent\Builder;
 use Database\Factories\EmbyUserLinkFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
+use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -24,6 +24,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
  * @property-read Collection<int, EmbyActivity> $activities
  * @property-read int|null $activities_count
  * @property-read User $user
+ *
  * @method static EmbyUserLinkFactory factory($count = null, $state = [])
  * @method static Builder<static>|EmbyUserLink newModelQuery()
  * @method static Builder<static>|EmbyUserLink newQuery()
@@ -34,6 +35,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
  * @method static Builder<static>|EmbyUserLink whereId($value)
  * @method static Builder<static>|EmbyUserLink whereUpdatedAt($value)
  * @method static Builder<static>|EmbyUserLink whereUserId($value)
+ *
  * @mixin \Eloquent
  */
 #[Fillable(['user_id', 'emby_user_id', 'emby_username'])]

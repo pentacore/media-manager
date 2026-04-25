@@ -5,7 +5,7 @@ use App\Enums\UserRole;
 use App\Models\User;
 
 test('first user created via SSO gets admin role', function (): void {
-    $action = new FindOrCreateSsoUser();
+    $action = new FindOrCreateSsoUser;
 
     $user = $action->execute(
         provider: 'authentik',
@@ -20,7 +20,7 @@ test('first user created via SSO gets admin role', function (): void {
 test('second user created via SSO gets viewer role', function (): void {
     User::factory()->admin()->create();
 
-    $action = new FindOrCreateSsoUser();
+    $action = new FindOrCreateSsoUser;
 
     $user = $action->execute(
         provider: 'authentik',
@@ -35,7 +35,7 @@ test('second user created via SSO gets viewer role', function (): void {
 test('SSO login links existing user by email', function (): void {
     $existing = User::factory()->create(['email' => 'match@example.com']);
 
-    $action = new FindOrCreateSsoUser();
+    $action = new FindOrCreateSsoUser;
 
     $user = $action->execute(
         provider: 'authentik',
@@ -55,7 +55,7 @@ test('SSO login finds returning user by sso_id', function (): void {
         'sso_id' => 'auth-returning',
     ]);
 
-    $action = new FindOrCreateSsoUser();
+    $action = new FindOrCreateSsoUser;
 
     $user = $action->execute(
         provider: 'authentik',

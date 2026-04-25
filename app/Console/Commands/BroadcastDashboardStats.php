@@ -4,13 +4,13 @@ declare(strict_types=1);
 
 namespace App\Console\Commands;
 
-use Override;
 use App\Enums\ActionRequestStatus;
 use App\Events\DashboardStatsUpdated;
 use App\Models\ActionRequest;
 use App\Models\ServiceConnection;
 use App\Models\WebhookEvent;
 use Illuminate\Console\Command;
+use Override;
 
 class BroadcastDashboardStats extends Command
 {

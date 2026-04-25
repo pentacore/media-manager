@@ -4,10 +4,10 @@ declare(strict_types=1);
 
 namespace App\Console\Commands;
 
-use Override;
 use App\Jobs\FetchLatestServiceVersion;
 use App\Models\ServiceConnection;
 use Illuminate\Console\Command;
+use Override;
 
 class CheckServiceVersions extends Command
 {
@@ -28,7 +28,7 @@ class CheckServiceVersions extends Command
             }
 
             app()->call([new FetchLatestServiceVersion($connection), 'handle']);
-            ++$checked;
+            $checked++;
         }
 
         $this->info(sprintf('Updated latest_version for %d service(s).', $checked));

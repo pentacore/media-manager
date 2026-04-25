@@ -32,7 +32,7 @@ return RectorConfig::configure()
             LaravelSetList::LARAVEL_CODE_QUALITY,
             LaravelSetList::LARAVEL_COLLECTION,
             LaravelSetList::LARAVEL_IF_HELPERS,
-//            LaravelSetList::LARAVEL_STATIC_TO_INJECTION,
+            //            LaravelSetList::LARAVEL_STATIC_TO_INJECTION,
             LaravelSetList::LARAVEL_TYPE_DECLARATIONS,
             LaravelSetList::LARAVEL_TESTING,
             LaravelSetList::LARAVEL_FACTORIES,
@@ -43,17 +43,17 @@ return RectorConfig::configure()
     ->withConfiguredRule(
         RouteActionCallableRector::class,
         [
-            'NAMESPACES' => ['App\\Http\\Controllers\\']
+            'NAMESPACES' => ['App\\Http\\Controllers\\'],
         ]
     )
     ->withPaths([
-        __DIR__ . '/app',
-        __DIR__ . '/bootstrap',
-        __DIR__ . '/config',
-        __DIR__ . '/database',
-        __DIR__ . '/public',
-        __DIR__ . '/resources',
-        __DIR__ . '/routes',
-        __DIR__ . '/tests',
+        __DIR__.'/app',
+        __DIR__.'/bootstrap',
+        __DIR__.'/config',
+        __DIR__.'/database',
+        __DIR__.'/public',
+        __DIR__.'/resources',
+        __DIR__.'/routes',
+        __DIR__.'/tests',
     ])
-    ->withSkipPath(__DIR__ . '/bootstrap/cache');
+    ->withSkipPath(__DIR__.'/bootstrap/cache');

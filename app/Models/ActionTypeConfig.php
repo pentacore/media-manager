@@ -4,13 +4,13 @@ declare(strict_types=1);
 
 namespace App\Models;
 
-use Override;
 use Carbon\CarbonImmutable;
-use Illuminate\Database\Eloquent\Builder;
 use Database\Factories\ActionTypeConfigFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Override;
 
 /**
  * @property int $id
@@ -21,6 +21,7 @@ use Illuminate\Database\Eloquent\Model;
  * @property bool $is_enabled
  * @property CarbonImmutable|null $created_at
  * @property CarbonImmutable|null $updated_at
+ *
  * @method static ActionTypeConfigFactory factory($count = null, $state = [])
  * @method static Builder<static>|ActionTypeConfig newModelQuery()
  * @method static Builder<static>|ActionTypeConfig newQuery()
@@ -33,6 +34,7 @@ use Illuminate\Database\Eloquent\Model;
  * @method static Builder<static>|ActionTypeConfig whereRequiresApproval($value)
  * @method static Builder<static>|ActionTypeConfig whereType($value)
  * @method static Builder<static>|ActionTypeConfig whereUpdatedAt($value)
+ *
  * @mixin \Eloquent
  */
 #[Fillable(['type', 'label', 'description', 'requires_approval', 'is_enabled'])]
