@@ -9,6 +9,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Resources\ServiceConnectionResource;
 use App\Models\ServiceConnection;
 use App\Services\Radarr\RadarrClient;
+use App\Services\ServiceClientFactory;
 use App\Services\Sonarr\SonarrClient;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Http\Client\ConnectionException;
@@ -54,13 +55,13 @@ class ServiceHealthController extends Controller
             return null;
         }
 
-        $client = match ($serviceConnection->type) {
-            ServiceType::Sonarr => new SonarrClient($serviceConnection),
-            ServiceType::Radarr => new RadarrClient($serviceConnection),
-            default => null,
-        };
+        if (! in_array($serviceConnection->type, [ServiceType::Sonarr, ServiceType::Radarr], true)) {
+            return null;
+        }
 
-        if ($client === null) {
+        $client = resolve(ServiceClientFactory::class)->make($serviceConnection);
+
+        if (! $client instanceof SonarrClient && ! $client instanceof RadarrClient) {
             return null;
         }
 

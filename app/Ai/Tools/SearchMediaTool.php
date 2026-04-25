@@ -4,13 +4,13 @@ declare(strict_types=1);
 
 namespace App\Ai\Tools;
 
-use Illuminate\JsonSchema\Types\StringType;
 use App\Enums\ServiceType;
-use App\Models\ServiceConnection;
 use App\Services\Radarr\RadarrClient;
 use App\Services\Seerr\SeerrClient;
+use App\Services\ServiceClientFactory;
 use App\Services\Sonarr\SonarrClient;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
+use Illuminate\JsonSchema\Types\StringType;
 use Laravel\Ai\Contracts\Tool;
 use Laravel\Ai\Tools\Request;
 use Stringable;
@@ -18,6 +18,8 @@ use Throwable;
 
 class SearchMediaTool implements Tool
 {
+    public function __construct(private readonly ServiceClientFactory $serviceClientFactory) {}
+
     public function description(): Stringable|string
     {
         return 'Search across Sonarr (TV series), Radarr (movies), and Seerr (requests) for media matching the query. Returns up to 5 hits per source.';
@@ -69,7 +71,8 @@ class SearchMediaTool implements Tool
      */
     private function sonarrSearch(string $query): array
     {
-        $sonarrClient = new SonarrClient(ServiceConnection::resolveActive(ServiceType::Sonarr));
+        $sonarrClient = $this->serviceClientFactory->makeForType(ServiceType::Sonarr);
+        assert($sonarrClient instanceof SonarrClient);
         $results = array_slice($sonarrClient->searchSeries($query), 0, 5);
 
         return array_map(fn (array $i): array => [
@@ -85,7 +88,8 @@ class SearchMediaTool implements Tool
      */
     private function radarrSearch(string $query): array
     {
-        $radarrClient = new RadarrClient(ServiceConnection::resolveActive(ServiceType::Radarr));
+        $radarrClient = $this->serviceClientFactory->makeForType(ServiceType::Radarr);
+        assert($radarrClient instanceof RadarrClient);
         $results = array_slice($radarrClient->searchMovies($query), 0, 5);
 
         return array_map(fn (array $i): array => [
@@ -101,7 +105,8 @@ class SearchMediaTool implements Tool
      */
     private function seerrSearch(string $query): array
     {
-        $seerrClient = new SeerrClient(ServiceConnection::resolveActive(ServiceType::Seerr));
+        $seerrClient = $this->serviceClientFactory->makeForType(ServiceType::Seerr);
+        assert($seerrClient instanceof SeerrClient);
         $response = $seerrClient->search($query);
         $results = $response['results'] ?? $response;
 

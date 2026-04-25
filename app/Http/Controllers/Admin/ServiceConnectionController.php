@@ -12,10 +12,7 @@ use App\Http\Resources\ServiceConnectionResource;
 use App\Jobs\FetchLatestServiceVersion;
 use App\Jobs\PingServiceHealth;
 use App\Models\ServiceConnection;
-use App\Services\Emby\EmbyClient;
-use App\Services\Radarr\RadarrClient;
-use App\Services\Seerr\SeerrClient;
-use App\Services\Sonarr\SonarrClient;
+use App\Services\ServiceClientFactory;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -145,12 +142,7 @@ class ServiceConnectionController extends Controller
         ]);
 
         try {
-            $client = match ($serviceConnection->type) {
-                ServiceType::Sonarr => new SonarrClient($serviceConnection),
-                ServiceType::Radarr => new RadarrClient($serviceConnection),
-                ServiceType::Emby => new EmbyClient($serviceConnection),
-                ServiceType::Seerr => new SeerrClient($serviceConnection),
-            };
+            $client = resolve(ServiceClientFactory::class)->make($serviceConnection);
 
             $result = match ($serviceConnection->type) {
                 ServiceType::Emby => $client->getSystemInfo(),

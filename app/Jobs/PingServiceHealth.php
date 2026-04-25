@@ -8,10 +8,7 @@ use App\Enums\HealthStatus;
 use App\Enums\ServiceType;
 use App\Events\ServiceHealthChanged;
 use App\Models\ServiceConnection;
-use App\Services\Emby\EmbyClient;
-use App\Services\Radarr\RadarrClient;
-use App\Services\Seerr\SeerrClient;
-use App\Services\Sonarr\SonarrClient;
+use App\Services\ServiceClientFactory;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
@@ -60,12 +57,7 @@ class PingServiceHealth implements ShouldQueue
      */
     private function ping(): array
     {
-        $client = match ($this->serviceConnection->type) {
-            ServiceType::Sonarr => new SonarrClient($this->serviceConnection),
-            ServiceType::Radarr => new RadarrClient($this->serviceConnection),
-            ServiceType::Emby => new EmbyClient($this->serviceConnection),
-            ServiceType::Seerr => new SeerrClient($this->serviceConnection),
-        };
+        $client = resolve(ServiceClientFactory::class)->make($this->serviceConnection);
 
         return match ($this->serviceConnection->type) {
             ServiceType::Emby => $client->getSystemInfo(),

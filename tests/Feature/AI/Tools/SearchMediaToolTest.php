@@ -28,8 +28,8 @@ test('fan-out search across all three services', function (): void {
         ]),
     ]);
 
-    $tool = new SearchMediaTool;
-    $result = json_decode((string) $tool->handle(new Request(['query' => 'any'])), true);
+    $searchMediaTool = resolve(SearchMediaTool::class);
+    $result = json_decode((string) $searchMediaTool->handle(new Request(['query' => 'any'])), true);
 
     expect($result['series'])->toHaveCount(1);
     expect($result['series'][0]['title'])->toBe('Breaking Bad');
@@ -46,7 +46,7 @@ test('failing service does not break others', function (): void {
         'radarr.local:7878/api/v3/movie/lookup*' => Http::response('boom', 500),
     ]);
 
-    $result = json_decode((string) (new SearchMediaTool)->handle(new Request(['query' => 'any'])), true);
+    $result = json_decode((string) resolve(SearchMediaTool::class)->handle(new Request(['query' => 'any'])), true);
 
     expect($result['series'])->toHaveCount(1);
     expect($result['movies'])->toBe([]);
@@ -54,14 +54,14 @@ test('failing service does not break others', function (): void {
 });
 
 test('empty query returns error', function (): void {
-    $result = json_decode((string) (new SearchMediaTool)->handle(new Request(['query' => ''])), true);
+    $result = json_decode((string) resolve(SearchMediaTool::class)->handle(new Request(['query' => ''])), true);
     expect($result)->toHaveKey('error');
 });
 
 test('description and schema are defined', function (): void {
-    $tool = new SearchMediaTool;
-    expect((string) $tool->description())->toContain('Sonarr');
+    $searchMediaTool = resolve(SearchMediaTool::class);
+    expect((string) $searchMediaTool->description())->toContain('Sonarr');
 
-    $reflection = new ReflectionMethod($tool, 'schema');
+    $reflection = new ReflectionMethod($searchMediaTool, 'schema');
     expect($reflection->isPublic())->toBeTrue();
 });
