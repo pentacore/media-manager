@@ -9,12 +9,10 @@ use App\Http\Controllers\Controller;
 use App\Models\ServiceConnection;
 use App\Services\Radarr\RadarrClient;
 use App\Services\Seerr\SeerrClient;
+use App\Services\Seerr\SeerrTitleResolver;
 use App\Services\Sonarr\SonarrClient;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
-use Illuminate\Http\Client\ConnectionException;
-use Illuminate\Http\Client\RequestException;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Cache;
 use Inertia\Inertia;
 use Inertia\Response;
 use Throwable;
@@ -22,6 +20,10 @@ use Throwable;
 class SearchController extends Controller
 {
     private const int MAX_RESULTS = 20;
+
+    public function __construct(
+        private readonly SeerrTitleResolver $seerrTitleResolver,
+    ) {}
 
     public function index(Request $request): Response
     {
@@ -157,26 +159,18 @@ class SearchController extends Controller
         }
 
         $results = is_array($response['results'] ?? null) ? $response['results'] : [];
-        $titles = $this->resolveSeerrTitles($connection, $seerrClient, $results);
+        $titles = $this->seerrTitleResolver->resolve($connection, $seerrClient, $results);
 
-        $enriched = array_map(function (array $req) use ($titles): array {
-            $mediaType = $req['type'] ?? ($req['media']['mediaType'] ?? null);
-            $tmdbId = $req['media']['tmdbId'] ?? null;
-            $titleKey = ($mediaType !== null && $tmdbId !== null)
-                ? sprintf('%s:%d', (string) $mediaType, (int) $tmdbId)
-                : null;
-
-            return [
-                'id' => $req['id'] ?? null,
-                'media_type' => $mediaType,
-                'title' => $titleKey !== null ? ($titles[$titleKey] ?? null) : null,
-                'tmdb_id' => $tmdbId,
-                'tvdb_id' => $req['media']['tvdbId'] ?? null,
-                'status' => $req['status'] ?? null,
-                'overview' => null,
-                'poster_path' => null,
-            ];
-        }, $results);
+        $enriched = array_map(fn (array $req): array => [
+            'id' => $req['id'] ?? null,
+            'media_type' => $req['type'] ?? ($req['media']['mediaType'] ?? null),
+            'title' => $this->seerrTitleResolver->titleFor($req, $titles),
+            'tmdb_id' => $req['media']['tmdbId'] ?? null,
+            'tvdb_id' => $req['media']['tvdbId'] ?? null,
+            'status' => $req['status'] ?? null,
+            'overview' => null,
+            'poster_path' => null,
+        ], $results);
 
         $matches = $this->filterByTitle($enriched, $term);
 
@@ -184,58 +178,6 @@ class SearchController extends Controller
             'results' => array_values($matches),
             'error' => null,
         ];
-    }
-
-    /**
-     * Fetch titles for every distinct (media_type, tmdb_id) pair.
-     * Cached for 5 minutes per connection + pair.
-     *
-     * @param  array<int, array<string, mixed>>  $requests
-     * @return array<string, string>
-     */
-    private function resolveSeerrTitles(ServiceConnection $serviceConnection, SeerrClient $seerrClient, array $requests): array
-    {
-        $pairs = [];
-        foreach ($requests as $request) {
-            $mediaType = $request['type'] ?? ($request['media']['mediaType'] ?? null);
-            $tmdbId = $request['media']['tmdbId'] ?? null;
-            if ($mediaType === null) {
-                continue;
-            }
-
-            if ($tmdbId === null) {
-                continue;
-            }
-
-            $pairs[sprintf('%s:%d', (string) $mediaType, (int) $tmdbId)] = [
-                'type' => (string) $mediaType,
-                'id' => (int) $tmdbId,
-            ];
-        }
-
-        $titles = [];
-        foreach ($pairs as $key => $pair) {
-            $cacheKey = sprintf('seerr:title:%d:%s:%d', $serviceConnection->id, $pair['type'], $pair['id']);
-            $titles[$key] = Cache::remember($cacheKey, now()->addMinutes(5), function () use ($seerrClient, $pair): string {
-                try {
-                    $detail = $pair['type'] === 'movie'
-                        ? $seerrClient->getMovieDetails($pair['id'])
-                        : $seerrClient->getTvDetails($pair['id']);
-                } catch (RequestException|ConnectionException) {
-                    return sprintf('%s #%d', ucfirst($pair['type']), $pair['id']);
-                }
-
-                return (string) (
-                    $detail['title']
-                    ?? $detail['name']
-                    ?? $detail['originalTitle']
-                    ?? $detail['originalName']
-                    ?? sprintf('%s #%d', ucfirst($pair['type']), $pair['id'])
-                );
-            });
-        }
-
-        return $titles;
     }
 
     /**

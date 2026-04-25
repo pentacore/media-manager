@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace App\Http\Controllers\Media;
 
 use App\Enums\ServiceType;
-use App\Http\Controllers\Controller;
 use App\Http\Requests\Media\StoreMovieRequest;
 use App\Models\ServiceConnection;
 use App\Services\Radarr\RadarrClient;
@@ -16,105 +15,78 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
+use Override;
 
-class MovieController extends Controller
+class MovieController extends BaseArrController
 {
     public function index(): Response|RedirectResponse
     {
-        try {
-            $connection = ServiceConnection::resolveActive(ServiceType::Radarr);
-        } catch (ModelNotFoundException) {
-            return $this->noConnectionRedirect();
+        $connection = $this->resolveConnection();
+        if ($connection instanceof RedirectResponse) {
+            return $connection;
         }
 
         return Inertia::render('Radarr/Movies/Index', [
-            'connection' => ['url' => rtrim($connection->url, '/')],
-            'movies' => Inertia::defer(function () use ($connection): array {
-                try {
-                    return array_map(fn (array $item): array => $this->mapMovie($item), new RadarrClient($connection)->getMovies());
-                } catch (RequestException|ConnectionException) {
-                    return [];
-                }
-            }),
-            'qualityProfiles' => Inertia::defer(function () use ($connection): array {
-                try {
-                    return $this->mapQualityProfiles(new RadarrClient($connection)->getQualityProfiles());
-                } catch (RequestException|ConnectionException) {
-                    return [];
-                }
-            }),
+            'connection' => $this->connectionUrl($connection),
+            'movies' => Inertia::defer(fn (): array => array_map(
+                fn (array $item): array => $this->mapMovie($item),
+                $this->tryClientCall($connection, fn (RadarrClient $radarrClient): array => $radarrClient->getMovies()),
+            )),
+            'qualityProfiles' => Inertia::defer(fn (): array => $this->mapQualityProfiles(
+                $this->tryClientCall($connection, fn (RadarrClient $radarrClient): array => $radarrClient->getQualityProfiles()),
+            )),
         ]);
     }
 
     public function show(int $id): Response|RedirectResponse
     {
-        try {
-            $connection = ServiceConnection::resolveActive(ServiceType::Radarr);
-        } catch (ModelNotFoundException) {
-            return $this->noConnectionRedirect();
+        $connection = $this->resolveConnection();
+        if ($connection instanceof RedirectResponse) {
+            return $connection;
         }
 
         try {
-            $movie = new RadarrClient($connection)->getMovieById($id);
+            $movie = $this->buildClient($connection)->getMovieById($id);
         } catch (RequestException|ConnectionException) {
             return $this->connectionFailedRedirect();
         }
 
         return Inertia::render('Radarr/Movies/Show', [
-            'connection' => ['url' => rtrim($connection->url, '/')],
+            'connection' => $this->connectionUrl($connection),
             'movie' => $this->mapMovie($movie, detailed: true),
         ]);
     }
 
     public function create(Request $request): Response|RedirectResponse
     {
-        try {
-            $connection = ServiceConnection::resolveActive(ServiceType::Radarr);
-        } catch (ModelNotFoundException) {
-            return $this->noConnectionRedirect();
+        $connection = $this->resolveConnection();
+        if ($connection instanceof RedirectResponse) {
+            return $connection;
         }
 
         $term = trim((string) $request->query('q', ''));
 
         return Inertia::render('Radarr/Movies/Create', [
-            'connection' => ['url' => rtrim($connection->url, '/')],
+            'connection' => $this->connectionUrl($connection),
             'searchTerm' => $term,
-            'qualityProfiles' => Inertia::defer(function () use ($connection): array {
-                try {
-                    return $this->mapQualityProfiles(new RadarrClient($connection)->getQualityProfiles());
-                } catch (RequestException|ConnectionException) {
-                    return [];
-                }
-            }),
-            'rootFolders' => Inertia::defer(function () use ($connection): array {
-                try {
-                    return array_map(fn (array $f): array => [
-                        'id' => $f['id'] ?? null,
-                        'path' => $f['path'] ?? '',
-                        'free_space' => $f['freeSpace'] ?? null,
-                    ], new RadarrClient($connection)->getRootFolders());
-                } catch (RequestException|ConnectionException) {
-                    return [];
-                }
-            }),
-            'searchResults' => Inertia::defer(function () use ($connection, $term): array {
-                if ($term === '') {
-                    return [];
-                }
-
-                try {
-                    return array_map(fn (array $item): array => [
-                        'tmdb_id' => $item['tmdbId'] ?? null,
-                        'title' => $item['title'] ?? null,
-                        'year' => $item['year'] ?? null,
-                        'overview' => $item['overview'] ?? null,
-                        'remote_poster' => $item['remotePoster'] ?? null,
-                        'images' => $item['images'] ?? [],
-                    ], new RadarrClient($connection)->searchMovies($term));
-                } catch (RequestException|ConnectionException) {
-                    return [];
-                }
-            }),
+            'qualityProfiles' => Inertia::defer(fn (): array => $this->mapQualityProfiles(
+                $this->tryClientCall($connection, fn (RadarrClient $radarrClient): array => $radarrClient->getQualityProfiles()),
+            )),
+            'rootFolders' => Inertia::defer(fn (): array => array_map(fn (array $f): array => [
+                'id' => $f['id'] ?? null,
+                'path' => $f['path'] ?? '',
+                'free_space' => $f['freeSpace'] ?? null,
+            ], $this->tryClientCall($connection, fn (RadarrClient $radarrClient): array => $radarrClient->getRootFolders()))),
+            'searchResults' => Inertia::defer(fn (): array => $term === ''
+                ? []
+                : array_map(fn (array $item): array => [
+                    'tmdb_id' => $item['tmdbId'] ?? null,
+                    'title' => $item['title'] ?? null,
+                    'year' => $item['year'] ?? null,
+                    'overview' => $item['overview'] ?? null,
+                    'remote_poster' => $item['remotePoster'] ?? null,
+                    'images' => $item['images'] ?? [],
+                ], $this->tryClientCall($connection, fn (RadarrClient $radarrClient): array => $radarrClient->searchMovies($term)))),
         ]);
     }
 
@@ -154,9 +126,30 @@ class MovieController extends Controller
         return to_route('media.movies.index');
     }
 
-    private function client(): RadarrClient
+    protected function serviceType(): ServiceType
     {
-        return new RadarrClient(ServiceConnection::resolveActive(ServiceType::Radarr));
+        return ServiceType::Radarr;
+    }
+
+    protected function buildClient(ServiceConnection $serviceConnection): RadarrClient
+    {
+        return new RadarrClient($serviceConnection);
+    }
+
+    #[Override]
+    protected function client(): RadarrClient
+    {
+        return $this->buildClient(ServiceConnection::resolveActive($this->serviceType()));
+    }
+
+    protected function noConnectionMessage(): string
+    {
+        return __('No active Radarr connection configured.');
+    }
+
+    protected function connectionFailedMessage(): string
+    {
+        return __('Failed to connect to Radarr.');
     }
 
     /**
@@ -203,19 +196,5 @@ class MovieController extends Controller
             'id' => $p['id'] ?? null,
             'name' => $p['name'] ?? null,
         ], $profiles);
-    }
-
-    private function noConnectionRedirect(): RedirectResponse
-    {
-        Inertia::flash('toast', ['type' => 'error', 'message' => __('No active Radarr connection configured.')]);
-
-        return to_route('dashboard');
-    }
-
-    private function connectionFailedRedirect(): RedirectResponse
-    {
-        Inertia::flash('toast', ['type' => 'error', 'message' => __('Failed to connect to Radarr.')]);
-
-        return to_route('dashboard');
     }
 }

@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace App\Http\Controllers\Media;
 
 use App\Enums\ServiceType;
-use App\Http\Controllers\Controller;
 use App\Http\Requests\Media\StoreSeriesRequest;
 use App\Models\ServiceConnection;
 use App\Services\Sonarr\SonarrClient;
@@ -16,130 +15,88 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
+use Override;
 
-class SeriesController extends Controller
+class SeriesController extends BaseArrController
 {
     public function index(): Response|RedirectResponse
     {
-        try {
-            $connection = ServiceConnection::resolveActive(ServiceType::Sonarr);
-        } catch (ModelNotFoundException) {
-            return $this->noConnectionRedirect();
+        $connection = $this->resolveConnection();
+        if ($connection instanceof RedirectResponse) {
+            return $connection;
         }
 
         return Inertia::render('Sonarr/Series/Index', [
-            'connection' => ['url' => rtrim($connection->url, '/')],
-            'series' => Inertia::defer(function () use ($connection): array {
-                try {
-                    return array_map(
-                        fn (array $item): array => $this->mapSeries($item),
-                        new SonarrClient($connection)->getSeries(),
-                    );
-                } catch (RequestException|ConnectionException) {
-                    return [];
-                }
-            }),
-            'qualityProfiles' => Inertia::defer(function () use ($connection): array {
-                try {
-                    return $this->mapQualityProfiles(
-                        new SonarrClient($connection)->getQualityProfiles(),
-                    );
-                } catch (RequestException|ConnectionException) {
-                    return [];
-                }
-            }),
+            'connection' => $this->connectionUrl($connection),
+            'series' => Inertia::defer(fn (): array => array_map(
+                fn (array $item): array => $this->mapSeries($item),
+                $this->tryClientCall($connection, fn (SonarrClient $sonarrClient): array => $sonarrClient->getSeries()),
+            )),
+            'qualityProfiles' => Inertia::defer(fn (): array => $this->mapQualityProfiles(
+                $this->tryClientCall($connection, fn (SonarrClient $sonarrClient): array => $sonarrClient->getQualityProfiles()),
+            )),
         ]);
     }
 
     public function show(int $id): Response|RedirectResponse
     {
-        try {
-            $connection = ServiceConnection::resolveActive(ServiceType::Sonarr);
-        } catch (ModelNotFoundException) {
-            return $this->noConnectionRedirect();
+        $connection = $this->resolveConnection();
+        if ($connection instanceof RedirectResponse) {
+            return $connection;
         }
 
         try {
-            $series = new SonarrClient($connection)->getSeriesById($id);
+            $series = $this->buildClient($connection)->getSeriesById($id);
         } catch (RequestException|ConnectionException) {
             return $this->connectionFailedRedirect();
         }
 
         return Inertia::render('Sonarr/Series/Show', [
-            'connection' => ['url' => rtrim($connection->url, '/')],
+            'connection' => $this->connectionUrl($connection),
             'series' => $this->mapSeries($series, detailed: true),
-            'episodes' => Inertia::defer(function () use ($connection, $id): array {
-                try {
-                    $episodes = new SonarrClient($connection)->getEpisodesBySeries($id);
-
-                    return array_map(fn (array $ep): array => [
-                        'id' => $ep['id'] ?? null,
-                        'season_number' => $ep['seasonNumber'] ?? 0,
-                        'episode_number' => $ep['episodeNumber'] ?? 0,
-                        'title' => $ep['title'] ?? null,
-                        'air_date' => $ep['airDate'] ?? null,
-                        'has_file' => $ep['hasFile'] ?? false,
-                        'monitored' => $ep['monitored'] ?? false,
-                        'overview' => $ep['overview'] ?? null,
-                    ], $episodes);
-                } catch (RequestException|ConnectionException) {
-                    return [];
-                }
-            }),
+            'episodes' => Inertia::defer(fn (): array => array_map(fn (array $ep): array => [
+                'id' => $ep['id'] ?? null,
+                'season_number' => $ep['seasonNumber'] ?? 0,
+                'episode_number' => $ep['episodeNumber'] ?? 0,
+                'title' => $ep['title'] ?? null,
+                'air_date' => $ep['airDate'] ?? null,
+                'has_file' => $ep['hasFile'] ?? false,
+                'monitored' => $ep['monitored'] ?? false,
+                'overview' => $ep['overview'] ?? null,
+            ], $this->tryClientCall($connection, fn (SonarrClient $sonarrClient): array => $sonarrClient->getEpisodesBySeries($id)))),
         ]);
     }
 
     public function create(Request $request): Response|RedirectResponse
     {
-        try {
-            $connection = ServiceConnection::resolveActive(ServiceType::Sonarr);
-        } catch (ModelNotFoundException) {
-            return $this->noConnectionRedirect();
+        $connection = $this->resolveConnection();
+        if ($connection instanceof RedirectResponse) {
+            return $connection;
         }
 
         $term = trim((string) $request->query('q', ''));
 
         return Inertia::render('Sonarr/Series/Create', [
-            'connection' => ['url' => rtrim($connection->url, '/')],
+            'connection' => $this->connectionUrl($connection),
             'searchTerm' => $term,
-            'qualityProfiles' => Inertia::defer(function () use ($connection): array {
-                try {
-                    return $this->mapQualityProfiles(
-                        new SonarrClient($connection)->getQualityProfiles(),
-                    );
-                } catch (RequestException|ConnectionException) {
-                    return [];
-                }
-            }),
-            'rootFolders' => Inertia::defer(function () use ($connection): array {
-                try {
-                    return array_map(fn (array $f): array => [
-                        'id' => $f['id'] ?? null,
-                        'path' => $f['path'] ?? '',
-                        'free_space' => $f['freeSpace'] ?? null,
-                    ], new SonarrClient($connection)->getRootFolders());
-                } catch (RequestException|ConnectionException) {
-                    return [];
-                }
-            }),
-            'searchResults' => Inertia::defer(function () use ($connection, $term): array {
-                if ($term === '') {
-                    return [];
-                }
-
-                try {
-                    return array_map(fn (array $item): array => [
-                        'tvdb_id' => $item['tvdbId'] ?? null,
-                        'title' => $item['title'] ?? null,
-                        'year' => $item['year'] ?? null,
-                        'overview' => $item['overview'] ?? null,
-                        'remote_poster' => $item['remotePoster'] ?? null,
-                        'images' => $item['images'] ?? [],
-                    ], new SonarrClient($connection)->searchSeries($term));
-                } catch (RequestException|ConnectionException) {
-                    return [];
-                }
-            }),
+            'qualityProfiles' => Inertia::defer(fn (): array => $this->mapQualityProfiles(
+                $this->tryClientCall($connection, fn (SonarrClient $sonarrClient): array => $sonarrClient->getQualityProfiles()),
+            )),
+            'rootFolders' => Inertia::defer(fn (): array => array_map(fn (array $f): array => [
+                'id' => $f['id'] ?? null,
+                'path' => $f['path'] ?? '',
+                'free_space' => $f['freeSpace'] ?? null,
+            ], $this->tryClientCall($connection, fn (SonarrClient $sonarrClient): array => $sonarrClient->getRootFolders()))),
+            'searchResults' => Inertia::defer(fn (): array => $term === ''
+                ? []
+                : array_map(fn (array $item): array => [
+                    'tvdb_id' => $item['tvdbId'] ?? null,
+                    'title' => $item['title'] ?? null,
+                    'year' => $item['year'] ?? null,
+                    'overview' => $item['overview'] ?? null,
+                    'remote_poster' => $item['remotePoster'] ?? null,
+                    'images' => $item['images'] ?? [],
+                ], $this->tryClientCall($connection, fn (SonarrClient $sonarrClient): array => $sonarrClient->searchSeries($term)))),
         ]);
     }
 
@@ -179,9 +136,30 @@ class SeriesController extends Controller
         return to_route('media.series.index');
     }
 
-    private function client(): SonarrClient
+    protected function serviceType(): ServiceType
     {
-        return new SonarrClient(ServiceConnection::resolveActive(ServiceType::Sonarr));
+        return ServiceType::Sonarr;
+    }
+
+    protected function buildClient(ServiceConnection $serviceConnection): SonarrClient
+    {
+        return new SonarrClient($serviceConnection);
+    }
+
+    #[Override]
+    protected function client(): SonarrClient
+    {
+        return $this->buildClient(ServiceConnection::resolveActive($this->serviceType()));
+    }
+
+    protected function noConnectionMessage(): string
+    {
+        return __('No active Sonarr connection configured.');
+    }
+
+    protected function connectionFailedMessage(): string
+    {
+        return __('Failed to connect to Sonarr.');
     }
 
     /**
@@ -232,19 +210,5 @@ class SeriesController extends Controller
             'id' => $p['id'] ?? null,
             'name' => $p['name'] ?? null,
         ], $profiles);
-    }
-
-    private function noConnectionRedirect(): RedirectResponse
-    {
-        Inertia::flash('toast', ['type' => 'error', 'message' => __('No active Sonarr connection configured.')]);
-
-        return to_route('dashboard');
-    }
-
-    private function connectionFailedRedirect(): RedirectResponse
-    {
-        Inertia::flash('toast', ['type' => 'error', 'message' => __('Failed to connect to Sonarr.')]);
-
-        return to_route('dashboard');
     }
 }

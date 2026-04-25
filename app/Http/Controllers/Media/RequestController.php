@@ -8,17 +8,21 @@ use App\Enums\ServiceType;
 use App\Http\Controllers\Controller;
 use App\Models\ServiceConnection;
 use App\Services\Seerr\SeerrClient;
+use App\Services\Seerr\SeerrTitleResolver;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\RequestException;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Cache;
 use Inertia\Inertia;
 use Inertia\Response;
 
 class RequestController extends Controller
 {
+    public function __construct(
+        private readonly SeerrTitleResolver $seerrTitleResolver,
+    ) {}
+
     public function index(Request $request): Response|RedirectResponse
     {
         try {
@@ -105,7 +109,7 @@ class RequestController extends Controller
         $results = is_array($response['results'] ?? null) ? $response['results'] : [];
         $pageInfo = is_array($response['pageInfo'] ?? null) ? $response['pageInfo'] : [];
 
-        $titles = $this->resolveTitles($serviceConnection, $seerrClient, $results);
+        $titles = $this->seerrTitleResolver->resolve($serviceConnection, $seerrClient, $results);
 
         return [
             'data' => array_map(fn (array $req): array => $this->mapRequest($req, $titles), $results),
@@ -138,52 +142,6 @@ class RequestController extends Controller
     }
 
     /**
-     * Fetch titles for every distinct (media_type, tmdb_id) in the result set.
-     * Uses Cache::remember for a 5-minute TTL so repeat visits are cheap.
-     *
-     * @param  array<int, array<string, mixed>>  $requests
-     * @return array<string, string> keyed by "{media_type}:{tmdb_id}"
-     */
-    private function resolveTitles(ServiceConnection $serviceConnection, SeerrClient $seerrClient, array $requests): array
-    {
-        $pairs = [];
-        foreach ($requests as $request) {
-            $mediaType = $request['type'] ?? ($request['media']['mediaType'] ?? null);
-            $tmdbId = $request['media']['tmdbId'] ?? null;
-            if ($mediaType === null) {
-                continue;
-            }
-
-            if ($tmdbId === null) {
-                continue;
-            }
-
-            $pairs[sprintf('%s:%d', $mediaType, (int) $tmdbId)] = [
-                'type' => (string) $mediaType,
-                'id' => (int) $tmdbId,
-            ];
-        }
-
-        $titles = [];
-        foreach ($pairs as $key => $pair) {
-            $cacheKey = sprintf('seerr:title:%d:%s:%d', $serviceConnection->id, $pair['type'], $pair['id']);
-            $titles[$key] = Cache::remember($cacheKey, now()->addMinutes(5), function () use ($seerrClient, $pair): string {
-                try {
-                    $detail = $pair['type'] === 'movie'
-                        ? $seerrClient->getMovieDetails($pair['id'])
-                        : $seerrClient->getTvDetails($pair['id']);
-                } catch (RequestException|ConnectionException) {
-                    return sprintf('%s #%d', ucfirst($pair['type']), $pair['id']);
-                }
-
-                return (string) ($detail['title'] ?? $detail['name'] ?? $detail['originalTitle'] ?? $detail['originalName'] ?? sprintf('%s #%d', ucfirst($pair['type']), $pair['id']));
-            });
-        }
-
-        return $titles;
-    }
-
-    /**
      * @param  array<string, mixed>  $req
      * @param  array<string, string>  $titles
      * @return array<string, mixed>
@@ -192,13 +150,12 @@ class RequestController extends Controller
     {
         $mediaType = $req['type'] ?? ($req['media']['mediaType'] ?? null);
         $tmdbId = $req['media']['tmdbId'] ?? null;
-        $titleKey = ($mediaType !== null && $tmdbId !== null) ? sprintf('%s:%d', $mediaType, (int) $tmdbId) : null;
 
         return [
             'id' => $req['id'] ?? null,
             'status' => $req['status'] ?? null,
             'media_type' => $mediaType,
-            'media_title' => $titleKey !== null ? ($titles[$titleKey] ?? null) : null,
+            'media_title' => $this->seerrTitleResolver->titleFor($req, $titles),
             'tmdb_id' => $tmdbId,
             'tvdb_id' => $req['media']['tvdbId'] ?? null,
             'requester' => $req['requestedBy']['displayName'] ?? ($req['requestedBy']['username'] ?? null),
