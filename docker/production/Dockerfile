@@ -55,8 +55,12 @@ RUN npm ci --no-audit --no-fund --prefer-offline
 COPY . .
 
 # Build-time env: artisan must be bootable so wayfinder + typefinder vite plugins can shell out to it.
-# Order matters: dump-autoload (no scripts) → .env + key → discover → generate types → vite build.
-RUN composer dump-autoload --optimize --classmap-authoritative --no-scripts \
+# Order matters: framework dirs → dump-autoload → .env + key → discover → generate types → vite build.
+# .dockerignore prunes storage/framework/{cache,sessions,views} contents, so we recreate the dirs
+# before booting Laravel — Blade's Compiler refuses to start without a valid view-cache path.
+RUN mkdir -p storage/framework/cache/data storage/framework/sessions storage/framework/views \
+        storage/app/public storage/logs bootstrap/cache \
+    && composer dump-autoload --optimize --classmap-authoritative --no-scripts \
     && cp .env.example .env \
     && php artisan key:generate --force --no-interaction \
     && php artisan package:discover --ansi \
