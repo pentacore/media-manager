@@ -16,9 +16,9 @@ class BroadcastDashboardStats extends Command
     #[Override]
     protected $description = 'Broadcast current dashboard statistics via WebSocket';
 
-    public function handle(DashboardStatsService $stats): void
+    public function handle(DashboardStatsService $dashboardStatsService): void
     {
-        $stats->broadcast();
+        $dashboardStatsService->broadcast();
 
         $this->info('Dashboard stats broadcast successfully.');
     }

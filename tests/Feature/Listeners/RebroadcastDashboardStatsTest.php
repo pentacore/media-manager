@@ -43,35 +43,32 @@ test('handle broadcasts current snapshot', function (): void {
         'status' => ActionRequestStatus::Pending,
     ]);
 
-    $listener = app(RebroadcastDashboardStats::class);
-    $listener->handle(new WebhookReceived($webhookEvent));
+    $rebroadcastDashboardStats = resolve(RebroadcastDashboardStats::class);
+    $rebroadcastDashboardStats->handle(new WebhookReceived($webhookEvent));
 
-    Event::assertDispatched(
-        DashboardStatsUpdated::class,
-        fn (DashboardStatsUpdated $event): bool => $event->pendingActions === 2
-            && $event->totalServices === 1
-            && $event->recentWebhooks === 4,
-    );
+    Event::assertDispatched(fn (DashboardStatsUpdated $dashboardStatsUpdated): bool => $dashboardStatsUpdated->pendingActions === 2
+        && $dashboardStatsUpdated->totalServices === 1
+        && $dashboardStatsUpdated->recentWebhooks === 4);
 });
 
 test('handle is throttled to one broadcast per second', function (): void {
     Event::fake([DashboardStatsUpdated::class]);
 
-    $listener = app(RebroadcastDashboardStats::class);
+    $rebroadcastDashboardStats = resolve(RebroadcastDashboardStats::class);
     $webhookEvent = WebhookEvent::factory()->create();
 
     // Three rapid-fire calls in the same second should produce one broadcast.
-    $listener->handle(new WebhookReceived($webhookEvent));
-    $listener->handle(new WebhookReceived($webhookEvent));
-    $listener->handle(new WebhookReceived($webhookEvent));
+    $rebroadcastDashboardStats->handle(new WebhookReceived($webhookEvent));
+    $rebroadcastDashboardStats->handle(new WebhookReceived($webhookEvent));
+    $rebroadcastDashboardStats->handle(new WebhookReceived($webhookEvent));
 
     Event::assertDispatchedTimes(DashboardStatsUpdated::class, 1);
 });
 
 test('snapshot returns the four counters', function (): void {
-    $service = app(DashboardStatsService::class);
+    $dashboardStatsService = resolve(DashboardStatsService::class);
 
-    expect($service->snapshot())->toHaveKeys([
+    expect($dashboardStatsService->snapshot())->toHaveKeys([
         'activeServices', 'totalServices', 'recentWebhooks', 'pendingActions',
     ]);
 });

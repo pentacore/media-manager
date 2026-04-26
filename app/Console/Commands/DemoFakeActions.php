@@ -12,6 +12,7 @@ use Illuminate\Broadcasting\BroadcastException;
 use Illuminate\Console\Attributes\Description;
 use Illuminate\Console\Attributes\Signature;
 use Illuminate\Console\Command;
+use Illuminate\Support\Sleep;
 use Throwable;
 
 #[Signature('demo:fake-actions
@@ -33,7 +34,7 @@ class DemoFakeActions extends Command
             $this->createAction($scenario);
 
             if ($delaySeconds > 0 && $scenario !== $scenarios->last()) {
-                sleep($delaySeconds);
+                Sleep::sleep($delaySeconds);
             }
         }
 
@@ -78,7 +79,7 @@ class DemoFakeActions extends Command
             $scenario['status']->value, $scenario['source'], $scenario['target'], $scenario['type']));
     }
 
-    private function warnReverbOffline(BroadcastException $e): void
+    private function warnReverbOffline(BroadcastException $broadcastException): void
     {
         if ($this->reverbWarned) {
             return;
@@ -88,7 +89,7 @@ class DemoFakeActions extends Command
         $this->newLine();
         $this->warn('Broadcast failed — Reverb is not reachable.');
         $this->warn('Start it with `vendor/bin/sail composer run dev` (boots app, queue, reverb, vite).');
-        $this->line(sprintf('  underlying error: %s', $e->getMessage()));
+        $this->line(sprintf('  underlying error: %s', $broadcastException->getMessage()));
         $this->newLine();
     }
 

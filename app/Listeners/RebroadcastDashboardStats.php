@@ -9,7 +9,7 @@ use Illuminate\Support\Facades\Cache;
 
 class RebroadcastDashboardStats
 {
-    public function __construct(private readonly DashboardStatsService $stats) {}
+    public function __construct(private readonly DashboardStatsService $dashboardStatsService) {}
 
     /**
      * Triggered by WebhookReceived, ActionRequestCreated,
@@ -29,7 +29,7 @@ class RebroadcastDashboardStats
         }
 
         try {
-            $this->stats->broadcast();
+            $this->dashboardStatsService->broadcast();
         } finally {
             // Lock auto-expires after 1s; explicit release is a no-op if the
             // listener finished within the TTL.

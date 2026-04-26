@@ -29,15 +29,15 @@ class DashboardStatsService
     {
         $snapshot = $this->snapshot();
 
-        $event = new DashboardStatsUpdated(
+        $dashboardStatsUpdated = new DashboardStatsUpdated(
             activeServices: $snapshot['activeServices'],
             totalServices: $snapshot['totalServices'],
             recentWebhooks: $snapshot['recentWebhooks'],
             pendingActions: $snapshot['pendingActions'],
         );
 
-        event($event);
+        event($dashboardStatsUpdated);
 
-        return $event;
+        return $dashboardStatsUpdated;
     }
 }

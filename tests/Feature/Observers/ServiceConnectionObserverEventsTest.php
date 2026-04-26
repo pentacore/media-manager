@@ -17,10 +17,7 @@ test('creating a connection broadcasts ServiceConnectionUpserted', function (): 
 
     $connection = ServiceConnection::factory()->sonarr()->create();
 
-    Event::assertDispatched(
-        ServiceConnectionUpserted::class,
-        fn (ServiceConnectionUpserted $event): bool => $event->serviceConnection->is($connection),
-    );
+    Event::assertDispatched(fn (ServiceConnectionUpserted $serviceConnectionUpserted): bool => $serviceConnectionUpserted->serviceConnection->is($connection));
 });
 
 test('updating a connection broadcasts ServiceConnectionUpserted', function (): void {
@@ -30,10 +27,7 @@ test('updating a connection broadcasts ServiceConnectionUpserted', function (): 
 
     $connection->update(['name' => 'Renamed Sonarr']);
 
-    Event::assertDispatched(
-        ServiceConnectionUpserted::class,
-        fn (ServiceConnectionUpserted $event): bool => $event->serviceConnection->name === 'Renamed Sonarr',
-    );
+    Event::assertDispatched(fn (ServiceConnectionUpserted $serviceConnectionUpserted): bool => $serviceConnectionUpserted->serviceConnection->name === 'Renamed Sonarr');
 });
 
 test('deleting a connection broadcasts ServiceConnectionDeleted with id', function (): void {
@@ -44,8 +38,5 @@ test('deleting a connection broadcasts ServiceConnectionDeleted with id', functi
 
     $connection->delete();
 
-    Event::assertDispatched(
-        ServiceConnectionDeleted::class,
-        fn (ServiceConnectionDeleted $event): bool => $event->serviceConnectionId === $id,
-    );
+    Event::assertDispatched(fn (ServiceConnectionDeleted $serviceConnectionDeleted): bool => $serviceConnectionDeleted->serviceConnectionId === $id);
 });

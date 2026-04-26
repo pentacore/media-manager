@@ -28,10 +28,7 @@ test('broadcasts ServiceLatestVersionFetched when latest_version changes', funct
 
     app()->call([new FetchLatestServiceVersion($connection), 'handle']);
 
-    Event::assertDispatched(
-        ServiceLatestVersionFetched::class,
-        fn (ServiceLatestVersionFetched $event): bool => $event->serviceConnection->id === $connection->id,
-    );
+    Event::assertDispatched(fn (ServiceLatestVersionFetched $serviceLatestVersionFetched): bool => $serviceLatestVersionFetched->serviceConnection->id === $connection->id);
 });
 
 test('does not broadcast ServiceLatestVersionFetched when latest_version is unchanged', function (): void {

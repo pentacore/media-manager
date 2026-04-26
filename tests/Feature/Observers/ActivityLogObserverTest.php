@@ -11,10 +11,7 @@ test('creating an ActivityLog dispatches ActivityLogCreated', function (): void 
 
     $log = ActivityLog::factory()->create();
 
-    Event::assertDispatched(
-        ActivityLogCreated::class,
-        fn (ActivityLogCreated $event): bool => $event->activityLog->is($log),
-    );
+    Event::assertDispatched(fn (ActivityLogCreated $activityLogCreated): bool => $activityLogCreated->activityLog->is($log));
 });
 
 test('updating an ActivityLog does not re-dispatch the created event', function (): void {

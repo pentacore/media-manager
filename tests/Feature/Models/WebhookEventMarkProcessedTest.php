@@ -13,9 +13,6 @@ test('markProcessed dispatches WebhookEventProcessed', function (): void {
 
     $webhookEvent->markProcessed();
 
-    Event::assertDispatched(
-        WebhookEventProcessed::class,
-        fn (WebhookEventProcessed $event): bool => $event->webhookEvent->id === $webhookEvent->id,
-    );
+    Event::assertDispatched(fn (WebhookEventProcessed $webhookEventProcessed): bool => $webhookEventProcessed->webhookEvent->id === $webhookEvent->id);
     expect($webhookEvent->fresh()->processed_at)->not->toBeNull();
 });

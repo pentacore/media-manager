@@ -13,6 +13,7 @@ use Illuminate\Broadcasting\BroadcastException;
 use Illuminate\Console\Attributes\Description;
 use Illuminate\Console\Attributes\Signature;
 use Illuminate\Console\Command;
+use Illuminate\Support\Sleep;
 use Illuminate\Support\Str;
 use Throwable;
 
@@ -52,7 +53,7 @@ class DemoFakeWebhooks extends Command
             $this->dispatchScenario($connection, $scenario);
 
             if ($delaySeconds > 0 && $scenario !== $scenarios->last()) {
-                sleep($delaySeconds);
+                Sleep::sleep($delaySeconds);
             }
         }
 
@@ -64,7 +65,7 @@ class DemoFakeWebhooks extends Command
     /**
      * @param  array{service: string, event_type: string, label: string, payload: array<string, mixed>}  $scenario
      */
-    private function dispatchScenario(ServiceConnection $connection, array $scenario): void
+    private function dispatchScenario(ServiceConnection $serviceConnection, array $scenario): void
     {
         // Inject a unique nonce so payload_hash differs from prior runs and the
         // dedupe in WebhookController doesn't swallow repeat demo invocations.
@@ -72,13 +73,13 @@ class DemoFakeWebhooks extends Command
         $payload['_demo_nonce'] = (string) Str::uuid();
 
         $webhookEvent = WebhookEvent::create([
-            'service_connection_id' => $connection->id,
+            'service_connection_id' => $serviceConnection->id,
             'event_type' => $scenario['event_type'],
             'payload_hash' => WebhookEvent::payloadHash($payload),
             'payload' => $payload,
         ]);
 
-        $webhookEvent->setRelation('serviceConnection', $connection);
+        $webhookEvent->setRelation('serviceConnection', $serviceConnection);
 
         try {
             event(new WebhookReceived($webhookEvent));
@@ -96,7 +97,7 @@ class DemoFakeWebhooks extends Command
         $this->line(sprintf('  [%s] %s', $scenario['service'], $scenario['label']));
     }
 
-    private function warnReverbOffline(BroadcastException $e): void
+    private function warnReverbOffline(BroadcastException $broadcastException): void
     {
         if ($this->reverbWarned) {
             return;
@@ -106,7 +107,7 @@ class DemoFakeWebhooks extends Command
         $this->newLine();
         $this->warn('Broadcast failed — Reverb is not reachable.');
         $this->warn('Start it with `vendor/bin/sail composer run dev` (boots app, queue, reverb, vite).');
-        $this->line(sprintf('  underlying error: %s', $e->getMessage()));
+        $this->line(sprintf('  underlying error: %s', $broadcastException->getMessage()));
         $this->newLine();
     }
 
