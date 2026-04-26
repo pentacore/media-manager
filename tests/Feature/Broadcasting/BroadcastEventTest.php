@@ -23,10 +23,13 @@ use Illuminate\Broadcasting\PrivateChannel;
 use Illuminate\Contracts\Broadcasting\ShouldBroadcast;
 use Illuminate\Contracts\Broadcasting\ShouldBroadcastNow;
 use Illuminate\Database\QueryException;
+use Illuminate\Support\Facades\Queue;
 
-test('ActionRequestCreated broadcasts on each admin and member user channel', function (): void {
-    $admin = User::factory()->admin()->create();
-    $member = User::factory()->member()->create();
+test('ActionRequestCreated broadcasts on the shared members.actions channel', function (): void {
+    // Three users present — no per-user fan-out: the event hits one channel
+    // regardless of how many members exist.
+    User::factory()->admin()->create();
+    User::factory()->member()->create();
     User::factory()->create();
 
     $actionRequest = ActionRequest::factory()->create();
@@ -34,20 +37,39 @@ test('ActionRequestCreated broadcasts on each admin and member user channel', fu
 
     expect($event)->toBeInstanceOf(ShouldBroadcast::class);
     expect($event->broadcastAs())->toBe('ActionRequestCreated');
-
-    $channels = $event->broadcastOn();
-    expect($channels)->toHaveCount(2);
-    expect(collect($channels)->map(fn (PrivateChannel $privateChannel): string => $privateChannel->name)->all())
-        ->toContain('private-App.Models.User.'.$admin->id)
-        ->toContain('private-App.Models.User.'.$member->id);
+    expect($event->broadcastOn())->toEqual(new PrivateChannel('members.actions'));
 
     $payload = $event->broadcastWith();
-    expect($payload)->toHaveKeys(['id', 'type', 'source_service', 'target_service', 'status', 'requires_approval', 'created_at']);
+    // Mirrors ActionRequestResource so the frontend can upsert realtime rows
+    // into the table without "undefined" rendering for payload/webhook_source/etc.
+    expect($payload)->toHaveKeys([
+        'id', 'type', 'source_service', 'target_service', 'status',
+        'requires_approval', 'payload', 'result', 'approved_by',
+        'webhook_source', 'created_at', 'updated_at',
+    ]);
     expect($payload['id'])->toBe($actionRequest->id);
 });
 
-test('ActionRequestStatusChanged broadcasts on each admin and member user channel', function (): void {
-    $admin = User::factory()->admin()->create();
+test('ActionRequestCreated strips sensitive detail from broadcast payload', function (): void {
+    $actionRequest = ActionRequest::factory()->create([
+        'result' => [
+            'success' => false,
+            'reason' => 'execution_failed',
+            'message' => 'leaked path /var/www/secrets',
+            'exception' => 'SomeException',
+        ],
+    ]);
+
+    $payload = new ActionRequestCreated($actionRequest)->broadcastWith();
+
+    expect($payload['result'])->toEqual([
+        'success' => false,
+        'reason' => 'execution_failed',
+    ]);
+});
+
+test('ActionRequestStatusChanged broadcasts on the shared members.actions channel', function (): void {
+    User::factory()->admin()->create();
     User::factory()->member()->create();
     User::factory()->create();
 
@@ -56,11 +78,7 @@ test('ActionRequestStatusChanged broadcasts on each admin and member user channe
 
     expect($event)->toBeInstanceOf(ShouldBroadcast::class);
     expect($event->broadcastAs())->toBe('ActionRequestStatusChanged');
-
-    $channels = $event->broadcastOn();
-    expect($channels)->toHaveCount(2);
-    expect(collect($channels)->map(fn (PrivateChannel $privateChannel): string => $privateChannel->name)->all())
-        ->toContain('private-App.Models.User.'.$admin->id);
+    expect($event->broadcastOn())->toEqual(new PrivateChannel('members.actions'));
 
     $payload = $event->broadcastWith();
     expect($payload)->toHaveKeys(['id', 'status', 'result', 'updated_at']);
@@ -214,7 +232,7 @@ test('WebhookEventProcessed broadcasts on dashboard channel', function (): void 
     expect($payload)->toHaveKeys(['id', 'processed_at']);
 });
 
-test('DashboardStatsUpdated broadcasts immediately on dashboard channel', function (): void {
+test('DashboardStatsUpdated broadcasts on dashboard channel via the queue', function (): void {
     $event = new DashboardStatsUpdated(
         activeServices: 3,
         totalServices: 5,
@@ -222,11 +240,42 @@ test('DashboardStatsUpdated broadcasts immediately on dashboard channel', functi
         pendingActions: 2,
     );
 
-    expect($event)->toBeInstanceOf(ShouldBroadcastNow::class);
+    // Must be queued, not ShouldBroadcastNow — a Reverb outage on the inline path
+    // would bubble out of the synchronous webhook controller and 500 the request.
+    expect($event)->toBeInstanceOf(ShouldBroadcast::class);
+    expect($event)->not->toBeInstanceOf(ShouldBroadcastNow::class);
     expect($event->broadcastOn())->toEqual(new PrivateChannel('dashboard'));
     expect($event->broadcastAs())->toBe('DashboardStatsUpdated');
 
     $payload = $event->broadcastWith();
     expect($payload)->toHaveKeys(['activeServices', 'totalServices', 'recentWebhooks', 'pendingActions', 'updatedAt']);
     expect($payload['activeServices'])->toBe(3);
+});
+
+test('webhook intake survives a broken broadcaster because dashboard rebroadcast is queued', function (): void {
+    Queue::fake();
+
+    $connection = ServiceConnection::factory()->sonarr()->create();
+
+    config()->set('broadcasting.default', 'reverb');
+    config()->set('broadcasting.connections.reverb', [
+        'driver' => 'reverb',
+        'key' => 'invalid',
+        'secret' => 'invalid',
+        'app_id' => 'invalid',
+        'options' => [
+            'host' => '127.0.0.1',
+            'port' => 1,
+            'scheme' => 'http',
+            'useTLS' => false,
+        ],
+    ]);
+
+    $response = $this->postJson(
+        route('webhooks.handle', ['service' => 'sonarr', 'connection' => $connection->id]),
+        ['eventType' => 'grab', 'data' => ['title' => 'Some Show']],
+        ['X-Webhook-Token' => $connection->webhook_token],
+    );
+
+    $response->assertOk();
 });

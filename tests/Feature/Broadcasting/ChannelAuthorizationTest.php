@@ -45,48 +45,64 @@ test('user cannot authenticate another users private channel', function (): void
         ->assertForbidden();
 });
 
-test('members can join shared channels', function (): void {
+$memberOnlyChannels = ['private-services', 'private-members.actions'];
+$openToAuthChannels = ['private-emby.activity', 'private-dashboard', 'private-activity'];
+
+test('members can join member-only channels', function () use ($memberOnlyChannels): void {
     $user = User::factory()->member()->create();
 
-    $channels = ['private-services', 'private-emby.activity', 'private-dashboard'];
-
-    foreach ($channels as $channel) {
+    foreach ($memberOnlyChannels as $memberOnlyChannel) {
         $this->actingAs($user)
             ->post('/broadcasting/auth', [
                 'socket_id' => '1234.1234567',
-                'channel_name' => $channel,
+                'channel_name' => $memberOnlyChannel,
             ])
             ->assertOk();
     }
 });
 
-test('admins can join shared channels', function (): void {
+test('admins can join member-only channels', function () use ($memberOnlyChannels): void {
     $user = User::factory()->admin()->create();
 
-    $channels = ['private-services', 'private-emby.activity', 'private-dashboard'];
-
-    foreach ($channels as $channel) {
+    foreach ($memberOnlyChannels as $memberOnlyChannel) {
         $this->actingAs($user)
             ->post('/broadcasting/auth', [
                 'socket_id' => '1234.1234567',
-                'channel_name' => $channel,
+                'channel_name' => $memberOnlyChannel,
             ])
             ->assertOk();
     }
 });
 
-test('viewers cannot join shared channels', function (): void {
+test('viewers cannot join member-only channels', function () use ($memberOnlyChannels): void {
     $viewer = User::factory()->create(); // default role is Viewer
 
-    $channels = ['private-services', 'private-emby.activity', 'private-dashboard'];
-
-    foreach ($channels as $channel) {
+    foreach ($memberOnlyChannels as $memberOnlyChannel) {
         $this->actingAs($viewer)
             ->post('/broadcasting/auth', [
                 'socket_id' => '1234.1234567',
-                'channel_name' => $channel,
+                'channel_name' => $memberOnlyChannel,
             ])
             ->assertForbidden();
+    }
+});
+
+test('all authenticated users can join the shared dashboard/activity/emby.activity channels', function () use ($openToAuthChannels): void {
+    foreach (['viewer', 'member', 'admin'] as $rolename) {
+        $user = match ($rolename) {
+            'admin' => User::factory()->admin()->create(),
+            'member' => User::factory()->member()->create(),
+            default => User::factory()->create(),
+        };
+
+        foreach ($openToAuthChannels as $openToAuthChannel) {
+            $this->actingAs($user)
+                ->post('/broadcasting/auth', [
+                    'socket_id' => '1234.1234567',
+                    'channel_name' => $openToAuthChannel,
+                ])
+                ->assertOk();
+        }
     }
 });
 

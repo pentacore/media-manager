@@ -9,6 +9,7 @@ use App\Jobs\ProcessWebhookEvent;
 use App\Models\ActionRequest;
 use App\Models\ServiceConnection;
 use App\Models\WebhookEvent;
+use Illuminate\Support\Facades\Date;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Queue;
 
@@ -41,6 +42,47 @@ test('broadcast dashboard stats command dispatches DashboardStatsUpdated event',
         ->assertSuccessful();
 
     Event::assertDispatched(DashboardStatsUpdated::class);
+});
+
+test('identical payload within the dedupe window is suppressed', function (): void {
+    Event::fake([WebhookReceived::class]);
+    Queue::fake();
+
+    $connection = ServiceConnection::factory()->sonarr()->create();
+    $payload = ['eventType' => 'grab', 'data' => ['title' => 'Test Show']];
+
+    $url = route('webhooks.handle', ['service' => 'sonarr', 'connection' => $connection->id]);
+    $headers = ['X-Webhook-Token' => $connection->webhook_token];
+
+    $this->postJson($url, $payload, $headers)->assertOk();
+    $this->postJson($url, $payload, $headers)->assertOk();
+    $this->postJson($url, $payload, $headers)->assertOk();
+
+    expect(WebhookEvent::query()->where('service_connection_id', $connection->id)->count())->toBe(1);
+    Event::assertDispatchedTimes(WebhookReceived::class, 1);
+    Queue::assertPushed(ProcessWebhookEvent::class, 1);
+});
+
+test('identical payload arriving outside the dedupe window is recorded again', function (): void {
+    Event::fake([WebhookReceived::class]);
+    Queue::fake();
+
+    $connection = ServiceConnection::factory()->sonarr()->create();
+    $payload = ['eventType' => 'grab', 'data' => ['title' => 'Test Show']];
+    $url = route('webhooks.handle', ['service' => 'sonarr', 'connection' => $connection->id]);
+    $headers = ['X-Webhook-Token' => $connection->webhook_token];
+
+    $this->postJson($url, $payload, $headers)->assertOk();
+
+    Date::setTestNow(Date::now()->addMinutes(10));
+
+    $this->postJson($url, $payload, $headers)->assertOk();
+
+    Date::setTestNow();
+
+    expect(WebhookEvent::query()->where('service_connection_id', $connection->id)->count())->toBe(2);
+    Event::assertDispatchedTimes(WebhookReceived::class, 2);
+    Queue::assertPushed(ProcessWebhookEvent::class, 2);
 });
 
 test('broadcast dashboard stats command sends correct counts', function (): void {

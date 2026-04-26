@@ -75,14 +75,11 @@ const isAdmin = computed(() => {
     return value === 'admin';
 });
 
-const userId = computed(() => page.props.auth.user?.id);
 const hasFilter = computed(() => props.filters.status !== '');
 const onFirstPage = computed(() => props.requests.meta.current_page === 1);
 const merge = computed(() => !hasFilter.value && onFirstPage.value);
 
-const userChannel = computed(() =>
-    typeof userId.value === 'number' ? `App.Models.User.${userId.value}` : null,
-);
+const ACTIONS_CHANNEL = 'members.actions';
 
 const {
     items: liveRequests,
@@ -91,7 +88,7 @@ const {
     resume,
     subscribe: subscribeCreated,
 } = useRealtimeList<ActionRequestRow>({
-    channel: userChannel.value ?? '',
+    channel: ACTIONS_CHANNEL,
     event: 'ActionRequestCreated',
     keyField: 'id',
     initial: props.requests.data,
@@ -115,7 +112,6 @@ const visibleRequests = computed(() =>
 );
 
 const { privateChannel, leaveChannel } = useWebSocket();
-let statusChannelName: string | null = null;
 
 interface StatusChangePayload {
     id: number;
@@ -134,23 +130,16 @@ function applyStatusChange(payload: StatusChangePayload): void {
 }
 
 onMounted(() => {
-    if (!userChannel.value) {
-        return;
-    }
-
     subscribeCreated();
 
-    statusChannelName = userChannel.value;
-    privateChannel(statusChannelName).listen(
+    privateChannel(ACTIONS_CHANNEL).listen(
         '.ActionRequestStatusChanged',
         (event: StatusChangePayload) => applyStatusChange(event),
     );
 });
 
 onUnmounted(() => {
-    if (statusChannelName) {
-        leaveChannel(statusChannelName);
-    }
+    leaveChannel(ACTIONS_CHANNEL);
 });
 
 function formatTime(iso: string | null): string {

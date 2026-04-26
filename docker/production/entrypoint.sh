@@ -25,14 +25,21 @@ warm_caches() {
 }
 
 if [[ "${RUN_MIGRATIONS:-false}" == "true" ]]; then
+    # --isolated takes a DB-level atomic lock so concurrent web replicas don't
+    # race the migrations table. The dedicated `migrate` role below is still
+    # the recommended pattern for multi-replica deployments.
     echo "Running migrations..."
-    php artisan migrate --force
+    php artisan migrate --force --isolated
 fi
 
 case "$role" in
     web)
         warm_caches
-        php artisan storage:link --force || true
+        # Idempotent symlink — `--force` would unlink+symlink and race other
+        # web replicas sharing a storage volume, briefly 404-ing public assets.
+        if [[ ! -L public/storage ]]; then
+            php artisan storage:link || true
+        fi
         # Octane worker mode on FrankenPHP: framework boots once per worker and is reused
         # across requests. --workers=auto sizes to CPU count; --max-requests recycles workers
         # to bound any per-request state leaks. Octane generates its own Caddyfile in

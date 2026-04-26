@@ -1,7 +1,8 @@
-import { usePage } from '@inertiajs/vue3';
 import { onUnmounted } from 'vue';
 import { toast } from 'vue-sonner';
 import { useWebSocket } from '@/composables/useWebSocket';
+
+const CHANNEL_NAME = 'members.actions';
 
 export interface UseNotifications {
     subscribe: () => void;
@@ -10,33 +11,16 @@ export interface UseNotifications {
 
 export function useNotifications(): UseNotifications {
     const { privateChannel, leaveChannel } = useWebSocket();
-    const page = usePage();
-    let channelName: string | null = null;
-
-    function resolveChannel(): string | null {
-        const userId = page.props.auth?.user?.id;
-
-        if (typeof userId !== 'number') {
-            return null;
-        }
-
-        return `App.Models.User.${userId}`;
-    }
+    let subscribed = false;
 
     function subscribe(): void {
-        if (channelName) {
+        if (subscribed) {
             return;
         }
 
-        const name = resolveChannel();
+        subscribed = true;
 
-        if (!name) {
-            return;
-        }
-
-        channelName = name;
-
-        privateChannel(name)
+        privateChannel(CHANNEL_NAME)
             .listen(
                 '.ActionRequestCreated',
                 (event: Record<string, unknown>) => {
@@ -63,9 +47,9 @@ export function useNotifications(): UseNotifications {
     }
 
     function unsubscribe(): void {
-        if (channelName) {
-            leaveChannel(channelName);
-            channelName = null;
+        if (subscribed) {
+            leaveChannel(CHANNEL_NAME);
+            subscribed = false;
         }
     }
 

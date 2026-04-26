@@ -4,9 +4,7 @@ declare(strict_types=1);
 
 namespace App\Events;
 
-use App\Enums\UserRole;
 use App\Models\ActionRequest;
-use App\Models\User;
 use Illuminate\Broadcasting\InteractsWithSockets;
 use Illuminate\Broadcasting\PrivateChannel;
 use Illuminate\Contracts\Broadcasting\ShouldBroadcast;
@@ -21,16 +19,9 @@ class ActionRequestStatusChanged implements ShouldBroadcast
 
     public function __construct(public ActionRequest $actionRequest) {}
 
-    /**
-     * @return array<int, PrivateChannel>
-     */
-    public function broadcastOn(): array
+    public function broadcastOn(): PrivateChannel
     {
-        return User::query()
-            ->whereIn('role', [UserRole::Admin->value, UserRole::Member->value])
-            ->pluck('id')
-            ->map(fn (int $id): PrivateChannel => new PrivateChannel('App.Models.User.'.$id))
-            ->all();
+        return new PrivateChannel('members.actions');
     }
 
     public function broadcastAs(): string

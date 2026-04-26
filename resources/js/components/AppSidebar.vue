@@ -92,7 +92,6 @@ watchEffect(() => {
 });
 
 const { privateChannel, leaveChannel } = useWebSocket();
-const userId = computed(() => page.props.auth.user?.id);
 
 let activitySessionTimer: ReturnType<typeof setInterval> | null = null;
 const sessionExpiryMs = 10 * 60 * 1000;
@@ -108,10 +107,7 @@ function pruneStaleSessions(): void {
         }
     }
 
-    activeSessions.value =
-        sessionTimestamps.size > 0
-            ? sessionTimestamps.size
-            : Math.max(0, activeSessions.value);
+    activeSessions.value = sessionTimestamps.size;
 }
 
 interface PlaybackPayload {
@@ -159,50 +155,41 @@ onMounted(() => {
         },
     );
 
-    if (typeof userId.value === 'number') {
-        const userChannel = `App.Models.User.${userId.value}`;
-        privateChannel(userChannel)
-            .listen(
-                '.ActionRequestCreated',
-                (event: ActionRequestCreatedPayload) => {
-                    if (
-                        event.status === 'pending' &&
-                        !pendingIds.has(event.id)
-                    ) {
-                        pendingIds.add(event.id);
-                        pendingActions.value += 1;
+    privateChannel('members.actions')
+        .listen(
+            '.ActionRequestCreated',
+            (event: ActionRequestCreatedPayload) => {
+                if (event.status === 'pending' && !pendingIds.has(event.id)) {
+                    pendingIds.add(event.id);
+                    pendingActions.value += 1;
+                }
+            },
+        )
+        .listen(
+            '.ActionRequestStatusChanged',
+            (event: ActionRequestStatusPayload) => {
+                if (
+                    TERMINAL_STATUSES.has(event.status) ||
+                    event.status === 'approved' ||
+                    event.status === 'executing'
+                ) {
+                    if (pendingIds.has(event.id)) {
+                        pendingIds.delete(event.id);
+                        pendingActions.value = Math.max(
+                            0,
+                            pendingActions.value - 1,
+                        );
                     }
-                },
-            )
-            .listen(
-                '.ActionRequestStatusChanged',
-                (event: ActionRequestStatusPayload) => {
-                    if (
-                        TERMINAL_STATUSES.has(event.status) ||
-                        event.status === 'approved' ||
-                        event.status === 'executing'
-                    ) {
-                        if (pendingIds.has(event.id)) {
-                            pendingIds.delete(event.id);
-                            pendingActions.value = Math.max(
-                                0,
-                                pendingActions.value - 1,
-                            );
-                        }
-                    }
-                },
-            );
-    }
+                }
+            },
+        );
 
     activitySessionTimer = setInterval(pruneStaleSessions, 60_000);
 });
 
 onUnmounted(() => {
     leaveChannel('emby.activity');
-
-    if (typeof userId.value === 'number') {
-        leaveChannel(`App.Models.User.${userId.value}`);
-    }
+    leaveChannel('members.actions');
 
     if (activitySessionTimer) {
         clearInterval(activitySessionTimer);
