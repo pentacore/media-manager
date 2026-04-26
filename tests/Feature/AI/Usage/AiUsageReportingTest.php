@@ -5,6 +5,7 @@ declare(strict_types=1);
 use App\Ai\Agents\CommandAgent;
 use App\Models\AiModelPrice;
 use App\Services\AiUsage\AiUsageReporting;
+use App\Services\AiUsage\Scenario;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
 
@@ -112,6 +113,62 @@ test('aggregateBy groups by the requested column and orders by cost desc', funct
     expect($rows)->toHaveCount(2);
     expect($rows->first()->key)->toBe('anthropic');
     expect((int) $rows->first()->invocations)->toBe(2);
+});
+
+test('totals with scenario uses flat rates instead of priced rates', function (): void {
+    seedPrice('openai', 'gpt-5-mini', input: 0.40, output: 1.60);
+
+    seedUsage(['prompt_tokens' => 1_000_000, 'completion_tokens' => 500_000]);
+
+    $scenario = new Scenario(
+        inputPerMtok: 1.00,
+        outputPerMtok: 5.00,
+        cacheReadPerMtok: 0,
+        cacheWritePerMtok: 0,
+        reasoningPerMtok: 0,
+    );
+
+    $totals = resolve(AiUsageReporting::class)->totals(
+        CarbonImmutable::now()->subDay(),
+        $scenario,
+    );
+
+    // 1M * $1 + 0.5M * $5 = $1 + $2.5 = $3.50
+    expect((float) $totals['total_cost'])->toBe(3.50);
+});
+
+test('scenario applies even when no price row exists for the model', function (): void {
+    // No price seeded for this model, but the scenario provides flat rates so
+    // cost is still computed.
+    seedUsage(['model' => 'mystery-model', 'prompt_tokens' => 1_000_000]);
+
+    $scenario = new Scenario(2.00, 0, 0, 0, 0);
+
+    $totals = resolve(AiUsageReporting::class)->totals(
+        CarbonImmutable::now()->subDay(),
+        $scenario,
+    );
+
+    expect((float) $totals['total_cost'])->toBe(2.00);
+});
+
+test('aggregateBy with scenario returns same groups but scenario-priced costs', function (): void {
+    seedPrice('openai', 'gpt-5-mini', input: 0.40, output: 1.60);
+
+    seedUsage(['provider' => 'openai', 'model' => 'gpt-5-mini', 'prompt_tokens' => 1_000_000]);
+    seedUsage(['provider' => 'openai', 'model' => 'gpt-5-mini', 'prompt_tokens' => 500_000]);
+
+    $scenario = new Scenario(2.00, 0, 0, 0, 0);
+
+    $rows = resolve(AiUsageReporting::class)->aggregateBy(
+        'provider',
+        CarbonImmutable::now()->subDay(),
+        $scenario,
+    );
+
+    expect($rows)->toHaveCount(1);
+    // 1.5M tokens * $2 = $3
+    expect((float) $rows->first()->total_cost)->toBe(3.00);
 });
 
 test('recentInvocations returns rows ordered by created_at desc with computed cost', function (): void {
