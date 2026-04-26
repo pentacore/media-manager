@@ -2,7 +2,9 @@
 
 declare(strict_types=1);
 
+use App\Http\Controllers\Admin\AiModelPriceController;
 use App\Http\Controllers\Admin\AiSettingsController;
+use App\Http\Controllers\Admin\AiUsageController;
 use App\Http\Controllers\Admin\ServiceConnectionController;
 use App\Http\Controllers\Admin\UserController;
 use Illuminate\Support\Facades\Route;
@@ -27,4 +29,11 @@ Route::middleware(['auth', 'verified', 'password.set', 'role:admin'])->prefix('a
 
     Route::get('ai-settings', [AiSettingsController::class, 'index'])->name('ai-settings.index');
     Route::put('ai-settings', [AiSettingsController::class, 'update'])->name('ai-settings.update');
+
+    Route::get('ai-usage', [AiUsageController::class, 'index'])->name('ai-usage.index');
+
+    Route::get('ai-prices', [AiModelPriceController::class, 'index'])->name('ai-prices.index');
+    Route::post('ai-prices', [AiModelPriceController::class, 'store'])->name('ai-prices.store');
+    Route::put('ai-prices/{aiModelPrice}', [AiModelPriceController::class, 'update'])->name('ai-prices.update');
+    Route::delete('ai-prices/{aiModelPrice}', [AiModelPriceController::class, 'destroy'])->name('ai-prices.destroy');
 });

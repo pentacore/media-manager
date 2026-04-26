@@ -2,7 +2,9 @@
 import { Link, usePage } from '@inertiajs/vue3';
 import {
     Activity as ActivityIcon,
+    BarChart3,
     Brain,
+    DollarSign,
     Film,
     HeartPulse,
     History,
@@ -22,7 +24,9 @@ import { computed, onMounted, onUnmounted, ref, watchEffect } from 'vue';
 import ActionRequestController from '@/actions/App/Http/Controllers/Actions/ActionRequestController';
 import ActionTypeConfigController from '@/actions/App/Http/Controllers/Actions/ActionTypeConfigController';
 import ActivityLogController from '@/actions/App/Http/Controllers/ActivityLogController';
+import AiModelPriceController from '@/actions/App/Http/Controllers/Admin/AiModelPriceController';
 import AiSettingsController from '@/actions/App/Http/Controllers/Admin/AiSettingsController';
+import AiUsageController from '@/actions/App/Http/Controllers/Admin/AiUsageController';
 import ServiceConnectionController from '@/actions/App/Http/Controllers/Admin/ServiceConnectionController';
 import UserController from '@/actions/App/Http/Controllers/Admin/UserController';
 import AIChatController from '@/actions/App/Http/Controllers/AI/ChatController';
@@ -296,6 +300,16 @@ const adminNavItems: NavItem[] = [
         title: 'AI Settings',
         href: AiSettingsController.index.url(),
         icon: Brain,
+    },
+    {
+        title: 'AI Usage',
+        href: AiUsageController.index.url(),
+        icon: BarChart3,
+    },
+    {
+        title: 'AI Prices',
+        href: AiModelPriceController.index.url(),
+        icon: DollarSign,
     },
 ];
 </script>
