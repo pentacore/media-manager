@@ -31,17 +31,17 @@ class ActivityLogController extends Controller
             $builder->where('service_connection_id', $serviceId);
         }
 
-        $paginator = $builder->paginate(50)->withQueryString();
+        $lengthAwarePaginator = $builder->paginate(50)->withQueryString();
 
         return Inertia::render('ActivityLog', [
             'logs' => [
-                'data' => ActivityLogResource::collection($paginator->getCollection())->toArray($request),
-                'links' => $paginator->linkCollection()->toArray(),
+                'data' => ActivityLogResource::collection($lengthAwarePaginator->getCollection())->toArray($request),
+                'links' => $lengthAwarePaginator->linkCollection()->toArray(),
                 'meta' => [
-                    'current_page' => $paginator->currentPage(),
-                    'last_page' => $paginator->lastPage(),
-                    'total' => $paginator->total(),
-                    'per_page' => $paginator->perPage(),
+                    'current_page' => $lengthAwarePaginator->currentPage(),
+                    'last_page' => $lengthAwarePaginator->lastPage(),
+                    'total' => $lengthAwarePaginator->total(),
+                    'per_page' => $lengthAwarePaginator->perPage(),
                 ],
             ],
             'filters' => [

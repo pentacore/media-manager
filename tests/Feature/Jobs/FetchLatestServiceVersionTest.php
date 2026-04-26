@@ -91,11 +91,9 @@ test('notifies all admins when a newer version is detected', function (): void {
     Notification::assertSentTo(
         $admin,
         ServiceUpdateAvailable::class,
-        function (ServiceUpdateAvailable $notification) use ($connection): bool {
-            return $notification->serviceConnection->is($connection)
-                && $notification->latestVersion === '4.0.5'
-                && $notification->currentVersion === '4.0.4';
-        },
+        fn (ServiceUpdateAvailable $notification): bool => $notification->serviceConnection->is($connection)
+            && $notification->latestVersion === '4.0.5'
+            && $notification->currentVersion === '4.0.4',
     );
     Notification::assertCount(2);
 });

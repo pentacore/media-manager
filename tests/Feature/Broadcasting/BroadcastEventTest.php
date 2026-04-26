@@ -31,7 +31,7 @@ test('ActionRequestCreated broadcasts on each admin and member user channel', fu
 
     $channels = $event->broadcastOn();
     expect($channels)->toHaveCount(2);
-    expect(collect($channels)->map(fn (PrivateChannel $c): string => $c->name)->all())
+    expect(collect($channels)->map(fn (PrivateChannel $privateChannel): string => $privateChannel->name)->all())
         ->toContain('private-App.Models.User.'.$admin->id)
         ->toContain('private-App.Models.User.'.$member->id);
 
@@ -53,7 +53,7 @@ test('ActionRequestStatusChanged broadcasts on each admin and member user channe
 
     $channels = $event->broadcastOn();
     expect($channels)->toHaveCount(2);
-    expect(collect($channels)->map(fn (PrivateChannel $c): string => $c->name)->all())
+    expect(collect($channels)->map(fn (PrivateChannel $privateChannel): string => $privateChannel->name)->all())
         ->toContain('private-App.Models.User.'.$admin->id);
 
     $payload = $event->broadcastWith();
