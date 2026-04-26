@@ -5,6 +5,7 @@ declare(strict_types=1);
 use App\Enums\ServiceType;
 use App\Models\ServiceConnection;
 use App\Services\Emby\EmbyClient;
+use App\Services\Prowlarr\ProwlarrClient;
 use App\Services\Radarr\RadarrClient;
 use App\Services\Seerr\SeerrClient;
 use App\Services\ServiceClientFactory;
@@ -35,4 +36,12 @@ test('makeForType resolves the active connection then makes a client', function 
 test('makeForType throws when no active connection exists', function (): void {
     expect(fn () => resolve(ServiceClientFactory::class)->makeForType(ServiceType::Sonarr))
         ->toThrow(ModelNotFoundException::class);
+});
+
+test('factory makes ProwlarrClient for Prowlarr connection', function (): void {
+    $connection = ServiceConnection::factory()->prowlarr()->create();
+
+    $client = resolve(ServiceClientFactory::class)->make($connection);
+
+    expect($client)->toBeInstanceOf(ProwlarrClient::class);
 });
