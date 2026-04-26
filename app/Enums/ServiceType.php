@@ -14,6 +14,7 @@ enum ServiceType: string
     case Radarr = 'radarr';
     case Emby = 'emby';
     case Seerr = 'seerr';
+    case Prowlarr = 'prowlarr';
 
     public function label(): string
     {
@@ -22,6 +23,7 @@ enum ServiceType: string
             self::Radarr => 'Radarr',
             self::Emby => 'Emby',
             self::Seerr => 'Seerr',
+            self::Prowlarr => 'Prowlarr',
         };
     }
 }

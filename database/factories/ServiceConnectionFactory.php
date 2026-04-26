@@ -64,6 +64,14 @@ class ServiceConnectionFactory extends Factory
         ]);
     }
 
+    public function prowlarr(): static
+    {
+        return $this->state(fn (array $attributes): array => [
+            'type' => ServiceType::Prowlarr,
+            'name' => 'Prowlarr',
+        ]);
+    }
+
     public function inactive(): static
     {
         return $this->state(fn (array $attributes): array => [
