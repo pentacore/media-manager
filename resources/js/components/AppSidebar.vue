@@ -17,7 +17,7 @@ import {
     Users,
     Zap,
 } from 'lucide-vue-next';
-import { computed } from 'vue';
+import { computed, onMounted, onUnmounted, ref, watchEffect } from 'vue';
 import ActionRequestController from '@/actions/App/Http/Controllers/Actions/ActionRequestController';
 import ActionTypeConfigController from '@/actions/App/Http/Controllers/Actions/ActionTypeConfigController';
 import ActivityLogController from '@/actions/App/Http/Controllers/ActivityLogController';
@@ -44,6 +44,7 @@ import {
     SidebarMenuButton,
     SidebarMenuItem,
 } from '@/components/ui/sidebar';
+import { useWebSocket } from '@/composables/useWebSocket';
 import { dashboard } from '@/routes';
 import type { NavItem } from '@/types';
 
@@ -66,6 +67,130 @@ const aiEnabled = computed(() =>
         (page.props as unknown as { ai?: { enabled?: boolean } }).ai?.enabled,
     ),
 );
+
+const initialNav = (page.props as unknown as {
+    nav?: { pendingActions?: number; activeSessions?: number };
+}).nav;
+
+const pendingActions = ref(initialNav?.pendingActions ?? 0);
+const activeSessions = ref(initialNav?.activeSessions ?? 0);
+const recentSessionIds = new Set<number>();
+
+watchEffect(() => {
+    const nav = (page.props as unknown as {
+        nav?: { pendingActions?: number; activeSessions?: number };
+    }).nav;
+
+    if (nav) {
+        pendingActions.value = nav.pendingActions ?? 0;
+        activeSessions.value = nav.activeSessions ?? 0;
+    }
+});
+
+const { privateChannel, leaveChannel } = useWebSocket();
+const userId = computed(() => page.props.auth.user?.id);
+
+let activitySessionTimer: ReturnType<typeof setInterval> | null = null;
+const sessionExpiryMs = 10 * 60 * 1000;
+const sessionTimestamps = new Map<number, number>();
+
+function pruneStaleSessions(): void {
+    const cutoff = Date.now() - sessionExpiryMs;
+
+    for (const [id, ts] of sessionTimestamps) {
+        if (ts < cutoff) {
+            sessionTimestamps.delete(id);
+            recentSessionIds.delete(id);
+        }
+    }
+
+    activeSessions.value = sessionTimestamps.size > 0
+        ? sessionTimestamps.size
+        : Math.max(0, activeSessions.value);
+}
+
+interface PlaybackPayload {
+    id: number;
+    action: string;
+}
+
+interface ActionRequestCreatedPayload {
+    id: number;
+    requires_approval: boolean;
+    status: string;
+}
+
+interface ActionRequestStatusPayload {
+    id: number;
+    status: string;
+}
+
+const TERMINAL_STATUSES = new Set(['completed', 'failed', 'rejected']);
+// Track which action ids we've already counted as pending so an
+// out-of-order Created/StatusChanged sequence doesn't double-count.
+const pendingIds = new Set<number>();
+
+onMounted(() => {
+    privateChannel('emby.activity').listen(
+        '.EmbyPlaybackUpdated',
+        (event: PlaybackPayload) => {
+            if (event.action === 'played') {
+                if (!recentSessionIds.has(event.id)) {
+                    recentSessionIds.add(event.id);
+                    activeSessions.value += 1;
+                }
+
+                sessionTimestamps.set(event.id, Date.now());
+            } else {
+                if (recentSessionIds.has(event.id)) {
+                    recentSessionIds.delete(event.id);
+                    sessionTimestamps.delete(event.id);
+                    activeSessions.value = Math.max(0, activeSessions.value - 1);
+                }
+            }
+        },
+    );
+
+    if (typeof userId.value === 'number') {
+        const userChannel = `App.Models.User.${userId.value}`;
+        privateChannel(userChannel)
+            .listen(
+                '.ActionRequestCreated',
+                (event: ActionRequestCreatedPayload) => {
+                    if (event.status === 'pending' && !pendingIds.has(event.id)) {
+                        pendingIds.add(event.id);
+                        pendingActions.value += 1;
+                    }
+                },
+            )
+            .listen(
+                '.ActionRequestStatusChanged',
+                (event: ActionRequestStatusPayload) => {
+                    if (TERMINAL_STATUSES.has(event.status) || event.status === 'approved' || event.status === 'executing') {
+                        if (pendingIds.has(event.id)) {
+                            pendingIds.delete(event.id);
+                            pendingActions.value = Math.max(0, pendingActions.value - 1);
+                        }
+                    }
+                },
+            );
+    }
+
+    activitySessionTimer = setInterval(pruneStaleSessions, 60_000);
+});
+
+onUnmounted(() => {
+    leaveChannel('emby.activity');
+
+    if (typeof userId.value === 'number') {
+        leaveChannel(`App.Models.User.${userId.value}`);
+    }
+
+    if (activitySessionTimer) {
+        clearInterval(activitySessionTimer);
+        activitySessionTimer = null;
+    }
+});
 
 const mainNavItems: NavItem[] = [
     {
@@ -103,11 +228,12 @@ const mediaNavItems: NavItem[] = [
     },
 ];
 
-const monitoringNavItems: NavItem[] = [
+const monitoringNavItems = computed<NavItem[]>(() => [
     {
         title: 'Now Playing',
         href: NowPlayingController().url,
         icon: ActivityIcon,
+        badge: () => activeSessions.value,
     },
     {
         title: 'Watch History',
@@ -119,15 +245,16 @@ const monitoringNavItems: NavItem[] = [
         href: ServiceHealthController().url,
         icon: HeartPulse,
     },
-];
+]);
 
-const automationNavItems: NavItem[] = [
+const automationNavItems = computed<NavItem[]>(() => [
     {
         title: 'Action Requests',
         href: ActionRequestController.index.url(),
         icon: Zap,
+        badge: () => pendingActions.value,
     },
-];
+]);
 
 const aiNavItems: NavItem[] = [
     {
