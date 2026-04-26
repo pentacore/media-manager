@@ -60,6 +60,7 @@ const mergedConnections = computed<Connection[]>(() =>
             return {
                 ...connection,
                 health_status: live.status as Connection['health_status'],
+                health_message: live.message ?? connection.health_message,
                 last_seen_at: live.last_seen_at,
             };
         }
@@ -204,28 +205,42 @@ function diskSpaceFor(connectionId: number): DiskSpace[] | undefined {
                     </div>
                 </CardHeader>
                 <CardContent class="space-y-3">
-                    <div class="flex items-center gap-2">
-                        <CircleCheck
+                    <div class="space-y-2">
+                        <div class="flex items-center gap-2">
+                            <CircleCheck
+                                v-if="
+                                    connection.is_active &&
+                                    connection.health_status === 'healthy'
+                                "
+                                class="size-4 text-green-600 dark:text-green-400"
+                            />
+                            <CircleX
+                                v-else-if="
+                                    connection.is_active &&
+                                    connection.health_status === 'unhealthy'
+                                "
+                                class="size-4 text-destructive"
+                            />
+                            <CircleHelp
+                                v-else
+                                class="size-4 text-muted-foreground"
+                            />
+                            <Badge :variant="healthBadgeVariant(connection)">
+                                {{ healthLabel(connection) }}
+                            </Badge>
+                        </div>
+
+                        <p
                             v-if="
                                 connection.is_active &&
-                                connection.health_status === 'healthy'
+                                connection.health_status === 'unhealthy' &&
+                                connection.health_message
                             "
-                            class="size-4 text-green-600 dark:text-green-400"
-                        />
-                        <CircleX
-                            v-else-if="
-                                connection.is_active &&
-                                connection.health_status === 'unhealthy'
-                            "
-                            class="size-4 text-destructive"
-                        />
-                        <CircleHelp
-                            v-else
-                            class="size-4 text-muted-foreground"
-                        />
-                        <Badge :variant="healthBadgeVariant(connection)">
-                            {{ healthLabel(connection) }}
-                        </Badge>
+                            class="rounded-sm border border-destructive/30 bg-destructive/5 px-2 py-1.5 font-mono text-xs break-words text-destructive"
+                            :title="connection.health_message"
+                        >
+                            {{ connection.health_message }}
+                        </p>
                     </div>
 
                     <div class="flex flex-wrap items-center gap-2 text-sm">

@@ -110,7 +110,7 @@ test('ServiceHealthChanged broadcasts on services channel with status', function
     expect($event->broadcastAs())->toBe('ServiceHealthChanged');
 
     $payload = $event->broadcastWith();
-    expect($payload)->toHaveKeys(['id', 'name', 'type', 'is_active', 'status', 'last_seen_at']);
+    expect($payload)->toHaveKeys(['id', 'name', 'type', 'is_active', 'status', 'message', 'last_seen_at']);
     expect($payload['status'])->toBe('healthy');
 });
 

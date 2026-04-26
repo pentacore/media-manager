@@ -21,6 +21,7 @@ use Pentacore\Typefinder\Attributes\TypefinderResource;
     'url' => 'string',
     'is_active' => 'boolean',
     'health_status' => "'healthy' | 'unhealthy' | 'unknown'",
+    'health_message' => 'string | null',
     'version' => 'string | null',
     'latest_version' => 'string | null',
     'update_available' => 'boolean',
@@ -44,6 +45,7 @@ class ServiceConnectionResource extends JsonResource
             'url' => $this->url,
             'is_active' => $this->is_active,
             'health_status' => ($this->health_status ?? HealthStatus::Unknown)->value,
+            'health_message' => $this->health_message,
             'version' => $this->version,
             'latest_version' => $this->latest_version,
             'update_available' => $this->latest_version !== null

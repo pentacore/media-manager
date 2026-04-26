@@ -61,7 +61,7 @@ use Override;
  * @mixin \Eloquent
  */
 #[ObservedBy(ServiceConnectionObserver::class)]
-#[Fillable(['type', 'name', 'url', 'api_key', 'webhook_token', 'is_active', 'version', 'latest_version', 'health_status', 'last_seen_at', 'settings'])]
+#[Fillable(['type', 'name', 'url', 'api_key', 'webhook_token', 'is_active', 'version', 'latest_version', 'health_status', 'health_message', 'last_seen_at', 'settings'])]
 class ServiceConnection extends Model
 {
     /** @use HasFactory<ServiceConnectionFactory> */

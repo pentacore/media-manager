@@ -7,6 +7,7 @@ export interface ServiceStatus {
     type: string;
     is_active: boolean;
     status: string;
+    message: string | null;
     last_seen_at: string | null;
 }
 

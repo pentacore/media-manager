@@ -43,6 +43,7 @@ class ServiceHealthChanged implements ShouldBroadcast
             'type' => $this->serviceConnection->type->value,
             'is_active' => $this->serviceConnection->is_active,
             'status' => $this->status,
+            'message' => $this->serviceConnection->health_message,
             'last_seen_at' => $this->serviceConnection->last_seen_at?->toISOString(),
         ];
     }
