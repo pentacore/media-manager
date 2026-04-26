@@ -32,21 +32,19 @@ runs:
       shell: bash
       run: composer install --no-interaction --prefer-dist --no-progress --no-scripts
 
-    - name: Bootstrap minimal Laravel env
-      shell: bash
-      run: |
-        cp .env.example .env
-        mkdir -p database
-        touch database/database.sqlite
-        php artisan key:generate --force --no-interaction
-        php artisan migrate --force --no-interaction
-
+    # Laravel refuses to boot without APP_KEY, but nothing in migrate / wayfinder /
+    # typefinder actually *uses* it — a dummy 32-byte key just satisfies the bootstrapper.
+    # No .env file: env vars take precedence and config/*.php fallbacks (sqlite,
+    # database/database.sqlite) cover the rest.
     - name: Generate Wayfinder + Typefinder types
       shell: bash
+      env:
+        APP_KEY: base64:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=
+        APP_ENV: production
       run: |
+        mkdir -p database
+        touch database/database.sqlite
+        php artisan migrate --force --no-interaction
         php artisan wayfinder:generate --with-form
         php artisan typefinder:generate
-
-    - name: Drop sqlite scaffolding
-      shell: bash
-      run: rm -f database/database.sqlite .env
+        rm -f database/database.sqlite
