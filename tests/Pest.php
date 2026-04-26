@@ -32,6 +32,13 @@ pest()->extend(TestCase::class)
     })
     ->in('Feature');
 
+pest()->extend(TestCase::class)
+    ->use(RefreshDatabase::class)
+    ->beforeEach(function (): void {
+        Queue::fake([PingServiceHealth::class, FetchLatestServiceVersion::class]);
+    })
+    ->in('Browser');
+
 /*
 |--------------------------------------------------------------------------
 | Expectations
