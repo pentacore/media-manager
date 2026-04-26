@@ -1,6 +1,5 @@
-import { ref, onUnmounted } from 'vue';
 import type { Ref } from 'vue';
-import { useWebSocket } from '@/composables/useWebSocket';
+import { useRealtimeList } from '@/composables/useRealtimeList';
 
 export interface NowPlayingItem {
     id: number;
@@ -19,35 +18,12 @@ export interface UseEmbyActivity {
 }
 
 export function useEmbyActivity(): UseEmbyActivity {
-    const { privateChannel, leaveChannel } = useWebSocket();
-    const nowPlaying = ref<NowPlayingItem[]>([]);
+    const { items, subscribe, unsubscribe } = useRealtimeList<NowPlayingItem>({
+        channel: 'emby.activity',
+        event: 'EmbyPlaybackUpdated',
+        keyField: 'id',
+        cap: 10,
+    });
 
-    function subscribe(): void {
-        privateChannel('emby.activity').listen(
-            '.EmbyPlaybackUpdated',
-            (event: NowPlayingItem) => {
-                const index = nowPlaying.value.findIndex(
-                    (item) => item.id === event.id,
-                );
-
-                if (index >= 0) {
-                    nowPlaying.value[index] = event;
-                } else {
-                    nowPlaying.value.unshift(event);
-
-                    if (nowPlaying.value.length > 10) {
-                        nowPlaying.value.pop();
-                    }
-                }
-            },
-        );
-    }
-
-    function unsubscribe(): void {
-        leaveChannel('emby.activity');
-    }
-
-    onUnmounted(unsubscribe);
-
-    return { nowPlaying, subscribe, unsubscribe };
+    return { nowPlaying: items, subscribe, unsubscribe };
 }
