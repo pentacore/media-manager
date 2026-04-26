@@ -40,12 +40,6 @@ phpunit.xml
 .phpunit.cache
 .phpunit.result.cache
 
-# Generated TS (regenerated in builder)
-resources/js/actions
-resources/js/routes
-resources/js/wayfinder
-resources/js/typefinder
-
 # Docs / agent files (declared in .gitignore but still in tree)
 docs
 .claude

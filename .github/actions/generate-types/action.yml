@@ -1,0 +1,52 @@
+name: Generate Wayfinder + Typefinder types
+description: |
+  Boots a minimal Laravel install (sqlite + migrations) so wayfinder:generate
+  and typefinder:generate can emit TypeScript types. Used to pre-build types
+  before any Vite build that runs with SKIP_TYPE_GENERATION=1.
+
+inputs:
+  php-version:
+    description: PHP version
+    required: false
+    default: '8.5'
+
+runs:
+  using: composite
+  steps:
+    - name: Setup PHP
+      uses: shivammathur/setup-php@v2
+      with:
+        php-version: ${{ inputs.php-version }}
+        extensions: pdo_sqlite, sqlite3
+        tools: composer:v2
+        coverage: none
+
+    - name: Cache composer
+      uses: actions/cache@v4
+      with:
+        path: ~/.cache/composer
+        key: composer-${{ runner.os }}-${{ inputs.php-version }}-${{ hashFiles('**/composer.lock') }}
+        restore-keys: composer-${{ runner.os }}-${{ inputs.php-version }}-
+
+    - name: Install composer dependencies
+      shell: bash
+      run: composer install --no-interaction --prefer-dist --no-progress --no-scripts
+
+    - name: Bootstrap minimal Laravel env
+      shell: bash
+      run: |
+        cp .env.example .env
+        mkdir -p database
+        touch database/database.sqlite
+        php artisan key:generate --force --no-interaction
+        php artisan migrate --force --no-interaction
+
+    - name: Generate Wayfinder + Typefinder types
+      shell: bash
+      run: |
+        php artisan wayfinder:generate --with-form
+        php artisan typefinder:generate
+
+    - name: Drop sqlite scaffolding
+      shell: bash
+      run: rm -f database/database.sqlite .env

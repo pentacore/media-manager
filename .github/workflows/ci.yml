@@ -236,6 +236,9 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
+      - name: Pre-generate Wayfinder + Typefinder types
+        uses: ./.github/actions/generate-types
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 

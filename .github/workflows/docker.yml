@@ -26,6 +26,9 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
+      - name: Pre-generate Wayfinder + Typefinder types
+        uses: ./.github/actions/generate-types
+
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
 

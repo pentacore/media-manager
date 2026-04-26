@@ -7,32 +7,16 @@ ENV COMPOSER_ALLOW_SUPERUSER=1 \
     COMPOSER_NO_INTERACTION=1 \
     COMPOSER_MEMORY_LIMIT=-1
 
+# Builder needs PHP only to run composer (vendor/ ships in the runtime image).
+# It does NOT boot artisan: Wayfinder + Typefinder TypeScript types are produced
+# upstream (CI) so the Vite build runs with SKIP_TYPE_GENERATION=1 and never
+# shells out to PHP. That's why no .env, key:generate, or DB scaffolding here.
 RUN apk add --no-cache \
         git \
         unzip \
         libzip \
-        icu-libs \
-        oniguruma \
-        libpng \
-        libjpeg-turbo \
-        freetype \
-        postgresql-libs \
         nodejs \
-        npm \
-    && wget -q -O - https://github.com/mlocati/docker-php-extension-installer/releases/latest/download/install-php-extensions \
-        > /usr/local/bin/install-php-extensions \
-    && chmod +x /usr/local/bin/install-php-extensions \
-    && install-php-extensions \
-        bcmath \
-        gd \
-        intl \
-        mbstring \
-        opcache \
-        pcntl \
-        pdo_pgsql \
-        redis \
-        sodium \
-        zip
+        npm
 
 COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
 
@@ -51,23 +35,14 @@ RUN composer install \
 COPY package.json package-lock.json ./
 RUN npm ci --no-audit --no-fund --prefer-offline
 
-# Copy app source (.dockerignore prunes vendor/, node_modules/, etc.)
+# Copy app source — caller must have run `php artisan wayfinder:generate --with-form`
+# and `php artisan typefinder:generate` so the generated .d.ts files are in the context.
 COPY . .
 
-# Build-time env: artisan must be bootable so wayfinder + typefinder vite plugins can shell out to it.
-# Order matters: framework dirs → dump-autoload → .env + key → discover → generate types → vite build.
-# .dockerignore prunes storage/framework/{cache,sessions,views} contents, so we recreate the dirs
-# before booting Laravel — Blade's Compiler refuses to start without a valid view-cache path.
-RUN mkdir -p storage/framework/cache/data storage/framework/sessions storage/framework/views \
-        storage/app/public storage/logs bootstrap/cache \
-    && composer dump-autoload --optimize --classmap-authoritative --no-scripts \
-    && cp .env.example .env \
-    && php artisan key:generate --force --no-interaction \
-    && php artisan package:discover --ansi \
-    && php artisan wayfinder:generate --with-form \
-    && php artisan typefinder:generate \
+ENV SKIP_TYPE_GENERATION=1
+RUN composer dump-autoload --optimize --classmap-authoritative --no-scripts \
     && npm run build \
-    && rm -rf node_modules .env
+    && rm -rf node_modules
 
 # ---------- runtime ----------
 # FrankenPHP = PHP + Caddy in a single binary; Laravel Octane keeps the framework booted across
