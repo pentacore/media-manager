@@ -14,6 +14,7 @@
         "laravel/ai": "^0.5.1",
         "laravel/fortify": "^1.34",
         "laravel/framework": "^13.0",
+        "laravel/octane": "^2.17",
         "laravel/reverb": "^1.10",
         "laravel/socialite": "^5.26",
         "laravel/tinker": "^3.0",

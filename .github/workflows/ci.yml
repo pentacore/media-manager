@@ -1,0 +1,339 @@
+name: ci
+
+on:
+  push:
+    branches: [main, master, develop]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  PHP_VERSION: '8.5'
+  NODE_VERSION: '24'
+
+jobs:
+  php-lint:
+    name: PHP lint (Pint)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ env.PHP_VERSION }}
+          tools: composer:v2
+          coverage: none
+
+      - name: Cache composer
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/composer
+          key: composer-${{ runner.os }}-${{ env.PHP_VERSION }}-${{ hashFiles('**/composer.lock') }}
+          restore-keys: composer-${{ runner.os }}-${{ env.PHP_VERSION }}-
+
+      - name: Install composer dependencies
+        run: composer install --no-interaction --prefer-dist --no-progress --no-scripts
+
+      - name: Run Pint
+        run: vendor/bin/pint --test --format=checkstyle
+
+  js-lint:
+    name: JS lint, format & types
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ env.PHP_VERSION }}
+          tools: composer:v2
+          coverage: none
+
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: Cache composer
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/composer
+          key: composer-${{ runner.os }}-${{ env.PHP_VERSION }}-${{ hashFiles('**/composer.lock') }}
+          restore-keys: composer-${{ runner.os }}-${{ env.PHP_VERSION }}-
+
+      - name: Install composer dependencies
+        run: composer install --no-interaction --prefer-dist --no-progress --no-scripts
+
+      - name: Install npm dependencies
+        run: npm ci
+
+      - name: Prepare environment
+        run: |
+          cp .env.example .env
+          php artisan key:generate
+
+      - name: Generate Wayfinder + Typefinder type definitions
+        run: |
+          php artisan wayfinder:generate --with-form
+          php artisan typefinder:generate
+
+      - name: Prettier
+        run: npm run format:check
+
+      - name: ESLint
+        run: npm run lint:check
+
+      - name: TypeScript types
+        run: npm run types:check
+
+  tests:
+    name: Pest tests
+    runs-on: ubuntu-latest
+
+    services:
+      pgsql:
+        image: postgres:18-alpine
+        env:
+          POSTGRES_DB: testing
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U postgres"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=10
+
+      valkey:
+        image: valkey/valkey:alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd="valkey-cli ping"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=10
+
+      typesense:
+        image: typesense/typesense:27.1
+        env:
+          TYPESENSE_DATA_DIR: /typesense-data
+          TYPESENSE_API_KEY: xyz
+          TYPESENSE_ENABLE_CORS: 'true'
+        ports:
+          - 8108:8108
+
+    env:
+      APP_ENV: testing
+      APP_DEBUG: 'true'
+      DB_CONNECTION: pgsql
+      DB_HOST: 127.0.0.1
+      DB_PORT: 5432
+      DB_DATABASE: testing
+      DB_USERNAME: postgres
+      DB_PASSWORD: postgres
+      REDIS_HOST: 127.0.0.1
+      REDIS_PORT: 6379
+      CACHE_STORE: array
+      SESSION_DRIVER: array
+      QUEUE_CONNECTION: sync
+      MAIL_MAILER: array
+      BROADCAST_CONNECTION: log
+      TYPESENSE_HOST: 127.0.0.1
+      TYPESENSE_PORT: 8108
+      TYPESENSE_API_KEY: xyz
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ env.PHP_VERSION }}
+          extensions: pdo_pgsql, redis, intl, bcmath, gd, zip, sodium
+          tools: composer:v2
+          coverage: none
+
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: Cache composer
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/composer
+          key: composer-${{ runner.os }}-${{ env.PHP_VERSION }}-${{ hashFiles('**/composer.lock') }}
+          restore-keys: composer-${{ runner.os }}-${{ env.PHP_VERSION }}-
+
+      - name: Install composer dependencies
+        run: composer install --no-interaction --prefer-dist --no-progress --optimize-autoloader
+
+      - name: Install npm dependencies
+        run: npm ci
+
+      - name: Prepare environment
+        run: |
+          cp .env.example .env
+          php artisan key:generate
+
+      - name: Build frontend assets
+        run: npm run build
+
+      - name: Run Pest
+        run: vendor/bin/pest --compact --parallel
+
+  octane-smoke:
+    name: Octane smoke test
+    runs-on: ubuntu-latest
+    needs: tests
+
+    services:
+      pgsql:
+        image: postgres:18-alpine
+        env:
+          POSTGRES_DB: app
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U postgres"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=10
+
+      valkey:
+        image: valkey/valkey:alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd="valkey-cli ping"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=10
+
+      typesense:
+        image: typesense/typesense:27.1
+        env:
+          TYPESENSE_DATA_DIR: /typesense-data
+          TYPESENSE_API_KEY: xyz
+          TYPESENSE_ENABLE_CORS: 'true'
+        ports:
+          - 8108:8108
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build production image (amd64, load locally)
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/production/Dockerfile
+          platforms: linux/amd64
+          push: false
+          load: true
+          tags: mediamanager:octane-smoke
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Generate APP_KEY
+        id: app_key
+        run: |
+          KEY=$(docker run --rm mediamanager:octane-smoke php -r "echo 'base64:'.base64_encode(random_bytes(32));")
+          echo "APP_KEY=$KEY" >> "$GITHUB_OUTPUT"
+
+      - name: Run container (web/Octane role)
+        env:
+          APP_KEY: ${{ steps.app_key.outputs.APP_KEY }}
+        run: |
+          docker run -d \
+            --name octane \
+            --network host \
+            -e APP_KEY="$APP_KEY" \
+            -e APP_ENV=production \
+            -e APP_DEBUG=false \
+            -e APP_URL=http://127.0.0.1:8080 \
+            -e CONTAINER_ROLE=web \
+            -e RUN_MIGRATIONS=true \
+            -e LOG_CHANNEL=stderr \
+            -e DB_CONNECTION=pgsql \
+            -e DB_HOST=127.0.0.1 \
+            -e DB_PORT=5432 \
+            -e DB_DATABASE=app \
+            -e DB_USERNAME=postgres \
+            -e DB_PASSWORD=postgres \
+            -e CACHE_STORE=redis \
+            -e SESSION_DRIVER=redis \
+            -e QUEUE_CONNECTION=sync \
+            -e BROADCAST_CONNECTION=log \
+            -e MAIL_MAILER=log \
+            -e REDIS_HOST=127.0.0.1 \
+            -e REDIS_PORT=6379 \
+            -e TYPESENSE_HOST=127.0.0.1 \
+            -e TYPESENSE_PORT=8108 \
+            -e TYPESENSE_API_KEY=xyz \
+            mediamanager:octane-smoke
+
+      - name: Wait for /up
+        run: |
+          for i in $(seq 1 60); do
+            if curl -fsS http://127.0.0.1:8080/up > /dev/null 2>&1; then
+              echo "Octane up after ${i}s"
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "Octane failed to start within 60s" >&2
+          docker logs octane >&2
+          exit 1
+
+      - name: Hammer /up (200 requests, assert all 200 OK)
+        run: |
+          fail=0
+          for i in $(seq 1 200); do
+            code=$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8080/up)
+            if [ "$code" != "200" ]; then
+              echo "Request $i: HTTP $code" >&2
+              fail=$((fail + 1))
+            fi
+          done
+          if [ "$fail" -gt 0 ]; then
+            echo "$fail/200 requests failed" >&2
+            exit 1
+          fi
+          echo "All 200 requests returned 200 OK"
+
+      - name: Smoke public routes
+        run: |
+          for path in / /login; do
+            code=$(curl -s -o /dev/null -w '%{http_code}' "http://127.0.0.1:8080${path}")
+            echo "GET ${path} -> ${code}"
+            # 200/302/419 (CSRF on first hit) are all acceptable; 5xx is not.
+            case "$code" in
+              5*) echo "5xx on ${path}" >&2; exit 1 ;;
+            esac
+          done
+
+      - name: Assert no PHP errors in logs
+        run: |
+          logs=$(docker logs octane 2>&1)
+          echo "$logs"
+          if echo "$logs" | grep -Ei 'PHP (Fatal|Parse) error|Uncaught.*Exception|Stack trace:' ; then
+            echo "PHP errors detected in Octane logs" >&2
+            exit 1
+          fi
+
+      - name: Stop container
+        if: always()
+        run: docker rm -f octane || true
