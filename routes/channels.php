@@ -13,3 +13,5 @@ Broadcast::channel('services', fn (User $user): bool => $user->role->isAtLeast(U
 Broadcast::channel('emby.activity', fn (User $user): bool => $user->role->isAtLeast(UserRole::Member));
 
 Broadcast::channel('dashboard', fn (User $user): bool => $user->role->isAtLeast(UserRole::Member));
+
+Broadcast::channel('activity', fn (User $user): bool => $user->role->isAtLeast(UserRole::Member));

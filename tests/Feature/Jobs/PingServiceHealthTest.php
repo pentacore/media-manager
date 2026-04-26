@@ -81,17 +81,36 @@ test('truncates very long upstream bodies to 255 chars', function (): void {
     expect(strlen((string) $connection->fresh()->health_message))->toBeLessThanOrEqual(255);
 });
 
-test('does not broadcast when status is unchanged', function (): void {
+test('broadcasts on every successful ping so last_seen_at heartbeat propagates', function (): void {
+    // Even with no status flip, a successful ping refreshes last_seen_at, which
+    // is a UI-relevant change worth broadcasting to subscribers.
     $connection = ServiceConnection::factory()->sonarr()->create([
         'url' => 'http://sonarr.local:8989',
         'health_status' => HealthStatus::Healthy,
+        'last_seen_at' => now()->subHour(),
+        'version' => '4.0.0',
     ]);
 
     Http::fake(['sonarr.local:8989/api/v3/system/status' => Http::response(['version' => '4.0.0'])]);
 
     new PingServiceHealth($connection)->handle();
 
-    Event::assertNotDispatched(ServiceHealthChanged::class);
+    Event::assertDispatched(ServiceHealthChanged::class);
+});
+
+test('broadcasts when health_message changes even if status stays unhealthy', function (): void {
+    $connection = ServiceConnection::factory()->sonarr()->create([
+        'url' => 'http://sonarr.local:8989',
+        'health_status' => HealthStatus::Unhealthy,
+        'health_message' => 'HTTP 500: previous failure',
+    ]);
+
+    Http::fake(['sonarr.local:8989/*' => Http::response('different body', 502)]);
+
+    new PingServiceHealth($connection)->handle();
+
+    expect($connection->fresh()->health_message)->toStartWith('HTTP 502');
+    Event::assertDispatched(ServiceHealthChanged::class);
 });
 
 test('implements ShouldQueue', function (): void {

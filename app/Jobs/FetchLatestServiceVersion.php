@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Jobs;
 
 use App\Enums\UserRole;
+use App\Events\ServiceLatestVersionFetched;
 use App\Models\ServiceConnection;
 use App\Models\User;
 use App\Notifications\ServiceUpdateAvailable;
@@ -54,6 +55,10 @@ class FetchLatestServiceVersion implements ShouldQueue
         $current = $this->serviceConnection->version;
 
         $this->serviceConnection->forceFill(['latest_version' => $latest])->saveQuietly();
+
+        if ($this->serviceConnection->wasChanged('latest_version')) {
+            event(new ServiceLatestVersionFetched($this->serviceConnection->fresh()));
+        }
 
         // Notify only when this is a *newly* discovered upgrade. We require the
         // installed version to be known (otherwise we can't tell it's an upgrade)

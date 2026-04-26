@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Models;
 
+use App\Events\WebhookEventProcessed;
 use Carbon\CarbonImmutable;
 use Database\Factories\WebhookEventFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
@@ -80,6 +81,7 @@ class WebhookEvent extends Model
     public function markProcessed(): void
     {
         $this->update(['processed_at' => now()]);
+        event(new WebhookEventProcessed($this));
     }
 
     /**

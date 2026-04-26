@@ -2,17 +2,49 @@
 
 declare(strict_types=1);
 
+use App\Events\ServiceLatestVersionFetched;
 use App\Jobs\FetchLatestServiceVersion;
 use App\Models\ServiceConnection;
 use App\Models\User;
 use App\Notifications\ServiceUpdateAvailable;
 use Illuminate\Contracts\Queue\ShouldQueue;
+use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Notification;
 
 beforeEach(function (): void {
     Http::preventStrayRequests();
     Notification::fake();
+    Event::fake([ServiceLatestVersionFetched::class]);
+});
+
+test('broadcasts ServiceLatestVersionFetched when latest_version changes', function (): void {
+    $connection = ServiceConnection::factory()->sonarr()->create([
+        'version' => '4.0.4',
+        'latest_version' => null,
+    ]);
+
+    Http::fake(['api.github.com/*' => Http::response(['tag_name' => 'v4.0.5'])]);
+
+    app()->call([new FetchLatestServiceVersion($connection), 'handle']);
+
+    Event::assertDispatched(
+        ServiceLatestVersionFetched::class,
+        fn (ServiceLatestVersionFetched $event): bool => $event->serviceConnection->id === $connection->id,
+    );
+});
+
+test('does not broadcast ServiceLatestVersionFetched when latest_version is unchanged', function (): void {
+    $connection = ServiceConnection::factory()->sonarr()->create([
+        'version' => '4.0.4',
+        'latest_version' => '4.0.5',
+    ]);
+
+    Http::fake(['api.github.com/*' => Http::response(['tag_name' => 'v4.0.5'])]);
+
+    app()->call([new FetchLatestServiceVersion($connection), 'handle']);
+
+    Event::assertNotDispatched(ServiceLatestVersionFetched::class);
 });
 
 test('fetches and stores latest_version for sonarr', function (): void {

@@ -64,10 +64,14 @@ test('marks connection Unhealthy when request fails', function (): void {
     Event::assertDispatched(ServiceHealthChanged::class);
 });
 
-test('does not broadcast when status is unchanged', function (): void {
+test('broadcasts every successful ping so last_seen_at heartbeat propagates', function (): void {
+    // The job now broadcasts on any UI-relevant change; last_seen_at always
+    // refreshes on success, so the broadcast fires on every healthy ping.
     $connection = ServiceConnection::factory()->sonarr()->create([
         'url' => 'http://sonarr.local:8989',
         'health_status' => HealthStatus::Healthy,
+        'last_seen_at' => now()->subHour(),
+        'version' => '4.0.0',
     ]);
 
     Http::fake(['sonarr.local:8989/api/v3/system/status' => Http::response(['version' => '4.0.0'])]);
@@ -75,7 +79,7 @@ test('does not broadcast when status is unchanged', function (): void {
     $this->artisan('services:check-health')->assertSuccessful();
 
     expect($connection->fresh()->health_status)->toBe(HealthStatus::Healthy);
-    Event::assertNotDispatched(ServiceHealthChanged::class);
+    Event::assertDispatched(ServiceHealthChanged::class);
 });
 
 test('broadcasts on transition Healthy -> Unhealthy', function (): void {

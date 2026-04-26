@@ -35,7 +35,6 @@ class PingServiceHealth implements ShouldQueue
     public function handle(): void
     {
         $this->serviceConnection->refresh();
-        $previousStatus = $this->serviceConnection->health_status ?? HealthStatus::Unknown;
 
         try {
             $result = $this->ping();
@@ -54,7 +53,10 @@ class PingServiceHealth implements ShouldQueue
             $newStatus = HealthStatus::Unhealthy;
         }
 
-        if ($previousStatus !== $newStatus) {
+        // Broadcast on any UI-relevant change, not only on a status flip — so
+        // a fresh `health_message` while still Unhealthy, or a refreshed
+        // `last_seen_at` heartbeat, propagates to subscribed pages.
+        if ($this->serviceConnection->wasChanged(['health_status', 'health_message', 'version', 'last_seen_at'])) {
             event(new ServiceHealthChanged($this->serviceConnection->fresh(), $newStatus->value));
         }
     }
