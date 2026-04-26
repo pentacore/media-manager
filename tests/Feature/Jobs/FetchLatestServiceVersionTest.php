@@ -4,11 +4,15 @@ declare(strict_types=1);
 
 use App\Jobs\FetchLatestServiceVersion;
 use App\Models\ServiceConnection;
+use App\Models\User;
+use App\Notifications\ServiceUpdateAvailable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Notification;
 
 beforeEach(function (): void {
     Http::preventStrayRequests();
+    Notification::fake();
 });
 
 test('fetches and stores latest_version for sonarr', function (): void {
@@ -65,4 +69,84 @@ test('strips v prefix', function (): void {
 test('implements ShouldQueue', function (): void {
     $connection = ServiceConnection::factory()->sonarr()->create();
     expect(new FetchLatestServiceVersion($connection))->toBeInstanceOf(ShouldQueue::class);
+});
+
+test('notifies all admins when a newer version is detected', function (): void {
+    $admin = User::factory()->admin()->create();
+    User::factory()->admin()->create();
+    User::factory()->member()->create();
+    User::factory()->create();
+
+    $connection = ServiceConnection::factory()->sonarr()->create([
+        'version' => '4.0.4',
+        'latest_version' => null,
+    ]);
+
+    Http::fake([
+        'api.github.com/*' => Http::response(['tag_name' => 'v4.0.5']),
+    ]);
+
+    app()->call([new FetchLatestServiceVersion($connection), 'handle']);
+
+    Notification::assertSentTo(
+        $admin,
+        ServiceUpdateAvailable::class,
+        function (ServiceUpdateAvailable $notification) use ($connection): bool {
+            return $notification->serviceConnection->is($connection)
+                && $notification->latestVersion === '4.0.5'
+                && $notification->currentVersion === '4.0.4';
+        },
+    );
+    Notification::assertCount(2);
+});
+
+test('does not notify when latest_version matches the installed version', function (): void {
+    User::factory()->admin()->create();
+
+    $connection = ServiceConnection::factory()->sonarr()->create([
+        'version' => '4.0.5',
+        'latest_version' => null,
+    ]);
+
+    Http::fake([
+        'api.github.com/*' => Http::response(['tag_name' => 'v4.0.5']),
+    ]);
+
+    app()->call([new FetchLatestServiceVersion($connection), 'handle']);
+
+    Notification::assertNothingSent();
+});
+
+test('does not re-notify when latest_version is unchanged from a previous run', function (): void {
+    User::factory()->admin()->create();
+
+    $connection = ServiceConnection::factory()->sonarr()->create([
+        'version' => '4.0.4',
+        'latest_version' => '4.0.5',
+    ]);
+
+    Http::fake([
+        'api.github.com/*' => Http::response(['tag_name' => 'v4.0.5']),
+    ]);
+
+    app()->call([new FetchLatestServiceVersion($connection), 'handle']);
+
+    Notification::assertNothingSent();
+});
+
+test('does not notify when installed version is unknown', function (): void {
+    User::factory()->admin()->create();
+
+    $connection = ServiceConnection::factory()->sonarr()->create([
+        'version' => null,
+        'latest_version' => null,
+    ]);
+
+    Http::fake([
+        'api.github.com/*' => Http::response(['tag_name' => 'v4.0.5']),
+    ]);
+
+    app()->call([new FetchLatestServiceVersion($connection), 'handle']);
+
+    Notification::assertNothingSent();
 });
