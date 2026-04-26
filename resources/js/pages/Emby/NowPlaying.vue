@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import { Head } from '@inertiajs/vue3';
+import { Head, router } from '@inertiajs/vue3';
 import { Film, Monitor, Pause, Play, Radio, Tv } from 'lucide-vue-next';
-import { onMounted } from 'vue';
+import { onBeforeUnmount, onMounted, watch } from 'vue';
 import NowPlayingController from '@/actions/App/Http/Controllers/Emby/NowPlayingController';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -41,13 +41,45 @@ defineOptions({
     },
 });
 
-const { subscribe } = useEmbyActivity();
+const { subscribe, nowPlaying } = useEmbyActivity();
+
+let reloadTimer: ReturnType<typeof setTimeout> | null = null;
+let reloading = false;
+
+function scheduleReload(): void {
+    if (reloadTimer || reloading) {
+        return;
+    }
+
+    reloadTimer = setTimeout(() => {
+        reloadTimer = null;
+        reloading = true;
+        router.reload({
+            only: ['sessions'],
+            onFinish: () => {
+                reloading = false;
+            },
+        });
+    }, 1500);
+}
+
+watch(
+    nowPlaying,
+    () => {
+        scheduleReload();
+    },
+    { deep: true },
+);
 
 onMounted(() => {
-    // Subscribe so broadcast events come in while page is open.
-    // Future work: merge incoming NowPlayingItem broadcast data with the initial
-    // sessions list (broadcast events currently have a simpler shape).
     subscribe();
+});
+
+onBeforeUnmount(() => {
+    if (reloadTimer) {
+        clearTimeout(reloadTimer);
+        reloadTimer = null;
+    }
 });
 
 function progressPercent(
