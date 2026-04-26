@@ -31,6 +31,7 @@ class FetchLatestServiceVersion implements ShouldQueue
     public const array REPO_MAP = [
         'sonarr' => 'Sonarr/Sonarr',
         'radarr' => 'Radarr/Radarr',
+        'prowlarr' => 'Prowlarr/Prowlarr',
         'seerr' => 'seerr-team/seerr',
         'emby' => 'MediaBrowser/Emby.Releases', // Emby is closed-source, but this is the canonical repo and latest release should be correct
     ];

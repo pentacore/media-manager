@@ -177,3 +177,9 @@ test('does not notify when installed version is unknown', function (): void {
 
     Notification::assertNothingSent();
 });
+
+test('REPO_MAP includes Prowlarr', function (): void {
+    expect(FetchLatestServiceVersion::REPO_MAP)
+        ->toHaveKey('prowlarr')
+        ->and(FetchLatestServiceVersion::REPO_MAP['prowlarr'])->toBe('Prowlarr/Prowlarr');
+});
