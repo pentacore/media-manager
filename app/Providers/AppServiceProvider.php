@@ -4,6 +4,11 @@ declare(strict_types=1);
 
 namespace App\Providers;
 
+use App\Events\ActionRequestCreated;
+use App\Events\ActionRequestStatusChanged;
+use App\Events\ServiceHealthChanged;
+use App\Events\WebhookReceived;
+use App\Listeners\RebroadcastDashboardStats;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\Date;
 use Illuminate\Support\Facades\DB;
@@ -32,6 +37,18 @@ class AppServiceProvider extends ServiceProvider
     {
         $this->configureDefaults();
         Event::listen(SocialiteWasCalled::class, AuthentikExtendSocialite::class);
+
+        // Pipe the four high-signal upstream events through the throttled
+        // dashboard-stats listener so the four counters stay current without
+        // waiting for the every-5-minute cron.
+        foreach ([
+            WebhookReceived::class,
+            ActionRequestCreated::class,
+            ActionRequestStatusChanged::class,
+            ServiceHealthChanged::class,
+        ] as $event) {
+            Event::listen($event, RebroadcastDashboardStats::class);
+        }
     }
 
     /**

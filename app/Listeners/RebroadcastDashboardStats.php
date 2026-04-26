@@ -1,0 +1,38 @@
+<?php
+
+declare(strict_types=1);
+
+namespace App\Listeners;
+
+use App\Services\Dashboard\DashboardStatsService;
+use Illuminate\Support\Facades\Cache;
+
+class RebroadcastDashboardStats
+{
+    public function __construct(private readonly DashboardStatsService $stats) {}
+
+    /**
+     * Triggered by WebhookReceived, ActionRequestCreated,
+     * ActionRequestStatusChanged, and ServiceHealthChanged. Re-runs the
+     * dashboard stats query and rebroadcasts.
+     *
+     * Throttled to at most one broadcast per second so a burst of webhooks
+     * (e.g. a Sonarr import grabbing 24 episodes at once) doesn't fan out
+     * 24 broadcasts.
+     */
+    public function handle(object $event): void
+    {
+        $lock = Cache::lock('dashboard-stats-broadcast', 1);
+
+        if (! $lock->get()) {
+            return;
+        }
+
+        try {
+            $this->stats->broadcast();
+        } finally {
+            // Lock auto-expires after 1s; explicit release is a no-op if the
+            // listener finished within the TTL.
+        }
+    }
+}
