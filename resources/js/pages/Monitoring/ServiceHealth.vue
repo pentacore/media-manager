@@ -46,27 +46,58 @@ defineOptions({
     },
 });
 
-const { services: liveServices, subscribe } = useServiceHealth();
+const {
+    services: liveServices,
+    versions: liveVersions,
+    lifecycle: liveLifecycle,
+    deletedIds,
+    subscribe,
+} = useServiceHealth();
 
 onMounted(() => {
     subscribe();
 });
 
 const mergedConnections = computed<Connection[]>(() =>
-    props.connections.map((connection) => {
-        const live = liveServices[connection.id];
+    props.connections
+        .filter((connection) => !deletedIds.has(connection.id))
+        .map((connection) => {
+            const lifecycle = liveLifecycle[connection.id];
 
-        if (live) {
+            if (lifecycle) {
+                return {
+                    ...connection,
+                    type: lifecycle.type as Connection['type'],
+                    name: lifecycle.name,
+                    url: lifecycle.url,
+                    is_active: lifecycle.is_active,
+                    health_status:
+                        lifecycle.health_status as Connection['health_status'],
+                    health_message: lifecycle.health_message,
+                    version: lifecycle.version,
+                    latest_version: lifecycle.latest_version,
+                    update_available: lifecycle.update_available,
+                    last_seen_at: lifecycle.last_seen_at,
+                };
+            }
+
+            const live = liveServices[connection.id];
+            const version = liveVersions[connection.id];
+
             return {
                 ...connection,
-                health_status: live.status as Connection['health_status'],
-                health_message: live.message ?? connection.health_message,
-                last_seen_at: live.last_seen_at,
+                health_status:
+                    (live?.status as Connection['health_status']) ??
+                    connection.health_status,
+                health_message: live?.message ?? connection.health_message,
+                last_seen_at: live?.last_seen_at ?? connection.last_seen_at,
+                version: version?.version ?? connection.version,
+                latest_version:
+                    version?.latest_version ?? connection.latest_version,
+                update_available:
+                    version?.update_available ?? connection.update_available,
             };
-        }
-
-        return connection;
-    }),
+        }),
 );
 
 const healthyCount = computed(

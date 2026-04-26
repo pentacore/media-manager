@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { Head, Link } from '@inertiajs/vue3';
 import { ExternalLink, Plus } from 'lucide-vue-next';
+import { onMounted } from 'vue';
 import MovieController from '@/actions/App/Http/Controllers/Media/MovieController';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -19,6 +20,7 @@ import {
     TooltipProvider,
     TooltipTrigger,
 } from '@/components/ui/tooltip';
+import { useRealtimeReload } from '@/composables/useRealtimeReload';
 import { dashboard } from '@/routes';
 
 interface QualityProfile {
@@ -59,6 +61,17 @@ defineOptions({
         ],
     },
 });
+
+const { subscribe: subscribeReload } = useRealtimeReload<{
+    service_type: string | null;
+}>({
+    channel: 'dashboard',
+    event: 'WebhookReceived',
+    only: ['movies'],
+    filter: (event) => event.service_type === 'radarr',
+});
+
+onMounted(subscribeReload);
 
 function formatSize(bytes: number): string {
     if (!bytes || bytes <= 0) {

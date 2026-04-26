@@ -11,7 +11,7 @@ import {
     Tv,
     X,
 } from 'lucide-vue-next';
-import { computed } from 'vue';
+import { computed, onMounted } from 'vue';
 import RequestController from '@/actions/App/Http/Controllers/Media/RequestController';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -30,6 +30,7 @@ import {
     TooltipProvider,
     TooltipTrigger,
 } from '@/components/ui/tooltip';
+import { useRealtimeReload } from '@/composables/useRealtimeReload';
 import { dashboard } from '@/routes';
 
 interface SeerrRequest {
@@ -73,6 +74,17 @@ defineOptions({
         ],
     },
 });
+
+const { subscribe: subscribeReload } = useRealtimeReload<{
+    service_type: string | null;
+}>({
+    channel: 'dashboard',
+    event: 'WebhookReceived',
+    only: ['requests', 'summary'],
+    filter: (event) => event.service_type === 'seerr',
+});
+
+onMounted(subscribeReload);
 
 const page = usePage();
 

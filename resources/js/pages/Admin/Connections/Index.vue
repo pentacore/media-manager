@@ -9,6 +9,7 @@ import {
     RefreshCw,
     Trash2,
 } from 'lucide-vue-next';
+import { computed, onMounted } from 'vue';
 import ServiceConnectionController from '@/actions/App/Http/Controllers/Admin/ServiceConnectionController';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -34,13 +35,88 @@ import {
     TooltipProvider,
     TooltipTrigger,
 } from '@/components/ui/tooltip';
+import { useServiceHealth } from '@/composables/useServiceHealth';
 import type { ServiceConnectionResource } from '@/typefinder/resources/ServiceConnectionResource';
 
 type Connection = ServiceConnectionResource;
 
-defineProps<{
+const props = defineProps<{
     connections: Connection[];
 }>();
+
+const {
+    services: liveServices,
+    versions: liveVersions,
+    lifecycle: liveLifecycle,
+    deletedIds,
+    subscribe,
+} = useServiceHealth();
+
+onMounted(subscribe);
+
+const liveConnections = computed<Connection[]>(() => {
+    const merged = props.connections
+        .filter((connection) => !deletedIds.has(connection.id))
+        .map((connection) => {
+            const lifecycle = liveLifecycle[connection.id];
+
+            if (lifecycle) {
+                return {
+                    ...connection,
+                    type: lifecycle.type as Connection['type'],
+                    name: lifecycle.name,
+                    url: lifecycle.url,
+                    is_active: lifecycle.is_active,
+                    health_status:
+                        lifecycle.health_status as Connection['health_status'],
+                    health_message: lifecycle.health_message,
+                    version: lifecycle.version,
+                    latest_version: lifecycle.latest_version,
+                    update_available: lifecycle.update_available,
+                    last_seen_at: lifecycle.last_seen_at,
+                };
+            }
+
+            const status = liveServices[connection.id];
+            const version = liveVersions[connection.id];
+
+            return {
+                ...connection,
+                health_status:
+                    (status?.status as Connection['health_status']) ??
+                    connection.health_status,
+                last_seen_at: status?.last_seen_at ?? connection.last_seen_at,
+                version: version?.version ?? connection.version,
+                latest_version:
+                    version?.latest_version ?? connection.latest_version,
+                update_available:
+                    version?.update_available ?? connection.update_available,
+            };
+        });
+
+    // Surface freshly-created connections that arrived via WS by reading
+    // lifecycle entries that aren't represented in the SSR prop.
+    const knownIds = new Set(props.connections.map((c) => c.id));
+
+    for (const id of Object.keys(liveLifecycle)) {
+        const numericId = Number(id);
+
+        if (knownIds.has(numericId) || deletedIds.has(numericId)) {
+            continue;
+        }
+
+        const lifecycle = liveLifecycle[numericId];
+        merged.unshift({
+            ...lifecycle,
+            type: lifecycle.type as Connection['type'],
+            health_status:
+                lifecycle.health_status as Connection['health_status'],
+            last_seen_human: null,
+        } as Connection);
+    }
+
+    return merged;
+});
 
 defineOptions({
     layout: {
@@ -153,7 +229,7 @@ function checkVersion(connection: Connection) {
                 </TableHeader>
                 <TableBody>
                     <TableRow
-                        v-for="connection in connections"
+                        v-for="connection in liveConnections"
                         :key="connection.id"
                     >
                         <TableCell class="font-medium">{{
@@ -311,7 +387,7 @@ function checkVersion(connection: Connection) {
                             </div>
                         </TableCell>
                     </TableRow>
-                    <TableRow v-if="connections.length === 0">
+                    <TableRow v-if="liveConnections.length === 0">
                         <TableCell
                             :colspan="7"
                             class="py-8 text-center text-muted-foreground"
