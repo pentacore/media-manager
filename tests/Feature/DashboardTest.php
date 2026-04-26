@@ -83,9 +83,13 @@ test('dashboard includes recent activity', function (): void {
             ->has('action')
             ->has('description')
             ->has('user_name')
+            ->has('service_id')
             ->has('service_name')
-            ->has('created_at')
             ->has('service_type')
+            ->has('subject_type')
+            ->has('subject_id')
+            ->has('metadata')
+            ->has('created_at')
         )
     );
 });

@@ -8,6 +8,7 @@ import {
     History,
     Inbox,
     LayoutGrid,
+    ScrollText,
     Search as SearchIcon,
     Tv,
     Zap,
@@ -15,6 +16,7 @@ import {
 import type { Component } from 'vue';
 import { computed, nextTick, ref, useTemplateRef, watch } from 'vue';
 import ActionRequestController from '@/actions/App/Http/Controllers/Actions/ActionRequestController';
+import ActivityLogController from '@/actions/App/Http/Controllers/ActivityLogController';
 import NowPlayingController from '@/actions/App/Http/Controllers/Emby/NowPlayingController';
 import WatchHistoryController from '@/actions/App/Http/Controllers/Emby/WatchHistoryController';
 import MovieController from '@/actions/App/Http/Controllers/Media/MovieController';
@@ -43,6 +45,11 @@ const inputEl = useTemplateRef<HTMLInputElement>('inputEl');
 
 const quickLinks = computed<QuickLink[]>(() => [
     { title: 'Dashboard', href: dashboard().url, icon: LayoutGrid },
+    {
+        title: 'Activity Log',
+        href: ActivityLogController().url,
+        icon: ScrollText,
+    },
     { title: 'Series', href: SeriesController.index.url(), icon: Tv },
     { title: 'Movies', href: MovieController.index.url(), icon: Film },
     { title: 'Requests', href: RequestController.index.url(), icon: Inbox },

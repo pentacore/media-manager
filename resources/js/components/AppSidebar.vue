@@ -9,6 +9,7 @@ import {
     LayoutGrid,
     Link2,
     Link as LinkIcon,
+    ScrollText,
     Search,
     Shield,
     Sparkles,
@@ -19,6 +20,7 @@ import {
 import { computed } from 'vue';
 import ActionRequestController from '@/actions/App/Http/Controllers/Actions/ActionRequestController';
 import ActionTypeConfigController from '@/actions/App/Http/Controllers/Actions/ActionTypeConfigController';
+import ActivityLogController from '@/actions/App/Http/Controllers/ActivityLogController';
 import ServiceConnectionController from '@/actions/App/Http/Controllers/Admin/ServiceConnectionController';
 import UserController from '@/actions/App/Http/Controllers/Admin/UserController';
 import AIChatController from '@/actions/App/Http/Controllers/AI/ChatController';
@@ -70,6 +72,11 @@ const mainNavItems: NavItem[] = [
         title: 'Dashboard',
         href: dashboard(),
         icon: LayoutGrid,
+    },
+    {
+        title: 'Activity Log',
+        href: ActivityLogController().url,
+        icon: ScrollText,
     },
     {
         title: 'Search',

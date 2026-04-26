@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use App\Http\Controllers\ActivityLogController;
 use App\Http\Controllers\Auth\AuthentikController;
 use App\Http\Controllers\Auth\EmbyAuthController;
 use App\Http\Controllers\Auth\InviteController;
@@ -15,6 +16,7 @@ Route::inertia('/', 'Welcome', [
 
 Route::middleware(['auth', 'verified', 'password.set'])->group(function (): void {
     Route::get('dashboard', DashboardController::class)->name('dashboard');
+    Route::get('activity-log', ActivityLogController::class)->name('activity-log');
 });
 
 Route::middleware('guest')->group(function (): void {
