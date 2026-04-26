@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { Head, router } from '@inertiajs/vue3';
-import { ScrollText } from 'lucide-vue-next';
+import { ScrollText, Sparkles } from 'lucide-vue-next';
+import { computed, onMounted, watch } from 'vue';
 import ActivityLogController from '@/actions/App/Http/Controllers/ActivityLogController';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -19,6 +20,7 @@ import {
     TableHeader,
     TableRow,
 } from '@/components/ui/table';
+import { useRealtimeList } from '@/composables/useRealtimeList';
 import { dashboard } from '@/routes';
 import type { ActivityLogResource } from '@/typefinder/resources/ActivityLogResource';
 
@@ -65,6 +67,46 @@ defineOptions({
         ],
     },
 });
+
+const hasFilter = computed(
+    () => props.filters.action !== '' || props.filters.service_id !== null,
+);
+const onFirstPage = computed(() => props.logs.meta.current_page === 1);
+const merge = computed(() => !hasFilter.value && onFirstPage.value);
+
+const {
+    items: liveLogs,
+    staleCount,
+    pause,
+    resume,
+    subscribe,
+} = useRealtimeList<ActivityLogResource>({
+    channel: 'activity',
+    event: 'ActivityLogCreated',
+    keyField: 'id',
+    initial: props.logs.data,
+    cap: props.logs.meta.per_page,
+});
+
+watch(
+    merge,
+    (canMerge) => {
+        if (canMerge) {
+            resume();
+        } else {
+            pause();
+        }
+    },
+    { immediate: true },
+);
+
+onMounted(subscribe);
+
+const visibleLogs = computed(() => (merge.value ? liveLogs.value : props.logs.data));
+
+function refresh(): void {
+    router.reload({ only: ['logs'], onSuccess: resume });
+}
 
 function formatTime(iso: string | null): string {
     if (!iso) {
@@ -228,6 +270,20 @@ function hasMetadata(metadata: unknown): boolean {
             </div>
         </div>
 
+        <div
+            v-if="staleCount > 0"
+            class="flex items-center justify-between rounded-md border border-primary/40 bg-primary/5 px-3 py-2 text-sm"
+        >
+            <span class="flex items-center gap-2">
+                <Sparkles class="size-4 text-primary" />
+                {{ staleCount }} new {{ staleCount === 1 ? 'entry' : 'entries' }}
+                arrived while filters were active.
+            </span>
+            <Button size="sm" variant="ghost" @click="refresh">
+                Refresh to view
+            </Button>
+        </div>
+
         <Table>
             <TableHeader>
                 <TableRow>
@@ -239,7 +295,7 @@ function hasMetadata(metadata: unknown): boolean {
                 </TableRow>
             </TableHeader>
             <TableBody>
-                <template v-for="log in logs.data" :key="log.id">
+                <template v-for="log in visibleLogs" :key="log.id">
                     <TableRow>
                         <TableCell class="text-muted-foreground">{{
                             formatTime(log.created_at)
@@ -279,7 +335,7 @@ function hasMetadata(metadata: unknown): boolean {
                         }}</TableCell>
                     </TableRow>
                 </template>
-                <TableRow v-if="logs.data.length === 0">
+                <TableRow v-if="visibleLogs.length === 0">
                     <TableCell
                         :colspan="5"
                         class="py-8 text-center text-muted-foreground"

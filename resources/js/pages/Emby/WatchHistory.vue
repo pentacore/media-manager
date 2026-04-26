@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { Head, router } from '@inertiajs/vue3';
-import { History } from 'lucide-vue-next';
+import { Head, router, usePage } from '@inertiajs/vue3';
+import { History, Sparkles } from 'lucide-vue-next';
+import { computed, onMounted, watch } from 'vue';
 import WatchHistoryController from '@/actions/App/Http/Controllers/Emby/WatchHistoryController';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -19,6 +20,7 @@ import {
     TableHeader,
     TableRow,
 } from '@/components/ui/table';
+import { useRealtimeList } from '@/composables/useRealtimeList';
 import { dashboard } from '@/routes';
 import type { EmbyActivityResource } from '@/typefinder/resources/EmbyActivityResource';
 
@@ -54,6 +56,63 @@ defineOptions({
         ],
     },
 });
+
+const page = usePage();
+const isViewer = computed(() => {
+    const role = page.props.auth.user?.role;
+
+    if (!role) {
+        return false;
+    }
+
+    const value = typeof role === 'string' ? role : role.value;
+
+    return value === 'viewer';
+});
+
+const hasFilter = computed(() => props.filters.media_type !== '');
+const onFirstPage = computed(() => props.activities.meta.current_page === 1);
+// Viewers only see their own history server-side, but the broadcast carries
+// every user's activity — pause for viewers so we don't leak.
+const merge = computed(
+    () => !hasFilter.value && onFirstPage.value && !isViewer.value,
+);
+
+const {
+    items: liveActivities,
+    staleCount,
+    pause,
+    resume,
+    subscribe,
+} = useRealtimeList<Activity>({
+    channel: 'emby.activity',
+    event: 'EmbyPlaybackUpdated',
+    keyField: 'id',
+    initial: props.activities.data,
+    cap: props.activities.meta.per_page,
+});
+
+watch(
+    merge,
+    (canMerge) => {
+        if (canMerge) {
+            resume();
+        } else {
+            pause();
+        }
+    },
+    { immediate: true },
+);
+
+onMounted(subscribe);
+
+const visibleActivities = computed(() =>
+    merge.value ? liveActivities.value : props.activities.data,
+);
+
+function refresh(): void {
+    router.reload({ only: ['activities'], onSuccess: () => resume() });
+}
 
 function formatTime(iso: string | null): string {
     if (!iso) {
@@ -153,6 +212,18 @@ function currentFilter(): string {
             </Select>
         </div>
 
+        <div
+            v-if="staleCount > 0"
+            class="flex items-center justify-between rounded-md border border-primary/40 bg-primary/5 px-3 py-2 text-sm"
+        >
+            <span class="flex items-center gap-2">
+                <Sparkles class="size-4 text-primary" />
+                {{ staleCount }} new
+                {{ staleCount === 1 ? 'entry' : 'entries' }} arrived.
+            </span>
+            <Button size="sm" variant="ghost" @click="refresh">Refresh</Button>
+        </div>
+
         <Table>
             <TableHeader>
                 <TableRow>
@@ -165,7 +236,7 @@ function currentFilter(): string {
             </TableHeader>
             <TableBody>
                 <TableRow
-                    v-for="activity in activities.data"
+                    v-for="activity in visibleActivities"
                     :key="activity.id"
                 >
                     <TableCell class="text-muted-foreground">{{
@@ -197,7 +268,7 @@ function currentFilter(): string {
                         <span v-else class="text-muted-foreground">-</span>
                     </TableCell>
                 </TableRow>
-                <TableRow v-if="activities.data.length === 0">
+                <TableRow v-if="visibleActivities.length === 0">
                     <TableCell
                         :colspan="5"
                         class="py-8 text-center text-muted-foreground"

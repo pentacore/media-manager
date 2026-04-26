@@ -131,7 +131,7 @@ test('EmbyPlaybackUpdated broadcasts on emby activity channel', function (): voi
     expect($event->broadcastAs())->toBe('EmbyPlaybackUpdated');
 
     $payload = $event->broadcastWith();
-    expect($payload)->toHaveKeys(['id', 'emby_user_link_id', 'media_type', 'media_title', 'series_title', 'action', 'play_position', 'duration_ticks', 'emby_username', 'updated_at']);
+    expect($payload)->toHaveKeys(['id', 'emby_user_link_id', 'media_type', 'media_title', 'series_title', 'action', 'play_position', 'duration_ticks', 'emby_username', 'created_at', 'updated_at']);
 });
 
 test('ActivityLogCreated broadcasts on activity channel with full payload', function (): void {

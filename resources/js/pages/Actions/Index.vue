@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { Head, router, usePage } from '@inertiajs/vue3';
-import { Zap } from 'lucide-vue-next';
-import { computed } from 'vue';
+import { Sparkles, Zap } from 'lucide-vue-next';
+import { computed, onMounted, onUnmounted, watch } from 'vue';
 import ActionRequestController from '@/actions/App/Http/Controllers/Actions/ActionRequestController';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -20,6 +20,8 @@ import {
     TableHeader,
     TableRow,
 } from '@/components/ui/table';
+import { useRealtimeList } from '@/composables/useRealtimeList';
+import { useWebSocket } from '@/composables/useWebSocket';
 import { dashboard } from '@/routes';
 import type { ActionRequestResource } from '@/typefinder/resources/ActionRequestResource';
 
@@ -71,6 +73,84 @@ const isAdmin = computed(() => {
     const value = typeof role === 'string' ? role : role.value;
 
     return value === 'admin';
+});
+
+const userId = computed(() => page.props.auth.user?.id);
+const hasFilter = computed(() => props.filters.status !== '');
+const onFirstPage = computed(() => props.requests.meta.current_page === 1);
+const merge = computed(() => !hasFilter.value && onFirstPage.value);
+
+const userChannel = computed(() =>
+    typeof userId.value === 'number' ? `App.Models.User.${userId.value}` : null,
+);
+
+const {
+    items: liveRequests,
+    staleCount,
+    pause,
+    resume,
+    subscribe: subscribeCreated,
+} = useRealtimeList<ActionRequestRow>({
+    channel: userChannel.value ?? '',
+    event: 'ActionRequestCreated',
+    keyField: 'id',
+    initial: props.requests.data,
+    cap: props.requests.meta.per_page,
+});
+
+watch(
+    merge,
+    (canMerge) => {
+        if (canMerge) {
+            resume();
+        } else {
+            pause();
+        }
+    },
+    { immediate: true },
+);
+
+const visibleRequests = computed(() =>
+    merge.value ? liveRequests.value : props.requests.data,
+);
+
+const { privateChannel, leaveChannel } = useWebSocket();
+let statusChannelName: string | null = null;
+
+interface StatusChangePayload {
+    id: number;
+    status: ActionRequestRow['status'];
+    result: { success: boolean | null; reason: string | null };
+    updated_at: string;
+}
+
+function applyStatusChange(payload: StatusChangePayload): void {
+    const target = liveRequests.value.find((row) => row.id === payload.id);
+
+    if (target) {
+        target.status = payload.status;
+        target.result = payload.result;
+    }
+}
+
+onMounted(() => {
+    if (!userChannel.value) {
+        return;
+    }
+
+    subscribeCreated();
+
+    statusChannelName = userChannel.value;
+    privateChannel(statusChannelName).listen(
+        '.ActionRequestStatusChanged',
+        (event: StatusChangePayload) => applyStatusChange(event),
+    );
+});
+
+onUnmounted(() => {
+    if (statusChannelName) {
+        leaveChannel(statusChannelName);
+    }
 });
 
 function formatTime(iso: string | null): string {
@@ -193,6 +273,27 @@ function stringifyJson(value: unknown): string {
                 </p>
             </div>
 
+            <div
+                v-if="staleCount > 0"
+                class="flex items-center gap-2 rounded-md border border-primary/40 bg-primary/5 px-3 py-1.5 text-sm"
+            >
+                <Sparkles class="size-4 text-primary" />
+                <span>{{ staleCount }} new</span>
+                <Button
+                    size="sm"
+                    variant="ghost"
+                    class="h-6 px-2"
+                    @click="
+                        router.reload({
+                            only: ['requests'],
+                            onSuccess: () => resume(),
+                        })
+                    "
+                >
+                    Refresh
+                </Button>
+            </div>
+
             <Select
                 :default-value="currentFilter()"
                 @update:model-value="onStatusChange"
@@ -226,7 +327,7 @@ function stringifyJson(value: unknown): string {
                 </TableRow>
             </TableHeader>
             <TableBody>
-                <TableRow v-for="request in requests.data" :key="request.id">
+                <TableRow v-for="request in visibleRequests" :key="request.id">
                     <TableCell class="text-muted-foreground">{{
                         formatTime(request.created_at)
                     }}</TableCell>
@@ -283,7 +384,7 @@ function stringifyJson(value: unknown): string {
                         >
                     </TableCell>
                 </TableRow>
-                <TableRow v-if="requests.data.length === 0">
+                <TableRow v-if="visibleRequests.length === 0">
                     <TableCell
                         :colspan="8"
                         class="py-8 text-center text-muted-foreground"

@@ -44,6 +44,7 @@ class EmbyPlaybackUpdated implements ShouldBroadcast
             'play_position' => $this->embyActivity->play_position,
             'duration_ticks' => $this->embyActivity->duration_ticks,
             'emby_username' => $this->embyActivity->embyUserLink?->emby_username,
+            'created_at' => $this->embyActivity->created_at?->toISOString(),
             'updated_at' => $this->embyActivity->updated_at?->toISOString(),
         ];
     }

@@ -60,7 +60,7 @@ test('multiple webhooks create separate events', function (): void {
     $this->postJson('/api/webhooks/radarr/'.$connection->id, ['eventType' => 'Download'], $headers);
 
     expect(WebhookEvent::count())->toBe(2);
-    expect(WebhookEvent::pluck('event_type')->toArray())->toBe(['Grab', 'Download']);
+    expect(WebhookEvent::orderBy('id')->pluck('event_type')->toArray())->toBe(['Grab', 'Download']);
 });
 
 test('duplicate webhook deliveries are idempotent', function (): void {

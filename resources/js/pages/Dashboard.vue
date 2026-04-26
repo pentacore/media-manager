@@ -12,6 +12,8 @@ import {
 } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useDashboardStats } from '@/composables/useDashboardStats';
+import { useRealtimeList } from '@/composables/useRealtimeList';
+import { useWebSocket } from '@/composables/useWebSocket';
 import { dashboard } from '@/routes';
 import type { ActivityLogResource } from '@/typefinder/resources/ActivityLogResource';
 
@@ -61,6 +63,26 @@ defineOptions({
 
 const { stats: liveStats, subscribe: subscribeStats } = useDashboardStats();
 
+const { items: liveActivity, subscribe: subscribeActivity } =
+    useRealtimeList<ActivityItem>({
+        channel: 'activity',
+        event: 'ActivityLogCreated',
+        keyField: 'id',
+        initial: props.recentActivity,
+        cap: 10,
+    });
+
+const { items: liveWebhooks, subscribe: subscribeWebhooks } =
+    useRealtimeList<WebhookEventItem>({
+        channel: 'dashboard',
+        event: 'WebhookReceived',
+        keyField: 'id',
+        initial: props.recentWebhookEvents,
+        cap: 5,
+    });
+
+const { privateChannel } = useWebSocket();
+
 const activeServices = computed(
     () => liveStats.value?.activeServices ?? props.stats.activeServices,
 );
@@ -108,6 +130,21 @@ function formatTime(isoString: string | null): string {
 
 onMounted(() => {
     subscribeStats();
+    subscribeActivity();
+    subscribeWebhooks();
+
+    // WebhookEventProcessed only carries id + processed_at, so we use it to
+    // flip the badge on existing live rows rather than feeding useRealtimeList.
+    privateChannel('dashboard').listen(
+        '.WebhookEventProcessed',
+        (event: { id: number; processed_at: string | null }) => {
+            const row = liveWebhooks.value.find((w) => w.id === event.id);
+
+            if (row) {
+                row.processed = true;
+            }
+        },
+    );
 });
 </script>
 
@@ -173,8 +210,8 @@ onMounted(() => {
                 <CardContent>
                     <div
                         v-if="
-                            recentActivity.length === 0 &&
-                            recentWebhookEvents.length === 0
+                            liveActivity.length === 0 &&
+                            liveWebhooks.length === 0
                         "
                         class="flex flex-col items-center justify-center py-8 text-center"
                     >
@@ -188,7 +225,7 @@ onMounted(() => {
 
                     <div v-else class="space-y-4">
                         <div
-                            v-for="item in recentActivity"
+                            v-for="item in liveActivity"
                             :key="`activity-${item.id}`"
                             class="flex items-start justify-between gap-4"
                         >
@@ -219,7 +256,7 @@ onMounted(() => {
                         </div>
 
                         <div
-                            v-if="recentWebhookEvents.length > 0"
+                            v-if="liveWebhooks.length > 0"
                             class="border-t pt-4"
                         >
                             <p
@@ -228,7 +265,7 @@ onMounted(() => {
                                 Recent Webhooks
                             </p>
                             <div
-                                v-for="event in recentWebhookEvents"
+                                v-for="event in liveWebhooks"
                                 :key="`webhook-${event.id}`"
                                 class="mb-3 flex items-start justify-between gap-4 last:mb-0"
                             >
