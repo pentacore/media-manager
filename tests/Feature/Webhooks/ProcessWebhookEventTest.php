@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use App\Jobs\ProcessWebhookEvent;
+use App\Models\ActivityLog;
 use App\Models\ServiceConnection;
 use App\Models\WebhookEvent;
 use App\Services\Emby\EmbyWebhookHandler;
@@ -50,6 +51,19 @@ test('job invokes EmbyWebhookHandler for emby service connections when handler e
     $this->app->bind(EmbyWebhookHandler::class, fn (): WebhookHandler => $mock);
 
     new ProcessWebhookEvent($event)->handle();
+});
+
+test('resolves ProwlarrWebhookHandler for Prowlarr connection', function (): void {
+    $connection = ServiceConnection::factory()->prowlarr()->create();
+    $event = WebhookEvent::factory()->create([
+        'service_connection_id' => $connection->id,
+        'event_type' => 'Test',
+        'payload' => ['eventType' => 'Test', 'instanceName' => 'Prowlarr'],
+    ]);
+
+    new ProcessWebhookEvent($event)->handle();
+
+    expect(ActivityLog::where('action', 'webhook.prowlarr.test')->count())->toBe(1);
 });
 
 test('already-processed events are skipped without invoking the handler', function (): void {

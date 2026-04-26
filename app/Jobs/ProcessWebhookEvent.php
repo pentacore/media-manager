@@ -7,6 +7,7 @@ namespace App\Jobs;
 use App\Enums\ServiceType;
 use App\Models\WebhookEvent;
 use App\Services\Emby\EmbyWebhookHandler;
+use App\Services\Prowlarr\ProwlarrWebhookHandler;
 use App\Services\Radarr\RadarrWebhookHandler;
 use App\Services\Seerr\SeerrWebhookHandler;
 use App\Services\Sonarr\SonarrWebhookHandler;
@@ -76,7 +77,7 @@ class ProcessWebhookEvent implements ShouldQueue
             ServiceType::Sonarr => SonarrWebhookHandler::class,
             ServiceType::Radarr => RadarrWebhookHandler::class,
             ServiceType::Seerr => SeerrWebhookHandler::class,
-            default => null,
+            ServiceType::Prowlarr => ProwlarrWebhookHandler::class,
         };
 
         if ($class === null || ! class_exists($class)) {
