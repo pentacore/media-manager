@@ -130,8 +130,7 @@ function onLinkKey(event: KeyboardEvent): void {
         document.activeElement as HTMLButtonElement,
     );
     const delta = event.key === 'ArrowDown' ? 1 : -1;
-    const nextIndex =
-        (currentIndex + delta + buttons.length) % buttons.length;
+    const nextIndex = (currentIndex + delta + buttons.length) % buttons.length;
     buttons[nextIndex]?.focus();
 }
 
@@ -188,10 +187,7 @@ function onInputKey(event: KeyboardEvent): void {
                     No matching pages — press Enter to search your library.
                 </p>
                 <ul v-else class="space-y-1">
-                    <li
-                        v-for="link in filteredLinks"
-                        :key="link.href"
-                    >
+                    <li v-for="link in filteredLinks" :key="link.href">
                         <button
                             type="button"
                             data-palette-link

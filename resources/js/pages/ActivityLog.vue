@@ -102,7 +102,9 @@ watch(
 
 onMounted(subscribe);
 
-const visibleLogs = computed(() => (merge.value ? liveLogs.value : props.logs.data));
+const visibleLogs = computed(() =>
+    merge.value ? liveLogs.value : props.logs.data,
+);
 
 function refresh(): void {
     router.reload({ only: ['logs'], onSuccess: resume });
@@ -276,7 +278,8 @@ function hasMetadata(metadata: unknown): boolean {
         >
             <span class="flex items-center gap-2">
                 <Sparkles class="size-4 text-primary" />
-                {{ staleCount }} new {{ staleCount === 1 ? 'entry' : 'entries' }}
+                {{ staleCount }} new
+                {{ staleCount === 1 ? 'entry' : 'entries' }}
                 arrived while filters were active.
             </span>
             <Button size="sm" variant="ghost" @click="refresh">
@@ -317,7 +320,8 @@ function hasMetadata(metadata: unknown): boolean {
                                     </summary>
                                     <pre
                                         class="mt-1 overflow-auto rounded bg-muted/40 p-2"
-                                        >{{ stringifyJson(log.metadata) }}</pre>
+                                        >{{ stringifyJson(log.metadata) }}</pre
+                                    >
                                 </details>
                             </div>
                         </TableCell>

@@ -68,18 +68,22 @@ const aiEnabled = computed(() =>
     ),
 );
 
-const initialNav = (page.props as unknown as {
-    nav?: { pendingActions?: number; activeSessions?: number };
-}).nav;
+const initialNav = (
+    page.props as unknown as {
+        nav?: { pendingActions?: number; activeSessions?: number };
+    }
+).nav;
 
 const pendingActions = ref(initialNav?.pendingActions ?? 0);
 const activeSessions = ref(initialNav?.activeSessions ?? 0);
 const recentSessionIds = new Set<number>();
 
 watchEffect(() => {
-    const nav = (page.props as unknown as {
-        nav?: { pendingActions?: number; activeSessions?: number };
-    }).nav;
+    const nav = (
+        page.props as unknown as {
+            nav?: { pendingActions?: number; activeSessions?: number };
+        }
+    ).nav;
 
     if (nav) {
         pendingActions.value = nav.pendingActions ?? 0;
@@ -104,9 +108,10 @@ function pruneStaleSessions(): void {
         }
     }
 
-    activeSessions.value = sessionTimestamps.size > 0
-        ? sessionTimestamps.size
-        : Math.max(0, activeSessions.value);
+    activeSessions.value =
+        sessionTimestamps.size > 0
+            ? sessionTimestamps.size
+            : Math.max(0, activeSessions.value);
 }
 
 interface PlaybackPayload {
@@ -145,7 +150,10 @@ onMounted(() => {
                 if (recentSessionIds.has(event.id)) {
                     recentSessionIds.delete(event.id);
                     sessionTimestamps.delete(event.id);
-                    activeSessions.value = Math.max(0, activeSessions.value - 1);
+                    activeSessions.value = Math.max(
+                        0,
+                        activeSessions.value - 1,
+                    );
                 }
             }
         },
@@ -157,7 +165,10 @@ onMounted(() => {
             .listen(
                 '.ActionRequestCreated',
                 (event: ActionRequestCreatedPayload) => {
-                    if (event.status === 'pending' && !pendingIds.has(event.id)) {
+                    if (
+                        event.status === 'pending' &&
+                        !pendingIds.has(event.id)
+                    ) {
                         pendingIds.add(event.id);
                         pendingActions.value += 1;
                     }
@@ -166,10 +177,17 @@ onMounted(() => {
             .listen(
                 '.ActionRequestStatusChanged',
                 (event: ActionRequestStatusPayload) => {
-                    if (TERMINAL_STATUSES.has(event.status) || event.status === 'approved' || event.status === 'executing') {
+                    if (
+                        TERMINAL_STATUSES.has(event.status) ||
+                        event.status === 'approved' ||
+                        event.status === 'executing'
+                    ) {
                         if (pendingIds.has(event.id)) {
                             pendingIds.delete(event.id);
-                            pendingActions.value = Math.max(0, pendingActions.value - 1);
+                            pendingActions.value = Math.max(
+                                0,
+                                pendingActions.value - 1,
+                            );
                         }
                     }
                 },

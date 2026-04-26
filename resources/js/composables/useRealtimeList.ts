@@ -108,5 +108,13 @@ export function useRealtimeList<T>({
 
     onUnmounted(unsubscribe);
 
-    return { items, staleCount, isPaused, pause, resume, subscribe, unsubscribe };
+    return {
+        items,
+        staleCount,
+        isPaused,
+        pause,
+        resume,
+        subscribe,
+        unsubscribe,
+    };
 }

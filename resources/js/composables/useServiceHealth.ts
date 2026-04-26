@@ -70,15 +70,12 @@ export function useServiceHealth(): UseServiceHealth {
             },
         );
 
-        ch.listen(
-            '.ServiceConnectionDeleted',
-            (event: { id: number }) => {
-                deletedIds.add(event.id);
-                delete services[event.id];
-                delete versions[event.id];
-                delete lifecycle[event.id];
-            },
-        );
+        ch.listen('.ServiceConnectionDeleted', (event: { id: number }) => {
+            deletedIds.add(event.id);
+            delete services[event.id];
+            delete versions[event.id];
+            delete lifecycle[event.id];
+        });
     }
 
     function unsubscribe(): void {
@@ -87,5 +84,12 @@ export function useServiceHealth(): UseServiceHealth {
 
     onUnmounted(unsubscribe);
 
-    return { services, versions, lifecycle, deletedIds, subscribe, unsubscribe };
+    return {
+        services,
+        versions,
+        lifecycle,
+        deletedIds,
+        subscribe,
+        unsubscribe,
+    };
 }
