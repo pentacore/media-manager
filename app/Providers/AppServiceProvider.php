@@ -9,6 +9,8 @@ use App\Events\ActionRequestStatusChanged;
 use App\Events\ServiceHealthChanged;
 use App\Events\WebhookReceived;
 use App\Listeners\RebroadcastDashboardStats;
+use App\Settings\AiSettings;
+use App\Settings\AppSettings;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\Date;
 use Illuminate\Support\Facades\DB;
@@ -27,7 +29,8 @@ class AppServiceProvider extends ServiceProvider
     #[Override]
     public function register(): void
     {
-        //
+        $this->app->singleton(AppSettings::class);
+        $this->app->singleton(AiSettings::class);
     }
 
     /**

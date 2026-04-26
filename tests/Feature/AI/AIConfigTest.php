@@ -22,8 +22,10 @@ test('anthropic provider configuration is present', function (): void {
     expect(config('ai.providers.anthropic.driver'))->toBe('anthropic');
 });
 
-test('default model is claude-sonnet-4-5', function (): void {
-    expect(config('mediamanager.ai.model'))->toBe('claude-sonnet-4-5');
+test('default per-agent models are set', function (): void {
+    expect(config('mediamanager.ai.command_model'))->toBe('gpt-5-mini');
+    expect(config('mediamanager.ai.advisor_model'))->toBe('gpt-5-mini');
+    expect(config('mediamanager.ai.mode'))->toBe('executive');
 });
 
 test('AIServiceProvider is registered', function (): void {

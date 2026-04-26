@@ -7,11 +7,18 @@ use App\Ai\Tools\CreateActionRequestTool;
 use App\Ai\Tools\GetServiceStatusTool;
 use App\Ai\Tools\QueryActivityTool;
 use App\Ai\Tools\SearchMediaTool;
+use App\Enums\AiMode;
 use App\Models\User;
+use App\Settings\AiSettings;
+use Illuminate\Support\Facades\Cache;
 use Laravel\Ai\Contracts\Agent;
 use Laravel\Ai\Contracts\Conversational;
 use Laravel\Ai\Contracts\HasTools;
 use Laravel\Ai\Contracts\Tool;
+
+beforeEach(function (): void {
+    Cache::flush();
+});
 
 test('implements the required interfaces', function (): void {
     $agent = new CommandAgent;
@@ -56,4 +63,36 @@ test('can be faked and prompted with a user', function (): void {
 
     expect($agentResponse->text)->toContain('pending');
     CommandAgent::assertPrompted('Delete Breaking Bad from Sonarr');
+});
+
+test('advisory mode strips CreateActionRequestTool from the toolset', function (): void {
+    resolve(AiSettings::class)->setMode(AiMode::Advisory);
+
+    $tools = iterator_to_array((function () {
+        yield from (new CommandAgent)->tools();
+    })());
+
+    expect($tools)->toHaveCount(3);
+    $classes = array_map(fn (Tool $tool): string => $tool::class, $tools);
+    expect($classes)->not->toContain(CreateActionRequestTool::class);
+    expect($classes)->toContain(SearchMediaTool::class);
+    expect($classes)->toContain(GetServiceStatusTool::class);
+    expect($classes)->toContain(QueryActivityTool::class);
+});
+
+test('advisory mode adds an advisory hint to instructions', function (): void {
+    resolve(AiSettings::class)->setMode(AiMode::Advisory);
+
+    $text = (string) (new CommandAgent)->instructions();
+
+    expect($text)->toContain('ADVISORY');
+    expect($text)->toContain('Executive mode');
+});
+
+test('executive mode keeps the original instruction text', function (): void {
+    resolve(AiSettings::class)->setMode(AiMode::Executive);
+
+    $text = (string) (new CommandAgent)->instructions();
+
+    expect($text)->not->toContain('ADVISORY');
 });

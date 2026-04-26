@@ -1,0 +1,144 @@
+<script setup lang="ts">
+import { Form, Head } from '@inertiajs/vue3';
+import { ref } from 'vue';
+import AiSettingsController from '@/actions/App/Http/Controllers/Admin/AiSettingsController';
+import InputError from '@/components/InputError.vue';
+import { Button } from '@/components/ui/button';
+import {
+    Card,
+    CardContent,
+    CardDescription,
+    CardHeader,
+    CardTitle,
+} from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from '@/components/ui/select';
+
+interface ModeOption {
+    value: string;
+    label: string;
+}
+
+interface AiSettingsState {
+    mode: string;
+    command_model: string;
+    advisor_model: string;
+}
+
+const props = defineProps<{
+    settings: AiSettingsState;
+    modes: ModeOption[];
+}>();
+
+defineOptions({
+    layout: {
+        breadcrumbs: [
+            { title: 'Admin', href: '#' },
+            { title: 'AI Settings', href: AiSettingsController.index.url() },
+        ],
+    },
+});
+
+const selectedMode = ref(props.settings.mode);
+</script>
+
+<template>
+    <Head title="AI Settings" />
+
+    <div class="max-w-2xl p-6">
+        <Card>
+            <CardHeader>
+                <CardTitle>AI Settings</CardTitle>
+                <CardDescription>
+                    Choose the operating mode and which model each AI agent
+                    uses. Models are free-form strings — they must match a model
+                    identifier supported by a configured laravel/ai provider
+                    (e.g.
+                    <code>gpt-5-mini</code>, <code>claude-haiku-4-5</code>,
+                    <code>gemini-3-flash-preview</code>).
+                </CardDescription>
+            </CardHeader>
+            <CardContent>
+                <Form
+                    v-bind="AiSettingsController.update.put()"
+                    class="space-y-6"
+                    v-slot="{ errors, processing }"
+                >
+                    <div class="space-y-2">
+                        <Label for="mode">Mode</Label>
+                        <Select
+                            name="mode"
+                            v-model="selectedMode"
+                            :default-value="settings.mode"
+                        >
+                            <SelectTrigger>
+                                <SelectValue placeholder="Select a mode" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem
+                                    v-for="mode in modes"
+                                    :key="mode.value"
+                                    :value="mode.value"
+                                >
+                                    {{ mode.label }}
+                                </SelectItem>
+                            </SelectContent>
+                        </Select>
+                        <p class="text-sm text-muted-foreground">
+                            <strong>Executive</strong>: agents can create and
+                            (when auto-approve is configured) auto-execute
+                            ActionRequests.<br />
+                            <strong>Advisory</strong>: CommandAgent loses its
+                            create-action tool and every ActionRequest queues
+                            as Pending regardless of the per-type rule. Use
+                            this while evaluating the AI before shipping full
+                            auto.
+                        </p>
+                        <InputError :message="errors.mode" />
+                    </div>
+
+                    <div class="space-y-2">
+                        <Label for="command_model">Command Agent Model</Label>
+                        <Input
+                            id="command_model"
+                            name="command_model"
+                            :default-value="settings.command_model"
+                        />
+                        <p class="text-sm text-muted-foreground">
+                            The agent that executes user intent (search,
+                            status, create ActionRequests).
+                        </p>
+                        <InputError :message="errors.command_model" />
+                    </div>
+
+                    <div class="space-y-2">
+                        <Label for="advisor_model">Advisor Agent Model</Label>
+                        <Input
+                            id="advisor_model"
+                            name="advisor_model"
+                            :default-value="settings.advisor_model"
+                        />
+                        <p class="text-sm text-muted-foreground">
+                            The read-only agent that recommends what to watch
+                            and summarises library activity.
+                        </p>
+                        <InputError :message="errors.advisor_model" />
+                    </div>
+
+                    <div class="flex gap-2 pt-4">
+                        <Button type="submit" :disabled="processing">
+                            Save Settings
+                        </Button>
+                    </div>
+                </Form>
+            </CardContent>
+        </Card>
+    </div>
+</template>

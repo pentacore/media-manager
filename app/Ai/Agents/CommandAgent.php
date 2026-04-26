@@ -8,18 +8,17 @@ use App\Ai\Tools\CreateActionRequestTool;
 use App\Ai\Tools\GetServiceStatusTool;
 use App\Ai\Tools\QueryActivityTool;
 use App\Ai\Tools\SearchMediaTool;
+use App\Enums\AiMode;
+use App\Settings\AiSettings;
 use Laravel\Ai\Attributes\MaxSteps;
-use Laravel\Ai\Attributes\Provider;
 use Laravel\Ai\Concerns\RemembersConversations;
 use Laravel\Ai\Contracts\Agent;
 use Laravel\Ai\Contracts\Conversational;
 use Laravel\Ai\Contracts\HasTools;
 use Laravel\Ai\Contracts\Tool;
-use Laravel\Ai\Enums\Lab;
 use Laravel\Ai\Promptable;
 use Stringable;
 
-#[Provider(Lab::Anthropic)]
 #[MaxSteps(12)]
 class CommandAgent implements Agent, Conversational, HasTools
 {
@@ -31,7 +30,7 @@ class CommandAgent implements Agent, Conversational, HasTools
      */
     public function model(): string
     {
-        return (string) config('mediamanager.ai.model', 'claude-sonnet-4-5');
+        return resolve(AiSettings::class)->commandModel();
     }
 
     /**
@@ -39,7 +38,9 @@ class CommandAgent implements Agent, Conversational, HasTools
      */
     public function instructions(): Stringable|string
     {
-        return <<<'PROMPT'
+        $isAdvisory = resolve(AiSettings::class)->mode() === AiMode::Advisory;
+
+        $base = <<<'PROMPT'
 You are Command, a natural-language operator for a self-hosted media stack (Sonarr, Radarr, Emby, Seerr).
 
 Your role:
@@ -59,6 +60,12 @@ Guidelines:
 - If a user asks something analytical or advisory, suggest they switch to the MediaAdvisor assistant.
 - If the user asks to "delete everything unwatched" or similar bulk ops, list the candidates and ask for confirmation before creating multiple ActionRequests.
 PROMPT;
+
+        if ($isAdvisory) {
+            $base .= "\n\nIMPORTANT: The system is currently in ADVISORY mode. CreateActionRequestTool is unavailable. Describe what action you would take, identify the target IDs, and tell the user to switch the system to Executive mode (Admin → AI Settings) if they want it executed. Do NOT promise to perform any destructive action — you cannot.";
+        }
+
+        return $base;
     }
 
     /**
@@ -68,11 +75,16 @@ PROMPT;
      */
     public function tools(): iterable
     {
-        return [
+        $tools = [
             resolve(SearchMediaTool::class),
             resolve(GetServiceStatusTool::class),
             resolve(QueryActivityTool::class),
-            resolve(CreateActionRequestTool::class),
         ];
+
+        if (resolve(AiSettings::class)->mode() !== AiMode::Advisory) {
+            $tools[] = resolve(CreateActionRequestTool::class);
+        }
+
+        return $tools;
     }
 }

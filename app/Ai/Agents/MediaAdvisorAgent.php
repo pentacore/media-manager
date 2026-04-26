@@ -7,18 +7,16 @@ namespace App\Ai\Agents;
 use App\Ai\Tools\GetServiceStatusTool;
 use App\Ai\Tools\QueryActivityTool;
 use App\Ai\Tools\SearchMediaTool;
+use App\Settings\AiSettings;
 use Laravel\Ai\Attributes\MaxSteps;
-use Laravel\Ai\Attributes\Provider;
 use Laravel\Ai\Concerns\RemembersConversations;
 use Laravel\Ai\Contracts\Agent;
 use Laravel\Ai\Contracts\Conversational;
 use Laravel\Ai\Contracts\HasTools;
 use Laravel\Ai\Contracts\Tool;
-use Laravel\Ai\Enums\Lab;
 use Laravel\Ai\Promptable;
 use Stringable;
 
-#[Provider(Lab::Anthropic)]
 #[MaxSteps(8)]
 class MediaAdvisorAgent implements Agent, Conversational, HasTools
 {
@@ -30,7 +28,7 @@ class MediaAdvisorAgent implements Agent, Conversational, HasTools
      */
     public function model(): string
     {
-        return (string) config('mediamanager.ai.model', 'claude-sonnet-4-5');
+        return resolve(AiSettings::class)->advisorModel();
     }
 
     /**

@@ -2,6 +2,7 @@
 import { Link, usePage } from '@inertiajs/vue3';
 import {
     Activity as ActivityIcon,
+    Brain,
     Film,
     HeartPulse,
     History,
@@ -21,6 +22,7 @@ import { computed, onMounted, onUnmounted, ref, watchEffect } from 'vue';
 import ActionRequestController from '@/actions/App/Http/Controllers/Actions/ActionRequestController';
 import ActionTypeConfigController from '@/actions/App/Http/Controllers/Actions/ActionTypeConfigController';
 import ActivityLogController from '@/actions/App/Http/Controllers/ActivityLogController';
+import AiSettingsController from '@/actions/App/Http/Controllers/Admin/AiSettingsController';
 import ServiceConnectionController from '@/actions/App/Http/Controllers/Admin/ServiceConnectionController';
 import UserController from '@/actions/App/Http/Controllers/Admin/UserController';
 import AIChatController from '@/actions/App/Http/Controllers/AI/ChatController';
@@ -289,6 +291,11 @@ const adminNavItems: NavItem[] = [
         title: 'Action Rules',
         href: ActionTypeConfigController.index.url(),
         icon: Shield,
+    },
+    {
+        title: 'AI Settings',
+        href: AiSettingsController.index.url(),
+        icon: Brain,
     },
 ];
 </script>

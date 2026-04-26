@@ -23,7 +23,7 @@ test('dispatch creates a Pending ActionRequest for requires_approval types', fun
         'is_enabled' => true,
     ]);
 
-    $request = (new ActionOrchestrator)->dispatch(
+    $request = resolve(ActionOrchestrator::class)->dispatch(
         type: 'delete_series',
         sourceService: 'emby',
         targetService: 'sonarr',
@@ -46,7 +46,7 @@ test('dispatch auto-executes when config has requires_approval=false', function 
         'is_enabled' => true,
     ]);
 
-    $request = (new ActionOrchestrator)->dispatch(
+    $request = resolve(ActionOrchestrator::class)->dispatch(
         type: 'emby_library_scan',
         sourceService: 'sonarr',
         targetService: 'emby',
@@ -60,7 +60,7 @@ test('dispatch auto-executes when config has requires_approval=false', function 
 });
 
 test('dispatch returns null when config is missing', function (): void {
-    $request = (new ActionOrchestrator)->dispatch(
+    $request = resolve(ActionOrchestrator::class)->dispatch(
         type: 'never_registered',
         sourceService: 'emby',
         targetService: 'sonarr',
@@ -79,7 +79,7 @@ test('dispatch returns null when config is disabled', function (): void {
         'is_enabled' => false,
     ]);
 
-    $request = (new ActionOrchestrator)->dispatch(
+    $request = resolve(ActionOrchestrator::class)->dispatch(
         type: 'delete_series',
         sourceService: 'emby',
         targetService: 'sonarr',
@@ -95,7 +95,7 @@ test('dispatch links to source WebhookEvent when provided', function (): void {
     ActionTypeConfig::factory()->create(['type' => 'delete_series', 'requires_approval' => true, 'is_enabled' => true]);
     $webhookEvent = WebhookEvent::factory()->create();
 
-    $request = (new ActionOrchestrator)->dispatch(
+    $request = resolve(ActionOrchestrator::class)->dispatch(
         type: 'delete_series',
         sourceService: 'emby',
         targetService: 'sonarr',

@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use App\Http\Controllers\Admin\AiSettingsController;
 use App\Http\Controllers\Admin\ServiceConnectionController;
 use App\Http\Controllers\Admin\UserController;
 use Illuminate\Support\Facades\Route;
@@ -23,4 +24,7 @@ Route::middleware(['auth', 'verified', 'password.set', 'role:admin'])->prefix('a
     Route::post('users', [UserController::class, 'store'])->name('users.store');
     Route::patch('users/{user}/role', [UserController::class, 'updateRole'])->name('users.update-role');
     Route::delete('users/{user}', [UserController::class, 'destroy'])->name('users.destroy');
+
+    Route::get('ai-settings', [AiSettingsController::class, 'index'])->name('ai-settings.index');
+    Route::put('ai-settings', [AiSettingsController::class, 'update'])->name('ai-settings.update');
 });
