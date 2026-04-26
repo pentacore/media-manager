@@ -11,34 +11,50 @@ use App\Events\WebhookReceived;
 use App\Models\ActionRequest;
 use App\Models\EmbyActivity;
 use App\Models\ServiceConnection;
+use App\Models\User;
 use App\Models\WebhookEvent;
 use Illuminate\Broadcasting\PrivateChannel;
 use Illuminate\Contracts\Broadcasting\ShouldBroadcast;
 use Illuminate\Contracts\Broadcasting\ShouldBroadcastNow;
 use Illuminate\Database\QueryException;
 
-test('ActionRequestCreated broadcasts on dashboard channel with correct payload', function (): void {
-    $actionRequest = ActionRequest::factory()->create();
+test('ActionRequestCreated broadcasts on each admin and member user channel', function (): void {
+    $admin = User::factory()->admin()->create();
+    $member = User::factory()->member()->create();
+    User::factory()->create();
 
+    $actionRequest = ActionRequest::factory()->create();
     $event = new ActionRequestCreated($actionRequest);
 
     expect($event)->toBeInstanceOf(ShouldBroadcast::class);
-    expect($event->broadcastOn())->toEqual(new PrivateChannel('dashboard'));
     expect($event->broadcastAs())->toBe('ActionRequestCreated');
+
+    $channels = $event->broadcastOn();
+    expect($channels)->toHaveCount(2);
+    expect(collect($channels)->map(fn (PrivateChannel $c): string => $c->name)->all())
+        ->toContain('private-App.Models.User.'.$admin->id)
+        ->toContain('private-App.Models.User.'.$member->id);
 
     $payload = $event->broadcastWith();
     expect($payload)->toHaveKeys(['id', 'type', 'source_service', 'target_service', 'status', 'requires_approval', 'created_at']);
     expect($payload['id'])->toBe($actionRequest->id);
 });
 
-test('ActionRequestStatusChanged broadcasts on dashboard channel with correct payload', function (): void {
-    $actionRequest = ActionRequest::factory()->completed()->create();
+test('ActionRequestStatusChanged broadcasts on each admin and member user channel', function (): void {
+    $admin = User::factory()->admin()->create();
+    User::factory()->member()->create();
+    User::factory()->create();
 
+    $actionRequest = ActionRequest::factory()->completed()->create();
     $event = new ActionRequestStatusChanged($actionRequest);
 
     expect($event)->toBeInstanceOf(ShouldBroadcast::class);
-    expect($event->broadcastOn())->toEqual(new PrivateChannel('dashboard'));
     expect($event->broadcastAs())->toBe('ActionRequestStatusChanged');
+
+    $channels = $event->broadcastOn();
+    expect($channels)->toHaveCount(2);
+    expect(collect($channels)->map(fn (PrivateChannel $c): string => $c->name)->all())
+        ->toContain('private-App.Models.User.'.$admin->id);
 
     $payload = $event->broadcastWith();
     expect($payload)->toHaveKeys(['id', 'status', 'result', 'updated_at']);
@@ -51,6 +67,8 @@ test('ActionRequestStatusChanged broadcasts on dashboard channel with correct pa
 });
 
 test('ActionRequestStatusChanged strips sensitive detail from broadcast payload', function (): void {
+    User::factory()->admin()->create();
+
     $actionRequest = ActionRequest::factory()->create([
         'result' => [
             'success' => false,

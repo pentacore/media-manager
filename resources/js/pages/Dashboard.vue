@@ -12,7 +12,6 @@ import {
 } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useDashboardStats } from '@/composables/useDashboardStats';
-import { useNotifications } from '@/composables/useNotifications';
 import { dashboard } from '@/routes';
 import type { ActivityLogResource } from '@/typefinder/resources/ActivityLogResource';
 
@@ -61,7 +60,6 @@ defineOptions({
 });
 
 const { stats: liveStats, subscribe: subscribeStats } = useDashboardStats();
-const { subscribe: subscribeNotifications } = useNotifications();
 
 const activeServices = computed(
     () => liveStats.value?.activeServices ?? props.stats.activeServices,
@@ -110,7 +108,6 @@ function formatTime(isoString: string | null): string {
 
 onMounted(() => {
     subscribeStats();
-    subscribeNotifications();
 });
 </script>
 
