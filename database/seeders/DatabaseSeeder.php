@@ -17,10 +17,12 @@ class DatabaseSeeder extends Seeder
     {
         // User::factory(10)->create();
 
-        User::factory()->admin()->create([
-            'name' => 'Test User',
-            'email' => 'test@example.com',
-        ]);
+        if (app()->environment(['local', 'testing'])) {
+            User::factory()->admin()->create([
+                'name' => 'Test User',
+                'email' => 'test@example.com',
+            ]);
+        }
 
         $this->call(ActionTypeConfigSeeder::class);
         $this->call(ServiceConnectionSeeder::class);

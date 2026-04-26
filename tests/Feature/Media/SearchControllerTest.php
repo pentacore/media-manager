@@ -5,6 +5,7 @@ declare(strict_types=1);
 use App\Models\ServiceConnection;
 use App\Models\User;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
 
 beforeEach(function (): void {
     config()->set('inertia.ssr.enabled', false);
@@ -273,6 +274,33 @@ test('search surfaces per-service error message when a service fails', function 
                 ->where('requestResults.error', 'No active Seerr connection configured.')
             )
         );
+});
+
+test('search does not leak provider exception details to members', function (): void {
+    Log::spy();
+    ServiceConnection::factory()->radarr()->create(['url' => 'http://radarr.local:7878', 'api_key' => 'rk']);
+
+    $member = User::factory()->member()->create();
+
+    Http::fake([
+        'radarr.local:7878/api/v3/movie' => Http::response('LEAKED-PROVIDER-SECRET', 500),
+    ]);
+
+    $this->actingAs($member)
+        ->get(route('media.search.index', ['q' => 'test']))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->loadDeferredProps(fn ($page) => $page
+                ->where('movieResults.results', [])
+                ->where('movieResults.error', 'Radarr search is temporarily unavailable.')
+            )
+        );
+
+    Log::shouldHaveReceived('warning')->once()->withArgs(
+        fn (string $message, array $context): bool => $message === 'Media search failed.'
+            && ($context['service'] ?? null) === 'radarr'
+            && str_contains((string) ($context['message'] ?? ''), 'LEAKED-PROVIDER-SECRET')
+    );
 });
 
 test('search reports no-connection errors when services are not configured', function (): void {

@@ -56,7 +56,7 @@ vendor/bin/sail npm run build
 vendor/bin/sail open
 ```
 
-The default seed creates an admin user `test@example.com` (password from the `User` factory — check it via `vendor/bin/sail artisan tinker` if you need it, or create a new admin through the invite flow). It also seeds the four `ActionTypeConfig` rows and, if any `*_URL` / `*_API_KEY` env vars are set, the matching `ServiceConnection` rows.
+In local/testing environments, the default seed creates an admin user `test@example.com` (password from the `User` factory — check it via `vendor/bin/sail artisan tinker` if you need it, or create a new admin through the invite flow). In non-local environments it skips that fixed user. It always seeds the four `ActionTypeConfig` rows and, if any `*_URL` / `*_API_KEY` env vars are set, the matching `ServiceConnection` rows.
 
 During development you probably want the Vite dev server running instead of `npm run build`:
 

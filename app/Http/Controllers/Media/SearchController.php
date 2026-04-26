@@ -13,6 +13,7 @@ use App\Services\Seerr\SeerrTitleResolver;
 use App\Services\Sonarr\SonarrClient;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
 use Inertia\Inertia;
 use Inertia\Response;
 use Throwable;
@@ -85,7 +86,7 @@ class SearchController extends Controller
         } catch (ModelNotFoundException) {
             return ['results' => [], 'error' => 'No active Sonarr connection configured.'];
         } catch (Throwable $throwable) {
-            return ['results' => [], 'error' => $throwable->getMessage()];
+            return $this->serviceFailure('sonarr', $throwable);
         }
 
         $matches = $this->filterByTitle($items, $term);
@@ -117,7 +118,7 @@ class SearchController extends Controller
         } catch (ModelNotFoundException) {
             return ['results' => [], 'error' => 'No active Radarr connection configured.'];
         } catch (Throwable $throwable) {
-            return ['results' => [], 'error' => $throwable->getMessage()];
+            return $this->serviceFailure('radarr', $throwable);
         }
 
         $matches = $this->filterByTitle($items, $term);
@@ -155,7 +156,7 @@ class SearchController extends Controller
         try {
             $response = $seerrClient->getRequests(['take' => 100, 'sort' => 'added']);
         } catch (Throwable $throwable) {
-            return ['results' => [], 'error' => $throwable->getMessage()];
+            return $this->serviceFailure('seerr', $throwable);
         }
 
         $results = is_array($response['results'] ?? null) ? $response['results'] : [];
@@ -200,5 +201,22 @@ class SearchController extends Controller
         });
 
         return array_slice(array_values($matches), 0, self::MAX_RESULTS);
+    }
+
+    /**
+     * @return array{results: array<int, array<string, mixed>>, error: string}
+     */
+    private function serviceFailure(string $service, Throwable $throwable): array
+    {
+        Log::warning('Media search failed.', [
+            'service' => $service,
+            'exception' => $throwable::class,
+            'message' => $throwable->getMessage(),
+        ]);
+
+        return [
+            'results' => [],
+            'error' => sprintf('%s search is temporarily unavailable.', ucfirst($service)),
+        ];
     }
 }
