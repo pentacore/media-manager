@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { Head } from '@inertiajs/vue3';
 import { Bot, Send, User as UserIcon } from 'lucide-vue-next';
-import { computed, nextTick, ref, useTemplateRef } from 'vue';
+import { computed, nextTick, ref, useTemplateRef, watch } from 'vue';
 import AIChatController from '@/actions/App/Http/Controllers/AI/ChatController';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -118,6 +118,17 @@ function newConversation() {
     messages.value = [];
     error.value = null;
 }
+
+// Switching agents mid-thread leaves the new agent inheriting tool calls
+// it doesn't have (Command's CreateActionRequestTool isn't on Advisor),
+// which OpenAI 400s on next replay. Reset to a clean conversation.
+watch(selectedAgent, (next, prev) => {
+    if (next === prev) {
+        return;
+    }
+
+    newConversation();
+});
 
 const activeAgentLabel = computed(() => {
     const current = selectedAgent.value || 'command';
