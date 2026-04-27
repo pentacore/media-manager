@@ -69,12 +69,20 @@ class ServiceConnectionController extends Controller
     }
 
     /**
-     * @return array<int, array<string, mixed>>
+     * @return array<int, array{id: int|null, name: string|null, enable: bool, priority: int|null, implementation: string|null}>
      */
     private function loadProwlarrIndexers(ServiceConnection $serviceConnection): array
     {
         try {
-            return new ProwlarrClient($serviceConnection)->listIndexers();
+            $entries = new ProwlarrClient($serviceConnection)->listIndexers();
+
+            return array_map(fn (array $entry): array => [
+                'id' => $entry['id'] ?? null,
+                'name' => $entry['name'] ?? null,
+                'enable' => $entry['enable'] ?? false,
+                'priority' => $entry['priority'] ?? null,
+                'implementation' => $entry['implementation'] ?? null,
+            ], $entries);
         } catch (Throwable $throwable) {
             Log::warning('Failed to load Prowlarr indexers for edit page', [
                 'connection_id' => $serviceConnection->id,

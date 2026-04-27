@@ -373,7 +373,7 @@ test('edit page exposes indexers prop populated for a Prowlarr connection', func
 
     Http::fake([
         'prowlarr.local:9696/api/v1/indexer' => Http::response([
-            ['id' => 1, 'name' => 'Demo One', 'enable' => true, 'priority' => 25],
+            ['id' => 1, 'name' => 'Demo One', 'enable' => true, 'priority' => 25, 'fields' => [['name' => 'apiKey', 'value' => 'SECRET']]],
             ['id' => 2, 'name' => 'Demo Two', 'enable' => false, 'priority' => 50],
         ]),
     ]);
@@ -386,7 +386,10 @@ test('edit page exposes indexers prop populated for a Prowlarr connection', func
             ->has('connection')
             ->loadDeferredProps(fn (AssertableInertia $assertableInertia): AssertableInertia => $assertableInertia
                 ->has('indexers', 2)
-                ->where('indexers.0.name', 'Demo One')));
+                ->where('indexers.0.name', 'Demo One')
+                ->where('indexers.0.priority', 25)
+                ->missing('indexers.0.fields')
+                ->missing('indexers.0.settings')));
 });
 
 test('edit page falls back to empty indexers when Prowlarr is unreachable', function (): void {

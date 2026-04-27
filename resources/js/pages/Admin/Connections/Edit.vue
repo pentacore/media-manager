@@ -64,7 +64,7 @@ interface Indexer {
 const props = defineProps<{
     connection: Connection;
     serviceTypes: ServiceTypeOption[];
-    indexers: Indexer[];
+    indexers?: Indexer[];
 }>();
 
 defineOptions({
@@ -393,7 +393,14 @@ function testIndexer(indexerId: number): void {
             </CardHeader>
             <CardContent>
                 <p
-                    v-if="indexers.length === 0"
+                    v-if="!indexers"
+                    class="flex items-center gap-2 text-sm text-muted-foreground"
+                >
+                    <Antenna class="size-4" />
+                    Loading indexers…
+                </p>
+                <p
+                    v-else-if="indexers.length === 0"
                     class="text-sm text-muted-foreground"
                 >
                     No indexers loaded. Either Prowlarr isn't reachable right
