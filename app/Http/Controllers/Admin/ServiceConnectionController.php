@@ -74,11 +74,11 @@ class ServiceConnectionController extends Controller
     private function loadProwlarrIndexers(ServiceConnection $serviceConnection): array
     {
         try {
-            return (new ProwlarrClient($serviceConnection))->listIndexers();
-        } catch (Throwable $e) {
+            return new ProwlarrClient($serviceConnection)->listIndexers();
+        } catch (Throwable $throwable) {
             Log::warning('Failed to load Prowlarr indexers for edit page', [
                 'connection_id' => $serviceConnection->id,
-                'exception' => $e::class,
+                'exception' => $throwable::class,
             ]);
 
             return [];

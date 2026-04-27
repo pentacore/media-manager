@@ -7,12 +7,14 @@ namespace App\Services\Prowlarr;
 use App\Services\Arr\ArrClient;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\RequestException;
+use Override;
 
 /**
  * @see https://prowlarr.com/docs/api/ for API Spec
  */
 class ProwlarrClient extends ArrClient
 {
+    #[Override]
     protected string $apiVersion = 'v1';
 
     /**
@@ -78,7 +80,7 @@ class ProwlarrClient extends ArrClient
         $params = array_filter([
             'indexers' => $indexerId,
             'since' => $sinceHours !== null ? now()->subHours($sinceHours)->toISOString() : null,
-        ], fn ($v): bool => $v !== null);
+        ], fn (int|string|null $v): bool => $v !== null);
 
         return $this->buildClient()
             ->get(sprintf('/api/%s/indexerstats', $this->apiVersion), $params)

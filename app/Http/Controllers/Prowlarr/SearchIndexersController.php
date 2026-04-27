@@ -45,12 +45,12 @@ class SearchIndexersController extends Controller
         }
 
         try {
-            $results = (new ProwlarrClient($connection))->searchIndexers($query);
-        } catch (Throwable $e) {
+            $results = new ProwlarrClient($connection)->searchIndexers($query);
+        } catch (Throwable $throwable) {
             Log::warning('Prowlarr indexer search failed', [
                 'connection_id' => $connection->id,
-                'exception' => $e::class,
-                'message' => $e->getMessage(),
+                'exception' => $throwable::class,
+                'message' => $throwable->getMessage(),
             ]);
 
             return Inertia::render('Prowlarr/Search', [

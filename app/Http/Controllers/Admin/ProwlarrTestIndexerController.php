@@ -18,18 +18,16 @@ class ProwlarrTestIndexerController extends Controller
 {
     public function __invoke(ServiceConnection $serviceConnection, int $indexerId): RedirectResponse
     {
-        if ($serviceConnection->type !== ServiceType::Prowlarr) {
-            throw new NotFoundHttpException;
-        }
+        throw_if($serviceConnection->type !== ServiceType::Prowlarr, NotFoundHttpException::class);
 
         try {
-            $result = (new ProwlarrClient($serviceConnection))->testIndexer($indexerId);
-        } catch (Throwable $e) {
+            $result = new ProwlarrClient($serviceConnection)->testIndexer($indexerId);
+        } catch (Throwable $throwable) {
             Log::warning('Prowlarr indexer test failed', [
                 'connection_id' => $serviceConnection->id,
                 'indexer_id' => $indexerId,
-                'exception' => $e::class,
-                'message' => $e->getMessage(),
+                'exception' => $throwable::class,
+                'message' => $throwable->getMessage(),
             ]);
 
             Inertia::flash('toast', ['type' => 'error', 'message' => 'Indexer test failed (network error).']);

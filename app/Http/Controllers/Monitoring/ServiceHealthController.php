@@ -57,12 +57,16 @@ class ServiceHealthController extends Controller
         $result = [];
 
         foreach ($connections as $connection) {
-            if ($connection->type !== ServiceType::Prowlarr || ! $connection->is_active) {
+            if ($connection->type !== ServiceType::Prowlarr) {
+                continue;
+            }
+
+            if (! $connection->is_active) {
                 continue;
             }
 
             try {
-                $entries = (new ProwlarrClient($connection))->listIndexers();
+                $entries = new ProwlarrClient($connection)->listIndexers();
                 $result[$connection->id] = array_map(fn (array $entry): array => [
                     'id' => $entry['id'] ?? null,
                     'name' => $entry['name'] ?? null,

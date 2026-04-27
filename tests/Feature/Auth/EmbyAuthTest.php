@@ -88,7 +88,7 @@ test('emby login is rate limited', function (): void {
         'emby.local:8096/Users/AuthenticateByName' => Http::response([], 401),
     ]);
 
-    for ($attempt = 1; $attempt <= 5; $attempt++) {
+    for ($attempt = 1; $attempt <= 5; ++$attempt) {
         $this->post(route('auth.emby'), [
             'username' => 'RateLimitedUser',
             'password' => 'wrongpass',

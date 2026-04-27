@@ -29,7 +29,7 @@ test('renders the page with empty results when no query is provided', function (
     $this->actingAs($this->member)
         ->get('/prowlarr/search')
         ->assertOk()
-        ->assertInertia(fn (AssertableInertia $page): AssertableInertia => $page
+        ->assertInertia(fn (AssertableInertia $assertableInertia): AssertableInertia => $assertableInertia
             ->component('Prowlarr/Search')
             ->where('query', '')
             ->where('results', [])
@@ -51,7 +51,7 @@ test('renders results when a query is provided', function (): void {
     $this->actingAs($this->member)
         ->get('/prowlarr/search?q=Demo')
         ->assertOk()
-        ->assertInertia(fn (AssertableInertia $page): AssertableInertia => $page
+        ->assertInertia(fn (AssertableInertia $assertableInertia): AssertableInertia => $assertableInertia
             ->component('Prowlarr/Search')
             ->where('query', 'Demo')
             ->has('results', 1)
@@ -62,7 +62,7 @@ test('renders empty results and a friendly error if no Prowlarr connection is co
     $this->actingAs($this->member)
         ->get('/prowlarr/search?q=Demo')
         ->assertOk()
-        ->assertInertia(fn (AssertableInertia $page): AssertableInertia => $page
+        ->assertInertia(fn (AssertableInertia $assertableInertia): AssertableInertia => $assertableInertia
             ->component('Prowlarr/Search')
             ->where('hasConnection', false)
             ->where('results', []));
@@ -81,7 +81,7 @@ test('renders an error message when the Prowlarr client throws', function (): vo
     $this->actingAs($this->member)
         ->get('/prowlarr/search?q=Demo')
         ->assertOk()
-        ->assertInertia(fn (AssertableInertia $page): AssertableInertia => $page
+        ->assertInertia(fn (AssertableInertia $assertableInertia): AssertableInertia => $assertableInertia
             ->component('Prowlarr/Search')
             ->where('error', 'Indexer search failed.')
             ->where('results', []));

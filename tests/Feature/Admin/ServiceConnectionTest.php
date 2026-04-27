@@ -381,10 +381,10 @@ test('edit page exposes indexers prop populated for a Prowlarr connection', func
     $this->actingAs($admin)
         ->get(sprintf('/admin/connections/%d/edit', $connection->id))
         ->assertOk()
-        ->assertInertia(fn (AssertableInertia $page): AssertableInertia => $page
+        ->assertInertia(fn (AssertableInertia $assertableInertia): AssertableInertia => $assertableInertia
             ->component('Admin/Connections/Edit')
             ->has('connection')
-            ->loadDeferredProps(fn (AssertableInertia $page): AssertableInertia => $page
+            ->loadDeferredProps(fn (AssertableInertia $assertableInertia): AssertableInertia => $assertableInertia
                 ->has('indexers', 2)
                 ->where('indexers.0.name', 'Demo One')));
 });
@@ -406,8 +406,8 @@ test('edit page falls back to empty indexers when Prowlarr is unreachable', func
     $this->actingAs($admin)
         ->get(sprintf('/admin/connections/%d/edit', $connection->id))
         ->assertOk()
-        ->assertInertia(fn (AssertableInertia $page): AssertableInertia => $page
+        ->assertInertia(fn (AssertableInertia $assertableInertia): AssertableInertia => $assertableInertia
             ->component('Admin/Connections/Edit')
-            ->loadDeferredProps(fn (AssertableInertia $page): AssertableInertia => $page
+            ->loadDeferredProps(fn (AssertableInertia $assertableInertia): AssertableInertia => $assertableInertia
                 ->where('indexers', [])));
 });

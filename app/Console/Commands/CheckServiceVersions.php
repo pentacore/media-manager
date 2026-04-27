@@ -28,7 +28,7 @@ class CheckServiceVersions extends Command
             }
 
             app()->call([new FetchLatestServiceVersion($connection), 'handle']);
-            $checked++;
+            ++$checked;
         }
 
         $this->info(sprintf('Updated latest_version for %d service(s).', $checked));
