@@ -93,3 +93,44 @@ test('add_series executor calls SonarrClient::searchSeries then addSeries', func
     expect($result['title'])->toBe('Demo Show');
     expect($result['tvdb_id'])->toBe(999001);
 });
+
+test('monitor_series executor toggles monitored via getSeriesById + updateSeries', function (): void {
+    Http::fake([
+        'sonarr.local:8989/api/v3/series/42' => Http::response(['id' => 42, 'title' => 'Demo', 'monitored' => true]),
+    ]);
+
+    $actionRequest = ActionRequest::factory()->create([
+        'type' => 'monitor_series',
+        'target_service' => 'sonarr',
+        'payload' => ['series_id' => 42, 'monitored' => false],
+    ]);
+
+    $result = (new SonarrActions)->execute($actionRequest);
+
+    expect($result['sonarr_series_id'])->toBe(42);
+    expect($result['monitored'])->toBeFalse();
+
+    Http::assertSent(fn ($r): bool => $r->method() === 'PUT'
+        && str_contains((string) $r->url(), '/api/v3/series/42')
+        && $r->data()['monitored'] === false);
+});
+
+test('set_series_quality_profile executor mutates qualityProfileId via getSeriesById + updateSeries', function (): void {
+    Http::fake([
+        'sonarr.local:8989/api/v3/series/42' => Http::response(['id' => 42, 'title' => 'Demo', 'qualityProfileId' => 1]),
+    ]);
+
+    $actionRequest = ActionRequest::factory()->create([
+        'type' => 'set_series_quality_profile',
+        'target_service' => 'sonarr',
+        'payload' => ['series_id' => 42, 'quality_profile_id' => 7],
+    ]);
+
+    $result = (new SonarrActions)->execute($actionRequest);
+
+    expect($result['quality_profile_id'])->toBe(7);
+
+    Http::assertSent(fn ($r): bool => $r->method() === 'PUT'
+        && str_contains((string) $r->url(), '/api/v3/series/42')
+        && $r->data()['qualityProfileId'] === 7);
+});

@@ -27,6 +27,20 @@ class ActionTypeConfigSeeder extends Seeder
                 'is_enabled' => true,
             ],
             [
+                'type' => 'monitor_series',
+                'label' => 'Toggle Sonarr series monitoring',
+                'description' => 'Set whether Sonarr monitors a series for new episodes (AI-initiated).',
+                'requires_approval' => false,
+                'is_enabled' => true,
+            ],
+            [
+                'type' => 'set_series_quality_profile',
+                'label' => 'Change Sonarr series quality profile',
+                'description' => 'Change the quality profile assigned to a series in Sonarr (AI-initiated).',
+                'requires_approval' => false,
+                'is_enabled' => true,
+            ],
+            [
                 'type' => 'delete_movie',
                 'label' => 'Delete movie from Radarr',
                 'description' => 'Remove a movie from Radarr when it is deleted from Emby.',

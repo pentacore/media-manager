@@ -20,6 +20,8 @@ class SonarrActions implements ActionExecutor
         return match ($actionRequest->type) {
             'delete_series' => $this->deleteSeries($actionRequest),
             'add_series' => $this->addSeries($actionRequest),
+            'monitor_series' => $this->monitorSeries($actionRequest),
+            'set_series_quality_profile' => $this->setSeriesQualityProfile($actionRequest),
             default => throw new InvalidArgumentException(sprintf('SonarrActions cannot execute type "%s"', $actionRequest->type)),
         };
     }
@@ -76,6 +78,52 @@ class SonarrActions implements ActionExecutor
             'sonarr_series_id' => $series['id'] ?? null,
             'title' => $series['title'] ?? null,
             'tvdb_id' => $tvdbId,
+        ];
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function monitorSeries(ActionRequest $actionRequest): array
+    {
+        $payload = $actionRequest->payload;
+        $seriesId = (int) ($payload['series_id'] ?? 0);
+
+        throw_if($seriesId <= 0, InvalidArgumentException::class, 'series_id is required');
+
+        $monitored = (bool) ($payload['monitored'] ?? true);
+
+        $client = new SonarrClient(ServiceConnection::resolveActive(ServiceType::Sonarr));
+        $series = $client->getSeriesById($seriesId);
+        $series['monitored'] = $monitored;
+        $client->updateSeries($seriesId, $series);
+
+        return [
+            'sonarr_series_id' => $seriesId,
+            'monitored' => $monitored,
+        ];
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function setSeriesQualityProfile(ActionRequest $actionRequest): array
+    {
+        $payload = $actionRequest->payload;
+        $seriesId = (int) ($payload['series_id'] ?? 0);
+        $qualityProfileId = (int) ($payload['quality_profile_id'] ?? 0);
+
+        throw_if($seriesId <= 0, InvalidArgumentException::class, 'series_id is required');
+        throw_if($qualityProfileId <= 0, InvalidArgumentException::class, 'quality_profile_id is required');
+
+        $client = new SonarrClient(ServiceConnection::resolveActive(ServiceType::Sonarr));
+        $series = $client->getSeriesById($seriesId);
+        $series['qualityProfileId'] = $qualityProfileId;
+        $client->updateSeries($seriesId, $series);
+
+        return [
+            'sonarr_series_id' => $seriesId,
+            'quality_profile_id' => $qualityProfileId,
         ];
     }
 }
