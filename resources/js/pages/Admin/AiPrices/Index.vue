@@ -204,7 +204,7 @@ function destroy(price: PriceRow) {
                     <DialogTitle>Edit {{ editing.provider }} / {{ editing.model }}</DialogTitle>
                 </DialogHeader>
                 <Form
-                    v-bind="AiModelPriceController.update.put(editing.id)"
+                    v-bind="AiModelPriceController.update.form(editing.id)"
                     class="space-y-4"
                     v-slot="{ errors, processing }"
                     @success="cancelEdit"

@@ -67,7 +67,7 @@ const selectedMode = ref(props.settings.mode);
             </CardHeader>
             <CardContent>
                 <Form
-                    v-bind="AiSettingsController.update.put()"
+                    v-bind="AiSettingsController.update.form()"
                     class="space-y-6"
                     v-slot="{ errors, processing }"
                 >

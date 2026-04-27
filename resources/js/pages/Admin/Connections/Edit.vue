@@ -173,7 +173,7 @@ function testIndexer(indexerId: number): void {
             <CardContent>
                 <Form
                     v-bind="
-                        ServiceConnectionController.update.put(connection.id)
+                        ServiceConnectionController.update.form(connection.id)
                     "
                     class="space-y-4"
                     v-slot="{ errors, processing }"
