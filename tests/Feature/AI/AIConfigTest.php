@@ -13,11 +13,11 @@ test('ai feature can be enabled via config', function (): void {
     expect(config('mediamanager.ai.enabled'))->toBeTrue();
 });
 
-test('default ai provider is set to anthropic', function (): void {
-    expect(config('ai.default'))->toBe('anthropic');
+test('default ai provider falls back to openai when AI_DEFAULT_PROVIDER env is unset', function (): void {
+    expect(config('ai.default'))->toBe('openai');
 });
 
-test('anthropic provider configuration is present', function (): void {
+test('anthropic provider configuration is still present even when not the default', function (): void {
     expect(config('ai.providers.anthropic'))->toBeArray();
     expect(config('ai.providers.anthropic.driver'))->toBe('anthropic');
 });
