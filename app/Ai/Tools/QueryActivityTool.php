@@ -76,11 +76,26 @@ class QueryActivityTool implements Tool
      */
     public function schema(JsonSchema $schema): array
     {
+        // OpenAI strict-mode function calling requires every property to also
+        // be in `required`; nullable() lets the LLM pass null when it wants
+        // the handler's `??` default to apply.
         return [
-            'scope' => $schema->string()->description('Either "emby" (playback) or "system" (webhooks/admin). Default: emby.'),
-            'media_type' => $schema->string()->description('Filter by media_type for emby scope: "movie" or "episode".'),
-            'since_days' => $schema->integer()->description('Look-back window in days (1-365, default 30).'),
-            'limit' => $schema->integer()->description('Max rows to return (1-50, default 25).'),
+            'scope' => $schema->string()
+                ->description('Either "emby" (playback) or "system" (webhooks/admin). Default: emby.')
+                ->required()
+                ->nullable(),
+            'media_type' => $schema->string()
+                ->description('Filter by media_type for emby scope: "movie" or "episode". Pass null for no filter.')
+                ->required()
+                ->nullable(),
+            'since_days' => $schema->integer()
+                ->description('Look-back window in days (1-365, default 30). Pass null for default.')
+                ->required()
+                ->nullable(),
+            'limit' => $schema->integer()
+                ->description('Max rows to return (1-50, default 25). Pass null for default.')
+                ->required()
+                ->nullable(),
         ];
     }
 }

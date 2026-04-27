@@ -74,9 +74,13 @@ class CreateActionRequestTool implements Tool
                 ->description('Target service name (sonarr, radarr, emby, or seerr).')
                 ->required(),
             'source_service' => $schema->string()
-                ->description('Source service (defaults to "ai" when originating from the assistant).'),
+                ->description('Source service (defaults to "ai" when originating from the assistant). Pass null to use the default.')
+                ->required()
+                ->nullable(),
             'payload' => $schema->object()
-                ->description('Action-specific payload, e.g. {"sonarr_series_id": 42, "delete_files": true} for delete_series.'),
+                ->description('Action-specific payload, e.g. {"sonarr_series_id": 42, "delete_files": true} for delete_series. Pass null when the action takes no arguments (e.g. emby_library_scan).')
+                ->required()
+                ->nullable(),
         ];
     }
 }
