@@ -5,6 +5,7 @@ declare(strict_types=1);
 use App\Http\Controllers\Admin\AiModelPriceController;
 use App\Http\Controllers\Admin\AiSettingsController;
 use App\Http\Controllers\Admin\AiUsageController;
+use App\Http\Controllers\Admin\ProwlarrTestIndexerController;
 use App\Http\Controllers\Admin\ServiceConnectionController;
 use App\Http\Controllers\Admin\UserController;
 use Illuminate\Support\Facades\Route;
@@ -21,6 +22,8 @@ Route::middleware(['auth', 'verified', 'password.set', 'role:admin'])->prefix('a
         ->name('connections.check-health');
     Route::post('connections/{serviceConnection}/check-version', [ServiceConnectionController::class, 'checkVersion'])
         ->name('connections.check-version');
+    Route::post('connections/{serviceConnection}/prowlarr/test-indexer/{indexerId}', ProwlarrTestIndexerController::class)
+        ->name('connections.prowlarr.test-indexer');
 
     Route::get('users', [UserController::class, 'index'])->name('users.index');
     Route::post('users', [UserController::class, 'store'])->name('users.store');
