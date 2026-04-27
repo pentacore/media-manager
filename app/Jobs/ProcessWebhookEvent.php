@@ -80,13 +80,13 @@ class ProcessWebhookEvent implements ShouldQueue
             ServiceType::Prowlarr => ProwlarrWebhookHandler::class,
         };
 
-        if ($class === null || ! class_exists($class)) {
+        if (! class_exists($class)) {
             return null;
         }
 
-        /** @var WebhookHandler $embyWebhookHandler */
-        $embyWebhookHandler = resolve($class);
+        /** @var WebhookHandler $handler */
+        $handler = resolve($class);
 
-        return $embyWebhookHandler;
+        return $handler;
     }
 }

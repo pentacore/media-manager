@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { Head, router } from '@inertiajs/vue3';
+import { Head, Link, router } from '@inertiajs/vue3';
 import { Antenna, ExternalLink, Search } from 'lucide-vue-next';
 import { ref } from 'vue';
+import ServiceConnectionController from '@/actions/App/Http/Controllers/Admin/ServiceConnectionController';
 import SearchIndexersController from '@/actions/App/Http/Controllers/Prowlarr/SearchIndexersController';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -95,7 +96,7 @@ function formatAge(days: number): string {
             class="rounded-md border border-amber-300/50 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-500/40 dark:bg-amber-950 dark:text-amber-100"
         >
             No active Prowlarr connection. Add one from
-            <a class="underline" href="/admin/connections">Admin → Connections</a>.
+            <Link :href="ServiceConnectionController.index.url()" class="underline">Admin → Connections</Link>.
         </div>
 
         <form
@@ -138,7 +139,7 @@ function formatAge(days: number): string {
                 </TableRow>
             </TableHeader>
             <TableBody>
-                <TableRow v-for="release in results" :key="`${release.indexer}-${release.title}`">
+                <TableRow v-for="release in results" :key="`${release.indexer}-${release.title}-${release.size}`">
                     <TableCell class="font-medium">{{ release.title }}</TableCell>
                     <TableCell><Badge variant="outline">{{ release.indexer }}</Badge></TableCell>
                     <TableCell class="text-right">{{ formatBytes(release.size) }}</TableCell>
