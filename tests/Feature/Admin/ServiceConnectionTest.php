@@ -6,6 +6,7 @@ use App\Models\ServiceConnection;
 use App\Models\User;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Queue;
+use Inertia\Testing\AssertableInertia;
 
 test('guests cannot access service connections', function (): void {
     $this->get(route('admin.connections.index'))
@@ -358,4 +359,55 @@ test('non-admin cannot dispatch version check', function (): void {
     $this->actingAs($member)
         ->post(route('admin.connections.check-version', $connection))
         ->assertForbidden();
+});
+
+test('edit page exposes indexers prop populated for a Prowlarr connection', function (): void {
+    config()->set('inertia.ssr.enabled', false);
+    Http::preventStrayRequests();
+
+    $admin = User::factory()->admin()->create();
+    $connection = ServiceConnection::factory()->prowlarr()->create([
+        'url' => 'http://prowlarr.local:9696',
+        'api_key' => 'test',
+    ]);
+
+    Http::fake([
+        'prowlarr.local:9696/api/v1/indexer' => Http::response([
+            ['id' => 1, 'name' => 'Demo One', 'enable' => true, 'priority' => 25],
+            ['id' => 2, 'name' => 'Demo Two', 'enable' => false, 'priority' => 50],
+        ]),
+    ]);
+
+    $this->actingAs($admin)
+        ->get(sprintf('/admin/connections/%d/edit', $connection->id))
+        ->assertOk()
+        ->assertInertia(fn (AssertableInertia $page): AssertableInertia => $page
+            ->component('Admin/Connections/Edit')
+            ->has('connection')
+            ->loadDeferredProps(fn (AssertableInertia $page): AssertableInertia => $page
+                ->has('indexers', 2)
+                ->where('indexers.0.name', 'Demo One')));
+});
+
+test('edit page falls back to empty indexers when Prowlarr is unreachable', function (): void {
+    config()->set('inertia.ssr.enabled', false);
+    Http::preventStrayRequests();
+
+    $admin = User::factory()->admin()->create();
+    $connection = ServiceConnection::factory()->prowlarr()->create([
+        'url' => 'http://prowlarr.local:9696',
+        'api_key' => 'test',
+    ]);
+
+    Http::fake([
+        'prowlarr.local:9696/api/v1/indexer' => Http::response([], 500),
+    ]);
+
+    $this->actingAs($admin)
+        ->get(sprintf('/admin/connections/%d/edit', $connection->id))
+        ->assertOk()
+        ->assertInertia(fn (AssertableInertia $page): AssertableInertia => $page
+            ->component('Admin/Connections/Edit')
+            ->loadDeferredProps(fn (AssertableInertia $page): AssertableInertia => $page
+                ->where('indexers', [])));
 });

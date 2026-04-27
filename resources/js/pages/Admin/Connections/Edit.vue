@@ -1,9 +1,11 @@
 <script setup lang="ts">
-import { Form, Head, Link, useHttp } from '@inertiajs/vue3';
-import { ClipboardCopy, Eye, EyeOff, Plug, RefreshCw } from 'lucide-vue-next';
-import { ref } from 'vue';
+import { Form, Head, Link, router, useHttp } from '@inertiajs/vue3';
+import { Antenna, ClipboardCopy, Eye, EyeOff, Plug, RefreshCw } from 'lucide-vue-next';
+import { reactive, ref } from 'vue';
+import ProwlarrTestIndexerController from '@/actions/App/Http/Controllers/Admin/ProwlarrTestIndexerController';
 import ServiceConnectionController from '@/actions/App/Http/Controllers/Admin/ServiceConnectionController';
 import InputError from '@/components/InputError.vue';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
     Card,
@@ -21,6 +23,14 @@ import {
     SelectTrigger,
     SelectValue,
 } from '@/components/ui/select';
+import {
+    Table,
+    TableBody,
+    TableCell,
+    TableHead,
+    TableHeader,
+    TableRow,
+} from '@/components/ui/table';
 import {
     Tooltip,
     TooltipContent,
@@ -43,9 +53,18 @@ interface Connection {
     is_active: boolean;
 }
 
+interface Indexer {
+    id: number;
+    name: string;
+    enable: boolean;
+    priority: number;
+    implementation?: string;
+}
+
 const props = defineProps<{
     connection: Connection;
     serviceTypes: ServiceTypeOption[];
+    indexers: Indexer[];
 }>();
 
 defineOptions({
@@ -119,6 +138,23 @@ function copyWebhookToken() {
     navigator.clipboard.writeText(webhookToken.value);
     copied.value = true;
     setTimeout(() => (copied.value = false), 2000);
+}
+
+const testing = reactive<Record<number, boolean>>({});
+
+function testIndexer(indexerId: number): void {
+    testing[indexerId] = true;
+
+    router.post(
+        ProwlarrTestIndexerController([props.connection.id, indexerId]).url,
+        {},
+        {
+            preserveScroll: true,
+            onFinish: () => {
+                testing[indexerId] = false;
+            },
+        },
+    );
 }
 </script>
 
@@ -342,6 +378,80 @@ function copyWebhookToken() {
                         </Link>
                     </div>
                 </Form>
+            </CardContent>
+        </Card>
+
+        <Card v-if="typeValue === 'prowlarr'" class="mt-6">
+            <CardHeader>
+                <CardTitle class="flex items-center gap-2">
+                    <Antenna class="size-5" />
+                    Configured Indexers
+                </CardTitle>
+                <CardDescription>
+                    Read-only — manage indexer config in Prowlarr's own UI.
+                </CardDescription>
+            </CardHeader>
+            <CardContent>
+                <p
+                    v-if="indexers.length === 0"
+                    class="text-sm text-muted-foreground"
+                >
+                    No indexers loaded. Either Prowlarr isn't reachable right
+                    now, or none are configured yet.
+                </p>
+                <Table v-else>
+                    <TableHeader>
+                        <TableRow>
+                            <TableHead>Name</TableHead>
+                            <TableHead>Implementation</TableHead>
+                            <TableHead class="text-right">Priority</TableHead>
+                            <TableHead class="text-center">Enabled</TableHead>
+                            <TableHead class="text-right">Actions</TableHead>
+                        </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                        <TableRow
+                            v-for="indexer in indexers"
+                            :key="indexer.id"
+                        >
+                            <TableCell class="font-medium">{{
+                                indexer.name
+                            }}</TableCell>
+                            <TableCell class="text-muted-foreground">{{
+                                indexer.implementation ?? '-'
+                            }}</TableCell>
+                            <TableCell class="text-right">{{
+                                indexer.priority
+                            }}</TableCell>
+                            <TableCell class="text-center">
+                                <Badge
+                                    :variant="
+                                        indexer.enable ? 'default' : 'outline'
+                                    "
+                                >
+                                    {{
+                                        indexer.enable ? 'Enabled' : 'Disabled'
+                                    }}
+                                </Badge>
+                            </TableCell>
+                            <TableCell class="text-right">
+                                <Button
+                                    type="button"
+                                    size="sm"
+                                    variant="outline"
+                                    :disabled="testing[indexer.id]"
+                                    @click="testIndexer(indexer.id)"
+                                >
+                                    {{
+                                        testing[indexer.id]
+                                            ? 'Testing...'
+                                            : 'Test'
+                                    }}
+                                </Button>
+                            </TableCell>
+                        </TableRow>
+                    </TableBody>
+                </Table>
             </CardContent>
         </Card>
     </div>

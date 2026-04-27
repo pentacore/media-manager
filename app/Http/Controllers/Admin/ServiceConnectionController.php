@@ -12,10 +12,12 @@ use App\Http\Resources\ServiceConnectionResource;
 use App\Jobs\FetchLatestServiceVersion;
 use App\Jobs\PingServiceHealth;
 use App\Models\ServiceConnection;
+use App\Services\Prowlarr\ProwlarrClient;
 use App\Services\ServiceClientFactory;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
 use Inertia\Inertia;
 use Inertia\Response;
 use Throwable;
@@ -60,7 +62,27 @@ class ServiceConnectionController extends Controller
                 'is_active' => $serviceConnection->is_active,
             ],
             'serviceTypes' => ServiceType::mapForSelect(labelKey: 'label'),
+            'indexers' => $serviceConnection->type === ServiceType::Prowlarr
+                ? Inertia::defer(fn (): array => $this->loadProwlarrIndexers($serviceConnection))
+                : [],
         ]);
+    }
+
+    /**
+     * @return array<int, array<string, mixed>>
+     */
+    private function loadProwlarrIndexers(ServiceConnection $serviceConnection): array
+    {
+        try {
+            return (new ProwlarrClient($serviceConnection))->listIndexers();
+        } catch (Throwable $e) {
+            Log::warning('Failed to load Prowlarr indexers for edit page', [
+                'connection_id' => $serviceConnection->id,
+                'exception' => $e::class,
+            ]);
+
+            return [];
+        }
     }
 
     public function update(ServiceConnectionUpdateRequest $serviceConnectionUpdateRequest, ServiceConnection $serviceConnection): RedirectResponse
