@@ -8,6 +8,7 @@ use App\Ai\Agents\CommandAgent;
 use App\Ai\Agents\MediaAdvisorAgent;
 use App\Http\Controllers\Controller;
 use App\Models\User;
+use Illuminate\Http\Client\RequestException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -51,12 +52,22 @@ class ChatController extends Controller
             $agent = $this->resolveAgent($agentKey, $user, $conversationId);
             $response = $agent->prompt($validated['message']);
         } catch (Throwable $throwable) {
-            Log::error('AI request failed.', [
+            // Laravel's HTTP-client RequestException truncates response bodies
+            // in getMessage(); pull the full body separately so OpenAI's
+            // verbose error JSON is visible for debugging.
+            $context = [
                 'user_id' => $user?->id,
                 'agent' => $agentKey,
                 'exception' => $throwable::class,
                 'message' => $throwable->getMessage(),
-            ]);
+            ];
+
+            if ($throwable instanceof RequestException) {
+                $context['response_body'] = $throwable->response->body();
+                $context['response_status'] = $throwable->response->status();
+            }
+
+            Log::error('AI request failed.', $context);
 
             $payload = ['error' => 'AI request failed.'];
 
