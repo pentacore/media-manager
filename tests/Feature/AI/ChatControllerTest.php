@@ -2,8 +2,7 @@
 
 declare(strict_types=1);
 
-use App\Ai\Agents\CommandAgent;
-use App\Ai\Agents\MediaAdvisorAgent;
+use App\Ai\Agents\MediaAgent;
 use App\Models\User;
 use Illuminate\Foundation\Http\Middleware\PreventRequestForgery;
 use Illuminate\Support\Facades\DB;
@@ -40,30 +39,24 @@ test('admin can view chat page', function (): void {
     $this->actingAs($admin)
         ->get(route('ai.chat'))
         ->assertOk()
-        ->assertInertia(fn ($page) => $page
-            ->component('AI/Chat')
-            ->has('agents', 2)
-            ->where('defaultAgent', 'command')
-        );
+        ->assertInertia(fn ($page) => $page->component('AI/Chat'));
 });
 
-test('admin can send a message to CommandAgent', function (): void {
-    CommandAgent::fake(['Action queued.']);
+test('admin can send a message to MediaAgent', function (): void {
+    MediaAgent::fake(['Action queued.']);
     $admin = User::factory()->admin()->create();
 
     $response = $this->actingAs($admin)
         ->postJson(route('ai.chat.send'), [
             'message' => 'Delete Breaking Bad',
-            'agent' => 'command',
         ])
         ->assertOk();
 
     expect($response->json('text'))->toBe('Action queued.');
-    expect($response->json('agent'))->toBe('command');
 });
 
 test('admin cannot continue another users AI conversation', function (): void {
-    CommandAgent::fake(['Action queued.']);
+    MediaAgent::fake(['Action queued.']);
     $owner = User::factory()->admin()->create();
     $admin = User::factory()->admin()->create();
 
@@ -78,27 +71,11 @@ test('admin cannot continue another users AI conversation', function (): void {
     $this->actingAs($admin)
         ->postJson(route('ai.chat.send'), [
             'message' => 'Continue this',
-            'agent' => 'command',
             'conversation_id' => '018f7cf5-3b26-72c8-93e5-6dc5b44f2472',
         ])
         ->assertNotFound();
 
-    CommandAgent::assertNeverPrompted();
-});
-
-test('admin can send a message to MediaAdvisorAgent', function (): void {
-    MediaAdvisorAgent::fake(['You have 3 unwatched series.']);
-    $admin = User::factory()->admin()->create();
-
-    $response = $this->actingAs($admin)
-        ->postJson(route('ai.chat.send'), [
-            'message' => 'What should I watch?',
-            'agent' => 'advisor',
-        ])
-        ->assertOk();
-
-    expect($response->json('text'))->toBe('You have 3 unwatched series.');
-    expect($response->json('agent'))->toBe('advisor');
+    MediaAgent::assertNeverPrompted();
 });
 
 test('message is validated as required', function (): void {
@@ -110,31 +87,18 @@ test('message is validated as required', function (): void {
         ->assertJsonValidationErrors(['message']);
 });
 
-test('agent value is validated to allowed options', function (): void {
-    $admin = User::factory()->admin()->create();
-
-    $this->actingAs($admin)
-        ->postJson(route('ai.chat.send'), [
-            'message' => 'hello',
-            'agent' => 'not_an_agent',
-        ])
-        ->assertUnprocessable()
-        ->assertJsonValidationErrors(['agent']);
-});
-
 test('exception messages are not leaked to the client outside local env', function (): void {
     Log::spy();
     $this->app['env'] = 'production';
     $this->withoutMiddleware(PreventRequestForgery::class);
 
-    CommandAgent::fake(fn (): never => throw new RuntimeException('LEAKED-PROVIDER-SECRET-https://api.example.com?token=abc'));
+    MediaAgent::fake(fn (): never => throw new RuntimeException('LEAKED-PROVIDER-SECRET-https://api.example.com?token=abc'));
 
     $admin = User::factory()->admin()->create();
 
     $response = $this->actingAs($admin)
         ->postJson(route('ai.chat.send'), [
             'message' => 'Delete Breaking Bad',
-            'agent' => 'command',
         ])
         ->assertStatus(500);
 
@@ -145,7 +109,6 @@ test('exception messages are not leaked to the client outside local env', functi
     Log::shouldHaveReceived('error')->once()->withArgs(
         fn (string $message, array $context): bool => $message === 'AI request failed.'
             && ($context['user_id'] ?? null) === $admin->id
-            && ($context['agent'] ?? null) === 'command'
             && str_contains((string) ($context['message'] ?? ''), 'LEAKED-PROVIDER-SECRET')
     );
 });
@@ -154,14 +117,13 @@ test('exception messages are surfaced to the client in local env', function (): 
     $this->app['env'] = 'local';
     $this->withoutMiddleware(PreventRequestForgery::class);
 
-    CommandAgent::fake(fn (): never => throw new RuntimeException('LOCAL-DEBUG-DETAIL'));
+    MediaAgent::fake(fn (): never => throw new RuntimeException('LOCAL-DEBUG-DETAIL'));
 
     $admin = User::factory()->admin()->create();
 
     $response = $this->actingAs($admin)
         ->postJson(route('ai.chat.send'), [
             'message' => 'Delete Breaking Bad',
-            'agent' => 'command',
         ])
         ->assertStatus(500);
 

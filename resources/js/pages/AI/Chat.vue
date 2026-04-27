@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { Head } from '@inertiajs/vue3';
 import { Bot, Send, User as UserIcon } from 'lucide-vue-next';
-import { computed, nextTick, ref, useTemplateRef, watch } from 'vue';
+import { nextTick, ref, useTemplateRef } from 'vue';
 import AIChatController from '@/actions/App/Http/Controllers/AI/ChatController';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -9,21 +9,11 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { dashboard } from '@/routes';
 
-interface AgentOption {
-    value: string;
-    label: string;
-}
-
 interface ChatMessage {
     role: 'user' | 'assistant';
     text: string;
     ts: number;
 }
-
-defineProps<{
-    agents: AgentOption[];
-    defaultAgent: string;
-}>();
 
 defineOptions({
     layout: {
@@ -38,7 +28,6 @@ const messages = ref<ChatMessage[]>([]);
 const input = ref('');
 const sending = ref(false);
 const error = ref<string | null>(null);
-const selectedAgent = ref('');
 const conversationId = ref<string | null>(null);
 const scrollRef = useTemplateRef<HTMLDivElement>('scroll');
 
@@ -77,7 +66,6 @@ async function sendMessage() {
             },
             body: JSON.stringify({
                 message: text,
-                agent: selectedAgent.value || undefined,
                 conversation_id: conversationId.value,
             }),
         });
@@ -93,7 +81,6 @@ async function sendMessage() {
         const data = (await response.json()) as {
             text: string;
             conversation_id: string | null;
-            agent: string;
         };
         conversationId.value = data.conversation_id;
         messages.value.push({
@@ -118,23 +105,6 @@ function newConversation() {
     messages.value = [];
     error.value = null;
 }
-
-// Switching agents mid-thread leaves the new agent inheriting tool calls
-// it doesn't have (Command's CreateActionRequestTool isn't on Advisor),
-// which OpenAI 400s on next replay. Reset to a clean conversation.
-watch(selectedAgent, (next, prev) => {
-    if (next === prev) {
-        return;
-    }
-
-    newConversation();
-});
-
-const activeAgentLabel = computed(() => {
-    const current = selectedAgent.value || 'command';
-
-    return current === 'advisor' ? 'Advisor' : 'Command';
-});
 </script>
 
 <template>
@@ -149,20 +119,6 @@ const activeAgentLabel = computed(() => {
                 </p>
             </div>
             <div class="flex items-center gap-2">
-                <select
-                    v-model="selectedAgent"
-                    class="h-9 rounded-md border border-input bg-background px-3 text-sm"
-                    :disabled="sending"
-                >
-                    <option value="">Default ({{ defaultAgent }})</option>
-                    <option
-                        v-for="opt in agents"
-                        :key="opt.value"
-                        :value="opt.value"
-                    >
-                        {{ opt.label }}
-                    </option>
-                </select>
                 <Button
                     variant="outline"
                     size="sm"
@@ -178,7 +134,7 @@ const activeAgentLabel = computed(() => {
             <CardHeader>
                 <CardTitle class="flex items-center gap-2 text-base">
                     <Bot class="size-4 text-muted-foreground" />
-                    {{ activeAgentLabel }}
+                    Assistant
                     <Badge
                         v-if="conversationId"
                         variant="outline"
