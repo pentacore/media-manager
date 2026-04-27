@@ -16,7 +16,7 @@ use Pentacore\Typefinder\Attributes\TypefinderResource;
  */
 #[TypefinderResource(shape: [
     'id' => 'number',
-    'type' => "'sonarr' | 'radarr' | 'emby' | 'seerr'",
+    'type' => "'sonarr' | 'radarr' | 'emby' | 'seerr' | 'prowlarr'",
     'name' => 'string',
     'url' => 'string',
     'is_active' => 'boolean',

@@ -30,11 +30,18 @@ interface DiskSpace {
     total_space: number | null;
 }
 
+interface Indexer {
+    id: number;
+    name: string;
+    enable: boolean;
+}
+
 type Connection = ServiceConnectionResource;
 
 const props = defineProps<{
     connections: Connection[];
     diskSpace?: Record<number, DiskSpace[]>;
+    prowlarrIndexers?: Record<number, Indexer[]>;
 }>();
 
 defineOptions({
@@ -188,6 +195,10 @@ function healthLabel(connection: Connection): string {
 function diskSpaceFor(connectionId: number): DiskSpace[] | undefined {
     return props.diskSpace?.[connectionId];
 }
+
+function indexersFor(connectionId: number): Indexer[] | undefined {
+    return props.prowlarrIndexers?.[connectionId];
+}
 </script>
 
 <template>
@@ -334,6 +345,43 @@ function diskSpaceFor(connectionId: number): DiskSpace[] | undefined {
                                 {{ formatSize(disk.free_space) }} /
                                 {{ formatSize(disk.total_space) }}
                             </span>
+                        </div>
+                    </div>
+
+                    <div
+                        v-if="
+                            !props.prowlarrIndexers &&
+                            connection.type === 'prowlarr' &&
+                            connection.is_active
+                        "
+                        class="flex items-center gap-2 border-t pt-3 text-xs text-muted-foreground"
+                    >
+                        <Server class="size-3" />
+                        Loading indexers…
+                    </div>
+                    <div
+                        v-else-if="
+                            connection.type === 'prowlarr' &&
+                            indexersFor(connection.id) &&
+                            indexersFor(connection.id)!.length > 0
+                        "
+                        class="space-y-1 border-t pt-3"
+                    >
+                        <div
+                            class="flex items-center gap-2 text-xs font-medium tracking-wider text-muted-foreground uppercase"
+                        >
+                            <Server class="size-3" />
+                            Indexers ({{ indexersFor(connection.id)!.length }})
+                        </div>
+                        <div
+                            v-for="indexer in indexersFor(connection.id)"
+                            :key="`${connection.id}-indexer-${indexer.id}`"
+                            class="flex items-center justify-between text-sm"
+                        >
+                            <span class="truncate">{{ indexer.name }}</span>
+                            <Badge :variant="indexer.enable ? 'default' : 'outline'" class="text-xs shrink-0">
+                                {{ indexer.enable ? 'Enabled' : 'Disabled' }}
+                            </Badge>
                         </div>
                     </div>
                 </CardContent>

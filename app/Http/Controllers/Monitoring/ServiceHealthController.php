@@ -8,6 +8,7 @@ use App\Enums\ServiceType;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\ServiceConnectionResource;
 use App\Models\ServiceConnection;
+use App\Services\Prowlarr\ProwlarrClient;
 use App\Services\Radarr\RadarrClient;
 use App\Services\ServiceClientFactory;
 use App\Services\Sonarr\SonarrClient;
@@ -28,6 +29,7 @@ class ServiceHealthController extends Controller
         return Inertia::render('Monitoring/ServiceHealth', [
             'connections' => ServiceConnectionResource::collection($connections)->toArray($request),
             'diskSpace' => Inertia::defer(fn (): array => $this->loadDiskSpaceForAll($connections)),
+            'prowlarrIndexers' => Inertia::defer(fn (): array => $this->loadProwlarrIndexersForAll($connections)),
         ]);
     }
 
@@ -41,6 +43,34 @@ class ServiceHealthController extends Controller
 
         foreach ($connections as $connection) {
             $result[$connection->id] = $this->diskSpaceFor($connection) ?? [];
+        }
+
+        return $result;
+    }
+
+    /**
+     * @param  Collection<int, ServiceConnection>  $connections
+     * @return array<int, array<int, array{id: int|null, name: string|null, enable: bool}>>
+     */
+    private function loadProwlarrIndexersForAll(Collection $connections): array
+    {
+        $result = [];
+
+        foreach ($connections as $connection) {
+            if ($connection->type !== ServiceType::Prowlarr || ! $connection->is_active) {
+                continue;
+            }
+
+            try {
+                $entries = (new ProwlarrClient($connection))->listIndexers();
+                $result[$connection->id] = array_map(fn (array $entry): array => [
+                    'id' => $entry['id'] ?? null,
+                    'name' => $entry['name'] ?? null,
+                    'enable' => $entry['enable'] ?? false,
+                ], $entries);
+            } catch (Throwable) {
+                $result[$connection->id] = [];
+            }
         }
 
         return $result;
