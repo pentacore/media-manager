@@ -19,7 +19,7 @@ abstract class BaseTool implements Tool
     {
         if ($this->risk() === Risk::Destructive
             && resolve(AiSettings::class)->mode() === AiMode::Advisory) {
-            return json_encode([
+            return $this->safeEncode([
                 'error' => 'advisory_mode_blocks_destructive',
                 'message' => 'The system is in Advisory mode. Tell the user to switch to Executive mode (Admin → AI Settings) if they want this action executed.',
             ]);
@@ -36,7 +36,7 @@ abstract class BaseTool implements Tool
                 'request' => $request->toArray(),
             ]);
 
-            return json_encode([
+            return $this->safeEncode([
                 'error' => 'tool_failed',
                 'code' => $this->errorCodeFor($throwable),
                 'message' => 'The tool failed. Tell the user what you were trying to do and suggest they try again.',
@@ -47,7 +47,7 @@ abstract class BaseTool implements Tool
             return $this->queueAsActionRequest($result);
         }
 
-        return json_encode($result);
+        return $this->safeEncode($result);
     }
 
     /**
@@ -75,14 +75,14 @@ abstract class BaseTool implements Tool
         );
 
         if ($actionRequest === null) {
-            return json_encode([
+            return $this->safeEncode([
                 'queued' => false,
                 'reason' => 'no_action_type_config',
                 'message' => 'No matching ActionTypeConfig exists for this action type, or it is disabled. Tell the user to enable the rule in Admin → Action Rules.',
             ]);
         }
 
-        return json_encode([
+        return $this->safeEncode([
             'queued' => true,
             'action_request_id' => $actionRequest->id,
             'status' => $actionRequest->status->value,
@@ -98,5 +98,23 @@ abstract class BaseTool implements Tool
         $base = class_basename($throwable);
 
         return strtolower(preg_replace('/(?<!^)[A-Z]/', '_$0', $base) ?: 'unknown');
+    }
+
+    /**
+     * Encode a payload to JSON resiliently. Falls back to a structured error
+     * envelope when encoding fails (e.g. invalid UTF-8 in upstream metadata,
+     * NaN/Inf, etc.) so handle() never violates its string return contract.
+     *
+     * @param  array<string, mixed>  $payload
+     */
+    private function safeEncode(array $payload): string
+    {
+        $encoded = json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_PARTIAL_OUTPUT_ON_ERROR);
+
+        if ($encoded === false) {
+            return '{"error":"tool_failed","code":"encoding_failed","message":"The tool result could not be encoded. Tell the user something went wrong."}';
+        }
+
+        return $encoded;
     }
 }

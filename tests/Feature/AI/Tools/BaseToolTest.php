@@ -72,6 +72,35 @@ class FakeThrowingTool extends BaseTool
     }
 }
 
+class FakeBinaryTool extends BaseTool
+{
+    public function description(): Stringable|string
+    {
+        return 'fake';
+    }
+
+    /**
+     * @return array{}
+     */
+    public function schema(JsonSchema $schema): array
+    {
+        return [];
+    }
+
+    public function risk(): Risk
+    {
+        return Risk::Read;
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    protected function execute(Request $request): array
+    {
+        return ['title' => "\xC3\x28"]; // invalid UTF-8 sequence
+    }
+}
+
 class FakeDestructiveTool extends BaseTool
 {
     public function description(): Stringable|string
@@ -157,4 +186,15 @@ test('Destructive tool returns no_action_type_config when type is unknown', func
     $decoded = json_decode($result, true);
     expect($decoded['queued'])->toBeFalse();
     expect($decoded['reason'])->toBe('no_action_type_config');
+});
+
+test('handle returns valid JSON even when execute() result has invalid UTF-8', function (): void {
+    $result = (string) (new FakeBinaryTool)->handle(makeFakeRequest());
+
+    $decoded = json_decode($result, true);
+    expect($decoded)->not->toBeNull();
+    expect($decoded)->toBeArray();
+    // Either the partial-output flag salvaged it (title key present, possibly null),
+    // or our error envelope kicked in (error key present).
+    expect(array_key_exists('title', $decoded) || array_key_exists('error', $decoded))->toBeTrue();
 });

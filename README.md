@@ -145,15 +145,22 @@ Gated behind `MEDIAMANAGER_AI_ENABLED`. When disabled, `/ai/*` routes 403 and th
 
 ```ini
 MEDIAMANAGER_AI_ENABLED=true
-MEDIAMANAGER_AI_DEFAULT_AGENT=command   # or 'advisor'
 MEDIAMANAGER_AI_MODEL=claude-sonnet-4-5
+MEDIAMANAGER_AI_MODE=executive          # or 'advisory'
 ANTHROPIC_API_KEY=sk-ant-...
 ```
 
-Two agents live in `app/Ai/Agents/`:
+A single `MediaAgent` (`app/Ai/Agents/MediaAgent.php`) handles every conversation. Behaviour is controlled by `MEDIAMANAGER_AI_MODE` (overridable at runtime via Admin → AI Settings):
 
-- **`MediaAdvisorAgent`** — read-only. Answers questions about watch history, library state, recent activity. Tool-restricted to reads.
-- **`CommandAgent`** — can dispatch `ActionRequest`s via `CreateActionRequestTool`. Requests still flow through the normal approval pipeline; the agent cannot bypass `requires_approval`.
+- **`executive`** — destructive tool calls are queued as `ActionRequest`s and flow through the normal approval pipeline (the agent cannot bypass `requires_approval`).
+- **`advisory`** — destructive tool calls are short-circuited with an error envelope telling the agent to instruct the user to switch modes.
+
+19 tools live under `app/Ai/Tools/{System,Sonarr,Radarr,Emby,Seerr,Prowlarr}/`, all extending `BaseTool`. Each tool declares a `Risk` tier:
+
+- **`Read` / `SafeWrite`** — execute directly and return their result as JSON.
+- **`Destructive`** — bypassed in advisory mode; in executive mode they're routed through `ActionOrchestrator` and queued as an `ActionRequest`.
+
+Conversation history is healed automatically before each request — orphaned tool calls (e.g. from an interrupted prior turn) get stub results inserted so OpenAI/Anthropic don't 400 on the malformed transcript.
 
 Admin-only access is enforced by the `ai.enabled` + `role:admin` middleware combo on `routes/ai.php`.
 
