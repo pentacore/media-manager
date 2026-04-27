@@ -2,9 +2,9 @@
 
 declare(strict_types=1);
 
-use App\Ai\Agents\CommandAgent;
-use App\Ai\Tools\GetServiceStatusTool;
-use App\Ai\Tools\SearchMediaTool;
+use App\Ai\Agents\MediaAgent;
+use App\Ai\Tools\Sonarr\DeleteSeriesTool;
+use App\Ai\Tools\Sonarr\SearchSeriesTool;
 use App\Listeners\Ai\RecordAgentUsage;
 use App\Listeners\Ai\RecordToolInvocation;
 use App\Models\AiToolInvocation;
@@ -20,8 +20,8 @@ test('writes one row per ToolInvoked event', function (): void {
     $event = new ToolInvoked(
         invocationId: 'inv-1',
         toolInvocationId: 'tool-call-xyz',
-        agent: new CommandAgent,
-        tool: resolve(SearchMediaTool::class),
+        agent: new MediaAgent,
+        tool: resolve(SearchSeriesTool::class),
         arguments: ['q' => 'breaking bad'],
         result: ['hits' => []],
     );
@@ -30,8 +30,8 @@ test('writes one row per ToolInvoked event', function (): void {
 
     $row = AiToolInvocation::where('invocation_id', 'inv-1')->firstOrFail();
     expect($row->tool_invocation_id)->toBe('tool-call-xyz');
-    expect($row->tool_class)->toBe(SearchMediaTool::class);
-    expect($row->agent_class)->toBe(CommandAgent::class);
+    expect($row->tool_class)->toBe(SearchSeriesTool::class);
+    expect($row->agent_class)->toBe(MediaAgent::class);
     expect($row->status)->toBe('success');
 });
 
@@ -41,22 +41,22 @@ test('end-to-end: tool events fire before AgentPrompted, count rolls up to the p
     (new RecordToolInvocation)->handle(new ToolInvoked(
         invocationId: $invocationId,
         toolInvocationId: 'a',
-        agent: new CommandAgent,
-        tool: resolve(SearchMediaTool::class),
+        agent: new MediaAgent,
+        tool: resolve(SearchSeriesTool::class),
         arguments: [],
         result: null,
     ));
     (new RecordToolInvocation)->handle(new ToolInvoked(
         invocationId: $invocationId,
         toolInvocationId: 'b',
-        agent: new CommandAgent,
-        tool: resolve(GetServiceStatusTool::class),
+        agent: new MediaAgent,
+        tool: resolve(DeleteSeriesTool::class),
         arguments: [],
         result: null,
     ));
 
     $agentPrompt = new ReflectionClass(AgentPrompt::class)->newInstanceWithoutConstructor();
-    new ReflectionProperty(AgentPrompt::class, 'agent')->setValue($agentPrompt, new CommandAgent);
+    new ReflectionProperty(AgentPrompt::class, 'agent')->setValue($agentPrompt, new MediaAgent);
 
     $response = new AgentResponse($invocationId, 'ok', new Usage, new Meta(provider: 'openai', model: 'gpt-5-mini'));
 

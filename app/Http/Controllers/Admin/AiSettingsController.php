@@ -19,8 +19,7 @@ class AiSettingsController extends Controller
         return Inertia::render('Admin/AiSettings/Index', [
             'settings' => [
                 'mode' => $aiSettings->mode()->value,
-                'command_model' => $aiSettings->commandModel(),
-                'advisor_model' => $aiSettings->advisorModel(),
+                'model' => $aiSettings->model(),
             ],
             'modes' => AiMode::mapForSelect(labelKey: 'label'),
         ]);
@@ -31,8 +30,7 @@ class AiSettingsController extends Controller
         $validated = $updateAiSettingsRequest->validated();
 
         $aiSettings->setMode(AiMode::from($validated['mode']));
-        $aiSettings->setCommandModel($validated['command_model']);
-        $aiSettings->setAdvisorModel($validated['advisor_model']);
+        $aiSettings->setModel($validated['model']);
 
         Inertia::flash('toast', ['type' => 'success', 'message' => __('AI settings updated.')]);
 

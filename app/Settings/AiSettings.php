@@ -12,10 +12,6 @@ class AiSettings
 
     public const MODEL_KEY = 'ai.model';
 
-    public const COMMAND_MODEL_KEY = 'ai.command_model';
-
-    public const ADVISOR_MODEL_KEY = 'ai.advisor_model';
-
     public function __construct(private readonly AppSettings $appSettings) {}
 
     public function mode(): AiMode
@@ -32,26 +28,10 @@ class AiSettings
     {
         $value = (string) $this->appSettings->get(
             self::MODEL_KEY,
-            config('mediamanager.ai.model', $this->commandModel()),
+            config('mediamanager.ai.model', 'gpt-5-mini'),
         );
 
         return $value !== '' ? $value : 'gpt-5-mini';
-    }
-
-    public function commandModel(): string
-    {
-        return (string) $this->appSettings->get(
-            self::COMMAND_MODEL_KEY,
-            config('mediamanager.ai.command_model', 'gpt-5-mini'),
-        );
-    }
-
-    public function advisorModel(): string
-    {
-        return (string) $this->appSettings->get(
-            self::ADVISOR_MODEL_KEY,
-            config('mediamanager.ai.advisor_model', 'gpt-5-mini'),
-        );
     }
 
     public function setMode(AiMode $aiMode): void
@@ -62,15 +42,5 @@ class AiSettings
     public function setModel(string $model): void
     {
         $this->appSettings->set(self::MODEL_KEY, $model);
-    }
-
-    public function setCommandModel(string $model): void
-    {
-        $this->appSettings->set(self::COMMAND_MODEL_KEY, $model);
-    }
-
-    public function setAdvisorModel(string $model): void
-    {
-        $this->appSettings->set(self::ADVISOR_MODEL_KEY, $model);
     }
 }

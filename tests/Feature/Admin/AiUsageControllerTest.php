@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-use App\Ai\Agents\CommandAgent;
+use App\Ai\Agents\MediaAgent;
 use App\Models\AiModelPrice;
 use App\Models\AiUsageRecord;
 use App\Models\User;
@@ -37,7 +37,7 @@ test('admin sees the dashboard with current totals', function (): void {
 
     AiUsageRecord::create([
         'invocation_id' => 'inv-1',
-        'agent_class' => CommandAgent::class,
+        'agent_class' => MediaAgent::class,
         'provider' => 'openai',
         'model' => 'gpt-5-mini',
         'prompt_tokens' => 1_000_000,
@@ -69,7 +69,7 @@ test('window query parameter filters the time range', function (): void {
 
     DB::table('ai_usage_records')->insert([
         'invocation_id' => 'old',
-        'agent_class' => CommandAgent::class,
+        'agent_class' => MediaAgent::class,
         'provider' => 'openai',
         'model' => 'gpt-5-mini',
         'prompt_tokens' => 1_000,
@@ -124,7 +124,7 @@ test('scenario query param adds projected props to the page', function (): void 
 
     DB::table('ai_usage_records')->insert([
         'invocation_id' => 'inv-x',
-        'agent_class' => CommandAgent::class,
+        'agent_class' => MediaAgent::class,
         'provider' => 'openai',
         'model' => 'gpt-5-mini',
         'prompt_tokens' => 1_000_000,

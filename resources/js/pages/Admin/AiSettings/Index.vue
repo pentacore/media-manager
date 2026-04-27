@@ -28,8 +28,7 @@ interface ModeOption {
 
 interface AiSettingsState {
     mode: string;
-    command_model: string;
-    advisor_model: string;
+    model: string;
 }
 
 const props = defineProps<{
@@ -57,10 +56,10 @@ const selectedMode = ref(props.settings.mode);
             <CardHeader>
                 <CardTitle>AI Settings</CardTitle>
                 <CardDescription>
-                    Choose the operating mode and which model each AI agent
-                    uses. Models are free-form strings — they must match a model
-                    identifier supported by a configured laravel/ai provider
-                    (e.g.
+                    Choose the operating mode and which model the AI agent
+                    uses. The model is a free-form string — it must match a
+                    model identifier supported by a configured laravel/ai
+                    provider (e.g.
                     <code>gpt-5-mini</code>, <code>claude-haiku-4-5</code>,
                     <code>gemini-3-flash-preview</code>).
                 </CardDescription>
@@ -92,44 +91,30 @@ const selectedMode = ref(props.settings.mode);
                             </SelectContent>
                         </Select>
                         <p class="text-sm text-muted-foreground">
-                            <strong>Executive</strong>: agents can create and
-                            (when auto-approve is configured) auto-execute
-                            ActionRequests.<br />
-                            <strong>Advisory</strong>: CommandAgent loses its
-                            create-action tool and every ActionRequest queues
-                            as Pending regardless of the per-type rule. Use
-                            this while evaluating the AI before shipping full
-                            auto.
+                            <strong>Executive</strong>: the agent can create
+                            and (when auto-approve is configured)
+                            auto-execute ActionRequests.<br />
+                            <strong>Advisory</strong>: destructive tools
+                            refuse to queue and every ActionRequest stays
+                            Pending regardless of the per-type rule. Use
+                            this while evaluating the AI before shipping
+                            full auto.
                         </p>
                         <InputError :message="errors.mode" />
                     </div>
 
                     <div class="space-y-2">
-                        <Label for="command_model">Command Agent Model</Label>
+                        <Label for="model">Model</Label>
                         <Input
-                            id="command_model"
-                            name="command_model"
-                            :default-value="settings.command_model"
+                            id="model"
+                            name="model"
+                            :default-value="settings.model"
                         />
                         <p class="text-sm text-muted-foreground">
-                            The agent that executes user intent (search,
-                            status, create ActionRequests).
+                            The model used by MediaAgent for all chat
+                            interactions.
                         </p>
-                        <InputError :message="errors.command_model" />
-                    </div>
-
-                    <div class="space-y-2">
-                        <Label for="advisor_model">Advisor Agent Model</Label>
-                        <Input
-                            id="advisor_model"
-                            name="advisor_model"
-                            :default-value="settings.advisor_model"
-                        />
-                        <p class="text-sm text-muted-foreground">
-                            The read-only agent that recommends what to watch
-                            and summarises library activity.
-                        </p>
-                        <InputError :message="errors.advisor_model" />
+                        <InputError :message="errors.model" />
                     </div>
 
                     <div class="flex gap-2 pt-4">

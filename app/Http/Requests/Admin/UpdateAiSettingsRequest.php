@@ -17,8 +17,7 @@ class UpdateAiSettingsRequest extends FormRequest
     {
         return [
             'mode' => ['required', 'string', AiMode::validationRule()],
-            'command_model' => ['required', 'string', 'max:100'],
-            'advisor_model' => ['required', 'string', 'max:100'],
+            'model' => ['required', 'string', 'max:100'],
         ];
     }
 }

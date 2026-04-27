@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-use App\Ai\Agents\CommandAgent;
+use App\Ai\Agents\MediaAgent;
 use App\Models\AiModelPrice;
 use App\Services\AiUsage\AiUsageReporting;
 use App\Services\AiUsage\Scenario;
@@ -28,7 +28,7 @@ function seedUsage(array $attrs = []): int
 
     return DB::table('ai_usage_records')->insertGetId(array_merge([
         'invocation_id' => 'inv-'.uniqid(),
-        'agent_class' => CommandAgent::class,
+        'agent_class' => MediaAgent::class,
         'provider' => 'openai',
         'model' => 'gpt-5-mini',
         'prompt_tokens' => 0,

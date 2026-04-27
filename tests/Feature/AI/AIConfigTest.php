@@ -22,9 +22,8 @@ test('anthropic provider configuration is still present even when not the defaul
     expect(config('ai.providers.anthropic.driver'))->toBe('anthropic');
 });
 
-test('default per-agent models are set', function (): void {
-    expect(config('mediamanager.ai.command_model'))->toBe('gpt-5-mini');
-    expect(config('mediamanager.ai.advisor_model'))->toBe('gpt-5-mini');
+test('default ai model is set', function (): void {
+    expect(config('mediamanager.ai.model'))->toBe('gpt-5-mini');
     expect(config('mediamanager.ai.mode'))->toBe('executive');
 });
 

@@ -13,14 +13,12 @@ beforeEach(function (): void {
 
 test('defaults come from config when nothing is persisted', function (): void {
     config()->set('mediamanager.ai.mode', 'executive');
-    config()->set('mediamanager.ai.command_model', 'gpt-5-mini');
-    config()->set('mediamanager.ai.advisor_model', 'gpt-5-mini');
+    config()->set('mediamanager.ai.model', 'gpt-5-mini');
 
     $aiSettings = resolve(AiSettings::class);
 
     expect($aiSettings->mode())->toBe(AiMode::Executive);
-    expect($aiSettings->commandModel())->toBe('gpt-5-mini');
-    expect($aiSettings->advisorModel())->toBe('gpt-5-mini');
+    expect($aiSettings->model())->toBe('gpt-5-mini');
 });
 
 test('setMode persists and is read back', function (): void {
@@ -32,14 +30,13 @@ test('setMode persists and is read back', function (): void {
     $this->assertDatabaseHas('app_settings', ['key' => 'ai.mode']);
 });
 
-test('setCommandModel and setAdvisorModel persist independently', function (): void {
+test('setModel persists and is read back', function (): void {
     $aiSettings = resolve(AiSettings::class);
 
-    $aiSettings->setCommandModel('claude-haiku-4-5');
-    $aiSettings->setAdvisorModel('gemini-3-flash-preview');
+    $aiSettings->setModel('claude-haiku-4-5');
 
-    expect($aiSettings->commandModel())->toBe('claude-haiku-4-5');
-    expect($aiSettings->advisorModel())->toBe('gemini-3-flash-preview');
+    expect($aiSettings->model())->toBe('claude-haiku-4-5');
+    $this->assertDatabaseHas('app_settings', ['key' => 'ai.model']);
 });
 
 test('invalid stored mode falls back to Executive', function (): void {

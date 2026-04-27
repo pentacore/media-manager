@@ -2,9 +2,9 @@
 
 declare(strict_types=1);
 
-use App\Ai\Agents\CommandAgent;
-use App\Ai\Tools\GetServiceStatusTool;
-use App\Ai\Tools\SearchMediaTool;
+use App\Ai\Agents\MediaAgent;
+use App\Ai\Tools\Sonarr\DeleteSeriesTool;
+use App\Ai\Tools\Sonarr\SearchSeriesTool;
 use App\Listeners\Ai\RecordAgentUsage;
 use App\Models\AiToolInvocation;
 use App\Models\AiUsageRecord;
@@ -38,7 +38,7 @@ test('writes one usage row with token counts and meta', function (): void {
 
     $agentPrompted = makeAgentPrompted(
         invocationId: 'inv-abc',
-        agent: new CommandAgent,
+        agent: new MediaAgent,
         usage: new Usage(promptTokens: 1234, completionTokens: 567, cacheWriteInputTokens: 50, cacheReadInputTokens: 100, reasoningTokens: 25),
         meta: new Meta(provider: 'openai', model: 'gpt-5-mini'),
         conversationId: 'conv-uuid',
@@ -49,7 +49,7 @@ test('writes one usage row with token counts and meta', function (): void {
 
     $row = AiUsageRecord::where('invocation_id', 'inv-abc')->firstOrFail();
 
-    expect($row->agent_class)->toBe(CommandAgent::class);
+    expect($row->agent_class)->toBe(MediaAgent::class);
     expect($row->provider)->toBe('openai');
     expect($row->model)->toBe('gpt-5-mini');
     expect($row->prompt_tokens)->toBe(1234);
@@ -66,21 +66,21 @@ test('tool_calls_count reflects rows already written for the same invocation', f
     AiToolInvocation::create([
         'invocation_id' => 'inv-multi',
         'tool_invocation_id' => 't1',
-        'tool_class' => SearchMediaTool::class,
-        'agent_class' => CommandAgent::class,
+        'tool_class' => SearchSeriesTool::class,
+        'agent_class' => MediaAgent::class,
         'status' => 'success',
     ]);
     AiToolInvocation::create([
         'invocation_id' => 'inv-multi',
         'tool_invocation_id' => 't2',
-        'tool_class' => GetServiceStatusTool::class,
-        'agent_class' => CommandAgent::class,
+        'tool_class' => DeleteSeriesTool::class,
+        'agent_class' => MediaAgent::class,
         'status' => 'success',
     ]);
 
     $agentPrompted = makeAgentPrompted(
         invocationId: 'inv-multi',
-        agent: new CommandAgent,
+        agent: new MediaAgent,
         usage: new Usage(promptTokens: 10, completionTokens: 5),
         meta: new Meta(provider: 'openai', model: 'gpt-5-mini'),
     );
@@ -93,7 +93,7 @@ test('tool_calls_count reflects rows already written for the same invocation', f
 test('handles missing conversation user gracefully', function (): void {
     $agentPrompted = makeAgentPrompted(
         invocationId: 'inv-anon',
-        agent: new CommandAgent,
+        agent: new MediaAgent,
         usage: new Usage,
         meta: new Meta(provider: 'openai', model: 'gpt-5-mini'),
     );
