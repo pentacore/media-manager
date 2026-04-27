@@ -10,6 +10,8 @@ class AiSettings
 {
     public const MODE_KEY = 'ai.mode';
 
+    public const MODEL_KEY = 'ai.model';
+
     public const COMMAND_MODEL_KEY = 'ai.command_model';
 
     public const ADVISOR_MODEL_KEY = 'ai.advisor_model';
@@ -24,6 +26,16 @@ class AiSettings
         );
 
         return AiMode::tryFrom($value) ?? AiMode::Executive;
+    }
+
+    public function model(): string
+    {
+        $value = (string) $this->appSettings->get(
+            self::MODEL_KEY,
+            config('mediamanager.ai.model', $this->commandModel()),
+        );
+
+        return $value !== '' ? $value : 'gpt-5-mini';
     }
 
     public function commandModel(): string
@@ -45,6 +57,11 @@ class AiSettings
     public function setMode(AiMode $aiMode): void
     {
         $this->appSettings->set(self::MODE_KEY, $aiMode->value);
+    }
+
+    public function setModel(string $model): void
+    {
+        $this->appSettings->set(self::MODEL_KEY, $model);
     }
 
     public function setCommandModel(string $model): void
