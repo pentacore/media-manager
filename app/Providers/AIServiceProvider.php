@@ -4,12 +4,14 @@ declare(strict_types=1);
 
 namespace App\Providers;
 
+use App\Ai\Storage\HealingConversationStore;
 use App\Listeners\Ai\RecordAgentFailover;
 use App\Listeners\Ai\RecordAgentUsage;
 use App\Listeners\Ai\RecordToolInvocation;
 use Illuminate\Contracts\Foundation\Application;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\ServiceProvider;
+use Laravel\Ai\Contracts\ConversationStore;
 use Laravel\Ai\Events\AgentFailedOver;
 use Laravel\Ai\Events\AgentPrompted;
 use Laravel\Ai\Events\ProviderFailedOver;
@@ -22,6 +24,11 @@ class AIServiceProvider extends ServiceProvider
     public function register(): void
     {
         $this->app->singleton('mediamanager.ai.enabled', fn (Application $application): bool => (bool) $application->make('config')->get('mediamanager.ai.enabled', false));
+
+        $this->app->extend(
+            ConversationStore::class,
+            fn (ConversationStore $inner): HealingConversationStore => new HealingConversationStore($inner),
+        );
     }
 
     public function boot(): void
