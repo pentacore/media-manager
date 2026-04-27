@@ -198,3 +198,40 @@ test('getTvDetails GETs /tv/{tmdbId}', function (): void {
 
     expect($result['name'])->toBe('Breaking Bad');
 });
+
+test('discoverMovies GETs /discover/movies with query params', function (): void {
+    Http::fake([
+        'seerr.local:5055/api/v1/discover/movies*' => Http::response([
+            'page' => 1,
+            'results' => [['id' => 603, 'title' => 'The Matrix']],
+        ]),
+    ]);
+
+    $result = $this->client->discoverMovies(['genre' => '28', 'sortBy' => 'popularity.desc', 'page' => 2]);
+
+    Http::assertSent(fn (Request $request): bool => $request->method() === 'GET'
+        && str_contains($request->url(), '/api/v1/discover/movies')
+        && str_contains($request->url(), 'genre=28')
+        && str_contains($request->url(), 'sortBy=popularity.desc')
+        && str_contains($request->url(), 'page=2'));
+
+    expect($result['results'])->toHaveCount(1);
+});
+
+test('discoverTv GETs /discover/tv with query params', function (): void {
+    Http::fake([
+        'seerr.local:5055/api/v1/discover/tv*' => Http::response([
+            'page' => 1,
+            'results' => [['id' => 1396, 'name' => 'Breaking Bad']],
+        ]),
+    ]);
+
+    $result = $this->client->discoverTv(['genre' => '18', 'sortBy' => 'vote_average.desc']);
+
+    Http::assertSent(fn (Request $request): bool => $request->method() === 'GET'
+        && str_contains($request->url(), '/api/v1/discover/tv')
+        && str_contains($request->url(), 'genre=18')
+        && str_contains($request->url(), 'sortBy=vote_average.desc'));
+
+    expect($result['results'])->toHaveCount(1);
+});

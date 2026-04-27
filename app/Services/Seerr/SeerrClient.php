@@ -175,4 +175,30 @@ class SeerrClient
     {
         return $this->buildClient()->get(sprintf('/api/%s/user', $this->apiVersion), $params)->throw()->json() ?? [];
     }
+
+    /**
+     * Discover movies from the Seerr catalog. Pass query options like `genre`, `sortBy`, `page`.
+     *
+     * @param  array<string, mixed>  $options
+     * @return array<string, mixed>
+     *
+     * @throws RequestException|ConnectionException
+     */
+    public function discoverMovies(array $options = []): array
+    {
+        return $this->buildClient()->get(sprintf('/api/%s/discover/movies', $this->apiVersion), $options)->throw()->json() ?? [];
+    }
+
+    /**
+     * Discover TV shows from the Seerr catalog. Pass query options like `genre`, `sortBy`, `page`.
+     *
+     * @param  array<string, mixed>  $options
+     * @return array<string, mixed>
+     *
+     * @throws RequestException|ConnectionException
+     */
+    public function discoverTv(array $options = []): array
+    {
+        return $this->buildClient()->get(sprintf('/api/%s/discover/tv', $this->apiVersion), $options)->throw()->json() ?? [];
+    }
 }
