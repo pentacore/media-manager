@@ -19,6 +19,7 @@ test('major pages render without JavaScript errors for a member', function (): v
         '/monitoring/now-playing',
         '/monitoring/watch-history',
         '/monitoring/service-health',
+        '/prowlarr/search',
         '/actions/requests',
     ]);
 

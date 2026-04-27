@@ -19,6 +19,7 @@ class ServiceConnectionSeeder extends Seeder
         ['prefix' => 'RADARR', 'type' => ServiceType::Radarr, 'defaultName' => 'Radarr'],
         ['prefix' => 'EMBY', 'type' => ServiceType::Emby, 'defaultName' => 'Emby'],
         ['prefix' => 'SEERR', 'type' => ServiceType::Seerr, 'defaultName' => 'Seerr'],
+        ['prefix' => 'PROWLARR', 'type' => ServiceType::Prowlarr, 'defaultName' => 'Prowlarr'],
     ];
 
     public function run(): void
