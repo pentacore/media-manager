@@ -47,9 +47,11 @@ const queryInput = ref(props.query);
 
 function submit(): void {
     const trimmed = queryInput.value.trim();
+
     if (trimmed === '') {
         return;
     }
+
     router.get(SearchIndexersController().url, { q: trimmed }, { preserveState: false });
 }
 
@@ -57,9 +59,11 @@ function formatBytes(bytes: number): string {
     if (bytes < 1_000_000) {
         return `${(bytes / 1_000).toFixed(0)} KB`;
     }
+
     if (bytes < 1_000_000_000) {
         return `${(bytes / 1_000_000).toFixed(0)} MB`;
     }
+
     return `${(bytes / 1_000_000_000).toFixed(2)} GB`;
 }
 
@@ -67,12 +71,15 @@ function formatAge(days: number): string {
     if (days < 1) {
         return 'Today';
     }
+
     if (days < 30) {
         return `${Math.round(days)}d`;
     }
+
     if (days < 365) {
         return `${Math.round(days / 30)}mo`;
     }
+
     return `${(days / 365).toFixed(1)}y`;
 }
 </script>
