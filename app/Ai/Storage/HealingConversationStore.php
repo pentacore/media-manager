@@ -16,30 +16,30 @@ use Override;
 
 class HealingConversationStore implements ConversationStore
 {
-    public function __construct(private readonly ConversationStore $inner) {}
+    public function __construct(private readonly ConversationStore $conversationStore) {}
 
     #[Override]
     public function latestConversationId(string|int $userId): ?string
     {
-        return $this->inner->latestConversationId($userId);
+        return $this->conversationStore->latestConversationId($userId);
     }
 
     #[Override]
     public function storeConversation(string|int|null $userId, string $title): string
     {
-        return $this->inner->storeConversation($userId, $title);
+        return $this->conversationStore->storeConversation($userId, $title);
     }
 
     #[Override]
     public function storeUserMessage(string $conversationId, string|int|null $userId, AgentPrompt $prompt): string
     {
-        return $this->inner->storeUserMessage($conversationId, $userId, $prompt);
+        return $this->conversationStore->storeUserMessage($conversationId, $userId, $prompt);
     }
 
     #[Override]
     public function storeAssistantMessage(string $conversationId, string|int|null $userId, AgentPrompt $prompt, AgentResponse $response): string
     {
-        return $this->inner->storeAssistantMessage($conversationId, $userId, $prompt, $response);
+        return $this->conversationStore->storeAssistantMessage($conversationId, $userId, $prompt, $response);
     }
 
     /**
@@ -48,7 +48,7 @@ class HealingConversationStore implements ConversationStore
     #[Override]
     public function getLatestConversationMessages(string $conversationId, int $limit): Collection
     {
-        $messages = $this->inner->getLatestConversationMessages($conversationId, $limit);
+        $messages = $this->conversationStore->getLatestConversationMessages($conversationId, $limit);
 
         return $this->heal($messages);
     }
@@ -125,7 +125,6 @@ class HealingConversationStore implements ConversationStore
                 'code' => 'orphan_recovered',
                 'message' => 'A previous tool call was lost. Do not retry the exact same call; tell the user what you were trying to do.',
             ]),
-            resultId: null,
         );
     }
 }

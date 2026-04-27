@@ -32,9 +32,9 @@ class SearchMoviesTool extends BaseTool
     protected function execute(Request $request): array
     {
         $query = (string) ($request->toArray()['query'] ?? '');
-        $connection = ServiceConnection::resolveActive(ServiceType::Radarr);
+        $serviceConnection = ServiceConnection::resolveActive(ServiceType::Radarr);
 
-        return (new RadarrClient($connection))->searchMovies($query);
+        return new RadarrClient($serviceConnection)->searchMovies($query);
     }
 
     /**

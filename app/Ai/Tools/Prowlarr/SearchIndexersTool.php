@@ -34,9 +34,9 @@ class SearchIndexersTool extends BaseTool
         $args = $request->toArray();
         $query = (string) ($args['query'] ?? '');
 
-        $connection = ServiceConnection::resolveActive(ServiceType::Prowlarr);
+        $serviceConnection = ServiceConnection::resolveActive(ServiceType::Prowlarr);
 
-        return (new ProwlarrClient($connection))->searchIndexers($query);
+        return new ProwlarrClient($serviceConnection)->searchIndexers($query);
     }
 
     /**

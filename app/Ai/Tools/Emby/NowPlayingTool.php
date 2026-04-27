@@ -34,13 +34,13 @@ class NowPlayingTool extends BaseTool
             ->latest('updated_at')
             ->limit(50)
             ->get()
-            ->map(fn (EmbyActivity $a): array => [
-                'id' => $a->id,
-                'media_type' => $a->media_type,
-                'media_title' => $a->media_title,
-                'series_title' => $a->series_title,
-                'emby_username' => $a->embyUserLink?->emby_username,
-                'updated_at' => $a->updated_at?->toISOString(),
+            ->map(fn (EmbyActivity $embyActivity): array => [
+                'id' => $embyActivity->id,
+                'media_type' => $embyActivity->media_type,
+                'media_title' => $embyActivity->media_title,
+                'series_title' => $embyActivity->series_title,
+                'emby_username' => $embyActivity->embyUserLink?->emby_username,
+                'updated_at' => $embyActivity->updated_at?->toISOString(),
             ])->all();
 
         return ['sessions' => $sessions];

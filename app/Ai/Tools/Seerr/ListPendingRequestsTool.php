@@ -31,9 +31,9 @@ class ListPendingRequestsTool extends BaseTool
      */
     protected function execute(Request $request): array
     {
-        $connection = ServiceConnection::resolveActive(ServiceType::Seerr);
+        $serviceConnection = ServiceConnection::resolveActive(ServiceType::Seerr);
 
-        return (new SeerrClient($connection))->getRequests(['filter' => 'pending']);
+        return new SeerrClient($serviceConnection)->getRequests(['filter' => 'pending']);
     }
 
     /**

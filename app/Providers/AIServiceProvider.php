@@ -27,7 +27,7 @@ class AIServiceProvider extends ServiceProvider
 
         $this->app->extend(
             ConversationStore::class,
-            fn (ConversationStore $inner): HealingConversationStore => new HealingConversationStore($inner),
+            fn (ConversationStore $conversationStore): HealingConversationStore => new HealingConversationStore($conversationStore),
         );
     }
 

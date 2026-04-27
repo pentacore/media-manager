@@ -30,9 +30,9 @@ class ListIndexersTool extends BaseTool
      */
     protected function execute(Request $request): array
     {
-        $connection = ServiceConnection::resolveActive(ServiceType::Prowlarr);
+        $serviceConnection = ServiceConnection::resolveActive(ServiceType::Prowlarr);
 
-        return (new ProwlarrClient($connection))->listIndexers();
+        return new ProwlarrClient($serviceConnection)->listIndexers();
     }
 
     /**

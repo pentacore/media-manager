@@ -32,12 +32,12 @@ class GetMovieTool extends BaseTool
     protected function execute(Request $request): array
     {
         $movieId = $request->toArray()['movie_id'] ?? null;
-        $connection = ServiceConnection::resolveActive(ServiceType::Radarr);
-        $client = new RadarrClient($connection);
+        $serviceConnection = ServiceConnection::resolveActive(ServiceType::Radarr);
+        $radarrClient = new RadarrClient($serviceConnection);
 
         return $movieId === null
-            ? $client->getMovies()
-            : $client->getMovieById((int) $movieId);
+            ? $radarrClient->getMovies()
+            : $radarrClient->getMovieById((int) $movieId);
     }
 
     /**

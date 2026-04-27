@@ -32,9 +32,9 @@ class SearchCatalogTool extends BaseTool
     protected function execute(Request $request): array
     {
         $query = (string) ($request->toArray()['query'] ?? '');
-        $connection = ServiceConnection::resolveActive(ServiceType::Seerr);
+        $serviceConnection = ServiceConnection::resolveActive(ServiceType::Seerr);
 
-        return (new SeerrClient($connection))->search($query);
+        return new SeerrClient($serviceConnection)->search($query);
     }
 
     /**

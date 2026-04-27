@@ -24,6 +24,9 @@ class FakeReadTool extends BaseTool
         return 'fake';
     }
 
+    /**
+     * @return array{}
+     */
     public function schema(JsonSchema $schema): array
     {
         return [];
@@ -34,6 +37,9 @@ class FakeReadTool extends BaseTool
         return Risk::Read;
     }
 
+    /**
+     * @return array<string, bool|string>
+     */
     protected function execute(Request $request): array
     {
         return ['ok' => true, 'data' => 'hello'];
@@ -47,6 +53,9 @@ class FakeThrowingTool extends BaseTool
         return 'fake';
     }
 
+    /**
+     * @return array{}
+     */
     public function schema(JsonSchema $schema): array
     {
         return [];
@@ -70,6 +79,9 @@ class FakeDestructiveTool extends BaseTool
         return 'fake';
     }
 
+    /**
+     * @return array{}
+     */
     public function schema(JsonSchema $schema): array
     {
         return [];
@@ -80,6 +92,9 @@ class FakeDestructiveTool extends BaseTool
         return Risk::Destructive;
     }
 
+    /**
+     * @return array<string, array<string, int>|string>
+     */
     protected function execute(Request $request): array
     {
         return ['type' => 'delete_series', 'target_service' => 'sonarr', 'payload' => ['sonarr_series_id' => 42]];

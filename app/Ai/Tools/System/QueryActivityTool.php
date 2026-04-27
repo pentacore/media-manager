@@ -46,13 +46,13 @@ class QueryActivityTool extends BaseTool
                 ->latest()
                 ->limit($limit)
                 ->get()
-                ->map(fn (ActivityLog $log): array => [
-                    'id' => $log->id,
-                    'action' => $log->action,
-                    'description' => $log->description,
-                    'user' => $log->user?->name,
-                    'service' => $log->serviceConnection?->name,
-                    'created_at' => $log->created_at?->toISOString(),
+                ->map(fn (ActivityLog $activityLog): array => [
+                    'id' => $activityLog->id,
+                    'action' => $activityLog->action,
+                    'description' => $activityLog->description,
+                    'user' => $activityLog->user?->name,
+                    'service' => $activityLog->serviceConnection?->name,
+                    'created_at' => $activityLog->created_at?->toISOString(),
                 ])->all();
 
             return ['scope' => 'system', 'entries' => $logs];
@@ -67,14 +67,14 @@ class QueryActivityTool extends BaseTool
             $builder->where('media_type', $mediaType);
         }
 
-        $activities = $builder->get()->map(fn (EmbyActivity $a): array => [
-            'id' => $a->id,
-            'media_type' => $a->media_type,
-            'media_title' => $a->media_title,
-            'series_title' => $a->series_title,
-            'action' => $a->action,
-            'emby_username' => $a->embyUserLink?->emby_username,
-            'created_at' => $a->created_at?->toISOString(),
+        $activities = $builder->get()->map(fn (EmbyActivity $embyActivity): array => [
+            'id' => $embyActivity->id,
+            'media_type' => $embyActivity->media_type,
+            'media_title' => $embyActivity->media_title,
+            'series_title' => $embyActivity->series_title,
+            'action' => $embyActivity->action,
+            'emby_username' => $embyActivity->embyUserLink?->emby_username,
+            'created_at' => $embyActivity->created_at?->toISOString(),
         ])->all();
 
         return ['scope' => 'emby', 'entries' => $activities];

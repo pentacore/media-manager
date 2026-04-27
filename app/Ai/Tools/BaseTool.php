@@ -11,12 +11,11 @@ use App\Settings\AiSettings;
 use Illuminate\Support\Facades\Log;
 use Laravel\Ai\Contracts\Tool;
 use Laravel\Ai\Tools\Request;
-use Stringable;
 use Throwable;
 
 abstract class BaseTool implements Tool
 {
-    final public function handle(Request $request): Stringable|string
+    final public function handle(Request $request): string
     {
         if ($this->risk() === Risk::Destructive
             && resolve(AiSettings::class)->mode() === AiMode::Advisory) {
@@ -28,18 +27,18 @@ abstract class BaseTool implements Tool
 
         try {
             $result = $this->execute($request);
-        } catch (Throwable $e) {
+        } catch (Throwable $throwable) {
             Log::warning('AI tool failure', [
                 'tool' => static::class,
                 'risk' => $this->risk()->value,
-                'exception' => $e::class,
-                'message' => $e->getMessage(),
+                'exception' => $throwable::class,
+                'message' => $throwable->getMessage(),
                 'request' => $request->toArray(),
             ]);
 
             return json_encode([
                 'error' => 'tool_failed',
-                'code' => $this->errorCodeFor($e),
+                'code' => $this->errorCodeFor($throwable),
                 'message' => 'The tool failed. Tell the user what you were trying to do and suggest they try again.',
             ]);
         }
@@ -66,9 +65,9 @@ abstract class BaseTool implements Tool
      */
     protected function queueAsActionRequest(array $candidate): string
     {
-        $orchestrator = resolve(ActionOrchestrator::class);
+        $actionOrchestrator = resolve(ActionOrchestrator::class);
 
-        $actionRequest = $orchestrator->dispatch(
+        $actionRequest = $actionOrchestrator->dispatch(
             type: (string) ($candidate['type'] ?? ''),
             sourceService: (string) ($candidate['source_service'] ?? 'ai'),
             targetService: (string) ($candidate['target_service'] ?? ''),

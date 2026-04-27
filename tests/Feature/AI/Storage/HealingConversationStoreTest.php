@@ -15,7 +15,7 @@ use Laravel\Ai\Responses\Data\ToolResult;
 
 function fakeInner(Collection $messages): ConversationStore
 {
-    return new class($messages) implements ConversationStore
+    return new readonly class($messages) implements ConversationStore
     {
         public function __construct(private Collection $messages) {}
 
@@ -49,8 +49,8 @@ function fakeInner(Collection $messages): ConversationStore
 test('healthy conversation passes through unchanged', function (): void {
     $messages = collect([
         new Message('user', 'hi'),
-        new AssistantMessage('using a tool', collect([new ToolCall(id: 'call_1', name: 'X', arguments: [], resultId: null)])),
-        new ToolResultMessage(collect([new ToolResult(id: 'call_1', name: 'X', arguments: [], result: 'done', resultId: null)])),
+        new AssistantMessage('using a tool', collect([new ToolCall(id: 'call_1', name: 'X', arguments: [])])),
+        new ToolResultMessage(collect([new ToolResult(id: 'call_1', name: 'X', arguments: [], result: 'done')])),
         new AssistantMessage('all done'),
     ]);
 
@@ -64,7 +64,7 @@ test('healthy conversation passes through unchanged', function (): void {
 test('orphan tool_call gets a synthetic ToolResultMessage injected after it', function (): void {
     $messages = collect([
         new Message('user', 'hi'),
-        new AssistantMessage('using a tool', collect([new ToolCall(id: 'call_1', name: 'X', arguments: [], resultId: null)])),
+        new AssistantMessage('using a tool', collect([new ToolCall(id: 'call_1', name: 'X', arguments: [])])),
         // missing ToolResultMessage for call_1 - orphan
         new Message('user', 'are you stuck?'),
     ]);
@@ -81,8 +81,8 @@ test('orphan tool_call gets a synthetic ToolResultMessage injected after it', fu
 
 test('multiple orphans are healed independently', function (): void {
     $messages = collect([
-        new AssistantMessage('first call', collect([new ToolCall(id: 'a', name: 'X', arguments: [], resultId: null)])),
-        new AssistantMessage('second call', collect([new ToolCall(id: 'b', name: 'Y', arguments: [], resultId: null)])),
+        new AssistantMessage('first call', collect([new ToolCall(id: 'a', name: 'X', arguments: [])])),
+        new AssistantMessage('second call', collect([new ToolCall(id: 'b', name: 'Y', arguments: [])])),
     ]);
 
     $healing = new HealingConversationStore(fakeInner($messages));
@@ -99,11 +99,11 @@ test('multiple orphans are healed independently', function (): void {
 test('partial tool_result coverage gets the missing IDs filled in', function (): void {
     $messages = collect([
         new AssistantMessage('parallel calls', collect([
-            new ToolCall(id: 'a', name: 'X', arguments: [], resultId: null),
-            new ToolCall(id: 'b', name: 'Y', arguments: [], resultId: null),
+            new ToolCall(id: 'a', name: 'X', arguments: []),
+            new ToolCall(id: 'b', name: 'Y', arguments: []),
         ])),
         new ToolResultMessage(collect([
-            new ToolResult(id: 'a', name: 'X', arguments: [], result: 'ok', resultId: null),
+            new ToolResult(id: 'a', name: 'X', arguments: [], result: 'ok'),
             // 'b' is missing
         ])),
     ]);

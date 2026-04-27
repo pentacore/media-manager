@@ -31,18 +31,18 @@ class GetServiceStatusTool extends BaseTool
     {
         $connections = ServiceConnection::orderBy('type')->orderBy('name')->get();
 
-        $data = $connections->map(fn (ServiceConnection $sc): array => [
-            'id' => $sc->id,
-            'name' => $sc->name,
-            'type' => $sc->type->value,
-            'is_active' => $sc->is_active,
-            'health_status' => ($sc->health_status ?? HealthStatus::Unknown)->value,
-            'version' => $sc->version,
-            'latest_version' => $sc->latest_version,
-            'update_available' => $sc->latest_version !== null
-                && $sc->version !== null
-                && $sc->latest_version !== $sc->version,
-            'last_seen_at' => $sc->last_seen_at?->toISOString(),
+        $data = $connections->map(fn (ServiceConnection $serviceConnection): array => [
+            'id' => $serviceConnection->id,
+            'name' => $serviceConnection->name,
+            'type' => $serviceConnection->type->value,
+            'is_active' => $serviceConnection->is_active,
+            'health_status' => ($serviceConnection->health_status ?? HealthStatus::Unknown)->value,
+            'version' => $serviceConnection->version,
+            'latest_version' => $serviceConnection->latest_version,
+            'update_available' => $serviceConnection->latest_version !== null
+                && $serviceConnection->version !== null
+                && $serviceConnection->latest_version !== $serviceConnection->version,
+            'last_seen_at' => $serviceConnection->last_seen_at?->toISOString(),
         ])->all();
 
         return ['services' => $data];

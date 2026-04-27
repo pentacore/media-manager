@@ -32,9 +32,9 @@ class SearchSeriesTool extends BaseTool
     protected function execute(Request $request): array
     {
         $query = (string) ($request->toArray()['query'] ?? '');
-        $connection = ServiceConnection::resolveActive(ServiceType::Sonarr);
+        $serviceConnection = ServiceConnection::resolveActive(ServiceType::Sonarr);
 
-        return (new SonarrClient($connection))->searchSeries($query);
+        return new SonarrClient($serviceConnection)->searchSeries($query);
     }
 
     /**

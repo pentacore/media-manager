@@ -8,7 +8,7 @@ arch('every tool under app/Ai/Tools/ extends BaseTool')
     ->expect('App\Ai\Tools')
     ->classes()
     ->toExtend(BaseTool::class)
-    ->ignoring(['App\Ai\Tools\BaseTool']);
+    ->ignoring([BaseTool::class]);
 
 // Note: no arch test for "subclasses don't override handle()" — BaseTool::handle() is
 // declared `final`, so PHP enforces this at compile time. Pest's `toHaveMethod` uses

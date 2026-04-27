@@ -36,7 +36,7 @@ test('SearchCatalogTool searches the Seerr catalog by query', function (): void 
 
     $result = json_decode((string) (new SearchCatalogTool)->handle(new Request(['query' => 'inception'])), true);
 
-    Http::assertSent(fn ($request): bool => str_contains($request->url(), 'query=inception'));
+    Http::assertSent(fn ($request): bool => str_contains((string) $request->url(), 'query=inception'));
     expect($result['results'])->toHaveCount(1);
 });
 
@@ -59,10 +59,10 @@ test('DiscoverMoviesTool calls /discover/movies with non-null filters', function
         'page' => 1,
     ])), true);
 
-    Http::assertSent(fn ($request): bool => str_contains($request->url(), '/api/v1/discover/movies')
-        && str_contains($request->url(), 'genre=28')
-        && str_contains($request->url(), 'sortBy=popularity.desc')
-        && str_contains($request->url(), 'page=1'));
+    Http::assertSent(fn ($request): bool => str_contains((string) $request->url(), '/api/v1/discover/movies')
+        && str_contains((string) $request->url(), 'genre=28')
+        && str_contains((string) $request->url(), 'sortBy=popularity.desc')
+        && str_contains((string) $request->url(), 'page=1'));
 
     expect($result['results'])->toHaveCount(1);
 });
@@ -78,10 +78,10 @@ test('DiscoverMoviesTool drops null filters before calling client', function ():
         'page' => null,
     ]));
 
-    Http::assertSent(fn ($request): bool => str_contains($request->url(), '/api/v1/discover/movies')
-        && ! str_contains($request->url(), 'genre=')
-        && ! str_contains($request->url(), 'sortBy=')
-        && ! str_contains($request->url(), 'page='));
+    Http::assertSent(fn ($request): bool => str_contains((string) $request->url(), '/api/v1/discover/movies')
+        && ! str_contains((string) $request->url(), 'genre=')
+        && ! str_contains((string) $request->url(), 'sortBy=')
+        && ! str_contains((string) $request->url(), 'page='));
 });
 
 test('DiscoverMoviesTool risk is Read', function (): void {
@@ -103,10 +103,10 @@ test('DiscoverTvTool calls /discover/tv with non-null filters', function (): voi
         'page' => 2,
     ])), true);
 
-    Http::assertSent(fn ($request): bool => str_contains($request->url(), '/api/v1/discover/tv')
-        && str_contains($request->url(), 'genre=18')
-        && str_contains($request->url(), 'sortBy=vote_average.desc')
-        && str_contains($request->url(), 'page=2'));
+    Http::assertSent(fn ($request): bool => str_contains((string) $request->url(), '/api/v1/discover/tv')
+        && str_contains((string) $request->url(), 'genre=18')
+        && str_contains((string) $request->url(), 'sortBy=vote_average.desc')
+        && str_contains((string) $request->url(), 'page=2'));
 
     expect($result['results'])->toHaveCount(1);
 });
@@ -167,8 +167,8 @@ test('ListPendingRequestsTool calls /request with filter=pending', function (): 
 
     $result = json_decode((string) (new ListPendingRequestsTool)->handle(new Request([])), true);
 
-    Http::assertSent(fn ($request): bool => str_contains($request->url(), '/api/v1/request')
-        && str_contains($request->url(), 'filter=pending'));
+    Http::assertSent(fn ($request): bool => str_contains((string) $request->url(), '/api/v1/request')
+        && str_contains((string) $request->url(), 'filter=pending'));
 
     expect($result['results'])->toHaveCount(1);
 });

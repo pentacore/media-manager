@@ -32,12 +32,12 @@ class GetSeriesTool extends BaseTool
     protected function execute(Request $request): array
     {
         $seriesId = $request->toArray()['series_id'] ?? null;
-        $connection = ServiceConnection::resolveActive(ServiceType::Sonarr);
-        $client = new SonarrClient($connection);
+        $serviceConnection = ServiceConnection::resolveActive(ServiceType::Sonarr);
+        $sonarrClient = new SonarrClient($serviceConnection);
 
         return $seriesId === null
-            ? $client->getSeries()
-            : $client->getSeriesById((int) $seriesId);
+            ? $sonarrClient->getSeries()
+            : $sonarrClient->getSeriesById((int) $seriesId);
     }
 
     /**

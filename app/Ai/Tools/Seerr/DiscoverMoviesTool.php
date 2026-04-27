@@ -32,7 +32,7 @@ class DiscoverMoviesTool extends BaseTool
     protected function execute(Request $request): array
     {
         $args = $request->toArray();
-        $connection = ServiceConnection::resolveActive(ServiceType::Seerr);
+        $serviceConnection = ServiceConnection::resolveActive(ServiceType::Seerr);
 
         $options = array_filter([
             'genre' => $args['genre'] ?? null,
@@ -40,7 +40,7 @@ class DiscoverMoviesTool extends BaseTool
             'page' => $args['page'] ?? null,
         ], fn ($value): bool => $value !== null);
 
-        return (new SeerrClient($connection))->discoverMovies($options);
+        return new SeerrClient($serviceConnection)->discoverMovies($options);
     }
 
     /**

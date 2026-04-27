@@ -36,12 +36,12 @@ class GetTitleTool extends BaseTool
         $tmdbId = (int) ($args['tmdb_id'] ?? 0);
         $mediaType = (string) ($args['media_type'] ?? '');
 
-        $connection = ServiceConnection::resolveActive(ServiceType::Seerr);
-        $client = new SeerrClient($connection);
+        $serviceConnection = ServiceConnection::resolveActive(ServiceType::Seerr);
+        $seerrClient = new SeerrClient($serviceConnection);
 
         return match ($mediaType) {
-            'movie' => $client->getMovieDetails($tmdbId),
-            'tv' => $client->getTvDetails($tmdbId),
+            'movie' => $seerrClient->getMovieDetails($tmdbId),
+            'tv' => $seerrClient->getTvDetails($tmdbId),
             default => throw new InvalidArgumentException(sprintf('Unknown media_type "%s". Expected "movie" or "tv".', $mediaType)),
         };
     }
