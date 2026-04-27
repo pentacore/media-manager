@@ -150,7 +150,7 @@ class ExecuteActionRequest implements ShouldBeUnique, ShouldQueue
     private function resolveExecutor(string $type): ?ActionExecutor
     {
         $class = match ($type) {
-            'delete_series' => SonarrActions::class,
+            'delete_series', 'add_series' => SonarrActions::class,
             'delete_movie' => RadarrActions::class,
             'cleanup_seerr_request' => SeerrActions::class,
             'emby_library_scan' => EmbyActions::class,

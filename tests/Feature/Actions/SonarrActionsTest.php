@@ -62,3 +62,34 @@ test('execute throws for unknown type', function (): void {
 
     expect(fn (): array => (new SonarrActions)->execute($request))->toThrow(InvalidArgumentException::class);
 });
+
+test('add_series executor calls SonarrClient::searchSeries then addSeries', function (): void {
+    Http::fake([
+        'sonarr.local:8989/api/v3/series/lookup*' => Http::response([
+            ['title' => 'Demo Show', 'tvdbId' => 999001, 'year' => 2024],
+        ]),
+        'sonarr.local:8989/api/v3/series' => Http::response([
+            'id' => 123,
+            'title' => 'Demo Show',
+            'tvdbId' => 999001,
+        ]),
+    ]);
+
+    $actionRequest = ActionRequest::factory()->create([
+        'type' => 'add_series',
+        'target_service' => 'sonarr',
+        'payload' => [
+            'tvdb_id' => 999001,
+            'quality_profile_id' => 1,
+            'root_folder_path' => '/tv',
+            'monitored' => true,
+            'season_folder' => true,
+        ],
+    ]);
+
+    $result = (new SonarrActions)->execute($actionRequest);
+
+    expect($result['sonarr_series_id'])->toBe(123);
+    expect($result['title'])->toBe('Demo Show');
+    expect($result['tvdb_id'])->toBe(999001);
+});

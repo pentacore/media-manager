@@ -20,6 +20,13 @@ class ActionTypeConfigSeeder extends Seeder
                 'is_enabled' => true,
             ],
             [
+                'type' => 'add_series',
+                'label' => 'Add series to Sonarr',
+                'description' => 'Add a series to Sonarr (AI-initiated).',
+                'requires_approval' => true,
+                'is_enabled' => true,
+            ],
+            [
                 'type' => 'delete_movie',
                 'label' => 'Delete movie from Radarr',
                 'description' => 'Remove a movie from Radarr when it is deleted from Emby.',
