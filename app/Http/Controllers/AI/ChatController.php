@@ -5,7 +5,9 @@ declare(strict_types=1);
 namespace App\Http\Controllers\AI;
 
 use App\Ai\Agents\MediaAgent;
+use App\Enums\AiProposedWorkflowStatus;
 use App\Http\Controllers\Controller;
+use App\Models\AiProposedWorkflow;
 use App\Models\User;
 use Illuminate\Http\Client\RequestException;
 use Illuminate\Http\JsonResponse;
@@ -28,6 +30,8 @@ class ChatController extends Controller
         $validated = $request->validate([
             'message' => ['required', 'string', 'max:4000'],
             'conversation_id' => ['nullable', 'string', 'uuid'],
+            'workflow_id' => ['nullable', 'string', 'uuid'],
+            'workflow_action' => ['nullable', 'string', 'in:approved,declined'],
         ]);
 
         $conversationId = $validated['conversation_id'] ?? null;
@@ -37,11 +41,34 @@ class ChatController extends Controller
             return response()->json(['message' => 'Conversation not found.'], 404);
         }
 
+        // Workflow continuation: validate ownership/state, transition the workflow,
+        // and synthesize the prompt the agent will receive (instead of the raw user text).
+        $messageToSend = $validated['message'];
+        if (! empty($validated['workflow_id']) && ! empty($validated['workflow_action'])) {
+            $workflow = AiProposedWorkflow::find($validated['workflow_id']);
+
+            if ($workflow === null || $workflow->user_id !== $user?->id) {
+                return response()->json(['message' => 'Workflow not found.'], 404);
+            }
+
+            if ($workflow->status !== AiProposedWorkflowStatus::Proposed) {
+                return response()->json(['message' => 'Workflow is no longer pending.'], 422);
+            }
+
+            $newStatus = $validated['workflow_action'] === 'approved'
+                ? AiProposedWorkflowStatus::Approved
+                : AiProposedWorkflowStatus::Declined;
+
+            $workflow->update(['status' => $newStatus]);
+
+            $messageToSend = $this->synthesizeWorkflowContinuation($workflow, $newStatus);
+        }
+
         try {
             $agent = $conversationId
                 ? (new MediaAgent)->continue($conversationId, as: $user)
                 : (new MediaAgent)->forUser($user);
-            $response = $agent->prompt($validated['message']);
+            $response = $agent->prompt($messageToSend);
         } catch (Throwable $throwable) {
             // Laravel's HTTP-client RequestException truncates response bodies
             // in getMessage(); pull the full body separately so OpenAI's
@@ -68,10 +95,54 @@ class ChatController extends Controller
             return response()->json($payload, 500);
         }
 
+        // Detect a freshly-proposed workflow created during this turn (no conversation_id yet).
+        $proposedWorkflow = $user !== null
+            ? AiProposedWorkflow::where('user_id', $user->id)
+                ->whereNull('conversation_id')
+                ->where('status', AiProposedWorkflowStatus::Proposed)
+                ->latest('created_at')
+                ->first()
+            : null;
+
+        $workflowPayload = null;
+        if ($proposedWorkflow !== null) {
+            $proposedWorkflow->update(['conversation_id' => $response->conversationId ?? null]);
+            $workflowPayload = [
+                'id' => $proposedWorkflow->id,
+                'rationale' => $proposedWorkflow->rationale,
+                'steps' => $proposedWorkflow->steps,
+            ];
+        }
+
         return response()->json([
             'text' => $response->text,
             'conversation_id' => $response->conversationId ?? null,
+            'workflow' => $workflowPayload,
         ]);
+    }
+
+    private function synthesizeWorkflowContinuation(AiProposedWorkflow $workflow, AiProposedWorkflowStatus $status): string
+    {
+        $stepsList = collect($workflow->steps)
+            ->map(fn (array $step, int $index): string => sprintf(
+                '%d. %s on %s — %s',
+                $index + 1,
+                $step['action'] ?? 'unknown',
+                $step['target'] ?? 'unknown',
+                $step['reason'] ?? '',
+            ))
+            ->implode("\n");
+
+        return $status === AiProposedWorkflowStatus::Approved
+            ? sprintf(
+                "The user has APPROVED workflow %s. Execute these steps now using the appropriate destructive tools (DeleteSeriesTool, DeleteMovieTool, CleanupRequestTool, LibraryScanTool, etc.):\n\n%s",
+                $workflow->id,
+                $stepsList,
+            )
+            : sprintf(
+                'The user has DECLINED workflow %s. Acknowledge the decline and ask what they would like to do instead.',
+                $workflow->id,
+            );
     }
 
     private function conversationBelongsToUser(string $conversationId, ?User $user): bool

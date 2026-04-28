@@ -9,10 +9,18 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { dashboard } from '@/routes';
 
+interface WorkflowProposal {
+    id: string;
+    rationale: string;
+    steps: Array<{ action: string; target: string; reason: string }>;
+}
+
 interface ChatMessage {
     role: 'user' | 'assistant';
     text: string;
     ts: number;
+    workflow?: WorkflowProposal | null;
+    workflowResolved?: 'approved' | 'declined' | null;
 }
 
 defineOptions({
@@ -31,15 +39,32 @@ const error = ref<string | null>(null);
 const conversationId = ref<string | null>(null);
 const scrollRef = useTemplateRef<HTMLDivElement>('scroll');
 
-async function sendMessage() {
-    const text = input.value.trim();
+async function sendMessage(continuationPayload?: {
+    workflow_id: string;
+    workflow_action: 'approved' | 'declined';
+    syntheticUserText: string;
+}): Promise<void> {
+    let bodyMessage: string;
+    let extraBody: Record<string, unknown> = {};
 
-    if (!text || sending.value) {
-        return;
+    if (continuationPayload) {
+        bodyMessage = continuationPayload.syntheticUserText;
+        extraBody = {
+            workflow_id: continuationPayload.workflow_id,
+            workflow_action: continuationPayload.workflow_action,
+        };
+    } else {
+        const text = input.value.trim();
+
+        if (!text || sending.value) {
+            return;
+        }
+
+        bodyMessage = text;
+        messages.value.push({ role: 'user', text, ts: Date.now() });
+        input.value = '';
     }
 
-    messages.value.push({ role: 'user', text, ts: Date.now() });
-    input.value = '';
     sending.value = true;
     error.value = null;
 
@@ -65,8 +90,9 @@ async function sendMessage() {
                     )?.content ?? '',
             },
             body: JSON.stringify({
-                message: text,
+                message: bodyMessage,
                 conversation_id: conversationId.value,
+                ...extraBody,
             }),
         });
 
@@ -81,12 +107,15 @@ async function sendMessage() {
         const data = (await response.json()) as {
             text: string;
             conversation_id: string | null;
+            workflow: WorkflowProposal | null;
         };
         conversationId.value = data.conversation_id;
         messages.value.push({
             role: 'assistant',
             text: data.text,
             ts: Date.now(),
+            workflow: data.workflow,
+            workflowResolved: null,
         });
     } catch (e) {
         error.value = e instanceof Error ? e.message : 'Unknown error';
@@ -98,6 +127,32 @@ async function sendMessage() {
             behavior: 'smooth',
         });
     }
+}
+
+function approveWorkflow(message: ChatMessage): void {
+    if (!message.workflow || message.workflowResolved) {
+        return;
+    }
+
+    message.workflowResolved = 'approved';
+    sendMessage({
+        workflow_id: message.workflow.id,
+        workflow_action: 'approved',
+        syntheticUserText: 'I approve the proposed workflow.',
+    });
+}
+
+function declineWorkflow(message: ChatMessage): void {
+    if (!message.workflow || message.workflowResolved) {
+        return;
+    }
+
+    message.workflowResolved = 'declined';
+    sendMessage({
+        workflow_id: message.workflow.id,
+        workflow_action: 'declined',
+        syntheticUserText: 'I decline the proposed workflow.',
+    });
 }
 
 function newConversation() {
@@ -163,9 +218,9 @@ function newConversation() {
                     <div
                         v-for="m in messages"
                         :key="m.ts"
-                        class="flex gap-3"
+                        class="flex flex-col gap-2"
                         :class="
-                            m.role === 'user' ? 'justify-end' : 'justify-start'
+                            m.role === 'user' ? 'items-end' : 'items-start'
                         "
                     >
                         <div
@@ -183,6 +238,61 @@ function newConversation() {
                             <div class="break-words whitespace-pre-wrap">
                                 {{ m.text }}
                             </div>
+                        </div>
+
+                        <div
+                            v-if="m.role === 'assistant' && m.workflow"
+                            class="max-w-[80%] rounded-lg border bg-muted/40 p-4 text-sm"
+                        >
+                            <p class="mb-2 font-medium">Proposed workflow</p>
+                            <p class="mb-3 text-muted-foreground">
+                                {{ m.workflow.rationale }}
+                            </p>
+                            <ol
+                                class="mb-4 list-inside list-decimal space-y-1 text-xs"
+                            >
+                                <li
+                                    v-for="(step, i) in m.workflow.steps"
+                                    :key="i"
+                                >
+                                    <span class="font-mono">{{
+                                        step.action
+                                    }}</span>
+                                    on
+                                    <strong>{{ step.target }}</strong>
+                                    — {{ step.reason }}
+                                </li>
+                            </ol>
+                            <div
+                                v-if="!m.workflowResolved"
+                                class="flex gap-2"
+                            >
+                                <Button
+                                    size="sm"
+                                    :disabled="sending"
+                                    @click="approveWorkflow(m)"
+                                >
+                                    Approve
+                                </Button>
+                                <Button
+                                    size="sm"
+                                    variant="outline"
+                                    :disabled="sending"
+                                    @click="declineWorkflow(m)"
+                                >
+                                    Decline
+                                </Button>
+                            </div>
+                            <p
+                                v-else
+                                class="text-xs text-muted-foreground"
+                            >
+                                {{
+                                    m.workflowResolved === 'approved'
+                                        ? 'Approved.'
+                                        : 'Declined.'
+                                }}
+                            </p>
                         </div>
                     </div>
 
@@ -204,7 +314,7 @@ function newConversation() {
 
                 <form
                     class="flex items-center gap-2"
-                    @submit.prevent="sendMessage"
+                    @submit.prevent="sendMessage()"
                 >
                     <Input
                         v-model="input"
