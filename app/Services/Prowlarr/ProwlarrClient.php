@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Services\Prowlarr;
 
+use App\Cache\Services\ProwlarrCache;
 use App\Services\Arr\ArrClient;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\RequestException;
@@ -17,6 +18,8 @@ class ProwlarrClient extends ArrClient
     #[Override]
     protected string $apiVersion = 'v1';
 
+    private ?ProwlarrCache $cache = null;
+
     /**
      * Search across configured indexers.
      *
@@ -27,12 +30,17 @@ class ProwlarrClient extends ArrClient
      */
     public function searchIndexers(string $query, array $options = []): array
     {
-        $params = ['query' => $query, ...$options];
+        return $this->cache()->rememberList(
+            'search:'.md5($query.'|'.serialize($options)),
+            function () use ($query, $options): array {
+                $params = ['query' => $query, ...$options];
 
-        return $this->buildClient()
-            ->get(sprintf('/api/%s/search', $this->apiVersion), $params)
-            ->throw()
-            ->json() ?? [];
+                return $this->buildClient()
+                    ->get(sprintf('/api/%s/search', $this->apiVersion), $params)
+                    ->throw()
+                    ->json() ?? [];
+            },
+        );
     }
 
     /**
@@ -42,10 +50,13 @@ class ProwlarrClient extends ArrClient
      */
     public function listIndexers(): array
     {
-        return $this->buildClient()
-            ->get(sprintf('/api/%s/indexer', $this->apiVersion))
-            ->throw()
-            ->json() ?? [];
+        return $this->cache()->rememberList(
+            'indexers',
+            fn (): array => $this->buildClient()
+                ->get(sprintf('/api/%s/indexer', $this->apiVersion))
+                ->throw()
+                ->json() ?? [],
+        );
     }
 
     /**
@@ -77,14 +88,63 @@ class ProwlarrClient extends ArrClient
      */
     public function getIndexerStats(?int $indexerId = null, ?int $sinceHours = null): array
     {
-        $params = array_filter([
-            'indexers' => $indexerId,
-            'since' => $sinceHours !== null ? now()->subHours($sinceHours)->toISOString() : null,
-        ], fn (int|string|null $v): bool => $v !== null);
+        return $this->cache()->rememberList(
+            'stats:'.md5(serialize([$indexerId, $sinceHours])),
+            function () use ($indexerId, $sinceHours): array {
+                $params = array_filter([
+                    'indexers' => $indexerId,
+                    'since' => $sinceHours !== null ? now()->subHours($sinceHours)->toISOString() : null,
+                ], fn (int|string|null $v): bool => $v !== null);
 
-        return $this->buildClient()
-            ->get(sprintf('/api/%s/indexerstats', $this->apiVersion), $params)
-            ->throw()
-            ->json() ?? [];
+                return $this->buildClient()
+                    ->get(sprintf('/api/%s/indexerstats', $this->apiVersion), $params)
+                    ->throw()
+                    ->json() ?? [];
+            },
+        );
+    }
+
+    /**
+     * @return array<int, array<string, mixed>>
+     *
+     * @throws RequestException|ConnectionException
+     */
+    public function getQualityProfiles(): array
+    {
+        return $this->cache()->rememberMetadata(
+            'quality-profiles',
+            fn (): array => parent::getQualityProfiles(),
+        );
+    }
+
+    /**
+     * @return array<int, array<string, mixed>>
+     *
+     * @throws RequestException|ConnectionException
+     */
+    public function getRootFolders(): array
+    {
+        return $this->cache()->rememberMetadata(
+            'root-folders',
+            fn (): array => parent::getRootFolders(),
+        );
+    }
+
+    /**
+     * @return array<int, array<string, mixed>>
+     *
+     * @throws RequestException|ConnectionException
+     */
+    public function getDiskSpace(): array
+    {
+        return $this->cache()->rememberMetadata(
+            'disk-space',
+            fn (): array => parent::getDiskSpace(),
+        );
+    }
+
+    private function cache(): ProwlarrCache
+    {
+        return $this->cache ??= new ProwlarrCache($this->connection);
     }
 }
