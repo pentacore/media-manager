@@ -9,6 +9,7 @@ use App\Enums\AiProposedWorkflowStatus;
 use App\Http\Controllers\Controller;
 use App\Models\AiProposedWorkflow;
 use App\Models\User;
+use Carbon\CarbonImmutable;
 use Illuminate\Http\Client\RequestException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -41,28 +42,13 @@ class ChatController extends Controller
             return response()->json(['message' => 'Conversation not found.'], 404);
         }
 
-        // Workflow continuation: validate ownership/state, transition the workflow,
-        // and synthesize the prompt the agent will receive (instead of the raw user text).
-        $messageToSend = $validated['message'];
-        if (! empty($validated['workflow_id']) && ! empty($validated['workflow_action'])) {
-            $workflow = AiProposedWorkflow::find($validated['workflow_id']);
-
-            if ($workflow === null || $workflow->user_id !== $user?->id) {
-                return response()->json(['message' => 'Workflow not found.'], 404);
-            }
-
-            if ($workflow->status !== AiProposedWorkflowStatus::Proposed) {
-                return response()->json(['message' => 'Workflow is no longer pending.'], 422);
-            }
-
-            $newStatus = $validated['workflow_action'] === 'approved'
-                ? AiProposedWorkflowStatus::Approved
-                : AiProposedWorkflowStatus::Declined;
-
-            $workflow->update(['status' => $newStatus]);
-
-            $messageToSend = $this->synthesizeWorkflowContinuation($workflow, $newStatus);
+        $continuation = $this->resolveWorkflowContinuation($validated, $user);
+        if ($continuation instanceof JsonResponse) {
+            return $continuation;
         }
+
+        $messageToSend = $continuation ?? $validated['message'];
+        $turnStartedAt = CarbonImmutable::now();
 
         try {
             $agent = $conversationId
@@ -95,30 +81,78 @@ class ChatController extends Controller
             return response()->json($payload, 500);
         }
 
-        // Detect a freshly-proposed workflow created during this turn (no conversation_id yet).
-        $proposedWorkflow = $user !== null
-            ? AiProposedWorkflow::where('user_id', $user->id)
-                ->whereNull('conversation_id')
-                ->where('status', AiProposedWorkflowStatus::Proposed)
-                ->latest('created_at')
-                ->first()
-            : null;
-
-        $workflowPayload = null;
-        if ($proposedWorkflow !== null) {
-            $proposedWorkflow->update(['conversation_id' => $response->conversationId ?? null]);
-            $workflowPayload = [
-                'id' => $proposedWorkflow->id,
-                'rationale' => $proposedWorkflow->rationale,
-                'steps' => $proposedWorkflow->steps,
-            ];
-        }
+        $workflowPayload = $this->attachFreshlyProposedWorkflow($user, $turnStartedAt, $response->conversationId ?? null);
 
         return response()->json([
             'text' => $response->text,
             'conversation_id' => $response->conversationId ?? null,
             'workflow' => $workflowPayload,
         ]);
+    }
+
+    /**
+     * Validate + transition a workflow continuation. Returns:
+     * - `JsonResponse` when validation fails (caller short-circuits with it)
+     * - `string` synthesized prompt when continuation succeeds
+     * - `null` when the request is not a continuation (caller uses raw message)
+     *
+     * @param  array<string, mixed>  $validated
+     */
+    private function resolveWorkflowContinuation(array $validated, ?User $user): JsonResponse|string|null
+    {
+        if (empty($validated['workflow_id']) || empty($validated['workflow_action'])) {
+            return null;
+        }
+
+        $workflow = AiProposedWorkflow::find($validated['workflow_id']);
+
+        if ($workflow === null || $workflow->user_id !== $user?->id) {
+            return response()->json(['message' => 'Workflow not found.'], 404);
+        }
+
+        if ($workflow->status !== AiProposedWorkflowStatus::Proposed) {
+            return response()->json(['message' => 'Workflow is no longer pending.'], 422);
+        }
+
+        $newStatus = $validated['workflow_action'] === 'approved'
+            ? AiProposedWorkflowStatus::Approved
+            : AiProposedWorkflowStatus::Declined;
+
+        $workflow->update(['status' => $newStatus]);
+
+        return $this->synthesizeWorkflowContinuation($workflow, $newStatus);
+    }
+
+    /**
+     * Detect a workflow proposed by ProposeWorkflowTool during the just-completed
+     * turn. We use the turn-start timestamp (rather than just `whereNull('conversation_id')`)
+     * to avoid picking up a sibling tab's pending proposal in the same admin's session.
+     *
+     * @return array{id: string, rationale: string, steps: array<int, array<string, mixed>>}|null
+     */
+    private function attachFreshlyProposedWorkflow(?User $user, CarbonImmutable $carbonImmutable, ?string $conversationId): ?array
+    {
+        if (! $user instanceof User) {
+            return null;
+        }
+
+        $proposedWorkflow = AiProposedWorkflow::where('user_id', $user->id)
+            ->where('created_at', '>=', $carbonImmutable)
+            ->where('status', AiProposedWorkflowStatus::Proposed)
+            ->latest('created_at')
+            ->first();
+
+        if ($proposedWorkflow === null) {
+            return null;
+        }
+
+        $proposedWorkflow->update(['conversation_id' => $conversationId]);
+
+        return [
+            'id' => $proposedWorkflow->id,
+            'rationale' => $proposedWorkflow->rationale,
+            'steps' => $proposedWorkflow->steps,
+        ];
     }
 
     private function synthesizeWorkflowContinuation(AiProposedWorkflow $aiProposedWorkflow, AiProposedWorkflowStatus $aiProposedWorkflowStatus): string
@@ -135,7 +169,7 @@ class ChatController extends Controller
 
         return $aiProposedWorkflowStatus === AiProposedWorkflowStatus::Approved
             ? sprintf(
-                "The user has APPROVED workflow %s. Execute these steps now using the appropriate destructive tools (DeleteSeriesTool, DeleteMovieTool, CleanupRequestTool, LibraryScanTool, etc.):\n\n%s",
+                "The user has APPROVED workflow %s. Execute each step now using the destructive tool that matches its action — do NOT call ProposeWorkflowTool again for these steps.\n\n%s",
                 $aiProposedWorkflow->id,
                 $stepsList,
             )

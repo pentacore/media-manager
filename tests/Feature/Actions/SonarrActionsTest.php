@@ -64,15 +64,19 @@ test('execute throws for unknown type', function (): void {
 });
 
 test('add_series executor calls SonarrClient::searchSeries then addSeries', function (): void {
+    // Fake order matters: the lookup pattern must be matched before the
+    // bare /series pattern, otherwise the more general key wins for
+    // /series/lookup?... requests.
     Http::fake([
         'sonarr.local:8989/api/v3/series/lookup*' => Http::response([
             ['title' => 'Demo Show', 'tvdbId' => 999001, 'year' => 2024],
         ]),
-        'sonarr.local:8989/api/v3/series' => Http::response([
-            'id' => 123,
-            'title' => 'Demo Show',
-            'tvdbId' => 999001,
-        ]),
+        'sonarr.local:8989/api/v3/series' => Http::sequence()
+            ->push([
+                'id' => 123,
+                'title' => 'Demo Show',
+                'tvdbId' => 999001,
+            ]),
     ]);
 
     $actionRequest = ActionRequest::factory()->create([

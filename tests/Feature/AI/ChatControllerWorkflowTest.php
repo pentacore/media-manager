@@ -7,8 +7,10 @@ use App\Enums\AiProposedWorkflowStatus;
 use App\Models\AiProposedWorkflow;
 use App\Models\User;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Http;
 
 beforeEach(function (): void {
+    Http::preventStrayRequests();
     config()->set('mediamanager.ai.enabled', true);
     $this->admin = User::factory()->admin()->create();
 });

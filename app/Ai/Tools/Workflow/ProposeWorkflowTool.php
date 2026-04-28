@@ -12,6 +12,7 @@ use Illuminate\Contracts\JsonSchema\JsonSchema;
 use Illuminate\JsonSchema\Types\Type;
 use Illuminate\Support\Str;
 use Laravel\Ai\Tools\Request;
+use RuntimeException;
 use Stringable;
 
 class ProposeWorkflowTool extends BaseTool
@@ -33,13 +34,16 @@ class ProposeWorkflowTool extends BaseTool
      */
     protected function execute(Request $request): array
     {
+        $userId = auth()->id();
+        throw_if($userId === null, RuntimeException::class, 'ProposeWorkflowTool requires an authenticated user.');
+
         $args = $request->toArray();
         $rationale = (string) ($args['rationale'] ?? '');
         $steps = is_array($args['steps'] ?? null) ? $args['steps'] : [];
 
         $workflow = AiProposedWorkflow::create([
             'id' => (string) Str::uuid7(),
-            'user_id' => auth()->id(),
+            'user_id' => $userId,
             'conversation_id' => null,
             'rationale' => Str::limit($rationale, 1000, ''),
             'steps' => $steps,
