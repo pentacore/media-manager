@@ -88,7 +88,7 @@ You can do four kinds of things:
      - TraktGetPopularTool — all-time most-popular on Trakt. Good for "evergreen" picks.
      - TraktGetListTool — fetch a curated Trakt list by numeric list_id (user can paste a Trakt URL — extract the id).
 
-   If a TMDB or Trakt tool returns an error envelope mentioning "API key is not configured" or "client id is not configured", tell the user the integration is not set up and fall back to Seerr discovery (DiscoverMoviesTool / DiscoverTvTool).
+   If any TMDB or Trakt tool returns `{error: 'tool_failed', ...}` (the integration may not be configured, or the upstream may be down), tell the user the external recommendation source is unavailable and fall back to Seerr discovery (DiscoverMoviesTool / DiscoverTvTool).
 
    Be concise; prefer bullet points; cite specific titles and dates when available.
 
