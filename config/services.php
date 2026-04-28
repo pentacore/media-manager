@@ -48,4 +48,14 @@ return [
         'token' => env('GITHUB_TOKEN'),
     ],
 
+    'tmdb' => [
+        'base_url' => env('TMDB_BASE_URL', 'https://api.themoviedb.org/3'),
+        'api_key' => env('TMDB_API_KEY'),
+    ],
+
+    'trakt' => [
+        'base_url' => env('TRAKT_BASE_URL', 'https://api.trakt.tv'),
+        'client_id' => env('TRAKT_CLIENT_ID'),
+    ],
+
 ];
