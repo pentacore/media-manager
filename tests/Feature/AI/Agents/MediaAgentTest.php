@@ -40,6 +40,30 @@ test('tool list includes the Phase-1 tool families', function (): void {
     expect($shortNames)->toContain('SearchIndexersTool');
 });
 
+test('tool list includes the Phase-2 tool families', function (): void {
+    $tools = collect(iterator_to_array((new MediaAgent)->tools(), false));
+
+    $shortNames = $tools->map(fn ($t): string => class_basename($t))->all();
+
+    expect($shortNames)->toContain('AddSeriesTool');
+    expect($shortNames)->toContain('MonitorSeriesTool');
+    expect($shortNames)->toContain('SetSeriesQualityProfileTool');
+    expect($shortNames)->toContain('AddMovieTool');
+    expect($shortNames)->toContain('MonitorMovieTool');
+    expect($shortNames)->toContain('SetMovieQualityProfileTool');
+    expect($shortNames)->toContain('MarkAsWatchedTool');
+    expect($shortNames)->toContain('MarkAsUnwatchedTool');
+    expect($shortNames)->toContain('ApproveRequestTool');
+    expect($shortNames)->toContain('DeclineRequestTool');
+    expect($shortNames)->toContain('ProposeWorkflowTool');
+});
+
+test('tool list has all 30 expected tools', function (): void {
+    $tools = collect(iterator_to_array((new MediaAgent)->tools(), false));
+
+    expect($tools->count())->toBe(30);
+});
+
 test('model() reads from AiSettings', function (): void {
     resolve(AiSettings::class)->setModel('gpt-4o-mini');
 
