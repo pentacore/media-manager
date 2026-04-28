@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Services\Radarr;
 
+use App\Cache\Services\RadarrCache;
 use App\Models\WebhookEvent;
 use App\Services\Actions\ActionOrchestrator;
 use App\Services\Webhook\AbstractWebhookHandler;
@@ -41,6 +42,10 @@ class RadarrWebhookHandler extends AbstractWebhookHandler
         };
 
         $webhookEvent->markProcessed();
+
+        if ($webhookEvent->serviceConnection !== null) {
+            new RadarrCache($webhookEvent->serviceConnection)->bustAll();
+        }
     }
 
     /**

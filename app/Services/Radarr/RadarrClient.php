@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Services\Radarr;
 
+use App\Cache\Services\RadarrCache;
 use App\Services\Arr\ArrClient;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\RequestException;
@@ -13,6 +14,8 @@ use Illuminate\Http\Client\RequestException;
  */
 class RadarrClient extends ArrClient
 {
+    private ?RadarrCache $cache = null;
+
     /**
      * @return array<int, array<string, mixed>>
      *
@@ -20,7 +23,10 @@ class RadarrClient extends ArrClient
      */
     public function getMovies(): array
     {
-        return $this->buildClient()->get(sprintf('/api/%s/movie', $this->apiVersion))->throw()->json() ?? [];
+        return $this->cache()->rememberList(
+            'list',
+            fn (): array => $this->buildClient()->get(sprintf('/api/%s/movie', $this->apiVersion))->throw()->json() ?? [],
+        );
     }
 
     /**
@@ -30,7 +36,10 @@ class RadarrClient extends ArrClient
      */
     public function getMovieById(int $id): array
     {
-        return $this->buildClient()->get(sprintf('/api/%s/movie/%d', $this->apiVersion, $id))->throw()->json() ?? [];
+        return $this->cache()->rememberEntity(
+            'movie:'.$id,
+            fn (): array => $this->buildClient()->get(sprintf('/api/%s/movie/%d', $this->apiVersion, $id))->throw()->json() ?? [],
+        );
     }
 
     /**
@@ -40,6 +49,7 @@ class RadarrClient extends ArrClient
      */
     public function addMovie(array $data): array
     {
+        // Write — not cached; bust handled by RadarrActions.
         return $this->buildClient()->post(sprintf('/api/%s/movie', $this->apiVersion), $data)->throw()->json() ?? [];
     }
 
@@ -71,6 +81,40 @@ class RadarrClient extends ArrClient
      */
     public function searchMovies(string $query): array
     {
-        return $this->buildClient()->get(sprintf('/api/%s/movie/lookup', $this->apiVersion), ['term' => $query])->throw()->json() ?? [];
+        return $this->cache()->rememberList(
+            'search:'.md5($query),
+            fn (): array => $this->buildClient()->get(sprintf('/api/%s/movie/lookup', $this->apiVersion), ['term' => $query])->throw()->json() ?? [],
+        );
+    }
+
+    /**
+     * @return array<int, array<string, mixed>>
+     *
+     * @throws RequestException|ConnectionException
+     */
+    public function getQualityProfiles(): array
+    {
+        return $this->cache()->rememberMetadata(
+            'quality-profiles',
+            fn (): array => parent::getQualityProfiles(),
+        );
+    }
+
+    /**
+     * @return array<int, array<string, mixed>>
+     *
+     * @throws RequestException|ConnectionException
+     */
+    public function getRootFolders(): array
+    {
+        return $this->cache()->rememberMetadata(
+            'root-folders',
+            fn (): array => parent::getRootFolders(),
+        );
+    }
+
+    private function cache(): RadarrCache
+    {
+        return $this->cache ??= new RadarrCache($this->connection);
     }
 }

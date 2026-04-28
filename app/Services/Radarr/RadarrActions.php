@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Services\Radarr;
 
+use App\Cache\Services\RadarrCache;
 use App\Enums\ServiceType;
 use App\Models\ActionRequest;
 use App\Models\ServiceConnection;
@@ -38,8 +39,9 @@ class RadarrActions implements ActionExecutor
 
         $deleteFiles = (bool) ($payload['delete_files'] ?? false);
 
-        $radarrClient = new RadarrClient(ServiceConnection::resolveActive(ServiceType::Radarr));
-        $radarrClient->deleteMovie($movieId, $deleteFiles);
+        $connection = ServiceConnection::resolveActive(ServiceType::Radarr);
+        new RadarrClient($connection)->deleteMovie($movieId, $deleteFiles);
+        new RadarrCache($connection)->bustAll();
 
         return [
             'radarr_movie_id' => $movieId,
@@ -57,7 +59,8 @@ class RadarrActions implements ActionExecutor
 
         throw_if($tmdbId <= 0, InvalidArgumentException::class, 'tmdb_id is required');
 
-        $radarrClient = new RadarrClient(ServiceConnection::resolveActive(ServiceType::Radarr));
+        $connection = ServiceConnection::resolveActive(ServiceType::Radarr);
+        $radarrClient = new RadarrClient($connection);
 
         // Look up the full movie spec by tmdb_id (Radarr's lookup accepts "tmdb:{id}" syntax).
         $candidates = $radarrClient->searchMovies(sprintf('tmdb:%d', $tmdbId));
@@ -72,6 +75,8 @@ class RadarrActions implements ActionExecutor
             'monitored' => (bool) ($payload['monitored'] ?? true),
             'addOptions' => ['searchForMovie' => true],
         ]));
+
+        new RadarrCache($connection)->bustAll();
 
         return [
             'radarr_movie_id' => $movie['id'] ?? null,
@@ -92,10 +97,12 @@ class RadarrActions implements ActionExecutor
 
         $monitored = (bool) ($payload['monitored'] ?? true);
 
-        $radarrClient = new RadarrClient(ServiceConnection::resolveActive(ServiceType::Radarr));
+        $connection = ServiceConnection::resolveActive(ServiceType::Radarr);
+        $radarrClient = new RadarrClient($connection);
         $movie = $radarrClient->getMovieById($movieId);
         $movie['monitored'] = $monitored;
         $radarrClient->updateMovie($movieId, $movie);
+        new RadarrCache($connection)->bustAll();
 
         return [
             'radarr_movie_id' => $movieId,
@@ -115,10 +122,12 @@ class RadarrActions implements ActionExecutor
         throw_if($movieId <= 0, InvalidArgumentException::class, 'movie_id is required');
         throw_if($qualityProfileId <= 0, InvalidArgumentException::class, 'quality_profile_id is required');
 
-        $radarrClient = new RadarrClient(ServiceConnection::resolveActive(ServiceType::Radarr));
+        $connection = ServiceConnection::resolveActive(ServiceType::Radarr);
+        $radarrClient = new RadarrClient($connection);
         $movie = $radarrClient->getMovieById($movieId);
         $movie['qualityProfileId'] = $qualityProfileId;
         $radarrClient->updateMovie($movieId, $movie);
+        new RadarrCache($connection)->bustAll();
 
         return [
             'radarr_movie_id' => $movieId,
