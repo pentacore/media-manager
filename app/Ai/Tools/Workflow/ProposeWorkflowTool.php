@@ -69,7 +69,20 @@ class ProposeWorkflowTool extends BaseTool
                 ->description('Plain-English summary of what the user asked and why these steps achieve it.')
                 ->required(),
             'steps' => $schema->array()
-                ->description('Ordered list of {action: string, target: string, reason: string} objects describing each step. Example: [{"action": "delete_series", "target": "Demo Show (id 42)", "reason": "Unwatched in 8 months."}].')
+                ->description('Ordered list of {action, target, reason} objects describing each step. Example: [{"action": "delete_series", "target": "Demo Show (id 42)", "reason": "Unwatched in 8 months."}].')
+                ->items(
+                    $schema->object([
+                        'action' => $schema->string()
+                            ->description('Tool / verb to invoke for this step (e.g. "delete_series").')
+                            ->required(),
+                        'target' => $schema->string()
+                            ->description('Concrete target of the action (e.g. "Demo Show (id 42)").')
+                            ->required(),
+                        'reason' => $schema->string()
+                            ->description('Plain-English justification shown to the approver.')
+                            ->required(),
+                    ])->withoutAdditionalProperties(),
+                )
                 ->required(),
         ];
     }
