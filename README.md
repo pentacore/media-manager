@@ -56,7 +56,7 @@ vendor/bin/sail npm run build
 vendor/bin/sail open
 ```
 
-In local/testing environments, the default seed creates an admin user `test@example.com` (password from the `User` factory — check it via `vendor/bin/sail artisan tinker` if you need it, or create a new admin through the invite flow). In non-local environments it skips that fixed user. It always seeds the four `ActionTypeConfig` rows and, if any `*_URL` / `*_API_KEY` env vars are set, the matching `ServiceConnection` rows.
+In local/testing environments, the default seed creates an admin user `test@example.com` (password from the `User` factory — check it via `vendor/bin/sail artisan tinker` if you need it, or create a new admin through the invite flow). In non-local environments it skips that fixed user. It always seeds the `ActionTypeConfig` rows (delete/add/monitor/quality-profile for Sonarr+Radarr, Seerr cleanup/approve/decline, Emby library scan) and, if any `*_URL` / `*_API_KEY` env vars are set, the matching `ServiceConnection` rows.
 
 During development you probably want the Vite dev server running instead of `npm run build`:
 
@@ -155,10 +155,12 @@ A single `MediaAgent` (`app/Ai/Agents/MediaAgent.php`) handles every conversatio
 - **`executive`** — destructive tool calls are queued as `ActionRequest`s and flow through the normal approval pipeline (the agent cannot bypass `requires_approval`).
 - **`advisory`** — destructive tool calls are short-circuited with an error envelope telling the agent to instruct the user to switch modes.
 
-19 tools live under `app/Ai/Tools/{System,Sonarr,Radarr,Emby,Seerr,Prowlarr}/`, all extending `BaseTool`. Each tool declares a `Risk` tier:
+30 tools live under `app/Ai/Tools/{System,Sonarr,Radarr,Emby,Seerr,Prowlarr,Workflow}/`, all extending `BaseTool`. Each tool declares a `Risk` tier:
 
 - **`Read` / `SafeWrite`** — execute directly and return their result as JSON.
 - **`Destructive`** — bypassed in advisory mode; in executive mode they're routed through `ActionOrchestrator` and queued as an `ActionRequest`.
+
+For multi-step intents the agent calls `ProposeWorkflowTool` to write an `AiProposedWorkflow` row instead of firing each step individually. The chat UI surfaces an Approve/Decline confirm card; on approval the controller pre-prompts the agent with the workflow's steps so it executes them as a batch (each step still funnels through the same `ActionOrchestrator` + approval rules).
 
 Conversation history is healed automatically before each request — orphaned tool calls (e.g. from an interrupted prior turn) get stub results inserted so OpenAI/Anthropic don't 400 on the malformed transcript.
 
@@ -361,7 +363,7 @@ Frontend composables in `resources/js/composables/` subscribe to these: `useServ
 
 ### Models
 
-`User`, `ServiceConnection`, `WebhookEvent`, `ActivityLog`, `ActionRequest`, `ActionTypeConfig`, `EmbyActivity`, `EmbyUserLink`.
+`User`, `ServiceConnection`, `WebhookEvent`, `ActivityLog`, `ActionRequest`, `ActionTypeConfig`, `EmbyActivity`, `EmbyUserLink`, `AiProposedWorkflow`, `AiUsageRecord`, `AiModelPrice`, `AgentConversation`.
 
 ## Contributing
 
