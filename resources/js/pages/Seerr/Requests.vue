@@ -108,8 +108,10 @@ function statusLabel(status: number | null): string {
             return 'Approved';
         case 3:
             return 'Declined';
+        case 4:
+            return 'Failed';
         default:
-            return 'Unknown';
+            return status === null ? 'Unknown' : `Unknown (${status})`;
     }
 }
 
@@ -122,6 +124,7 @@ function statusVariant(
         case 2:
             return 'default';
         case 3:
+        case 4:
             return 'destructive';
         default:
             return 'outline';
@@ -308,10 +311,10 @@ const rangeText = computed(() => {
                             }}</TableCell>
                             <TableCell class="text-right">
                                 <div class="inline-flex items-center gap-1">
-                                    <Tooltip v-if="seerrUrl(req)">
+                                    <Tooltip v-if="tvdbUrl(req)">
                                         <TooltipTrigger as-child>
                                             <a
-                                                :href="seerrUrl(req)!"
+                                                :href="tvdbUrl(req)!"
                                                 target="_blank"
                                                 rel="noopener noreferrer"
                                             >
@@ -319,17 +322,15 @@ const rangeText = computed(() => {
                                                     variant="ghost"
                                                     size="icon"
                                                 >
-                                                    <ExternalLink
-                                                        class="size-4"
-                                                    />
+                                                    <Tv class="size-4" />
                                                     <span class="sr-only"
-                                                        >Open in Seerr</span
+                                                        >Open on TVDB</span
                                                     >
                                                 </Button>
                                             </a>
                                         </TooltipTrigger>
                                         <TooltipContent
-                                            >Open in Seerr</TooltipContent
+                                            >Open on TVDB</TooltipContent
                                         >
                                     </Tooltip>
                                     <Tooltip v-if="tmdbUrl(req)">
@@ -354,10 +355,10 @@ const rangeText = computed(() => {
                                             >Open on TMDB</TooltipContent
                                         >
                                     </Tooltip>
-                                    <Tooltip v-if="tvdbUrl(req)">
+                                    <Tooltip v-if="seerrUrl(req)">
                                         <TooltipTrigger as-child>
                                             <a
-                                                :href="tvdbUrl(req)!"
+                                                :href="seerrUrl(req)!"
                                                 target="_blank"
                                                 rel="noopener noreferrer"
                                             >
@@ -365,15 +366,17 @@ const rangeText = computed(() => {
                                                     variant="ghost"
                                                     size="icon"
                                                 >
-                                                    <Tv class="size-4" />
+                                                    <ExternalLink
+                                                        class="size-4"
+                                                    />
                                                     <span class="sr-only"
-                                                        >Open on TVDB</span
+                                                        >Open in Seerr</span
                                                     >
                                                 </Button>
                                             </a>
                                         </TooltipTrigger>
                                         <TooltipContent
-                                            >Open on TVDB</TooltipContent
+                                            >Open in Seerr</TooltipContent
                                         >
                                     </Tooltip>
                                     <template v-if="req.status === 1">

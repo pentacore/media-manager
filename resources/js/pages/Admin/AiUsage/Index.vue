@@ -2,7 +2,6 @@
 import { Head, router } from '@inertiajs/vue3';
 import { ChevronDown, ChevronRight } from 'lucide-vue-next';
 import { computed, ref } from 'vue';
-import type { QueryParams } from '@/wayfinder';
 import AiModelPriceController from '@/actions/App/Http/Controllers/Admin/AiModelPriceController';
 import AiUsageController from '@/actions/App/Http/Controllers/Admin/AiUsageController';
 import { Badge } from '@/components/ui/badge';
@@ -26,6 +25,7 @@ import {
     TableHeader,
     TableRow,
 } from '@/components/ui/table';
+import type { QueryParams } from '@/wayfinder';
 
 interface Totals {
     total_invocations: number;
