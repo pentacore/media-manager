@@ -31,6 +31,7 @@ import {
     DialogTitle,
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
+import { useCommandPalette } from '@/composables/useCommandPalette';
 import { dashboard } from '@/routes';
 
 interface QuickLink {
@@ -39,7 +40,7 @@ interface QuickLink {
     icon: Component;
 }
 
-const open = ref(false);
+const { open } = useCommandPalette();
 const query = ref('');
 const inputEl = useTemplateRef<HTMLInputElement>('inputEl');
 

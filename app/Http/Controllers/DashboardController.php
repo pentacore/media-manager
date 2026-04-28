@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Http\Controllers;
 
 use App\Enums\ActionRequestStatus;
+use App\Enums\HealthStatus;
 use App\Enums\ServiceType;
 use App\Http\Resources\ActivityLogResource;
 use App\Models\ActionRequest;
@@ -23,13 +24,37 @@ class DashboardController extends Controller
 {
     public function __invoke(Request $request): Response
     {
+        $services = ServiceConnection::query()
+            ->orderBy('type')
+            ->get();
+
+        $healthyCount = $services->filter(
+            fn (ServiceConnection $serviceConnection): bool => $serviceConnection->health_status === HealthStatus::Healthy,
+        )->count();
+
+        $pendingActions = ActionRequest::where('status', ActionRequestStatus::Pending)->count();
+
         return Inertia::render('Dashboard', [
             'stats' => [
-                'activeServices' => ServiceConnection::where('is_active', true)->count(),
-                'totalServices' => ServiceConnection::count(),
+                'activeServices' => $services->where('is_active', true)->count(),
+                'totalServices' => $services->count(),
+                'healthyServices' => $healthyCount,
                 'recentWebhooks' => WebhookEvent::where('created_at', '>=', now()->subDay())->count(),
-                'pendingActions' => ActionRequest::where('status', ActionRequestStatus::Pending)->count(),
+                'pendingActions' => $pendingActions,
+                'failedActions' => ActionRequest::where('status', ActionRequestStatus::Failed)
+                    ->where('created_at', '>=', now()->subDay())->count(),
+                'recentActions' => ActionRequest::where('created_at', '>=', now()->subDay())->count(),
             ],
+            'services' => $services->map(fn (ServiceConnection $serviceConnection): array => [
+                'id' => $serviceConnection->id,
+                'type' => $serviceConnection->type->value,
+                'name' => $serviceConnection->name,
+                'health' => $serviceConnection->health_status?->value ?? 'unknown',
+                'version' => $serviceConnection->version,
+                'latest_version' => $serviceConnection->latest_version,
+                'last_seen_at' => $serviceConnection->last_seen_at?->toISOString(),
+                'is_active' => $serviceConnection->is_active,
+            ])->values(),
             'recentActivity' => ActivityLogResource::collection(
                 ActivityLog::with(['user:id,name', 'serviceConnection:id,name,type'])
                     ->latest()
@@ -47,6 +72,28 @@ class DashboardController extends Controller
                     'service_type' => $webhookEvent->serviceConnection?->type->value,
                     'processed' => $webhookEvent->processed_at !== null,
                     'created_at' => $webhookEvent->created_at?->toISOString(),
+                ]),
+            'pendingApprovals' => ActionRequest::with([
+                'webhookEvent.serviceConnection:id,name,type',
+                'approvedByUser:id,name',
+            ])
+                ->where('status', ActionRequestStatus::Pending)
+                ->latest()
+                ->take(3)
+                ->get()
+                ->map(fn (ActionRequest $actionRequest): array => [
+                    'id' => $actionRequest->id,
+                    'type' => $actionRequest->type,
+                    'target_service' => $actionRequest->target_service,
+                    'subject_label' => is_string($actionRequest->payload['title'] ?? null)
+                        ? $actionRequest->payload['title']
+                        : ($actionRequest->payload['name'] ?? '—'),
+                    'requested_by' => $actionRequest->approvedByUser?->name
+                        ?? $actionRequest->webhookEvent?->serviceConnection?->name
+                        ?? 'system',
+                    'trigger' => $actionRequest->webhookEvent?->event_type
+                        ?? 'manual',
+                    'created_at' => $actionRequest->created_at?->toISOString(),
                 ]),
             'nowPlaying' => Inertia::defer(fn (): array => $this->loadNowPlaying()),
         ]);
