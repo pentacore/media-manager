@@ -113,3 +113,27 @@ test('throws on server error', function (): void {
 
     $this->client->getSystemInfo();
 })->throws(RequestException::class);
+
+test('markItemPlayed POSTs to PlayedItems endpoint', function (): void {
+    Http::fake([
+        'emby.local:8096/Users/user1/PlayedItems/item1*' => Http::response(['Played' => true]),
+    ]);
+
+    $result = $this->client->markItemPlayed('user1', 'item1');
+
+    expect($result['Played'])->toBeTrue();
+    Http::assertSent(fn (Request $request): bool => $request->method() === 'POST'
+        && str_contains($request->url(), '/Users/user1/PlayedItems/item1'));
+});
+
+test('markItemUnplayed DELETEs the PlayedItems endpoint', function (): void {
+    Http::fake([
+        'emby.local:8096/Users/user1/PlayedItems/item1*' => Http::response(['Played' => false]),
+    ]);
+
+    $result = $this->client->markItemUnplayed('user1', 'item1');
+
+    expect($result['Played'])->toBeFalse();
+    Http::assertSent(fn (Request $request): bool => $request->method() === 'DELETE'
+        && str_contains($request->url(), '/Users/user1/PlayedItems/item1'));
+});

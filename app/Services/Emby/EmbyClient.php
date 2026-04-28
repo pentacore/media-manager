@@ -82,4 +82,30 @@ class EmbyClient
     {
         $this->buildClient()->post('/Library/Refresh')->throw();
     }
+
+    /**
+     * @return array<string, mixed>
+     *
+     * @throws RequestException|ConnectionException
+     */
+    public function markItemPlayed(string $userId, string $itemId): array
+    {
+        return $this->buildClient()
+            ->post(sprintf('/Users/%s/PlayedItems/%s', $userId, $itemId))
+            ->throw()
+            ->json() ?? [];
+    }
+
+    /**
+     * @return array<string, mixed>
+     *
+     * @throws RequestException|ConnectionException
+     */
+    public function markItemUnplayed(string $userId, string $itemId): array
+    {
+        return $this->buildClient()
+            ->delete(sprintf('/Users/%s/PlayedItems/%s', $userId, $itemId))
+            ->throw()
+            ->json() ?? [];
+    }
 }
