@@ -60,3 +60,31 @@ test('getSeriesById caches per-id', function (): void {
 
     Http::assertSentCount(1);
 });
+
+test('getQualityProfiles caches inherited ArrClient call', function (): void {
+    Http::fake([
+        'sonarr.local:8989/api/v3/qualityprofile' => Http::response([
+            ['id' => 1, 'name' => 'Any'],
+        ]),
+    ]);
+
+    $client = new SonarrClient($this->connection);
+    $client->getQualityProfiles();
+    $client->getQualityProfiles();
+
+    Http::assertSentCount(1);
+});
+
+test('getRootFolders caches inherited ArrClient call', function (): void {
+    Http::fake([
+        'sonarr.local:8989/api/v3/rootfolder' => Http::response([
+            ['id' => 1, 'path' => '/tv'],
+        ]),
+    ]);
+
+    $client = new SonarrClient($this->connection);
+    $client->getRootFolders();
+    $client->getRootFolders();
+
+    Http::assertSentCount(1);
+});

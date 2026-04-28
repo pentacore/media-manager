@@ -105,3 +105,77 @@ test('setSeriesQualityProfile busts the Sonarr cache for its connection', functi
 
     expect($hits)->toBe(1);
 });
+
+test('addSeries busts the Sonarr cache after a successful HTTP write', function (): void {
+    $connection = ServiceConnection::factory()->sonarr()->create([
+        'url' => 'http://sonarr.local:8989',
+        'api_key' => 'k',
+    ]);
+
+    Http::fake([
+        'sonarr.local:8989/api/v3/series/lookup*' => Http::response([
+            ['title' => 'Demo Show', 'tvdbId' => 999001, 'year' => 2024],
+        ]),
+        'sonarr.local:8989/api/v3/series' => Http::sequence()
+            ->push(['id' => 123, 'title' => 'Demo Show', 'tvdbId' => 999001]),
+    ]);
+
+    $cache = new SonarrCache($connection);
+    $cache->rememberList('list', fn (): array => ['warm' => true]);
+
+    $actionRequest = ActionRequest::factory()->create([
+        'type' => 'add_series',
+        'target_service' => 'sonarr',
+        'payload' => [
+            'tvdb_id' => 999001,
+            'quality_profile_id' => 1,
+            'root_folder_path' => '/tv',
+            'monitored' => true,
+            'season_folder' => true,
+        ],
+    ]);
+
+    new SonarrActions()->execute($actionRequest);
+
+    $hits = 0;
+    $cache->rememberList('list', function () use (&$hits): array {
+        $hits++;
+
+        return ['fresh' => true];
+    });
+
+    expect($hits)->toBe(1);
+});
+
+test('failed HTTP write does NOT bust the Sonarr cache', function (): void {
+    $connection = ServiceConnection::factory()->sonarr()->create([
+        'url' => 'http://sonarr.local:8989',
+        'api_key' => 'k',
+    ]);
+
+    // 500 from Sonarr — `throw()` will fire after retries, action throws.
+    Http::fake(['sonarr.local:8989/api/v3/series/42*' => Http::response('boom', 500)]);
+
+    $cache = new SonarrCache($connection);
+    $cache->rememberList('list', fn (): array => ['warm' => true]);
+
+    $actionRequest = ActionRequest::factory()->create([
+        'type' => 'delete_series',
+        'payload' => ['sonarr_series_id' => 42, 'delete_files' => false],
+    ]);
+
+    try {
+        new SonarrActions()->execute($actionRequest);
+    } catch (Throwable) {
+        // expected — Sonarr returned 500
+    }
+
+    $hits = 0;
+    $cache->rememberList('list', function () use (&$hits): array {
+        $hits++;
+
+        return ['stale-but-warm' => true];
+    });
+
+    expect($hits)->toBe(0);
+});

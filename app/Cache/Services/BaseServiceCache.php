@@ -8,6 +8,18 @@ use Closure;
 use Illuminate\Contracts\Cache\Repository;
 use Illuminate\Support\Facades\Cache;
 
+/**
+ * Base for per-service tagged caches (Sonarr, Radarr, Seerr, Prowlarr, Tmdb, Trakt).
+ *
+ * Subclasses provide the service slug, an optional connection id (null for
+ * household-keyed services like Tmdb/Trakt), and the TTL bucket map. Cache
+ * entries are tagged with `{service}:{id}` (or `{service}` when no
+ * connection) so `bustAll()` only flushes entries for this scope.
+ *
+ * NOTE: the cache store is resolved on every call via `Cache::store(config('mediamanager.cache.store'))`.
+ * Tests that swap the configured store mid-run must flush whatever store
+ * they previously used — there is no per-instance store memoization.
+ */
 abstract class BaseServiceCache
 {
     abstract protected function service(): string;

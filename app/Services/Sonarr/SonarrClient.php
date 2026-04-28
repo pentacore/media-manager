@@ -15,6 +15,8 @@ use Illuminate\Http\Client\RequestException;
  */
 class SonarrClient extends ArrClient
 {
+    private ?SonarrCache $cache = null;
+
     /**
      * @return array<int, array<string, mixed>>
      *
@@ -130,6 +132,6 @@ class SonarrClient extends ArrClient
 
     private function cache(): SonarrCache
     {
-        return new SonarrCache($this->connection);
+        return $this->cache ??= new SonarrCache($this->connection);
     }
 }
