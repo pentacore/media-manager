@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use App\Ai\Storage\HealingConversationStore;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\DB;
 use Laravel\Ai\Contracts\ConversationStore;
 use Laravel\Ai\Messages\AssistantMessage;
 use Laravel\Ai\Messages\Message;
@@ -12,6 +13,7 @@ use Laravel\Ai\Prompts\AgentPrompt;
 use Laravel\Ai\Responses\AgentResponse;
 use Laravel\Ai\Responses\Data\ToolCall;
 use Laravel\Ai\Responses\Data\ToolResult;
+use Laravel\Ai\Storage\DatabaseConversationStore;
 
 function fakeInner(Collection $messages): ConversationStore
 {
@@ -94,6 +96,58 @@ test('multiple orphans are healed independently', function (): void {
     expect($result[1]->toolResults->first()->id)->toBe('a');
     expect($result[3])->toBeInstanceOf(ToolResultMessage::class);
     expect($result[3]->toolResults->first()->id)->toBe('b');
+});
+
+test('reasoningId and reasoningSummary are restored from raw DB rows', function (): void {
+    $conversationId = '01900000-0000-7000-0000-000000000001';
+
+    DB::table('agent_conversations')->insert([
+        'id' => $conversationId,
+        'user_id' => null,
+        'title' => 'test',
+        'created_at' => now(),
+        'updated_at' => now(),
+    ]);
+
+    DB::table('agent_conversation_messages')->insert([
+        'id' => '01900000-0000-7000-0000-000000000002',
+        'conversation_id' => $conversationId,
+        'user_id' => null,
+        'agent' => 'TestAgent',
+        'role' => 'assistant',
+        'content' => '',
+        'attachments' => '[]',
+        'tool_calls' => json_encode([
+            [
+                'id' => 'fc_abc',
+                'name' => 'SearchMediaTool',
+                'arguments' => ['q' => 'breaking bad'],
+                'result_id' => 'call_xyz',
+                'reasoning_id' => 'rs_def',
+                'reasoning_summary' => [['type' => 'summary_text', 'text' => 'reasoning text']],
+            ],
+        ]),
+        'tool_results' => json_encode([
+            ['id' => 'fc_abc', 'name' => 'SearchMediaTool', 'arguments' => [], 'result' => 'ok', 'result_id' => 'call_xyz'],
+        ]),
+        'usage' => '[]',
+        'meta' => '[]',
+        'created_at' => now(),
+        'updated_at' => now(),
+    ]);
+
+    $healing = new HealingConversationStore(new DatabaseConversationStore);
+
+    $messages = $healing->getLatestConversationMessages($conversationId, 100)->values();
+
+    /** @var AssistantMessage $assistant */
+    $assistant = $messages->first(fn (Message $message): bool => $message instanceof AssistantMessage);
+    /** @var ToolCall $toolCall */
+    $toolCall = $assistant->toolCalls->first();
+
+    expect($toolCall->id)->toBe('fc_abc');
+    expect($toolCall->reasoningId)->toBe('rs_def');
+    expect($toolCall->reasoningSummary)->toBe([['type' => 'summary_text', 'text' => 'reasoning text']]);
 });
 
 test('partial tool_result coverage gets the missing IDs filled in', function (): void {
