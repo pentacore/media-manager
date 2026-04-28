@@ -48,3 +48,43 @@ test('getTitle throws when API key is not configured', function (): void {
     expect(fn () => (new TmdbClient)->getTitle(27205, 'movie'))
         ->toThrow(RuntimeException::class, 'TMDB API key is not configured.');
 });
+
+test('getSimilar returns the results array for a movie', function (): void {
+    Http::fake([
+        'api.themoviedb.org/3/movie/27205/similar*' => Http::response([
+            'page' => 1,
+            'results' => [
+                ['id' => 1234, 'title' => 'Similar Movie'],
+            ],
+        ]),
+    ]);
+
+    $payload = (new TmdbClient)->getSimilar(27205, 'movie');
+
+    expect($payload['results'])->toHaveCount(1);
+    expect($payload['results'][0]['title'])->toBe('Similar Movie');
+});
+
+test('getSimilar uses the TV endpoint for media_type tv', function (): void {
+    Http::fake([
+        'api.themoviedb.org/3/tv/1399/similar*' => Http::response(['results' => []]),
+    ]);
+
+    (new TmdbClient)->getSimilar(1399, 'tv');
+
+    Http::assertSent(fn ($r): bool => str_contains((string) $r->url(), '/tv/1399/similar'));
+});
+
+test('getCredits returns cast and crew', function (): void {
+    Http::fake([
+        'api.themoviedb.org/3/movie/27205/credits*' => Http::response([
+            'cast' => [['name' => 'Leonardo DiCaprio', 'character' => 'Cobb']],
+            'crew' => [['name' => 'Christopher Nolan', 'job' => 'Director']],
+        ]),
+    ]);
+
+    $payload = (new TmdbClient)->getCredits(27205, 'movie');
+
+    expect($payload['cast'][0]['name'])->toBe('Leonardo DiCaprio');
+    expect($payload['crew'][0]['job'])->toBe('Director');
+});

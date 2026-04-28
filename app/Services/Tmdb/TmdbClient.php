@@ -38,6 +38,32 @@ class TmdbClient
             ->json() ?? [];
     }
 
+    /**
+     * @return array<string, mixed>
+     *
+     * @throws RequestException|ConnectionException
+     */
+    public function getSimilar(int $tmdbId, string $mediaType): array
+    {
+        return $this->buildClient()
+            ->get($this->endpointFor($mediaType, $tmdbId, '/similar'))
+            ->throw()
+            ->json() ?? [];
+    }
+
+    /**
+     * @return array<string, mixed>
+     *
+     * @throws RequestException|ConnectionException
+     */
+    public function getCredits(int $tmdbId, string $mediaType): array
+    {
+        return $this->buildClient()
+            ->get($this->endpointFor($mediaType, $tmdbId, '/credits'))
+            ->throw()
+            ->json() ?? [];
+    }
+
     private function endpointFor(string $mediaType, int $tmdbId, string $suffix = ''): string
     {
         return match ($mediaType) {
