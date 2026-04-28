@@ -120,9 +120,11 @@ class HealingConversationStore implements ConversationStore
                 if (! is_array($toolCall)) {
                     continue;
                 }
+
                 if (! isset($toolCall['id'])) {
                     continue;
                 }
+
                 if (! isset($toolCall['reasoning_id'])) {
                     continue;
                 }
