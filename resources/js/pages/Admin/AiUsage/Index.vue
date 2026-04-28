@@ -2,6 +2,7 @@
 import { Head, router } from '@inertiajs/vue3';
 import { ChevronDown, ChevronRight } from 'lucide-vue-next';
 import { computed, ref } from 'vue';
+import type { QueryParams } from '@/wayfinder';
 import AiModelPriceController from '@/actions/App/Http/Controllers/Admin/AiModelPriceController';
 import AiUsageController from '@/actions/App/Http/Controllers/Admin/AiUsageController';
 import { Badge } from '@/components/ui/badge';
@@ -43,7 +44,6 @@ interface AggregateRow {
 interface RecentRow {
     id: number;
     created_at: string;
-    agent_class: string | null;
     provider: string | null;
     model: string | null;
     prompt_tokens: number;
@@ -77,14 +77,12 @@ interface ScenarioRates {
 const props = defineProps<{
     window: '24h' | '7d' | '30d';
     totals: Totals;
-    by_agent: AggregateRow[];
     by_model: AggregateRow[];
     by_provider: AggregateRow[];
     recent: RecentRow[];
     priced_models: PricedModel[];
     scenario: ScenarioRates | null;
     scenario_totals?: Totals;
-    scenario_by_agent?: AggregateRow[];
     scenario_by_model?: AggregateRow[];
     scenario_by_provider?: AggregateRow[];
     scenario_recent?: RecentRow[];
@@ -112,9 +110,6 @@ const form = ref({
 
 const selectedLoadKey = ref<string>('');
 
-const aggregatedScenarioByAgent = computed(() =>
-    indexByKey(props.scenario_by_agent ?? []),
-);
 const aggregatedScenarioByModel = computed(() =>
     indexByKey(props.scenario_by_model ?? []),
 );
@@ -142,11 +137,11 @@ function setWindow(value: string) {
     );
 }
 
-function buildQuery(extra: Record<string, string>): Record<string, unknown> {
-    const query: Record<string, unknown> = { ...extra };
+function buildQuery(extra: Record<string, string>): QueryParams {
+    const query: QueryParams = { ...extra };
 
     if (props.scenario) {
-        query.scenario = props.scenario;
+        query.scenario = { ...props.scenario };
     }
 
     return query;
@@ -233,16 +228,6 @@ function formatNumber(value: number | string): string {
     return n.toLocaleString('en-US');
 }
 
-function shortClass(value: string | null): string {
-    if (!value) {
-        return '—';
-    }
-
-    const parts = value.split('\\');
-
-    return parts[parts.length - 1] ?? value;
-}
-
 function formatTimestamp(value: string): string {
     return new Date(value).toLocaleString('en-US', {
         dateStyle: 'short',
@@ -301,7 +286,7 @@ function formatTimestamp(value: string): string {
                     <Label>Load rates from existing model</Label>
                     <Select
                         :model-value="selectedLoadKey"
-                        @update:model-value="(value: string | string[]) => loadFromModel(typeof value === 'string' ? value : '')"
+                        @update:model-value="(value) => loadFromModel(typeof value === 'string' ? value : '')"
                     >
                         <SelectTrigger>
                             <SelectValue placeholder="Pick a priced model to copy its rates…" />
@@ -455,56 +440,7 @@ function formatTimestamp(value: string): string {
             </Card>
         </div>
 
-        <div class="grid grid-cols-1 gap-4 lg:grid-cols-3">
-            <Card>
-                <CardHeader>
-                    <CardTitle>By Agent</CardTitle>
-                </CardHeader>
-                <CardContent>
-                    <Table>
-                        <TableHeader>
-                            <TableRow>
-                                <TableHead>Agent</TableHead>
-                                <TableHead class="text-right">Invocations</TableHead>
-                                <TableHead class="text-right">Cost</TableHead>
-                                <TableHead v-if="scenarioActive" class="text-right">
-                                    Projected
-                                </TableHead>
-                            </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                            <TableRow
-                                v-for="row in by_agent"
-                                :key="row.key ?? 'null'"
-                            >
-                                <TableCell>{{ shortClass(row.key) }}</TableCell>
-                                <TableCell class="text-right">{{
-                                    formatNumber(row.invocations)
-                                }}</TableCell>
-                                <TableCell class="text-right">{{
-                                    formatCost(row.total_cost)
-                                }}</TableCell>
-                                <TableCell v-if="scenarioActive" class="text-right text-primary">
-                                    {{
-                                        formatCost(
-                                            aggregatedScenarioByAgent[
-                                                row.key ?? '__null__'
-                                            ] ?? '0',
-                                        )
-                                    }}
-                                </TableCell>
-                            </TableRow>
-                            <TableEmpty
-                                v-if="by_agent.length === 0"
-                                :colspan="scenarioActive ? 4 : 3"
-                            >
-                                No data in this window.
-                            </TableEmpty>
-                        </TableBody>
-                    </Table>
-                </CardContent>
-            </Card>
-
+        <div class="grid grid-cols-1 gap-4 lg:grid-cols-2">
             <Card>
                 <CardHeader>
                     <CardTitle>By Model</CardTitle>
@@ -614,7 +550,6 @@ function formatTimestamp(value: string): string {
                         <TableRow>
                             <TableHead>When</TableHead>
                             <TableHead>User</TableHead>
-                            <TableHead>Agent</TableHead>
                             <TableHead>Model</TableHead>
                             <TableHead class="text-right">Tokens</TableHead>
                             <TableHead class="text-right">Tools</TableHead>
@@ -631,7 +566,6 @@ function formatTimestamp(value: string): string {
                                 {{ formatTimestamp(row.created_at) }}
                             </TableCell>
                             <TableCell>{{ row.user_name ?? '—' }}</TableCell>
-                            <TableCell>{{ shortClass(row.agent_class) }}</TableCell>
                             <TableCell class="font-mono text-xs">{{ row.model ?? '—' }}</TableCell>
                             <TableCell class="text-right">{{ formatNumber(row.total_tokens) }}</TableCell>
                             <TableCell class="text-right">{{ row.tool_calls_count }}</TableCell>
@@ -647,7 +581,7 @@ function formatTimestamp(value: string): string {
                         </TableRow>
                         <TableEmpty
                             v-if="recent.length === 0"
-                            :colspan="scenarioActive ? 9 : 8"
+                            :colspan="scenarioActive ? 8 : 7"
                         >
                             No invocations in this window.
                         </TableEmpty>

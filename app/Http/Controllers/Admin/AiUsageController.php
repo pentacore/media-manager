@@ -35,7 +35,6 @@ class AiUsageController extends Controller
         $page = [
             'window' => $window,
             'totals' => $aiUsageReporting->totals($since),
-            'by_agent' => $aiUsageReporting->aggregateBy('agent_class', $since),
             'by_model' => $aiUsageReporting->aggregateBy('model', $since),
             'by_provider' => $aiUsageReporting->aggregateBy('provider', $since),
             'recent' => $aiUsageReporting->recentInvocations($since),
@@ -48,7 +47,6 @@ class AiUsageController extends Controller
 
         if ($scenario instanceof Scenario) {
             $page['scenario_totals'] = $aiUsageReporting->totals($since, $scenario);
-            $page['scenario_by_agent'] = $aiUsageReporting->aggregateBy('agent_class', $since, $scenario);
             $page['scenario_by_model'] = $aiUsageReporting->aggregateBy('model', $since, $scenario);
             $page['scenario_by_provider'] = $aiUsageReporting->aggregateBy('provider', $since, $scenario);
             $page['scenario_recent'] = $aiUsageReporting->recentInvocations($since, $scenario);

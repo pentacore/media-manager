@@ -12,7 +12,7 @@ use InvalidArgumentException;
 
 class AiUsageReporting
 {
-    private const array AGGREGATABLE_COLUMNS = ['agent_class', 'model', 'provider'];
+    private const array AGGREGATABLE_COLUMNS = ['model', 'provider'];
 
     private const string TOKEN_SUM_EXPR = '
         ai_usage_records.prompt_tokens
@@ -79,7 +79,6 @@ class AiUsageReporting
             ->selectRaw('
                 ai_usage_records.id,
                 ai_usage_records.created_at,
-                ai_usage_records.agent_class,
                 ai_usage_records.provider,
                 ai_usage_records.model,
                 ai_usage_records.prompt_tokens,
