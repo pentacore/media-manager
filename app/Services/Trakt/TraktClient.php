@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Services\Trakt;
 
+use App\Cache\Services\TraktCache;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\PendingRequest;
 use Illuminate\Http\Client\RequestException;
@@ -13,6 +14,8 @@ use RuntimeException;
 
 class TraktClient
 {
+    private ?TraktCache $cache = null;
+
     protected function buildClient(): PendingRequest
     {
         $clientId = config('services.trakt.client_id');
@@ -36,10 +39,13 @@ class TraktClient
      */
     public function getTrending(string $mediaType): array
     {
-        return $this->buildClient()
-            ->get(sprintf('/%s/trending', $this->collectionFor($mediaType)))
-            ->throw()
-            ->json() ?? [];
+        return $this->cache()->rememberList(
+            'trending:'.$mediaType,
+            fn (): array => $this->buildClient()
+                ->get(sprintf('/%s/trending', $this->collectionFor($mediaType)))
+                ->throw()
+                ->json() ?? [],
+        );
     }
 
     /**
@@ -49,10 +55,13 @@ class TraktClient
      */
     public function getPopular(string $mediaType): array
     {
-        return $this->buildClient()
-            ->get(sprintf('/%s/popular', $this->collectionFor($mediaType)))
-            ->throw()
-            ->json() ?? [];
+        return $this->cache()->rememberList(
+            'popular:'.$mediaType,
+            fn (): array => $this->buildClient()
+                ->get(sprintf('/%s/popular', $this->collectionFor($mediaType)))
+                ->throw()
+                ->json() ?? [],
+        );
     }
 
     /**
@@ -62,10 +71,18 @@ class TraktClient
      */
     public function getList(int $listId): array
     {
-        return $this->buildClient()
-            ->get(sprintf('/lists/%d/items', $listId))
-            ->throw()
-            ->json() ?? [];
+        return $this->cache()->rememberMetadata(
+            'list:'.$listId,
+            fn (): array => $this->buildClient()
+                ->get(sprintf('/lists/%d/items', $listId))
+                ->throw()
+                ->json() ?? [],
+        );
+    }
+
+    private function cache(): TraktCache
+    {
+        return $this->cache ??= new TraktCache;
     }
 
     private function collectionFor(string $mediaType): string
