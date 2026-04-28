@@ -219,9 +219,7 @@ function newConversation() {
                         v-for="m in messages"
                         :key="m.ts"
                         class="flex flex-col gap-2"
-                        :class="
-                            m.role === 'user' ? 'items-end' : 'items-start'
-                        "
+                        :class="m.role === 'user' ? 'items-end' : 'items-start'"
                     >
                         <div
                             class="flex max-w-[80%] gap-2 rounded-lg px-4 py-3 text-sm"
@@ -263,10 +261,7 @@ function newConversation() {
                                     — {{ step.reason }}
                                 </li>
                             </ol>
-                            <div
-                                v-if="!m.workflowResolved"
-                                class="flex gap-2"
-                            >
+                            <div v-if="!m.workflowResolved" class="flex gap-2">
                                 <Button
                                     size="sm"
                                     :disabled="sending"
@@ -283,10 +278,7 @@ function newConversation() {
                                     Decline
                                 </Button>
                             </div>
-                            <p
-                                v-else
-                                class="text-xs text-muted-foreground"
-                            >
+                            <p v-else class="text-xs text-muted-foreground">
                                 {{
                                     m.workflowResolved === 'approved'
                                         ? 'Approved.'

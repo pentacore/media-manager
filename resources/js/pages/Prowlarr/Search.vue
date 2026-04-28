@@ -52,7 +52,11 @@ function submit(): void {
         return;
     }
 
-    router.get(SearchIndexersController().url, { q: trimmed }, { preserveState: false });
+    router.get(
+        SearchIndexersController().url,
+        { q: trimmed },
+        { preserveState: false },
+    );
 }
 
 function formatBytes(bytes: number): string {
@@ -89,7 +93,9 @@ function formatAge(days: number): string {
 
     <div class="space-y-6 p-6">
         <div>
-            <h2 class="flex items-center gap-2 text-2xl font-bold tracking-tight">
+            <h2
+                class="flex items-center gap-2 text-2xl font-bold tracking-tight"
+            >
                 <Antenna class="size-6" />
                 Indexer Search
             </h2>
@@ -103,14 +109,14 @@ function formatAge(days: number): string {
             class="rounded-md border border-amber-300/50 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-500/40 dark:bg-amber-950 dark:text-amber-100"
         >
             No active Prowlarr connection. Add one from
-            <Link :href="ServiceConnectionController.index.url()" class="underline">Admin → Connections</Link>.
+            <Link
+                :href="ServiceConnectionController.index.url()"
+                class="underline"
+                >Admin → Connections</Link
+            >.
         </div>
 
-        <form
-            v-else
-            class="flex items-center gap-2"
-            @submit.prevent="submit"
-        >
+        <form v-else class="flex items-center gap-2" @submit.prevent="submit">
             <Input
                 v-model="queryInput"
                 type="search"
@@ -130,7 +136,12 @@ function formatAge(days: number): string {
             {{ error }}
         </div>
 
-        <div v-if="hasConnection && query !== '' && results.length === 0 && !error" class="text-center text-sm text-muted-foreground">
+        <div
+            v-if="
+                hasConnection && query !== '' && results.length === 0 && !error
+            "
+            class="text-center text-sm text-muted-foreground"
+        >
             No releases found for "{{ query }}".
         </div>
 
@@ -146,12 +157,27 @@ function formatAge(days: number): string {
                 </TableRow>
             </TableHeader>
             <TableBody>
-                <TableRow v-for="release in results" :key="`${release.indexer}-${release.title}-${release.size}`">
-                    <TableCell class="font-medium">{{ release.title }}</TableCell>
-                    <TableCell><Badge variant="outline">{{ release.indexer }}</Badge></TableCell>
-                    <TableCell class="text-right">{{ formatBytes(release.size) }}</TableCell>
-                    <TableCell class="text-right">{{ release.seeders ?? '-' }}</TableCell>
-                    <TableCell class="text-right text-muted-foreground">{{ formatAge(release.age) }}</TableCell>
+                <TableRow
+                    v-for="release in results"
+                    :key="`${release.indexer}-${release.title}-${release.size}`"
+                >
+                    <TableCell class="font-medium">{{
+                        release.title
+                    }}</TableCell>
+                    <TableCell
+                        ><Badge variant="outline">{{
+                            release.indexer
+                        }}</Badge></TableCell
+                    >
+                    <TableCell class="text-right">{{
+                        formatBytes(release.size)
+                    }}</TableCell>
+                    <TableCell class="text-right">{{
+                        release.seeders ?? '-'
+                    }}</TableCell>
+                    <TableCell class="text-right text-muted-foreground">{{
+                        formatAge(release.age)
+                    }}</TableCell>
                     <TableCell class="text-right">
                         <a
                             v-if="release.downloadUrl"
@@ -163,7 +189,9 @@ function formatAge(days: number): string {
                             <ExternalLink class="size-3" />
                             Download
                         </a>
-                        <span v-else class="text-xs text-muted-foreground">-</span>
+                        <span v-else class="text-xs text-muted-foreground"
+                            >-</span
+                        >
                     </TableCell>
                 </TableRow>
             </TableBody>

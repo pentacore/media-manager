@@ -1,6 +1,13 @@
 <script setup lang="ts">
 import { Form, Head, Link, router, useHttp } from '@inertiajs/vue3';
-import { Antenna, ClipboardCopy, Eye, EyeOff, Plug, RefreshCw } from 'lucide-vue-next';
+import {
+    Antenna,
+    ClipboardCopy,
+    Eye,
+    EyeOff,
+    Plug,
+    RefreshCw,
+} from 'lucide-vue-next';
 import { reactive, ref } from 'vue';
 import ProwlarrTestIndexerController from '@/actions/App/Http/Controllers/Admin/ProwlarrTestIndexerController';
 import ServiceConnectionController from '@/actions/App/Http/Controllers/Admin/ServiceConnectionController';
@@ -417,10 +424,7 @@ function testIndexer(indexerId: number): void {
                         </TableRow>
                     </TableHeader>
                     <TableBody>
-                        <TableRow
-                            v-for="indexer in indexers"
-                            :key="indexer.id"
-                        >
+                        <TableRow v-for="indexer in indexers" :key="indexer.id">
                             <TableCell class="font-medium">{{
                                 indexer.name
                             }}</TableCell>

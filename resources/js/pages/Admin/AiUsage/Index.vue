@@ -256,7 +256,7 @@ function formatTimestamp(value: string): string {
 
             <div class="flex gap-1 rounded-md border bg-muted p-1">
                 <Button
-                    v-for="option in (['24h', '7d', '30d'] as const)"
+                    v-for="option in ['24h', '7d', '30d'] as const"
                     :key="option"
                     :variant="props.window === option ? 'default' : 'ghost'"
                     size="sm"
@@ -268,13 +268,20 @@ function formatTimestamp(value: string): string {
         </div>
 
         <Card>
-            <CardHeader class="cursor-pointer pb-3" @click="panelOpen = !panelOpen">
+            <CardHeader
+                class="cursor-pointer pb-3"
+                @click="panelOpen = !panelOpen"
+            >
                 <div class="flex items-center justify-between">
                     <div class="flex items-center gap-2">
                         <ChevronDown v-if="panelOpen" class="size-4" />
                         <ChevronRight v-else class="size-4" />
-                        <CardTitle class="text-base">What-if Scenario</CardTitle>
-                        <Badge v-if="scenarioActive" variant="secondary">Active</Badge>
+                        <CardTitle class="text-base"
+                            >What-if Scenario</CardTitle
+                        >
+                        <Badge v-if="scenarioActive" variant="secondary"
+                            >Active</Badge
+                        >
                     </div>
                     <p class="text-sm text-muted-foreground">
                         Recompute costs against hypothetical rates
@@ -286,10 +293,17 @@ function formatTimestamp(value: string): string {
                     <Label>Load rates from existing model</Label>
                     <Select
                         :model-value="selectedLoadKey"
-                        @update:model-value="(value) => loadFromModel(typeof value === 'string' ? value : '')"
+                        @update:model-value="
+                            (value) =>
+                                loadFromModel(
+                                    typeof value === 'string' ? value : '',
+                                )
+                        "
                     >
                         <SelectTrigger>
-                            <SelectValue placeholder="Pick a priced model to copy its rates…" />
+                            <SelectValue
+                                placeholder="Pick a priced model to copy its rates…"
+                            />
                         </SelectTrigger>
                         <SelectContent>
                             <SelectItem
@@ -388,7 +402,9 @@ function formatTimestamp(value: string): string {
                         class="mt-1 text-sm"
                     >
                         <span class="font-medium text-primary"
-                            >{{ formatCost(scenario_totals.total_cost) }}
+                            >{{
+                                formatCost(scenario_totals.total_cost)
+                            }}
                             projected</span
                         >
                         <span class="ml-1 text-muted-foreground"
@@ -450,9 +466,14 @@ function formatTimestamp(value: string): string {
                         <TableHeader>
                             <TableRow>
                                 <TableHead>Model</TableHead>
-                                <TableHead class="text-right">Invocations</TableHead>
+                                <TableHead class="text-right"
+                                    >Invocations</TableHead
+                                >
                                 <TableHead class="text-right">Cost</TableHead>
-                                <TableHead v-if="scenarioActive" class="text-right">
+                                <TableHead
+                                    v-if="scenarioActive"
+                                    class="text-right"
+                                >
                                     Projected
                                 </TableHead>
                             </TableRow>
@@ -469,7 +490,10 @@ function formatTimestamp(value: string): string {
                                 <TableCell class="text-right">{{
                                     formatCost(row.total_cost)
                                 }}</TableCell>
-                                <TableCell v-if="scenarioActive" class="text-right text-primary">
+                                <TableCell
+                                    v-if="scenarioActive"
+                                    class="text-right text-primary"
+                                >
                                     {{
                                         formatCost(
                                             aggregatedScenarioByModel[
@@ -499,9 +523,14 @@ function formatTimestamp(value: string): string {
                         <TableHeader>
                             <TableRow>
                                 <TableHead>Provider</TableHead>
-                                <TableHead class="text-right">Invocations</TableHead>
+                                <TableHead class="text-right"
+                                    >Invocations</TableHead
+                                >
                                 <TableHead class="text-right">Cost</TableHead>
-                                <TableHead v-if="scenarioActive" class="text-right">
+                                <TableHead
+                                    v-if="scenarioActive"
+                                    class="text-right"
+                                >
                                     Projected
                                 </TableHead>
                             </TableRow>
@@ -518,7 +547,10 @@ function formatTimestamp(value: string): string {
                                 <TableCell class="text-right">{{
                                     formatCost(row.total_cost)
                                 }}</TableCell>
-                                <TableCell v-if="scenarioActive" class="text-right text-primary">
+                                <TableCell
+                                    v-if="scenarioActive"
+                                    class="text-right text-primary"
+                                >
                                     {{
                                         formatCost(
                                             aggregatedScenarioByProvider[
@@ -562,19 +594,42 @@ function formatTimestamp(value: string): string {
                     </TableHeader>
                     <TableBody>
                         <TableRow v-for="row in recent" :key="row.id">
-                            <TableCell class="whitespace-nowrap text-sm text-muted-foreground">
+                            <TableCell
+                                class="text-sm whitespace-nowrap text-muted-foreground"
+                            >
                                 {{ formatTimestamp(row.created_at) }}
                             </TableCell>
                             <TableCell>{{ row.user_name ?? '—' }}</TableCell>
-                            <TableCell class="font-mono text-xs">{{ row.model ?? '—' }}</TableCell>
-                            <TableCell class="text-right">{{ formatNumber(row.total_tokens) }}</TableCell>
-                            <TableCell class="text-right">{{ row.tool_calls_count }}</TableCell>
-                            <TableCell class="text-right">{{ formatCost(row.cost) }}</TableCell>
-                            <TableCell v-if="scenarioActive" class="text-right text-primary">
-                                {{ formatCost(indexedScenarioRecent[row.id] ?? '0') }}
+                            <TableCell class="font-mono text-xs">{{
+                                row.model ?? '—'
+                            }}</TableCell>
+                            <TableCell class="text-right">{{
+                                formatNumber(row.total_tokens)
+                            }}</TableCell>
+                            <TableCell class="text-right">{{
+                                row.tool_calls_count
+                            }}</TableCell>
+                            <TableCell class="text-right">{{
+                                formatCost(row.cost)
+                            }}</TableCell>
+                            <TableCell
+                                v-if="scenarioActive"
+                                class="text-right text-primary"
+                            >
+                                {{
+                                    formatCost(
+                                        indexedScenarioRecent[row.id] ?? '0',
+                                    )
+                                }}
                             </TableCell>
                             <TableCell>
-                                <Badge :variant="row.status === 'success' ? 'secondary' : 'destructive'">
+                                <Badge
+                                    :variant="
+                                        row.status === 'success'
+                                            ? 'secondary'
+                                            : 'destructive'
+                                    "
+                                >
                                     {{ row.status }}
                                 </Badge>
                             </TableCell>

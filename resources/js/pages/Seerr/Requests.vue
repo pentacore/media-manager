@@ -13,7 +13,8 @@ import {
 } from 'lucide-vue-next';
 import { computed, onMounted } from 'vue';
 import RequestController from '@/actions/App/Http/Controllers/Media/RequestController';
-import { Badge, BadgeVariants } from '@/components/ui/badge';
+import type { BadgeVariants } from '@/components/ui/badge';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import {

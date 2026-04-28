@@ -56,10 +56,10 @@ const selectedMode = ref(props.settings.mode);
             <CardHeader>
                 <CardTitle>AI Settings</CardTitle>
                 <CardDescription>
-                    Choose the operating mode and which model the AI agent
-                    uses. The model is a free-form string — it must match a
-                    model identifier supported by a configured laravel/ai
-                    provider (e.g.
+                    Choose the operating mode and which model the AI agent uses.
+                    The model is a free-form string — it must match a model
+                    identifier supported by a configured laravel/ai provider
+                    (e.g.
                     <code>gpt-5-mini</code>, <code>claude-haiku-4-5</code>,
                     <code>gemini-3-flash-preview</code>).
                 </CardDescription>
@@ -91,14 +91,13 @@ const selectedMode = ref(props.settings.mode);
                             </SelectContent>
                         </Select>
                         <p class="text-sm text-muted-foreground">
-                            <strong>Executive</strong>: the agent can create
-                            and (when auto-approve is configured)
-                            auto-execute ActionRequests.<br />
-                            <strong>Advisory</strong>: destructive tools
-                            refuse to queue and every ActionRequest stays
-                            Pending regardless of the per-type rule. Use
-                            this while evaluating the AI before shipping
-                            full auto.
+                            <strong>Executive</strong>: the agent can create and
+                            (when auto-approve is configured) auto-execute
+                            ActionRequests.<br />
+                            <strong>Advisory</strong>: destructive tools refuse
+                            to queue and every ActionRequest stays Pending
+                            regardless of the per-type rule. Use this while
+                            evaluating the AI before shipping full auto.
                         </p>
                         <InputError :message="errors.mode" />
                     </div>

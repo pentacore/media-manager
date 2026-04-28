@@ -122,32 +122,78 @@ function destroy(price: PriceRow) {
                         <div class="grid grid-cols-2 gap-4">
                             <div class="space-y-2">
                                 <Label for="input_per_mtok">Input ($/M)</Label>
-                                <Input id="input_per_mtok" name="input_per_mtok" type="number" step="0.0001" min="0" />
+                                <Input
+                                    id="input_per_mtok"
+                                    name="input_per_mtok"
+                                    type="number"
+                                    step="0.0001"
+                                    min="0"
+                                />
                                 <InputError :message="errors.input_per_mtok" />
                             </div>
                             <div class="space-y-2">
-                                <Label for="output_per_mtok">Output ($/M)</Label>
-                                <Input id="output_per_mtok" name="output_per_mtok" type="number" step="0.0001" min="0" />
+                                <Label for="output_per_mtok"
+                                    >Output ($/M)</Label
+                                >
+                                <Input
+                                    id="output_per_mtok"
+                                    name="output_per_mtok"
+                                    type="number"
+                                    step="0.0001"
+                                    min="0"
+                                />
                                 <InputError :message="errors.output_per_mtok" />
                             </div>
                             <div class="space-y-2">
-                                <Label for="cache_read_per_mtok">Cache Read ($/M)</Label>
-                                <Input id="cache_read_per_mtok" name="cache_read_per_mtok" type="number" step="0.0001" min="0" />
-                                <InputError :message="errors.cache_read_per_mtok" />
+                                <Label for="cache_read_per_mtok"
+                                    >Cache Read ($/M)</Label
+                                >
+                                <Input
+                                    id="cache_read_per_mtok"
+                                    name="cache_read_per_mtok"
+                                    type="number"
+                                    step="0.0001"
+                                    min="0"
+                                />
+                                <InputError
+                                    :message="errors.cache_read_per_mtok"
+                                />
                             </div>
                             <div class="space-y-2">
-                                <Label for="cache_write_per_mtok">Cache Write ($/M)</Label>
-                                <Input id="cache_write_per_mtok" name="cache_write_per_mtok" type="number" step="0.0001" min="0" />
-                                <InputError :message="errors.cache_write_per_mtok" />
+                                <Label for="cache_write_per_mtok"
+                                    >Cache Write ($/M)</Label
+                                >
+                                <Input
+                                    id="cache_write_per_mtok"
+                                    name="cache_write_per_mtok"
+                                    type="number"
+                                    step="0.0001"
+                                    min="0"
+                                />
+                                <InputError
+                                    :message="errors.cache_write_per_mtok"
+                                />
                             </div>
-                            <div class="space-y-2 col-span-2">
-                                <Label for="reasoning_per_mtok">Reasoning ($/M)</Label>
-                                <Input id="reasoning_per_mtok" name="reasoning_per_mtok" type="number" step="0.0001" min="0" />
-                                <InputError :message="errors.reasoning_per_mtok" />
+                            <div class="col-span-2 space-y-2">
+                                <Label for="reasoning_per_mtok"
+                                    >Reasoning ($/M)</Label
+                                >
+                                <Input
+                                    id="reasoning_per_mtok"
+                                    name="reasoning_per_mtok"
+                                    type="number"
+                                    step="0.0001"
+                                    min="0"
+                                />
+                                <InputError
+                                    :message="errors.reasoning_per_mtok"
+                                />
                             </div>
                         </div>
                         <DialogFooter>
-                            <Button type="submit" :disabled="processing">Save</Button>
+                            <Button type="submit" :disabled="processing"
+                                >Save</Button
+                            >
                         </DialogFooter>
                     </Form>
                 </DialogContent>
@@ -174,34 +220,64 @@ function destroy(price: PriceRow) {
                     </TableHeader>
                     <TableBody>
                         <TableRow v-for="price in prices" :key="price.id">
-                            <TableCell class="font-medium">{{ price.provider }}</TableCell>
-                            <TableCell class="font-mono text-xs">{{ price.model }}</TableCell>
-                            <TableCell class="text-right">${{ price.input_per_mtok }}</TableCell>
-                            <TableCell class="text-right">${{ price.output_per_mtok }}</TableCell>
-                            <TableCell class="text-right">${{ price.cache_read_per_mtok }}</TableCell>
-                            <TableCell class="text-right">${{ price.cache_write_per_mtok }}</TableCell>
-                            <TableCell class="text-right">${{ price.reasoning_per_mtok }}</TableCell>
+                            <TableCell class="font-medium">{{
+                                price.provider
+                            }}</TableCell>
+                            <TableCell class="font-mono text-xs">{{
+                                price.model
+                            }}</TableCell>
+                            <TableCell class="text-right"
+                                >${{ price.input_per_mtok }}</TableCell
+                            >
+                            <TableCell class="text-right"
+                                >${{ price.output_per_mtok }}</TableCell
+                            >
+                            <TableCell class="text-right"
+                                >${{ price.cache_read_per_mtok }}</TableCell
+                            >
+                            <TableCell class="text-right"
+                                >${{ price.cache_write_per_mtok }}</TableCell
+                            >
+                            <TableCell class="text-right"
+                                >${{ price.reasoning_per_mtok }}</TableCell
+                            >
                             <TableCell class="text-right">
                                 <div class="flex justify-end gap-2">
-                                    <Button variant="outline" size="sm" @click="startEdit(price)">Edit</Button>
-                                    <Button variant="ghost" size="icon" @click="destroy(price)">
+                                    <Button
+                                        variant="outline"
+                                        size="sm"
+                                        @click="startEdit(price)"
+                                        >Edit</Button
+                                    >
+                                    <Button
+                                        variant="ghost"
+                                        size="icon"
+                                        @click="destroy(price)"
+                                    >
                                         <Trash2 class="size-4" />
                                     </Button>
                                 </div>
                             </TableCell>
                         </TableRow>
                         <TableEmpty v-if="prices.length === 0" :colspan="8">
-                            No models priced yet. Click "Add Model Price" to start.
+                            No models priced yet. Click "Add Model Price" to
+                            start.
                         </TableEmpty>
                     </TableBody>
                 </Table>
             </CardContent>
         </Card>
 
-        <Dialog :open="editing !== null" @update:open="(v) => !v && cancelEdit()">
+        <Dialog
+            :open="editing !== null"
+            @update:open="(v) => !v && cancelEdit()"
+        >
             <DialogContent v-if="editing">
                 <DialogHeader>
-                    <DialogTitle>Edit {{ editing.provider }} / {{ editing.model }}</DialogTitle>
+                    <DialogTitle
+                        >Edit {{ editing.provider }} /
+                        {{ editing.model }}</DialogTitle
+                    >
                 </DialogHeader>
                 <Form
                     v-bind="AiModelPriceController.update.form(editing.id)"
@@ -212,32 +288,71 @@ function destroy(price: PriceRow) {
                     <div class="grid grid-cols-2 gap-4">
                         <div class="space-y-2">
                             <Label for="edit_input">Input ($/M)</Label>
-                            <Input id="edit_input" name="input_per_mtok" type="number" step="0.0001" min="0" :default-value="editing.input_per_mtok" />
+                            <Input
+                                id="edit_input"
+                                name="input_per_mtok"
+                                type="number"
+                                step="0.0001"
+                                min="0"
+                                :default-value="editing.input_per_mtok"
+                            />
                             <InputError :message="errors.input_per_mtok" />
                         </div>
                         <div class="space-y-2">
                             <Label for="edit_output">Output ($/M)</Label>
-                            <Input id="edit_output" name="output_per_mtok" type="number" step="0.0001" min="0" :default-value="editing.output_per_mtok" />
+                            <Input
+                                id="edit_output"
+                                name="output_per_mtok"
+                                type="number"
+                                step="0.0001"
+                                min="0"
+                                :default-value="editing.output_per_mtok"
+                            />
                             <InputError :message="errors.output_per_mtok" />
                         </div>
                         <div class="space-y-2">
                             <Label for="edit_cache_r">Cache Read ($/M)</Label>
-                            <Input id="edit_cache_r" name="cache_read_per_mtok" type="number" step="0.0001" min="0" :default-value="editing.cache_read_per_mtok" />
+                            <Input
+                                id="edit_cache_r"
+                                name="cache_read_per_mtok"
+                                type="number"
+                                step="0.0001"
+                                min="0"
+                                :default-value="editing.cache_read_per_mtok"
+                            />
                             <InputError :message="errors.cache_read_per_mtok" />
                         </div>
                         <div class="space-y-2">
                             <Label for="edit_cache_w">Cache Write ($/M)</Label>
-                            <Input id="edit_cache_w" name="cache_write_per_mtok" type="number" step="0.0001" min="0" :default-value="editing.cache_write_per_mtok" />
-                            <InputError :message="errors.cache_write_per_mtok" />
+                            <Input
+                                id="edit_cache_w"
+                                name="cache_write_per_mtok"
+                                type="number"
+                                step="0.0001"
+                                min="0"
+                                :default-value="editing.cache_write_per_mtok"
+                            />
+                            <InputError
+                                :message="errors.cache_write_per_mtok"
+                            />
                         </div>
-                        <div class="space-y-2 col-span-2">
+                        <div class="col-span-2 space-y-2">
                             <Label for="edit_reasoning">Reasoning ($/M)</Label>
-                            <Input id="edit_reasoning" name="reasoning_per_mtok" type="number" step="0.0001" min="0" :default-value="editing.reasoning_per_mtok" />
+                            <Input
+                                id="edit_reasoning"
+                                name="reasoning_per_mtok"
+                                type="number"
+                                step="0.0001"
+                                min="0"
+                                :default-value="editing.reasoning_per_mtok"
+                            />
                             <InputError :message="errors.reasoning_per_mtok" />
                         </div>
                     </div>
                     <DialogFooter>
-                        <Button type="submit" :disabled="processing">Save</Button>
+                        <Button type="submit" :disabled="processing"
+                            >Save</Button
+                        >
                     </DialogFooter>
                 </Form>
             </DialogContent>

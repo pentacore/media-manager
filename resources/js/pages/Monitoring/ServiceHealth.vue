@@ -379,7 +379,12 @@ function indexersFor(connectionId: number): Indexer[] | undefined {
                             class="flex items-center justify-between text-sm"
                         >
                             <span class="truncate">{{ indexer.name }}</span>
-                            <Badge :variant="indexer.enable ? 'default' : 'outline'" class="text-xs shrink-0">
+                            <Badge
+                                :variant="
+                                    indexer.enable ? 'default' : 'outline'
+                                "
+                                class="shrink-0 text-xs"
+                            >
                                 {{ indexer.enable ? 'Enabled' : 'Disabled' }}
                             </Badge>
                         </div>
