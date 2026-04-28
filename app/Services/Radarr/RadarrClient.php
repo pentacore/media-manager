@@ -8,13 +8,14 @@ use App\Cache\Services\RadarrCache;
 use App\Services\Arr\ArrClient;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\RequestException;
+use Override;
 
 /**
  * @see https://raw.githubusercontent.com/Radarr/Radarr/develop/src/Radarr.Api.V3/openapi.json for up-to-date openApi Spec
  */
 class RadarrClient extends ArrClient
 {
-    private ?RadarrCache $cache = null;
+    private ?RadarrCache $radarrCache = null;
 
     /**
      * @return array<int, array<string, mixed>>
@@ -92,6 +93,7 @@ class RadarrClient extends ArrClient
      *
      * @throws RequestException|ConnectionException
      */
+    #[Override]
     public function getQualityProfiles(): array
     {
         return $this->cache()->rememberMetadata(
@@ -105,6 +107,7 @@ class RadarrClient extends ArrClient
      *
      * @throws RequestException|ConnectionException
      */
+    #[Override]
     public function getRootFolders(): array
     {
         return $this->cache()->rememberMetadata(
@@ -115,6 +118,6 @@ class RadarrClient extends ArrClient
 
     private function cache(): RadarrCache
     {
-        return $this->cache ??= new RadarrCache($this->connection);
+        return $this->radarrCache ??= new RadarrCache($this->connection);
     }
 }

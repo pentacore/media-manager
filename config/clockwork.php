@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 use Illuminate\Container\Container;
 use Illuminate\Foundation\Application;
 
@@ -16,7 +18,7 @@ return [
     |
     */
 
-    'enable' => env('CLOCKWORK_ENABLE', null),
+    'enable' => env('CLOCKWORK_ENABLE'),
 
     /*
     |------------------------------------------------------------------------------------------------------------------

@@ -21,7 +21,7 @@ class SeerrClient
 {
     protected string $apiVersion = 'v1';
 
-    private ?SeerrCache $cache = null;
+    private ?SeerrCache $seerrCache = null;
 
     public function __construct(
         protected ServiceConnection $connection,
@@ -231,6 +231,6 @@ class SeerrClient
 
     private function cache(): SeerrCache
     {
-        return $this->cache ??= new SeerrCache($this->connection);
+        return $this->seerrCache ??= new SeerrCache($this->connection);
     }
 }

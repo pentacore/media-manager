@@ -168,6 +168,10 @@ Conversation history is healed automatically before each request — orphaned to
 
 Admin-only access is enforced by the `ai.enabled` + `role:admin` middleware combo on `routes/ai.php`.
 
+## External-API caching
+
+Slow Sonarr / Radarr / Seerr / Prowlarr / TMDB / Trakt reads pass through `app/Cache/Services/{Service}Cache.php`, backed by Valkey (Redis-compatible) with tagged invalidation. TTLs are configurable via `MEDIAMANAGER_CACHE_TTL_{LIST,ENTITY,METADATA}` (defaults: 60s / 300s / 600s). Webhook handlers (`{Service}WebhookHandler::handle()`) and local action executors (`{Service}Actions`, `RequestController` write paths) call `bustAll()` to evict per-connection tags so writes feel immediate; TTL alone covers third-party providers (TMDB/Trakt) which we cannot invalidate on demand. Cache driver is set explicitly via `MEDIAMANAGER_CACHE_STORE` (default `redis`) — independent of Laravel's global `CACHE_STORE`. Tests use the `array` driver via `tests/Pest.php`.
+
 ## Webhooks
 
 Point each service's outbound webhook at:

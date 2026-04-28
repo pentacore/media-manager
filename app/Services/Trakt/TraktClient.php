@@ -14,7 +14,7 @@ use RuntimeException;
 
 class TraktClient
 {
-    private ?TraktCache $cache = null;
+    private ?TraktCache $traktCache = null;
 
     protected function buildClient(): PendingRequest
     {
@@ -82,7 +82,7 @@ class TraktClient
 
     private function cache(): TraktCache
     {
-        return $this->cache ??= new TraktCache;
+        return $this->traktCache ??= new TraktCache;
     }
 
     private function collectionFor(string $mediaType): string

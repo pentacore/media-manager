@@ -18,7 +18,7 @@ class ProwlarrClient extends ArrClient
     #[Override]
     protected string $apiVersion = 'v1';
 
-    private ?ProwlarrCache $cache = null;
+    private ?ProwlarrCache $prowlarrCache = null;
 
     /**
      * Search across configured indexers.
@@ -109,6 +109,7 @@ class ProwlarrClient extends ArrClient
      *
      * @throws RequestException|ConnectionException
      */
+    #[Override]
     public function getQualityProfiles(): array
     {
         return $this->cache()->rememberMetadata(
@@ -122,6 +123,7 @@ class ProwlarrClient extends ArrClient
      *
      * @throws RequestException|ConnectionException
      */
+    #[Override]
     public function getRootFolders(): array
     {
         return $this->cache()->rememberMetadata(
@@ -135,6 +137,7 @@ class ProwlarrClient extends ArrClient
      *
      * @throws RequestException|ConnectionException
      */
+    #[Override]
     public function getDiskSpace(): array
     {
         return $this->cache()->rememberMetadata(
@@ -145,6 +148,6 @@ class ProwlarrClient extends ArrClient
 
     private function cache(): ProwlarrCache
     {
-        return $this->cache ??= new ProwlarrCache($this->connection);
+        return $this->prowlarrCache ??= new ProwlarrCache($this->connection);
     }
 }

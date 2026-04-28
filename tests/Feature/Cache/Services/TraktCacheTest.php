@@ -13,6 +13,7 @@ test('TraktCache caches and busts under the bare service tag', function (): void
     $cache = new TraktCache;
 
     $cache->rememberMetadata('list:1', fn (): array => ['t' => 'first']);
+
     $hits = 0;
     $cache->rememberMetadata('list:1', function () use (&$hits): array {
         $hits++;

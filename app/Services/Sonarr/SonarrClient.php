@@ -8,6 +8,7 @@ use App\Cache\Services\SonarrCache;
 use App\Services\Arr\ArrClient;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\RequestException;
+use Override;
 
 /**
  * @see https://sonarr.tv/docs/api/#v3 for API Spec
@@ -15,7 +16,7 @@ use Illuminate\Http\Client\RequestException;
  */
 class SonarrClient extends ArrClient
 {
-    private ?SonarrCache $cache = null;
+    private ?SonarrCache $sonarrCache = null;
 
     /**
      * @return array<int, array<string, mixed>>
@@ -109,6 +110,7 @@ class SonarrClient extends ArrClient
      *
      * @throws RequestException|ConnectionException
      */
+    #[Override]
     public function getQualityProfiles(): array
     {
         return $this->cache()->rememberMetadata(
@@ -122,6 +124,7 @@ class SonarrClient extends ArrClient
      *
      * @throws RequestException|ConnectionException
      */
+    #[Override]
     public function getRootFolders(): array
     {
         return $this->cache()->rememberMetadata(
@@ -132,6 +135,6 @@ class SonarrClient extends ArrClient
 
     private function cache(): SonarrCache
     {
-        return $this->cache ??= new SonarrCache($this->connection);
+        return $this->sonarrCache ??= new SonarrCache($this->connection);
     }
 }

@@ -71,8 +71,8 @@ test('getIndexerStats caches per-arg-shape', function (): void {
     ]);
 
     $client = new ProwlarrClient($this->connection);
-    $client->getIndexerStats(null, null);
-    $client->getIndexerStats(null, null);
+    $client->getIndexerStats();
+    $client->getIndexerStats();
 
     Http::assertSentCount(1);
 });

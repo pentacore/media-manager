@@ -8,7 +8,7 @@ use App\Models\ServiceConnection;
 
 class ProwlarrCache extends BaseServiceCache
 {
-    public function __construct(private ServiceConnection $connection) {}
+    public function __construct(private readonly ServiceConnection $serviceConnection) {}
 
     protected function service(): string
     {
@@ -17,7 +17,7 @@ class ProwlarrCache extends BaseServiceCache
 
     protected function connectionId(): ?int
     {
-        return $this->connection->id;
+        return $this->serviceConnection->id;
     }
 
     /**

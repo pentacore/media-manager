@@ -14,7 +14,7 @@ use RuntimeException;
 
 class TmdbClient
 {
-    private ?TmdbCache $cache = null;
+    private ?TmdbCache $tmdbCache = null;
 
     protected function buildClient(): PendingRequest
     {
@@ -78,7 +78,7 @@ class TmdbClient
 
     private function cache(): TmdbCache
     {
-        return $this->cache ??= new TmdbCache;
+        return $this->tmdbCache ??= new TmdbCache;
     }
 
     private function endpointFor(string $mediaType, int $tmdbId, string $suffix = ''): string
