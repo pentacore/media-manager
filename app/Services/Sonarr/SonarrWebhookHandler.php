@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Services\Sonarr;
 
+use App\Cache\Services\SonarrCache;
 use App\Models\WebhookEvent;
 use App\Services\Actions\ActionOrchestrator;
 use App\Services\Webhook\AbstractWebhookHandler;
@@ -41,6 +42,10 @@ class SonarrWebhookHandler extends AbstractWebhookHandler
         };
 
         $webhookEvent->markProcessed();
+
+        if ($webhookEvent->serviceConnection !== null) {
+            new SonarrCache($webhookEvent->serviceConnection)->bustAll();
+        }
     }
 
     /**

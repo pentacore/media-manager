@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Services\Sonarr;
 
+use App\Cache\Services\SonarrCache;
 use App\Services\Arr\ArrClient;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\RequestException;
@@ -21,7 +22,10 @@ class SonarrClient extends ArrClient
      */
     public function getSeries(): array
     {
-        return $this->buildClient()->get(sprintf('/api/%s/series', $this->apiVersion))->throw()->json() ?? [];
+        return $this->cache()->rememberList(
+            'list',
+            fn (): array => $this->buildClient()->get(sprintf('/api/%s/series', $this->apiVersion))->throw()->json() ?? [],
+        );
     }
 
     /**
@@ -31,7 +35,10 @@ class SonarrClient extends ArrClient
      */
     public function getSeriesById(int $id): array
     {
-        return $this->buildClient()->get(sprintf('/api/%s/series/%d', $this->apiVersion, $id))->throw()->json() ?? [];
+        return $this->cache()->rememberEntity(
+            'series:'.$id,
+            fn (): array => $this->buildClient()->get(sprintf('/api/%s/series/%d', $this->apiVersion, $id))->throw()->json() ?? [],
+        );
     }
 
     /**
@@ -41,6 +48,7 @@ class SonarrClient extends ArrClient
      */
     public function addSeries(array $data): array
     {
+        // Write — not cached; bust handled by SonarrActions.
         return $this->buildClient()->post(sprintf('/api/%s/series', $this->apiVersion), $data)->throw()->json() ?? [];
     }
 
@@ -72,7 +80,10 @@ class SonarrClient extends ArrClient
      */
     public function searchSeries(string $query): array
     {
-        return $this->buildClient()->get(sprintf('/api/%s/series/lookup', $this->apiVersion), ['term' => $query])->throw()->json() ?? [];
+        return $this->cache()->rememberList(
+            'search:'.md5($query),
+            fn (): array => $this->buildClient()->get(sprintf('/api/%s/series/lookup', $this->apiVersion), ['term' => $query])->throw()->json() ?? [],
+        );
     }
 
     /**
@@ -82,9 +93,43 @@ class SonarrClient extends ArrClient
      */
     public function getEpisodesBySeries(int $seriesId): array
     {
-        return $this->buildClient()
-            ->get(sprintf('/api/%s/episode', $this->apiVersion), ['seriesId' => $seriesId])
-            ->throw()
-            ->json() ?? [];
+        return $this->cache()->rememberList(
+            'episodes:'.$seriesId,
+            fn (): array => $this->buildClient()
+                ->get(sprintf('/api/%s/episode', $this->apiVersion), ['seriesId' => $seriesId])
+                ->throw()
+                ->json() ?? [],
+        );
+    }
+
+    /**
+     * @return array<int, array<string, mixed>>
+     *
+     * @throws RequestException|ConnectionException
+     */
+    public function getQualityProfiles(): array
+    {
+        return $this->cache()->rememberMetadata(
+            'quality-profiles',
+            fn (): array => parent::getQualityProfiles(),
+        );
+    }
+
+    /**
+     * @return array<int, array<string, mixed>>
+     *
+     * @throws RequestException|ConnectionException
+     */
+    public function getRootFolders(): array
+    {
+        return $this->cache()->rememberMetadata(
+            'root-folders',
+            fn (): array => parent::getRootFolders(),
+        );
+    }
+
+    private function cache(): SonarrCache
+    {
+        return new SonarrCache($this->connection);
     }
 }

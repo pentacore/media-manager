@@ -5,6 +5,7 @@ declare(strict_types=1);
 use App\Jobs\FetchLatestServiceVersion;
 use App\Jobs\PingServiceHealth;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Queue;
 use Tests\TestCase;
 
@@ -29,6 +30,12 @@ pest()->extend(TestCase::class)
         // Fake only those two jobs by default — other jobs (webhook handlers,
         // etc.) keep their normal sync dispatch behaviour.
         Queue::fake([PingServiceHealth::class, FetchLatestServiceVersion::class]);
+
+        // External-API caches (app/Cache/Services) default to redis in production.
+        // Force the array store in tests so per-test state is isolated and tagged
+        // flushes don't leak across runs.
+        config()->set('mediamanager.cache.store', 'array');
+        Cache::store('array')->flush();
     })
     ->in('Feature');
 
@@ -36,6 +43,9 @@ pest()->extend(TestCase::class)
     ->use(RefreshDatabase::class)
     ->beforeEach(function (): void {
         Queue::fake([PingServiceHealth::class, FetchLatestServiceVersion::class]);
+
+        config()->set('mediamanager.cache.store', 'array');
+        Cache::store('array')->flush();
     })
     ->in('Browser');
 

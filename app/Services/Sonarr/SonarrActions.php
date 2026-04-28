@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Services\Sonarr;
 
+use App\Cache\Services\SonarrCache;
 use App\Enums\ServiceType;
 use App\Models\ActionRequest;
 use App\Models\ServiceConnection;
@@ -38,8 +39,9 @@ class SonarrActions implements ActionExecutor
 
         $deleteFiles = (bool) ($payload['delete_files'] ?? false);
 
-        $sonarrClient = new SonarrClient(ServiceConnection::resolveActive(ServiceType::Sonarr));
-        $sonarrClient->deleteSeries($seriesId, $deleteFiles);
+        $connection = ServiceConnection::resolveActive(ServiceType::Sonarr);
+        new SonarrClient($connection)->deleteSeries($seriesId, $deleteFiles);
+        new SonarrCache($connection)->bustAll();
 
         return [
             'sonarr_series_id' => $seriesId,
@@ -57,7 +59,8 @@ class SonarrActions implements ActionExecutor
 
         throw_if($tvdbId <= 0, InvalidArgumentException::class, 'tvdb_id is required');
 
-        $sonarrClient = new SonarrClient(ServiceConnection::resolveActive(ServiceType::Sonarr));
+        $connection = ServiceConnection::resolveActive(ServiceType::Sonarr);
+        $sonarrClient = new SonarrClient($connection);
 
         // Look up the full series spec by tvdb_id (Sonarr's lookup accepts "tvdb:{id}" syntax).
         $candidates = $sonarrClient->searchSeries(sprintf('tvdb:%d', $tvdbId));
@@ -73,6 +76,8 @@ class SonarrActions implements ActionExecutor
             'seasonFolder' => (bool) ($payload['season_folder'] ?? true),
             'addOptions' => ['searchForMissingEpisodes' => true],
         ]));
+
+        new SonarrCache($connection)->bustAll();
 
         return [
             'sonarr_series_id' => $series['id'] ?? null,
@@ -93,10 +98,12 @@ class SonarrActions implements ActionExecutor
 
         $monitored = (bool) ($payload['monitored'] ?? true);
 
-        $sonarrClient = new SonarrClient(ServiceConnection::resolveActive(ServiceType::Sonarr));
+        $connection = ServiceConnection::resolveActive(ServiceType::Sonarr);
+        $sonarrClient = new SonarrClient($connection);
         $series = $sonarrClient->getSeriesById($seriesId);
         $series['monitored'] = $monitored;
         $sonarrClient->updateSeries($seriesId, $series);
+        new SonarrCache($connection)->bustAll();
 
         return [
             'sonarr_series_id' => $seriesId,
@@ -116,10 +123,12 @@ class SonarrActions implements ActionExecutor
         throw_if($seriesId <= 0, InvalidArgumentException::class, 'series_id is required');
         throw_if($qualityProfileId <= 0, InvalidArgumentException::class, 'quality_profile_id is required');
 
-        $sonarrClient = new SonarrClient(ServiceConnection::resolveActive(ServiceType::Sonarr));
+        $connection = ServiceConnection::resolveActive(ServiceType::Sonarr);
+        $sonarrClient = new SonarrClient($connection);
         $series = $sonarrClient->getSeriesById($seriesId);
         $series['qualityProfileId'] = $qualityProfileId;
         $sonarrClient->updateSeries($seriesId, $series);
+        new SonarrCache($connection)->bustAll();
 
         return [
             'sonarr_series_id' => $seriesId,
