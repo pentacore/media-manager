@@ -1,9 +1,9 @@
 <script setup lang="ts">
 import { Head, router, usePage } from '@inertiajs/vue3';
-import { History, Sparkles } from 'lucide-vue-next';
+import { Calendar, Download, Sparkles } from 'lucide-vue-next';
 import { computed, onMounted, watch } from 'vue';
 import WatchHistoryController from '@/actions/App/Http/Controllers/Emby/WatchHistoryController';
-import { Badge } from '@/components/ui/badge';
+import { InitialsAvatar, Pill, StatCard, SvcChip } from '@/components/mm';
 import { Button } from '@/components/ui/button';
 import {
     Select,
@@ -12,14 +12,6 @@ import {
     SelectTrigger,
     SelectValue,
 } from '@/components/ui/select';
-import {
-    Table,
-    TableBody,
-    TableCell,
-    TableHead,
-    TableHeader,
-    TableRow,
-} from '@/components/ui/table';
 import { useRealtimeList } from '@/composables/useRealtimeList';
 import { dashboard } from '@/routes';
 import type { EmbyActivityResource } from '@/typefinder/resources/EmbyActivityResource';
@@ -51,8 +43,8 @@ const props = defineProps<{
 defineOptions({
     layout: {
         breadcrumbs: [
-            { title: 'Dashboard', href: dashboard() },
-            { title: 'Watch History', href: WatchHistoryController().url },
+            { title: 'Live', href: dashboard().url },
+            { title: 'Watch history', href: WatchHistoryController().url },
         ],
     },
 });
@@ -62,8 +54,8 @@ const isViewer = computed(() => {
     const role = page.props.auth.user?.role;
 
     if (!role) {
-        return false;
-    }
+return false;
+}
 
     const value = typeof role === 'string' ? role : role.value;
 
@@ -72,8 +64,6 @@ const isViewer = computed(() => {
 
 const hasFilter = computed(() => props.filters.media_type !== '');
 const onFirstPage = computed(() => props.activities.meta.current_page === 1);
-// Viewers only see their own history server-side, but the broadcast carries
-// every user's activity — pause for viewers so we don't leak.
 const merge = computed(
     () => !hasFilter.value && onFirstPage.value && !isViewer.value,
 );
@@ -116,46 +106,104 @@ function refresh(): void {
 
 function formatTime(iso: string | null): string {
     if (!iso) {
-        return '-';
-    }
-
-    const date = new Date(iso);
-    const now = new Date();
-    const diffMs = now.getTime() - date.getTime();
-    const diffMins = Math.floor(diffMs / 60000);
-
-    if (diffMins < 1) {
-        return 'Just now';
-    }
-
-    if (diffMins < 60) {
-        return `${diffMins}m ago`;
-    }
-
-    const diffHours = Math.floor(diffMins / 60);
-
-    if (diffHours < 24) {
-        return `${diffHours}h ago`;
-    }
-
-    const diffDays = Math.floor(diffHours / 24);
-
-    return `${diffDays}d ago`;
+return '—';
 }
 
-function actionBadgeVariant(
-    action: string | null,
-): 'default' | 'secondary' | 'outline' {
-    if (action === 'played') {
-        return 'default';
-    }
+    const ms = Date.now() - new Date(iso).getTime();
+    const m = Math.floor(ms / 60_000);
 
-    if (action === 'stopped') {
-        return 'secondary';
-    }
-
-    return 'outline';
+    if (m < 1) {
+return 'just now';
 }
+
+    if (m < 60) {
+return `${m}m ago`;
+}
+
+    const h = Math.floor(m / 60);
+
+    if (h < 24) {
+return `${h}h ago`;
+}
+
+    return `${Math.floor(h / 24)}d ago`;
+}
+
+function ticksToHours(ticks: number | null): number {
+    if (!ticks) {
+return 0;
+}
+
+    return ticks / 10_000_000 / 3600;
+}
+
+function ticksToText(ticks: number | null): string {
+    if (!ticks) {
+return '0m';
+}
+
+    const total = Math.floor(ticks / 10_000_000);
+    const h = Math.floor(total / 3600);
+    const m = Math.floor((total % 3600) / 60);
+
+    if (h > 0) {
+return `${h}h ${m}m`;
+}
+
+    return `${m}m`;
+}
+
+function completionPct(activity: Activity): number {
+    const pos = activity.play_position ?? 0;
+    const dur = activity.duration_ticks ?? 0;
+
+    if (!dur) {
+return 0;
+}
+
+    return Math.min(100, (pos / dur) * 100);
+}
+
+const totals = computed(() => {
+    const items = visibleActivities.value;
+    let totalTicks = 0;
+    let completed = 0;
+    const userTicks = new Map<string, number>();
+
+    for (const a of items) {
+        const dur = a.duration_ticks ?? 0;
+        totalTicks += dur;
+
+        if (completionPct(a) >= 90) {
+completed++;
+}
+
+        const u = a.emby_username ?? 'unknown';
+        userTicks.set(u, (userTicks.get(u) ?? 0) + dur);
+    }
+
+    let topUser: { name: string; ticks: number; sessions: number } | null = null;
+
+    for (const [name, ticks] of userTicks) {
+        if (!topUser || ticks > topUser.ticks) {
+            topUser = {
+                name,
+                ticks,
+                sessions: items.filter(
+                    (a) => (a.emby_username ?? 'unknown') === name,
+                ).length,
+            };
+        }
+    }
+
+    return {
+        hours: ticksToHours(totalTicks),
+        sessions: items.length,
+        completionRate:
+            items.length > 0 ? Math.round((completed / items.length) * 100) : 0,
+        topUser,
+    };
+});
 
 function onMediaTypeChange(value: unknown) {
     const v = typeof value === 'string' ? value : '';
@@ -168,8 +216,8 @@ function onMediaTypeChange(value: unknown) {
 
 function goToPage(url: string | null) {
     if (!url) {
-        return;
-    }
+return;
+}
 
     router.get(url, {}, { preserveState: true, preserveScroll: true });
 }
@@ -180,105 +228,206 @@ function currentFilter(): string {
 </script>
 
 <template>
-    <Head title="Watch History" />
+    <Head title="Watch history" />
 
-    <div class="space-y-6 p-6">
-        <div class="flex items-start justify-between gap-4">
+    <div class="flex flex-col gap-4 p-5">
+        <!-- Hero -->
+        <div class="flex items-end justify-between gap-3">
             <div>
-                <h2
-                    class="flex items-center gap-2 text-2xl font-bold tracking-tight"
+                <div class="mb-1.5 flex items-center gap-2">
+                    <SvcChip id="emby" />
+                    <span class="text-fg-subtle">/</span>
+                    <span class="text-[13px] text-muted-foreground"
+                        >Watch history</span
+                    >
+                </div>
+                <h1
+                    class="text-[22px] leading-tight font-semibold tracking-tight"
                 >
-                    <History class="size-6" />
-                    Watch History
-                </h2>
-                <p class="text-muted-foreground">
-                    {{ activities.meta.total }}
-                    {{ activities.meta.total === 1 ? 'entry' : 'entries' }}
+                    Watch history
+                </h1>
+                <p class="mt-1 text-[13px] text-muted-foreground">
+                    {{ activities.meta.total }} entries · synced from Emby
                 </p>
             </div>
-
-            <Select
-                :default-value="currentFilter()"
-                @update:model-value="onMediaTypeChange"
-            >
-                <SelectTrigger class="w-40">
-                    <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                    <SelectItem value="all">All types</SelectItem>
-                    <SelectItem value="movie">Movie</SelectItem>
-                    <SelectItem value="episode">Episode</SelectItem>
-                </SelectContent>
-            </Select>
+            <div class="flex items-center gap-2">
+                <Select
+                    :default-value="currentFilter()"
+                    @update:model-value="onMediaTypeChange"
+                >
+                    <SelectTrigger class="h-7 w-32 text-xs">
+                        <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                        <SelectItem value="all">All types</SelectItem>
+                        <SelectItem value="movie">Movie</SelectItem>
+                        <SelectItem value="episode">Episode</SelectItem>
+                    </SelectContent>
+                </Select>
+                <Button variant="outline" size="sm" class="h-7 gap-1.5 text-xs">
+                    <Calendar class="size-3.5" />Last 7 days
+                </Button>
+                <Button variant="outline" size="sm" class="h-7 gap-1.5 text-xs">
+                    <Download class="size-3.5" />Export CSV
+                </Button>
+            </div>
         </div>
 
+        <!-- Stats -->
+        <div class="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+            <StatCard
+                label="Total watch time"
+                :value="`${totals.hours.toFixed(1)}h`"
+                :hint="`across ${totals.sessions} sessions`"
+            />
+            <StatCard
+                label="Sessions"
+                :value="totals.sessions"
+                hint="visible in this view"
+            />
+            <StatCard
+                label="Completion rate"
+                :value="`${totals.completionRate}%`"
+                hint="≥90% counted as complete"
+            />
+            <div
+                class="flex min-h-[110px] flex-col gap-2.5 rounded-xl border border-border bg-card p-5"
+            >
+                <span
+                    class="text-[11.5px] font-semibold tracking-[0.05em] text-muted-foreground uppercase"
+                    >Top user</span
+                >
+                <div v-if="totals.topUser" class="flex items-center gap-2.5">
+                    <InitialsAvatar :name="totals.topUser.name" :size="32" />
+                    <div>
+                        <div class="text-[15px] font-semibold">
+                            {{ totals.topUser.name }}
+                        </div>
+                        <div
+                            class="font-mono-tabular text-[11.5px] text-muted-foreground"
+                        >
+                            {{ ticksToText(totals.topUser.ticks) }} ·
+                            {{ totals.topUser.sessions }} sessions
+                        </div>
+                    </div>
+                </div>
+                <div v-else class="text-sm text-fg-subtle">No data</div>
+            </div>
+        </div>
+
+        <!-- Stale notice -->
         <div
             v-if="staleCount > 0"
-            class="flex items-center justify-between rounded-md border border-primary/40 bg-primary/5 px-3 py-2 text-sm"
+            class="flex items-center justify-between rounded-md border border-accent/40 bg-accent/10 px-3 py-2 text-sm"
         >
-            <span class="flex items-center gap-2">
-                <Sparkles class="size-4 text-primary" />
+            <span class="flex items-center gap-2 text-accent">
+                <Sparkles class="size-4" />
                 {{ staleCount }} new
                 {{ staleCount === 1 ? 'entry' : 'entries' }} arrived.
             </span>
             <Button size="sm" variant="ghost" @click="refresh">Refresh</Button>
         </div>
 
-        <Table>
-            <TableHeader>
-                <TableRow>
-                    <TableHead>When</TableHead>
-                    <TableHead>User</TableHead>
-                    <TableHead>Type</TableHead>
-                    <TableHead>Title</TableHead>
-                    <TableHead>Action</TableHead>
-                </TableRow>
-            </TableHeader>
-            <TableBody>
-                <TableRow
-                    v-for="activity in visibleActivities"
-                    :key="activity.id"
-                >
-                    <TableCell class="text-muted-foreground">{{
-                        formatTime(activity.created_at)
-                    }}</TableCell>
-                    <TableCell>{{ activity.emby_username ?? '-' }}</TableCell>
-                    <TableCell>
-                        <Badge v-if="activity.media_type" variant="outline">{{
-                            activity.media_type
-                        }}</Badge>
-                        <span v-else class="text-muted-foreground">-</span>
-                    </TableCell>
-                    <TableCell class="font-medium">
-                        {{ activity.media_title ?? '-' }}
-                        <span
-                            v-if="activity.series_title"
-                            class="block text-xs font-normal text-muted-foreground"
+        <!-- Table -->
+        <div class="overflow-hidden rounded-xl border border-border bg-card">
+            <table class="w-full border-collapse text-[13px]">
+                <thead>
+                    <tr>
+                        <th
+                            v-for="h in [
+                                'Started',
+                                'User',
+                                'Title',
+                                'Watched',
+                                'Completion',
+                                'Type',
+                            ]"
+                            :key="h"
+                            class="border-b border-border bg-card px-3 py-2 text-left text-[11.5px] font-medium tracking-[0.05em] text-muted-foreground uppercase"
                         >
-                            {{ activity.series_title }}
-                        </span>
-                    </TableCell>
-                    <TableCell>
-                        <Badge
-                            v-if="activity.action"
-                            :variant="actionBadgeVariant(activity.action)"
-                        >
-                            {{ activity.action }}
-                        </Badge>
-                        <span v-else class="text-muted-foreground">-</span>
-                    </TableCell>
-                </TableRow>
-                <TableRow v-if="visibleActivities.length === 0">
-                    <TableCell
-                        :colspan="5"
-                        class="py-8 text-center text-muted-foreground"
+                            {{ h }}
+                        </th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr
+                        v-for="activity in visibleActivities"
+                        :key="activity.id"
+                        class="border-b border-border last:border-b-0 hover:bg-bg-hover"
                     >
-                        No activity yet.
-                    </TableCell>
-                </TableRow>
-            </TableBody>
-        </Table>
+                        <td
+                            class="font-mono-tabular px-3 py-2.5 text-[11.5px] text-fg-subtle whitespace-nowrap"
+                        >
+                            {{ formatTime(activity.created_at) }}
+                        </td>
+                        <td class="px-3 py-2.5">
+                            <span class="flex items-center gap-2">
+                                <InitialsAvatar
+                                    :name="activity.emby_username ?? '?'"
+                                    :size="20"
+                                />
+                                <span>{{
+                                    activity.emby_username ?? '—'
+                                }}</span>
+                            </span>
+                        </td>
+                        <td class="px-3 py-2.5">
+                            <div class="font-medium">
+                                {{ activity.media_title ?? '—' }}
+                            </div>
+                            <div
+                                v-if="activity.series_title"
+                                class="text-[11.5px] text-muted-foreground"
+                            >
+                                {{ activity.series_title }}
+                            </div>
+                        </td>
+                        <td class="font-mono-tabular px-3 py-2.5 text-[12px]">
+                            {{ ticksToText(activity.duration_ticks) }}
+                        </td>
+                        <td class="px-3 py-2.5">
+                            <div class="flex items-center gap-2">
+                                <div
+                                    class="h-1 w-20 overflow-hidden rounded-full bg-bg-elev"
+                                >
+                                    <div
+                                        class="h-full rounded-full"
+                                        :class="
+                                            completionPct(activity) < 50
+                                                ? 'bg-warning'
+                                                : 'bg-accent'
+                                        "
+                                        :style="{
+                                            width: `${completionPct(activity)}%`,
+                                        }"
+                                    />
+                                </div>
+                                <span
+                                    class="font-mono-tabular w-10 text-[11.5px]"
+                                    >{{ Math.round(completionPct(activity)) }}%</span
+                                >
+                            </div>
+                        </td>
+                        <td class="px-3 py-2.5">
+                            <Pill v-if="activity.media_type">{{
+                                activity.media_type
+                            }}</Pill>
+                            <span v-else class="text-fg-subtle">—</span>
+                        </td>
+                    </tr>
+                    <tr v-if="visibleActivities.length === 0">
+                        <td
+                            colspan="6"
+                            class="px-3 py-8 text-center text-sm text-fg-subtle"
+                        >
+                            No activity yet.
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
 
+        <!-- Pagination -->
         <div
             v-if="activities.links.length > 3"
             class="flex flex-wrap items-center gap-2"
@@ -289,7 +438,9 @@ function currentFilter(): string {
                 variant="outline"
                 size="sm"
                 :disabled="!link.url"
-                :class="link.active ? 'bg-accent' : ''"
+                :class="
+                    link.active ? 'bg-accent text-accent-foreground' : ''
+                "
                 @click="goToPage(link.url)"
             >
                 <span v-html="link.label" />

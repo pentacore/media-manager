@@ -1,24 +1,19 @@
 <script setup lang="ts">
 import { Head } from '@inertiajs/vue3';
 import {
+    AlertTriangle,
     ArrowUp,
-    CircleCheck,
-    CircleHelp,
-    CircleX,
+    Calendar,
+    Check,
     HardDrive,
-    HeartPulse,
+    RefreshCcw,
     Server,
+    X,
 } from 'lucide-vue-next';
 import { computed, onMounted } from 'vue';
 import ServiceHealthController from '@/actions/App/Http/Controllers/Monitoring/ServiceHealthController';
-import { Badge } from '@/components/ui/badge';
-import {
-    Card,
-    CardContent,
-    CardDescription,
-    CardHeader,
-    CardTitle,
-} from '@/components/ui/card';
+import { Pill, StatCard, StatusPill, SvcChip } from '@/components/mm';
+import { Button } from '@/components/ui/button';
 import { useServiceHealth } from '@/composables/useServiceHealth';
 import { dashboard } from '@/routes';
 import type { ServiceConnectionResource } from '@/typefinder/resources/ServiceConnectionResource';
@@ -47,7 +42,7 @@ const props = defineProps<{
 defineOptions({
     layout: {
         breadcrumbs: [
-            { title: 'Dashboard', href: dashboard() },
+            { title: 'Live', href: dashboard().url },
             { title: 'Service Health', href: ServiceHealthController().url },
         ],
     },
@@ -61,9 +56,7 @@ const {
     subscribe,
 } = useServiceHealth();
 
-onMounted(() => {
-    subscribe();
-});
+onMounted(subscribe);
 
 const mergedConnections = computed<Connection[]>(() =>
     props.connections
@@ -114,18 +107,26 @@ const healthyCount = computed(
         ).length,
 );
 
-function typeLabel(type: string): string {
-    return type.charAt(0).toUpperCase() + type.slice(1);
-}
+const unhealthyCount = computed(
+    () =>
+        mergedConnections.value.filter(
+            (c) => c.is_active && c.health_status === 'unhealthy',
+        ).length,
+);
+
+const updateAvailableCount = computed(
+    () =>
+        mergedConnections.value.filter((c) => c.update_available).length,
+);
 
 function formatSize(bytes: number | null): string {
     if (bytes === null || bytes === undefined) {
-        return '—';
-    }
+return '—';
+}
 
     if (bytes === 0) {
-        return '0 B';
-    }
+return '0 B';
+}
 
     const units = ['B', 'KB', 'MB', 'GB', 'TB', 'PB'];
     const i = Math.floor(Math.log(bytes) / Math.log(1024));
@@ -136,64 +137,55 @@ function formatSize(bytes: number | null): string {
 
 function formatTime(iso: string | null): string {
     if (!iso) {
-        return 'never';
-    }
-
-    const date = new Date(iso);
-    const now = new Date();
-    const diffMs = now.getTime() - date.getTime();
-    const diffMins = Math.floor(diffMs / 60000);
-
-    if (diffMins < 1) {
-        return 'just now';
-    }
-
-    if (diffMins < 60) {
-        return `${diffMins} min ago`;
-    }
-
-    const diffHours = Math.floor(diffMins / 60);
-
-    if (diffHours < 24) {
-        return `${diffHours}h ago`;
-    }
-
-    const diffDays = Math.floor(diffHours / 24);
-
-    return `${diffDays}d ago`;
+return 'never';
 }
 
-function healthBadgeVariant(
-    connection: Connection,
-): 'default' | 'destructive' | 'secondary' {
-    if (!connection.is_active) {
-        return 'secondary';
-    }
+    const ms = Date.now() - new Date(iso).getTime();
+    const m = Math.floor(ms / 60_000);
 
-    if (connection.health_status === 'healthy') {
-        return 'default';
-    }
-
-    if (connection.health_status === 'unhealthy') {
-        return 'destructive';
-    }
-
-    return 'secondary';
+    if (m < 1) {
+return 'just now';
 }
 
-function healthLabel(connection: Connection): string {
-    if (!connection.is_active) {
-        return 'Inactive';
-    }
-
-    return (
-        connection.health_status.charAt(0).toUpperCase() +
-        connection.health_status.slice(1)
-    );
+    if (m < 60) {
+return `${m}m ago`;
 }
 
-function diskSpaceFor(connectionId: number): DiskSpace[] | undefined {
-    return props.diskSpace?.[connectionId];
+    const h = Math.floor(m / 60);
+
+    if (h < 24) {
+return `${h}h ago`;
+}
+
+    return `${Math.floor(h / 24)}d ago`;
+}
+
+function svcId(type: string): string {
+    const t = type.toLowerCase();
+
+    if (t.includes('jellyseerr') || t.includes('seerr')) {
+return 'seerr';
+}
+
+    return t;
+}
+
+function diskFree(connectionId: number): { free: number; total: number } | null {
+    const disks = props.diskSpace?.[connectionId];
+
+    if (!disks || disks.length === 0) {
+return null;
+}
+
+    let free = 0;
+    let total = 0;
+
+    for (const disk of disks) {
+        free += disk.free_space ?? 0;
+        total += disk.total_space ?? 0;
+    }
+
+    return { free, total };
 }
 
 function indexersFor(connectionId: number): Indexer[] | undefined {
@@ -204,193 +196,236 @@ function indexersFor(connectionId: number): Indexer[] | undefined {
 <template>
     <Head title="Service Health" />
 
-    <div class="space-y-6 p-6">
-        <div class="flex items-center gap-3">
-            <HeartPulse class="size-6 text-muted-foreground" />
+    <div class="flex flex-col gap-4 p-5">
+        <!-- Hero -->
+        <div class="flex items-end justify-between gap-3">
             <div>
-                <h2 class="text-2xl font-bold tracking-tight">
-                    Service Health
-                </h2>
-                <p class="text-sm text-muted-foreground">
-                    {{ mergedConnections.length }} service{{
-                        mergedConnections.length === 1 ? '' : 's'
-                    }}, {{ healthyCount }} healthy
+                <h1
+                    class="text-[22px] leading-tight font-semibold tracking-tight"
+                >
+                    Service health
+                </h1>
+                <p class="mt-1 text-[13px] text-muted-foreground">
+                    Pings every 5 minutes · history retained 30 days
                 </p>
+            </div>
+            <div class="flex items-center gap-2">
+                <Button variant="outline" size="sm" class="h-7 gap-1.5 text-xs">
+                    <Calendar class="size-3.5" />Last 24h
+                </Button>
+                <Button size="sm" class="h-7 gap-1.5 text-xs">
+                    <RefreshCcw class="size-3.5" />Run check now
+                </Button>
             </div>
         </div>
 
-        <div
-            v-if="mergedConnections.length === 0"
-            class="flex flex-col items-center justify-center py-16 text-center"
-        >
-            <Server class="mb-3 size-10 text-muted-foreground/50" />
-            <p class="text-sm text-muted-foreground">
-                No service connections configured.
-            </p>
+        <!-- Stat cards -->
+        <div class="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+            <StatCard
+                label="Healthy"
+                :value="`${healthyCount} / ${mergedConnections.length}`"
+                :hint="`${unhealthyCount} unhealthy`"
+            />
+            <StatCard
+                label="Active services"
+                :value="
+                    mergedConnections.filter((c) => c.is_active).length
+                "
+                :hint="`${mergedConnections.filter((c) => !c.is_active).length} inactive`"
+            />
+            <StatCard
+                label="Updates pending"
+                :value="updateAvailableCount"
+                hint="latest releases observed"
+            />
+            <StatCard
+                label="Connections"
+                :value="mergedConnections.length"
+                :hint="`${mergedConnections.filter((c) => c.type === 'prowlarr').length} indexer hubs`"
+            />
         </div>
 
-        <div v-else class="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-            <Card v-for="connection in mergedConnections" :key="connection.id">
-                <CardHeader>
-                    <div class="flex items-start justify-between gap-2">
-                        <div class="min-w-0 flex-1">
-                            <CardTitle class="truncate">{{
-                                connection.name
-                            }}</CardTitle>
-                            <CardDescription class="truncate">{{
-                                connection.url
-                            }}</CardDescription>
-                        </div>
-                        <Badge variant="outline">{{
-                            typeLabel(connection.type)
-                        }}</Badge>
-                    </div>
-                </CardHeader>
-                <CardContent class="space-y-3">
-                    <div class="space-y-2">
-                        <div class="flex items-center gap-2">
-                            <CircleCheck
-                                v-if="
-                                    connection.is_active &&
-                                    connection.health_status === 'healthy'
-                                "
-                                class="size-4 text-green-600 dark:text-green-400"
-                            />
-                            <CircleX
-                                v-else-if="
-                                    connection.is_active &&
-                                    connection.health_status === 'unhealthy'
-                                "
-                                class="size-4 text-destructive"
-                            />
-                            <CircleHelp
-                                v-else
-                                class="size-4 text-muted-foreground"
-                            />
-                            <Badge :variant="healthBadgeVariant(connection)">
-                                {{ healthLabel(connection) }}
-                            </Badge>
-                        </div>
+        <!-- Service strip -->
+        <div class="overflow-hidden rounded-xl border border-border bg-card">
+            <div
+                class="flex items-center justify-between border-b border-border px-4 py-3"
+            >
+                <span
+                    class="text-[12px] font-semibold tracking-[0.06em] text-muted-foreground uppercase"
+                    >Per-service status</span
+                >
+                <span class="text-xs text-muted-foreground"
+                    >health-strip placeholder until service_metrics
+                    table</span
+                >
+            </div>
 
-                        <p
-                            v-if="
-                                connection.is_active &&
-                                connection.health_status === 'unhealthy' &&
-                                connection.health_message
-                            "
-                            class="rounded-sm border border-destructive/30 bg-destructive/5 px-2 py-1.5 font-mono text-xs break-words text-destructive"
-                            :title="connection.health_message"
-                        >
-                            {{ connection.health_message }}
-                        </p>
-                    </div>
+            <div
+                v-if="mergedConnections.length === 0"
+                class="flex flex-col items-center gap-2 py-10 text-fg-subtle"
+            >
+                <Server class="size-5" />
+                <span class="text-sm"
+                    >No service connections configured.</span
+                >
+            </div>
 
-                    <div class="flex flex-wrap items-center gap-2 text-sm">
-                        <span class="text-muted-foreground">Version:</span>
-                        <span class="font-medium">{{
-                            connection.version ?? '—'
-                        }}</span>
-                        <Badge
-                            v-if="connection.update_available"
-                            variant="outline"
-                            class="gap-1"
-                        >
-                            <ArrowUp class="size-3" />
-                            Update available{{
-                                connection.latest_version
-                                    ? ` → ${connection.latest_version}`
-                                    : ''
-                            }}
-                        </Badge>
-                    </div>
-
-                    <div class="text-xs text-muted-foreground">
-                        Last seen: {{ formatTime(connection.last_seen_at) }}
-                    </div>
-
+            <div v-else>
+                <div
+                    v-for="connection in mergedConnections"
+                    :key="connection.id"
+                    class="border-b border-border px-4 py-3 last:border-b-0"
+                >
                     <div
-                        v-if="
-                            !props.diskSpace &&
-                            (connection.type === 'sonarr' ||
-                                connection.type === 'radarr') &&
-                            connection.is_active
-                        "
-                        class="flex items-center gap-2 border-t pt-3 text-xs text-muted-foreground"
+                        class="grid items-center gap-4"
+                        style="grid-template-columns: 200px 1fr 120px 120px 120px"
                     >
-                        <HardDrive class="size-3" />
-                        Loading disk space…
-                    </div>
-                    <div
-                        v-else-if="
-                            diskSpaceFor(connection.id) &&
-                            diskSpaceFor(connection.id)!.length > 0
-                        "
-                        class="space-y-1 border-t pt-3"
-                    >
-                        <div
-                            class="flex items-center gap-2 text-xs font-medium tracking-wider text-muted-foreground uppercase"
-                        >
-                            <HardDrive class="size-3" />
-                            Disk Space
-                        </div>
-                        <div
-                            v-for="(disk, index) in diskSpaceFor(connection.id)"
-                            :key="`${connection.id}-disk-${index}`"
-                            class="flex items-center justify-between text-sm"
-                        >
-                            <span class="truncate text-muted-foreground">
-                                {{ disk.label ?? disk.path ?? 'Unknown' }}
-                            </span>
-                            <span class="shrink-0 tabular-nums">
-                                {{ formatSize(disk.free_space) }} /
-                                {{ formatSize(disk.total_space) }}
-                            </span>
-                        </div>
-                    </div>
-
-                    <div
-                        v-if="
-                            !props.prowlarrIndexers &&
-                            connection.type === 'prowlarr' &&
-                            connection.is_active
-                        "
-                        class="flex items-center gap-2 border-t pt-3 text-xs text-muted-foreground"
-                    >
-                        <Server class="size-3" />
-                        Loading indexers…
-                    </div>
-                    <div
-                        v-else-if="
-                            connection.type === 'prowlarr' &&
-                            indexersFor(connection.id) &&
-                            indexersFor(connection.id)!.length > 0
-                        "
-                        class="space-y-1 border-t pt-3"
-                    >
-                        <div
-                            class="flex items-center gap-2 text-xs font-medium tracking-wider text-muted-foreground uppercase"
-                        >
-                            <Server class="size-3" />
-                            Indexers ({{ indexersFor(connection.id)!.length }})
-                        </div>
-                        <div
-                            v-for="indexer in indexersFor(connection.id)"
-                            :key="`${connection.id}-indexer-${indexer.id}`"
-                            class="flex items-center justify-between text-sm"
-                        >
-                            <span class="truncate">{{ indexer.name }}</span>
-                            <Badge
-                                :variant="
-                                    indexer.enable ? 'default' : 'outline'
-                                "
-                                class="shrink-0 text-xs"
+                        <div>
+                            <div class="flex items-center gap-2">
+                                <span
+                                    v-if="
+                                        connection.is_active &&
+                                        connection.health_status === 'healthy'
+                                    "
+                                    class="text-success"
+                                >
+                                    <Check class="size-4" />
+                                </span>
+                                <span
+                                    v-else-if="
+                                        connection.is_active &&
+                                        connection.health_status === 'unhealthy'
+                                    "
+                                    class="text-destructive"
+                                >
+                                    <X class="size-4" />
+                                </span>
+                                <span v-else class="text-warning">
+                                    <AlertTriangle class="size-4" />
+                                </span>
+                                <SvcChip
+                                    :id="svcId(connection.type)"
+                                    :label="connection.name"
+                                />
+                            </div>
+                            <div
+                                class="font-mono-tabular mt-1 truncate text-[11px] text-fg-subtle"
                             >
-                                {{ indexer.enable ? 'Enabled' : 'Disabled' }}
-                            </Badge>
+                                {{ connection.url }}
+                            </div>
+                        </div>
+
+                        <!-- 60-min strip placeholder -->
+                        <div
+                            class="flex h-7 items-end gap-px"
+                            aria-hidden="true"
+                        >
+                            <span
+                                v-for="i in 60"
+                                :key="`bar-${connection.id}-${i}`"
+                                class="w-1 rounded-sm"
+                                :class="
+                                    connection.health_status === 'healthy'
+                                        ? 'bg-accent/70'
+                                        : connection.health_status ===
+                                            'unhealthy'
+                                          ? 'bg-destructive/70'
+                                          : 'bg-warning/70'
+                                "
+                                :style="{ height: `${30 + (i % 7) * 10}%` }"
+                            />
+                        </div>
+
+                        <div>
+                            <div
+                                class="text-[10.5px] font-semibold tracking-[0.05em] text-muted-foreground uppercase"
+                            >
+                                Last seen
+                            </div>
+                            <div class="font-mono-tabular text-[12px]">
+                                {{ formatTime(connection.last_seen_at) }}
+                            </div>
+                        </div>
+
+                        <div>
+                            <div
+                                class="text-[10.5px] font-semibold tracking-[0.05em] text-muted-foreground uppercase"
+                            >
+                                Version
+                            </div>
+                            <div class="flex items-center gap-1.5">
+                                <span class="font-mono-tabular text-[12px]">{{
+                                    connection.version ?? '—'
+                                }}</span>
+                                <Pill
+                                    v-if="connection.update_available"
+                                    variant="warn"
+                                    class="text-[10px]"
+                                >
+                                    <ArrowUp class="size-2.5" />{{
+                                        connection.latest_version ?? 'update'
+                                    }}
+                                </Pill>
+                            </div>
+                        </div>
+
+                        <div class="flex justify-end">
+                            <StatusPill
+                                v-if="connection.is_active"
+                                :status="connection.health_status"
+                            />
+                            <Pill v-else>inactive</Pill>
                         </div>
                     </div>
-                </CardContent>
-            </Card>
+
+                    <!-- Health message -->
+                    <div
+                        v-if="
+                            connection.is_active &&
+                            connection.health_status === 'unhealthy' &&
+                            connection.health_message
+                        "
+                        class="mt-2 rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 font-mono text-[11.5px] text-destructive"
+                    >
+                        {{ connection.health_message }}
+                    </div>
+
+                    <!-- Disk + indexer rows -->
+                    <div
+                        v-if="diskFree(connection.id)"
+                        class="mt-2 flex items-center gap-2 text-[11.5px] text-muted-foreground"
+                    >
+                        <HardDrive class="size-3.5" />
+                        <span class="font-mono-tabular">{{
+                            formatSize(diskFree(connection.id)!.free)
+                        }}</span>
+                        <span>free of</span>
+                        <span class="font-mono-tabular">{{
+                            formatSize(diskFree(connection.id)!.total)
+                        }}</span>
+                    </div>
+
+                    <div
+                        v-if="
+                            connection.type === 'prowlarr' &&
+                            indexersFor(connection.id)
+                        "
+                        class="mt-2 flex flex-wrap items-center gap-1.5"
+                    >
+                        <span class="text-[11.5px] text-muted-foreground"
+                            >Indexers:</span
+                        >
+                        <Pill
+                            v-for="indexer in indexersFor(connection.id)"
+                            :key="`${connection.id}-${indexer.id}`"
+                            :variant="indexer.enable ? 'ok' : 'default'"
+                            class="text-[10.5px]"
+                        >
+                            {{ indexer.name }}
+                        </Pill>
+                    </div>
+                </div>
+            </div>
         </div>
     </div>
 </template>

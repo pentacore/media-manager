@@ -1,17 +1,18 @@
 <script setup lang="ts">
 import { Head, Link, router } from '@inertiajs/vue3';
 import {
-    ArrowUpCircle,
-    Briefcase,
+    ArrowUp,
     HeartPulse,
+    MoreHorizontal,
     Pencil,
+    Plus,
     Power,
     RefreshCw,
     Trash2,
 } from 'lucide-vue-next';
 import { computed, onMounted } from 'vue';
 import ServiceConnectionController from '@/actions/App/Http/Controllers/Admin/ServiceConnectionController';
-import { Badge } from '@/components/ui/badge';
+import { Pill, StatusPill, SvcChip } from '@/components/mm';
 import { Button } from '@/components/ui/button';
 import {
     DropdownMenu,
@@ -21,21 +22,8 @@ import {
     DropdownMenuSeparator,
     DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import {
-    Table,
-    TableBody,
-    TableCell,
-    TableHead,
-    TableHeader,
-    TableRow,
-} from '@/components/ui/table';
-import {
-    Tooltip,
-    TooltipContent,
-    TooltipProvider,
-    TooltipTrigger,
-} from '@/components/ui/tooltip';
 import { useServiceHealth } from '@/composables/useServiceHealth';
+import { dashboard } from '@/routes';
 import type { ServiceConnectionResource } from '@/typefinder/resources/ServiceConnectionResource';
 
 type Connection = ServiceConnectionResource;
@@ -94,8 +82,6 @@ const liveConnections = computed<Connection[]>(() => {
             };
         });
 
-    // Surface freshly-created connections that arrived via WS by reading
-    // lifecycle entries that aren't represented in the SSR prop.
     const knownIds = new Set(props.connections.map((c) => c.id));
 
     for (const id of Object.keys(liveLifecycle)) {
@@ -121,7 +107,7 @@ const liveConnections = computed<Connection[]>(() => {
 defineOptions({
     layout: {
         breadcrumbs: [
-            { title: 'Admin', href: '#' },
+            { title: 'Admin', href: dashboard().url },
             {
                 title: 'Connections',
                 href: ServiceConnectionController.index.url(),
@@ -130,40 +116,22 @@ defineOptions({
     },
 });
 
-function typeLabel(type: Connection['type']): string {
-    return type.charAt(0).toUpperCase() + type.slice(1);
+function svcId(type: Connection['type']): string {
+    const t = String(type).toLowerCase();
+
+    if (t.includes('jellyseerr') || t.includes('seerr')) {
+return 'seerr';
 }
 
-function statusBadgeVariant(
-    connection: Connection,
-): 'default' | 'destructive' | 'secondary' | 'outline' {
-    if (!connection.is_active) {
-        return 'secondary';
-    }
-
-    switch (connection.health_status) {
-        case 'healthy':
-            return 'default';
-        case 'unhealthy':
-            return 'destructive';
-        default:
-            return 'outline';
-    }
+    return t;
 }
 
-function statusLabel(connection: Connection): string {
+function statusKey(connection: Connection): string {
     if (!connection.is_active) {
-        return 'Inactive';
-    }
+return 'inactive';
+}
 
-    switch (connection.health_status) {
-        case 'healthy':
-            return 'Healthy';
-        case 'unhealthy':
-            return 'Unhealthy';
-        default:
-            return 'Unknown';
-    }
+    return connection.health_status ?? 'unknown';
 }
 
 function toggleConnection(connection: Connection) {
@@ -194,210 +162,204 @@ function checkVersion(connection: Connection) {
         preserveScroll: true,
     });
 }
+
+function shortToken(token: string | null | undefined): string {
+    if (!token) {
+return '—';
+}
+
+    return `••••••••${token.slice(-4)}`;
+}
 </script>
 
 <template>
     <Head title="Service Connections" />
 
-    <div class="space-y-6 p-6">
-        <div class="flex items-center justify-between">
+    <div class="flex flex-col gap-4 p-5">
+        <!-- Hero -->
+        <div class="flex items-end justify-between gap-3">
             <div>
-                <h2 class="text-2xl font-bold tracking-tight">
-                    Service Connections
-                </h2>
-                <p class="text-muted-foreground">
-                    Manage your external service integrations.
+                <div class="mb-1.5 text-[13px] text-muted-foreground">
+                    Admin
+                    <span class="text-fg-subtle">/</span>
+                    Connections
+                </div>
+                <h1
+                    class="text-[22px] leading-tight font-semibold tracking-tight"
+                >
+                    Service connections
+                </h1>
+                <p
+                    class="mt-1 max-w-[640px] text-[13px] text-muted-foreground"
+                >
+                    One row per upstream service. Webhook URLs and tokens are
+                    auto-generated; rotate by clearing the field on edit.
                 </p>
             </div>
             <Link :href="ServiceConnectionController.create.url()">
-                <Button>Add Connection</Button>
+                <Button size="sm" class="h-7 gap-1.5 text-xs">
+                    <Plus class="size-3.5" />Add connection
+                </Button>
             </Link>
         </div>
 
-        <TooltipProvider :delay-duration="200">
-            <Table>
-                <TableHeader>
-                    <TableRow>
-                        <TableHead>Name</TableHead>
-                        <TableHead>Type</TableHead>
-                        <TableHead>URL</TableHead>
-                        <TableHead>Status</TableHead>
-                        <TableHead>Last Seen</TableHead>
-                        <TableHead>Version</TableHead>
-                        <TableHead class="text-right">Actions</TableHead>
-                    </TableRow>
-                </TableHeader>
-                <TableBody>
-                    <TableRow
+        <!-- Connections table -->
+        <div class="overflow-hidden rounded-xl border border-border bg-card">
+            <table class="w-full border-collapse text-[13px]">
+                <thead>
+                    <tr>
+                        <th
+                            v-for="h in [
+                                'Service',
+                                'URL',
+                                'Health',
+                                'Last seen',
+                                'Token',
+                                '',
+                            ]"
+                            :key="h"
+                            class="border-b border-border bg-card px-3 py-2 text-left text-[11.5px] font-medium tracking-[0.05em] text-muted-foreground uppercase"
+                        >
+                            {{ h }}
+                        </th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr
                         v-for="connection in liveConnections"
                         :key="connection.id"
+                        class="border-b border-border last:border-b-0 hover:bg-bg-hover"
                     >
-                        <TableCell class="font-medium">{{
-                            connection.name
-                        }}</TableCell>
-                        <TableCell>
-                            <Badge variant="outline">{{
-                                typeLabel(connection.type)
-                            }}</Badge>
-                        </TableCell>
-                        <TableCell class="text-muted-foreground">{{
-                            connection.url
-                        }}</TableCell>
-                        <TableCell>
-                            <Badge :variant="statusBadgeVariant(connection)">
-                                {{ statusLabel(connection) }}
-                            </Badge>
-                        </TableCell>
-                        <TableCell class="text-muted-foreground">
-                            {{ connection.last_seen_human ?? 'Never' }}
-                        </TableCell>
-                        <TableCell>
-                            <div class="flex flex-col gap-1 text-sm">
-                                <span class="font-mono">{{
-                                    connection.version ?? '—'
-                                }}</span>
+                        <td class="px-3 py-2.5">
+                            <span class="flex items-center gap-2.5">
+                                <SvcChip
+                                    :id="svcId(connection.type)"
+                                    :label="connection.name"
+                                />
                                 <span
+                                    class="font-mono-tabular text-[11px] text-fg-subtle"
+                                    >v{{ connection.version ?? '—' }}</span
+                                >
+                                <Pill
                                     v-if="connection.update_available"
-                                    class="inline-flex items-center gap-1 text-xs text-amber-600 dark:text-amber-400"
+                                    variant="warn"
+                                    class="text-[10px]"
                                 >
-                                    <ArrowUpCircle class="size-3" />
-                                    {{ connection.latest_version }} available
-                                </span>
-                                <span
-                                    v-else-if="
-                                        connection.latest_version &&
-                                        !connection.version
-                                    "
-                                    class="font-mono text-xs text-muted-foreground"
-                                >
-                                    latest: {{ connection.latest_version }}
-                                </span>
-                            </div>
-                        </TableCell>
-                        <TableCell class="text-right">
+                                    <ArrowUp class="size-2.5" />{{
+                                        connection.latest_version ?? 'update'
+                                    }}
+                                </Pill>
+                            </span>
+                        </td>
+                        <td
+                            class="font-mono-tabular px-3 py-2.5 text-[12px] text-muted-foreground"
+                        >
+                            {{ connection.url }}
+                        </td>
+                        <td class="px-3 py-2.5">
+                            <StatusPill :status="statusKey(connection)" />
+                        </td>
+                        <td
+                            class="font-mono-tabular px-3 py-2.5 text-[11.5px] text-fg-subtle"
+                        >
+                            {{ connection.last_seen_human ?? 'never' }}
+                        </td>
+                        <td class="px-3 py-2.5">
+                            <span
+                                class="font-mono-tabular rounded border border-border bg-bg-elev px-2 py-0.5 text-[11px]"
+                                >{{ shortToken(connection.api_key) }}</span
+                            >
+                        </td>
+                        <td class="px-3 py-2.5 text-right">
                             <div class="inline-flex items-center gap-1">
-                                <Tooltip>
-                                    <TooltipTrigger as-child>
-                                        <Link
-                                            :href="
-                                                ServiceConnectionController.edit.url(
-                                                    connection.id,
-                                                )
-                                            "
-                                        >
-                                            <Button variant="ghost" size="icon">
-                                                <Pencil class="size-4" />
-                                                <span class="sr-only"
-                                                    >Edit</span
-                                                >
-                                            </Button>
-                                        </Link>
-                                    </TooltipTrigger>
-                                    <TooltipContent>Edit</TooltipContent>
-                                </Tooltip>
-
-                                <Tooltip>
-                                    <TooltipTrigger as-child>
+                                <Link
+                                    :href="
+                                        ServiceConnectionController.edit.url(
+                                            connection.id,
+                                        )
+                                    "
+                                >
+                                    <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        class="h-7 px-2 text-xs"
+                                    >
+                                        <Pencil class="size-3.5" />Edit
+                                    </Button>
+                                </Link>
+                                <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    class="h-7 px-2 text-xs"
+                                    @click="checkHealth(connection)"
+                                >
+                                    Test
+                                </Button>
+                                <DropdownMenu>
+                                    <DropdownMenuTrigger as-child>
                                         <Button
                                             variant="ghost"
-                                            size="icon"
-                                            @click="
-                                                toggleConnection(connection)
-                                            "
+                                            size="sm"
+                                            class="size-7 p-0"
                                         >
-                                            <Power class="size-4" />
-                                            <span class="sr-only">{{
+                                            <MoreHorizontal class="size-3.5" />
+                                        </Button>
+                                    </DropdownMenuTrigger>
+                                    <DropdownMenuContent
+                                        align="end"
+                                        class="w-48"
+                                    >
+                                        <DropdownMenuLabel
+                                            >Jobs</DropdownMenuLabel
+                                        >
+                                        <DropdownMenuSeparator />
+                                        <DropdownMenuItem
+                                            @click="checkHealth(connection)"
+                                        >
+                                            <HeartPulse class="mr-2 size-4" />
+                                            Check health
+                                        </DropdownMenuItem>
+                                        <DropdownMenuItem
+                                            @click="checkVersion(connection)"
+                                        >
+                                            <RefreshCw class="mr-2 size-4" />
+                                            Check version
+                                        </DropdownMenuItem>
+                                        <DropdownMenuSeparator />
+                                        <DropdownMenuItem
+                                            @click="toggleConnection(connection)"
+                                        >
+                                            <Power class="mr-2 size-4" />
+                                            {{
                                                 connection.is_active
                                                     ? 'Disable'
                                                     : 'Enable'
-                                            }}</span>
-                                        </Button>
-                                    </TooltipTrigger>
-                                    <TooltipContent>{{
-                                        connection.is_active
-                                            ? 'Disable'
-                                            : 'Enable'
-                                    }}</TooltipContent>
-                                </Tooltip>
-
-                                <Tooltip>
-                                    <DropdownMenu>
-                                        <DropdownMenuTrigger as-child>
-                                            <TooltipTrigger as-child>
-                                                <Button
-                                                    variant="ghost"
-                                                    size="icon"
-                                                >
-                                                    <Briefcase class="size-4" />
-                                                    <span class="sr-only"
-                                                        >Jobs</span
-                                                    >
-                                                </Button>
-                                            </TooltipTrigger>
-                                            <TooltipContent>
-                                                Jobs
-                                            </TooltipContent>
-                                        </DropdownMenuTrigger>
-                                        <DropdownMenuContent
-                                            align="end"
-                                            class="w-48"
-                                        >
-                                            <DropdownMenuLabel
-                                                >Jobs</DropdownMenuLabel
-                                            >
-                                            <DropdownMenuSeparator />
-                                            <DropdownMenuItem
-                                                @click="checkHealth(connection)"
-                                            >
-                                                <HeartPulse
-                                                    class="mr-2 size-4"
-                                                />
-                                                Check health
-                                            </DropdownMenuItem>
-                                            <DropdownMenuItem
-                                                @click="
-                                                    checkVersion(connection)
-                                                "
-                                            >
-                                                <RefreshCw
-                                                    class="mr-2 size-4"
-                                                />
-                                                Check version
-                                            </DropdownMenuItem>
-                                        </DropdownMenuContent>
-                                    </DropdownMenu>
-                                </Tooltip>
-
-                                <Tooltip>
-                                    <TooltipTrigger as-child>
-                                        <Button
-                                            variant="ghost"
-                                            size="icon"
-                                            class="text-destructive hover:text-destructive"
+                                            }}
+                                        </DropdownMenuItem>
+                                        <DropdownMenuItem
+                                            class="text-destructive focus:text-destructive"
                                             @click="
                                                 deleteConnection(connection)
                                             "
                                         >
-                                            <Trash2 class="size-4" />
-                                            <span class="sr-only">Delete</span>
-                                        </Button>
-                                    </TooltipTrigger>
-                                    <TooltipContent>Delete</TooltipContent>
-                                </Tooltip>
+                                            <Trash2 class="mr-2 size-4" />
+                                            Delete
+                                        </DropdownMenuItem>
+                                    </DropdownMenuContent>
+                                </DropdownMenu>
                             </div>
-                        </TableCell>
-                    </TableRow>
-                    <TableRow v-if="liveConnections.length === 0">
-                        <TableCell
-                            :colspan="7"
-                            class="py-8 text-center text-muted-foreground"
+                        </td>
+                    </tr>
+                    <tr v-if="liveConnections.length === 0">
+                        <td
+                            colspan="6"
+                            class="px-3 py-8 text-center text-sm text-fg-subtle"
                         >
-                            No connections configured yet. Add one to get
-                            started.
-                        </TableCell>
-                    </TableRow>
-                </TableBody>
-            </Table>
-        </TooltipProvider>
+                            No connections configured. Add one to get started.
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
     </div>
 </template>

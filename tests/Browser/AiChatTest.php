@@ -21,8 +21,8 @@ test('admin can open AI chat and send a message', function (): void {
     visit('/ai/chat')
         ->assertNoJavaScriptErrors()
         ->assertSee('AI Assistant')
-        ->type('input[placeholder^="Ask"]', 'What is on my watchlist?')
-        ->click('button[type="submit"]')
+        ->type('textarea[placeholder^="Ask"]', 'What is on my watchlist?')
+        ->click('Send')
         ->assertSee('What is on my watchlist?')
         ->assertSee('Sure, here is what I found.');
 });
@@ -63,8 +63,8 @@ test('proposed workflow renders confirm card and approval round-trips', function
 
     visit('/ai/chat')
         ->assertNoJavaScriptErrors()
-        ->type('input[placeholder^="Ask"]', 'Clean up my old shows please.')
-        ->click('button[type="submit"]')
+        ->type('textarea[placeholder^="Ask"]', 'Clean up my old shows please.')
+        ->click('Send')
         ->assertSee('I have proposed a 3-step workflow.')
         ->assertSee('Proposed workflow')
         ->assertSee('Cleaning up unwatched series')
@@ -108,8 +108,8 @@ test('proposed workflow can be declined from confirm card', function (): void {
 
     visit('/ai/chat')
         ->assertNoJavaScriptErrors()
-        ->type('input[placeholder^="Ask"]', 'Try something risky.')
-        ->click('button[type="submit"]')
+        ->type('textarea[placeholder^="Ask"]', 'Try something risky.')
+        ->click('Send')
         ->assertSee('Proposed workflow')
         ->click('Decline')
         ->assertSee('Declined.')
