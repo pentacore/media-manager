@@ -137,14 +137,20 @@ class AiUsageReporting
             ];
         }
 
+        // Cast each rate parameter to numeric. Postgres infers parameter
+        // types from context, and the surrounding integer columns
+        // (prompt_tokens etc.) make it default to integer — which fails
+        // hard on fractional rates like 0.75. Explicit ::numeric forces a
+        // decimal-friendly type regardless of whether PHP sends the value
+        // as a float or a string.
         return [
             '
                 (
-                    ai_usage_records.prompt_tokens * ?
-                    + ai_usage_records.completion_tokens * ?
-                    + ai_usage_records.cache_read_input_tokens * ?
-                    + ai_usage_records.cache_write_input_tokens * ?
-                    + ai_usage_records.reasoning_tokens * ?
+                    ai_usage_records.prompt_tokens * ?::numeric
+                    + ai_usage_records.completion_tokens * ?::numeric
+                    + ai_usage_records.cache_read_input_tokens * ?::numeric
+                    + ai_usage_records.cache_write_input_tokens * ?::numeric
+                    + ai_usage_records.reasoning_tokens * ?::numeric
                 ) / 1000000.0
             ',
             [

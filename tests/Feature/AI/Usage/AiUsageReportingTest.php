@@ -206,3 +206,20 @@ test('totals still uses exact match when no dated suffix is present', function (
 
     expect((float) $totals['total_cost'])->toBe(0.40);
 });
+
+test('totals with scenario accepts fractional rates', function (): void {
+    seedUsage([
+        'prompt_tokens' => 1_000_000,
+        'completion_tokens' => 500_000,
+    ]);
+
+    $scenario = new Scenario(0.75, 4.50, 0.25, 0.25, 0);
+
+    $totals = resolve(AiUsageReporting::class)->totals(
+        CarbonImmutable::now()->subDay(),
+        $scenario,
+    );
+
+    // 1M * $0.75 + 0.5M * $4.50 = 0.75 + 2.25 = 3.00
+    expect((float) $totals['total_cost'])->toBe(3.00);
+});
