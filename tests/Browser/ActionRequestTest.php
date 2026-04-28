@@ -18,10 +18,10 @@ test('a member sees a pending action request and can approve it', function (): v
 
     visit('/actions/requests')
         ->assertNoJavaScriptErrors()
-        ->assertSee('Action Requests')
+        ->assertSee('Action queue')
         ->assertSee('sonarr.scan')
-        ->assertSee('pending')
-        ->click('Approve')
+        ->assertSee('Pending')
+        ->click('Approve & execute')
         ->assertPathIs('/actions/requests');
 
     // Sync queue runs the dispatched action immediately. Without a real
@@ -43,7 +43,7 @@ test('a completed action request renders with a non-pending status', function ()
     visit('/actions/requests')
         ->assertNoJavaScriptErrors()
         ->assertSee('sonarr.scan')
-        ->assertSee('completed');
+        ->assertSee('Completed');
 });
 
 test('a viewer cannot reach the action requests page', function (): void {

@@ -1,27 +1,24 @@
 <script setup lang="ts">
 import { Head, router, usePage } from '@inertiajs/vue3';
-import { Sparkles, Zap } from 'lucide-vue-next';
-import { computed, onMounted, onUnmounted, watch } from 'vue';
+import {
+    AlertTriangle,
+    Inbox,
+    RefreshCcw,
+    Settings as SettingsIcon,
+    Sparkles,
+} from 'lucide-vue-next';
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import ActionRequestController from '@/actions/App/Http/Controllers/Actions/ActionRequestController';
-import { Badge } from '@/components/ui/badge';
+import {
+    Field,
+    InitialsAvatar,
+    StatusPill,
+    SvcChip,
+} from '@/components/mm';
 import { Button } from '@/components/ui/button';
-import {
-    Select,
-    SelectContent,
-    SelectItem,
-    SelectTrigger,
-    SelectValue,
-} from '@/components/ui/select';
-import {
-    Table,
-    TableBody,
-    TableCell,
-    TableHead,
-    TableHeader,
-    TableRow,
-} from '@/components/ui/table';
 import { useRealtimeList } from '@/composables/useRealtimeList';
 import { useWebSocket } from '@/composables/useWebSocket';
+import { cn } from '@/lib/utils';
 import { dashboard } from '@/routes';
 import type { ActionRequestResource } from '@/typefinder/resources/ActionRequestResource';
 
@@ -52,9 +49,9 @@ const props = defineProps<{
 defineOptions({
     layout: {
         breadcrumbs: [
-            { title: 'Dashboard', href: dashboard() },
+            { title: 'Overview', href: dashboard().url },
             {
-                title: 'Action Requests',
+                title: 'Action Queue',
                 href: ActionRequestController.index.url(),
             },
         ],
@@ -107,8 +104,23 @@ watch(
     { immediate: true },
 );
 
-const visibleRequests = computed(() =>
+const visibleRequests = computed<ActionRequestRow[]>(() =>
     merge.value ? liveRequests.value : props.requests.data,
+);
+
+const selectedId = ref<number | null>(visibleRequests.value[0]?.id ?? null);
+
+watch(visibleRequests, (rows) => {
+    if (
+        selectedId.value === null ||
+        !rows.some((row) => row.id === selectedId.value)
+    ) {
+        selectedId.value = rows[0]?.id ?? null;
+    }
+});
+
+const selected = computed<ActionRequestRow | null>(() =>
+    visibleRequests.value.find((row) => row.id === selectedId.value) ?? null,
 );
 
 const { privateChannel, leaveChannel } = useWebSocket();
@@ -142,68 +154,95 @@ onUnmounted(() => {
     leaveChannel(ACTIONS_CHANNEL);
 });
 
-function formatTime(iso: string | null): string {
-    if (!iso) {
-        return '-';
-    }
-
-    const date = new Date(iso);
-    const now = new Date();
-    const diffMs = now.getTime() - date.getTime();
-    const diffMins = Math.floor(diffMs / 60000);
-
-    if (diffMins < 1) {
-        return 'Just now';
-    }
-
-    if (diffMins < 60) {
-        return `${diffMins}m ago`;
-    }
-
-    const diffHours = Math.floor(diffMins / 60);
-
-    if (diffHours < 24) {
-        return `${diffHours}h ago`;
-    }
-
-    const diffDays = Math.floor(diffHours / 24);
-
-    return `${diffDays}d ago`;
-}
-
-function statusVariant(
-    status: string,
-): 'default' | 'secondary' | 'outline' | 'destructive' {
-    switch (status) {
-        case 'pending':
-            return 'secondary';
-        case 'approved':
-        case 'executing':
-            return 'default';
-        case 'completed':
-            return 'outline';
-        case 'failed':
-        case 'rejected':
-            return 'destructive';
-        default:
-            return 'outline';
-    }
-}
-
-function onStatusChange(value: unknown) {
-    const v = typeof value === 'string' ? value : '';
-    router.get(
-        ActionRequestController.index.url(),
-        v === 'all' ? {} : { status: v },
-        { preserveState: true, preserveScroll: true, replace: true },
-    );
-}
+const TABS: { id: string; label: string }[] = [
+    { id: 'all', label: 'All' },
+    { id: 'pending', label: 'Pending' },
+    { id: 'approved', label: 'Approved' },
+    { id: 'executing', label: 'Executing' },
+    { id: 'completed', label: 'Completed' },
+    { id: 'failed', label: 'Failed' },
+    { id: 'rejected', label: 'Rejected' },
+];
 
 function currentFilter(): string {
     return props.filters.status === '' ? 'all' : props.filters.status;
 }
 
-function approve(id: number) {
+function setFilter(id: string): void {
+    router.get(
+        ActionRequestController.index.url(),
+        id === 'all' ? {} : { status: id },
+        { preserveState: true, preserveScroll: true, replace: true },
+    );
+}
+
+function refresh(): void {
+    router.reload({
+        only: ['requests'],
+        onSuccess: () => resume(),
+    });
+}
+
+function formatRelative(iso: string | null): string {
+    if (!iso) {
+        return '—';
+    }
+
+    const ms = Date.now() - new Date(iso).getTime();
+    const m = Math.floor(ms / 60_000);
+
+    if (m < 1) {
+        return 'just now';
+    }
+
+    if (m < 60) {
+        return `${m}m ago`;
+    }
+
+    const h = Math.floor(m / 60);
+
+    if (h < 24) {
+        return `${h}h ago`;
+    }
+
+    return `${Math.floor(h / 24)}d ago`;
+}
+
+function isDestructive(type: string | null | undefined): boolean {
+    return /delete|remove|destroy/.test(type ?? '');
+}
+
+function svcId(name: string | null | undefined): string {
+    if (!name) {
+return '';
+}
+
+    const t = name.toLowerCase();
+
+    if (t.includes('jellyseerr') || t.includes('seerr')) {
+return 'seerr';
+}
+
+    if (t.includes('sonarr')) {
+return 'sonarr';
+}
+
+    if (t.includes('radarr')) {
+return 'radarr';
+}
+
+    if (t.includes('emby')) {
+return 'emby';
+}
+
+    if (t.includes('prowlarr')) {
+return 'prowlarr';
+}
+
+    return t;
+}
+
+function approve(id: number): void {
     router.post(
         ActionRequestController.approve.url(id),
         {},
@@ -211,7 +250,7 @@ function approve(id: number) {
     );
 }
 
-function reject(id: number) {
+function reject(id: number): void {
     router.post(
         ActionRequestController.reject.url(id),
         {},
@@ -219,7 +258,7 @@ function reject(id: number) {
     );
 }
 
-function retry(id: number) {
+function retry(id: number): void {
     router.post(
         ActionRequestController.retry.url(id),
         {},
@@ -227,194 +266,477 @@ function retry(id: number) {
     );
 }
 
-function goToPage(url: string | null) {
+function goToPage(url: string | null): void {
     if (!url) {
-        return;
-    }
+return;
+}
 
     router.get(url, {}, { preserveState: true, preserveScroll: true });
 }
 
-function stringifyJson(value: unknown): string {
-    try {
-        return JSON.stringify(value, null, 2);
-    } catch {
-        return String(value);
+function payloadTitle(row: ActionRequestRow): string {
+    const t = row.payload?.['title'] ?? row.payload?.['name'];
+
+    return typeof t === 'string' && t.length > 0
+        ? t
+        : `${row.type.replace(/_/g, ' ')}`;
+}
+
+function payloadDetail(row: ActionRequestRow): string {
+    const detail = row.payload?.['detail'] ?? row.payload?.['summary'];
+
+    return typeof detail === 'string' ? detail : '';
+}
+
+function statusCount(id: string): number {
+    if (id === 'all') {
+return props.requests.meta.total;
+}
+
+    return visibleRequests.value.filter((row) => row.status === id).length;
+}
+
+function pipelineState(
+    row: ActionRequestRow,
+    stage: 'created' | 'approved' | 'executing' | 'done',
+): 'done' | 'failed' | 'active' | 'pending' {
+    const s = row.status;
+
+    if (stage === 'created') {
+return 'done';
+}
+
+    if (stage === 'approved') {
+        return s === 'pending' ? 'pending' : s === 'rejected' ? 'failed' : 'done';
     }
+
+    if (stage === 'executing') {
+        return ['executing', 'completed', 'failed'].includes(s)
+            ? 'done'
+            : 'pending';
+    }
+
+    if (s === 'completed') {
+return 'done';
+}
+
+    if (s === 'failed') {
+return 'failed';
+}
+
+    return 'pending';
 }
 </script>
 
 <template>
-    <Head title="Action Requests" />
+    <Head title="Action Queue" />
 
-    <div class="space-y-6 p-6">
-        <div class="flex items-start justify-between gap-4">
+    <div class="flex flex-col gap-4 p-5">
+        <!-- Hero -->
+        <div class="flex items-end justify-between gap-3">
             <div>
-                <h2
-                    class="flex items-center gap-2 text-2xl font-bold tracking-tight"
-                >
-                    <Zap class="size-6" />
-                    Action Requests
-                    <Badge variant="outline">{{ requests.meta.total }}</Badge>
-                </h2>
-                <p class="text-muted-foreground">
-                    Review pending automations and re-run failed actions.
+                <h1 class="text-[22px] font-semibold tracking-tight">
+                    Action queue
+                </h1>
+                <p class="mt-1 text-[13px] text-muted-foreground">
+                    <span class="font-mono-tabular">ActionRequest</span>
+                    state machine — pending → approved → executing →
+                    completed/failed
                 </p>
             </div>
-
-            <div
-                v-if="staleCount > 0"
-                class="flex items-center gap-2 rounded-md border border-primary/40 bg-primary/5 px-3 py-1.5 text-sm"
-            >
-                <Sparkles class="size-4 text-primary" />
-                <span>{{ staleCount }} new</span>
-                <Button
-                    size="sm"
-                    variant="ghost"
-                    class="h-6 px-2"
-                    @click="
-                        router.reload({
-                            only: ['requests'],
-                            onSuccess: () => resume(),
-                        })
-                    "
+            <div class="flex items-center gap-2">
+                <div
+                    v-if="staleCount > 0"
+                    class="flex items-center gap-2 rounded-md border border-accent/40 bg-accent/10 px-3 py-1 text-sm text-accent"
                 >
-                    Refresh
+                    <Sparkles class="size-4" />
+                    <span>{{ staleCount }} new</span>
+                    <Button
+                        size="sm"
+                        variant="ghost"
+                        class="h-6 px-2 text-accent hover:bg-accent/20"
+                        @click="refresh"
+                    >
+                        Refresh
+                    </Button>
+                </div>
+                <Button
+                    variant="outline"
+                    size="sm"
+                    class="h-7 gap-1.5 px-2 text-xs"
+                >
+                    <SettingsIcon class="size-3.5" />Approval rules
+                </Button>
+                <Button
+                    variant="outline"
+                    size="sm"
+                    class="h-7 gap-1.5 px-2 text-xs"
+                    @click="refresh"
+                >
+                    <RefreshCcw class="size-3.5" />Refresh
                 </Button>
             </div>
-
-            <Select
-                :default-value="currentFilter()"
-                @update:model-value="onStatusChange"
-            >
-                <SelectTrigger class="w-44">
-                    <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                    <SelectItem value="all">All statuses</SelectItem>
-                    <SelectItem value="pending">Pending</SelectItem>
-                    <SelectItem value="approved">Approved</SelectItem>
-                    <SelectItem value="executing">Executing</SelectItem>
-                    <SelectItem value="completed">Completed</SelectItem>
-                    <SelectItem value="failed">Failed</SelectItem>
-                    <SelectItem value="rejected">Rejected</SelectItem>
-                </SelectContent>
-            </Select>
         </div>
 
-        <Table>
-            <TableHeader>
-                <TableRow>
-                    <TableHead>Created</TableHead>
-                    <TableHead>Type</TableHead>
-                    <TableHead>Flow</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead>Approval</TableHead>
-                    <TableHead>Source</TableHead>
-                    <TableHead>Approved By</TableHead>
-                    <TableHead class="text-right">Actions</TableHead>
-                </TableRow>
-            </TableHeader>
-            <TableBody>
-                <TableRow v-for="request in visibleRequests" :key="request.id">
-                    <TableCell class="text-muted-foreground">{{
-                        formatTime(request.created_at)
-                    }}</TableCell>
-                    <TableCell class="font-medium">{{
-                        request.type
-                    }}</TableCell>
-                    <TableCell class="text-muted-foreground">
-                        {{ request.source_service }} &rarr;
-                        {{ request.target_service }}
-                    </TableCell>
-                    <TableCell>
-                        <Badge :variant="statusVariant(request.status)">{{
-                            request.status
-                        }}</Badge>
-                    </TableCell>
-                    <TableCell>
-                        <span
-                            v-if="request.requires_approval"
-                            class="text-foreground"
-                            >&#10003;</span
-                        >
-                        <span v-else class="text-muted-foreground"
-                            >&#10007;</span
-                        >
-                    </TableCell>
-                    <TableCell class="text-muted-foreground">{{
-                        request.webhook_source ?? '-'
-                    }}</TableCell>
-                    <TableCell class="text-muted-foreground">{{
-                        request.approved_by ?? '-'
-                    }}</TableCell>
-                    <TableCell class="space-x-2 text-right">
-                        <template v-if="request.status === 'pending'">
-                            <Button size="sm" @click="approve(request.id)"
-                                >Approve</Button
+        <!-- Tabs -->
+        <div class="flex flex-wrap items-center gap-1.5">
+            <button
+                v-for="tab in TABS"
+                :key="tab.id"
+                type="button"
+                :class="
+                    cn(
+                        'inline-flex h-7 items-center gap-1.5 rounded-md px-2.5 text-xs font-medium transition-colors',
+                        currentFilter() === tab.id
+                            ? 'bg-accent text-accent-foreground'
+                            : 'text-muted-foreground hover:bg-bg-hover hover:text-foreground',
+                    )
+                "
+                @click="setFilter(tab.id)"
+            >
+                {{ tab.label }}
+                <span
+                    v-if="tab.id === 'all' || statusCount(tab.id) > 0"
+                    class="font-mono-tabular text-[11px] opacity-70"
+                >
+                    {{
+                        tab.id === 'all'
+                            ? requests.meta.total
+                            : statusCount(tab.id)
+                    }}
+                </span>
+            </button>
+        </div>
+
+        <!-- Table + Detail -->
+        <div class="grid gap-4 lg:grid-cols-[1.6fr_1fr] lg:items-start">
+            <div
+                class="overflow-hidden rounded-xl border border-border bg-card"
+            >
+                <table class="w-full border-collapse text-[13px]">
+                    <thead>
+                        <tr>
+                            <th
+                                class="w-6 border-b border-border bg-card px-3 py-2"
+                            />
+                            <th
+                                class="border-b border-border bg-card px-3 py-2 text-left text-[11.5px] font-medium tracking-[0.05em] text-muted-foreground uppercase"
                             >
+                                Action
+                            </th>
+                            <th
+                                class="border-b border-border bg-card px-3 py-2 text-left text-[11.5px] font-medium tracking-[0.05em] text-muted-foreground uppercase"
+                            >
+                                Service
+                            </th>
+                            <th
+                                class="border-b border-border bg-card px-3 py-2 text-left text-[11.5px] font-medium tracking-[0.05em] text-muted-foreground uppercase"
+                            >
+                                Trigger
+                            </th>
+                            <th
+                                class="border-b border-border bg-card px-3 py-2 text-left text-[11.5px] font-medium tracking-[0.05em] text-muted-foreground uppercase"
+                            >
+                                Status
+                            </th>
+                            <th
+                                class="border-b border-border bg-card px-3 py-2 text-left text-[11.5px] font-medium tracking-[0.05em] text-muted-foreground uppercase"
+                            >
+                                Age
+                            </th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr
+                            v-for="row in visibleRequests"
+                            :key="row.id"
+                            :class="
+                                cn(
+                                    'border-b border-border transition-colors hover:bg-bg-hover',
+                                    selectedId === row.id && 'bg-accent/8',
+                                )
+                            "
+                            @click="selectedId = row.id"
+                        >
+                            <td class="px-3 py-2.5 align-middle">
+                                <span
+                                    :class="
+                                        cn(
+                                            'inline-block h-5 w-1 rounded-sm',
+                                            isDestructive(row.type)
+                                                ? 'bg-destructive'
+                                                : 'bg-info',
+                                        )
+                                    "
+                                />
+                            </td>
+                            <td class="px-3 py-2.5 align-middle">
+                                <div class="font-medium">
+                                    {{ payloadTitle(row) }}
+                                </div>
+                                <div
+                                    class="font-mono-tabular text-[11px] text-fg-subtle"
+                                >
+                                    act_{{ row.id }} · {{ row.type }}
+                                </div>
+                            </td>
+                            <td class="px-3 py-2.5 align-middle">
+                                <SvcChip
+                                    :id="svcId(row.target_service)"
+                                    :label="row.target_service"
+                                />
+                            </td>
+                            <td class="px-3 py-2.5 align-middle">
+                                <span
+                                    class="font-mono-tabular text-[11.5px] text-muted-foreground"
+                                >
+                                    {{ row.webhook_source ?? 'manual' }}
+                                </span>
+                            </td>
+                            <td class="px-3 py-2.5 align-middle">
+                                <StatusPill :status="row.status" />
+                            </td>
+                            <td
+                                class="font-mono-tabular px-3 py-2.5 align-middle text-[11.5px] text-fg-subtle"
+                            >
+                                {{ formatRelative(row.created_at) }}
+                            </td>
+                        </tr>
+                        <tr v-if="visibleRequests.length === 0">
+                            <td
+                                colspan="6"
+                                class="px-3 py-12 text-center text-sm text-fg-subtle"
+                            >
+                                <div
+                                    class="flex flex-col items-center gap-2"
+                                >
+                                    <Inbox class="size-5" />
+                                    No action requests in this view.
+                                </div>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- Detail panel -->
+            <aside class="lg:sticky lg:top-16">
+                <div
+                    v-if="!selected"
+                    class="flex flex-col items-center gap-2 rounded-xl border border-border bg-card p-9 text-fg-subtle"
+                >
+                    <Inbox class="size-5" />
+                    <span class="text-sm"
+                        >Select an action to inspect.</span
+                    >
+                </div>
+                <div
+                    v-else
+                    class="overflow-hidden rounded-xl border border-border bg-card"
+                >
+                    <div
+                        class="flex flex-col gap-1.5 border-b border-border p-4"
+                    >
+                        <div class="flex items-center justify-between">
+                            <span
+                                class="font-mono-tabular text-[11px] text-fg-subtle"
+                                >act_{{ selected.id }}</span
+                            >
+                            <StatusPill :status="selected.status" />
+                        </div>
+                        <h2
+                            class="font-serif text-[22px] leading-tight text-foreground italic"
+                        >
+                            {{ payloadTitle(selected) }}
+                        </h2>
+                        <div class="flex items-center gap-2.5">
+                            <SvcChip
+                                :id="svcId(selected.target_service)"
+                                :label="selected.target_service"
+                            />
+                            <span
+                                :class="
+                                    cn(
+                                        'font-mono-tabular rounded border px-1.5 py-0.5 text-[11px]',
+                                        isDestructive(selected.type)
+                                            ? 'border-destructive/35 text-destructive'
+                                            : 'border-border text-fg-subtle',
+                                    )
+                                "
+                            >
+                                {{ selected.type }}
+                            </span>
+                        </div>
+                    </div>
+
+                    <div class="flex flex-col gap-3.5 p-4">
+                        <Field label="Trigger">
+                            {{ selected.webhook_source ?? 'Manual' }}
+                        </Field>
+                        <Field label="Source → target">
+                            <span
+                                class="font-mono-tabular text-[12px] text-muted-foreground"
+                            >
+                                {{ selected.source_service }} →
+                                {{ selected.target_service }}
+                            </span>
+                        </Field>
+                        <Field label="Approved by">
+                            <div class="flex items-center gap-2">
+                                <InitialsAvatar
+                                    :name="selected.approved_by ?? 'system'"
+                                    :size="20"
+                                />
+                                <span class="text-[13px]">{{
+                                    selected.approved_by ?? 'system'
+                                }}</span>
+                            </div>
+                        </Field>
+                        <Field label="Created">
+                            {{ formatRelative(selected.created_at) }}
+                        </Field>
+                        <Field
+                            v-if="payloadDetail(selected)"
+                            label="Detail"
+                        >
+                            <span
+                                class="text-[13px] text-muted-foreground"
+                                >{{ payloadDetail(selected) }}</span
+                            >
+                        </Field>
+
+                        <div
+                            v-if="isDestructive(selected.type)"
+                            class="flex gap-2.5 rounded-lg border border-destructive/25 bg-destructive/10 p-3"
+                        >
+                            <AlertTriangle
+                                class="mt-0.5 size-4 shrink-0 text-destructive"
+                            />
+                            <div class="text-[12.5px] text-muted-foreground">
+                                This action is
+                                <span
+                                    class="font-semibold text-destructive"
+                                    >destructive</span
+                                >. Approval queues an
+                                <span
+                                    class="font-mono-tabular text-[11.5px]"
+                                    >ExecuteActionRequest</span
+                                >
+                                job. Files on disk will be removed.
+                            </div>
+                        </div>
+
+                        <Field label="Pipeline">
+                            <ol
+                                class="font-mono-tabular flex flex-col gap-1 rounded-md border border-border bg-bg-elev p-2.5 text-[11px]"
+                            >
+                                <li
+                                    v-for="stage in [
+                                        { id: 'created', label: 'created' },
+                                        { id: 'approved', label: 'approved' },
+                                        {
+                                            id: 'executing',
+                                            label: 'executing',
+                                        },
+                                        { id: 'done', label: 'completed' },
+                                    ]"
+                                    :key="stage.id"
+                                    :class="
+                                        cn(
+                                            'flex items-center gap-2',
+                                            pipelineState(
+                                                selected,
+                                                stage.id as
+                                                    | 'created'
+                                                    | 'approved'
+                                                    | 'executing'
+                                                    | 'done',
+                                            ) === 'done'
+                                                ? 'text-accent'
+                                                : pipelineState(
+                                                        selected,
+                                                        stage.id as
+                                                            | 'created'
+                                                            | 'approved'
+                                                            | 'executing'
+                                                            | 'done',
+                                                    ) === 'failed'
+                                                  ? 'text-destructive'
+                                                  : 'text-fg-subtle',
+                                        )
+                                    "
+                                >
+                                    <span>
+                                        <template
+                                            v-if="
+                                                pipelineState(
+                                                    selected,
+                                                    stage.id as
+                                                        | 'created'
+                                                        | 'approved'
+                                                        | 'executing'
+                                                        | 'done',
+                                                ) === 'done'
+                                            "
+                                            >●</template
+                                        >
+                                        <template
+                                            v-else-if="
+                                                pipelineState(
+                                                    selected,
+                                                    stage.id as
+                                                        | 'created'
+                                                        | 'approved'
+                                                        | 'executing'
+                                                        | 'done',
+                                                ) === 'failed'
+                                            "
+                                            >✕</template
+                                        >
+                                        <template v-else>○</template>
+                                    </span>
+                                    <span>{{
+                                        stage.id === 'done' &&
+                                        selected.status === 'failed'
+                                            ? 'failed'
+                                            : stage.label
+                                    }}</span>
+                                </li>
+                            </ol>
+                        </Field>
+
+                        <div
+                            v-if="selected.status === 'pending'"
+                            class="mt-1 flex gap-2"
+                        >
+                            <Button
+                                class="flex-1"
+                                @click="approve(selected.id)"
+                            >
+                                Approve &amp; execute
+                            </Button>
                             <Button
                                 variant="destructive"
-                                size="sm"
-                                @click="reject(request.id)"
-                                >Reject</Button
+                                @click="reject(selected.id)"
                             >
-                        </template>
+                                Decline
+                            </Button>
+                        </div>
                         <Button
-                            v-else-if="request.status === 'failed' && isAdmin"
+                            v-else-if="
+                                selected.status === 'failed' && isAdmin
+                            "
                             variant="outline"
-                            size="sm"
-                            @click="retry(request.id)"
+                            @click="retry(selected.id)"
                         >
                             Retry
                         </Button>
-                        <span v-else class="text-xs text-muted-foreground"
-                            >-</span
-                        >
-                    </TableCell>
-                </TableRow>
-                <TableRow v-if="visibleRequests.length === 0">
-                    <TableCell
-                        :colspan="8"
-                        class="py-8 text-center text-muted-foreground"
-                    >
-                        No action requests.
-                    </TableCell>
-                </TableRow>
-            </TableBody>
-        </Table>
-
-        <div
-            v-if="requests.data.some((r) => r.status === 'pending' || r.result)"
-            class="space-y-2"
-        >
-            <details
-                v-for="request in requests.data.filter(
-                    (r) => r.status === 'pending' || r.result,
-                )"
-                :key="`details-${request.id}`"
-                class="rounded-md border bg-muted/30 p-3 text-xs"
-            >
-                <summary class="cursor-pointer font-medium">
-                    #{{ request.id }} {{ request.type }} — payload &amp; result
-                </summary>
-                <div class="mt-2 grid gap-3 md:grid-cols-2">
-                    <div>
-                        <div class="mb-1 text-muted-foreground">Payload</div>
-                        <pre class="overflow-auto rounded bg-background p-2">{{
-                            stringifyJson(request.payload)
-                        }}</pre>
-                    </div>
-                    <div>
-                        <div class="mb-1 text-muted-foreground">Result</div>
-                        <pre class="overflow-auto rounded bg-background p-2">{{
-                            request.result ? stringifyJson(request.result) : '—'
-                        }}</pre>
                     </div>
                 </div>
-            </details>
+            </aside>
         </div>
 
+        <!-- Pagination -->
         <div
             v-if="requests.links.length > 3"
             class="flex flex-wrap items-center gap-2"
@@ -425,7 +747,7 @@ function stringifyJson(value: unknown): string {
                 variant="outline"
                 size="sm"
                 :disabled="!link.url"
-                :class="link.active ? 'bg-accent' : ''"
+                :class="link.active ? 'bg-accent text-accent-foreground' : ''"
                 @click="goToPage(link.url)"
             >
                 <span v-html="link.label" />

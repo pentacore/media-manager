@@ -1,29 +1,22 @@
 <script setup lang="ts">
-import { Head, router } from '@inertiajs/vue3';
+import { Head, Link, router } from '@inertiajs/vue3';
 import {
     AlertCircle,
+    Antenna,
+    Clock,
+    Command,
     ExternalLink,
-    Film,
-    ImageOff,
-    Inbox,
     Search as SearchIcon,
-    Tv,
+    Sparkles,
+    X,
 } from 'lucide-vue-next';
-import { onMounted, ref, useTemplateRef } from 'vue';
+import { computed, onMounted, ref, useTemplateRef } from 'vue';
 import SearchController from '@/actions/App/Http/Controllers/Media/SearchController';
+import SearchIndexersController from '@/actions/App/Http/Controllers/Prowlarr/SearchIndexersController';
+import { Pill, Poster, StatusPill, SvcChip } from '@/components/mm';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Spinner } from '@/components/ui/spinner';
-import {
-    Tooltip,
-    TooltipContent,
-    TooltipProvider,
-    TooltipTrigger,
-} from '@/components/ui/tooltip';
+import { cn } from '@/lib/utils';
 import { dashboard } from '@/routes';
 
 interface SeriesResult {
@@ -88,7 +81,7 @@ const props = defineProps<{
 defineOptions({
     layout: {
         breadcrumbs: [
-            { title: 'Dashboard', href: dashboard() },
+            { title: 'Media', href: dashboard().url },
             { title: 'Search', href: SearchController.index.url() },
         ],
     },
@@ -98,6 +91,16 @@ const query = ref(props.query);
 const submitting = ref(false);
 const searchInput = useTemplateRef<HTMLInputElement>('searchInput');
 
+type Scope = 'all' | 'library' | 'requests' | 'indexers';
+const scope = ref<Scope>('all');
+
+const SCOPES: { id: Scope; label: string }[] = [
+    { id: 'all', label: 'All' },
+    { id: 'library', label: 'Library' },
+    { id: 'requests', label: 'Requests' },
+    { id: 'indexers', label: 'Indexers' },
+];
+
 onMounted(() => {
     searchInput.value?.focus();
     searchInput.value?.select();
@@ -105,8 +108,8 @@ onMounted(() => {
 
 function submitSearch() {
     if (submitting.value) {
-        return;
-    }
+return;
+}
 
     router.get(
         SearchController.index.url(),
@@ -123,421 +126,423 @@ function submitSearch() {
     );
 }
 
+function clearQuery() {
+    query.value = '';
+    searchInput.value?.focus();
+}
+
 function sonarrSeriesUrl(slug: string | null): string | null {
     if (!slug || !props.connections.sonarr) {
-        return null;
-    }
+return null;
+}
 
     return `${props.connections.sonarr.url}/series/${slug}`;
 }
 
 function radarrMovieUrl(slug: string | null): string | null {
     if (!slug || !props.connections.radarr) {
-        return null;
-    }
+return null;
+}
 
     return `${props.connections.radarr.url}/movie/${slug}`;
 }
+
+const libraryCount = computed(
+    () =>
+        (props.seriesResults?.results.length ?? 0) +
+        (props.movieResults?.results.length ?? 0),
+);
+const requestCount = computed(
+    () => props.requestResults?.results.length ?? 0,
+);
+
+const showLibrary = computed(
+    () => scope.value === 'all' || scope.value === 'library',
+);
+const showRequests = computed(
+    () => scope.value === 'all' || scope.value === 'requests',
+);
+const showIndexers = computed(() => scope.value === 'indexers');
+
+const seerrStatusKey = (status: number | null): string => {
+    switch (status) {
+        case 1:
+            return 'pending';
+        case 2:
+            return 'approved';
+        case 3:
+            return 'declined';
+        case 4:
+            return 'failed';
+        case 5:
+            return 'available';
+        default:
+            return 'unknown';
+    }
+};
+
+const SUGGESTED = [
+    'Trending today',
+    'On your watchlist',
+    'Indexer health',
+];
+const RECENT = [
+    'severance s2',
+    'dune part two',
+    'past lives',
+    'oppenheimer 4k',
+];
 </script>
 
 <template>
     <Head title="Search" />
 
-    <div class="space-y-6 p-6">
-        <div class="mx-auto w-full max-w-2xl">
-            <form class="flex gap-2" @submit.prevent="submitSearch">
-                <Input
+    <div class="flex flex-col gap-4 p-5">
+        <!-- Hero -->
+        <div>
+            <h1 class="text-[22px] leading-tight font-semibold tracking-tight">
+                Search
+            </h1>
+            <p class="mt-1 text-[13px] text-muted-foreground">
+                One box across library and requests. Indexers opt-in.
+            </p>
+        </div>
+
+        <!-- Search box -->
+        <div class="rounded-xl border border-border bg-card p-3.5">
+            <form
+                class="flex h-11 items-center gap-2.5 rounded-md border border-border bg-bg-elev px-3"
+                @submit.prevent="submitSearch"
+            >
+                <SearchIcon class="size-4 text-fg-subtle" />
+                <input
                     ref="searchInput"
                     v-model="query"
                     type="search"
-                    placeholder="Search your library for series, movies, and requests..."
-                    class="flex-1"
-                    :disabled="submitting"
+                    placeholder="Search titles, requests, releases…"
+                    class="h-8 flex-1 bg-transparent text-[15px] outline-none placeholder:text-fg-subtle"
                 />
-                <Button type="submit" :disabled="submitting">
-                    <Spinner v-if="submitting" class="size-4" />
-                    <SearchIcon v-else class="size-4" />
-                    Search
-                </Button>
+                <button
+                    v-if="query"
+                    type="button"
+                    class="inline-flex size-7 items-center justify-center rounded-md text-muted-foreground hover:bg-bg-hover"
+                    @click="clearQuery"
+                >
+                    <X class="size-3.5" />
+                </button>
+                <kbd
+                    class="font-mono-tabular flex items-center gap-0.5 rounded border border-border bg-card px-1 py-px text-[10px] text-muted-foreground"
+                >
+                    <Command class="size-2.5" />K
+                </kbd>
             </form>
+
+            <div class="mt-3 flex flex-wrap items-center gap-1.5">
+                <button
+                    v-for="s in SCOPES"
+                    :key="s.id"
+                    type="button"
+                    :class="
+                        cn(
+                            'inline-flex h-7 items-center gap-1.5 rounded-md px-2.5 text-xs font-medium transition-colors',
+                            scope === s.id
+                                ? 'bg-accent text-accent-foreground'
+                                : 'text-muted-foreground hover:bg-bg-hover hover:text-foreground',
+                        )
+                    "
+                    @click="scope = s.id"
+                >
+                    {{ s.label }}
+                </button>
+                <span class="ml-auto text-[11.5px] text-fg-subtle">
+                    <template v-if="query"
+                        >{{ libraryCount + requestCount }} results</template
+                    >
+                    <template v-else>type to search</template>
+                </span>
+            </div>
         </div>
 
-        <div
-            v-if="query === ''"
-            class="flex flex-col items-center justify-center py-20 text-center"
+        <!-- Empty state -->
+        <div v-if="!query" class="grid gap-4 lg:grid-cols-2">
+            <div class="overflow-hidden rounded-xl border border-border bg-card">
+                <div
+                    class="border-b border-border px-4 py-3 text-[12px] font-semibold tracking-[0.06em] text-muted-foreground uppercase"
+                >
+                    Recent
+                </div>
+                <div class="flex flex-col p-3">
+                    <button
+                        v-for="r in RECENT"
+                        :key="r"
+                        type="button"
+                        class="flex items-center gap-2.5 rounded-md px-2 py-2 text-left text-[13px] hover:bg-bg-hover"
+                        @click="
+                            query = r;
+                            submitSearch();
+                        "
+                    >
+                        <Clock class="size-3.5 text-fg-subtle" />
+                        <span>{{ r }}</span>
+                    </button>
+                </div>
+            </div>
+            <div class="overflow-hidden rounded-xl border border-border bg-card">
+                <div
+                    class="border-b border-border px-4 py-3 text-[12px] font-semibold tracking-[0.06em] text-muted-foreground uppercase"
+                >
+                    Suggested
+                </div>
+                <div class="flex flex-col p-3">
+                    <div
+                        v-for="r in SUGGESTED"
+                        :key="r"
+                        class="flex items-center gap-2.5 rounded-md px-2 py-2 text-[13px]"
+                    >
+                        <Sparkles class="size-3.5 text-accent" />
+                        <span>{{ r }}</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Library section -->
+        <section
+            v-if="query && showLibrary"
+            class="overflow-hidden rounded-xl border border-border bg-card"
         >
-            <SearchIcon class="mb-4 size-16 text-muted-foreground/50" />
-            <p class="text-lg font-medium">
-                Search your library across Sonarr, Radarr, and Seerr
-            </p>
-            <p class="mt-1 text-sm text-muted-foreground">
-                Type above to find series, movies, and existing media requests
-                already tracked.
-            </p>
-        </div>
+            <div
+                class="flex items-center justify-between border-b border-border px-4 py-3"
+            >
+                <div class="flex items-center gap-2">
+                    <span
+                        class="text-[12px] font-semibold tracking-[0.06em] text-muted-foreground uppercase"
+                    >
+                        Library
+                    </span>
+                    <Pill>{{ libraryCount }}</Pill>
+                </div>
+                <span class="text-xs text-fg-subtle"
+                    >Sonarr + Radarr matches</span
+                >
+            </div>
 
-        <template v-else>
-            <TooltipProvider :delay-duration="200">
-                <!-- Series -->
-                <section class="space-y-3">
-                    <div class="flex items-center gap-2">
-                        <Tv class="size-5 text-muted-foreground" />
-                        <h3 class="text-lg font-semibold">Series (Sonarr)</h3>
-                        <Badge v-if="props.seriesResults" variant="secondary">
-                            {{ props.seriesResults.results.length }}
-                        </Badge>
-                    </div>
-                    <Alert
-                        v-if="props.seriesResults?.error"
-                        variant="destructive"
-                    >
-                        <AlertCircle class="size-4" />
-                        <AlertTitle>Sonarr unavailable</AlertTitle>
-                        <AlertDescription>{{
-                            props.seriesResults.error
-                        }}</AlertDescription>
-                    </Alert>
-                    <div
-                        v-else-if="!props.seriesResults"
-                        class="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3"
-                    >
-                        <Skeleton
-                            v-for="i in 3"
-                            :key="`series-skel-${i}`"
-                            class="h-32 w-full"
-                        />
-                    </div>
-                    <p
-                        v-else-if="props.seriesResults.results.length === 0"
-                        class="text-sm text-muted-foreground"
-                    >
-                        No matches in your Sonarr library.
-                    </p>
-                    <div
-                        v-else
-                        class="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3"
-                    >
-                        <Card
-                            v-for="(series, index) in props.seriesResults
-                                .results"
-                            :key="`series-${series.id ?? series.tvdb_id ?? index}`"
-                        >
-                            <CardHeader>
-                                <div class="flex gap-3">
-                                    <div
-                                        class="flex size-20 shrink-0 items-center justify-center overflow-hidden rounded bg-muted"
-                                    >
-                                        <Tv
-                                            class="size-6 text-muted-foreground/50"
-                                        />
-                                    </div>
-                                    <div class="min-w-0 flex-1">
-                                        <div
-                                            class="flex items-start justify-between gap-2"
-                                        >
-                                            <CardTitle
-                                                class="truncate text-base"
-                                                >{{
-                                                    series.title ?? 'Unknown'
-                                                }}</CardTitle
-                                            >
-                                            <Tooltip
-                                                v-if="
-                                                    sonarrSeriesUrl(
-                                                        series.title_slug,
-                                                    )
-                                                "
-                                            >
-                                                <TooltipTrigger as-child>
-                                                    <a
-                                                        :href="
-                                                            sonarrSeriesUrl(
-                                                                series.title_slug,
-                                                            ) ?? undefined
-                                                        "
-                                                        target="_blank"
-                                                        rel="noopener noreferrer"
-                                                    >
-                                                        <Button
-                                                            variant="ghost"
-                                                            size="icon"
-                                                            class="size-6"
-                                                        >
-                                                            <ExternalLink
-                                                                class="size-3.5"
-                                                            />
-                                                            <span
-                                                                class="sr-only"
-                                                                >Open in
-                                                                Sonarr</span
-                                                            >
-                                                        </Button>
-                                                    </a>
-                                                </TooltipTrigger>
-                                                <TooltipContent
-                                                    >Open in
-                                                    Sonarr</TooltipContent
-                                                >
-                                            </Tooltip>
-                                        </div>
-                                        <div
-                                            class="mt-1 flex flex-wrap items-center gap-2"
-                                        >
-                                            <p
-                                                v-if="series.year"
-                                                class="text-sm text-muted-foreground"
-                                            >
-                                                {{ series.year }}
-                                            </p>
-                                            <Badge
-                                                v-if="series.monitored"
-                                                variant="outline"
-                                                class="text-xs"
-                                                >Monitored</Badge
-                                            >
-                                            <Badge
-                                                v-if="series.status"
-                                                variant="secondary"
-                                                class="text-xs"
-                                                >{{ series.status }}</Badge
-                                            >
-                                        </div>
-                                    </div>
-                                </div>
-                            </CardHeader>
-                            <CardContent>
-                                <p
-                                    class="line-clamp-2 text-sm text-muted-foreground"
-                                >
-                                    {{
-                                        series.overview ??
-                                        'No overview available.'
-                                    }}
-                                </p>
-                            </CardContent>
-                        </Card>
-                    </div>
-                </section>
+            <Alert v-if="props.seriesResults?.error" variant="destructive">
+                <AlertCircle class="size-4" />
+                <AlertTitle>Sonarr unavailable</AlertTitle>
+                <AlertDescription>{{
+                    props.seriesResults.error
+                }}</AlertDescription>
+            </Alert>
+            <Alert v-if="props.movieResults?.error" variant="destructive">
+                <AlertCircle class="size-4" />
+                <AlertTitle>Radarr unavailable</AlertTitle>
+                <AlertDescription>{{
+                    props.movieResults.error
+                }}</AlertDescription>
+            </Alert>
 
-                <!-- Movies -->
-                <section class="space-y-3">
-                    <div class="flex items-center gap-2">
-                        <Film class="size-5 text-muted-foreground" />
-                        <h3 class="text-lg font-semibold">Movies (Radarr)</h3>
-                        <Badge v-if="props.movieResults" variant="secondary">
-                            {{ props.movieResults.results.length }}
-                        </Badge>
-                    </div>
-                    <Alert
-                        v-if="props.movieResults?.error"
-                        variant="destructive"
-                    >
-                        <AlertCircle class="size-4" />
-                        <AlertTitle>Radarr unavailable</AlertTitle>
-                        <AlertDescription>{{
-                            props.movieResults.error
-                        }}</AlertDescription>
-                    </Alert>
-                    <div
-                        v-else-if="!props.movieResults"
-                        class="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3"
-                    >
-                        <Skeleton
-                            v-for="i in 3"
-                            :key="`movie-skel-${i}`"
-                            class="h-32 w-full"
+            <div
+                v-if="!props.seriesResults || !props.movieResults"
+                class="grid gap-4 p-4"
+                style="grid-template-columns: repeat(auto-fill, minmax(150px, 1fr))"
+            >
+                <Skeleton
+                    v-for="i in 6"
+                    :key="`lib-skel-${i}`"
+                    class="aspect-[2/3] w-full rounded-md"
+                />
+            </div>
+            <div
+                v-else-if="libraryCount === 0"
+                class="px-4 py-6 text-sm text-fg-subtle"
+            >
+                No matches in your library.
+            </div>
+            <div
+                v-else
+                class="grid gap-4 p-4"
+                style="grid-template-columns: repeat(auto-fill, minmax(150px, 1fr))"
+            >
+                <div
+                    v-for="(series, index) in props.seriesResults.results"
+                    :key="`series-${series.id ?? series.tvdb_id ?? index}`"
+                    class="flex flex-col gap-2"
+                >
+                    <div class="relative">
+                        <Poster
+                            :hint="(series.title ?? 'tv').toLowerCase().slice(0, 12)"
+                            size="full"
                         />
-                    </div>
-                    <p
-                        v-else-if="props.movieResults.results.length === 0"
-                        class="text-sm text-muted-foreground"
-                    >
-                        No matches in your Radarr library.
-                    </p>
-                    <div
-                        v-else
-                        class="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3"
-                    >
-                        <Card
-                            v-for="(movie, index) in props.movieResults.results"
-                            :key="`movie-${movie.id ?? movie.tmdb_id ?? index}`"
+                        <Pill
+                            class="absolute top-2 left-2 border-transparent bg-black/55 text-white"
                         >
-                            <CardHeader>
-                                <div class="flex gap-3">
-                                    <div
-                                        class="flex size-20 shrink-0 items-center justify-center overflow-hidden rounded bg-muted"
-                                    >
-                                        <Film
-                                            class="size-6 text-muted-foreground/50"
-                                        />
-                                    </div>
-                                    <div class="min-w-0 flex-1">
-                                        <div
-                                            class="flex items-start justify-between gap-2"
-                                        >
-                                            <CardTitle
-                                                class="truncate text-base"
-                                                >{{
-                                                    movie.title ?? 'Unknown'
-                                                }}</CardTitle
-                                            >
-                                            <Tooltip
-                                                v-if="
-                                                    radarrMovieUrl(
-                                                        movie.title_slug,
-                                                    )
-                                                "
-                                            >
-                                                <TooltipTrigger as-child>
-                                                    <a
-                                                        :href="
-                                                            radarrMovieUrl(
-                                                                movie.title_slug,
-                                                            ) ?? undefined
-                                                        "
-                                                        target="_blank"
-                                                        rel="noopener noreferrer"
-                                                    >
-                                                        <Button
-                                                            variant="ghost"
-                                                            size="icon"
-                                                            class="size-6"
-                                                        >
-                                                            <ExternalLink
-                                                                class="size-3.5"
-                                                            />
-                                                            <span
-                                                                class="sr-only"
-                                                                >Open in
-                                                                Radarr</span
-                                                            >
-                                                        </Button>
-                                                    </a>
-                                                </TooltipTrigger>
-                                                <TooltipContent
-                                                    >Open in
-                                                    Radarr</TooltipContent
-                                                >
-                                            </Tooltip>
-                                        </div>
-                                        <div
-                                            class="mt-1 flex flex-wrap items-center gap-2"
-                                        >
-                                            <p
-                                                v-if="movie.year"
-                                                class="text-sm text-muted-foreground"
-                                            >
-                                                {{ movie.year }}
-                                            </p>
-                                            <Badge
-                                                v-if="movie.monitored"
-                                                variant="outline"
-                                                class="text-xs"
-                                                >Monitored</Badge
-                                            >
-                                            <Badge
-                                                v-if="movie.has_file"
-                                                variant="default"
-                                                class="text-xs"
-                                                >Downloaded</Badge
-                                            >
-                                        </div>
-                                    </div>
-                                </div>
-                            </CardHeader>
-                            <CardContent>
-                                <p
-                                    class="line-clamp-2 text-sm text-muted-foreground"
-                                >
-                                    {{
-                                        movie.overview ??
-                                        'No overview available.'
-                                    }}
-                                </p>
-                            </CardContent>
-                        </Card>
+                            <SvcChip id="sonarr" label="TV" />
+                        </Pill>
+                        <a
+                            v-if="sonarrSeriesUrl(series.title_slug)"
+                            :href="sonarrSeriesUrl(series.title_slug)!"
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            class="absolute top-2 right-2 inline-flex size-6 items-center justify-center rounded-md bg-black/55 text-white"
+                        >
+                            <ExternalLink class="size-3" />
+                        </a>
                     </div>
-                </section>
+                    <div>
+                        <div class="text-[12.5px] leading-tight font-medium">
+                            {{ series.title ?? 'Unknown' }}
+                        </div>
+                        <div
+                            class="font-mono-tabular mt-0.5 text-[10.5px] text-fg-subtle"
+                        >
+                            {{ series.year ?? '—' }} ·
+                            {{ series.status ?? 'unknown' }}
+                        </div>
+                    </div>
+                </div>
+                <div
+                    v-for="(movie, index) in props.movieResults.results"
+                    :key="`movie-${movie.id ?? movie.tmdb_id ?? index}`"
+                    class="flex flex-col gap-2"
+                >
+                    <div class="relative">
+                        <Poster
+                            :hint="(movie.title ?? 'film').toLowerCase().slice(0, 12)"
+                            size="full"
+                        />
+                        <Pill
+                            class="absolute top-2 left-2 border-transparent bg-black/55 text-white"
+                        >
+                            <SvcChip id="radarr" label="Movie" />
+                        </Pill>
+                        <a
+                            v-if="radarrMovieUrl(movie.title_slug)"
+                            :href="radarrMovieUrl(movie.title_slug)!"
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            class="absolute top-2 right-2 inline-flex size-6 items-center justify-center rounded-md bg-black/55 text-white"
+                        >
+                            <ExternalLink class="size-3" />
+                        </a>
+                    </div>
+                    <div>
+                        <div class="text-[12.5px] leading-tight font-medium">
+                            {{ movie.title ?? 'Unknown' }}
+                        </div>
+                        <div
+                            class="font-mono-tabular mt-0.5 text-[10.5px] text-fg-subtle"
+                        >
+                            {{ movie.year ?? '—' }} ·
+                            {{ movie.has_file ? 'on disk' : 'missing' }}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
 
-                <!-- Requests -->
-                <section class="space-y-3">
-                    <div class="flex items-center gap-2">
-                        <Inbox class="size-5 text-muted-foreground" />
-                        <h3 class="text-lg font-semibold">Requests (Seerr)</h3>
-                        <Badge v-if="props.requestResults" variant="secondary">
-                            {{ props.requestResults.results.length }}
-                        </Badge>
-                    </div>
-                    <Alert
-                        v-if="props.requestResults?.error"
-                        variant="destructive"
+        <!-- Requests section -->
+        <section
+            v-if="query && showRequests"
+            class="overflow-hidden rounded-xl border border-border bg-card"
+        >
+            <div
+                class="flex items-center justify-between border-b border-border px-4 py-3"
+            >
+                <div class="flex items-center gap-2">
+                    <SvcChip id="seerr" />
+                    <span
+                        class="text-[12px] font-semibold tracking-[0.06em] text-muted-foreground uppercase"
                     >
-                        <AlertCircle class="size-4" />
-                        <AlertTitle>Seerr unavailable</AlertTitle>
-                        <AlertDescription>{{
-                            props.requestResults.error
-                        }}</AlertDescription>
-                    </Alert>
-                    <div
-                        v-else-if="!props.requestResults"
-                        class="grid grid-cols-1 gap-4 md:grid-cols-4"
-                    >
-                        <Skeleton
-                            v-for="i in 4"
-                            :key="`request-skel-${i}`"
-                            class="h-32 w-full"
-                        />
+                        Requests
+                    </span>
+                    <Pill>{{ requestCount }}</Pill>
+                </div>
+            </div>
+
+            <Alert v-if="props.requestResults?.error" variant="destructive">
+                <AlertCircle class="size-4" />
+                <AlertTitle>Seerr unavailable</AlertTitle>
+                <AlertDescription>{{
+                    props.requestResults.error
+                }}</AlertDescription>
+            </Alert>
+
+            <div v-if="!props.requestResults" class="space-y-2 p-4">
+                <Skeleton
+                    v-for="i in 3"
+                    :key="`req-skel-${i}`"
+                    class="h-14 w-full rounded-md"
+                />
+            </div>
+            <div
+                v-else-if="requestCount === 0"
+                class="px-4 py-6 text-sm text-fg-subtle"
+            >
+                No matching requests.
+            </div>
+            <div v-else>
+                <div
+                    v-for="(request, i) in props.requestResults.results"
+                    :key="`req-${request.id ?? i}`"
+                    :class="[
+                        'flex items-center gap-3.5 px-4 py-3',
+                        i > 0 && 'border-t border-border',
+                    ]"
+                >
+                    <Poster
+                        :hint="(request.title ?? 'media').toLowerCase().slice(0, 12)"
+                        size="sm"
+                    />
+                    <div class="min-w-0 flex-1">
+                        <div class="text-[13px] font-medium">
+                            {{ request.title ?? 'Unknown' }}
+                        </div>
+                        <div class="text-[11.5px] text-muted-foreground">
+                            {{ request.media_type ?? 'unknown' }}
+                        </div>
                     </div>
-                    <p
-                        v-else-if="props.requestResults.results.length === 0"
-                        class="text-sm text-muted-foreground"
+                    <StatusPill :status="seerrStatusKey(request.status)" />
+                </div>
+            </div>
+        </section>
+
+        <!-- Indexers section (opt-in) -->
+        <section
+            v-if="query && showIndexers"
+            class="overflow-hidden rounded-xl border border-border bg-card"
+        >
+            <div
+                class="flex items-center justify-between border-b border-border px-4 py-3"
+            >
+                <div class="flex items-center gap-2">
+                    <SvcChip id="prowlarr" />
+                    <span
+                        class="text-[12px] font-semibold tracking-[0.06em] text-muted-foreground uppercase"
                     >
-                        No matching existing requests in Seerr.
-                    </p>
-                    <div v-else class="grid grid-cols-1 gap-4 md:grid-cols-4">
-                        <Card
-                            v-for="(request, index) in props.requestResults
-                                .results"
-                            :key="`request-${request.id ?? index}`"
-                        >
-                            <CardHeader>
-                                <div
-                                    class="flex size-20 shrink-0 items-center justify-center overflow-hidden rounded bg-muted"
-                                >
-                                    <Inbox
-                                        v-if="!request.poster_path"
-                                        class="size-6 text-muted-foreground/50"
-                                    />
-                                    <ImageOff
-                                        v-else
-                                        class="size-6 text-muted-foreground/50"
-                                    />
-                                </div>
-                                <CardTitle class="truncate text-base">{{
-                                    request.title ?? 'Unknown'
-                                }}</CardTitle>
-                                <Badge
-                                    v-if="request.media_type"
-                                    variant="outline"
-                                    class="w-fit"
-                                >
-                                    {{ request.media_type }}
-                                </Badge>
-                            </CardHeader>
-                            <CardContent>
-                                <p
-                                    class="line-clamp-2 text-sm text-muted-foreground"
-                                >
-                                    {{
-                                        request.overview ??
-                                        'No overview available.'
-                                    }}
-                                </p>
-                            </CardContent>
-                        </Card>
-                    </div>
-                </section>
-            </TooltipProvider>
-        </template>
+                        Indexer releases
+                    </span>
+                </div>
+                <span class="text-xs text-fg-subtle"
+                    >indexer hits excluded from "All" by default</span
+                >
+            </div>
+            <div class="flex flex-col items-center gap-3 px-4 py-9">
+                <Antenna class="size-6 text-fg-subtle" />
+                <p class="max-w-[420px] text-center text-sm text-muted-foreground">
+                    Prowlarr indexer hits aren't wired into the unified search
+                    yet. Open the dedicated indexer search for this query.
+                </p>
+                <Link
+                    :href="
+                        SearchIndexersController().url +
+                        (query ? `?q=${encodeURIComponent(query)}` : '')
+                    "
+                    class="inline-flex h-7 items-center gap-1.5 rounded-md bg-accent px-3 text-xs font-medium text-accent-foreground hover:bg-accent/90"
+                >
+                    <Antenna class="size-3.5" />Open indexer search
+                </Link>
+            </div>
+        </section>
     </div>
 </template>

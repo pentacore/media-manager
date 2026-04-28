@@ -6,32 +6,26 @@ import {
     ChevronRight,
     Database,
     ExternalLink,
+    Filter,
+    Play,
+    RefreshCcw,
     RefreshCw,
     Trash2,
     Tv,
     X,
 } from 'lucide-vue-next';
-import { computed, onMounted } from 'vue';
+import { computed, onMounted, ref } from 'vue';
 import RequestController from '@/actions/App/Http/Controllers/Media/RequestController';
-import type { BadgeVariants } from '@/components/ui/badge';
-import { Badge } from '@/components/ui/badge';
+import {
+    InitialsAvatar,
+    Poster,
+    StatusPill,
+    SvcChip,
+} from '@/components/mm';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
-import {
-    Table,
-    TableBody,
-    TableCell,
-    TableHead,
-    TableHeader,
-    TableRow,
-} from '@/components/ui/table';
-import {
-    Tooltip,
-    TooltipContent,
-    TooltipProvider,
-    TooltipTrigger,
-} from '@/components/ui/tooltip';
 import { useRealtimeReload } from '@/composables/useRealtimeReload';
+import { cn } from '@/lib/utils';
 import { dashboard } from '@/routes';
 
 interface SeerrRequest {
@@ -58,6 +52,7 @@ interface Summary {
     pending: number;
     approved: number;
     declined: number;
+    available?: number;
 }
 
 const props = defineProps<{
@@ -70,7 +65,7 @@ const props = defineProps<{
 defineOptions({
     layout: {
         breadcrumbs: [
-            { title: 'Dashboard', href: dashboard() },
+            { title: 'Media', href: dashboard().url },
             { title: 'Requests', href: RequestController.index.url() },
         ],
     },
@@ -93,96 +88,125 @@ const isAdmin = computed(() => {
     const role = page.props.auth.user?.role;
 
     if (!role) {
-        return false;
-    }
+return false;
+}
 
     const value = typeof role === 'string' ? role : role.value;
 
     return value === 'admin';
 });
 
-function statusLabel(status: number | null): string {
+type FilterId = 'pending' | 'approved' | 'available' | 'declined' | 'all';
+const filter = ref<FilterId>('pending');
+
+const TABS: { id: FilterId; label: string }[] = [
+    { id: 'pending', label: 'Pending review' },
+    { id: 'approved', label: 'Approved' },
+    { id: 'available', label: 'Now available' },
+    { id: 'declined', label: 'Declined' },
+    { id: 'all', label: 'All' },
+];
+
+function statusKey(status: number | null): FilterId | 'failed' | 'unknown' {
     switch (status) {
         case 1:
-            return 'Pending';
+            return 'pending';
         case 2:
-            return 'Approved';
+            return 'approved';
         case 3:
-            return 'Declined';
+            return 'declined';
         case 4:
-            return 'Failed';
+            return 'failed';
         case 5:
-            return 'Available';
+            return 'available';
         default:
-            return status === null ? 'Unknown' : `Unknown (${status})`;
+            return 'unknown';
     }
 }
 
-function statusVariant(status: number | null): BadgeVariants['variant'] {
-    switch (status) {
-        case 1:
-            return 'secondary';
-        case 2:
-            return 'default';
-        case 3:
-        case 4:
-            return 'destructive';
-        case 5:
-            return 'success';
-        default:
-            return 'outline';
-    }
+const visible = computed<SeerrRequest[]>(() => {
+    if (!props.requests) {
+return [];
+}
+
+    if (filter.value === 'all') {
+return props.requests.data;
+}
+
+    return props.requests.data.filter(
+        (req) => statusKey(req.status) === filter.value,
+    );
+});
+
+function counts(id: FilterId): number {
+    if (!props.summary) {
+return 0;
+}
+
+    if (id === 'all') {
+return props.summary.total;
+}
+
+    if (id === 'pending') {
+return props.summary.pending;
+}
+
+    if (id === 'approved') {
+return props.summary.approved;
+}
+
+    if (id === 'declined') {
+return props.summary.declined;
+}
+
+    if (id === 'available') {
+return props.summary.available ?? 0;
+}
+
+    return 0;
 }
 
 function mediaTypeLabel(type: string | null): string {
     if (type === 'movie') {
-        return 'Movie';
-    }
+return 'Movie';
+}
 
     if (type === 'tv') {
-        return 'TV';
-    }
+return 'Series';
+}
 
     return type ?? 'Unknown';
 }
 
 function formatTime(iso: string | null): string {
     if (!iso) {
-        return '-';
-    }
+return '—';
+}
 
-    const date = new Date(iso);
-    const now = new Date();
-    const diffMs = now.getTime() - date.getTime();
-    const diffMins = Math.floor(diffMs / 60000);
+    const ms = Date.now() - new Date(iso).getTime();
+    const m = Math.floor(ms / 60_000);
 
-    if (diffMins < 1) {
-        return 'Just now';
-    }
+    if (m < 1) {
+return 'just now';
+}
 
-    if (diffMins < 60) {
-        return `${diffMins}m ago`;
-    }
+    if (m < 60) {
+return `${m}m ago`;
+}
 
-    const diffHours = Math.floor(diffMins / 60);
+    const h = Math.floor(m / 60);
 
-    if (diffHours < 24) {
-        return `${diffHours}h ago`;
-    }
+    if (h < 24) {
+return `${h}h ago`;
+}
 
-    const diffDays = Math.floor(diffHours / 24);
-
-    if (diffDays < 30) {
-        return `${diffDays}d ago`;
-    }
-
-    return date.toISOString().slice(0, 10);
+    return `${Math.floor(h / 24)}d ago`;
 }
 
 function seerrUrl(req: SeerrRequest): string | null {
     if (req.tmdb_id === null) {
-        return null;
-    }
+return null;
+}
 
     const path = req.media_type === 'movie' ? 'movie' : 'tv';
 
@@ -191,8 +215,8 @@ function seerrUrl(req: SeerrRequest): string | null {
 
 function tmdbUrl(req: SeerrRequest): string | null {
     if (req.tmdb_id === null) {
-        return null;
-    }
+return null;
+}
 
     const path = req.media_type === 'movie' ? 'movie' : 'tv';
 
@@ -201,8 +225,8 @@ function tmdbUrl(req: SeerrRequest): string | null {
 
 function tvdbUrl(req: SeerrRequest): string | null {
     if (req.tvdb_id === null || req.media_type !== 'tv') {
-        return null;
-    }
+return null;
+}
 
     return `https://thetvdb.com/dereferrer/series/${req.tvdb_id}`;
 }
@@ -255,229 +279,231 @@ const rangeText = computed(() => {
     const m = meta.value;
 
     if (!m) {
-        return '';
-    }
+return '';
+}
 
     const start = (m.current_page - 1) * m.per_page + 1;
     const end = Math.min(m.current_page * m.per_page, m.total);
 
-    return `Showing ${start}-${end} of ${m.total}`;
+    return `Showing ${start}–${end} of ${m.total}`;
 });
 </script>
 
 <template>
     <Head title="Requests" />
 
-    <div class="space-y-6 p-6">
-        <div>
-            <h2 class="text-2xl font-bold tracking-tight">Media Requests</h2>
-            <p v-if="summary" class="text-muted-foreground">
-                {{ summary.total }} total · {{ summary.pending }} pending ·
-                {{ summary.approved }} approved
-            </p>
-            <Skeleton v-else class="mt-1 h-5 w-64" />
+    <div class="flex flex-col gap-4 p-5">
+        <!-- Hero -->
+        <div class="flex items-end justify-between gap-3">
+            <div>
+                <div class="mb-1.5 flex items-center gap-2">
+                    <SvcChip id="seerr" />
+                    <span class="text-fg-subtle">/</span>
+                    <span class="text-[13px] text-muted-foreground"
+                        >Requests</span
+                    >
+                </div>
+                <h1
+                    class="text-[22px] leading-tight font-semibold tracking-tight"
+                >
+                    Household requests
+                </h1>
+                <p
+                    v-if="summary"
+                    class="mt-1 text-[13px] text-muted-foreground"
+                >
+                    {{ summary.pending }} pending ·
+                    {{ summary.approved }} approved ·
+                    {{ summary.available ?? 0 }} available ·
+                    {{ summary.declined }} declined
+                </p>
+                <Skeleton v-else class="mt-1 h-5 w-64" />
+            </div>
+            <div class="flex items-center gap-2">
+                <Button variant="outline" size="sm" class="h-7 gap-1.5 text-xs">
+                    <Filter class="size-3.5" />User
+                </Button>
+                <Button variant="outline" size="sm" class="h-7 gap-1.5 text-xs">
+                    <RefreshCcw class="size-3.5" />Sync Seerr
+                </Button>
+            </div>
         </div>
 
-        <TooltipProvider :delay-duration="200">
-            <Table>
-                <TableHeader>
-                    <TableRow>
-                        <TableHead>Status</TableHead>
-                        <TableHead>Type</TableHead>
-                        <TableHead>Title</TableHead>
-                        <TableHead>Requester</TableHead>
-                        <TableHead>Created</TableHead>
-                        <TableHead class="text-right">Actions</TableHead>
-                    </TableRow>
-                </TableHeader>
-                <TableBody>
-                    <template v-if="requests">
-                        <TableRow v-for="req in requests.data" :key="req.id">
-                            <TableCell>
-                                <Badge :variant="statusVariant(req.status)">{{
-                                    statusLabel(req.status)
-                                }}</Badge>
-                            </TableCell>
-                            <TableCell>
-                                <Badge variant="outline">{{
-                                    mediaTypeLabel(req.media_type)
-                                }}</Badge>
-                            </TableCell>
-                            <TableCell class="font-medium">{{
-                                req.media_title ?? 'Unknown'
-                            }}</TableCell>
-                            <TableCell class="text-muted-foreground">{{
-                                req.requester ?? '-'
-                            }}</TableCell>
-                            <TableCell class="text-muted-foreground">{{
-                                formatTime(req.created_at)
-                            }}</TableCell>
-                            <TableCell class="text-right">
-                                <div class="inline-flex items-center gap-1">
-                                    <Tooltip v-if="tvdbUrl(req)">
-                                        <TooltipTrigger as-child>
-                                            <a
-                                                :href="tvdbUrl(req)!"
-                                                target="_blank"
-                                                rel="noopener noreferrer"
-                                            >
-                                                <Button
-                                                    variant="ghost"
-                                                    size="icon"
-                                                >
-                                                    <Tv class="size-4" />
-                                                    <span class="sr-only"
-                                                        >Open on TVDB</span
-                                                    >
-                                                </Button>
-                                            </a>
-                                        </TooltipTrigger>
-                                        <TooltipContent
-                                            >Open on TVDB</TooltipContent
-                                        >
-                                    </Tooltip>
-                                    <Tooltip v-if="tmdbUrl(req)">
-                                        <TooltipTrigger as-child>
-                                            <a
-                                                :href="tmdbUrl(req)!"
-                                                target="_blank"
-                                                rel="noopener noreferrer"
-                                            >
-                                                <Button
-                                                    variant="ghost"
-                                                    size="icon"
-                                                >
-                                                    <Database class="size-4" />
-                                                    <span class="sr-only"
-                                                        >Open on TMDB</span
-                                                    >
-                                                </Button>
-                                            </a>
-                                        </TooltipTrigger>
-                                        <TooltipContent
-                                            >Open on TMDB</TooltipContent
-                                        >
-                                    </Tooltip>
-                                    <Tooltip v-if="seerrUrl(req)">
-                                        <TooltipTrigger as-child>
-                                            <a
-                                                :href="seerrUrl(req)!"
-                                                target="_blank"
-                                                rel="noopener noreferrer"
-                                            >
-                                                <Button
-                                                    variant="ghost"
-                                                    size="icon"
-                                                >
-                                                    <ExternalLink
-                                                        class="size-4"
-                                                    />
-                                                    <span class="sr-only"
-                                                        >Open in Seerr</span
-                                                    >
-                                                </Button>
-                                            </a>
-                                        </TooltipTrigger>
-                                        <TooltipContent
-                                            >Open in Seerr</TooltipContent
-                                        >
-                                    </Tooltip>
-                                    <template v-if="req.status === 1">
-                                        <Tooltip>
-                                            <TooltipTrigger as-child>
-                                                <Button
-                                                    variant="ghost"
-                                                    size="icon"
-                                                    @click="approveRequest(req)"
-                                                >
-                                                    <Check class="size-4" />
-                                                    <span class="sr-only"
-                                                        >Approve</span
-                                                    >
-                                                </Button>
-                                            </TooltipTrigger>
-                                            <TooltipContent
-                                                >Approve</TooltipContent
-                                            >
-                                        </Tooltip>
-                                        <Tooltip>
-                                            <TooltipTrigger as-child>
-                                                <Button
-                                                    variant="ghost"
-                                                    size="icon"
-                                                    @click="declineRequest(req)"
-                                                >
-                                                    <X class="size-4" />
-                                                    <span class="sr-only"
-                                                        >Decline</span
-                                                    >
-                                                </Button>
-                                            </TooltipTrigger>
-                                            <TooltipContent
-                                                >Decline</TooltipContent
-                                            >
-                                        </Tooltip>
-                                    </template>
-                                    <Tooltip v-if="isAdmin">
-                                        <TooltipTrigger as-child>
-                                            <Button
-                                                variant="ghost"
-                                                size="icon"
-                                                @click="retryRequest(req)"
-                                            >
-                                                <RefreshCw class="size-4" />
-                                                <span class="sr-only"
-                                                    >Retry</span
-                                                >
-                                            </Button>
-                                        </TooltipTrigger>
-                                        <TooltipContent>Retry</TooltipContent>
-                                    </Tooltip>
-                                    <Tooltip v-if="isAdmin">
-                                        <TooltipTrigger as-child>
-                                            <Button
-                                                variant="ghost"
-                                                size="icon"
-                                                class="text-destructive hover:text-destructive"
-                                                @click="deleteRequest(req)"
-                                            >
-                                                <Trash2 class="size-4" />
-                                                <span class="sr-only"
-                                                    >Delete</span
-                                                >
-                                            </Button>
-                                        </TooltipTrigger>
-                                        <TooltipContent>Delete</TooltipContent>
-                                    </Tooltip>
-                                </div>
-                            </TableCell>
-                        </TableRow>
-                        <TableRow v-if="requests.data.length === 0">
-                            <TableCell
-                                :colspan="6"
-                                class="py-8 text-center text-muted-foreground"
-                            >
-                                No requests found.
-                            </TableCell>
-                        </TableRow>
-                    </template>
-                    <template v-else>
-                        <TableRow v-for="i in 8" :key="`skeleton-${i}`">
-                            <TableCell><Skeleton class="h-5 w-16" /></TableCell>
-                            <TableCell><Skeleton class="h-5 w-12" /></TableCell>
-                            <TableCell><Skeleton class="h-5 w-48" /></TableCell>
-                            <TableCell><Skeleton class="h-5 w-24" /></TableCell>
-                            <TableCell><Skeleton class="h-5 w-16" /></TableCell>
-                            <TableCell class="text-right"
-                                ><Skeleton class="inline-block h-8 w-32"
-                            /></TableCell>
-                        </TableRow>
-                    </template>
-                </TableBody>
-            </Table>
-        </TooltipProvider>
+        <!-- Tabs -->
+        <div class="flex flex-wrap items-center gap-1.5">
+            <button
+                v-for="tab in TABS"
+                :key="tab.id"
+                type="button"
+                :class="
+                    cn(
+                        'inline-flex h-7 items-center gap-1.5 rounded-md px-2.5 text-xs font-medium transition-colors',
+                        filter === tab.id
+                            ? 'bg-accent text-accent-foreground'
+                            : 'text-muted-foreground hover:bg-bg-hover hover:text-foreground',
+                    )
+                "
+                @click="filter = tab.id"
+            >
+                {{ tab.label }}
+                <span class="font-mono-tabular text-[11px] opacity-70">{{
+                    counts(tab.id)
+                }}</span>
+            </button>
+        </div>
 
-        <div v-if="meta" class="flex items-center justify-between">
+        <!-- Cards -->
+        <div
+            v-if="requests"
+            class="grid gap-4"
+            style="grid-template-columns: repeat(auto-fill, minmax(320px, 1fr))"
+        >
+            <div
+                v-for="req in visible"
+                :key="req.id"
+                class="flex gap-3.5 rounded-xl border border-border bg-card p-3.5"
+            >
+                <Poster
+                    :hint="(req.media_title ?? 'media').toLowerCase().slice(0, 12)"
+                    size="lg"
+                />
+                <div class="flex min-w-0 flex-1 flex-col gap-1.5">
+                    <div class="flex items-center justify-between">
+                        <span class="font-mono-tabular text-[11px] text-fg-subtle"
+                            >req_{{ req.id }}</span
+                        >
+                        <StatusPill :status="statusKey(req.status)" />
+                    </div>
+                    <div
+                        class="text-[15px] leading-tight font-semibold text-pretty"
+                    >
+                        {{ req.media_title ?? 'Unknown' }}
+                    </div>
+                    <div class="text-[12px] text-muted-foreground">
+                        {{ mediaTypeLabel(req.media_type) }}
+                    </div>
+                    <div
+                        v-if="req.requester"
+                        class="flex items-center gap-2"
+                    >
+                        <InitialsAvatar :name="req.requester" :size="20" />
+                        <span class="text-[12px]">{{ req.requester }}</span>
+                        <span class="text-[12px] text-fg-subtle">·</span>
+                        <span class="text-[12px] text-fg-subtle">{{
+                            formatTime(req.created_at)
+                        }}</span>
+                    </div>
+
+                    <div class="mt-auto flex items-center gap-2 pt-1.5">
+                        <template v-if="req.status === 1">
+                            <Button
+                                size="sm"
+                                class="h-7 flex-1 text-xs"
+                                @click="approveRequest(req)"
+                            >
+                                <Check class="size-3.5" />Approve
+                            </Button>
+                            <Button
+                                size="sm"
+                                variant="destructive"
+                                class="h-7 text-xs"
+                                @click="declineRequest(req)"
+                            >
+                                <X class="size-3.5" />Decline
+                            </Button>
+                        </template>
+                        <a
+                            v-else-if="req.status === 5"
+                            :href="seerrUrl(req) ?? '#'"
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            class="flex h-7 flex-1 items-center justify-center gap-1.5 rounded-md border border-border bg-card px-2 text-xs font-medium hover:bg-bg-hover"
+                        >
+                            <Play class="size-3.5" />Open in Emby
+                        </a>
+                        <a
+                            v-else
+                            :href="seerrUrl(req) ?? '#'"
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            class="flex h-7 flex-1 items-center justify-center gap-1.5 rounded-md text-xs font-medium text-muted-foreground hover:bg-bg-hover hover:text-foreground"
+                        >
+                            View detail
+                        </a>
+                        <a
+                            v-if="tmdbUrl(req)"
+                            :href="tmdbUrl(req)!"
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            class="inline-flex size-7 items-center justify-center rounded-md text-muted-foreground hover:bg-bg-hover"
+                            title="TMDB"
+                        >
+                            <Database class="size-3.5" />
+                        </a>
+                        <a
+                            v-if="tvdbUrl(req)"
+                            :href="tvdbUrl(req)!"
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            class="inline-flex size-7 items-center justify-center rounded-md text-muted-foreground hover:bg-bg-hover"
+                            title="TVDB"
+                        >
+                            <Tv class="size-3.5" />
+                        </a>
+                        <a
+                            v-if="seerrUrl(req)"
+                            :href="seerrUrl(req)!"
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            class="inline-flex size-7 items-center justify-center rounded-md text-muted-foreground hover:bg-bg-hover"
+                            title="Seerr"
+                        >
+                            <ExternalLink class="size-3.5" />
+                        </a>
+                        <button
+                            v-if="isAdmin"
+                            type="button"
+                            class="inline-flex size-7 items-center justify-center rounded-md text-muted-foreground hover:bg-bg-hover"
+                            title="Retry"
+                            @click="retryRequest(req)"
+                        >
+                            <RefreshCw class="size-3.5" />
+                        </button>
+                        <button
+                            v-if="isAdmin"
+                            type="button"
+                            class="inline-flex size-7 items-center justify-center rounded-md text-destructive hover:bg-destructive/10"
+                            title="Delete"
+                            @click="deleteRequest(req)"
+                        >
+                            <Trash2 class="size-3.5" />
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <div
+                v-if="visible.length === 0"
+                class="col-span-full rounded-xl border border-border bg-card p-9 text-center text-sm text-fg-subtle"
+            >
+                No requests in this view.
+            </div>
+        </div>
+
+        <div
+            v-else
+            class="grid gap-4"
+            style="grid-template-columns: repeat(auto-fill, minmax(320px, 1fr))"
+        >
+            <Skeleton
+                v-for="n in 6"
+                :key="`req-skel-${n}`"
+                class="h-[160px] w-full rounded-xl"
+            />
+        </div>
+
+        <!-- Pagination -->
+        <div v-if="meta && meta.last_page > 1" class="flex items-center justify-between">
             <p class="text-sm text-muted-foreground">{{ rangeText }}</p>
             <div class="flex items-center gap-2">
                 <Button

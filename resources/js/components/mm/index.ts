@@ -6,3 +6,4 @@ export { default as Poster } from './Poster.vue';
 export { default as LiveDot } from './LiveDot.vue';
 export { default as InitialsAvatar } from './InitialsAvatar.vue';
 export { default as StatCard } from './StatCard.vue';
+export { default as Field } from './Field.vue';
