@@ -1,11 +1,11 @@
 <script setup lang="ts">
 import { Form, Head, router } from '@inertiajs/vue3';
-import { Trash2 } from 'lucide-vue-next';
+import { Plus, Trash2 } from 'lucide-vue-next';
 import { ref } from 'vue';
 import AiModelPriceController from '@/actions/App/Http/Controllers/Admin/AiModelPriceController';
 import InputError from '@/components/InputError.vue';
+import { Pill, StatCard } from '@/components/mm';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import {
     Dialog,
     DialogContent,
@@ -16,15 +16,7 @@ import {
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import {
-    Table,
-    TableBody,
-    TableCell,
-    TableEmpty,
-    TableHead,
-    TableHeader,
-    TableRow,
-} from '@/components/ui/table';
+import { dashboard } from '@/routes';
 
 interface PriceRow {
     id: number;
@@ -37,14 +29,14 @@ interface PriceRow {
     reasoning_per_mtok: string;
 }
 
-defineProps<{
+const props = defineProps<{
     prices: PriceRow[];
 }>();
 
 defineOptions({
     layout: {
         breadcrumbs: [
-            { title: 'Admin', href: '#' },
+            { title: 'Admin', href: dashboard().url },
             { title: 'AI Prices', href: AiModelPriceController.index.url() },
         ],
     },
@@ -71,29 +63,66 @@ function destroy(price: PriceRow) {
         preserveScroll: true,
     });
 }
+
+function fmt(rate: string): string {
+    const n = parseFloat(rate);
+
+    if (Number.isNaN(n)) {
+return '—';
+}
+
+    return `$${n.toFixed(2)}`;
+}
+
+const cheapest = ref(
+    [...props.prices].sort(
+        (a, b) =>
+            parseFloat(a.input_per_mtok) + parseFloat(a.output_per_mtok) -
+            (parseFloat(b.input_per_mtok) + parseFloat(b.output_per_mtok)),
+    )[0] ?? null,
+);
+
+const priciest = ref(
+    [...props.prices].sort(
+        (a, b) =>
+            parseFloat(b.input_per_mtok) + parseFloat(b.output_per_mtok) -
+            (parseFloat(a.input_per_mtok) + parseFloat(a.output_per_mtok)),
+    )[0] ?? null,
+);
 </script>
 
 <template>
     <Head title="AI Model Prices" />
 
-    <div class="space-y-6 p-6">
-        <div class="flex items-center justify-between">
+    <div class="flex flex-col gap-4 p-5">
+        <!-- Hero -->
+        <div class="flex items-end justify-between gap-3">
             <div>
-                <h1 class="text-2xl font-semibold">AI Model Prices</h1>
-                <p class="text-sm text-muted-foreground">
+                <div class="mb-1.5 text-[13px] text-muted-foreground">
+                    Admin <span class="text-fg-subtle">/</span> AI prices
+                </div>
+                <h1
+                    class="text-[22px] leading-tight font-semibold tracking-tight"
+                >
+                    AI prices
+                </h1>
+                <p
+                    class="mt-1 max-w-[640px] text-[13px] text-muted-foreground"
+                >
                     Per-million-token rates used to estimate cost on the AI
                     Usage dashboard. Add a row for any model you've used so its
                     spend shows up.
                 </p>
             </div>
-
             <Dialog v-model:open="showCreateDialog">
                 <DialogTrigger as-child>
-                    <Button>Add Model Price</Button>
+                    <Button size="sm" class="h-7 gap-1.5 text-xs">
+                        <Plus class="size-3.5" />Add model price
+                    </Button>
                 </DialogTrigger>
                 <DialogContent>
                     <DialogHeader>
-                        <DialogTitle>Add Model Price</DialogTitle>
+                        <DialogTitle>Add model price</DialogTitle>
                     </DialogHeader>
                     <Form
                         v-bind="AiModelPriceController.store.post()"
@@ -120,58 +149,42 @@ function destroy(price: PriceRow) {
                             <InputError :message="errors.model" />
                         </div>
                         <div class="grid grid-cols-2 gap-4">
-                            <div class="space-y-2">
-                                <Label for="input_per_mtok">Input ($/M)</Label>
+                            <div
+                                v-for="field in (
+                                    [
+                                        ['input_per_mtok', 'Input ($/M)'],
+                                        ['output_per_mtok', 'Output ($/M)'],
+                                        [
+                                            'cache_read_per_mtok',
+                                            'Cache Read ($/M)',
+                                        ],
+                                        [
+                                            'cache_write_per_mtok',
+                                            'Cache Write ($/M)',
+                                        ],
+                                    ] as const
+                                )"
+                                :key="field[0]"
+                                class="space-y-2"
+                            >
+                                <Label :for="field[0]">{{ field[1] }}</Label>
                                 <Input
-                                    id="input_per_mtok"
-                                    name="input_per_mtok"
-                                    type="number"
-                                    step="0.0001"
-                                    min="0"
-                                />
-                                <InputError :message="errors.input_per_mtok" />
-                            </div>
-                            <div class="space-y-2">
-                                <Label for="output_per_mtok"
-                                    >Output ($/M)</Label
-                                >
-                                <Input
-                                    id="output_per_mtok"
-                                    name="output_per_mtok"
-                                    type="number"
-                                    step="0.0001"
-                                    min="0"
-                                />
-                                <InputError :message="errors.output_per_mtok" />
-                            </div>
-                            <div class="space-y-2">
-                                <Label for="cache_read_per_mtok"
-                                    >Cache Read ($/M)</Label
-                                >
-                                <Input
-                                    id="cache_read_per_mtok"
-                                    name="cache_read_per_mtok"
+                                    :id="field[0]"
+                                    :name="field[0]"
                                     type="number"
                                     step="0.0001"
                                     min="0"
                                 />
                                 <InputError
-                                    :message="errors.cache_read_per_mtok"
-                                />
-                            </div>
-                            <div class="space-y-2">
-                                <Label for="cache_write_per_mtok"
-                                    >Cache Write ($/M)</Label
-                                >
-                                <Input
-                                    id="cache_write_per_mtok"
-                                    name="cache_write_per_mtok"
-                                    type="number"
-                                    step="0.0001"
-                                    min="0"
-                                />
-                                <InputError
-                                    :message="errors.cache_write_per_mtok"
+                                    :message="
+                                        errors[
+                                            field[0] as
+                                                | 'input_per_mtok'
+                                                | 'output_per_mtok'
+                                                | 'cache_read_per_mtok'
+                                                | 'cache_write_per_mtok'
+                                        ]
+                                    "
                                 />
                             </div>
                             <div class="col-span-2 space-y-2">
@@ -200,84 +213,167 @@ function destroy(price: PriceRow) {
             </Dialog>
         </div>
 
-        <Card>
-            <CardHeader>
-                <CardTitle>Configured Models</CardTitle>
-            </CardHeader>
-            <CardContent>
-                <Table>
-                    <TableHeader>
-                        <TableRow>
-                            <TableHead>Provider</TableHead>
-                            <TableHead>Model</TableHead>
-                            <TableHead class="text-right">Input</TableHead>
-                            <TableHead class="text-right">Output</TableHead>
-                            <TableHead class="text-right">Cache R</TableHead>
-                            <TableHead class="text-right">Cache W</TableHead>
-                            <TableHead class="text-right">Reasoning</TableHead>
-                            <TableHead class="text-right">Actions</TableHead>
-                        </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                        <TableRow v-for="price in prices" :key="price.id">
-                            <TableCell class="font-medium">{{
-                                price.provider
-                            }}</TableCell>
-                            <TableCell class="font-mono text-xs">{{
-                                price.model
-                            }}</TableCell>
-                            <TableCell class="text-right"
-                                >${{ price.input_per_mtok }}</TableCell
-                            >
-                            <TableCell class="text-right"
-                                >${{ price.output_per_mtok }}</TableCell
-                            >
-                            <TableCell class="text-right"
-                                >${{ price.cache_read_per_mtok }}</TableCell
-                            >
-                            <TableCell class="text-right"
-                                >${{ price.cache_write_per_mtok }}</TableCell
-                            >
-                            <TableCell class="text-right"
-                                >${{ price.reasoning_per_mtok }}</TableCell
-                            >
-                            <TableCell class="text-right">
-                                <div class="flex justify-end gap-2">
-                                    <Button
-                                        variant="outline"
-                                        size="sm"
-                                        @click="startEdit(price)"
-                                        >Edit</Button
-                                    >
-                                    <Button
-                                        variant="ghost"
-                                        size="icon"
-                                        @click="destroy(price)"
-                                    >
-                                        <Trash2 class="size-4" />
-                                    </Button>
-                                </div>
-                            </TableCell>
-                        </TableRow>
-                        <TableEmpty v-if="prices.length === 0" :colspan="8">
-                            No models priced yet. Click "Add Model Price" to
-                            start.
-                        </TableEmpty>
-                    </TableBody>
-                </Table>
-            </CardContent>
-        </Card>
+        <!-- Stat cards -->
+        <div class="grid gap-4 md:grid-cols-3">
+            <StatCard
+                label="Models priced"
+                :value="prices.length"
+                hint="rows in this catalog"
+            />
+            <div
+                class="flex min-h-[110px] flex-col gap-2.5 rounded-xl border border-border bg-card p-5"
+            >
+                <span
+                    class="text-[11.5px] font-semibold tracking-[0.05em] text-muted-foreground uppercase"
+                    >Cheapest</span
+                >
+                <div v-if="cheapest">
+                    <div
+                        class="font-mono-tabular text-[15px] font-semibold"
+                    >
+                        {{ cheapest.model }}
+                    </div>
+                    <div class="text-xs text-muted-foreground">
+                        {{ fmt(cheapest.input_per_mtok) }} in /
+                        {{ fmt(cheapest.output_per_mtok) }} out
+                    </div>
+                </div>
+                <div v-else class="text-sm text-fg-subtle">No data</div>
+            </div>
+            <div
+                class="flex min-h-[110px] flex-col gap-2.5 rounded-xl border border-border bg-card p-5"
+            >
+                <span
+                    class="text-[11.5px] font-semibold tracking-[0.05em] text-muted-foreground uppercase"
+                    >Priciest</span
+                >
+                <div v-if="priciest">
+                    <div
+                        class="font-mono-tabular text-[15px] font-semibold"
+                    >
+                        {{ priciest.model }}
+                    </div>
+                    <div class="text-xs text-muted-foreground">
+                        {{ fmt(priciest.input_per_mtok) }} in /
+                        {{ fmt(priciest.output_per_mtok) }} out
+                    </div>
+                </div>
+                <div v-else class="text-sm text-fg-subtle">No data</div>
+            </div>
+        </div>
 
+        <!-- Models table -->
+        <div class="overflow-hidden rounded-xl border border-border bg-card">
+            <div
+                class="border-b border-border px-4 py-3 text-[12px] font-semibold tracking-[0.06em] text-muted-foreground uppercase"
+            >
+                Configured models
+            </div>
+            <table class="w-full border-collapse text-[13px]">
+                <thead>
+                    <tr>
+                        <th
+                            v-for="h in [
+                                'Model',
+                                'Provider',
+                                'Input',
+                                'Output',
+                                'Cache R',
+                                'Cache W',
+                                'Reasoning',
+                                '',
+                            ]"
+                            :key="h"
+                            class="border-b border-border bg-card px-3 py-2 text-left text-[11.5px] font-medium tracking-[0.05em] text-muted-foreground uppercase"
+                        >
+                            {{ h }}
+                        </th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr
+                        v-for="price in prices"
+                        :key="price.id"
+                        class="border-b border-border last:border-b-0 hover:bg-bg-hover"
+                    >
+                        <td class="px-3 py-2.5">
+                            <div
+                                class="font-mono-tabular text-[12.5px] font-medium"
+                            >
+                                {{ price.model }}
+                            </div>
+                        </td>
+                        <td class="px-3 py-2.5">
+                            <Pill>{{ price.provider }}</Pill>
+                        </td>
+                        <td
+                            class="font-mono-tabular px-3 py-2.5 text-right"
+                        >
+                            {{ fmt(price.input_per_mtok) }}
+                        </td>
+                        <td
+                            class="font-mono-tabular px-3 py-2.5 text-right"
+                        >
+                            {{ fmt(price.output_per_mtok) }}
+                        </td>
+                        <td
+                            class="font-mono-tabular px-3 py-2.5 text-right text-fg-subtle"
+                        >
+                            {{ fmt(price.cache_read_per_mtok) }}
+                        </td>
+                        <td
+                            class="font-mono-tabular px-3 py-2.5 text-right text-fg-subtle"
+                        >
+                            {{ fmt(price.cache_write_per_mtok) }}
+                        </td>
+                        <td
+                            class="font-mono-tabular px-3 py-2.5 text-right text-fg-subtle"
+                        >
+                            {{ fmt(price.reasoning_per_mtok) }}
+                        </td>
+                        <td class="px-3 py-2.5 text-right">
+                            <div class="flex justify-end gap-1">
+                                <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    class="h-7 px-2 text-xs"
+                                    @click="startEdit(price)"
+                                >
+                                    Edit
+                                </Button>
+                                <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    class="size-7 p-0 text-destructive hover:text-destructive"
+                                    @click="destroy(price)"
+                                >
+                                    <Trash2 class="size-3.5" />
+                                </Button>
+                            </div>
+                        </td>
+                    </tr>
+                    <tr v-if="prices.length === 0">
+                        <td
+                            colspan="8"
+                            class="px-3 py-8 text-center text-sm text-fg-subtle"
+                        >
+                            No models priced yet. Click "Add model price".
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <!-- Edit dialog -->
         <Dialog
             :open="editing !== null"
             @update:open="(v) => !v && cancelEdit()"
         >
             <DialogContent v-if="editing">
                 <DialogHeader>
-                    <DialogTitle
-                        >Edit {{ editing.provider }} /
-                        {{ editing.model }}</DialogTitle
-                    >
+                    <DialogTitle>
+                        Edit {{ editing.provider }} / {{ editing.model }}
+                    </DialogTitle>
                 </DialogHeader>
                 <Form
                     v-bind="AiModelPriceController.update.form(editing.id)"
@@ -286,54 +382,57 @@ function destroy(price: PriceRow) {
                     @success="cancelEdit"
                 >
                     <div class="grid grid-cols-2 gap-4">
-                        <div class="space-y-2">
-                            <Label for="edit_input">Input ($/M)</Label>
+                        <div
+                            v-for="field in (
+                                [
+                                    ['edit_input', 'input_per_mtok', 'Input ($/M)'],
+                                    [
+                                        'edit_output',
+                                        'output_per_mtok',
+                                        'Output ($/M)',
+                                    ],
+                                    [
+                                        'edit_cache_r',
+                                        'cache_read_per_mtok',
+                                        'Cache Read ($/M)',
+                                    ],
+                                    [
+                                        'edit_cache_w',
+                                        'cache_write_per_mtok',
+                                        'Cache Write ($/M)',
+                                    ],
+                                ] as const
+                            )"
+                            :key="field[0]"
+                            class="space-y-2"
+                        >
+                            <Label :for="field[0]">{{ field[2] }}</Label>
                             <Input
-                                id="edit_input"
-                                name="input_per_mtok"
+                                :id="field[0]"
+                                :name="field[1]"
                                 type="number"
                                 step="0.0001"
                                 min="0"
-                                :default-value="editing.input_per_mtok"
-                            />
-                            <InputError :message="errors.input_per_mtok" />
-                        </div>
-                        <div class="space-y-2">
-                            <Label for="edit_output">Output ($/M)</Label>
-                            <Input
-                                id="edit_output"
-                                name="output_per_mtok"
-                                type="number"
-                                step="0.0001"
-                                min="0"
-                                :default-value="editing.output_per_mtok"
-                            />
-                            <InputError :message="errors.output_per_mtok" />
-                        </div>
-                        <div class="space-y-2">
-                            <Label for="edit_cache_r">Cache Read ($/M)</Label>
-                            <Input
-                                id="edit_cache_r"
-                                name="cache_read_per_mtok"
-                                type="number"
-                                step="0.0001"
-                                min="0"
-                                :default-value="editing.cache_read_per_mtok"
-                            />
-                            <InputError :message="errors.cache_read_per_mtok" />
-                        </div>
-                        <div class="space-y-2">
-                            <Label for="edit_cache_w">Cache Write ($/M)</Label>
-                            <Input
-                                id="edit_cache_w"
-                                name="cache_write_per_mtok"
-                                type="number"
-                                step="0.0001"
-                                min="0"
-                                :default-value="editing.cache_write_per_mtok"
+                                :default-value="
+                                    editing[
+                                        field[1] as
+                                            | 'input_per_mtok'
+                                            | 'output_per_mtok'
+                                            | 'cache_read_per_mtok'
+                                            | 'cache_write_per_mtok'
+                                    ]
+                                "
                             />
                             <InputError
-                                :message="errors.cache_write_per_mtok"
+                                :message="
+                                    errors[
+                                        field[1] as
+                                            | 'input_per_mtok'
+                                            | 'output_per_mtok'
+                                            | 'cache_read_per_mtok'
+                                            | 'cache_write_per_mtok'
+                                    ]
+                                "
                             />
                         </div>
                         <div class="col-span-2 space-y-2">
@@ -346,13 +445,15 @@ function destroy(price: PriceRow) {
                                 min="0"
                                 :default-value="editing.reasoning_per_mtok"
                             />
-                            <InputError :message="errors.reasoning_per_mtok" />
+                            <InputError
+                                :message="errors.reasoning_per_mtok"
+                            />
                         </div>
                     </div>
                     <DialogFooter>
-                        <Button type="submit" :disabled="processing"
-                            >Save</Button
-                        >
+                        <Button type="submit" :disabled="processing">
+                            Save
+                        </Button>
                     </DialogFooter>
                 </Form>
             </DialogContent>

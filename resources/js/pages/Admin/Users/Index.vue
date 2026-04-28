@@ -1,11 +1,11 @@
 <script setup lang="ts">
 import { Form, Head, router, usePage } from '@inertiajs/vue3';
+import { Plus, Upload } from 'lucide-vue-next';
 import { computed, ref } from 'vue';
 import UserController from '@/actions/App/Http/Controllers/Admin/UserController';
 import InputError from '@/components/InputError.vue';
+import { InitialsAvatar, Pill } from '@/components/mm';
 import PasswordInput from '@/components/PasswordInput.vue';
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
     Dialog,
@@ -25,14 +25,7 @@ import {
     SelectTrigger,
     SelectValue,
 } from '@/components/ui/select';
-import {
-    Table,
-    TableBody,
-    TableCell,
-    TableHead,
-    TableHeader,
-    TableRow,
-} from '@/components/ui/table';
+import { dashboard } from '@/routes';
 
 interface RoleOption {
     value: string;
@@ -57,7 +50,7 @@ defineProps<{
 defineOptions({
     layout: {
         breadcrumbs: [
-            { title: 'Admin', href: '#' },
+            { title: 'Admin', href: dashboard().url },
             { title: 'Users', href: UserController.index.url() },
         ],
     },
@@ -80,21 +73,28 @@ function roleLabel(role: UserItem['role']): string {
     return role.label ?? role.value;
 }
 
-function authMethod(ssoProvider: string | null): string {
-    if (!ssoProvider) {
-        return 'Local';
-    }
+function rolePillVariant(
+    role: UserItem['role'],
+): 'ok' | 'info' | 'warn' | 'default' {
+    const v = roleValue(role);
 
-    return ssoProvider.charAt(0).toUpperCase() + ssoProvider.slice(1);
+    if (v === 'admin') {
+return 'info';
 }
 
-function initials(name: string): string {
-    return name
-        .split(' ')
-        .map((n) => n[0])
-        .join('')
-        .toUpperCase()
-        .slice(0, 2);
+    if (v === 'member') {
+return 'ok';
+}
+
+    return 'default';
+}
+
+function authMethod(ssoProvider: string | null): string {
+    if (!ssoProvider) {
+return 'local';
+}
+
+    return ssoProvider.charAt(0).toUpperCase() + ssoProvider.slice(1);
 }
 
 function updateRole(user: UserItem, newRole: string) {
@@ -114,78 +114,217 @@ function deleteUser(user: UserItem) {
 </script>
 
 <template>
-    <Head title="User Management" />
+    <Head title="Users" />
 
-    <div class="space-y-6 p-6">
-        <div class="flex items-center justify-between">
+    <div class="flex flex-col gap-4 p-5">
+        <!-- Hero -->
+        <div class="flex items-end justify-between gap-3">
             <div>
-                <h2 class="text-2xl font-bold tracking-tight">Users</h2>
-                <p class="text-muted-foreground">
-                    Manage user accounts and roles.
+                <div class="mb-1.5 text-[13px] text-muted-foreground">
+                    Admin <span class="text-fg-subtle">/</span> Users
+                </div>
+                <h1
+                    class="text-[22px] leading-tight font-semibold tracking-tight"
+                >
+                    Users
+                </h1>
+                <p class="mt-1 text-[13px] text-muted-foreground">
+                    Local accounts, SSO, and Emby-credential users live in one
+                    table.
                 </p>
             </div>
+            <div class="flex items-center gap-2">
+                <Button variant="outline" size="sm" class="h-7 gap-1.5 text-xs">
+                    <Upload class="size-3.5" />Import from Emby
+                </Button>
+                <Dialog v-model:open="showCreateDialog">
+                    <DialogTrigger as-child>
+                        <Button size="sm" class="h-7 gap-1.5 text-xs">
+                            <Plus class="size-3.5" />Invite user
+                        </Button>
+                    </DialogTrigger>
+                    <DialogContent>
+                        <DialogHeader>
+                            <DialogTitle>{{
+                                setPassword ? 'Create user' : 'Invite user'
+                            }}</DialogTitle>
+                            <DialogDescription>
+                                {{
+                                    setPassword
+                                        ? 'Create a user account with a password.'
+                                        : "Send an invitation email. They'll set their own password when they accept."
+                                }}
+                            </DialogDescription>
+                        </DialogHeader>
 
-            <Dialog v-model:open="showCreateDialog">
-                <DialogTrigger as-child>
-                    <Button>Invite User</Button>
-                </DialogTrigger>
-                <DialogContent>
-                    <DialogHeader>
-                        <DialogTitle>{{
-                            setPassword ? 'Create User' : 'Invite User'
-                        }}</DialogTitle>
-                        <DialogDescription>
-                            {{
-                                setPassword
-                                    ? 'Create a user account with a password.'
-                                    : "Send an invitation email. They'll set their own password when they accept."
-                            }}
-                        </DialogDescription>
-                    </DialogHeader>
+                        <Form
+                            v-bind="UserController.store.post()"
+                            v-slot="{ errors, processing }"
+                            class="space-y-4"
+                            @success="
+                                showCreateDialog = false;
+                                setPassword = false;
+                            "
+                        >
+                            <input
+                                type="hidden"
+                                name="set_password"
+                                :value="setPassword ? '1' : '0'"
+                            />
+                            <div class="space-y-2">
+                                <Label for="create-name">Name</Label>
+                                <Input
+                                    id="create-name"
+                                    name="name"
+                                    required
+                                    placeholder="Full name"
+                                />
+                                <InputError :message="errors.name" />
+                            </div>
+                            <div class="space-y-2">
+                                <Label for="create-email">Email</Label>
+                                <Input
+                                    id="create-email"
+                                    name="email"
+                                    type="email"
+                                    required
+                                    placeholder="email@example.com"
+                                />
+                                <InputError :message="errors.email" />
+                            </div>
+                            <div class="space-y-2">
+                                <Label for="create-role">Role</Label>
+                                <Select name="role" default-value="viewer">
+                                    <SelectTrigger>
+                                        <SelectValue
+                                            placeholder="Select a role"
+                                        />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem
+                                            v-for="role in roles"
+                                            :key="role.value"
+                                            :value="role.value"
+                                        >
+                                            {{ role.label }}
+                                        </SelectItem>
+                                    </SelectContent>
+                                </Select>
+                                <InputError :message="errors.role" />
+                            </div>
+                            <template v-if="setPassword">
+                                <div class="space-y-2">
+                                    <Label for="create-password"
+                                        >Password</Label
+                                    >
+                                    <PasswordInput
+                                        id="create-password"
+                                        name="password"
+                                        required
+                                        placeholder="Password"
+                                    />
+                                    <InputError :message="errors.password" />
+                                </div>
+                                <div class="space-y-2">
+                                    <Label for="create-password-confirmation"
+                                        >Confirm Password</Label
+                                    >
+                                    <PasswordInput
+                                        id="create-password-confirmation"
+                                        name="password_confirmation"
+                                        required
+                                        placeholder="Confirm password"
+                                    />
+                                </div>
+                            </template>
+                            <button
+                                type="button"
+                                class="text-sm text-muted-foreground underline underline-offset-4 hover:text-foreground"
+                                @click="setPassword = !setPassword"
+                            >
+                                {{
+                                    setPassword
+                                        ? 'Send invite instead'
+                                        : 'Set password manually'
+                                }}
+                            </button>
+                            <DialogFooter>
+                                <Button
+                                    type="button"
+                                    variant="outline"
+                                    @click="
+                                        showCreateDialog = false;
+                                        setPassword = false;
+                                    "
+                                    >Cancel</Button
+                                >
+                                <Button type="submit" :disabled="processing">
+                                    {{
+                                        setPassword
+                                            ? 'Create user'
+                                            : 'Send invitation'
+                                    }}
+                                </Button>
+                            </DialogFooter>
+                        </Form>
+                    </DialogContent>
+                </Dialog>
+            </div>
+        </div>
 
-                    <Form
-                        v-bind="UserController.store.post()"
-                        v-slot="{ errors, processing }"
-                        class="space-y-4"
-                        @success="
-                            showCreateDialog = false;
-                            setPassword = false;
-                        "
+        <!-- Users table -->
+        <div class="overflow-hidden rounded-xl border border-border bg-card">
+            <table class="w-full border-collapse text-[13px]">
+                <thead>
+                    <tr>
+                        <th
+                            v-for="h in [
+                                'User',
+                                'Role',
+                                'Auth',
+                                'Joined',
+                                '',
+                            ]"
+                            :key="h"
+                            class="border-b border-border bg-card px-3 py-2 text-left text-[11.5px] font-medium tracking-[0.05em] text-muted-foreground uppercase"
+                        >
+                            {{ h }}
+                        </th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr
+                        v-for="user in users"
+                        :key="user.id"
+                        class="border-b border-border last:border-b-0 hover:bg-bg-hover"
                     >
-                        <input
-                            type="hidden"
-                            name="set_password"
-                            :value="setPassword ? '1' : '0'"
-                        />
-
-                        <div class="space-y-2">
-                            <Label for="create-name">Name</Label>
-                            <Input
-                                id="create-name"
-                                name="name"
-                                required
-                                placeholder="Full name"
-                            />
-                            <InputError :message="errors.name" />
-                        </div>
-
-                        <div class="space-y-2">
-                            <Label for="create-email">Email</Label>
-                            <Input
-                                id="create-email"
-                                name="email"
-                                type="email"
-                                required
-                                placeholder="email@example.com"
-                            />
-                            <InputError :message="errors.email" />
-                        </div>
-
-                        <div class="space-y-2">
-                            <Label for="create-role">Role</Label>
-                            <Select name="role" default-value="viewer">
-                                <SelectTrigger>
-                                    <SelectValue placeholder="Select a role" />
+                        <td class="px-3 py-2.5">
+                            <span class="flex items-center gap-2.5">
+                                <InitialsAvatar :name="user.name" :size="24" />
+                                <span>
+                                    <div class="font-medium">{{
+                                        user.name
+                                    }}</div>
+                                    <div
+                                        class="text-[11.5px] text-muted-foreground"
+                                    >
+                                        {{ user.email }}
+                                    </div>
+                                </span>
+                            </span>
+                        </td>
+                        <td class="px-3 py-2.5">
+                            <Select
+                                v-if="user.id !== currentUserId"
+                                :default-value="roleValue(user.role)"
+                                @update:model-value="
+                                    (val) =>
+                                        typeof val === 'string' &&
+                                        updateRole(user, val)
+                                "
+                            >
+                                <SelectTrigger class="h-7 w-28 text-xs">
+                                    <SelectValue />
                                 </SelectTrigger>
                                 <SelectContent>
                                     <SelectItem
@@ -197,159 +336,47 @@ function deleteUser(user: UserItem) {
                                     </SelectItem>
                                 </SelectContent>
                             </Select>
-                            <InputError :message="errors.role" />
-                        </div>
-
-                        <template v-if="setPassword">
-                            <div class="space-y-2">
-                                <Label for="create-password">Password</Label>
-                                <PasswordInput
-                                    id="create-password"
-                                    name="password"
-                                    required
-                                    placeholder="Password"
-                                />
-                                <InputError :message="errors.password" />
-                            </div>
-
-                            <div class="space-y-2">
-                                <Label for="create-password-confirmation"
-                                    >Confirm Password</Label
-                                >
-                                <PasswordInput
-                                    id="create-password-confirmation"
-                                    name="password_confirmation"
-                                    required
-                                    placeholder="Confirm password"
-                                />
-                            </div>
-                        </template>
-
-                        <button
-                            type="button"
-                            class="text-sm text-muted-foreground underline underline-offset-4 hover:text-foreground"
-                            @click="setPassword = !setPassword"
+                            <Pill v-else :variant="rolePillVariant(user.role)">{{
+                                roleLabel(user.role)
+                            }}</Pill>
+                        </td>
+                        <td
+                            class="font-mono-tabular px-3 py-2.5 text-[11.5px] text-muted-foreground"
                         >
-                            {{
-                                setPassword
-                                    ? 'Send invite instead'
-                                    : 'Set password manually'
-                            }}
-                        </button>
-
-                        <DialogFooter>
+                            {{ authMethod(user.sso_provider) }}
+                        </td>
+                        <td
+                            class="font-mono-tabular px-3 py-2.5 text-[11.5px] text-fg-subtle"
+                        >
+                            {{ user.created_at }}
+                        </td>
+                        <td class="px-3 py-2.5 text-right">
                             <Button
-                                type="button"
-                                variant="outline"
-                                @click="
-                                    showCreateDialog = false;
-                                    setPassword = false;
-                                "
-                                >Cancel</Button
+                                v-if="user.id !== currentUserId"
+                                variant="ghost"
+                                size="sm"
+                                class="h-7 px-2 text-xs text-destructive hover:text-destructive"
+                                @click="deleteUser(user)"
                             >
-                            <Button type="submit" :disabled="processing">
-                                {{
-                                    setPassword
-                                        ? 'Create User'
-                                        : 'Send Invitation'
-                                }}
+                                Delete
                             </Button>
-                        </DialogFooter>
-                    </Form>
-                </DialogContent>
-            </Dialog>
+                            <span
+                                v-else
+                                class="text-[11.5px] text-fg-subtle"
+                                >You</span
+                            >
+                        </td>
+                    </tr>
+                    <tr v-if="users.length === 0">
+                        <td
+                            colspan="5"
+                            class="px-3 py-8 text-center text-sm text-fg-subtle"
+                        >
+                            No users yet.
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
         </div>
-
-        <Table>
-            <TableHeader>
-                <TableRow>
-                    <TableHead>User</TableHead>
-                    <TableHead>Email</TableHead>
-                    <TableHead>Role</TableHead>
-                    <TableHead>Auth Method</TableHead>
-                    <TableHead>Joined</TableHead>
-                    <TableHead class="text-right">Actions</TableHead>
-                </TableRow>
-            </TableHeader>
-            <TableBody>
-                <TableRow v-for="user in users" :key="user.id">
-                    <TableCell>
-                        <div class="flex items-center gap-3">
-                            <Avatar class="h-8 w-8">
-                                <AvatarImage
-                                    v-if="user.avatar_url"
-                                    :src="user.avatar_url"
-                                    :alt="user.name"
-                                />
-                                <AvatarFallback>{{
-                                    initials(user.name)
-                                }}</AvatarFallback>
-                            </Avatar>
-                            <span class="font-medium">{{ user.name }}</span>
-                        </div>
-                    </TableCell>
-                    <TableCell class="text-muted-foreground">{{
-                        user.email
-                    }}</TableCell>
-                    <TableCell>
-                        <Select
-                            v-if="user.id !== currentUserId"
-                            :default-value="roleValue(user.role)"
-                            @update:model-value="
-                                (val) =>
-                                    typeof val === 'string' &&
-                                    updateRole(user, val)
-                            "
-                        >
-                            <SelectTrigger class="w-28">
-                                <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                                <SelectItem
-                                    v-for="role in roles"
-                                    :key="role.value"
-                                    :value="role.value"
-                                >
-                                    {{ role.label }}
-                                </SelectItem>
-                            </SelectContent>
-                        </Select>
-                        <Badge v-else variant="outline">{{
-                            roleLabel(user.role)
-                        }}</Badge>
-                    </TableCell>
-                    <TableCell>
-                        <Badge variant="secondary">{{
-                            authMethod(user.sso_provider)
-                        }}</Badge>
-                    </TableCell>
-                    <TableCell class="text-muted-foreground">{{
-                        user.created_at
-                    }}</TableCell>
-                    <TableCell class="text-right">
-                        <Button
-                            v-if="user.id !== currentUserId"
-                            variant="ghost"
-                            size="sm"
-                            class="text-destructive"
-                            @click="deleteUser(user)"
-                        >
-                            Delete
-                        </Button>
-                        <span v-else class="text-xs text-muted-foreground"
-                            >You</span
-                        >
-                    </TableCell>
-                </TableRow>
-                <TableRow v-if="users.length === 0">
-                    <TableCell
-                        :colspan="6"
-                        class="py-8 text-center text-muted-foreground"
-                    >
-                        No users found.
-                    </TableCell>
-                </TableRow>
-            </TableBody>
-        </Table>
     </div>
 </template>

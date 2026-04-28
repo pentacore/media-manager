@@ -1,12 +1,16 @@
 <script setup lang="ts">
 import { Head, router } from '@inertiajs/vue3';
-import { ChevronDown, ChevronRight } from 'lucide-vue-next';
+import {
+    ChevronDown,
+    ChevronRight,
+    Download,
+    Sparkles,
+} from 'lucide-vue-next';
 import { computed, ref } from 'vue';
 import AiModelPriceController from '@/actions/App/Http/Controllers/Admin/AiModelPriceController';
 import AiUsageController from '@/actions/App/Http/Controllers/Admin/AiUsageController';
-import { Badge } from '@/components/ui/badge';
+import { InitialsAvatar, Pill, StatCard } from '@/components/mm';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import {
@@ -16,15 +20,8 @@ import {
     SelectTrigger,
     SelectValue,
 } from '@/components/ui/select';
-import {
-    Table,
-    TableBody,
-    TableCell,
-    TableEmpty,
-    TableHead,
-    TableHeader,
-    TableRow,
-} from '@/components/ui/table';
+import { cn } from '@/lib/utils';
+import { dashboard } from '@/routes';
 import type { QueryParams } from '@/wayfinder';
 
 interface Totals {
@@ -91,7 +88,7 @@ const props = defineProps<{
 defineOptions({
     layout: {
         breadcrumbs: [
-            { title: 'Admin', href: '#' },
+            { title: 'Admin', href: dashboard().url },
             { title: 'AI Usage', href: AiUsageController.index.url() },
         ],
     },
@@ -151,8 +148,8 @@ function loadFromModel(key: string) {
     selectedLoadKey.value = key;
 
     if (!key) {
-        return;
-    }
+return;
+}
 
     const [provider, model] = key.split('|');
     const priced = props.priced_models.find(
@@ -160,8 +157,8 @@ function loadFromModel(key: string) {
     );
 
     if (!priced) {
-        return;
-    }
+return;
+}
 
     form.value = {
         input: parseFloat(priced.input_per_mtok),
@@ -192,9 +189,7 @@ function applyScenario() {
 
 function clearScenario() {
     router.visit(
-        AiUsageController.index.url({
-            query: { window: props.window },
-        }),
+        AiUsageController.index.url({ query: { window: props.window } }),
         { preserveScroll: true },
     );
 }
@@ -203,16 +198,16 @@ function formatCost(value: string | number): string {
     const n = typeof value === 'string' ? parseFloat(value) : value;
 
     if (n < 0.01 && n > 0) {
-        return `$${n.toFixed(5)}`;
-    }
+return `$${n.toFixed(5)}`;
+}
 
     return `$${n.toFixed(2)}`;
 }
 
 function costDelta(actual: string, projected: string | undefined): string {
     if (projected === undefined) {
-        return '';
-    }
+return '';
+}
 
     const a = parseFloat(actual);
     const p = parseFloat(projected);
@@ -239,13 +234,23 @@ function formatTimestamp(value: string): string {
 <template>
     <Head title="AI Usage" />
 
-    <div class="space-y-6 p-6">
-        <div class="flex items-center justify-between">
+    <div class="flex flex-col gap-4 p-5">
+        <!-- Hero -->
+        <div class="flex items-end justify-between gap-3">
             <div>
-                <h1 class="text-2xl font-semibold">AI Usage</h1>
-                <p class="text-sm text-muted-foreground">
-                    Token consumption and estimated cost by agent, model, and
-                    provider. Costs computed from
+                <div class="mb-1.5 text-[13px] text-muted-foreground">
+                    Admin <span class="text-fg-subtle">/</span> AI usage
+                </div>
+                <h1
+                    class="text-[22px] leading-tight font-semibold tracking-tight"
+                >
+                    AI usage
+                </h1>
+                <p
+                    class="mt-1 max-w-[640px] text-[13px] text-muted-foreground"
+                >
+                    Per-call ledger with token counts, latency, and cost.
+                    Pricing pulled from
                     <a
                         :href="AiModelPriceController.index.url()"
                         class="underline hover:text-foreground"
@@ -253,44 +258,85 @@ function formatTimestamp(value: string): string {
                     >.
                 </p>
             </div>
-
-            <div class="flex gap-1 rounded-md border bg-muted p-1">
-                <Button
-                    v-for="option in ['24h', '7d', '30d'] as const"
-                    :key="option"
-                    :variant="props.window === option ? 'default' : 'ghost'"
-                    size="sm"
-                    @click="setWindow(option)"
+            <div class="flex items-center gap-2">
+                <div
+                    class="flex items-center gap-0.5 rounded-md border border-border bg-bg-elev p-0.5"
                 >
-                    {{ option }}
+                    <button
+                        v-for="opt in (['24h', '7d', '30d'] as const)"
+                        :key="opt"
+                        type="button"
+                        :class="
+                            cn(
+                                'inline-flex h-6 items-center rounded px-2 text-xs font-medium transition-colors',
+                                props.window === opt
+                                    ? 'bg-accent text-accent-foreground'
+                                    : 'text-muted-foreground hover:bg-bg-hover hover:text-foreground',
+                            )
+                        "
+                        @click="setWindow(opt)"
+                    >
+                        {{ opt }}
+                    </button>
+                </div>
+                <Button variant="outline" size="sm" class="h-7 gap-1.5 text-xs">
+                    <Download class="size-3.5" />Export CSV
                 </Button>
             </div>
         </div>
 
-        <Card>
-            <CardHeader
-                class="cursor-pointer pb-3"
+        <!-- Stat cards -->
+        <div class="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+            <StatCard
+                label="Spend"
+                :value="formatCost(totals.total_cost)"
+                :hint="
+                    scenarioActive && scenario_totals
+                        ? `${formatCost(scenario_totals.total_cost)} projected · ${costDelta(totals.total_cost, scenario_totals.total_cost)}`
+                        : `${props.window} window`
+                "
+            />
+            <StatCard
+                label="Invocations"
+                :value="formatNumber(totals.total_invocations)"
+                :hint="`${formatNumber(totals.total_tool_calls)} tool calls`"
+            />
+            <StatCard
+                label="Total tokens"
+                :value="formatNumber(totals.total_tokens)"
+                hint="prompt + completion"
+            />
+            <StatCard
+                label="Tool calls"
+                :value="formatNumber(totals.total_tool_calls)"
+                hint="across all invocations"
+            />
+        </div>
+
+        <!-- Scenario panel -->
+        <div class="overflow-hidden rounded-xl border border-border bg-card">
+            <button
+                type="button"
+                class="flex w-full items-center justify-between border-b border-border px-4 py-3 hover:bg-bg-hover"
                 @click="panelOpen = !panelOpen"
             >
-                <div class="flex items-center justify-between">
-                    <div class="flex items-center gap-2">
-                        <ChevronDown v-if="panelOpen" class="size-4" />
-                        <ChevronRight v-else class="size-4" />
-                        <CardTitle class="text-base"
-                            >What-if Scenario</CardTitle
-                        >
-                        <Badge v-if="scenarioActive" variant="secondary"
-                            >Active</Badge
-                        >
-                    </div>
-                    <p class="text-sm text-muted-foreground">
-                        Recompute costs against hypothetical rates
-                    </p>
-                </div>
-            </CardHeader>
-            <CardContent v-if="panelOpen" class="space-y-4">
+                <span class="flex items-center gap-2">
+                    <ChevronDown v-if="panelOpen" class="size-4" />
+                    <ChevronRight v-else class="size-4" />
+                    <Sparkles class="size-3.5 text-accent" />
+                    <span
+                        class="text-[12px] font-semibold tracking-[0.06em] text-muted-foreground uppercase"
+                        >What-if scenario</span
+                    >
+                    <Pill v-if="scenarioActive" variant="info">active</Pill>
+                </span>
+                <span class="text-xs text-muted-foreground"
+                    >Recompute against hypothetical rates</span
+                >
+            </button>
+            <div v-if="panelOpen" class="space-y-4 p-4">
                 <div class="space-y-2">
-                    <Label>Load rates from existing model</Label>
+                    <Label class="text-xs">Load rates from existing model</Label>
                     <Select
                         :model-value="selectedLoadKey"
                         @update:model-value="
@@ -300,7 +346,7 @@ function formatTimestamp(value: string): string {
                                 )
                         "
                     >
-                        <SelectTrigger>
+                        <SelectTrigger class="h-8 text-sm">
                             <SelectValue
                                 placeholder="Pick a priced model to copy its rates…"
                             />
@@ -315,334 +361,308 @@ function formatTimestamp(value: string): string {
                             </SelectItem>
                         </SelectContent>
                     </Select>
-                    <p class="text-sm text-muted-foreground">
-                        Or type custom rates below. All values are dollars per
-                        million tokens.
-                    </p>
                 </div>
 
-                <div class="grid grid-cols-2 gap-3 md:grid-cols-5">
-                    <div class="space-y-1">
-                        <Label for="rate_input">Input</Label>
+                <div class="grid gap-3 md:grid-cols-5">
+                    <div
+                        v-for="field in (
+                            [
+                                ['input', 'Input'],
+                                ['output', 'Output'],
+                                ['cache_read', 'Cache read'],
+                                ['cache_write', 'Cache write'],
+                                ['reasoning', 'Reasoning'],
+                            ] as const
+                        )"
+                        :key="field[0]"
+                        class="space-y-1"
+                    >
+                        <Label :for="`rate_${field[0]}`" class="text-xs">
+                            {{ field[1] }}
+                        </Label>
                         <Input
-                            id="rate_input"
+                            :id="`rate_${field[0]}`"
                             type="number"
                             step="0.0001"
                             min="0"
-                            v-model.number="form.input"
-                        />
-                    </div>
-                    <div class="space-y-1">
-                        <Label for="rate_output">Output</Label>
-                        <Input
-                            id="rate_output"
-                            type="number"
-                            step="0.0001"
-                            min="0"
-                            v-model.number="form.output"
-                        />
-                    </div>
-                    <div class="space-y-1">
-                        <Label for="rate_cache_read">Cache Read</Label>
-                        <Input
-                            id="rate_cache_read"
-                            type="number"
-                            step="0.0001"
-                            min="0"
-                            v-model.number="form.cache_read"
-                        />
-                    </div>
-                    <div class="space-y-1">
-                        <Label for="rate_cache_write">Cache Write</Label>
-                        <Input
-                            id="rate_cache_write"
-                            type="number"
-                            step="0.0001"
-                            min="0"
-                            v-model.number="form.cache_write"
-                        />
-                    </div>
-                    <div class="space-y-1">
-                        <Label for="rate_reasoning">Reasoning</Label>
-                        <Input
-                            id="rate_reasoning"
-                            type="number"
-                            step="0.0001"
-                            min="0"
-                            v-model.number="form.reasoning"
+                            class="h-8 font-mono text-xs"
+                            v-model.number="
+                                form[
+                                    field[0] as
+                                        | 'input'
+                                        | 'output'
+                                        | 'cache_read'
+                                        | 'cache_write'
+                                        | 'reasoning'
+                                ]
+                            "
                         />
                     </div>
                 </div>
 
                 <div class="flex gap-2">
-                    <Button @click="applyScenario">Apply</Button>
+                    <Button
+                        size="sm"
+                        class="h-7 text-xs"
+                        @click="applyScenario"
+                    >
+                        Apply
+                    </Button>
                     <Button
                         v-if="scenarioActive"
+                        size="sm"
                         variant="outline"
+                        class="h-7 text-xs"
                         @click="clearScenario"
-                        >Clear</Button
                     >
+                        Clear
+                    </Button>
                 </div>
-            </CardContent>
-        </Card>
-
-        <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            <Card>
-                <CardHeader class="pb-2">
-                    <CardTitle class="text-sm font-medium text-muted-foreground"
-                        >Estimated Cost</CardTitle
-                    >
-                </CardHeader>
-                <CardContent>
-                    <div class="text-2xl font-semibold">
-                        {{ formatCost(totals.total_cost) }}
-                    </div>
-                    <div
-                        v-if="scenarioActive && scenario_totals"
-                        class="mt-1 text-sm"
-                    >
-                        <span class="font-medium text-primary"
-                            >{{
-                                formatCost(scenario_totals.total_cost)
-                            }}
-                            projected</span
-                        >
-                        <span class="ml-1 text-muted-foreground"
-                            >({{
-                                costDelta(
-                                    totals.total_cost,
-                                    scenario_totals.total_cost,
-                                )
-                            }})</span
-                        >
-                    </div>
-                </CardContent>
-            </Card>
-            <Card>
-                <CardHeader class="pb-2">
-                    <CardTitle class="text-sm font-medium text-muted-foreground"
-                        >Invocations</CardTitle
-                    >
-                </CardHeader>
-                <CardContent>
-                    <div class="text-2xl font-semibold">
-                        {{ formatNumber(totals.total_invocations) }}
-                    </div>
-                </CardContent>
-            </Card>
-            <Card>
-                <CardHeader class="pb-2">
-                    <CardTitle class="text-sm font-medium text-muted-foreground"
-                        >Total Tokens</CardTitle
-                    >
-                </CardHeader>
-                <CardContent>
-                    <div class="text-2xl font-semibold">
-                        {{ formatNumber(totals.total_tokens) }}
-                    </div>
-                </CardContent>
-            </Card>
-            <Card>
-                <CardHeader class="pb-2">
-                    <CardTitle class="text-sm font-medium text-muted-foreground"
-                        >Tool Calls</CardTitle
-                    >
-                </CardHeader>
-                <CardContent>
-                    <div class="text-2xl font-semibold">
-                        {{ formatNumber(totals.total_tool_calls) }}
-                    </div>
-                </CardContent>
-            </Card>
+            </div>
         </div>
 
-        <div class="grid grid-cols-1 gap-4 lg:grid-cols-2">
-            <Card>
-                <CardHeader>
-                    <CardTitle>By Model</CardTitle>
-                </CardHeader>
-                <CardContent>
-                    <Table>
-                        <TableHeader>
-                            <TableRow>
-                                <TableHead>Model</TableHead>
-                                <TableHead class="text-right"
-                                    >Invocations</TableHead
-                                >
-                                <TableHead class="text-right">Cost</TableHead>
-                                <TableHead
-                                    v-if="scenarioActive"
-                                    class="text-right"
-                                >
-                                    Projected
-                                </TableHead>
-                            </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                            <TableRow
-                                v-for="row in by_model"
-                                :key="row.key ?? 'null'"
+        <!-- By model + by provider -->
+        <div class="grid gap-4 lg:grid-cols-2">
+            <div
+                class="overflow-hidden rounded-xl border border-border bg-card"
+            >
+                <div
+                    class="border-b border-border px-4 py-3 text-[12px] font-semibold tracking-[0.06em] text-muted-foreground uppercase"
+                >
+                    By model
+                </div>
+                <table class="w-full border-collapse text-[13px]">
+                    <thead>
+                        <tr>
+                            <th
+                                class="border-b border-border px-3 py-2 text-left text-[11.5px] font-medium tracking-[0.05em] text-muted-foreground uppercase"
                             >
-                                <TableCell>{{ row.key ?? '—' }}</TableCell>
-                                <TableCell class="text-right">{{
-                                    formatNumber(row.invocations)
-                                }}</TableCell>
-                                <TableCell class="text-right">{{
-                                    formatCost(row.total_cost)
-                                }}</TableCell>
-                                <TableCell
-                                    v-if="scenarioActive"
-                                    class="text-right text-primary"
-                                >
-                                    {{
-                                        formatCost(
-                                            aggregatedScenarioByModel[
-                                                row.key ?? '__null__'
-                                            ] ?? '0',
-                                        )
-                                    }}
-                                </TableCell>
-                            </TableRow>
-                            <TableEmpty
-                                v-if="by_model.length === 0"
-                                :colspan="scenarioActive ? 4 : 3"
+                                Model
+                            </th>
+                            <th
+                                class="border-b border-border px-3 py-2 text-right text-[11.5px] font-medium tracking-[0.05em] text-muted-foreground uppercase"
                             >
-                                No data in this window.
-                            </TableEmpty>
-                        </TableBody>
-                    </Table>
-                </CardContent>
-            </Card>
-
-            <Card>
-                <CardHeader>
-                    <CardTitle>By Provider</CardTitle>
-                </CardHeader>
-                <CardContent>
-                    <Table>
-                        <TableHeader>
-                            <TableRow>
-                                <TableHead>Provider</TableHead>
-                                <TableHead class="text-right"
-                                    >Invocations</TableHead
-                                >
-                                <TableHead class="text-right">Cost</TableHead>
-                                <TableHead
-                                    v-if="scenarioActive"
-                                    class="text-right"
-                                >
-                                    Projected
-                                </TableHead>
-                            </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                            <TableRow
-                                v-for="row in by_provider"
-                                :key="row.key ?? 'null'"
+                                Calls
+                            </th>
+                            <th
+                                class="border-b border-border px-3 py-2 text-right text-[11.5px] font-medium tracking-[0.05em] text-muted-foreground uppercase"
                             >
-                                <TableCell>{{ row.key ?? '—' }}</TableCell>
-                                <TableCell class="text-right">{{
-                                    formatNumber(row.invocations)
-                                }}</TableCell>
-                                <TableCell class="text-right">{{
-                                    formatCost(row.total_cost)
-                                }}</TableCell>
-                                <TableCell
-                                    v-if="scenarioActive"
-                                    class="text-right text-primary"
-                                >
-                                    {{
-                                        formatCost(
-                                            aggregatedScenarioByProvider[
-                                                row.key ?? '__null__'
-                                            ] ?? '0',
-                                        )
-                                    }}
-                                </TableCell>
-                            </TableRow>
-                            <TableEmpty
-                                v-if="by_provider.length === 0"
-                                :colspan="scenarioActive ? 4 : 3"
-                            >
-                                No data in this window.
-                            </TableEmpty>
-                        </TableBody>
-                    </Table>
-                </CardContent>
-            </Card>
-        </div>
-
-        <Card>
-            <CardHeader>
-                <CardTitle>Recent Invocations</CardTitle>
-            </CardHeader>
-            <CardContent>
-                <Table>
-                    <TableHeader>
-                        <TableRow>
-                            <TableHead>When</TableHead>
-                            <TableHead>User</TableHead>
-                            <TableHead>Model</TableHead>
-                            <TableHead class="text-right">Tokens</TableHead>
-                            <TableHead class="text-right">Tools</TableHead>
-                            <TableHead class="text-right">Cost</TableHead>
-                            <TableHead v-if="scenarioActive" class="text-right">
-                                Projected
-                            </TableHead>
-                            <TableHead>Status</TableHead>
-                        </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                        <TableRow v-for="row in recent" :key="row.id">
-                            <TableCell
-                                class="text-sm whitespace-nowrap text-muted-foreground"
-                            >
-                                {{ formatTimestamp(row.created_at) }}
-                            </TableCell>
-                            <TableCell>{{ row.user_name ?? '—' }}</TableCell>
-                            <TableCell class="font-mono text-xs">{{
-                                row.model ?? '—'
-                            }}</TableCell>
-                            <TableCell class="text-right">{{
-                                formatNumber(row.total_tokens)
-                            }}</TableCell>
-                            <TableCell class="text-right">{{
-                                row.tool_calls_count
-                            }}</TableCell>
-                            <TableCell class="text-right">{{
-                                formatCost(row.cost)
-                            }}</TableCell>
-                            <TableCell
+                                Cost
+                            </th>
+                            <th
                                 v-if="scenarioActive"
-                                class="text-right text-primary"
+                                class="border-b border-border px-3 py-2 text-right text-[11.5px] font-medium tracking-[0.05em] text-muted-foreground uppercase"
+                            >
+                                Projected
+                            </th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr
+                            v-for="row in by_model"
+                            :key="row.key ?? 'null'"
+                            class="border-b border-border last:border-b-0 hover:bg-bg-hover"
+                        >
+                            <td class="font-mono-tabular px-3 py-2 text-[12px]">
+                                {{ row.key ?? '—' }}
+                            </td>
+                            <td class="font-mono-tabular px-3 py-2 text-right">
+                                {{ formatNumber(row.invocations) }}
+                            </td>
+                            <td class="font-mono-tabular px-3 py-2 text-right">
+                                {{ formatCost(row.total_cost) }}
+                            </td>
+                            <td
+                                v-if="scenarioActive"
+                                class="font-mono-tabular px-3 py-2 text-right text-accent"
                             >
                                 {{
                                     formatCost(
-                                        indexedScenarioRecent[row.id] ?? '0',
+                                        aggregatedScenarioByModel[
+                                            row.key ?? '__null__'
+                                        ] ?? '0',
                                     )
                                 }}
-                            </TableCell>
-                            <TableCell>
-                                <Badge
-                                    :variant="
-                                        row.status === 'success'
-                                            ? 'secondary'
-                                            : 'destructive'
-                                    "
-                                >
-                                    {{ row.status }}
-                                </Badge>
-                            </TableCell>
-                        </TableRow>
-                        <TableEmpty
-                            v-if="recent.length === 0"
+                            </td>
+                        </tr>
+                        <tr v-if="by_model.length === 0">
+                            <td
+                                :colspan="scenarioActive ? 4 : 3"
+                                class="px-3 py-6 text-center text-sm text-fg-subtle"
+                            >
+                                No data in this window.
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <div
+                class="overflow-hidden rounded-xl border border-border bg-card"
+            >
+                <div
+                    class="border-b border-border px-4 py-3 text-[12px] font-semibold tracking-[0.06em] text-muted-foreground uppercase"
+                >
+                    By provider
+                </div>
+                <table class="w-full border-collapse text-[13px]">
+                    <thead>
+                        <tr>
+                            <th
+                                class="border-b border-border px-3 py-2 text-left text-[11.5px] font-medium tracking-[0.05em] text-muted-foreground uppercase"
+                            >
+                                Provider
+                            </th>
+                            <th
+                                class="border-b border-border px-3 py-2 text-right text-[11.5px] font-medium tracking-[0.05em] text-muted-foreground uppercase"
+                            >
+                                Calls
+                            </th>
+                            <th
+                                class="border-b border-border px-3 py-2 text-right text-[11.5px] font-medium tracking-[0.05em] text-muted-foreground uppercase"
+                            >
+                                Cost
+                            </th>
+                            <th
+                                v-if="scenarioActive"
+                                class="border-b border-border px-3 py-2 text-right text-[11.5px] font-medium tracking-[0.05em] text-muted-foreground uppercase"
+                            >
+                                Projected
+                            </th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr
+                            v-for="row in by_provider"
+                            :key="row.key ?? 'null'"
+                            class="border-b border-border last:border-b-0 hover:bg-bg-hover"
+                        >
+                            <td class="font-mono-tabular px-3 py-2 text-[12px]">
+                                {{ row.key ?? '—' }}
+                            </td>
+                            <td class="font-mono-tabular px-3 py-2 text-right">
+                                {{ formatNumber(row.invocations) }}
+                            </td>
+                            <td class="font-mono-tabular px-3 py-2 text-right">
+                                {{ formatCost(row.total_cost) }}
+                            </td>
+                            <td
+                                v-if="scenarioActive"
+                                class="font-mono-tabular px-3 py-2 text-right text-accent"
+                            >
+                                {{
+                                    formatCost(
+                                        aggregatedScenarioByProvider[
+                                            row.key ?? '__null__'
+                                        ] ?? '0',
+                                    )
+                                }}
+                            </td>
+                        </tr>
+                        <tr v-if="by_provider.length === 0">
+                            <td
+                                :colspan="scenarioActive ? 4 : 3"
+                                class="px-3 py-6 text-center text-sm text-fg-subtle"
+                            >
+                                No data in this window.
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Recent calls ledger -->
+        <div class="overflow-hidden rounded-xl border border-border bg-card">
+            <div
+                class="border-b border-border px-4 py-3 text-[12px] font-semibold tracking-[0.06em] text-muted-foreground uppercase"
+            >
+                Recent invocations
+            </div>
+            <table class="w-full border-collapse text-[13px]">
+                <thead>
+                    <tr>
+                        <th
+                            v-for="h in [
+                                'When',
+                                'User',
+                                'Model',
+                                'Tokens',
+                                'Tools',
+                                'Cost',
+                                ...(scenarioActive ? ['Projected'] : []),
+                                'Status',
+                            ]"
+                            :key="h"
+                            class="border-b border-border px-3 py-2 text-left text-[11.5px] font-medium tracking-[0.05em] text-muted-foreground uppercase"
+                        >
+                            {{ h }}
+                        </th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr
+                        v-for="row in recent"
+                        :key="row.id"
+                        class="border-b border-border last:border-b-0 hover:bg-bg-hover"
+                    >
+                        <td
+                            class="font-mono-tabular px-3 py-2 text-[11.5px] text-fg-subtle whitespace-nowrap"
+                        >
+                            {{ formatTimestamp(row.created_at) }}
+                        </td>
+                        <td class="px-3 py-2">
+                            <span class="flex items-center gap-2">
+                                <InitialsAvatar
+                                    :name="row.user_name ?? 'system'"
+                                    :size="20"
+                                />
+                                <span>{{ row.user_name ?? '—' }}</span>
+                            </span>
+                        </td>
+                        <td class="font-mono-tabular px-3 py-2 text-[12px]">
+                            {{ row.model ?? '—' }}
+                        </td>
+                        <td class="font-mono-tabular px-3 py-2 text-right">
+                            {{ formatNumber(row.total_tokens) }}
+                        </td>
+                        <td class="font-mono-tabular px-3 py-2 text-right">
+                            {{ row.tool_calls_count }}
+                        </td>
+                        <td class="font-mono-tabular px-3 py-2 text-right">
+                            {{ formatCost(row.cost) }}
+                        </td>
+                        <td
+                            v-if="scenarioActive"
+                            class="font-mono-tabular px-3 py-2 text-right text-accent"
+                        >
+                            {{
+                                formatCost(
+                                    indexedScenarioRecent[row.id] ?? '0',
+                                )
+                            }}
+                        </td>
+                        <td class="px-3 py-2">
+                            <Pill
+                                :variant="
+                                    row.status === 'success' ? 'ok' : 'danger'
+                                "
+                                dot
+                            >
+                                {{ row.status }}
+                            </Pill>
+                        </td>
+                    </tr>
+                    <tr v-if="recent.length === 0">
+                        <td
                             :colspan="scenarioActive ? 8 : 7"
+                            class="px-3 py-6 text-center text-sm text-fg-subtle"
                         >
                             No invocations in this window.
-                        </TableEmpty>
-                    </TableBody>
-                </Table>
-            </CardContent>
-        </Card>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
     </div>
 </template>

@@ -1,10 +1,8 @@
 <script setup lang="ts">
 import { Head, router } from '@inertiajs/vue3';
-import { Shield } from 'lucide-vue-next';
 import { ref, watch } from 'vue';
 import ActionTypeConfigController from '@/actions/App/Http/Controllers/Actions/ActionTypeConfigController';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Checkbox } from '@/components/ui/checkbox';
+import { Toggle } from '@/components/mm';
 import { dashboard } from '@/routes';
 import type { ActionTypeConfigResource } from '@/typefinder/resources/ActionTypeConfigResource';
 
@@ -15,9 +13,9 @@ const props = defineProps<{ rules: RuleRow[] }>();
 defineOptions({
     layout: {
         breadcrumbs: [
-            { title: 'Dashboard', href: dashboard() },
+            { title: 'Automation', href: dashboard().url },
             {
-                title: 'Action Rules',
+                title: 'Approval Rules',
                 href: ActionTypeConfigController.index.url(),
             },
         ],
@@ -45,90 +43,112 @@ function persist(rule: RuleRow) {
     );
 }
 
-function onApprovalChange(rule: RuleRow, value: boolean | 'indeterminate') {
-    rule.requires_approval = value === true;
+function setEnabled(rule: RuleRow, value: boolean) {
+    rule.is_enabled = value;
     persist(rule);
 }
 
-function onEnabledChange(rule: RuleRow, value: boolean | 'indeterminate') {
-    rule.is_enabled = value === true;
+function setApproval(rule: RuleRow, value: boolean) {
+    rule.requires_approval = value;
     persist(rule);
 }
 </script>
 
 <template>
-    <Head title="Action Rules" />
+    <Head title="Approval rules" />
 
-    <div class="space-y-6 p-6">
+    <div class="flex flex-col gap-4 p-5">
+        <!-- Hero -->
         <div>
-            <h2
-                class="flex items-center gap-2 text-2xl font-bold tracking-tight"
+            <div class="mb-1.5 text-[13px] text-muted-foreground">
+                Actions <span class="text-fg-subtle">/</span> Approval rules
+            </div>
+            <h1
+                class="text-[22px] leading-tight font-semibold tracking-tight"
             >
-                <Shield class="size-6" />
-                Action Rules
-            </h2>
-            <p class="text-muted-foreground">
-                Configure which automated actions require approval and which are
-                enabled.
+                Approval rules
+            </h1>
+            <p class="mt-1 max-w-[640px] text-[13px] text-muted-foreground">
+                Per-action toggles. Disabled rules are silently dropped at the
+                orchestrator. Approval-gated actions wait for an admin/member to
+                confirm.
             </p>
         </div>
 
         <div
             v-if="localRules.length === 0"
-            class="rounded-md border p-8 text-center text-muted-foreground"
+            class="rounded-xl border border-border bg-card p-8 text-center text-sm text-fg-subtle"
         >
             No action rules configured.
         </div>
 
-        <div v-else class="grid grid-cols-1 gap-4 md:grid-cols-2">
-            <Card v-for="rule in localRules" :key="rule.id">
-                <CardHeader>
-                    <CardTitle>{{ rule.label }}</CardTitle>
-                    <p class="font-mono text-xs text-muted-foreground">
-                        {{ rule.type }}
-                    </p>
-                </CardHeader>
-                <CardContent class="space-y-4">
-                    <p
-                        v-if="rule.description"
-                        class="text-sm text-muted-foreground"
+        <div
+            v-else
+            class="overflow-hidden rounded-xl border border-border bg-card"
+        >
+            <table class="w-full border-collapse text-[13px]">
+                <thead>
+                    <tr>
+                        <th
+                            v-for="h in [
+                                'Action type',
+                                'Description',
+                                'Enabled',
+                                'Requires approval',
+                            ]"
+                            :key="h"
+                            class="border-b border-border bg-card px-3 py-2 text-left text-[11.5px] font-medium tracking-[0.05em] text-muted-foreground uppercase"
+                        >
+                            {{ h }}
+                        </th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr
+                        v-for="rule in localRules"
+                        :key="rule.id"
+                        class="border-b border-border last:border-b-0 hover:bg-bg-hover"
                     >
-                        {{ rule.description }}
-                    </p>
-
-                    <div class="flex items-center justify-between">
-                        <label
-                            :for="`approval-${rule.id}`"
-                            class="text-sm font-medium"
-                        >
-                            Requires approval
-                        </label>
-                        <Checkbox
-                            :id="`approval-${rule.id}`"
-                            :model-value="rule.requires_approval"
-                            @update:model-value="
-                                (v) => onApprovalChange(rule, v)
-                            "
-                        />
-                    </div>
-
-                    <div class="flex items-center justify-between">
-                        <label
-                            :for="`enabled-${rule.id}`"
-                            class="text-sm font-medium"
-                        >
-                            Enabled
-                        </label>
-                        <Checkbox
-                            :id="`enabled-${rule.id}`"
-                            :model-value="rule.is_enabled"
-                            @update:model-value="
-                                (v) => onEnabledChange(rule, v)
-                            "
-                        />
-                    </div>
-                </CardContent>
-            </Card>
+                        <td class="px-3 py-3">
+                            <div
+                                class="font-mono-tabular text-[12.5px] font-medium"
+                            >
+                                {{ rule.type }}
+                            </div>
+                            <div
+                                class="mt-0.5 text-[11.5px] text-fg-subtle"
+                            >
+                                {{ rule.label }}
+                            </div>
+                        </td>
+                        <td class="px-3 py-3 text-muted-foreground">
+                            {{ rule.description ?? '—' }}
+                        </td>
+                        <td class="px-3 py-3">
+                            <Toggle
+                                :model-value="rule.is_enabled"
+                                :label="rule.is_enabled ? 'on' : 'off'"
+                                @update:model-value="
+                                    (v) => setEnabled(rule, v)
+                                "
+                            />
+                        </td>
+                        <td class="px-3 py-3">
+                            <Toggle
+                                :model-value="rule.requires_approval"
+                                :label="
+                                    rule.requires_approval
+                                        ? 'required'
+                                        : 'auto'
+                                "
+                                @update:model-value="
+                                    (v) => setApproval(rule, v)
+                                "
+                            />
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
         </div>
     </div>
 </template>
