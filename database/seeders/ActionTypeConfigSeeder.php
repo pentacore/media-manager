@@ -48,6 +48,27 @@ class ActionTypeConfigSeeder extends Seeder
                 'is_enabled' => true,
             ],
             [
+                'type' => 'add_movie',
+                'label' => 'Add movie to Radarr',
+                'description' => 'Add a movie to Radarr (AI-initiated).',
+                'requires_approval' => true,
+                'is_enabled' => true,
+            ],
+            [
+                'type' => 'monitor_movie',
+                'label' => 'Toggle Radarr movie monitoring',
+                'description' => 'Set whether Radarr monitors a movie (AI-initiated).',
+                'requires_approval' => false,
+                'is_enabled' => true,
+            ],
+            [
+                'type' => 'set_movie_quality_profile',
+                'label' => 'Change Radarr movie quality profile',
+                'description' => 'Change the quality profile assigned to a movie in Radarr (AI-initiated).',
+                'requires_approval' => false,
+                'is_enabled' => true,
+            ],
+            [
                 'type' => 'cleanup_seerr_request',
                 'label' => 'Clean up Seerr request',
                 'description' => 'Delete the matching Seerr request when media is removed.',

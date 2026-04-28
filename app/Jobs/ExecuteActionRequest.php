@@ -151,7 +151,7 @@ class ExecuteActionRequest implements ShouldBeUnique, ShouldQueue
     {
         $class = match ($type) {
             'delete_series', 'add_series', 'monitor_series', 'set_series_quality_profile' => SonarrActions::class,
-            'delete_movie' => RadarrActions::class,
+            'delete_movie', 'add_movie', 'monitor_movie', 'set_movie_quality_profile' => RadarrActions::class,
             'cleanup_seerr_request' => SeerrActions::class,
             'emby_library_scan' => EmbyActions::class,
             default => null,
