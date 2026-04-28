@@ -155,12 +155,14 @@ A single `MediaAgent` (`app/Ai/Agents/MediaAgent.php`) handles every conversatio
 - **`executive`** — destructive tool calls are queued as `ActionRequest`s and flow through the normal approval pipeline (the agent cannot bypass `requires_approval`).
 - **`advisory`** — destructive tool calls are short-circuited with an error envelope telling the agent to instruct the user to switch modes.
 
-30 tools live under `app/Ai/Tools/{System,Sonarr,Radarr,Emby,Seerr,Prowlarr,Workflow}/`, all extending `BaseTool`. Each tool declares a `Risk` tier:
+36 tools live under `app/Ai/Tools/{System,Sonarr,Radarr,Emby,Seerr,Prowlarr,Workflow,Tmdb,Trakt}/`, all extending `BaseTool`. Each tool declares a `Risk` tier:
 
 - **`Read` / `SafeWrite`** — execute directly and return their result as JSON.
 - **`Destructive`** — bypassed in advisory mode; in executive mode they're routed through `ActionOrchestrator` and queued as an `ActionRequest`.
 
 For multi-step intents the agent calls `ProposeWorkflowTool` to write an `AiProposedWorkflow` row instead of firing each step individually. The chat UI surfaces an Approve/Decline confirm card; on approval the controller pre-prompts the agent with the workflow's steps so it executes them as a batch (each step still funnels through the same `ActionOrchestrator` + approval rules).
+
+TMDB and Trakt integrations are optional. Set `TMDB_API_KEY` (v4 Read Access Token) and `TRAKT_CLIENT_ID` (just the OAuth client id — no full OAuth flow) to enable the recommendation tools. When unset, the tools return a `tool_failed` envelope and the agent falls back to Seerr discovery.
 
 Conversation history is healed automatically before each request — orphaned tool calls (e.g. from an interrupted prior turn) get stub results inserted so OpenAI/Anthropic don't 400 on the malformed transcript.
 
