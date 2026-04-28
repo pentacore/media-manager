@@ -22,7 +22,7 @@ test('TraktGetTrendingTool returns the parsed array', function (): void {
     ]);
 
     $result = (new TraktGetTrendingTool)->handle(new Request(['media_type' => 'movie']));
-    $decoded = json_decode((string) $result, true);
+    $decoded = json_decode($result, true);
 
     expect($decoded['results'][0]['movie']['title'])->toBe('Inception');
 });
@@ -35,7 +35,7 @@ test('TraktGetPopularTool routes media_type tv to /shows/popular', function (): 
     ]);
 
     $result = (new TraktGetPopularTool)->handle(new Request(['media_type' => 'tv']));
-    $decoded = json_decode((string) $result, true);
+    $decoded = json_decode($result, true);
 
     expect($decoded['results'][0]['title'])->toBe('Severance');
 });
@@ -48,7 +48,7 @@ test('TraktGetListTool returns items for a list id', function (): void {
     ]);
 
     $result = (new TraktGetListTool)->handle(new Request(['list_id' => 777]));
-    $decoded = json_decode((string) $result, true);
+    $decoded = json_decode($result, true);
 
     expect($decoded['results'][0]['show']['title'])->toBe('The Bear');
 });
@@ -57,7 +57,7 @@ test('TraktGetTrendingTool error envelope on service failure', function (): void
     Http::fake(['api.trakt.tv/movies/trending*' => Http::response(['error' => 'boom'], 500)]);
 
     $result = (new TraktGetTrendingTool)->handle(new Request(['media_type' => 'movie']));
-    $decoded = json_decode((string) $result, true);
+    $decoded = json_decode($result, true);
 
     expect($decoded['error'])->toBe('tool_failed');
 });

@@ -38,14 +38,14 @@ test('getTitle hits /tv/{id} for a series', function (): void {
 });
 
 test('getTitle rejects unknown media_type', function (): void {
-    expect(fn () => (new TmdbClient)->getTitle(1, 'bogus'))
+    expect(fn (): array => (new TmdbClient)->getTitle(1, 'bogus'))
         ->toThrow(InvalidArgumentException::class);
 });
 
 test('getTitle throws when API key is not configured', function (): void {
-    config()->set('services.tmdb.api_key', null);
+    config()->set('services.tmdb.api_key');
 
-    expect(fn () => (new TmdbClient)->getTitle(27205, 'movie'))
+    expect(fn (): array => (new TmdbClient)->getTitle(27205, 'movie'))
         ->toThrow(RuntimeException::class, 'TMDB API key is not configured.');
 });
 

@@ -63,13 +63,13 @@ test('getList hits /lists/{id}/items', function (): void {
 });
 
 test('rejects unknown media_type', function (): void {
-    expect(fn () => (new TraktClient)->getTrending('podcast'))
+    expect(fn (): array => (new TraktClient)->getTrending('podcast'))
         ->toThrow(InvalidArgumentException::class);
 });
 
 test('throws when client_id is missing', function (): void {
-    config()->set('services.trakt.client_id', null);
+    config()->set('services.trakt.client_id');
 
-    expect(fn () => (new TraktClient)->getTrending('movie'))
+    expect(fn (): array => (new TraktClient)->getTrending('movie'))
         ->toThrow(RuntimeException::class, 'Trakt client id is not configured.');
 });

@@ -22,7 +22,7 @@ test('TmdbGetTitleTool returns parsed json verbatim', function (): void {
     ]);
 
     $result = (new TmdbGetTitleTool)->handle(new Request(['tmdb_id' => 27205, 'media_type' => 'movie']));
-    $decoded = json_decode((string) $result, true);
+    $decoded = json_decode($result, true);
 
     expect($decoded['title'])->toBe('Inception');
     expect($decoded['tagline'])->toBe('Your mind is the scene of the crime.');
@@ -32,7 +32,7 @@ test('TmdbGetTitleTool error envelope when service throws', function (): void {
     Http::fake(['api.themoviedb.org/3/movie/0*' => Http::response(['status_message' => 'not found'], 404)]);
 
     $result = (new TmdbGetTitleTool)->handle(new Request(['tmdb_id' => 0, 'media_type' => 'movie']));
-    $decoded = json_decode((string) $result, true);
+    $decoded = json_decode($result, true);
 
     expect($decoded['error'])->toBe('tool_failed');
 });
@@ -46,7 +46,7 @@ test('TmdbGetSimilarTool returns the results array', function (): void {
     ]);
 
     $result = (new TmdbGetSimilarTool)->handle(new Request(['tmdb_id' => 1399, 'media_type' => 'tv']));
-    $decoded = json_decode((string) $result, true);
+    $decoded = json_decode($result, true);
 
     expect($decoded['results'][0]['name'])->toBe('Rick and Morty');
 });
@@ -60,7 +60,7 @@ test('TmdbGetCreditsTool returns the cast/crew payload', function (): void {
     ]);
 
     $result = (new TmdbGetCreditsTool)->handle(new Request(['tmdb_id' => 27205, 'media_type' => 'movie']));
-    $decoded = json_decode((string) $result, true);
+    $decoded = json_decode($result, true);
 
     expect($decoded['cast'][0]['name'])->toBe('Leonardo DiCaprio');
 });
