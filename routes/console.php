@@ -23,3 +23,7 @@ Schedule::command('services:check-versions')
 Schedule::command(BroadcastDashboardStats::class)
     ->everyFiveMinutes()
     ->withoutOverlapping();
+
+Schedule::command('ai:prune-proposed-workflows')
+    ->daily()
+    ->withoutOverlapping();
