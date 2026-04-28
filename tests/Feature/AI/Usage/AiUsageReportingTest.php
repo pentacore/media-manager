@@ -184,3 +184,25 @@ test('recentInvocations returns rows ordered by created_at desc with computed co
     expect($rows->last()->id)->toBe($olderId);
     expect((float) $rows->first()->cost)->toBeGreaterThan(0);
 });
+
+test('totals matches dated model id against base model price', function (): void {
+    seedPrice('openai', 'gpt-5-mini', input: 0.40, output: 1.60);
+
+    seedUsage(['model' => 'gpt-5-mini-2025-09-23', 'prompt_tokens' => 1_000_000]);
+
+    $totals = resolve(AiUsageReporting::class)->totals(CarbonImmutable::now()->subDay());
+
+    // 1M tokens * $0.40 = $0.40 — base-name price applies despite the
+    // dated suffix on the recorded model id.
+    expect((float) $totals['total_cost'])->toBe(0.40);
+});
+
+test('totals still uses exact match when no dated suffix is present', function (): void {
+    seedPrice('openai', 'gpt-5-mini', input: 0.40, output: 1.60);
+
+    seedUsage(['model' => 'gpt-5-mini', 'prompt_tokens' => 1_000_000]);
+
+    $totals = resolve(AiUsageReporting::class)->totals(CarbonImmutable::now()->subDay());
+
+    expect((float) $totals['total_cost'])->toBe(0.40);
+});

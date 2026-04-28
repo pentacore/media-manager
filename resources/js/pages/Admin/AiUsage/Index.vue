@@ -224,10 +224,25 @@ function formatNumber(value: number | string): string {
 }
 
 function formatTimestamp(value: string): string {
-    return new Date(value).toLocaleString('en-US', {
-        dateStyle: 'short',
-        timeStyle: 'short',
+    // The ledger SELECTs created_at as a raw timestamp without timezone
+    // info, so JS would otherwise interpret it as local time. Append 'Z'
+    // when the string has no TZ designator so it is parsed as UTC and the
+    // toLocale* calls below convert to the viewer's local timezone.
+    const hasTz = /Z$|[+-]\d{2}:?\d{2}$/.test(value);
+    const d = new Date(hasTz ? value : `${value.replace(' ', 'T')}Z`);
+    const today = new Date();
+    const sameDay =
+        d.getFullYear() === today.getFullYear() &&
+        d.getMonth() === today.getMonth() &&
+        d.getDate() === today.getDate();
+    const time = d.toLocaleTimeString([], {
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: false,
     });
+    if (sameDay) return time;
+    const date = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    return `${date} ${time}`;
 }
 </script>
 

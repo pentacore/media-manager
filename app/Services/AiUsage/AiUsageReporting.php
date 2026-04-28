@@ -92,7 +92,19 @@ class AiUsageReporting
             ', $costBindings)
             ->latest('ai_usage_records.created_at')
             ->limit($limit)
-            ->get();
+            ->get()
+            // The DB driver returns created_at as a naive timestamp string;
+            // serialize it as an ISO 8601 UTC value so the browser can
+            // convert it to the viewer's local timezone instead of treating
+            // it as already-local.
+            ->map(function (object $row): object {
+                if (isset($row->created_at) && is_string($row->created_at)) {
+                    $row->created_at = CarbonImmutable::parse($row->created_at, 'UTC')
+                        ->toIso8601String();
+                }
+
+                return $row;
+            });
     }
 
     /**
@@ -153,10 +165,18 @@ class AiUsageReporting
         // scenario, rates come from the scenario itself, so the join is
         // unnecessary and would also break orderByDesc('total_cost') in some
         // edge cases by influencing row counts.
+        // Match on provider + base model name. A "base" name is the model id
+        // recorded on the usage row with any trailing date-version suffix
+        // (e.g. "-2025-09-23") stripped, so storing pricing for "gpt-5-mini"
+        // covers both "gpt-5-mini" and dated variants like
+        // "gpt-5-mini-2025-09-23". An exact match still wins because the
+        // stripped value equals the unstripped value when no suffix exists.
         if (! $scenario instanceof Scenario) {
             $builder->leftJoin('ai_model_prices', function ($join): void {
                 $join->on('ai_usage_records.provider', '=', 'ai_model_prices.provider')
-                    ->on('ai_usage_records.model', '=', 'ai_model_prices.model');
+                    ->whereRaw(
+                        "regexp_replace(ai_usage_records.model, '-[0-9]{4}-[0-9]{2}-[0-9]{2}$', '') = ai_model_prices.model"
+                    );
             });
         }
 
