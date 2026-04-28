@@ -76,6 +76,20 @@ class ActionTypeConfigSeeder extends Seeder
                 'is_enabled' => true,
             ],
             [
+                'type' => 'approve_seerr_request',
+                'label' => 'Approve Seerr request',
+                'description' => 'Approve a pending Seerr media request (AI-initiated).',
+                'requires_approval' => false,
+                'is_enabled' => true,
+            ],
+            [
+                'type' => 'decline_seerr_request',
+                'label' => 'Decline Seerr request',
+                'description' => 'Decline a pending Seerr media request (AI-initiated).',
+                'requires_approval' => false,
+                'is_enabled' => true,
+            ],
+            [
                 'type' => 'emby_library_scan',
                 'label' => 'Trigger Emby library scan',
                 'description' => 'Ask Emby to refresh its library after a download completes.',

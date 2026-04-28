@@ -37,3 +37,31 @@ test('throws when seerr_request_id is missing', function (): void {
 
     expect(fn (): array => (new SeerrActions)->execute($request))->toThrow(InvalidArgumentException::class);
 });
+
+test('approve_seerr_request POSTs to seerr approve endpoint', function (): void {
+    Http::fake(['seerr.local:5055/api/v1/request/77/approve' => Http::response([], 200)]);
+
+    $request = ActionRequest::factory()->create([
+        'type' => 'approve_seerr_request',
+        'payload' => ['seerr_request_id' => 77],
+    ]);
+
+    $result = (new SeerrActions)->execute($request);
+
+    expect($result)->toMatchArray(['seerr_request_id' => 77, 'status' => 'approved']);
+    Http::assertSent(fn ($r): bool => $r->method() === 'POST' && str_ends_with((string) $r->url(), '/api/v1/request/77/approve'));
+});
+
+test('decline_seerr_request POSTs to seerr decline endpoint', function (): void {
+    Http::fake(['seerr.local:5055/api/v1/request/88/decline' => Http::response([], 200)]);
+
+    $request = ActionRequest::factory()->create([
+        'type' => 'decline_seerr_request',
+        'payload' => ['seerr_request_id' => 88],
+    ]);
+
+    $result = (new SeerrActions)->execute($request);
+
+    expect($result)->toMatchArray(['seerr_request_id' => 88, 'status' => 'declined']);
+    Http::assertSent(fn ($r): bool => $r->method() === 'POST' && str_ends_with((string) $r->url(), '/api/v1/request/88/decline'));
+});
