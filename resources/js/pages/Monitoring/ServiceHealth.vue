@@ -33,8 +33,21 @@ interface Indexer {
 
 type Connection = ServiceConnectionResource;
 
+interface MetricBucket {
+    minute: number;
+    status: 'healthy' | 'unhealthy' | 'unknown' | 'gap' | string;
+    latency_ms: number | null;
+}
+
+interface MetricsBundle {
+    strips: Record<number, MetricBucket[]>;
+    uptime: Record<number, number | null>;
+    avg_latency: Record<number, number | null>;
+}
+
 const props = defineProps<{
     connections: Connection[];
+    metrics?: MetricsBundle;
     diskSpace?: Record<number, DiskSpace[]>;
     prowlarrIndexers?: Record<number, Indexer[]>;
 }>();
@@ -119,6 +132,16 @@ const updateAvailableCount = computed(
         mergedConnections.value.filter((c) => c.update_available).length,
 );
 
+const overallUptime = computed<number | null>(() => {
+    const samples = Object.values(props.metrics?.uptime ?? {}).filter(
+        (v): v is number => typeof v === 'number',
+    );
+
+    if (samples.length === 0) return null;
+
+    return samples.reduce((acc, v) => acc + v, 0) / samples.length;
+});
+
 function formatSize(bytes: number | null): string {
     if (bytes === null || bytes === undefined) {
 return '—';
@@ -191,6 +214,46 @@ return null;
 function indexersFor(connectionId: number): Indexer[] | undefined {
     return props.prowlarrIndexers?.[connectionId];
 }
+
+const EMPTY_STRIP: MetricBucket[] = Array.from({ length: 60 }, (_, i) => ({
+    minute: i,
+    status: 'gap',
+    latency_ms: null,
+}));
+
+function stripFor(connectionId: number): MetricBucket[] {
+    return props.metrics?.strips?.[connectionId] ?? EMPTY_STRIP;
+}
+
+function avgLatencyFor(connectionId: number): number | null {
+    return props.metrics?.avg_latency?.[connectionId] ?? null;
+}
+
+function uptimeFor(connectionId: number): number | null {
+    return props.metrics?.uptime?.[connectionId] ?? null;
+}
+
+function bucketColor(status: string): string {
+    switch (status) {
+        case 'healthy':
+            return 'bg-success/80';
+        case 'degraded':
+        case 'unknown':
+            return 'bg-warning/80';
+        case 'unhealthy':
+            return 'bg-destructive/80';
+        default:
+            return 'bg-border';
+    }
+}
+
+function barHeight(bucket: MetricBucket): number {
+    if (bucket.status === 'gap') return 20;
+    if (!bucket.latency_ms) return 60;
+    // 0-500ms maps to 30-100%; clamp for outliers.
+    const pct = 30 + Math.min(70, (bucket.latency_ms / 500) * 70);
+    return Math.round(pct);
+}
 </script>
 
 <template>
@@ -239,9 +302,17 @@ function indexersFor(connectionId: number): Indexer[] | undefined {
                 hint="latest releases observed"
             />
             <StatCard
-                label="Connections"
-                :value="mergedConnections.length"
-                :hint="`${mergedConnections.filter((c) => c.type === 'prowlarr').length} indexer hubs`"
+                label="Avg uptime · 30d"
+                :value="
+                    overallUptime !== null
+                        ? `${overallUptime.toFixed(2)}%`
+                        : '—'
+                "
+                :hint="
+                    overallUptime !== null
+                        ? 'across all configured services'
+                        : 'no metrics yet'
+                "
             />
         </div>
 
@@ -315,24 +386,18 @@ function indexersFor(connectionId: number): Indexer[] | undefined {
                             </div>
                         </div>
 
-                        <!-- 60-min strip placeholder -->
+                        <!-- 60-min strip from service_metrics -->
                         <div
                             class="flex h-7 items-end gap-px"
+                            :title="`Per-minute health, oldest left → newest right`"
                             aria-hidden="true"
                         >
                             <span
-                                v-for="i in 60"
-                                :key="`bar-${connection.id}-${i}`"
+                                v-for="bucket in stripFor(connection.id)"
+                                :key="`bar-${connection.id}-${bucket.minute}`"
                                 class="w-1 rounded-sm"
-                                :class="
-                                    connection.health_status === 'healthy'
-                                        ? 'bg-accent/70'
-                                        : connection.health_status ===
-                                            'unhealthy'
-                                          ? 'bg-destructive/70'
-                                          : 'bg-warning/70'
-                                "
-                                :style="{ height: `${30 + (i % 7) * 10}%` }"
+                                :class="bucketColor(bucket.status)"
+                                :style="{ height: `${barHeight(bucket)}%` }"
                             />
                         </div>
 
@@ -340,10 +405,18 @@ function indexersFor(connectionId: number): Indexer[] | undefined {
                             <div
                                 class="text-[10.5px] font-semibold tracking-[0.05em] text-muted-foreground uppercase"
                             >
-                                Last seen
+                                Latency · 1h
                             </div>
                             <div class="font-mono-tabular text-[12px]">
-                                {{ formatTime(connection.last_seen_at) }}
+                                <span v-if="avgLatencyFor(connection.id) !== null">
+                                    {{ avgLatencyFor(connection.id) }}ms
+                                </span>
+                                <span v-else class="text-fg-subtle">—</span>
+                            </div>
+                            <div
+                                class="font-mono-tabular text-[10.5px] text-fg-subtle"
+                            >
+                                seen {{ formatTime(connection.last_seen_at) }}
                             </div>
                         </div>
 

@@ -6,6 +6,7 @@ use App\Enums\HealthStatus;
 use App\Events\ServiceHealthChanged;
 use App\Jobs\PingServiceHealth;
 use App\Models\ServiceConnection;
+use App\Models\ServiceMetric;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Support\Facades\Event;
@@ -140,4 +141,46 @@ test('handles seerr via getStatus', function (): void {
     new PingServiceHealth($connection)->handle();
 
     expect($connection->fresh()->version)->toBe('3.0.0');
+});
+
+test('writes a ServiceMetric row on success', function (): void {
+    $connection = ServiceConnection::factory()->sonarr()->create([
+        'url' => 'http://sonarr.local:8989',
+    ]);
+
+    Http::fake(['sonarr.local:8989/api/v3/system/status' => Http::response(['version' => '4.0.0'])]);
+
+    new PingServiceHealth($connection)->handle();
+
+    $metric = ServiceMetric::query()
+        ->where('service_connection_id', $connection->id)
+        ->latest('id')
+        ->first();
+
+    expect($metric)->not->toBeNull();
+    expect($metric->status)->toBe(HealthStatus::Healthy);
+    expect($metric->message)->toBeNull();
+    expect($metric->latency_ms)->toBeGreaterThanOrEqual(0);
+});
+
+test('writes a ServiceMetric row on connection failure with null latency', function (): void {
+    $connection = ServiceConnection::factory()->radarr()->create([
+        'url' => 'http://radarr.local:7878',
+    ]);
+
+    Http::fake(function (): void {
+        throw new ConnectionException('Connection refused');
+    });
+
+    new PingServiceHealth($connection)->handle();
+
+    $metric = ServiceMetric::query()
+        ->where('service_connection_id', $connection->id)
+        ->latest('id')
+        ->first();
+
+    expect($metric)->not->toBeNull();
+    expect($metric->status)->toBe(HealthStatus::Unhealthy);
+    expect($metric->latency_ms)->toBeNull();
+    expect($metric->message)->toContain('Connection');
 });

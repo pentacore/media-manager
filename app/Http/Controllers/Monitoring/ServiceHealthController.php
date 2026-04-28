@@ -11,6 +11,7 @@ use App\Models\ServiceConnection;
 use App\Services\Prowlarr\ProwlarrClient;
 use App\Services\Radarr\RadarrClient;
 use App\Services\ServiceClientFactory;
+use App\Services\ServiceMetrics\ServiceMetricsRepository;
 use App\Services\Sonarr\SonarrClient;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Http\Client\ConnectionException;
@@ -22,12 +23,27 @@ use Throwable;
 
 class ServiceHealthController extends Controller
 {
-    public function __invoke(Request $request): Response
+    public function __invoke(Request $request, ServiceMetricsRepository $serviceMetricsRepository): Response
     {
         $connections = ServiceConnection::orderBy('type')->orderBy('name')->get();
+        $ids = $connections->pluck('id')->all();
+
+        $strips = $serviceMetricsRepository->last60MinutesFor($ids);
+        $uptime = [];
+        $avgLatency = [];
+
+        foreach ($ids as $id) {
+            $uptime[$id] = $serviceMetricsRepository->uptimePercent($id);
+            $avgLatency[$id] = $serviceMetricsRepository->averageLatencyMs($id);
+        }
 
         return Inertia::render('Monitoring/ServiceHealth', [
             'connections' => ServiceConnectionResource::collection($connections)->toArray($request),
+            'metrics' => [
+                'strips' => $strips,
+                'uptime' => $uptime,
+                'avg_latency' => $avgLatency,
+            ],
             'diskSpace' => Inertia::defer(fn (): array => $this->loadDiskSpaceForAll($connections)),
             'prowlarrIndexers' => Inertia::defer(fn (): array => $this->loadProwlarrIndexersForAll($connections)),
         ]);

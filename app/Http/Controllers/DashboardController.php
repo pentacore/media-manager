@@ -13,6 +13,7 @@ use App\Models\ActivityLog;
 use App\Models\ServiceConnection;
 use App\Models\WebhookEvent;
 use App\Services\Emby\EmbyClient;
+use App\Services\ServiceMetrics\ServiceMetricsRepository;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\RequestException;
@@ -22,7 +23,7 @@ use Inertia\Response;
 
 class DashboardController extends Controller
 {
-    public function __invoke(Request $request): Response
+    public function __invoke(Request $request, ServiceMetricsRepository $serviceMetricsRepository): Response
     {
         $services = ServiceConnection::query()
             ->orderBy('type')
@@ -54,6 +55,8 @@ class DashboardController extends Controller
                 'latest_version' => $serviceConnection->latest_version,
                 'last_seen_at' => $serviceConnection->last_seen_at?->toISOString(),
                 'is_active' => $serviceConnection->is_active,
+                'latency_spark' => $serviceMetricsRepository->recentLatencySamples($serviceConnection->id),
+                'avg_latency_ms' => $serviceMetricsRepository->averageLatencyMs($serviceConnection->id),
             ])->values(),
             'recentActivity' => ActivityLogResource::collection(
                 ActivityLog::with(['user:id,name', 'serviceConnection:id,name,type'])

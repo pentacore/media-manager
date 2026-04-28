@@ -8,6 +8,7 @@ use App\Enums\HealthStatus;
 use App\Enums\ServiceType;
 use App\Events\ServiceHealthChanged;
 use App\Models\ServiceConnection;
+use App\Models\ServiceMetric;
 use App\Services\ServiceClientFactory;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -36,8 +37,14 @@ class PingServiceHealth implements ShouldQueue
     {
         $this->serviceConnection->refresh();
 
+        $startedAt = microtime(true);
+        $latencyMs = null;
+        $message = null;
+
         try {
             $result = $this->ping();
+            $latencyMs = (int) round((microtime(true) - $startedAt) * 1000);
+
             $this->serviceConnection->forceFill([
                 'health_status' => HealthStatus::Healthy,
                 'health_message' => null,
@@ -46,12 +53,32 @@ class PingServiceHealth implements ShouldQueue
             ])->saveQuietly();
             $newStatus = HealthStatus::Healthy;
         } catch (Throwable $throwable) {
+            // Connection / request errors that come back with a real HTTP
+            // response still produced a measurable round-trip — keep that
+            // latency. Pre-response failures (DNS, ECONNREFUSED) leave it
+            // null so the strip can render them as "no data".
+            $elapsed = (int) round((microtime(true) - $startedAt) * 1000);
+
+            if ($throwable instanceof RequestException) {
+                $latencyMs = $elapsed;
+            }
+
+            $message = $this->formatFailureReason($throwable);
+
             $this->serviceConnection->forceFill([
                 'health_status' => HealthStatus::Unhealthy,
-                'health_message' => $this->formatFailureReason($throwable),
+                'health_message' => $message,
             ])->saveQuietly();
             $newStatus = HealthStatus::Unhealthy;
         }
+
+        ServiceMetric::create([
+            'service_connection_id' => $this->serviceConnection->id,
+            'status' => $newStatus,
+            'latency_ms' => $latencyMs,
+            'message' => $message,
+            'recorded_at' => now(),
+        ]);
 
         // Broadcast on any UI-relevant change, not only on a status flip — so
         // a fresh `health_message` while still Unhealthy, or a refreshed

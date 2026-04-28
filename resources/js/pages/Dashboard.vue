@@ -36,6 +36,8 @@ interface ServiceItem {
     latest_version: string | null;
     last_seen_at: string | null;
     is_active: boolean;
+    latency_spark: number[];
+    avg_latency_ms: number | null;
 }
 
 interface NowPlayingItem {
@@ -534,6 +536,13 @@ onMounted(() => {
                             :label="service.type"
                         />
                         <span
+                            v-if="service.avg_latency_ms !== null"
+                            class="font-mono-tabular ml-auto text-[11px] text-fg-subtle"
+                        >
+                            {{ service.avg_latency_ms }}ms
+                        </span>
+                        <span
+                            v-else
                             class="font-mono-tabular ml-auto text-[11px] text-fg-subtle"
                         >
                             {{ formatRelative(service.last_seen_at) }}
