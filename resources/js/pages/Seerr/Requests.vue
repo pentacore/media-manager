@@ -13,7 +13,7 @@ import {
 } from 'lucide-vue-next';
 import { computed, onMounted } from 'vue';
 import RequestController from '@/actions/App/Http/Controllers/Media/RequestController';
-import { Badge } from '@/components/ui/badge';
+import { Badge, BadgeVariants } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import {
@@ -110,14 +110,14 @@ function statusLabel(status: number | null): string {
             return 'Declined';
         case 4:
             return 'Failed';
+        case 5:
+            return 'Available';
         default:
             return status === null ? 'Unknown' : `Unknown (${status})`;
     }
 }
 
-function statusVariant(
-    status: number | null,
-): 'secondary' | 'default' | 'destructive' | 'outline' {
+function statusVariant(status: number | null): BadgeVariants['variant'] {
     switch (status) {
         case 1:
             return 'secondary';
@@ -126,6 +126,8 @@ function statusVariant(
         case 3:
         case 4:
             return 'destructive';
+        case 5:
+            return 'success';
         default:
             return 'outline';
     }
