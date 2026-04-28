@@ -33,6 +33,12 @@ use App\Ai\Tools\Sonarr\SearchSeriesTool;
 use App\Ai\Tools\Sonarr\SetSeriesQualityProfileTool;
 use App\Ai\Tools\System\GetServiceStatusTool;
 use App\Ai\Tools\System\QueryActivityTool;
+use App\Ai\Tools\Tmdb\TmdbGetCreditsTool;
+use App\Ai\Tools\Tmdb\TmdbGetSimilarTool;
+use App\Ai\Tools\Tmdb\TmdbGetTitleTool;
+use App\Ai\Tools\Trakt\TraktGetListTool;
+use App\Ai\Tools\Trakt\TraktGetPopularTool;
+use App\Ai\Tools\Trakt\TraktGetTrendingTool;
 use App\Ai\Tools\Workflow\ProposeWorkflowTool;
 use App\Settings\AiSettings;
 use Laravel\Ai\Attributes\MaxSteps;
@@ -73,7 +79,18 @@ You can do four kinds of things:
    - ListPendingRequestsTool — pending Seerr requests
    - SearchIndexersTool / ListIndexersTool — Prowlarr release search
 
-2. **Recommend** what to watch, what to clean up, what to add. You can suggest titles in the user's existing library (use the search/get tools), or titles available via Seerr's catalog (DiscoverMoviesTool / DiscoverTvTool / GetTitleTool). Be concise; prefer bullet points; cite specific titles and dates when available.
+2. **Recommend** what to watch, what to clean up, what to add. You can suggest titles from:
+   - The user's existing library (use the search/get tools above).
+   - Seerr's catalog (DiscoverMoviesTool / DiscoverTvTool / GetTitleTool).
+   - **External metadata (optional integrations):**
+     - TmdbGetTitleTool / TmdbGetSimilarTool / TmdbGetCreditsTool — TMDB direct: tagline, full episode lists for TV, certifications, full cast/crew. Richer than the Seerr proxy when you need depth.
+     - TraktGetTrendingTool — what is hot on Trakt right now (most watchers in the last 24h). Good for "what should I watch this weekend?".
+     - TraktGetPopularTool — all-time most-popular on Trakt. Good for "evergreen" picks.
+     - TraktGetListTool — fetch a curated Trakt list by numeric list_id (user can paste a Trakt URL — extract the id).
+
+   If a TMDB or Trakt tool returns an error envelope mentioning "API key is not configured" or "client id is not configured", tell the user the integration is not set up and fall back to Seerr discovery (DiscoverMoviesTool / DiscoverTvTool).
+
+   Be concise; prefer bullet points; cite specific titles and dates when available.
 
 3. **Take individual actions.** Two flavors:
    - **SafeWrite (executes immediately, no approval queue):**
@@ -150,6 +167,14 @@ PROMPT;
             // Prowlarr
             resolve(SearchIndexersTool::class),
             resolve(ListIndexersTool::class),
+            // TMDB — external metadata
+            resolve(TmdbGetTitleTool::class),
+            resolve(TmdbGetSimilarTool::class),
+            resolve(TmdbGetCreditsTool::class),
+            // Trakt — trending / popular / curated lists
+            resolve(TraktGetTrendingTool::class),
+            resolve(TraktGetPopularTool::class),
+            resolve(TraktGetListTool::class),
             // Workflow
             resolve(ProposeWorkflowTool::class),
         ];

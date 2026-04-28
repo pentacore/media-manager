@@ -58,10 +58,23 @@ test('tool list includes the Phase-2 tool families', function (): void {
     expect($shortNames)->toContain('ProposeWorkflowTool');
 });
 
-test('tool list has all 30 expected tools', function (): void {
+test('tool list has all 36 expected tools', function (): void {
     $tools = collect(iterator_to_array((new MediaAgent)->tools(), false));
 
-    expect($tools->count())->toBe(30);
+    expect($tools->count())->toBe(36);
+});
+
+test('tool list includes the Phase-3 metadata tool families', function (): void {
+    $tools = collect(iterator_to_array((new MediaAgent)->tools(), false));
+
+    $shortNames = $tools->map(fn ($t): string => class_basename($t))->all();
+
+    expect($shortNames)->toContain('TmdbGetTitleTool');
+    expect($shortNames)->toContain('TmdbGetSimilarTool');
+    expect($shortNames)->toContain('TmdbGetCreditsTool');
+    expect($shortNames)->toContain('TraktGetTrendingTool');
+    expect($shortNames)->toContain('TraktGetPopularTool');
+    expect($shortNames)->toContain('TraktGetListTool');
 });
 
 test('model() reads from AiSettings', function (): void {
