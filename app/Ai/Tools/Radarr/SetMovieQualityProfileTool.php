@@ -15,7 +15,7 @@ class SetMovieQualityProfileTool extends BaseTool
 {
     public function description(): Stringable|string
     {
-        return 'Change the quality profile for a movie in Radarr. Use the movie_id from SearchMoviesTool/GetMovieTool. quality_profile_id from Radarr\'s quality profiles list.';
+        return "Change the quality profile for a movie in Radarr. Use the movie_id from SearchMoviesTool/GetMovieTool. quality_profile_id from Radarr's quality profiles list.";
     }
 
     public function risk(): Risk

@@ -7,6 +7,7 @@ namespace App\Models;
 use App\Enums\AiProposedWorkflowStatus;
 use Carbon\CarbonImmutable;
 use Database\Factories\AiProposedWorkflowFactory;
+use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -25,16 +26,17 @@ use Override;
  *
  * @method static AiProposedWorkflowFactory factory($count = null, $state = [])
  */
+#[Fillable(['id', 'user_id', 'conversation_id', 'rationale', 'steps', 'status'])]
 class AiProposedWorkflow extends Model
 {
     /** @use HasFactory<AiProposedWorkflowFactory> */
     use HasFactory;
 
+    #[Override]
     protected $keyType = 'string';
 
+    #[Override]
     public $incrementing = false;
-
-    protected $fillable = ['id', 'user_id', 'conversation_id', 'rationale', 'steps', 'status'];
 
     /**
      * @return array<string, string>

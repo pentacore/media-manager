@@ -16,7 +16,7 @@ test('queues a set_series_quality_profile ActionRequest', function (): void {
         'requires_approval' => false,
     ]);
 
-    $result = json_decode((string) (new SetSeriesQualityProfileTool)->handle(new Request([
+    $result = json_decode((new SetSeriesQualityProfileTool)->handle(new Request([
         'series_id' => 42,
         'quality_profile_id' => 7,
     ])), true);

@@ -116,6 +116,7 @@ test('workflow continuation rejects when workflow does not belong to the user', 
         ]);
 
     $response->assertNotFound();
+
     expect($workflow->fresh()->status)->toBe(AiProposedWorkflowStatus::Proposed);
     MediaAgent::assertNeverPrompted();
 });
@@ -137,6 +138,7 @@ test('workflow continuation rejects when workflow is already terminal', function
         ]);
 
     $response->assertStatus(422);
+
     expect($workflow->fresh()->status)->toBe(AiProposedWorkflowStatus::Approved);
     MediaAgent::assertNeverPrompted();
 });

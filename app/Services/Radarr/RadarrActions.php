@@ -57,16 +57,16 @@ class RadarrActions implements ActionExecutor
 
         throw_if($tmdbId <= 0, InvalidArgumentException::class, 'tmdb_id is required');
 
-        $client = new RadarrClient(ServiceConnection::resolveActive(ServiceType::Radarr));
+        $radarrClient = new RadarrClient(ServiceConnection::resolveActive(ServiceType::Radarr));
 
         // Look up the full movie spec by tmdb_id (Radarr's lookup accepts "tmdb:{id}" syntax).
-        $candidates = $client->searchMovies(sprintf('tmdb:%d', $tmdbId));
+        $candidates = $radarrClient->searchMovies(sprintf('tmdb:%d', $tmdbId));
 
         throw_if($candidates === [], InvalidArgumentException::class, sprintf('No movie found in Radarr lookup for tmdb_id %d', $tmdbId));
 
         $seed = $candidates[0];
 
-        $movie = $client->addMovie(array_merge($seed, [
+        $movie = $radarrClient->addMovie(array_merge($seed, [
             'qualityProfileId' => (int) ($payload['quality_profile_id'] ?? 0),
             'rootFolderPath' => (string) ($payload['root_folder_path'] ?? ''),
             'monitored' => (bool) ($payload['monitored'] ?? true),
@@ -92,10 +92,10 @@ class RadarrActions implements ActionExecutor
 
         $monitored = (bool) ($payload['monitored'] ?? true);
 
-        $client = new RadarrClient(ServiceConnection::resolveActive(ServiceType::Radarr));
-        $movie = $client->getMovieById($movieId);
+        $radarrClient = new RadarrClient(ServiceConnection::resolveActive(ServiceType::Radarr));
+        $movie = $radarrClient->getMovieById($movieId);
         $movie['monitored'] = $monitored;
-        $client->updateMovie($movieId, $movie);
+        $radarrClient->updateMovie($movieId, $movie);
 
         return [
             'radarr_movie_id' => $movieId,
@@ -115,10 +115,10 @@ class RadarrActions implements ActionExecutor
         throw_if($movieId <= 0, InvalidArgumentException::class, 'movie_id is required');
         throw_if($qualityProfileId <= 0, InvalidArgumentException::class, 'quality_profile_id is required');
 
-        $client = new RadarrClient(ServiceConnection::resolveActive(ServiceType::Radarr));
-        $movie = $client->getMovieById($movieId);
+        $radarrClient = new RadarrClient(ServiceConnection::resolveActive(ServiceType::Radarr));
+        $movie = $radarrClient->getMovieById($movieId);
         $movie['qualityProfileId'] = $qualityProfileId;
-        $client->updateMovie($movieId, $movie);
+        $radarrClient->updateMovie($movieId, $movie);
 
         return [
             'radarr_movie_id' => $movieId,

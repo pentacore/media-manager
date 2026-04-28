@@ -16,7 +16,7 @@ test('queues a set_movie_quality_profile ActionRequest', function (): void {
         'requires_approval' => false,
     ]);
 
-    $result = json_decode((string) (new SetMovieQualityProfileTool)->handle(new Request([
+    $result = json_decode((new SetMovieQualityProfileTool)->handle(new Request([
         'movie_id' => 42,
         'quality_profile_id' => 7,
     ])), true);

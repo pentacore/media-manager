@@ -16,7 +16,7 @@ test('queues a monitor_series ActionRequest', function (): void {
         'requires_approval' => false,
     ]);
 
-    $result = json_decode((string) (new MonitorSeriesTool)->handle(new Request([
+    $result = json_decode((new MonitorSeriesTool)->handle(new Request([
         'series_id' => 42,
         'monitored' => false,
     ])), true);

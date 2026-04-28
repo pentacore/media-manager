@@ -34,9 +34,9 @@ class MarkAsWatchedTool extends BaseTool
         $args = $request->toArray();
         $userId = (string) ($args['emby_user_id'] ?? '');
         $itemId = (string) ($args['emby_item_id'] ?? '');
-        $connection = ServiceConnection::resolveActive(ServiceType::Emby);
+        $serviceConnection = ServiceConnection::resolveActive(ServiceType::Emby);
 
-        $result = (new EmbyClient($connection))->markItemPlayed($userId, $itemId);
+        $result = new EmbyClient($serviceConnection)->markItemPlayed($userId, $itemId);
 
         return [
             'played' => (bool) ($result['Played'] ?? true),

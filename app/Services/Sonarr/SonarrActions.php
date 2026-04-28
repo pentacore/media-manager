@@ -57,16 +57,16 @@ class SonarrActions implements ActionExecutor
 
         throw_if($tvdbId <= 0, InvalidArgumentException::class, 'tvdb_id is required');
 
-        $client = new SonarrClient(ServiceConnection::resolveActive(ServiceType::Sonarr));
+        $sonarrClient = new SonarrClient(ServiceConnection::resolveActive(ServiceType::Sonarr));
 
         // Look up the full series spec by tvdb_id (Sonarr's lookup accepts "tvdb:{id}" syntax).
-        $candidates = $client->searchSeries(sprintf('tvdb:%d', $tvdbId));
+        $candidates = $sonarrClient->searchSeries(sprintf('tvdb:%d', $tvdbId));
 
         throw_if($candidates === [], InvalidArgumentException::class, sprintf('No series found in Sonarr lookup for tvdb_id %d', $tvdbId));
 
         $seed = $candidates[0];
 
-        $series = $client->addSeries(array_merge($seed, [
+        $series = $sonarrClient->addSeries(array_merge($seed, [
             'qualityProfileId' => (int) ($payload['quality_profile_id'] ?? 0),
             'rootFolderPath' => (string) ($payload['root_folder_path'] ?? ''),
             'monitored' => (bool) ($payload['monitored'] ?? true),
@@ -93,10 +93,10 @@ class SonarrActions implements ActionExecutor
 
         $monitored = (bool) ($payload['monitored'] ?? true);
 
-        $client = new SonarrClient(ServiceConnection::resolveActive(ServiceType::Sonarr));
-        $series = $client->getSeriesById($seriesId);
+        $sonarrClient = new SonarrClient(ServiceConnection::resolveActive(ServiceType::Sonarr));
+        $series = $sonarrClient->getSeriesById($seriesId);
         $series['monitored'] = $monitored;
-        $client->updateSeries($seriesId, $series);
+        $sonarrClient->updateSeries($seriesId, $series);
 
         return [
             'sonarr_series_id' => $seriesId,
@@ -116,10 +116,10 @@ class SonarrActions implements ActionExecutor
         throw_if($seriesId <= 0, InvalidArgumentException::class, 'series_id is required');
         throw_if($qualityProfileId <= 0, InvalidArgumentException::class, 'quality_profile_id is required');
 
-        $client = new SonarrClient(ServiceConnection::resolveActive(ServiceType::Sonarr));
-        $series = $client->getSeriesById($seriesId);
+        $sonarrClient = new SonarrClient(ServiceConnection::resolveActive(ServiceType::Sonarr));
+        $series = $sonarrClient->getSeriesById($seriesId);
         $series['qualityProfileId'] = $qualityProfileId;
-        $client->updateSeries($seriesId, $series);
+        $sonarrClient->updateSeries($seriesId, $series);
 
         return [
             'sonarr_series_id' => $seriesId,

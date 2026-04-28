@@ -121,9 +121,9 @@ class ChatController extends Controller
         ]);
     }
 
-    private function synthesizeWorkflowContinuation(AiProposedWorkflow $workflow, AiProposedWorkflowStatus $status): string
+    private function synthesizeWorkflowContinuation(AiProposedWorkflow $aiProposedWorkflow, AiProposedWorkflowStatus $aiProposedWorkflowStatus): string
     {
-        $stepsList = collect($workflow->steps)
+        $stepsList = collect($aiProposedWorkflow->steps)
             ->map(fn (array $step, int $index): string => sprintf(
                 '%d. %s on %s — %s',
                 $index + 1,
@@ -133,15 +133,15 @@ class ChatController extends Controller
             ))
             ->implode("\n");
 
-        return $status === AiProposedWorkflowStatus::Approved
+        return $aiProposedWorkflowStatus === AiProposedWorkflowStatus::Approved
             ? sprintf(
                 "The user has APPROVED workflow %s. Execute these steps now using the appropriate destructive tools (DeleteSeriesTool, DeleteMovieTool, CleanupRequestTool, LibraryScanTool, etc.):\n\n%s",
-                $workflow->id,
+                $aiProposedWorkflow->id,
                 $stepsList,
             )
             : sprintf(
                 'The user has DECLINED workflow %s. Acknowledge the decline and ask what they would like to do instead.',
-                $workflow->id,
+                $aiProposedWorkflow->id,
             );
     }
 

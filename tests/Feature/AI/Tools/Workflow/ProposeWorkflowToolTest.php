@@ -13,7 +13,7 @@ test('stores a proposed workflow row and returns awaiting_confirmation envelope'
     $user = User::factory()->admin()->create();
     $this->actingAs($user);
 
-    $result = json_decode((string) (new ProposeWorkflowTool)->handle(new Request([
+    $result = json_decode((new ProposeWorkflowTool)->handle(new Request([
         'rationale' => 'User asked to delete unwatched horror movies older than 6 months.',
         'steps' => [
             ['action' => 'delete_movie', 'target' => 'Movie A (id 1)', 'reason' => 'Unwatched 8mo'],
@@ -39,13 +39,13 @@ test('truncates rationale to 1000 chars', function (): void {
 
     $longRationale = str_repeat('x', 1500);
 
-    $result = json_decode((string) (new ProposeWorkflowTool)->handle(new Request([
+    $result = json_decode((new ProposeWorkflowTool)->handle(new Request([
         'rationale' => $longRationale,
         'steps' => [['action' => 'delete_movie', 'target' => 'X', 'reason' => 'y']],
     ])), true);
 
     $workflow = AiProposedWorkflow::find($result['workflow_id']);
-    expect(strlen($workflow->rationale))->toBeLessThanOrEqual(1000);
+    expect(strlen((string) $workflow->rationale))->toBeLessThanOrEqual(1000);
 });
 
 test('risk is Read', function (): void {

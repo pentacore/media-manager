@@ -16,7 +16,7 @@ test('queues an add_movie ActionRequest with the right payload', function (): vo
         'requires_approval' => true,
     ]);
 
-    $result = json_decode((string) (new AddMovieTool)->handle(new Request([
+    $result = json_decode((new AddMovieTool)->handle(new Request([
         'tmdb_id' => 999001,
         'quality_profile_id' => 1,
         'root_folder_path' => '/movies',

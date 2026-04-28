@@ -23,7 +23,7 @@ test('marks an emby item as played', function (): void {
         'emby.local:8096/Users/user1/PlayedItems/item1*' => Http::response(['Played' => true]),
     ]);
 
-    $result = json_decode((string) (new MarkAsWatchedTool)->handle(new Request([
+    $result = json_decode((new MarkAsWatchedTool)->handle(new Request([
         'emby_user_id' => 'user1',
         'emby_item_id' => 'item1',
     ])), true);

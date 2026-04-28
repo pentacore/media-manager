@@ -21,7 +21,7 @@ test('seeder is idempotent', function (): void {
     $this->seed(ActionTypeConfigSeeder::class);
     $this->seed(ActionTypeConfigSeeder::class);
 
-    expect(ActionTypeConfig::count())->toBe(4);
+    expect(ActionTypeConfig::count())->toBe(12);
 });
 
 test('destructive types default to requires_approval=true', function (): void {

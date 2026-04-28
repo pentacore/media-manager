@@ -16,7 +16,7 @@ test('queues an add_series ActionRequest with the right payload', function (): v
         'requires_approval' => true,
     ]);
 
-    $result = json_decode((string) (new AddSeriesTool)->handle(new Request([
+    $result = json_decode((new AddSeriesTool)->handle(new Request([
         'tvdb_id' => 999001,
         'quality_profile_id' => 1,
         'root_folder_path' => '/tv',

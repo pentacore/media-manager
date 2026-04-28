@@ -133,7 +133,7 @@ class FakeDestructiveTool extends BaseTool
 test('Read tool returns json-encoded execute() result', function (): void {
     $tool = new FakeReadTool;
 
-    $result = (string) $tool->handle(makeFakeRequest());
+    $result = $tool->handle(makeFakeRequest());
 
     expect(json_decode($result, true))->toBe(['ok' => true, 'data' => 'hello']);
 });
@@ -141,7 +141,7 @@ test('Read tool returns json-encoded execute() result', function (): void {
 test('handle catches throwables and returns a structured error JSON', function (): void {
     $tool = new FakeThrowingTool;
 
-    $result = (string) $tool->handle(makeFakeRequest());
+    $result = $tool->handle(makeFakeRequest());
 
     $decoded = json_decode($result, true);
     expect($decoded['error'])->toBe('tool_failed');
@@ -157,7 +157,7 @@ test('Destructive tool routes through ActionOrchestrator', function (): void {
     ]);
 
     $tool = new FakeDestructiveTool;
-    $result = (string) $tool->handle(makeFakeRequest());
+    $result = $tool->handle(makeFakeRequest());
 
     $decoded = json_decode($result, true);
     expect($decoded['queued'])->toBeTrue();
@@ -171,7 +171,7 @@ test('Destructive tool refuses to run in Advisory mode', function (): void {
     resolve(AiSettings::class)->setMode(AiMode::Advisory);
 
     $tool = new FakeDestructiveTool;
-    $result = (string) $tool->handle(makeFakeRequest());
+    $result = $tool->handle(makeFakeRequest());
 
     $decoded = json_decode($result, true);
     expect($decoded['error'])->toBe('advisory_mode_blocks_destructive');
@@ -181,7 +181,7 @@ test('Destructive tool refuses to run in Advisory mode', function (): void {
 test('Destructive tool returns no_action_type_config when type is unknown', function (): void {
     $tool = new FakeDestructiveTool;
 
-    $result = (string) $tool->handle(makeFakeRequest());
+    $result = $tool->handle(makeFakeRequest());
 
     $decoded = json_decode($result, true);
     expect($decoded['queued'])->toBeFalse();
@@ -189,7 +189,7 @@ test('Destructive tool returns no_action_type_config when type is unknown', func
 });
 
 test('handle returns valid JSON even when execute() result has invalid UTF-8', function (): void {
-    $result = (string) (new FakeBinaryTool)->handle(makeFakeRequest());
+    $result = (new FakeBinaryTool)->handle(makeFakeRequest());
 
     $decoded = json_decode($result, true);
     expect($decoded)->not->toBeNull();

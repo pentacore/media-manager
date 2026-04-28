@@ -17,7 +17,7 @@ test('ApproveRequestTool queues an approve_seerr_request ActionRequest', functio
         'requires_approval' => false,
     ]);
 
-    $result = json_decode((string) (new ApproveRequestTool)->handle(new Request([
+    $result = json_decode((new ApproveRequestTool)->handle(new Request([
         'seerr_request_id' => 5101,
     ])), true);
 
@@ -36,7 +36,7 @@ test('DeclineRequestTool queues a decline_seerr_request ActionRequest', function
         'requires_approval' => false,
     ]);
 
-    $result = json_decode((string) (new DeclineRequestTool)->handle(new Request([
+    $result = json_decode((new DeclineRequestTool)->handle(new Request([
         'seerr_request_id' => 5102,
     ])), true);
 

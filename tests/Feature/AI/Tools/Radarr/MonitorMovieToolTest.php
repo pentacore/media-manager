@@ -16,7 +16,7 @@ test('queues a monitor_movie ActionRequest', function (): void {
         'requires_approval' => false,
     ]);
 
-    $result = json_decode((string) (new MonitorMovieTool)->handle(new Request([
+    $result = json_decode((new MonitorMovieTool)->handle(new Request([
         'movie_id' => 42,
         'monitored' => false,
     ])), true);

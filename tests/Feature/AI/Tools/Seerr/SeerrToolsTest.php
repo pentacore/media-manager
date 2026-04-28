@@ -34,7 +34,7 @@ test('SearchCatalogTool searches the Seerr catalog by query', function (): void 
         ]),
     ]);
 
-    $result = json_decode((string) (new SearchCatalogTool)->handle(new Request(['query' => 'inception'])), true);
+    $result = json_decode((new SearchCatalogTool)->handle(new Request(['query' => 'inception'])), true);
 
     Http::assertSent(fn ($request): bool => str_contains((string) $request->url(), 'query=inception'));
     expect($result['results'])->toHaveCount(1);
@@ -53,7 +53,7 @@ test('DiscoverMoviesTool calls /discover/movies with non-null filters', function
         ]),
     ]);
 
-    $result = json_decode((string) (new DiscoverMoviesTool)->handle(new Request([
+    $result = json_decode((new DiscoverMoviesTool)->handle(new Request([
         'genre' => '28',
         'sort_by' => 'popularity.desc',
         'page' => 1,
@@ -97,7 +97,7 @@ test('DiscoverTvTool calls /discover/tv with non-null filters', function (): voi
         ]),
     ]);
 
-    $result = json_decode((string) (new DiscoverTvTool)->handle(new Request([
+    $result = json_decode((new DiscoverTvTool)->handle(new Request([
         'genre' => '18',
         'sort_by' => 'vote_average.desc',
         'page' => 2,
@@ -122,7 +122,7 @@ test('GetTitleTool fetches movie details when media_type is movie', function ():
         'seerr.local:5055/api/v1/movie/603' => Http::response(['id' => 603, 'title' => 'The Matrix']),
     ]);
 
-    $result = json_decode((string) (new GetTitleTool)->handle(new Request([
+    $result = json_decode((new GetTitleTool)->handle(new Request([
         'tmdb_id' => 603,
         'media_type' => 'movie',
     ])), true);
@@ -135,7 +135,7 @@ test('GetTitleTool fetches tv details when media_type is tv', function (): void 
         'seerr.local:5055/api/v1/tv/1396' => Http::response(['id' => 1396, 'name' => 'Breaking Bad']),
     ]);
 
-    $result = json_decode((string) (new GetTitleTool)->handle(new Request([
+    $result = json_decode((new GetTitleTool)->handle(new Request([
         'tmdb_id' => 1396,
         'media_type' => 'tv',
     ])), true);
@@ -144,7 +144,7 @@ test('GetTitleTool fetches tv details when media_type is tv', function (): void 
 });
 
 test('GetTitleTool returns tool_failed for unknown media_type', function (): void {
-    $result = json_decode((string) (new GetTitleTool)->handle(new Request([
+    $result = json_decode((new GetTitleTool)->handle(new Request([
         'tmdb_id' => 1,
         'media_type' => 'bogus',
     ])), true);
@@ -165,7 +165,7 @@ test('ListPendingRequestsTool calls /request with filter=pending', function (): 
         ]),
     ]);
 
-    $result = json_decode((string) (new ListPendingRequestsTool)->handle(new Request([])), true);
+    $result = json_decode((new ListPendingRequestsTool)->handle(new Request([])), true);
 
     Http::assertSent(fn ($request): bool => str_contains((string) $request->url(), '/api/v1/request')
         && str_contains((string) $request->url(), 'filter=pending'));
@@ -186,7 +186,7 @@ test('CleanupRequestTool queues a cleanup_seerr_request ActionRequest', function
         'requires_approval' => true,
     ]);
 
-    $result = json_decode((string) (new CleanupRequestTool)->handle(new Request([
+    $result = json_decode((new CleanupRequestTool)->handle(new Request([
         'seerr_request_id' => 99,
     ])), true);
 
@@ -200,7 +200,7 @@ test('CleanupRequestTool queues a cleanup_seerr_request ActionRequest', function
 });
 
 test('CleanupRequestTool reports no_action_type_config when rule is missing', function (): void {
-    $result = json_decode((string) (new CleanupRequestTool)->handle(new Request([
+    $result = json_decode((new CleanupRequestTool)->handle(new Request([
         'seerr_request_id' => 99,
     ])), true);
 

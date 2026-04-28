@@ -23,7 +23,7 @@ test('marks an emby item as unplayed', function (): void {
         'emby.local:8096/Users/user1/PlayedItems/item1*' => Http::response(['Played' => false]),
     ]);
 
-    $result = json_decode((string) (new MarkAsUnwatchedTool)->handle(new Request([
+    $result = json_decode((new MarkAsUnwatchedTool)->handle(new Request([
         'emby_user_id' => 'user1',
         'emby_item_id' => 'item1',
     ])), true);
