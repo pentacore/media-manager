@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Services\Seerr;
 
+use App\Cache\Services\SeerrCache;
 use App\Enums\ServiceType;
 use App\Models\ActionRequest;
 use App\Models\ServiceConnection;
@@ -35,8 +36,9 @@ class SeerrActions implements ActionExecutor
 
         throw_if($requestId <= 0, InvalidArgumentException::class, 'seerr_request_id is required');
 
-        $seerrClient = new SeerrClient(ServiceConnection::resolveActive(ServiceType::Seerr));
-        $seerrClient->deleteRequest($requestId);
+        $connection = ServiceConnection::resolveActive(ServiceType::Seerr);
+        new SeerrClient($connection)->deleteRequest($requestId);
+        new SeerrCache($connection)->bustAll();
 
         return [
             'seerr_request_id' => $requestId,
@@ -52,8 +54,9 @@ class SeerrActions implements ActionExecutor
 
         throw_if($requestId <= 0, InvalidArgumentException::class, 'seerr_request_id is required');
 
-        $seerrClient = new SeerrClient(ServiceConnection::resolveActive(ServiceType::Seerr));
-        $seerrClient->updateRequestStatus($requestId, 'approve');
+        $connection = ServiceConnection::resolveActive(ServiceType::Seerr);
+        new SeerrClient($connection)->updateRequestStatus($requestId, 'approve');
+        new SeerrCache($connection)->bustAll();
 
         return [
             'seerr_request_id' => $requestId,
@@ -70,8 +73,9 @@ class SeerrActions implements ActionExecutor
 
         throw_if($requestId <= 0, InvalidArgumentException::class, 'seerr_request_id is required');
 
-        $seerrClient = new SeerrClient(ServiceConnection::resolveActive(ServiceType::Seerr));
-        $seerrClient->updateRequestStatus($requestId, 'decline');
+        $connection = ServiceConnection::resolveActive(ServiceType::Seerr);
+        new SeerrClient($connection)->updateRequestStatus($requestId, 'decline');
+        new SeerrCache($connection)->bustAll();
 
         return [
             'seerr_request_id' => $requestId,

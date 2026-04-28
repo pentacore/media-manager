@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Services\Seerr;
 
+use App\Cache\Services\SeerrCache;
 use App\Models\WebhookEvent;
 use App\Services\Actions\ActionOrchestrator;
 use App\Services\Webhook\AbstractWebhookHandler;
@@ -42,6 +43,10 @@ class SeerrWebhookHandler extends AbstractWebhookHandler
         };
 
         $webhookEvent->markProcessed();
+
+        if ($webhookEvent->serviceConnection !== null) {
+            new SeerrCache($webhookEvent->serviceConnection)->bustAll();
+        }
     }
 
     /**

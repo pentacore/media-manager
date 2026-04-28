@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Services\Seerr;
 
+use App\Cache\Services\SeerrCache;
 use App\Models\ServiceConnection;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\PendingRequest;
@@ -19,6 +20,8 @@ use Throwable;
 class SeerrClient
 {
     protected string $apiVersion = 'v1';
+
+    private ?SeerrCache $cache = null;
 
     public function __construct(
         protected ServiceConnection $connection,
@@ -56,7 +59,10 @@ class SeerrClient
      */
     public function getRequests(array $params = []): array
     {
-        return $this->buildClient()->get(sprintf('/api/%s/request', $this->apiVersion), $params)->throw()->json() ?? [];
+        return $this->cache()->rememberList(
+            'requests:'.md5(serialize($params)),
+            fn (): array => $this->buildClient()->get(sprintf('/api/%s/request', $this->apiVersion), $params)->throw()->json() ?? [],
+        );
     }
 
     /**
@@ -66,7 +72,10 @@ class SeerrClient
      */
     public function getRequestById(int $id): array
     {
-        return $this->buildClient()->get(sprintf('/api/%s/request/%d', $this->apiVersion, $id))->throw()->json() ?? [];
+        return $this->cache()->rememberEntity(
+            'request:'.$id,
+            fn (): array => $this->buildClient()->get(sprintf('/api/%s/request/%d', $this->apiVersion, $id))->throw()->json() ?? [],
+        );
     }
 
     /**
@@ -120,10 +129,13 @@ class SeerrClient
      */
     public function getMovieDetails(int $tmdbId): array
     {
-        return $this->buildClient()
-            ->get(sprintf('/api/%s/movie/%d', $this->apiVersion, $tmdbId))
-            ->throw()
-            ->json() ?? [];
+        return $this->cache()->rememberEntity(
+            'movie-details:'.$tmdbId,
+            fn (): array => $this->buildClient()
+                ->get(sprintf('/api/%s/movie/%d', $this->apiVersion, $tmdbId))
+                ->throw()
+                ->json() ?? [],
+        );
     }
 
     /**
@@ -135,10 +147,13 @@ class SeerrClient
      */
     public function getTvDetails(int $tmdbId): array
     {
-        return $this->buildClient()
-            ->get(sprintf('/api/%s/tv/%d', $this->apiVersion, $tmdbId))
-            ->throw()
-            ->json() ?? [];
+        return $this->cache()->rememberEntity(
+            'tv-details:'.$tmdbId,
+            fn (): array => $this->buildClient()
+                ->get(sprintf('/api/%s/tv/%d', $this->apiVersion, $tmdbId))
+                ->throw()
+                ->json() ?? [],
+        );
     }
 
     /**
@@ -150,10 +165,13 @@ class SeerrClient
      */
     public function getRequestCount(): array
     {
-        return $this->buildClient()
-            ->get(sprintf('/api/%s/request/count', $this->apiVersion))
-            ->throw()
-            ->json() ?? [];
+        return $this->cache()->rememberList(
+            'request-count',
+            fn (): array => $this->buildClient()
+                ->get(sprintf('/api/%s/request/count', $this->apiVersion))
+                ->throw()
+                ->json() ?? [],
+        );
     }
 
     /**
@@ -163,7 +181,10 @@ class SeerrClient
      */
     public function search(string $query): array
     {
-        return $this->buildClient()->get(sprintf('/api/%s/search', $this->apiVersion), ['query' => $query])->throw()->json() ?? [];
+        return $this->cache()->rememberList(
+            'search:'.md5($query),
+            fn (): array => $this->buildClient()->get(sprintf('/api/%s/search', $this->apiVersion), ['query' => $query])->throw()->json() ?? [],
+        );
     }
 
     /**
@@ -186,7 +207,10 @@ class SeerrClient
      */
     public function discoverMovies(array $options = []): array
     {
-        return $this->buildClient()->get(sprintf('/api/%s/discover/movies', $this->apiVersion), $options)->throw()->json() ?? [];
+        return $this->cache()->rememberList(
+            'discover:movies:'.md5(serialize($options)),
+            fn (): array => $this->buildClient()->get(sprintf('/api/%s/discover/movies', $this->apiVersion), $options)->throw()->json() ?? [],
+        );
     }
 
     /**
@@ -199,6 +223,14 @@ class SeerrClient
      */
     public function discoverTv(array $options = []): array
     {
-        return $this->buildClient()->get(sprintf('/api/%s/discover/tv', $this->apiVersion), $options)->throw()->json() ?? [];
+        return $this->cache()->rememberList(
+            'discover:tv:'.md5(serialize($options)),
+            fn (): array => $this->buildClient()->get(sprintf('/api/%s/discover/tv', $this->apiVersion), $options)->throw()->json() ?? [],
+        );
+    }
+
+    private function cache(): SeerrCache
+    {
+        return $this->cache ??= new SeerrCache($this->connection);
     }
 }

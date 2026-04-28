@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers\Media;
 
+use App\Cache\Services\SeerrCache;
 use App\Enums\ServiceType;
 use App\Http\Controllers\Controller;
 use App\Models\ServiceConnection;
@@ -45,7 +46,9 @@ class RequestController extends Controller
     public function destroy(int $id): RedirectResponse
     {
         try {
-            $this->client()->deleteRequest($id);
+            $connection = ServiceConnection::resolveActive(ServiceType::Seerr);
+            new SeerrClient($connection)->deleteRequest($id);
+            new SeerrCache($connection)->bustAll();
         } catch (ModelNotFoundException) {
             return $this->noConnectionRedirect();
         } catch (RequestException|ConnectionException) {
@@ -72,7 +75,9 @@ class RequestController extends Controller
     public function retry(int $id): RedirectResponse
     {
         try {
-            $this->client()->retryRequest($id);
+            $connection = ServiceConnection::resolveActive(ServiceType::Seerr);
+            new SeerrClient($connection)->retryRequest($id);
+            new SeerrCache($connection)->bustAll();
         } catch (ModelNotFoundException) {
             return $this->noConnectionRedirect();
         } catch (RequestException|ConnectionException) {
@@ -167,7 +172,9 @@ class RequestController extends Controller
     private function updateStatus(int $id, string $status, string $successMessage, string $failureMessage): RedirectResponse
     {
         try {
-            $this->client()->updateRequestStatus($id, $status);
+            $connection = ServiceConnection::resolveActive(ServiceType::Seerr);
+            new SeerrClient($connection)->updateRequestStatus($id, $status);
+            new SeerrCache($connection)->bustAll();
         } catch (ModelNotFoundException) {
             return $this->noConnectionRedirect();
         } catch (RequestException|ConnectionException) {
@@ -179,11 +186,6 @@ class RequestController extends Controller
         Inertia::flash('toast', ['type' => 'success', 'message' => $successMessage]);
 
         return back();
-    }
-
-    private function client(): SeerrClient
-    {
-        return new SeerrClient(ServiceConnection::resolveActive(ServiceType::Seerr));
     }
 
     private function noConnectionRedirect(): RedirectResponse
