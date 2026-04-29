@@ -201,6 +201,164 @@ test('summary falls back to zeros when count endpoint fails', function (): void 
         );
 });
 
+test('summary exposes available count from filter=available pageInfo', function (): void {
+    $member = User::factory()->member()->create();
+
+    Http::fake([
+        'seerr.local:5055/api/v1/request/count' => Http::response([
+            'total' => 75, 'pending' => 5, 'approved' => 60, 'declined' => 10,
+        ]),
+        'seerr.local:5055/api/v1/request*' => fn ($request) => str_contains((string) $request->url(), 'filter=available')
+            ? Http::response([
+                'pageInfo' => ['page' => 1, 'pages' => 1, 'pageSize' => 1, 'results' => 42],
+                'results' => [],
+            ])
+            : Http::response([
+                'pageInfo' => ['page' => 1, 'pages' => 1, 'pageSize' => 50, 'results' => 0],
+                'results' => [],
+            ]),
+    ]);
+
+    $this->actingAs($member)
+        ->get(route('media.requests.index'))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->loadDeferredProps('default', function ($page): void {
+                $page
+                    ->where('summary.available', 42)
+                    ->where('summary.approved', 60)
+                    ->where('summary.declined', 10);
+            })
+        );
+
+    Http::assertSent(fn ($request): bool => str_contains((string) $request->url(), 'filter=available')
+        && str_contains((string) $request->url(), 'take=1')
+    );
+});
+
+test('declined filter walks the unfiltered list and keeps only declined rows', function (): void {
+    $member = User::factory()->member()->create();
+
+    Http::fake([
+        'seerr.local:5055/api/v1/request/count' => Http::response([
+            'total' => 3, 'pending' => 1, 'approved' => 1, 'declined' => 1,
+        ]),
+        'seerr.local:5055/api/v1/movie/700' => Http::response(['id' => 700, 'title' => 'Declined Movie']),
+        'seerr.local:5055/api/v1/movie/701' => Http::response(['id' => 701, 'title' => 'Pending Movie']),
+        'seerr.local:5055/api/v1/movie/702' => Http::response(['id' => 702, 'title' => 'Approved Movie']),
+        'seerr.local:5055/api/v1/request*' => Http::response([
+            'pageInfo' => ['page' => 1, 'pages' => 1, 'pageSize' => 100, 'results' => 3],
+            'results' => [
+                ['id' => 11, 'status' => 1, 'type' => 'movie', 'media' => ['mediaType' => 'movie', 'tmdbId' => 701]],
+                ['id' => 12, 'status' => 3, 'type' => 'movie', 'media' => ['mediaType' => 'movie', 'tmdbId' => 700]],
+                ['id' => 13, 'status' => 2, 'type' => 'movie', 'media' => ['mediaType' => 'movie', 'tmdbId' => 702]],
+            ],
+        ]),
+    ]);
+
+    $this->actingAs($member)
+        ->get(route('media.requests.index', ['status' => 'declined']))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->loadDeferredProps('default', function ($page): void {
+                $page
+                    ->has('requests.data', 1)
+                    ->where('requests.data.0.id', 12)
+                    ->where('requests.data.0.status', 3)
+                    ->where('requests.data.0.media_title', 'Declined Movie')
+                    ->where('requests.meta.total', 1)
+                    ->where('requests.meta.last_page', 1);
+            })
+        );
+
+    Http::assertNotSent(fn ($request): bool => str_contains((string) $request->url(), 'filter=declined'));
+});
+
+test('approved filter walks the unfiltered list and keeps only approved rows', function (): void {
+    $member = User::factory()->member()->create();
+
+    Http::fake([
+        'seerr.local:5055/api/v1/request/count' => Http::response([
+            'total' => 2, 'pending' => 1, 'approved' => 1, 'declined' => 0,
+        ]),
+        'seerr.local:5055/api/v1/movie/801' => Http::response(['id' => 801, 'title' => 'Approved Movie']),
+        'seerr.local:5055/api/v1/movie/802' => Http::response(['id' => 802, 'title' => 'Pending Movie']),
+        'seerr.local:5055/api/v1/request*' => Http::response([
+            'pageInfo' => ['page' => 1, 'pages' => 1, 'pageSize' => 100, 'results' => 2],
+            'results' => [
+                ['id' => 21, 'status' => 1, 'type' => 'movie', 'media' => ['mediaType' => 'movie', 'tmdbId' => 802]],
+                ['id' => 22, 'status' => 2, 'type' => 'movie', 'media' => ['mediaType' => 'movie', 'tmdbId' => 801]],
+            ],
+        ]),
+    ]);
+
+    $this->actingAs($member)
+        ->get(route('media.requests.index', ['status' => 'approved']))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->loadDeferredProps('default', function ($page): void {
+                $page
+                    ->has('requests.data', 1)
+                    ->where('requests.data.0.id', 22)
+                    ->where('requests.data.0.status', 2)
+                    ->where('requests.meta.total', 1);
+            })
+        );
+
+    Http::assertNotSent(fn ($request): bool => str_contains((string) $request->url(), 'filter=approved'));
+});
+
+test('declined filter paginates locally using the count endpoint as the total', function (): void {
+    $member = User::factory()->member()->create();
+
+    // 60 declined rows scattered across two upstream pages of 100. Per-page=50,
+    // so page 1 should hold 50 declined and page 2 the remaining 10.
+    $allRows = [];
+    $declinedTmdbIds = [];
+    for ($i = 1; $i <= 100; $i++) {
+        $tmdb = 1000 + $i;
+        // First 60 hits → declined; the rest → approved.
+        $statusCode = $i <= 60 ? 3 : 2;
+        $allRows[] = [
+            'id' => $i,
+            'status' => $statusCode,
+            'type' => 'movie',
+            'media' => ['mediaType' => 'movie', 'tmdbId' => $tmdb],
+        ];
+        if ($statusCode === 3) {
+            $declinedTmdbIds[] = $tmdb;
+        }
+    }
+
+    $movieFakes = [];
+    foreach ($declinedTmdbIds as $tmdb) {
+        $movieFakes['seerr.local:5055/api/v1/movie/'.$tmdb] = Http::response(['id' => $tmdb, 'title' => 'Movie '.$tmdb]);
+    }
+
+    Http::fake(array_merge($movieFakes, [
+        'seerr.local:5055/api/v1/request/count' => Http::response([
+            'total' => 100, 'pending' => 0, 'approved' => 40, 'declined' => 60,
+        ]),
+        'seerr.local:5055/api/v1/request*' => Http::response([
+            'pageInfo' => ['page' => 1, 'pages' => 1, 'pageSize' => 100, 'results' => 100],
+            'results' => $allRows,
+        ]),
+    ]));
+
+    $this->actingAs($member)
+        ->get(route('media.requests.index', ['status' => 'declined', 'page' => 2]))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->loadDeferredProps('default', function ($page): void {
+                $page
+                    ->has('requests.data', 10)
+                    ->where('requests.meta.current_page', 2)
+                    ->where('requests.meta.last_page', 2)
+                    ->where('requests.meta.total', 60);
+            })
+        );
+});
+
 test('requests list falls back to empty when list endpoint fails', function (): void {
     $member = User::factory()->member()->create();
 

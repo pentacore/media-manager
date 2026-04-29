@@ -26,14 +26,31 @@ class RequestController extends Controller
 
     /**
      * Allowed status filters mapped to the Seerr `filter` query param.
+     * Approved and declined are not native Seerr filter values, so they
+     * are handled by walking the unfiltered list and matching on the
+     * request `status` field. See LOCAL_STATUS_VALUES.
      */
     private const array STATUS_FILTERS = [
         'all' => null,
         'pending' => 'pending',
-        'approved' => 'approved',
+        'approved' => null,
         'available' => 'available',
-        'declined' => 'declined',
+        'declined' => null,
     ];
+
+    /**
+     * Request statuses that have to be filtered locally because Seerr's
+     * /request endpoint does not understand them as filter strings.
+     * Seerr's MediaRequestStatus: 1=PENDING, 2=APPROVED, 3=DECLINED, 4=FAILED.
+     */
+    private const array LOCAL_STATUS_VALUES = [
+        'approved' => 2,
+        'declined' => 3,
+    ];
+
+    private const int LOCAL_FILTER_PAGE_SIZE = 100;
+
+    private const int LOCAL_FILTER_MAX_PAGES = 20;
 
     public function index(Request $request): Response|RedirectResponse
     {
@@ -112,6 +129,10 @@ class RequestController extends Controller
      */
     private function loadRequests(ServiceConnection $serviceConnection, int $page, int $perPage, string $status = 'pending'): array
     {
+        if (array_key_exists($status, self::LOCAL_STATUS_VALUES)) {
+            return $this->loadLocallyFilteredRequests($serviceConnection, $page, $perPage, $status);
+        }
+
         $seerrClient = new SeerrClient($serviceConnection);
 
         $params = [
@@ -151,14 +172,99 @@ class RequestController extends Controller
     }
 
     /**
-     * @return array{total: int, pending: int, approved: int, declined: int}
+     * Walk Seerr's unfiltered request list and keep only rows whose
+     * `status` matches the requested approved/declined view. Stops as
+     * soon as enough rows have been collected for the current page or
+     * the upstream list is exhausted. The total count comes from
+     * /request/count so pagination still reports accurate bounds even
+     * when we short-circuit before walking everything.
+     *
+     * @return array{data: array<int, array<string, mixed>>, meta: array<string, int>}
+     */
+    private function loadLocallyFilteredRequests(ServiceConnection $serviceConnection, int $page, int $perPage, string $status): array
+    {
+        $statusValue = self::LOCAL_STATUS_VALUES[$status];
+        $seerrClient = new SeerrClient($serviceConnection);
+        $needed = $page * $perPage;
+        $matched = [];
+
+        for ($pageIndex = 0; $pageIndex < self::LOCAL_FILTER_MAX_PAGES; $pageIndex++) {
+            try {
+                $response = $seerrClient->getRequests([
+                    'take' => self::LOCAL_FILTER_PAGE_SIZE,
+                    'skip' => $pageIndex * self::LOCAL_FILTER_PAGE_SIZE,
+                    'sort' => 'added',
+                ]);
+            } catch (RequestException|ConnectionException) {
+                break;
+            }
+
+            $rows = is_array($response['results'] ?? null) ? $response['results'] : [];
+            if ($rows === []) {
+                break;
+            }
+
+            foreach ($rows as $row) {
+                if ((int) ($row['status'] ?? 0) === $statusValue) {
+                    $matched[] = $row;
+                    if (count($matched) >= $needed) {
+                        break 2;
+                    }
+                }
+            }
+
+            $pageInfo = is_array($response['pageInfo'] ?? null) ? $response['pageInfo'] : [];
+            $totalPages = (int) ($pageInfo['pages'] ?? 0);
+            if ($totalPages > 0 && $pageIndex + 1 >= $totalPages) {
+                break;
+            }
+        }
+
+        $window = array_slice($matched, ($page - 1) * $perPage, $perPage);
+        $titles = $this->seerrTitleResolver->resolve($serviceConnection, $seerrClient, $window);
+
+        try {
+            $counts = $seerrClient->getRequestCount();
+            $total = (int) ($counts[$status] ?? count($matched));
+        } catch (RequestException|ConnectionException) {
+            $total = count($matched);
+        }
+
+        $lastPage = max(1, (int) ceil($total / $perPage));
+
+        return [
+            'data' => array_map(fn (array $req): array => $this->mapRequest($req, $titles), $window),
+            'meta' => [
+                'current_page' => $page,
+                'last_page' => $lastPage,
+                'total' => $total,
+                'per_page' => $perPage,
+            ],
+        ];
+    }
+
+    /**
+     * @return array{total: int, pending: int, approved: int, declined: int, available: int}
      */
     private function loadSummary(ServiceConnection $serviceConnection): array
     {
+        $seerrClient = new SeerrClient($serviceConnection);
+
         try {
-            $counts = new SeerrClient($serviceConnection)->getRequestCount();
+            $counts = $seerrClient->getRequestCount();
         } catch (RequestException|ConnectionException) {
-            return ['total' => 0, 'pending' => 0, 'approved' => 0, 'declined' => 0];
+            return ['total' => 0, 'pending' => 0, 'approved' => 0, 'declined' => 0, 'available' => 0];
+        }
+
+        // /request/count does not break out an `available` bucket, so we
+        // ask Seerr for one row of `filter=available` and read the total
+        // from pageInfo. Keeps the tab badge truthful without paginating.
+        $available = 0;
+        try {
+            $availableResponse = $seerrClient->getRequests(['filter' => 'available', 'take' => 1]);
+            $available = (int) ($availableResponse['pageInfo']['results'] ?? 0);
+        } catch (RequestException|ConnectionException) {
+            // Leave zero; the rest of the summary still renders.
         }
 
         return [
@@ -166,6 +272,7 @@ class RequestController extends Controller
             'pending' => (int) ($counts['pending'] ?? 0),
             'approved' => (int) ($counts['approved'] ?? 0),
             'declined' => (int) ($counts['declined'] ?? 0),
+            'available' => $available,
         ];
     }
 
