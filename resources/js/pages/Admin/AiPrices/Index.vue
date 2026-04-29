@@ -27,7 +27,27 @@ interface PriceRow {
     cache_read_per_mtok: string;
     cache_write_per_mtok: string;
     reasoning_per_mtok: string;
+    batch_input_per_mtok: string | null;
+    batch_output_per_mtok: string | null;
+    batch_cache_read_per_mtok: string | null;
+    batch_cache_write_per_mtok: string | null;
+    batch_reasoning_per_mtok: string | null;
 }
+
+type RateField =
+    | 'input_per_mtok'
+    | 'output_per_mtok'
+    | 'cache_read_per_mtok'
+    | 'cache_write_per_mtok'
+    | 'reasoning_per_mtok';
+
+const BATCH_FIELD: Record<RateField, keyof PriceRow> = {
+    input_per_mtok: 'batch_input_per_mtok',
+    output_per_mtok: 'batch_output_per_mtok',
+    cache_read_per_mtok: 'batch_cache_read_per_mtok',
+    cache_write_per_mtok: 'batch_cache_write_per_mtok',
+    reasoning_per_mtok: 'batch_reasoning_per_mtok',
+};
 
 const props = defineProps<{
     prices: PriceRow[];
@@ -64,14 +84,34 @@ function destroy(price: PriceRow) {
     });
 }
 
-function fmt(rate: string): string {
+function fmt(rate: string | null | undefined): string {
+    if (rate === null || rate === undefined) {
+        return '—';
+    }
+
     const n = parseFloat(rate);
 
     if (Number.isNaN(n)) {
-return '—';
-}
+        return '—';
+    }
 
     return `$${n.toFixed(2)}`;
+}
+
+const showBatch = ref(false);
+
+function rateFor(price: PriceRow, field: RateField): string | null {
+    if (showBatch.value) {
+        const value = price[BATCH_FIELD[field]];
+
+        return value === null || value === undefined ? null : String(value);
+    }
+
+    return price[field];
+}
+
+function hasBatch(price: PriceRow): boolean {
+    return price.batch_input_per_mtok !== null && price.batch_input_per_mtok !== undefined;
 }
 
 const cheapest = ref(
@@ -265,9 +305,47 @@ const priciest = ref(
         <!-- Models table -->
         <div class="overflow-hidden rounded-xl border border-border bg-card">
             <div
-                class="border-b border-border px-4 py-3 text-[12px] font-semibold tracking-[0.06em] text-muted-foreground uppercase"
+                class="flex items-center justify-between gap-3 border-b border-border px-4 py-3"
             >
-                Configured models
+                <span
+                    class="text-[12px] font-semibold tracking-[0.06em] text-muted-foreground uppercase"
+                >
+                    Configured models
+                </span>
+                <div
+                    class="inline-flex items-center rounded-md border border-border bg-bg-elev p-0.5 text-[12px]"
+                    role="tablist"
+                    aria-label="Pricing tier"
+                >
+                    <button
+                        type="button"
+                        role="tab"
+                        :aria-selected="!showBatch"
+                        class="h-6 rounded px-2.5 font-medium transition-colors"
+                        :class="
+                            !showBatch
+                                ? 'bg-card text-foreground shadow-sm'
+                                : 'text-muted-foreground hover:text-foreground'
+                        "
+                        @click="showBatch = false"
+                    >
+                        Standard
+                    </button>
+                    <button
+                        type="button"
+                        role="tab"
+                        :aria-selected="showBatch"
+                        class="h-6 rounded px-2.5 font-medium transition-colors"
+                        :class="
+                            showBatch
+                                ? 'bg-card text-foreground shadow-sm'
+                                : 'text-muted-foreground hover:text-foreground'
+                        "
+                        @click="showBatch = true"
+                    >
+                        Batch (50%)
+                    </button>
+                </div>
             </div>
             <table class="w-full border-collapse text-[13px]">
                 <thead>
@@ -295,12 +373,23 @@ const priciest = ref(
                         v-for="price in prices"
                         :key="price.id"
                         class="border-b border-border last:border-b-0 hover:bg-bg-hover"
+                        :class="
+                            showBatch && !hasBatch(price)
+                                ? 'opacity-50'
+                                : ''
+                        "
                     >
                         <td class="px-3 py-2.5">
                             <div
                                 class="font-mono-tabular text-[12.5px] font-medium"
                             >
                                 {{ price.model }}
+                            </div>
+                            <div
+                                v-if="showBatch && !hasBatch(price)"
+                                class="text-[11px] text-fg-subtle"
+                            >
+                                no batch — showing standard
                             </div>
                         </td>
                         <td class="px-3 py-2.5">
@@ -309,27 +398,27 @@ const priciest = ref(
                         <td
                             class="font-mono-tabular px-3 py-2.5 text-right"
                         >
-                            {{ fmt(price.input_per_mtok) }}
+                            {{ fmt(rateFor(price, 'input_per_mtok') ?? price.input_per_mtok) }}
                         </td>
                         <td
                             class="font-mono-tabular px-3 py-2.5 text-right"
                         >
-                            {{ fmt(price.output_per_mtok) }}
+                            {{ fmt(rateFor(price, 'output_per_mtok') ?? price.output_per_mtok) }}
                         </td>
                         <td
                             class="font-mono-tabular px-3 py-2.5 text-right text-fg-subtle"
                         >
-                            {{ fmt(price.cache_read_per_mtok) }}
+                            {{ fmt(rateFor(price, 'cache_read_per_mtok') ?? price.cache_read_per_mtok) }}
                         </td>
                         <td
                             class="font-mono-tabular px-3 py-2.5 text-right text-fg-subtle"
                         >
-                            {{ fmt(price.cache_write_per_mtok) }}
+                            {{ fmt(rateFor(price, 'cache_write_per_mtok') ?? price.cache_write_per_mtok) }}
                         </td>
                         <td
                             class="font-mono-tabular px-3 py-2.5 text-right text-fg-subtle"
                         >
-                            {{ fmt(price.reasoning_per_mtok) }}
+                            {{ fmt(rateFor(price, 'reasoning_per_mtok') ?? price.reasoning_per_mtok) }}
                         </td>
                         <td class="px-3 py-2.5 text-right">
                             <div class="flex justify-end gap-1">

@@ -88,6 +88,24 @@ class AiModelPriceSeeder extends Seeder
             ['provider' => 'cohere', 'model' => 'command-r7b-12-2024', 'input_per_mtok' => 0.0375, 'output_per_mtok' => 0.15, 'cache_read_per_mtok' => 0, 'cache_write_per_mtok' => 0, 'reasoning_per_mtok' => 0],
         ];
 
+        // Providers offering an async/batch API at 50% of synchronous rates.
+        // OpenAI Batch API, Anthropic Message Batches, Gemini Batch Mode, Mistral Batch API.
+        $batchSupported = ['openai', 'anthropic', 'gemini', 'mistral'];
+        $batchDiscount = 0.5;
+
+        foreach ($defaults as &$row) {
+            if (! in_array($row['provider'], $batchSupported, true)) {
+                continue;
+            }
+
+            $row['batch_input_per_mtok'] = round($row['input_per_mtok'] * $batchDiscount, 4);
+            $row['batch_output_per_mtok'] = round($row['output_per_mtok'] * $batchDiscount, 4);
+            $row['batch_cache_read_per_mtok'] = round($row['cache_read_per_mtok'] * $batchDiscount, 4);
+            $row['batch_cache_write_per_mtok'] = round($row['cache_write_per_mtok'] * $batchDiscount, 4);
+            $row['batch_reasoning_per_mtok'] = round($row['reasoning_per_mtok'] * $batchDiscount, 4);
+        }
+        unset($row);
+
         foreach ($defaults as $default) {
             AiModelPrice::updateOrCreate(
                 ['provider' => $default['provider'], 'model' => $default['model']],

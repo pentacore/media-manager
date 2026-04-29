@@ -20,6 +20,11 @@ use Override;
  * @property string $cache_read_per_mtok
  * @property string $cache_write_per_mtok
  * @property string $reasoning_per_mtok
+ * @property string|null $batch_input_per_mtok
+ * @property string|null $batch_output_per_mtok
+ * @property string|null $batch_cache_read_per_mtok
+ * @property string|null $batch_cache_write_per_mtok
+ * @property string|null $batch_reasoning_per_mtok
  * @property CarbonImmutable|null $created_at
  * @property CarbonImmutable|null $updated_at
  *
@@ -37,6 +42,11 @@ use Override;
     'cache_read_per_mtok',
     'cache_write_per_mtok',
     'reasoning_per_mtok',
+    'batch_input_per_mtok',
+    'batch_output_per_mtok',
+    'batch_cache_read_per_mtok',
+    'batch_cache_write_per_mtok',
+    'batch_reasoning_per_mtok',
 ])]
 class AiModelPrice extends Model
 {
@@ -54,6 +64,11 @@ class AiModelPrice extends Model
             'cache_read_per_mtok' => 'decimal:4',
             'cache_write_per_mtok' => 'decimal:4',
             'reasoning_per_mtok' => 'decimal:4',
+            'batch_input_per_mtok' => 'decimal:4',
+            'batch_output_per_mtok' => 'decimal:4',
+            'batch_cache_read_per_mtok' => 'decimal:4',
+            'batch_cache_write_per_mtok' => 'decimal:4',
+            'batch_reasoning_per_mtok' => 'decimal:4',
         ];
     }
 }
