@@ -143,6 +143,18 @@ test('handles seerr via getStatus', function (): void {
     expect($connection->fresh()->version)->toBe('3.0.0');
 });
 
+test('handles sabnzbd via getVersion', function (): void {
+    $connection = ServiceConnection::factory()->sabnzbd()->create([
+        'url' => 'http://sab.local:8080',
+    ]);
+
+    Http::fake(['sab.local:8080/sabnzbd/api*' => Http::response(['version' => '4.2.0'])]);
+
+    new PingServiceHealth($connection)->handle();
+
+    expect($connection->fresh()->version)->toBe('4.2.0');
+});
+
 test('writes a ServiceMetric row on success', function (): void {
     $connection = ServiceConnection::factory()->sonarr()->create([
         'url' => 'http://sonarr.local:8989',

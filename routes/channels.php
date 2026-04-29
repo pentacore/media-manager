@@ -16,6 +16,9 @@ Broadcast::channel('services', fn (User $user): bool => $user->role->isAtLeast(U
 // payload includes service routing detail not relevant to viewers.
 Broadcast::channel('members.actions', fn (User $user): bool => $user->role->isAtLeast(UserRole::Member));
 
+// SABnzbd download lifecycle. Member+ only since the queue page is gated the same way.
+Broadcast::channel('members.sabnzbd', fn (User $user): bool => $user->role->isAtLeast(UserRole::Member));
+
 // Open to anyone authenticated. The matching pages (dashboard, activity log,
 // now playing, watch history) are also unrestricted, so locking the realtime
 // feeds tighter than the pages just yields silent broken UI for viewers.

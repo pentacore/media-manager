@@ -31,3 +31,8 @@ Schedule::command('ai:prune-proposed-workflows')
 Schedule::command('ai:refresh-prices')
     ->weekly()
     ->withoutOverlapping();
+
+Schedule::command('sabnzbd:poll-history')
+    ->everyFiveMinutes()
+    ->withoutOverlapping()
+    ->runInBackground();

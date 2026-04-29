@@ -43,5 +43,6 @@ require __DIR__.'/admin.php';
 require __DIR__.'/media.php';
 require __DIR__.'/emby.php';
 require __DIR__.'/prowlarr.php';
+require __DIR__.'/sabnzbd.php';
 require __DIR__.'/actions.php';
 require __DIR__.'/ai.php';

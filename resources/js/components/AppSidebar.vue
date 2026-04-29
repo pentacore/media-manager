@@ -5,6 +5,7 @@ import {
     Brain,
     Clock,
     DollarSign,
+    Download,
     Film,
     Heart,
     HeartPulse,
@@ -38,6 +39,7 @@ import RequestController from '@/actions/App/Http/Controllers/Media/RequestContr
 import SearchController from '@/actions/App/Http/Controllers/Media/SearchController';
 import SeriesController from '@/actions/App/Http/Controllers/Media/SeriesController';
 import ServiceHealthController from '@/actions/App/Http/Controllers/Monitoring/ServiceHealthController';
+import SabnzbdQueueController from '@/actions/App/Http/Controllers/Sabnzbd/QueueController';
 import AppLogo from '@/components/AppLogo.vue';
 import NavMain from '@/components/NavMain.vue';
 import NavUser from '@/components/NavUser.vue';
@@ -237,6 +239,11 @@ const mediaNavItems: NavItem[] = [
         title: 'Search',
         href: SearchController.index.url(),
         icon: Search,
+    },
+    {
+        title: 'Downloads',
+        href: SabnzbdQueueController.index.url(),
+        icon: Download,
     },
 ];
 

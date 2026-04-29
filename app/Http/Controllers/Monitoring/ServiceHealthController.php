@@ -11,6 +11,7 @@ use App\Jobs\PingServiceHealth;
 use App\Models\ServiceConnection;
 use App\Services\Prowlarr\ProwlarrClient;
 use App\Services\Radarr\RadarrClient;
+use App\Services\Sabnzbd\SabnzbdClient;
 use App\Services\ServiceClientFactory;
 use App\Services\ServiceMetrics\ServiceMetricsRepository;
 use App\Services\Sonarr\SonarrClient;
@@ -36,7 +37,7 @@ class ServiceHealthController extends Controller
         $connections = ServiceConnection::query()->where('is_active', true)->get();
 
         foreach ($connections as $connection) {
-            PingServiceHealth::dispatchSync($connection);
+            dispatch_sync(new PingServiceHealth($connection));
         }
 
         Inertia::flash('toast', [
@@ -129,13 +130,13 @@ class ServiceHealthController extends Controller
             return null;
         }
 
-        if (! in_array($serviceConnection->type, [ServiceType::Sonarr, ServiceType::Radarr], true)) {
+        if (! in_array($serviceConnection->type, [ServiceType::Sonarr, ServiceType::Radarr, ServiceType::SABnzbd], true)) {
             return null;
         }
 
         $client = resolve(ServiceClientFactory::class)->make($serviceConnection);
 
-        if (! $client instanceof SonarrClient && ! $client instanceof RadarrClient) {
+        if (! $client instanceof SonarrClient && ! $client instanceof RadarrClient && ! $client instanceof SabnzbdClient) {
             return null;
         }
 

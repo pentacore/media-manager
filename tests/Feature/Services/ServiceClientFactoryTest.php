@@ -7,6 +7,7 @@ use App\Models\ServiceConnection;
 use App\Services\Emby\EmbyClient;
 use App\Services\Prowlarr\ProwlarrClient;
 use App\Services\Radarr\RadarrClient;
+use App\Services\Sabnzbd\SabnzbdClient;
 use App\Services\Seerr\SeerrClient;
 use App\Services\ServiceClientFactory;
 use App\Services\Sonarr\SonarrClient;
@@ -23,6 +24,7 @@ test('make returns the right client per service type', function (ServiceType $se
     [ServiceType::Radarr, RadarrClient::class],
     [ServiceType::Emby, EmbyClient::class],
     [ServiceType::Seerr, SeerrClient::class],
+    [ServiceType::SABnzbd, SabnzbdClient::class],
 ]);
 
 test('makeForType resolves the active connection then makes a client', function (): void {

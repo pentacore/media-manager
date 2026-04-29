@@ -72,6 +72,14 @@ class ServiceConnectionFactory extends Factory
         ]);
     }
 
+    public function sabnzbd(): static
+    {
+        return $this->state(fn (array $attributes): array => [
+            'type' => ServiceType::SABnzbd,
+            'name' => 'SABnzbd',
+        ]);
+    }
+
     public function inactive(): static
     {
         return $this->state(fn (array $attributes): array => [

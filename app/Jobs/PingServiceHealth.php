@@ -120,6 +120,7 @@ class PingServiceHealth implements ShouldQueue
         return match ($this->serviceConnection->type) {
             ServiceType::Emby => $client->getSystemInfo(),
             ServiceType::Seerr => $client->getStatus(),
+            ServiceType::SABnzbd => $client->getVersion(),
             default => $client->getSystemStatus(),
         };
     }
