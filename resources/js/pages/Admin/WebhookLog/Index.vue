@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import { Head, Link, router } from '@inertiajs/vue3';
 import { Webhook } from 'lucide-vue-next';
+import { ref, watch } from 'vue';
 import WebhookLogController from '@/actions/App/Http/Controllers/Admin/WebhookLogController';
-import { Pill, SvcChip } from '@/components/mm';
+import { Pill, SvcChip, Toggle } from '@/components/mm';
 import { Button } from '@/components/ui/button';
 import {
     Select,
@@ -50,7 +51,42 @@ const props = defineProps<{
     };
     filters: { service_id: number | null; event_type: string };
     filterOptions: { services: ServiceOption[]; eventTypes: string[] };
+    settings: { capture_enabled: boolean };
 }>();
+
+const captureEnabled = ref(props.settings.capture_enabled);
+const updatingCapture = ref(false);
+
+watch(
+    () => props.settings.capture_enabled,
+    (value) => {
+        captureEnabled.value = value;
+    },
+);
+
+function setCapture(value: boolean): void {
+    if (updatingCapture.value || value === captureEnabled.value) {
+        return;
+    }
+
+    updatingCapture.value = true;
+    captureEnabled.value = value;
+
+    router.put(
+        WebhookLogController.updateSettings.url(),
+        { capture_enabled: value },
+        {
+            preserveScroll: true,
+            preserveState: true,
+            onError: () => {
+                captureEnabled.value = !value;
+            },
+            onFinish: () => {
+                updatingCapture.value = false;
+            },
+        },
+    );
+}
 
 defineOptions({
     layout: {
@@ -139,6 +175,20 @@ function svcId(type: string | null): string {
                     debugging integrations and auditing what services are
                     actually sending.
                 </p>
+            </div>
+            <div
+                class="flex flex-col items-end gap-1 rounded-xl border border-border bg-card px-3 py-2"
+            >
+                <span
+                    class="text-[11.5px] font-semibold tracking-[0.05em] text-muted-foreground uppercase"
+                    >Capture &amp; store</span
+                >
+                <Toggle
+                    :model-value="captureEnabled"
+                    :disabled="updatingCapture"
+                    :label="captureEnabled ? 'Storing payloads' : 'Discarding'"
+                    @update:model-value="setCapture"
+                />
             </div>
         </div>
 

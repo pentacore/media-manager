@@ -47,5 +47,6 @@ Route::middleware(['auth', 'verified', 'password.set', 'role:admin'])->prefix('a
     Route::delete('ai-prices/{aiModelPrice}', [AiModelPriceController::class, 'destroy'])->name('ai-prices.destroy');
 
     Route::get('webhook-log', [WebhookLogController::class, 'index'])->name('webhook-log.index');
+    Route::put('webhook-log/settings', [WebhookLogController::class, 'updateSettings'])->name('webhook-log.update-settings');
     Route::get('webhook-log/{webhookEvent}', [WebhookLogController::class, 'show'])->name('webhook-log.show');
 });

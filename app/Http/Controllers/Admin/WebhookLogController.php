@@ -7,14 +7,16 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Controller;
 use App\Models\ServiceConnection;
 use App\Models\WebhookEvent;
+use App\Settings\WebhookSettings;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
 
 class WebhookLogController extends Controller
 {
-    public function index(Request $request): Response
+    public function index(Request $request, WebhookSettings $webhookSettings): Response
     {
         $serviceId = $request->integer('service_id');
         $eventType = $request->string('event_type')->toString();
@@ -66,7 +68,28 @@ class WebhookLogController extends Controller
                     ->values()
                     ->all(),
             ],
+            'settings' => [
+                'capture_enabled' => $webhookSettings->captureEnabled(),
+            ],
         ]);
+    }
+
+    public function updateSettings(Request $request, WebhookSettings $webhookSettings): RedirectResponse
+    {
+        $validated = $request->validate([
+            'capture_enabled' => ['required', 'boolean'],
+        ]);
+
+        $webhookSettings->setCaptureEnabled((bool) $validated['capture_enabled']);
+
+        Inertia::flash('toast', [
+            'type' => 'success',
+            'message' => $validated['capture_enabled']
+                ? __('Webhook capture enabled.')
+                : __('Webhook capture disabled.'),
+        ]);
+
+        return back();
     }
 
     public function show(WebhookEvent $webhookEvent): Response

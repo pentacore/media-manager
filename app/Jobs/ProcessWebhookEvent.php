@@ -12,6 +12,7 @@ use App\Services\Radarr\RadarrWebhookHandler;
 use App\Services\Seerr\SeerrWebhookHandler;
 use App\Services\Sonarr\SonarrWebhookHandler;
 use App\Services\Webhook\WebhookHandler;
+use App\Settings\WebhookSettings;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
@@ -63,11 +64,29 @@ class ProcessWebhookEvent implements ShouldQueue
                 'webhook_event_id' => $this->webhookEvent->id,
                 'service_type' => $connection->type->value,
             ]);
+            $this->discardIfCaptureDisabled();
 
             return;
         }
 
         $handler->handle($this->webhookEvent);
+
+        $this->discardIfCaptureDisabled();
+    }
+
+    /**
+     * Drop the persisted event row when admins have turned capture off.
+     * Handlers always run against a stored model (so dedupe and retries
+     * work) and the row is trimmed afterwards to keep the log table from
+     * growing without bound.
+     */
+    private function discardIfCaptureDisabled(): void
+    {
+        if (resolve(WebhookSettings::class)->captureEnabled()) {
+            return;
+        }
+
+        $this->webhookEvent->delete();
     }
 
     private function resolveHandler(ServiceType $serviceType): ?WebhookHandler

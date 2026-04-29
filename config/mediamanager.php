@@ -56,4 +56,20 @@ return [
             'metadata' => (int) env('MEDIAMANAGER_CACHE_TTL_METADATA', 600),
         ],
     ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Webhooks
+    |--------------------------------------------------------------------------
+    |
+    | Defaults for incoming webhook handling. The capture toggle controls
+    | whether processed webhook payloads remain in the webhook_events table
+    | (useful for the admin Webhook log) or are discarded after handlers run.
+    | The persisted setting in app_settings overrides this default.
+    |
+    */
+
+    'webhooks' => [
+        'capture_enabled' => (bool) env('MEDIAMANAGER_WEBHOOKS_CAPTURE_ENABLED', true),
+    ],
 ];
