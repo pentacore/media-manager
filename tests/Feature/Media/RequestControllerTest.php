@@ -249,9 +249,12 @@ test('summary exposes every status bucket reported by /request/count', function 
     );
 });
 
-test('available media status overrides request status so Open-in-Emby renders', function (): void {
+test('available media status is bubbled to the row status field', function (): void {
     $member = User::factory()->member()->create();
 
+    // mapRequest needs to surface media.status === 5 (AVAILABLE) so the
+    // Vue-side StatusPill shows "Now available" instead of "Approved"
+    // for fully-grabbed requests.
     Http::fake([
         'seerr.local:5055/api/v1/request/count' => Http::response([
             'total' => 1, 'pending' => 0, 'approved' => 1, 'declined' => 0,
@@ -262,9 +265,9 @@ test('available media status overrides request status so Open-in-Emby renders', 
             'results' => [
                 [
                     'id' => 1,
-                    'status' => 2, // request.status = APPROVED
+                    'status' => 2,
                     'type' => 'movie',
-                    'media' => ['mediaType' => 'movie', 'tmdbId' => 700, 'status' => 5], // media.status = AVAILABLE
+                    'media' => ['mediaType' => 'movie', 'tmdbId' => 700, 'status' => 5],
                 ],
             ],
         ]),
@@ -278,49 +281,6 @@ test('available media status overrides request status so Open-in-Emby renders', 
                 $page->where('requests.data.0.status', 5);
             })
         );
-});
-
-test('requests page exposes the active Emby connection url', function (): void {
-    ServiceConnection::factory()->emby()->create([
-        'url' => 'http://emby.local:8096',
-        'api_key' => 'eb',
-    ]);
-
-    $member = User::factory()->member()->create();
-
-    Http::fake([
-        'seerr.local:5055/api/v1/request/count' => Http::response([
-            'total' => 0, 'pending' => 0, 'approved' => 0, 'declined' => 0,
-        ]),
-        'seerr.local:5055/api/v1/request*' => Http::response([
-            'pageInfo' => ['page' => 1, 'pages' => 1, 'pageSize' => 50, 'results' => 0],
-            'results' => [],
-        ]),
-    ]);
-
-    $this->actingAs($member)
-        ->get(route('media.requests.index'))
-        ->assertOk()
-        ->assertInertia(fn ($page) => $page->where('embyConnection.url', 'http://emby.local:8096'));
-});
-
-test('requests page reports null Emby connection when none is configured', function (): void {
-    $member = User::factory()->member()->create();
-
-    Http::fake([
-        'seerr.local:5055/api/v1/request/count' => Http::response([
-            'total' => 0, 'pending' => 0, 'approved' => 0, 'declined' => 0,
-        ]),
-        'seerr.local:5055/api/v1/request*' => Http::response([
-            'pageInfo' => ['page' => 1, 'pages' => 1, 'pageSize' => 50, 'results' => 0],
-            'results' => [],
-        ]),
-    ]);
-
-    $this->actingAs($member)
-        ->get(route('media.requests.index'))
-        ->assertOk()
-        ->assertInertia(fn ($page) => $page->where('embyConnection', null));
 });
 
 test('processing filter passes through to Seerr filter=processing', function (): void {

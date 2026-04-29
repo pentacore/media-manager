@@ -6,7 +6,6 @@ import {
     ChevronRight,
     Database,
     ExternalLink,
-    Play,
     RefreshCcw,
     RefreshCw,
     Trash2,
@@ -66,7 +65,6 @@ interface Summary {
 
 const props = defineProps<{
     connection: { url: string };
-    embyConnection: { url: string } | null;
     filters: { page: number; status: FilterId };
     requests?: { data: SeerrRequest[]; meta: Meta };
     summary?: Summary;
@@ -278,20 +276,6 @@ function seerrUrl(req: SeerrRequest): string | null {
     const path = req.media_type === 'movie' ? 'movie' : 'tv';
 
     return `${props.connection.url}/${path}/${req.tmdb_id}`;
-}
-
-function embyUrl(req: SeerrRequest): string | null {
-    if (!props.embyConnection) {
-        return null;
-    }
-
-    if (!req.media_title) {
-        return `${props.embyConnection.url}/web/index.html`;
-    }
-
-    const query = encodeURIComponent(req.media_title);
-
-    return `${props.embyConnection.url}/web/index.html#!/search?query=${query}`;
 }
 
 function tmdbUrl(req: SeerrRequest): string | null {
@@ -529,24 +513,6 @@ const rangeText = computed(() => {
                                 <X class="size-3.5" />Decline
                             </Button>
                         </template>
-                        <a
-                            v-else-if="req.status === 5 && embyUrl(req)"
-                            :href="embyUrl(req)!"
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            class="flex h-7 flex-1 items-center justify-center gap-1.5 rounded-md border border-border bg-card px-2 text-xs font-medium whitespace-nowrap hover:bg-bg-hover"
-                        >
-                            <Play class="size-3.5" />Open Emby
-                        </a>
-                        <a
-                            v-else
-                            :href="seerrUrl(req) ?? '#'"
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            class="flex h-7 flex-1 items-center justify-center gap-1.5 rounded-md text-xs font-medium text-muted-foreground hover:bg-bg-hover hover:text-foreground"
-                        >
-                            View detail
-                        </a>
                         <a
                             v-if="tmdbUrl(req)"
                             :href="tmdbUrl(req)!"

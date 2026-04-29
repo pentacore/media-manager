@@ -72,25 +72,10 @@ class RequestController extends Controller
 
         return Inertia::render('Seerr/Requests', [
             'connection' => ['url' => rtrim($connection->url, '/')],
-            'embyConnection' => $this->resolveEmbyConnectionPayload(),
             'filters' => ['page' => $page, 'status' => $status],
             'requests' => Inertia::defer(fn (): array => $this->loadRequests($connection, $page, $perPage, $status)),
             'summary' => Inertia::defer(fn (): array => $this->loadSummary($connection)),
         ]);
-    }
-
-    /**
-     * @return array{url: string}|null
-     */
-    private function resolveEmbyConnectionPayload(): ?array
-    {
-        try {
-            $embyConnection = ServiceConnection::resolveActive(ServiceType::Emby);
-        } catch (ModelNotFoundException) {
-            return null;
-        }
-
-        return ['url' => rtrim($embyConnection->url, '/')];
     }
 
     public function destroy(int $id): RedirectResponse
