@@ -14,7 +14,7 @@ import {
     Zap,
 } from 'lucide-vue-next';
 import type { Component } from 'vue';
-import { computed, nextTick, ref, useTemplateRef, watch } from 'vue';
+import { computed, nextTick, onMounted, ref, useTemplateRef, watch } from 'vue';
 import ActionRequestController from '@/actions/App/Http/Controllers/Actions/ActionRequestController';
 import ActivityLogController from '@/actions/App/Http/Controllers/ActivityLogController';
 import NowPlayingController from '@/actions/App/Http/Controllers/Emby/NowPlayingController';
@@ -88,23 +88,25 @@ const filteredLinks = computed(() => {
     );
 });
 
-// Bind on document with capture so browser-level Cmd/Ctrl+K shortcuts
-// (Chrome/Firefox address-bar search) don't intercept it before us.
-useEventListener(
-    () => document,
-    'keydown',
-    (event: KeyboardEvent) => {
-        if (
-            (event.key === 'k' || event.key === 'K') &&
-            (event.metaKey || event.ctrlKey)
-        ) {
-            event.preventDefault();
-            event.stopPropagation();
-            open.value = !open.value;
-        }
-    },
-    { capture: true },
-);
+onMounted(() => {
+    // Bind on document with capture so browser-level Cmd/Ctrl+K shortcuts
+    // (Chrome/Firefox address-bar search) don't intercept it before us.
+    useEventListener(
+        () => document,
+        'keydown',
+        (event: KeyboardEvent) => {
+            if (
+                (event.key === 'k' || event.key === 'K') &&
+                (event.metaKey || event.ctrlKey)
+            ) {
+                event.preventDefault();
+                event.stopPropagation();
+                open.value = !open.value;
+            }
+        },
+        { capture: true },
+    );
+});
 
 watch(open, (next) => {
     if (next) {
