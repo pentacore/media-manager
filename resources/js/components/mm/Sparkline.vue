@@ -15,12 +15,17 @@ const props = withDefaults(
 
 const paths = computed(() => {
     if (props.data.length < 2) {
-        return { line: '', area: '' };
+        return { line: '', area: '', flat: true };
     }
 
     const max = Math.max(...props.data);
     const min = Math.min(...props.data);
-    const span = max - min || 1;
+
+    if (max === min) {
+        return { line: '', area: '', flat: true };
+    }
+
+    const span = max - min;
     const step = props.width / (props.data.length - 1);
     const points = props.data.map<[number, number]>((v, i) => [
         i * step,
@@ -35,7 +40,7 @@ const paths = computed(() => {
         .join(' ');
     const area = `${line} L${props.width} ${props.height} L0 ${props.height} Z`;
 
-    return { line, area };
+    return { line, area, flat: false };
 });
 </script>
 
@@ -47,11 +52,24 @@ const paths = computed(() => {
         class="overflow-visible"
         aria-hidden="true"
     >
-        <path :d="paths.area" class="fill-accent/15 stroke-none" />
-        <path
-            :d="paths.line"
-            class="fill-none stroke-accent"
-            stroke-width="1.5"
-        />
+        <template v-if="paths.flat">
+            <line
+                :x1="0"
+                :x2="width"
+                :y1="height / 2"
+                :y2="height / 2"
+                class="stroke-border"
+                stroke-width="1"
+                stroke-dasharray="2 3"
+            />
+        </template>
+        <template v-else>
+            <path :d="paths.area" class="fill-accent/15 stroke-none" />
+            <path
+                :d="paths.line"
+                class="fill-none stroke-accent"
+                stroke-width="1.5"
+            />
+        </template>
     </svg>
 </template>

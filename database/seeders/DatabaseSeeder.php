@@ -27,5 +27,9 @@ class DatabaseSeeder extends Seeder
         $this->call(ActionTypeConfigSeeder::class);
         $this->call(ServiceConnectionSeeder::class);
         $this->call(AiModelPriceSeeder::class);
+
+        if (app()->environment('local')) {
+            $this->call(DemoActivitySeeder::class);
+        }
     }
 }
