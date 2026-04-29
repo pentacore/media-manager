@@ -18,6 +18,7 @@ import {
     Sparkles,
     Tv,
     Users,
+    Webhook as WebhookIcon,
 } from 'lucide-vue-next';
 import { computed, onMounted, onUnmounted, ref, watchEffect } from 'vue';
 import ActionRequestController from '@/actions/App/Http/Controllers/Actions/ActionRequestController';
@@ -28,6 +29,7 @@ import AiSettingsController from '@/actions/App/Http/Controllers/Admin/AiSetting
 import AiUsageController from '@/actions/App/Http/Controllers/Admin/AiUsageController';
 import ServiceConnectionController from '@/actions/App/Http/Controllers/Admin/ServiceConnectionController';
 import UserController from '@/actions/App/Http/Controllers/Admin/UserController';
+import WebhookLogController from '@/actions/App/Http/Controllers/Admin/WebhookLogController';
 import AIChatController from '@/actions/App/Http/Controllers/AI/ChatController';
 import NowPlayingController from '@/actions/App/Http/Controllers/Emby/NowPlayingController';
 import WatchHistoryController from '@/actions/App/Http/Controllers/Emby/WatchHistoryController';
@@ -300,6 +302,11 @@ const adminNavItems: NavItem[] = [
         title: 'AI Prices',
         href: AiModelPriceController.index.url(),
         icon: DollarSign,
+    },
+    {
+        title: 'Webhook Log',
+        href: WebhookLogController.index.url(),
+        icon: WebhookIcon,
     },
 ];
 </script>

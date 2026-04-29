@@ -9,6 +9,7 @@ use App\Http\Controllers\Admin\EmbyLinkController;
 use App\Http\Controllers\Admin\ProwlarrTestIndexerController;
 use App\Http\Controllers\Admin\ServiceConnectionController;
 use App\Http\Controllers\Admin\UserController;
+use App\Http\Controllers\Admin\WebhookLogController;
 use Illuminate\Support\Facades\Route;
 
 Route::middleware(['auth', 'verified', 'password.set', 'role:admin'])->prefix('admin')->name('admin.')->group(function (): void {
@@ -43,4 +44,7 @@ Route::middleware(['auth', 'verified', 'password.set', 'role:admin'])->prefix('a
     Route::post('ai-prices', [AiModelPriceController::class, 'store'])->name('ai-prices.store');
     Route::put('ai-prices/{aiModelPrice}', [AiModelPriceController::class, 'update'])->name('ai-prices.update');
     Route::delete('ai-prices/{aiModelPrice}', [AiModelPriceController::class, 'destroy'])->name('ai-prices.destroy');
+
+    Route::get('webhook-log', [WebhookLogController::class, 'index'])->name('webhook-log.index');
+    Route::get('webhook-log/{webhookEvent}', [WebhookLogController::class, 'show'])->name('webhook-log.show');
 });

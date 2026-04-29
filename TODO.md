@@ -1,35 +1,35 @@
-- Restructure the sidebar to match the order of the new design
-- Move emby link into the user management page, like the new design does
-- I dont think the sparklines work on the dashboard
-- Seed the activity log with some data as well as action requests and watch history
-- Implement any missing functionality, i see a lot of buttons that doesnt really do anything (Mainly refresh buttons), and not everything is as the design shows
-    - Dashboard refresh
-    - Activity log "Last 45h" & Export NDJSON (wtf is ndjson?)
-    - The saerch "Recent" doesnt seem to actually be recent searches, its static
-    - The Suggested in the search page shows nothing
-    - The "Profile" filter in the series page does nothing, whats the sync button supposed to do?
-    - Neither of the filter buttons in Movies does anything, when adding a movie or series, the services cache should be refreshed, whats the sync button supposed to do?
-    - In the requests page, the "filter" doesnt work properly with the pagination, whats the sync button supposed to do? User filter doesnt do anything
-    - now playing force refresh should just be a refresh button, and it doesnt do anything right now
-    - Watch history "Last 7 days" doesnt work properly as well as export csv
-    - Service health "Last 24h" and run check now does nothing
-    - Action requests approval rules and refresh buttons does nothing
-    - What does the "mode" button in AI Assistant do? does it actually do anything?
-    - AI usage export doesnt work
-- The Seer search doesnt seem to be working, it says "3 results" but nothing is showing up
-- Change the "All" button in search to "Library + Requests"
-- Add an agent that refreshes the configured AI prices, and a button to refresh the prices in the AI Prices page
-- Notifications button doesnt do anything, add a page for notifications and seed it with some data
-- The AI Assistant button in the top bar does nothing, does this button possibly bring anything useful to the table?
+- [x] Restructure the sidebar to match the order of the new design
+- [x] Move emby link into the user management page, like the new design does
+- [x] I dont think the sparklines work on the dashboard
+- [x] Seed the activity log with some data as well as action requests and watch history
+- [ ] Implement any missing functionality, i see a lot of buttons that doesnt really do anything (Mainly refresh buttons), and not everything is as the design shows
+    - [x] Dashboard refresh
+    - [x] Activity log "Last 45h" & Export NDJSON (wtf is ndjson?)
+    - [x] The saerch "Recent" doesnt seem to actually be recent searches, its static
+    - [x] The Suggested in the search page shows nothing
+    - [x] The "Profile" filter in the series page does nothing, whats the sync button supposed to do?
+    - [x] Neither of the filter buttons in Movies does anything, when adding a movie or series, the services cache should be refreshed, whats the sync button supposed to do?
+    - [x] In the requests page, the "filter" doesnt work properly with the pagination, whats the sync button supposed to do? User filter doesnt do anything
+    - [x] now playing force refresh should just be a refresh button, and it doesnt do anything right now
+    - [x] Watch history "Last 7 days" doesnt work properly as well as export csv
+    - [x] Service health "Last 24h" and run check now does nothing
+    - [x] Action requests approval rules and refresh buttons does nothing
+    - [ ] What does the "mode" button in AI Assistant do? does it actually do anything?
+    - [x] AI usage export doesnt work
+- [x] The Seer search doesnt seem to be working, it says "3 results" but nothing is showing up
+- [x] Change the "All" button in search to "Library + Requests"
+- [ ] Add an agent that refreshes the configured AI prices, and a button to refresh the prices in the AI Prices page
+- [ ] Notifications button doesnt do anything, add a page for notifications and seed it with some data
+- [ ] The AI Assistant button in the top bar does nothing, does this button possibly bring anything useful to the table?
 
 NEW ITEMS:
-- Add link emby account function into the user settings page, allow admins to manually link emby accounts by username
-- Import from emby button doesnt do anything in the "Users" page
-- the K hotkey doesnt work
-- How is the WAtch history actually supposed to work? it says "Synced from emby" but i cant see anything actually being synced anywhere
-- In the activity log i cant click back to "all" filter
-- Hide the approval rules button in Action Queue for non-admins
-- The time scale buttons in the actibity log doesnt work unless you do a manual refresh, this seems true for a lot of the pages
-- The "now available" button in the requests page doesnt work
-- The realtime updates seems flaky in a lot of pages, like the service health page for example, it should update the status of the services without needing to refresh the page, but it doesnt always do that, check all pages for similar issues
-- Id like to log all incoming webhooks (Toggleable in the admin settings), and then be able to see the payloads in an admin-only page, this would be really useful for debugging and also just to have a record of all incoming webhooks, especially if you have a lot of them coming in
+- [x] Add link emby account function into the user settings page, allow admins to manually link emby accounts by username
+- [x] Import from emby button doesnt do anything in the "Users" page
+- [x] the K hotkey doesnt work
+- [x] How is the WAtch history actually supposed to work? it says "Synced from emby" but i cant see anything actually being synced anywhere
+- [x] In the activity log i cant click back to "all" filter
+- [x] Hide the approval rules button in Action Queue for non-admins
+- [x] The time scale buttons in the actibity log doesnt work unless you do a manual refresh, this seems true for a lot of the pages
+- [x] The "now available" button in the requests page doesnt work
+- [ ] The realtime updates seems flaky in a lot of pages, like the service health page for example, it should update the status of the services without needing to refresh the page, but it doesnt always do that, check all pages for similar issues
+- [x] Id like to log all incoming webhooks (Toggleable in the admin settings), and then be able to see the payloads in an admin-only page, this would be really useful for debugging and also just to have a record of all incoming webhooks, especially if you have a lot of them coming in
