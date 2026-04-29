@@ -22,17 +22,24 @@ class UserController extends Controller
     {
         return Inertia::render('Admin/Users/Index', [
             'users' => User::query()
+                ->with(['embyUserLinks:id,user_id,emby_username'])
                 ->orderBy('name')
                 ->get()
-                ->map(fn (User $user): array => [
-                    'id' => $user->id,
-                    'name' => $user->name,
-                    'email' => $user->email,
-                    'role' => $user->role,
-                    'sso_provider' => $user->sso_provider,
-                    'avatar_url' => $user->avatar_url,
-                    'created_at' => $user->created_at->diffForHumans(),
-                ]),
+                ->map(function (User $user): array {
+                    $link = $user->embyUserLinks->first();
+
+                    return [
+                        'id' => $user->id,
+                        'name' => $user->name,
+                        'email' => $user->email,
+                        'role' => $user->role,
+                        'sso_provider' => $user->sso_provider,
+                        'avatar_url' => $user->avatar_url,
+                        'created_at' => $user->created_at->diffForHumans(),
+                        'emby_link_id' => $link?->id,
+                        'emby_username' => $link?->emby_username,
+                    ];
+                }),
             'roles' => UserRole::mapForSelect(labelKey: 'label'),
         ]);
     }

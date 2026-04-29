@@ -1,0 +1,23 @@
+- Restructure the sidebar to match the order of the new design
+- Move emby link into the user management page, like the new design does
+- I dont think the sparklines work on the dashboard
+- Seed the activity log with some data as well as action requests and watch history
+- Implement any missing functionality, i see a lot of buttons that doesnt really do anything (Mainly refresh buttons), and not everything is as the design shows
+    - Dashboard refresh
+    - Activity log "Last 45h" & Export NDJSON (wtf is ndjson?)
+    - The saerch "Recent" doesnt seem to actually be recent searches, its static
+    - The Suggested in the search page shows nothing
+    - The "Profile" filter in the series page does nothing, whats the sync button supposed to do?
+    - Neither of the filter buttons in Movies does anything, when adding a movie or series, the services cache should be refreshed, whats the sync button supposed to do?
+    - In the requests page, the "filter" doesnt work properly with the pagination, whats the sync button supposed to do? User filter doesnt do anything
+    - now playing force refresh should just be a refresh button, and it doesnt do anything right now
+    - Watch history "Last 7 days" doesnt work properly as well as export csv
+    - Service health "Last 24h" and run check now does nothing
+    - Action requests approval rules and refresh buttons does nothing
+    - What does the "mode" button in AI Assistant do? does it actually do anything?
+    - AI usage export doesnt work
+- The Seer search doesnt seem to be working, it says "3 results" but nothing is showing up
+- Change the "All" button in search to "Library + Requests"
+- Add an agent that refreshes the configured AI prices, and a button to refresh the prices in the AI Prices page
+- Notifications button doesnt do anything, add a page for notifications and seed it with some data
+- The AI Assistant button in the top bar does nothing, does this button possibly bring anything useful to the table?

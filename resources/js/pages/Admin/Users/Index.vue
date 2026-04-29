@@ -3,8 +3,9 @@ import { Form, Head, router, usePage } from '@inertiajs/vue3';
 import { Plus, Upload } from 'lucide-vue-next';
 import { computed, ref } from 'vue';
 import UserController from '@/actions/App/Http/Controllers/Admin/UserController';
+import UserLinkController from '@/actions/App/Http/Controllers/Emby/UserLinkController';
 import InputError from '@/components/InputError.vue';
-import { InitialsAvatar, Pill } from '@/components/mm';
+import { InitialsAvatar, Pill, SvcChip } from '@/components/mm';
 import PasswordInput from '@/components/PasswordInput.vue';
 import { Button } from '@/components/ui/button';
 import {
@@ -40,6 +41,8 @@ interface UserItem {
     sso_provider: string | null;
     avatar_url: string | null;
     created_at: string;
+    emby_link_id: number | null;
+    emby_username: string | null;
 }
 
 defineProps<{
@@ -110,6 +113,21 @@ function deleteUser(user: UserItem) {
             method: 'delete',
         });
     }
+}
+
+function unlinkEmby(user: UserItem) {
+    if (user.emby_link_id === null) {
+        return;
+    }
+
+    if (!confirm(`Unlink Emby account "${user.emby_username}" from ${user.name}?`)) {
+        return;
+    }
+
+    router.visit(UserLinkController.destroy.url(user.emby_link_id), {
+        method: 'delete',
+        preserveScroll: true,
+    });
 }
 </script>
 
@@ -278,7 +296,14 @@ function deleteUser(user: UserItem) {
                 <thead>
                     <tr>
                         <th
-                            v-for="h in ['User', 'Role', 'Auth', 'Joined', '']"
+                            v-for="h in [
+                                'User',
+                                'Role',
+                                'Auth',
+                                'Emby link',
+                                'Joined',
+                                '',
+                            ]"
                             :key="h"
                             class="border-b border-border bg-card px-3 py-2 text-left text-[11.5px] font-medium tracking-[0.05em] text-muted-foreground uppercase"
                         >
@@ -341,6 +366,27 @@ function deleteUser(user: UserItem) {
                         >
                             {{ authMethod(user.sso_provider) }}
                         </td>
+                        <td class="px-3 py-2.5">
+                            <span
+                                v-if="user.emby_username"
+                                class="inline-flex items-center gap-1.5"
+                            >
+                                <SvcChip id="emby" />
+                                <span class="font-mono-tabular text-[11.5px]">
+                                    {{ user.emby_username }}
+                                </span>
+                                <button
+                                    type="button"
+                                    class="text-[11px] text-muted-foreground underline-offset-2 hover:text-destructive hover:underline"
+                                    @click="unlinkEmby(user)"
+                                >
+                                    unlink
+                                </button>
+                            </span>
+                            <span v-else class="text-[11.5px] text-fg-subtle">
+                                —
+                            </span>
+                        </td>
                         <td
                             class="font-mono-tabular px-3 py-2.5 text-[11.5px] text-fg-subtle"
                         >
@@ -363,7 +409,7 @@ function deleteUser(user: UserItem) {
                     </tr>
                     <tr v-if="users.length === 0">
                         <td
-                            colspan="5"
+                            colspan="6"
                             class="px-3 py-8 text-center text-sm text-fg-subtle"
                         >
                             No users yet.

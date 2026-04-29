@@ -1,24 +1,23 @@
 <script setup lang="ts">
 import { Link, usePage } from '@inertiajs/vue3';
 import {
-    Activity as ActivityIcon,
     BarChart3,
     Brain,
+    Clock,
     DollarSign,
     Film,
+    Heart,
     HeartPulse,
-    History,
     Inbox,
     LayoutGrid,
-    Link2,
     Link as LinkIcon,
+    Play,
     ScrollText,
     Search,
     Shield,
     Sparkles,
     Tv,
     Users,
-    Zap,
 } from 'lucide-vue-next';
 import { computed, onMounted, onUnmounted, ref, watchEffect } from 'vue';
 import ActionRequestController from '@/actions/App/Http/Controllers/Actions/ActionRequestController';
@@ -31,7 +30,6 @@ import ServiceConnectionController from '@/actions/App/Http/Controllers/Admin/Se
 import UserController from '@/actions/App/Http/Controllers/Admin/UserController';
 import AIChatController from '@/actions/App/Http/Controllers/AI/ChatController';
 import NowPlayingController from '@/actions/App/Http/Controllers/Emby/NowPlayingController';
-import UserLinkController from '@/actions/App/Http/Controllers/Emby/UserLinkController';
 import WatchHistoryController from '@/actions/App/Http/Controllers/Emby/WatchHistoryController';
 import MovieController from '@/actions/App/Http/Controllers/Media/MovieController';
 import RequestController from '@/actions/App/Http/Controllers/Media/RequestController';
@@ -203,27 +201,23 @@ onUnmounted(() => {
     }
 });
 
-const mainNavItems: NavItem[] = [
+const overviewNavItems = computed<NavItem[]>(() => [
     {
         title: 'Dashboard',
         href: dashboard(),
         icon: LayoutGrid,
     },
     {
-        title: 'Activity Log',
-        href: ActivityLogController().url,
-        icon: ScrollText,
+        title: 'Action Queue',
+        href: ActionRequestController.index.url(),
+        icon: Inbox,
+        badge: () => pendingActions.value,
     },
-    {
-        title: 'Search',
-        href: SearchController.index.url(),
-        icon: Search,
-    },
-];
+]);
 
 const mediaNavItems: NavItem[] = [
     {
-        title: 'Series',
+        title: 'TV Series',
         href: SeriesController.index.url(),
         icon: Tv,
     },
@@ -235,35 +229,36 @@ const mediaNavItems: NavItem[] = [
     {
         title: 'Requests',
         href: RequestController.index.url(),
-        icon: Inbox,
+        icon: Heart,
+    },
+    {
+        title: 'Search',
+        href: SearchController.index.url(),
+        icon: Search,
     },
 ];
 
-const monitoringNavItems = computed<NavItem[]>(() => [
+const liveNavItems = computed<NavItem[]>(() => [
     {
         title: 'Now Playing',
         href: NowPlayingController().url,
-        icon: ActivityIcon,
+        icon: Play,
         badge: () => activeSessions.value,
     },
     {
-        title: 'Watch History',
+        title: 'Watch history',
         href: WatchHistoryController().url,
-        icon: History,
+        icon: Clock,
     },
     {
         title: 'Service Health',
         href: ServiceHealthController().url,
         icon: HeartPulse,
     },
-]);
-
-const automationNavItems = computed<NavItem[]>(() => [
     {
-        title: 'Action Requests',
-        href: ActionRequestController.index.url(),
-        icon: Zap,
-        badge: () => pendingActions.value,
+        title: 'Activity log',
+        href: ActivityLogController().url,
+        icon: ScrollText,
     },
 ]);
 
@@ -287,12 +282,7 @@ const adminNavItems: NavItem[] = [
         icon: Users,
     },
     {
-        title: 'Emby Links',
-        href: UserLinkController.index.url(),
-        icon: Link2,
-    },
-    {
-        title: 'Action Rules',
+        title: 'Approval Rules',
         href: ActionTypeConfigController.index.url(),
         icon: Shield,
     },
@@ -329,14 +319,13 @@ const adminNavItems: NavItem[] = [
         </SidebarHeader>
 
         <SidebarContent>
-            <NavMain :items="mainNavItems" />
+            <NavMain :items="overviewNavItems" label="Overview" />
             <NavMain :items="mediaNavItems" label="Media" />
-            <NavMain :items="monitoringNavItems" label="Monitoring" />
-            <NavMain :items="automationNavItems" label="Automation" />
+            <NavMain :items="liveNavItems" label="Live" />
             <NavMain
                 v-if="aiEnabled && isAdmin"
                 :items="aiNavItems"
-                label="AI"
+                label="Assistant"
             />
             <NavMain v-if="isAdmin" :items="adminNavItems" label="Admin" />
         </SidebarContent>
