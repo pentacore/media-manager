@@ -87,4 +87,39 @@ abstract class ArrClient
             ...$params,
         ])->throw()->json() ?? [];
     }
+
+    /**
+     * Sonarr/Radarr both expose a paginated download queue at this path.
+     * Subclasses choose what to inline-include via $params (e.g.
+     * `includeSeries=true&includeEpisode=true` for Sonarr,
+     * `includeMovie=true` for Radarr) so we don't make a second call per row.
+     *
+     * @param  array<string, mixed>  $params
+     * @return array<string, mixed>
+     *
+     * @throws RequestException|ConnectionException
+     */
+    public function getQueue(array $params = []): array
+    {
+        return $this->buildClient()
+            ->get(sprintf('/api/%s/queue', $this->apiVersion), $params)
+            ->throw()
+            ->json() ?? [];
+    }
+
+    /**
+     * Paginated history feed (grabs, imports, failures, deletions).
+     *
+     * @param  array<string, mixed>  $params
+     * @return array<string, mixed>
+     *
+     * @throws RequestException|ConnectionException
+     */
+    public function getHistory(array $params = []): array
+    {
+        return $this->buildClient()
+            ->get(sprintf('/api/%s/history', $this->apiVersion), $params)
+            ->throw()
+            ->json() ?? [];
+    }
 }

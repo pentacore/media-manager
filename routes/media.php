@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use App\Http\Controllers\Library\ActivityController as LibraryActivityController;
 use App\Http\Controllers\Media\MovieController;
 use App\Http\Controllers\Media\RequestController;
 use App\Http\Controllers\Media\SearchController;
@@ -48,4 +49,8 @@ Route::middleware(['auth', 'verified', 'password.set', 'role:member'])
 
         // Unified search
         Route::get('search', [SearchController::class, 'index'])->name('search.index');
+
+        // Combined Sonarr + Radarr download queue
+        Route::get('library/activity/queue', [LibraryActivityController::class, 'queue'])
+            ->name('library.activity.queue');
     });

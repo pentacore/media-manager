@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { Link, usePage } from '@inertiajs/vue3';
 import {
+    Activity,
     BarChart3,
     Brain,
     Clock,
@@ -34,6 +35,7 @@ import WebhookLogController from '@/actions/App/Http/Controllers/Admin/WebhookLo
 import AIChatController from '@/actions/App/Http/Controllers/AI/ChatController';
 import NowPlayingController from '@/actions/App/Http/Controllers/Emby/NowPlayingController';
 import WatchHistoryController from '@/actions/App/Http/Controllers/Emby/WatchHistoryController';
+import LibraryActivityController from '@/actions/App/Http/Controllers/Library/ActivityController';
 import MovieController from '@/actions/App/Http/Controllers/Media/MovieController';
 import RequestController from '@/actions/App/Http/Controllers/Media/RequestController';
 import SearchController from '@/actions/App/Http/Controllers/Media/SearchController';
@@ -244,6 +246,11 @@ const mediaNavItems: NavItem[] = [
         title: 'Downloads',
         href: SabnzbdQueueController.index.url(),
         icon: Download,
+    },
+    {
+        title: 'Library activity',
+        href: LibraryActivityController.queue.url(),
+        icon: Activity,
     },
 ];
 
