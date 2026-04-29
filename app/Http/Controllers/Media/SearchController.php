@@ -10,7 +10,6 @@ use App\Models\ServiceConnection;
 use App\Services\Prowlarr\ProwlarrClient;
 use App\Services\Radarr\RadarrClient;
 use App\Services\Seerr\SeerrClient;
-use App\Services\Seerr\SeerrTitleResolver;
 use App\Services\Sonarr\SonarrClient;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
@@ -23,10 +22,6 @@ use Throwable;
 class SearchController extends Controller
 {
     private const int MAX_RESULTS = 20;
-
-    public function __construct(
-        private readonly SeerrTitleResolver $seerrTitleResolver,
-    ) {}
 
     public function index(Request $request): Response
     {
@@ -153,6 +148,15 @@ class SearchController extends Controller
     }
 
     /**
+     * Find existing Seerr requests matching the search term.
+     *
+     * Two-step: hit Seerr's TMDB-backed `/search` to get title matches, then
+     * for any hit already tracked in Seerr (`mediaInfo` present) fetch the
+     * movie/tv detail to read its `mediaInfo.requests` array. The /search
+     * endpoint sets `mediaInfo` as a presence flag but does not include the
+     * full requests collection. Returns one row per request, regardless of
+     * status.
+     *
      * @return array{results: array<int, array<string, mixed>>, error: ?string}
      */
     private function searchSeerr(string $term): array
@@ -166,31 +170,76 @@ class SearchController extends Controller
         $seerrClient = new SeerrClient($connection);
 
         try {
-            $response = $seerrClient->getRequests(['take' => 100, 'sort' => 'added']);
+            $response = $seerrClient->search($term);
         } catch (Throwable $throwable) {
             return $this->serviceFailure('seerr', $throwable);
         }
 
-        $results = is_array($response['results'] ?? null) ? $response['results'] : [];
-        $titles = $this->seerrTitleResolver->resolve($connection, $seerrClient, $results);
+        $hits = is_array($response['results'] ?? null) ? $response['results'] : [];
+        $rows = [];
 
-        $enriched = array_map(fn (array $req): array => [
-            'id' => $req['id'] ?? null,
-            'media_type' => $req['type'] ?? ($req['media']['mediaType'] ?? null),
-            'title' => $this->seerrTitleResolver->titleFor($req, $titles),
-            'tmdb_id' => $req['media']['tmdbId'] ?? null,
-            'tvdb_id' => $req['media']['tvdbId'] ?? null,
-            'status' => $req['status'] ?? null,
-            'overview' => null,
-            'poster_path' => null,
-        ], $results);
+        foreach ($hits as $hit) {
+            $mediaType = (string) ($hit['mediaType'] ?? '');
+            if (! in_array($mediaType, ['movie', 'tv'], true)) {
+                continue;
+            }
 
-        $matches = $this->filterByTitle($enriched, $term);
+            // mediaInfo is only emitted on /search hits that have an entry in
+            // Seerr's local DB — i.e. items that have ever been requested.
+            if (! is_array($hit['mediaInfo'] ?? null)) {
+                continue;
+            }
 
-        return [
-            'results' => array_values($matches),
-            'error' => null,
-        ];
+            $tmdbId = (int) ($hit['id'] ?? $hit['mediaInfo']['tmdbId'] ?? 0);
+            if ($tmdbId <= 0) {
+                continue;
+            }
+
+            try {
+                $detail = $mediaType === 'movie'
+                    ? $seerrClient->getMovieDetails($tmdbId)
+                    : $seerrClient->getTvDetails($tmdbId);
+            } catch (Throwable $throwable) {
+                Log::warning('Seerr detail lookup failed during search.', [
+                    'media_type' => $mediaType,
+                    'tmdb_id' => $tmdbId,
+                    'exception' => $throwable::class,
+                    'message' => $throwable->getMessage(),
+                ]);
+
+                continue;
+            }
+
+            $mediaInfo = is_array($detail['mediaInfo'] ?? null) ? $detail['mediaInfo'] : [];
+            $requests = is_array($mediaInfo['requests'] ?? null) ? $mediaInfo['requests'] : [];
+            if ($requests === []) {
+                continue;
+            }
+
+            $title = $detail['title'] ?? $detail['name'] ?? $hit['title'] ?? $hit['name'] ?? null;
+            $overview = $detail['overview'] ?? $hit['overview'] ?? null;
+            $posterPath = $detail['posterPath'] ?? $hit['posterPath'] ?? null;
+            $tvdbId = $mediaInfo['tvdbId'] ?? $hit['mediaInfo']['tvdbId'] ?? null;
+
+            foreach ($requests as $request) {
+                $rows[] = [
+                    'id' => $request['id'] ?? null,
+                    'media_type' => $mediaType,
+                    'title' => is_string($title) ? $title : null,
+                    'tmdb_id' => $tmdbId,
+                    'tvdb_id' => $tvdbId,
+                    'status' => $request['status'] ?? null,
+                    'overview' => is_string($overview) ? $overview : null,
+                    'poster_path' => is_string($posterPath) ? $posterPath : null,
+                ];
+
+                if (count($rows) >= self::MAX_RESULTS) {
+                    break 2;
+                }
+            }
+        }
+
+        return ['results' => $rows, 'error' => null];
     }
 
     /**

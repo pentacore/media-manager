@@ -162,24 +162,41 @@ test('search resolves deferred movie results from Radarr library', function (): 
         );
 });
 
-test('search resolves deferred request results from Seerr with title enrichment', function (): void {
+test('search resolves deferred request results from Seerr search + detail endpoints', function (): void {
     ServiceConnection::factory()->seerr()->create(['url' => 'http://seerr.local:5055', 'api_key' => 'jk']);
 
     $member = User::factory()->member()->create();
 
     Http::fake([
+        'seerr.local:5055/api/v1/search*' => Http::response([
+            'page' => 1,
+            'totalPages' => 1,
+            'totalResults' => 1,
+            'results' => [
+                [
+                    'id' => 1396,
+                    'mediaType' => 'tv',
+                    'name' => 'Found Show',
+                    'overview' => 'Pilot.',
+                    'posterPath' => '/poster.jpg',
+                    // Presence flag only — actual requests come from /tv/{id}.
+                    'mediaInfo' => ['id' => 9, 'mediaType' => 'tv', 'tmdbId' => 1396, 'status' => 5],
+                ],
+            ],
+        ]),
         'seerr.local:5055/api/v1/tv/1396' => Http::response([
             'id' => 1396,
             'name' => 'Found Show',
-        ]),
-        'seerr.local:5055/api/v1/request*' => Http::response([
-            'pageInfo' => ['page' => 1, 'pages' => 1, 'pageSize' => 100, 'results' => 1],
-            'results' => [
-                [
-                    'id' => 3,
-                    'status' => 2,
-                    'type' => 'tv',
-                    'media' => ['mediaType' => 'tv', 'tmdbId' => 1396, 'tvdbId' => 81189],
+            'overview' => 'Pilot.',
+            'posterPath' => '/poster.jpg',
+            'mediaInfo' => [
+                'id' => 9,
+                'mediaType' => 'tv',
+                'tmdbId' => 1396,
+                'tvdbId' => 81189,
+                'status' => 5,
+                'requests' => [
+                    ['id' => 3, 'status' => 2],
                 ],
             ],
         ]),
@@ -196,8 +213,147 @@ test('search resolves deferred request results from Seerr with title enrichment'
                 ->where('requestResults.results.0.title', 'Found Show')
                 ->where('requestResults.results.0.media_type', 'tv')
                 ->where('requestResults.results.0.tmdb_id', 1396)
+                ->where('requestResults.results.0.tvdb_id', 81189)
+                ->where('requestResults.results.0.status', 2)
+                ->where('requestResults.results.0.overview', 'Pilot.')
+                ->where('requestResults.results.0.poster_path', '/poster.jpg')
             )
         );
+});
+
+test('search ignores Seerr hits that are not yet tracked in the local DB', function (): void {
+    ServiceConnection::factory()->seerr()->create(['url' => 'http://seerr.local:5055', 'api_key' => 'jk']);
+
+    $member = User::factory()->member()->create();
+
+    Http::fake([
+        'seerr.local:5055/api/v1/search*' => Http::response([
+            'results' => [
+                ['id' => 999, 'mediaType' => 'movie', 'title' => 'Not Yet Requested', 'mediaInfo' => null],
+            ],
+        ]),
+    ]);
+
+    $this->actingAs($member)
+        ->get(route('media.search.index', ['q' => 'anything']))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->loadDeferredProps(fn ($page) => $page
+                ->where('requestResults.error', null)
+                ->where('requestResults.results', [])
+            )
+        );
+
+    Http::assertNotSent(fn ($request): bool => str_contains((string) $request->url(), '/api/v1/movie/'));
+});
+
+test('search drops hits whose detail lookup returns no requests', function (): void {
+    ServiceConnection::factory()->seerr()->create(['url' => 'http://seerr.local:5055', 'api_key' => 'jk']);
+
+    $member = User::factory()->member()->create();
+
+    Http::fake([
+        'seerr.local:5055/api/v1/search*' => Http::response([
+            'results' => [
+                [
+                    'id' => 1000,
+                    'mediaType' => 'movie',
+                    'title' => 'Tracked Without Requests',
+                    'mediaInfo' => ['id' => 1, 'mediaType' => 'movie', 'tmdbId' => 1000],
+                ],
+            ],
+        ]),
+        'seerr.local:5055/api/v1/movie/1000' => Http::response([
+            'id' => 1000,
+            'title' => 'Tracked Without Requests',
+            'mediaInfo' => ['id' => 1, 'mediaType' => 'movie', 'tmdbId' => 1000, 'requests' => []],
+        ]),
+    ]);
+
+    $this->actingAs($member)
+        ->get(route('media.search.index', ['q' => 'tracked']))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->loadDeferredProps(fn ($page) => $page
+                ->where('requestResults.results', [])
+            )
+        );
+});
+
+test('search filters out person hits returned by Seerr multi-search', function (): void {
+    ServiceConnection::factory()->seerr()->create(['url' => 'http://seerr.local:5055', 'api_key' => 'jk']);
+
+    $member = User::factory()->member()->create();
+
+    Http::fake([
+        'seerr.local:5055/api/v1/search*' => Http::response([
+            'results' => [
+                ['id' => 500, 'mediaType' => 'person', 'name' => 'Some Actor', 'mediaInfo' => null],
+            ],
+        ]),
+    ]);
+
+    $this->actingAs($member)
+        ->get(route('media.search.index', ['q' => 'actor']))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->loadDeferredProps(fn ($page) => $page
+                ->where('requestResults.results', [])
+            )
+        );
+});
+
+test('search surfaces approved or available Seerr requests regardless of status', function (): void {
+    ServiceConnection::factory()->seerr()->create(['url' => 'http://seerr.local:5055', 'api_key' => 'jk']);
+
+    $member = User::factory()->member()->create();
+
+    // Regression for #38: requests that had already been approved/available
+    // (status 2 / 5) used to disappear because the controller pulled a
+    // fixed window of /request rows. Now we walk /search → details and
+    // include every request the detail endpoint exposes.
+    Http::fake([
+        'seerr.local:5055/api/v1/search*' => Http::response([
+            'results' => [
+                [
+                    'id' => 7777,
+                    'mediaType' => 'tv',
+                    'name' => 'FBI',
+                    'mediaInfo' => ['id' => 50, 'mediaType' => 'tv', 'tmdbId' => 7777, 'status' => 5],
+                ],
+            ],
+        ]),
+        'seerr.local:5055/api/v1/tv/7777' => Http::response([
+            'id' => 7777,
+            'name' => 'FBI',
+            'mediaInfo' => [
+                'id' => 50,
+                'mediaType' => 'tv',
+                'tmdbId' => 7777,
+                'tvdbId' => 333333,
+                'status' => 5,
+                'requests' => [
+                    ['id' => 42, 'status' => 2],
+                    ['id' => 43, 'status' => 5],
+                ],
+            ],
+        ]),
+    ]);
+
+    $this->actingAs($member)
+        ->get(route('media.search.index', ['q' => 'FBI']))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->loadDeferredProps(fn ($page) => $page
+                ->has('requestResults.results', 2)
+                ->where('requestResults.results.0.id', 42)
+                ->where('requestResults.results.0.status', 2)
+                ->where('requestResults.results.1.id', 43)
+                ->where('requestResults.results.1.status', 5)
+            )
+        );
+
+    Http::assertNotSent(fn ($request): bool => str_contains((string) $request->url(), '/api/v1/request'));
 });
 
 test('sonarr library results are filtered by case-insensitive title substring', function (): void {
