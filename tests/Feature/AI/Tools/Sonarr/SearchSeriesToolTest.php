@@ -24,7 +24,7 @@ test('searches Sonarr series catalog by query', function (): void {
         ]),
     ]);
 
-    $result = json_decode((string) (new SearchSeriesTool)->handle(new Request(['query' => 'Severance'])), true);
+    $result = json_decode((new SearchSeriesTool)->handle(new Request(['query' => 'Severance'])), true);
 
     expect($result)->toHaveCount(1);
     expect($result[0]['title'])->toBe('Severance');
@@ -33,7 +33,7 @@ test('searches Sonarr series catalog by query', function (): void {
 test('returns tool_failed when no Sonarr connection is configured', function (): void {
     $this->connection->delete();
 
-    $result = json_decode((string) (new SearchSeriesTool)->handle(new Request(['query' => 'Severance'])), true);
+    $result = json_decode((new SearchSeriesTool)->handle(new Request(['query' => 'Severance'])), true);
 
     expect($result['error'])->toBe('tool_failed');
 });

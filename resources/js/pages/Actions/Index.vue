@@ -9,12 +9,7 @@ import {
 } from 'lucide-vue-next';
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import ActionRequestController from '@/actions/App/Http/Controllers/Actions/ActionRequestController';
-import {
-    Field,
-    InitialsAvatar,
-    StatusPill,
-    SvcChip,
-} from '@/components/mm';
+import { Field, InitialsAvatar, StatusPill, SvcChip } from '@/components/mm';
 import { Button } from '@/components/ui/button';
 import { useRealtimeList } from '@/composables/useRealtimeList';
 import { useWebSocket } from '@/composables/useWebSocket';
@@ -119,8 +114,10 @@ watch(visibleRequests, (rows) => {
     }
 });
 
-const selected = computed<ActionRequestRow | null>(() =>
-    visibleRequests.value.find((row) => row.id === selectedId.value) ?? null,
+const selected = computed<ActionRequestRow | null>(
+    () =>
+        visibleRequests.value.find((row) => row.id === selectedId.value) ??
+        null,
 );
 
 const { privateChannel, leaveChannel } = useWebSocket();
@@ -214,30 +211,30 @@ function isDestructive(type: string | null | undefined): boolean {
 
 function svcId(name: string | null | undefined): string {
     if (!name) {
-return '';
-}
+        return '';
+    }
 
     const t = name.toLowerCase();
 
     if (t.includes('jellyseerr') || t.includes('seerr')) {
-return 'seerr';
-}
+        return 'seerr';
+    }
 
     if (t.includes('sonarr')) {
-return 'sonarr';
-}
+        return 'sonarr';
+    }
 
     if (t.includes('radarr')) {
-return 'radarr';
-}
+        return 'radarr';
+    }
 
     if (t.includes('emby')) {
-return 'emby';
-}
+        return 'emby';
+    }
 
     if (t.includes('prowlarr')) {
-return 'prowlarr';
-}
+        return 'prowlarr';
+    }
 
     return t;
 }
@@ -268,8 +265,8 @@ function retry(id: number): void {
 
 function goToPage(url: string | null): void {
     if (!url) {
-return;
-}
+        return;
+    }
 
     router.get(url, {}, { preserveState: true, preserveScroll: true });
 }
@@ -290,8 +287,8 @@ function payloadDetail(row: ActionRequestRow): string {
 
 function statusCount(id: string): number {
     if (id === 'all') {
-return props.requests.meta.total;
-}
+        return props.requests.meta.total;
+    }
 
     return visibleRequests.value.filter((row) => row.status === id).length;
 }
@@ -303,11 +300,15 @@ function pipelineState(
     const s = row.status;
 
     if (stage === 'created') {
-return 'done';
-}
+        return 'done';
+    }
 
     if (stage === 'approved') {
-        return s === 'pending' ? 'pending' : s === 'rejected' ? 'failed' : 'done';
+        return s === 'pending'
+            ? 'pending'
+            : s === 'rejected'
+              ? 'failed'
+              : 'done';
     }
 
     if (stage === 'executing') {
@@ -317,12 +318,12 @@ return 'done';
     }
 
     if (s === 'completed') {
-return 'done';
-}
+        return 'done';
+    }
 
     if (s === 'failed') {
-return 'failed';
-}
+        return 'failed';
+    }
 
     return 'pending';
 }
@@ -507,9 +508,7 @@ return 'failed';
                                 colspan="6"
                                 class="px-3 py-12 text-center text-sm text-fg-subtle"
                             >
-                                <div
-                                    class="flex flex-col items-center gap-2"
-                                >
+                                <div class="flex flex-col items-center gap-2">
                                     <Inbox class="size-5" />
                                     No action requests in this view.
                                 </div>
@@ -526,9 +525,7 @@ return 'failed';
                     class="flex flex-col items-center gap-2 rounded-xl border border-border bg-card p-9 text-fg-subtle"
                 >
                     <Inbox class="size-5" />
-                    <span class="text-sm"
-                        >Select an action to inspect.</span
-                    >
+                    <span class="text-sm">Select an action to inspect.</span>
                 </div>
                 <div
                     v-else
@@ -595,14 +592,10 @@ return 'failed';
                         <Field label="Created">
                             {{ formatRelative(selected.created_at) }}
                         </Field>
-                        <Field
-                            v-if="payloadDetail(selected)"
-                            label="Detail"
-                        >
-                            <span
-                                class="text-[13px] text-muted-foreground"
-                                >{{ payloadDetail(selected) }}</span
-                            >
+                        <Field v-if="payloadDetail(selected)" label="Detail">
+                            <span class="text-[13px] text-muted-foreground">{{
+                                payloadDetail(selected)
+                            }}</span>
                         </Field>
 
                         <div
@@ -614,12 +607,10 @@ return 'failed';
                             />
                             <div class="text-[12.5px] text-muted-foreground">
                                 This action is
-                                <span
-                                    class="font-semibold text-destructive"
+                                <span class="font-semibold text-destructive"
                                     >destructive</span
                                 >. Approval queues an
-                                <span
-                                    class="font-mono-tabular text-[11.5px]"
+                                <span class="font-mono-tabular text-[11.5px]"
                                     >ExecuteActionRequest</span
                                 >
                                 job. Files on disk will be removed.
@@ -723,9 +714,7 @@ return 'failed';
                             </Button>
                         </div>
                         <Button
-                            v-else-if="
-                                selected.status === 'failed' && isAdmin
-                            "
+                            v-else-if="selected.status === 'failed' && isAdmin"
                             variant="outline"
                             @click="retry(selected.id)"
                         >

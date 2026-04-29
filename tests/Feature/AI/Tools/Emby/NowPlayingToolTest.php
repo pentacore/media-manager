@@ -12,7 +12,7 @@ test('returns currently-playing emby sessions (action=played, recent)', function
     EmbyActivity::factory()->create(['action' => 'stopped', 'updated_at' => now()->subMinute()]);
     EmbyActivity::factory()->create(['action' => 'played', 'updated_at' => now()->subHour()]);
 
-    $result = json_decode((string) (new NowPlayingTool)->handle(new Request([])), true);
+    $result = json_decode((new NowPlayingTool)->handle(new Request([])), true);
 
     expect($result['sessions'])->toHaveCount(1);
     expect($result['sessions'][0]['media_title'])->toBe('Demo Movie');

@@ -111,13 +111,17 @@ function rateFor(price: PriceRow, field: RateField): string | null {
 }
 
 function hasBatch(price: PriceRow): boolean {
-    return price.batch_input_per_mtok !== null && price.batch_input_per_mtok !== undefined;
+    return (
+        price.batch_input_per_mtok !== null &&
+        price.batch_input_per_mtok !== undefined
+    );
 }
 
 const cheapest = ref(
     [...props.prices].sort(
         (a, b) =>
-            parseFloat(a.input_per_mtok) + parseFloat(a.output_per_mtok) -
+            parseFloat(a.input_per_mtok) +
+            parseFloat(a.output_per_mtok) -
             (parseFloat(b.input_per_mtok) + parseFloat(b.output_per_mtok)),
     )[0] ?? null,
 );
@@ -125,7 +129,8 @@ const cheapest = ref(
 const priciest = ref(
     [...props.prices].sort(
         (a, b) =>
-            parseFloat(b.input_per_mtok) + parseFloat(b.output_per_mtok) -
+            parseFloat(b.input_per_mtok) +
+            parseFloat(b.output_per_mtok) -
             (parseFloat(a.input_per_mtok) + parseFloat(a.output_per_mtok)),
     )[0] ?? null,
 );
@@ -146,9 +151,7 @@ const priciest = ref(
                 >
                     AI prices
                 </h1>
-                <p
-                    class="mt-1 max-w-[640px] text-[13px] text-muted-foreground"
-                >
+                <p class="mt-1 max-w-[640px] text-[13px] text-muted-foreground">
                     Per-million-token rates used to estimate cost on the AI
                     Usage dashboard. Add a row for any model you've used so its
                     spend shows up.
@@ -190,20 +193,15 @@ const priciest = ref(
                         </div>
                         <div class="grid grid-cols-2 gap-4">
                             <div
-                                v-for="field in (
+                                v-for="field in [
+                                    ['input_per_mtok', 'Input ($/M)'],
+                                    ['output_per_mtok', 'Output ($/M)'],
+                                    ['cache_read_per_mtok', 'Cache Read ($/M)'],
                                     [
-                                        ['input_per_mtok', 'Input ($/M)'],
-                                        ['output_per_mtok', 'Output ($/M)'],
-                                        [
-                                            'cache_read_per_mtok',
-                                            'Cache Read ($/M)',
-                                        ],
-                                        [
-                                            'cache_write_per_mtok',
-                                            'Cache Write ($/M)',
-                                        ],
-                                    ] as const
-                                )"
+                                        'cache_write_per_mtok',
+                                        'Cache Write ($/M)',
+                                    ],
+                                ] as const"
                                 :key="field[0]"
                                 class="space-y-2"
                             >
@@ -268,9 +266,7 @@ const priciest = ref(
                     >Cheapest</span
                 >
                 <div v-if="cheapest">
-                    <div
-                        class="font-mono-tabular text-[15px] font-semibold"
-                    >
+                    <div class="font-mono-tabular text-[15px] font-semibold">
                         {{ cheapest.model }}
                     </div>
                     <div class="text-xs text-muted-foreground">
@@ -288,9 +284,7 @@ const priciest = ref(
                     >Priciest</span
                 >
                 <div v-if="priciest">
-                    <div
-                        class="font-mono-tabular text-[15px] font-semibold"
-                    >
+                    <div class="font-mono-tabular text-[15px] font-semibold">
                         {{ priciest.model }}
                     </div>
                     <div class="text-xs text-muted-foreground">
@@ -374,9 +368,7 @@ const priciest = ref(
                         :key="price.id"
                         class="border-b border-border last:border-b-0 hover:bg-bg-hover"
                         :class="
-                            showBatch && !hasBatch(price)
-                                ? 'opacity-50'
-                                : ''
+                            showBatch && !hasBatch(price) ? 'opacity-50' : ''
                         "
                     >
                         <td class="px-3 py-2.5">
@@ -395,30 +387,51 @@ const priciest = ref(
                         <td class="px-3 py-2.5">
                             <Pill>{{ price.provider }}</Pill>
                         </td>
-                        <td
-                            class="font-mono-tabular px-3 py-2.5 text-right"
-                        >
-                            {{ fmt(rateFor(price, 'input_per_mtok') ?? price.input_per_mtok) }}
+                        <td class="font-mono-tabular px-3 py-2.5 text-right">
+                            {{
+                                fmt(
+                                    rateFor(price, 'input_per_mtok') ??
+                                        price.input_per_mtok,
+                                )
+                            }}
                         </td>
-                        <td
-                            class="font-mono-tabular px-3 py-2.5 text-right"
-                        >
-                            {{ fmt(rateFor(price, 'output_per_mtok') ?? price.output_per_mtok) }}
-                        </td>
-                        <td
-                            class="font-mono-tabular px-3 py-2.5 text-right text-fg-subtle"
-                        >
-                            {{ fmt(rateFor(price, 'cache_read_per_mtok') ?? price.cache_read_per_mtok) }}
-                        </td>
-                        <td
-                            class="font-mono-tabular px-3 py-2.5 text-right text-fg-subtle"
-                        >
-                            {{ fmt(rateFor(price, 'cache_write_per_mtok') ?? price.cache_write_per_mtok) }}
+                        <td class="font-mono-tabular px-3 py-2.5 text-right">
+                            {{
+                                fmt(
+                                    rateFor(price, 'output_per_mtok') ??
+                                        price.output_per_mtok,
+                                )
+                            }}
                         </td>
                         <td
                             class="font-mono-tabular px-3 py-2.5 text-right text-fg-subtle"
                         >
-                            {{ fmt(rateFor(price, 'reasoning_per_mtok') ?? price.reasoning_per_mtok) }}
+                            {{
+                                fmt(
+                                    rateFor(price, 'cache_read_per_mtok') ??
+                                        price.cache_read_per_mtok,
+                                )
+                            }}
+                        </td>
+                        <td
+                            class="font-mono-tabular px-3 py-2.5 text-right text-fg-subtle"
+                        >
+                            {{
+                                fmt(
+                                    rateFor(price, 'cache_write_per_mtok') ??
+                                        price.cache_write_per_mtok,
+                                )
+                            }}
+                        </td>
+                        <td
+                            class="font-mono-tabular px-3 py-2.5 text-right text-fg-subtle"
+                        >
+                            {{
+                                fmt(
+                                    rateFor(price, 'reasoning_per_mtok') ??
+                                        price.reasoning_per_mtok,
+                                )
+                            }}
                         </td>
                         <td class="px-3 py-2.5 text-right">
                             <div class="flex justify-end gap-1">
@@ -472,26 +485,24 @@ const priciest = ref(
                 >
                     <div class="grid grid-cols-2 gap-4">
                         <div
-                            v-for="field in (
+                            v-for="field in [
+                                ['edit_input', 'input_per_mtok', 'Input ($/M)'],
                                 [
-                                    ['edit_input', 'input_per_mtok', 'Input ($/M)'],
-                                    [
-                                        'edit_output',
-                                        'output_per_mtok',
-                                        'Output ($/M)',
-                                    ],
-                                    [
-                                        'edit_cache_r',
-                                        'cache_read_per_mtok',
-                                        'Cache Read ($/M)',
-                                    ],
-                                    [
-                                        'edit_cache_w',
-                                        'cache_write_per_mtok',
-                                        'Cache Write ($/M)',
-                                    ],
-                                ] as const
-                            )"
+                                    'edit_output',
+                                    'output_per_mtok',
+                                    'Output ($/M)',
+                                ],
+                                [
+                                    'edit_cache_r',
+                                    'cache_read_per_mtok',
+                                    'Cache Read ($/M)',
+                                ],
+                                [
+                                    'edit_cache_w',
+                                    'cache_write_per_mtok',
+                                    'Cache Write ($/M)',
+                                ],
+                            ] as const"
                             :key="field[0]"
                             class="space-y-2"
                         >
@@ -534,9 +545,7 @@ const priciest = ref(
                                 min="0"
                                 :default-value="editing.reasoning_per_mtok"
                             />
-                            <InputError
-                                :message="errors.reasoning_per_mtok"
-                            />
+                            <InputError :message="errors.reasoning_per_mtok" />
                         </div>
                     </div>
                     <DialogFooter>

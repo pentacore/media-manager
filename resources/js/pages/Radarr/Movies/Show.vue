@@ -1,11 +1,16 @@
 <script setup lang="ts">
 import { Head, Link, router } from '@inertiajs/vue3';
-import { Clock, ExternalLink, Film, HardDrive, Trash2 } from 'lucide-vue-next';
+import {
+    ArrowLeft,
+    Clock,
+    ExternalLink,
+    HardDrive,
+    Trash2,
+} from 'lucide-vue-next';
 import { ref } from 'vue';
 import MovieController from '@/actions/App/Http/Controllers/Media/MovieController';
-import { Badge } from '@/components/ui/badge';
+import { Pill, Poster, StatusPill } from '@/components/mm';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Checkbox } from '@/components/ui/checkbox';
 import {
     Dialog,
@@ -107,129 +112,34 @@ function confirmDelete() {
 <template>
     <Head :title="movie.title" />
 
-    <div class="space-y-6 p-6">
-        <div class="flex items-start justify-between gap-4">
-            <div class="flex items-start gap-6">
-                <div
-                    class="w-[200px] shrink-0 overflow-hidden rounded-md border bg-muted"
-                >
-                    <img
-                        v-if="posterUrl()"
-                        :src="posterUrl() ?? ''"
-                        :alt="movie.title"
-                        class="aspect-[2/3] w-full object-cover"
-                    />
-                    <div
-                        v-else
-                        class="flex aspect-[2/3] w-full items-center justify-center bg-muted text-muted-foreground"
-                    >
-                        <Film class="size-12" />
-                    </div>
-                </div>
-
-                <div class="min-w-0 flex-1 space-y-4">
-                    <div>
-                        <h2 class="text-3xl font-bold tracking-tight">
-                            {{ movie.title }}
-                            <span
-                                v-if="movie.year"
-                                class="font-normal text-muted-foreground"
-                            >
-                                ({{ movie.year }})
-                            </span>
-                        </h2>
-                    </div>
-
-                    <div class="flex flex-wrap items-center gap-2">
-                        <Badge variant="outline">{{
-                            movie.status ?? 'unknown'
-                        }}</Badge>
-                        <Badge
-                            :variant="movie.monitored ? 'default' : 'secondary'"
-                        >
-                            {{ movie.monitored ? 'Monitored' : 'Unmonitored' }}
-                        </Badge>
-                        <Badge
-                            :variant="movie.has_file ? 'default' : 'secondary'"
-                        >
-                            {{ movie.has_file ? 'File present' : 'Missing' }}
-                        </Badge>
-                    </div>
-
-                    <p
-                        v-if="movie.overview"
-                        class="text-sm text-muted-foreground"
-                    >
-                        {{ movie.overview }}
-                    </p>
-
-                    <dl class="grid gap-4 sm:grid-cols-2">
-                        <div>
-                            <dt
-                                class="text-xs tracking-wider text-muted-foreground uppercase"
-                            >
-                                Studio
-                            </dt>
-                            <dd class="mt-1 text-sm">
-                                {{ movie.studio ?? '-' }}
-                            </dd>
-                        </div>
-                        <div>
-                            <dt
-                                class="text-xs tracking-wider text-muted-foreground uppercase"
-                            >
-                                Runtime
-                            </dt>
-                            <dd class="mt-1 flex items-center gap-1 text-sm">
-                                <Clock class="size-3.5 text-muted-foreground" />
-                                {{
-                                    movie.runtime ? `${movie.runtime} min` : '-'
-                                }}
-                            </dd>
-                        </div>
-                        <div>
-                            <dt
-                                class="text-xs tracking-wider text-muted-foreground uppercase"
-                            >
-                                Root Folder
-                            </dt>
-                            <dd class="mt-1 text-sm break-all">
-                                {{ movie.root_folder_path ?? '-' }}
-                            </dd>
-                        </div>
-                        <div>
-                            <dt
-                                class="text-xs tracking-wider text-muted-foreground uppercase"
-                            >
-                                Quality Profile
-                            </dt>
-                            <dd class="mt-1 text-sm">
-                                {{ movie.quality_profile_id ?? '-' }}
-                            </dd>
-                        </div>
-                    </dl>
-                </div>
-            </div>
-
+    <div class="flex flex-col gap-6 p-5">
+        <div class="flex items-center justify-between">
+            <Link :href="MovieController.index.url()">
+                <Button variant="ghost" size="sm" class="h-8 text-xs">
+                    <ArrowLeft class="size-3.5" />
+                    Back to movies
+                </Button>
+            </Link>
             <div class="flex items-center gap-2">
-                <Link :href="MovieController.index.url()">
-                    <Button variant="outline">Back</Button>
-                </Link>
                 <a
-                    v-if="props.movie.title_slug"
-                    :href="`${props.connection.url}/movie/${props.movie.title_slug}`"
+                    v-if="movie.title_slug"
+                    :href="`${connection.url}/movie/${movie.title_slug}`"
                     target="_blank"
                     rel="noopener noreferrer"
                 >
-                    <Button variant="outline" size="sm">
-                        <ExternalLink class="mr-2 size-4" />
+                    <Button variant="outline" size="sm" class="h-8 text-xs">
+                        <ExternalLink class="size-3.5" />
                         Open in Radarr
                     </Button>
                 </a>
                 <Dialog v-model:open="deleteDialogOpen">
                     <DialogTrigger as-child>
-                        <Button variant="destructive">
-                            <Trash2 class="mr-2 size-4" />
+                        <Button
+                            variant="destructive"
+                            size="sm"
+                            class="h-8 text-xs"
+                        >
+                            <Trash2 class="size-3.5" />
                             Delete
                         </Button>
                     </DialogTrigger>
@@ -237,15 +147,14 @@ function confirmDelete() {
                         <DialogHeader>
                             <DialogTitle>Delete {{ movie.title }}?</DialogTitle>
                             <DialogDescription>
-                                This will remove the movie from Radarr. This
-                                action cannot be undone.
+                                Removes the movie from Radarr. Cannot be undone.
                             </DialogDescription>
                         </DialogHeader>
                         <div class="flex items-center gap-2 py-2">
                             <Checkbox id="delete_files" v-model="deleteFiles" />
                             <label
                                 for="delete_files"
-                                class="text-sm leading-none"
+                                class="text-[13px] leading-none"
                             >
                                 Also delete files from disk
                             </label>
@@ -254,58 +163,184 @@ function confirmDelete() {
                             <Button
                                 variant="outline"
                                 @click="deleteDialogOpen = false"
-                                >Cancel</Button
                             >
-                            <Button variant="destructive" @click="confirmDelete"
-                                >Confirm</Button
+                                Cancel
+                            </Button>
+                            <Button
+                                variant="destructive"
+                                @click="confirmDelete"
                             >
+                                Confirm
+                            </Button>
                         </DialogFooter>
                     </DialogContent>
                 </Dialog>
             </div>
         </div>
 
-        <Card v-if="movie.movie_file">
-            <CardHeader>
-                <div class="flex items-center gap-2">
-                    <HardDrive class="size-4 text-muted-foreground" />
-                    <CardTitle>File Info</CardTitle>
+        <div class="rounded-xl border border-border bg-card p-6">
+            <div class="flex flex-col gap-6 md:flex-row">
+                <div class="shrink-0">
+                    <img
+                        v-if="posterUrl()"
+                        :src="posterUrl() ?? ''"
+                        :alt="movie.title"
+                        class="w-[180px] rounded-md border border-border bg-muted object-cover"
+                    />
+                    <Poster v-else :hint="movie.title" size="lg" />
                 </div>
-            </CardHeader>
-            <CardContent>
-                <dl class="grid gap-4 sm:grid-cols-3">
+
+                <div class="flex-1 space-y-4">
                     <div>
-                        <dt
-                            class="text-xs tracking-wider text-muted-foreground uppercase"
+                        <h1
+                            class="text-[22px] leading-tight font-semibold tracking-tight"
                         >
-                            Quality
-                        </dt>
-                        <dd class="mt-1 text-sm">
-                            {{ movie.movie_file.quality ?? '-' }}
-                        </dd>
+                            {{ movie.title }}
+                            <span
+                                v-if="movie.year"
+                                class="font-mono-tabular text-[15px] font-normal text-muted-foreground"
+                            >
+                                ({{ movie.year }})
+                            </span>
+                        </h1>
+                        <div class="mt-2 flex flex-wrap items-center gap-1.5">
+                            <StatusPill
+                                v-if="movie.status"
+                                :status="movie.status"
+                            />
+                            <Pill
+                                :variant="movie.monitored ? 'ok' : 'default'"
+                                :dot="movie.monitored"
+                            >
+                                {{
+                                    movie.monitored
+                                        ? 'Monitored'
+                                        : 'Unmonitored'
+                                }}
+                            </Pill>
+                            <Pill :variant="movie.has_file ? 'ok' : 'warn'">
+                                {{
+                                    movie.has_file ? 'File present' : 'Missing'
+                                }}
+                            </Pill>
+                        </div>
                     </div>
-                    <div>
-                        <dt
-                            class="text-xs tracking-wider text-muted-foreground uppercase"
-                        >
-                            Size
-                        </dt>
-                        <dd class="mt-1 text-sm">
-                            {{ formatSize(movie.movie_file.size) }}
-                        </dd>
+
+                    <p
+                        v-if="movie.overview"
+                        class="max-w-[640px] text-[13px] leading-relaxed text-muted-foreground"
+                    >
+                        {{ movie.overview }}
+                    </p>
+
+                    <div
+                        class="grid grid-cols-2 gap-x-6 gap-y-3 md:grid-cols-4"
+                    >
+                        <div>
+                            <div
+                                class="text-[11.5px] font-semibold tracking-[0.05em] text-muted-foreground uppercase"
+                            >
+                                Studio
+                            </div>
+                            <div class="mt-0.5 text-[13px]">
+                                {{ movie.studio ?? '-' }}
+                            </div>
+                        </div>
+                        <div>
+                            <div
+                                class="text-[11.5px] font-semibold tracking-[0.05em] text-muted-foreground uppercase"
+                            >
+                                Runtime
+                            </div>
+                            <div
+                                class="font-mono-tabular mt-0.5 flex items-center gap-1 text-[13px]"
+                            >
+                                <Clock class="size-3.5 text-muted-foreground" />
+                                {{
+                                    movie.runtime ? `${movie.runtime} min` : '-'
+                                }}
+                            </div>
+                        </div>
+                        <div>
+                            <div
+                                class="text-[11.5px] font-semibold tracking-[0.05em] text-muted-foreground uppercase"
+                            >
+                                Quality profile
+                            </div>
+                            <div class="font-mono-tabular mt-0.5 text-[13px]">
+                                {{ movie.quality_profile_id ?? '-' }}
+                            </div>
+                        </div>
+                        <div>
+                            <div
+                                class="text-[11.5px] font-semibold tracking-[0.05em] text-muted-foreground uppercase"
+                            >
+                                Size on disk
+                            </div>
+                            <div class="font-mono-tabular mt-0.5 text-[13px]">
+                                {{ formatSize(movie.size_on_disk) }}
+                            </div>
+                        </div>
+                        <div class="md:col-span-4">
+                            <div
+                                class="text-[11.5px] font-semibold tracking-[0.05em] text-muted-foreground uppercase"
+                            >
+                                Root folder
+                            </div>
+                            <div
+                                class="font-mono-tabular mt-0.5 truncate text-[13px]"
+                                :title="movie.root_folder_path ?? ''"
+                            >
+                                {{ movie.root_folder_path ?? '-' }}
+                            </div>
+                        </div>
                     </div>
-                    <div>
-                        <dt
-                            class="text-xs tracking-wider text-muted-foreground uppercase"
-                        >
-                            Relative Path
-                        </dt>
-                        <dd class="mt-1 text-sm break-all">
-                            {{ movie.movie_file.relative_path ?? '-' }}
-                        </dd>
+                </div>
+            </div>
+        </div>
+
+        <div
+            v-if="movie.movie_file"
+            class="rounded-xl border border-border bg-card p-6"
+        >
+            <div class="mb-4 flex items-center gap-2">
+                <HardDrive class="size-4 text-muted-foreground" />
+                <h2 class="text-[14px] font-semibold tracking-tight">
+                    File info
+                </h2>
+            </div>
+            <div class="grid gap-4 sm:grid-cols-3">
+                <div>
+                    <div
+                        class="text-[11.5px] font-semibold tracking-[0.05em] text-muted-foreground uppercase"
+                    >
+                        Quality
                     </div>
-                </dl>
-            </CardContent>
-        </Card>
+                    <div class="mt-0.5 text-[13px]">
+                        {{ movie.movie_file.quality ?? '-' }}
+                    </div>
+                </div>
+                <div>
+                    <div
+                        class="text-[11.5px] font-semibold tracking-[0.05em] text-muted-foreground uppercase"
+                    >
+                        Size
+                    </div>
+                    <div class="font-mono-tabular mt-0.5 text-[13px]">
+                        {{ formatSize(movie.movie_file.size) }}
+                    </div>
+                </div>
+                <div>
+                    <div
+                        class="text-[11.5px] font-semibold tracking-[0.05em] text-muted-foreground uppercase"
+                    >
+                        Relative path
+                    </div>
+                    <div class="font-mono-tabular mt-0.5 text-[13px] break-all">
+                        {{ movie.movie_file.relative_path ?? '-' }}
+                    </div>
+                </div>
+            </div>
+        </div>
     </div>
 </template>

@@ -22,7 +22,7 @@ test('returns library series when no id is given', function (): void {
         'sonarr.local:8989/api/v3/series' => Http::response([['id' => 1, 'title' => 'Demo']]),
     ]);
 
-    $result = json_decode((string) (new GetSeriesTool)->handle(new Request(['series_id' => null])), true);
+    $result = json_decode((new GetSeriesTool)->handle(new Request(['series_id' => null])), true);
 
     expect($result)->toHaveCount(1);
 });
@@ -32,7 +32,7 @@ test('returns single series when id is given', function (): void {
         'sonarr.local:8989/api/v3/series/42' => Http::response(['id' => 42, 'title' => 'Demo']),
     ]);
 
-    $result = json_decode((string) (new GetSeriesTool)->handle(new Request(['series_id' => 42])), true);
+    $result = json_decode((new GetSeriesTool)->handle(new Request(['series_id' => 42])), true);
 
     expect($result['id'])->toBe(42);
 });

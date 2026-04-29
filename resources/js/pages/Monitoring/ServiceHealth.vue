@@ -129,8 +129,7 @@ const unhealthyCount = computed(
 );
 
 const updateAvailableCount = computed(
-    () =>
-        mergedConnections.value.filter((c) => c.update_available).length,
+    () => mergedConnections.value.filter((c) => c.update_available).length,
 );
 
 const overallUptime = computed<number | null>(() => {
@@ -139,20 +138,20 @@ const overallUptime = computed<number | null>(() => {
     );
 
     if (samples.length === 0) {
-return null;
-}
+        return null;
+    }
 
     return samples.reduce((acc, v) => acc + v, 0) / samples.length;
 });
 
 function formatSize(bytes: number | null): string {
     if (bytes === null || bytes === undefined) {
-return '—';
-}
+        return '—';
+    }
 
     if (bytes === 0) {
-return '0 B';
-}
+        return '0 B';
+    }
 
     const units = ['B', 'KB', 'MB', 'GB', 'TB', 'PB'];
     const i = Math.floor(Math.log(bytes) / Math.log(1024));
@@ -163,25 +162,25 @@ return '0 B';
 
 function formatTime(iso: string | null): string {
     if (!iso) {
-return 'never';
-}
+        return 'never';
+    }
 
     const ms = Date.now() - new Date(iso).getTime();
     const m = Math.floor(ms / 60_000);
 
     if (m < 1) {
-return 'just now';
-}
+        return 'just now';
+    }
 
     if (m < 60) {
-return `${m}m ago`;
-}
+        return `${m}m ago`;
+    }
 
     const h = Math.floor(m / 60);
 
     if (h < 24) {
-return `${h}h ago`;
-}
+        return `${h}h ago`;
+    }
 
     return `${Math.floor(h / 24)}d ago`;
 }
@@ -190,8 +189,8 @@ function svcId(type: string): string {
     const t = type.toLowerCase();
 
     if (t.includes('jellyseerr') || t.includes('seerr')) {
-return 'seerr';
-}
+        return 'seerr';
+    }
 
     return t;
 }
@@ -202,8 +201,8 @@ function disksFor(connectionId: number): DiskSpace[] | undefined {
 
 function diskUsed(disk: DiskSpace): number | null {
     if (disk.free_space === null || disk.total_space === null) {
-return null;
-}
+        return null;
+    }
 
     return Math.max(0, disk.total_space - disk.free_space);
 }
@@ -242,12 +241,12 @@ function bucketColor(status: string): string {
 
 function barHeight(bucket: MetricBucket): number {
     if (bucket.status === 'gap') {
-return 20;
-}
+        return 20;
+    }
 
     if (!bucket.latency_ms) {
-return 60;
-}
+        return 60;
+    }
 
     // 0-500ms maps to 30-100%; clamp for outliers.
     const pct = 30 + Math.min(70, (bucket.latency_ms / 500) * 70);
@@ -291,9 +290,7 @@ return 60;
             />
             <StatCard
                 label="Active services"
-                :value="
-                    mergedConnections.filter((c) => c.is_active).length
-                "
+                :value="mergedConnections.filter((c) => c.is_active).length"
                 :hint="`${mergedConnections.filter((c) => !c.is_active).length} inactive`"
             />
             <StatCard
@@ -326,8 +323,7 @@ return 60;
                     >Per-service status</span
                 >
                 <span class="text-xs text-muted-foreground"
-                    >health-strip placeholder until service_metrics
-                    table</span
+                    >health-strip placeholder until service_metrics table</span
                 >
             </div>
 
@@ -336,9 +332,7 @@ return 60;
                 class="flex flex-col items-center gap-2 py-10 text-fg-subtle"
             >
                 <Server class="size-5" />
-                <span class="text-sm"
-                    >No service connections configured.</span
-                >
+                <span class="text-sm">No service connections configured.</span>
             </div>
 
             <div v-else>
@@ -349,7 +343,9 @@ return 60;
                 >
                     <div
                         class="grid items-center gap-4"
-                        style="grid-template-columns: 200px 1fr 120px 120px 120px"
+                        style="
+                            grid-template-columns: 200px 1fr 120px 120px 120px;
+                        "
                     >
                         <div>
                             <div class="flex items-center gap-2">
@@ -408,7 +404,9 @@ return 60;
                                 Latency · 1h
                             </div>
                             <div class="font-mono-tabular text-[12px]">
-                                <span v-if="avgLatencyFor(connection.id) !== null">
+                                <span
+                                    v-if="avgLatencyFor(connection.id) !== null"
+                                >
                                     {{ avgLatencyFor(connection.id) }}ms
                                 </span>
                                 <span v-else class="text-fg-subtle">—</span>
@@ -488,7 +486,9 @@ return 60;
                                 >{{ disk.path }}</span
                             >
                             <span class="text-fg-subtle">·</span>
-                            <template v-if="(disk.display ?? 'both') === 'free'">
+                            <template
+                                v-if="(disk.display ?? 'both') === 'free'"
+                            >
                                 <span class="font-mono-tabular">{{
                                     formatSize(disk.free_space)
                                 }}</span>

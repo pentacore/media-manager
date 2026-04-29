@@ -11,7 +11,7 @@ test('returns recent watched entries with default 30-day window', function (): v
     EmbyActivity::factory()->count(3)->create(['action' => 'played', 'created_at' => now()->subDays(2)]);
     EmbyActivity::factory()->create(['action' => 'played', 'created_at' => now()->subDays(60)]);
 
-    $result = json_decode((string) (new WatchHistoryTool)->handle(new Request(['since_days' => null, 'limit' => null])), true);
+    $result = json_decode((new WatchHistoryTool)->handle(new Request(['since_days' => null, 'limit' => null])), true);
 
     expect($result['entries'])->toHaveCount(3);
 });
@@ -19,7 +19,7 @@ test('returns recent watched entries with default 30-day window', function (): v
 test('honors limit', function (): void {
     EmbyActivity::factory()->count(5)->create(['action' => 'played', 'created_at' => now()->subDay()]);
 
-    $result = json_decode((string) (new WatchHistoryTool)->handle(new Request(['since_days' => 30, 'limit' => 2])), true);
+    $result = json_decode((new WatchHistoryTool)->handle(new Request(['since_days' => 30, 'limit' => 2])), true);
 
     expect($result['entries'])->toHaveCount(2);
 });

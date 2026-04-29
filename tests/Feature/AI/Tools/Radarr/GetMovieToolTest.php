@@ -22,7 +22,7 @@ test('returns library movies when no id is given', function (): void {
         'radarr.local:7878/api/v3/movie' => Http::response([['id' => 1, 'title' => 'Demo']]),
     ]);
 
-    $result = json_decode((string) (new GetMovieTool)->handle(new Request(['movie_id' => null])), true);
+    $result = json_decode((new GetMovieTool)->handle(new Request(['movie_id' => null])), true);
 
     expect($result)->toHaveCount(1);
 });
@@ -32,7 +32,7 @@ test('returns single movie when id is given', function (): void {
         'radarr.local:7878/api/v3/movie/42' => Http::response(['id' => 42, 'title' => 'Demo']),
     ]);
 
-    $result = json_decode((string) (new GetMovieTool)->handle(new Request(['movie_id' => 42])), true);
+    $result = json_decode((new GetMovieTool)->handle(new Request(['movie_id' => 42])), true);
 
     expect($result['id'])->toBe(42);
 });

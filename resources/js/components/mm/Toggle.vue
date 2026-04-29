@@ -24,8 +24,8 @@ const labelText = computed(
 
 function toggle() {
     if (props.disabled) {
-return;
-}
+        return;
+    }
 
     emit('update:modelValue', !props.modelValue);
 }

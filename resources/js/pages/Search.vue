@@ -142,8 +142,8 @@ function submitSearch() {
 
 function setScope(next: Scope) {
     if (scope.value === next) {
-return;
-}
+        return;
+    }
 
     scope.value = next;
 
@@ -161,16 +161,16 @@ function clearQuery() {
 
 function sonarrSeriesUrl(slug: string | null): string | null {
     if (!slug || !props.connections.sonarr) {
-return null;
-}
+        return null;
+    }
 
     return `${props.connections.sonarr.url}/series/${slug}`;
 }
 
 function radarrMovieUrl(slug: string | null): string | null {
     if (!slug || !props.connections.radarr) {
-return null;
-}
+        return null;
+    }
 
     return `${props.connections.radarr.url}/movie/${slug}`;
 }
@@ -180,9 +180,7 @@ const libraryCount = computed(
         (props.seriesResults?.results.length ?? 0) +
         (props.movieResults?.results.length ?? 0),
 );
-const requestCount = computed(
-    () => props.requestResults?.results.length ?? 0,
-);
+const requestCount = computed(() => props.requestResults?.results.length ?? 0);
 
 const showLibrary = computed(
     () => scope.value === 'all' || scope.value === 'library',
@@ -194,12 +192,12 @@ const showIndexers = computed(() => scope.value === 'indexers');
 
 function formatSize(bytes: number | null): string {
     if (bytes === null || bytes === undefined) {
-return '—';
-}
+        return '—';
+    }
 
     if (bytes === 0) {
-return '0 B';
-}
+        return '0 B';
+    }
 
     const units = ['B', 'KB', 'MB', 'GB', 'TB'];
     const i = Math.floor(Math.log(bytes) / Math.log(1024));
@@ -225,11 +223,7 @@ const seerrStatusKey = (status: number | null): string => {
     }
 };
 
-const SUGGESTED = [
-    'Trending today',
-    'On your watchlist',
-    'Indexer health',
-];
+const SUGGESTED = ['Trending today', 'On your watchlist', 'Indexer health'];
 const RECENT = [
     'severance s2',
     'dune part two',
@@ -309,7 +303,9 @@ const RECENT = [
 
         <!-- Empty state -->
         <div v-if="!query" class="grid gap-4 lg:grid-cols-2">
-            <div class="overflow-hidden rounded-xl border border-border bg-card">
+            <div
+                class="overflow-hidden rounded-xl border border-border bg-card"
+            >
                 <div
                     class="border-b border-border px-4 py-3 text-[12px] font-semibold tracking-[0.06em] text-muted-foreground uppercase"
                 >
@@ -331,7 +327,9 @@ const RECENT = [
                     </button>
                 </div>
             </div>
-            <div class="overflow-hidden rounded-xl border border-border bg-card">
+            <div
+                class="overflow-hidden rounded-xl border border-border bg-card"
+            >
                 <div
                     class="border-b border-border px-4 py-3 text-[12px] font-semibold tracking-[0.06em] text-muted-foreground uppercase"
                 >
@@ -389,7 +387,12 @@ const RECENT = [
             <div
                 v-if="!props.seriesResults || !props.movieResults"
                 class="grid gap-4 p-4"
-                style="grid-template-columns: repeat(auto-fill, minmax(150px, 1fr))"
+                style="
+                    grid-template-columns: repeat(
+                        auto-fill,
+                        minmax(150px, 1fr)
+                    );
+                "
             >
                 <Skeleton
                     v-for="i in 6"
@@ -406,7 +409,12 @@ const RECENT = [
             <div
                 v-else
                 class="grid gap-4 p-4"
-                style="grid-template-columns: repeat(auto-fill, minmax(150px, 1fr))"
+                style="
+                    grid-template-columns: repeat(
+                        auto-fill,
+                        minmax(150px, 1fr)
+                    );
+                "
             >
                 <div
                     v-for="(series, index) in props.seriesResults.results"
@@ -415,7 +423,11 @@ const RECENT = [
                 >
                     <div class="relative">
                         <Poster
-                            :hint="(series.title ?? 'tv').toLowerCase().slice(0, 12)"
+                            :hint="
+                                (series.title ?? 'tv')
+                                    .toLowerCase()
+                                    .slice(0, 12)
+                            "
                             size="full"
                         />
                         <Pill
@@ -452,7 +464,11 @@ const RECENT = [
                 >
                     <div class="relative">
                         <Poster
-                            :hint="(movie.title ?? 'film').toLowerCase().slice(0, 12)"
+                            :hint="
+                                (movie.title ?? 'film')
+                                    .toLowerCase()
+                                    .slice(0, 12)
+                            "
                             size="full"
                         />
                         <Pill
@@ -535,7 +551,11 @@ const RECENT = [
                     ]"
                 >
                     <Poster
-                        :hint="(request.title ?? 'media').toLowerCase().slice(0, 12)"
+                        :hint="
+                            (request.title ?? 'media')
+                                .toLowerCase()
+                                .slice(0, 12)
+                        "
                         size="sm"
                     />
                     <div class="min-w-0 flex-1">
@@ -578,9 +598,7 @@ const RECENT = [
             <Alert v-if="indexerResults?.error" variant="destructive">
                 <AlertCircle class="size-4" />
                 <AlertTitle>Prowlarr unavailable</AlertTitle>
-                <AlertDescription>{{
-                    indexerResults.error
-                }}</AlertDescription>
+                <AlertDescription>{{ indexerResults.error }}</AlertDescription>
             </Alert>
 
             <div v-if="!indexerResults" class="space-y-2 p-4">
@@ -646,9 +664,7 @@ const RECENT = [
                         >
                             {{ hit.category ?? '—' }}
                         </td>
-                        <td
-                            class="font-mono-tabular px-3 py-2.5 text-[12px]"
-                        >
+                        <td class="font-mono-tabular px-3 py-2.5 text-[12px]">
                             {{ formatSize(hit.size_bytes) }}
                         </td>
                         <td class="font-mono-tabular px-3 py-2.5 text-[12px]">

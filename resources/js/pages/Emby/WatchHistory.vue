@@ -54,8 +54,8 @@ const isViewer = computed(() => {
     const role = page.props.auth.user?.role;
 
     if (!role) {
-return false;
-}
+        return false;
+    }
 
     const value = typeof role === 'string' ? role : role.value;
 
@@ -106,49 +106,49 @@ function refresh(): void {
 
 function formatTime(iso: string | null): string {
     if (!iso) {
-return '—';
-}
+        return '—';
+    }
 
     const ms = Date.now() - new Date(iso).getTime();
     const m = Math.floor(ms / 60_000);
 
     if (m < 1) {
-return 'just now';
-}
+        return 'just now';
+    }
 
     if (m < 60) {
-return `${m}m ago`;
-}
+        return `${m}m ago`;
+    }
 
     const h = Math.floor(m / 60);
 
     if (h < 24) {
-return `${h}h ago`;
-}
+        return `${h}h ago`;
+    }
 
     return `${Math.floor(h / 24)}d ago`;
 }
 
 function ticksToHours(ticks: number | null): number {
     if (!ticks) {
-return 0;
-}
+        return 0;
+    }
 
     return ticks / 10_000_000 / 3600;
 }
 
 function ticksToText(ticks: number | null): string {
     if (!ticks) {
-return '0m';
-}
+        return '0m';
+    }
 
     const total = Math.floor(ticks / 10_000_000);
     const h = Math.floor(total / 3600);
     const m = Math.floor((total % 3600) / 60);
 
     if (h > 0) {
-return `${h}h ${m}m`;
-}
+        return `${h}h ${m}m`;
+    }
 
     return `${m}m`;
 }
@@ -158,8 +158,8 @@ function completionPct(activity: Activity): number {
     const dur = activity.duration_ticks ?? 0;
 
     if (!dur) {
-return 0;
-}
+        return 0;
+    }
 
     return Math.min(100, (pos / dur) * 100);
 }
@@ -175,14 +175,15 @@ const totals = computed(() => {
         totalTicks += dur;
 
         if (completionPct(a) >= 90) {
-completed++;
-}
+            completed++;
+        }
 
         const u = a.emby_username ?? 'unknown';
         userTicks.set(u, (userTicks.get(u) ?? 0) + dur);
     }
 
-    let topUser: { name: string; ticks: number; sessions: number } | null = null;
+    let topUser: { name: string; ticks: number; sessions: number } | null =
+        null;
 
     for (const [name, ticks] of userTicks) {
         if (!topUser || ticks > topUser.ticks) {
@@ -216,8 +217,8 @@ function onMediaTypeChange(value: unknown) {
 
 function goToPage(url: string | null) {
     if (!url) {
-return;
-}
+        return;
+    }
 
     router.get(url, {}, { preserveState: true, preserveScroll: true });
 }
@@ -356,7 +357,7 @@ function currentFilter(): string {
                         class="border-b border-border last:border-b-0 hover:bg-bg-hover"
                     >
                         <td
-                            class="font-mono-tabular px-3 py-2.5 text-[11.5px] text-fg-subtle whitespace-nowrap"
+                            class="font-mono-tabular px-3 py-2.5 text-[11.5px] whitespace-nowrap text-fg-subtle"
                         >
                             {{ formatTime(activity.created_at) }}
                         </td>
@@ -366,9 +367,7 @@ function currentFilter(): string {
                                     :name="activity.emby_username ?? '?'"
                                     :size="20"
                                 />
-                                <span>{{
-                                    activity.emby_username ?? '—'
-                                }}</span>
+                                <span>{{ activity.emby_username ?? '—' }}</span>
                             </span>
                         </td>
                         <td class="px-3 py-2.5">
@@ -404,7 +403,9 @@ function currentFilter(): string {
                                 </div>
                                 <span
                                     class="font-mono-tabular w-10 text-[11.5px]"
-                                    >{{ Math.round(completionPct(activity)) }}%</span
+                                    >{{
+                                        Math.round(completionPct(activity))
+                                    }}%</span
                                 >
                             </div>
                         </td>
@@ -438,9 +439,7 @@ function currentFilter(): string {
                 variant="outline"
                 size="sm"
                 :disabled="!link.url"
-                :class="
-                    link.active ? 'bg-accent text-accent-foreground' : ''
-                "
+                :class="link.active ? 'bg-accent text-accent-foreground' : ''"
                 @click="goToPage(link.url)"
             >
                 <span v-html="link.label" />

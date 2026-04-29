@@ -16,7 +16,7 @@ test('queues a delete_series ActionRequest with the right payload', function ():
         'requires_approval' => true,
     ]);
 
-    $result = json_decode((string) (new DeleteSeriesTool)->handle(new Request([
+    $result = json_decode((new DeleteSeriesTool)->handle(new Request([
         'series_id' => 42,
         'delete_files' => true,
     ])), true);
@@ -31,7 +31,7 @@ test('queues a delete_series ActionRequest with the right payload', function ():
 });
 
 test('reports no_action_type_config when delete_series rule is missing', function (): void {
-    $result = json_decode((string) (new DeleteSeriesTool)->handle(new Request([
+    $result = json_decode((new DeleteSeriesTool)->handle(new Request([
         'series_id' => 42,
         'delete_files' => true,
     ])), true);

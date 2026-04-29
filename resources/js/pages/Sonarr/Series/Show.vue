@@ -1,19 +1,18 @@
 <script setup lang="ts">
 import { Head, Link, router, WhenVisible } from '@inertiajs/vue3';
 import {
-    Calendar,
-    HardDrive,
     Activity,
-    Trash2,
-    ChevronRight,
     ArrowLeft,
+    Calendar,
+    ChevronRight,
     ExternalLink,
+    HardDrive,
+    Trash2,
 } from 'lucide-vue-next';
 import { ref } from 'vue';
 import SeriesController from '@/actions/App/Http/Controllers/Media/SeriesController';
-import { Badge } from '@/components/ui/badge';
+import { Pill, Poster, StatusPill } from '@/components/mm';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Checkbox } from '@/components/ui/checkbox';
 import {
     Collapsible,
@@ -171,12 +170,12 @@ function sonarrSeriesUrl(): string | null {
 <template>
     <Head :title="series.title" />
 
-    <div class="space-y-6 p-6">
+    <div class="flex flex-col gap-6 p-5">
         <div class="flex items-center justify-between">
             <Link :href="SeriesController.index.url()">
-                <Button variant="ghost" size="sm">
-                    <ArrowLeft class="mr-2 size-4" />
-                    Back to Series
+                <Button variant="ghost" size="sm" class="h-8 text-xs">
+                    <ArrowLeft class="size-3.5" />
+                    Back to series
                 </Button>
             </Link>
             <div class="flex items-center gap-2">
@@ -186,26 +185,30 @@ function sonarrSeriesUrl(): string | null {
                     target="_blank"
                     rel="noopener noreferrer"
                 >
-                    <Button variant="outline" size="sm">
-                        <ExternalLink class="mr-2 size-4" />
+                    <Button variant="outline" size="sm" class="h-8 text-xs">
+                        <ExternalLink class="size-3.5" />
                         Open in Sonarr
                     </Button>
                 </a>
                 <Dialog v-model:open="deleteDialogOpen">
                     <DialogTrigger as-child>
-                        <Button variant="destructive" size="sm">
-                            <Trash2 class="mr-2 size-4" />
+                        <Button
+                            variant="destructive"
+                            size="sm"
+                            class="h-8 text-xs"
+                        >
+                            <Trash2 class="size-3.5" />
                             Delete
                         </Button>
                     </DialogTrigger>
                     <DialogContent>
                         <DialogHeader>
-                            <DialogTitle
-                                >Delete {{ series.title }}?</DialogTitle
-                            >
+                            <DialogTitle>
+                                Delete {{ series.title }}?
+                            </DialogTitle>
                             <DialogDescription>
-                                This will remove the series from Sonarr. This
-                                action cannot be undone.
+                                Removes the series from Sonarr. Cannot be
+                                undone.
                             </DialogDescription>
                         </DialogHeader>
                         <div class="flex items-center gap-2 py-2">
@@ -218,233 +221,283 @@ function sonarrSeriesUrl(): string | null {
                             <Button
                                 variant="outline"
                                 @click="deleteDialogOpen = false"
-                                >Cancel</Button
                             >
-                            <Button variant="destructive" @click="confirmDelete"
-                                >Delete</Button
+                                Cancel
+                            </Button>
+                            <Button
+                                variant="destructive"
+                                @click="confirmDelete"
                             >
+                                Delete
+                            </Button>
                         </DialogFooter>
                     </DialogContent>
                 </Dialog>
             </div>
         </div>
 
-        <div class="flex flex-col gap-6 md:flex-row">
-            <div class="shrink-0">
-                <img
-                    v-if="posterUrl()"
-                    :src="posterUrl() ?? ''"
-                    :alt="series.title"
-                    class="w-[200px] rounded-md border bg-muted object-cover shadow"
-                />
-                <div
-                    v-else
-                    class="flex h-[300px] w-[200px] items-center justify-center rounded-md border bg-muted text-muted-foreground"
-                >
-                    No poster
-                </div>
-            </div>
-
-            <div class="flex-1 space-y-4">
-                <div>
-                    <h1 class="text-3xl font-bold tracking-tight">
-                        {{ series.title }}
-                        <span
-                            v-if="series.year"
-                            class="font-normal text-muted-foreground"
-                            >({{ series.year }})</span
-                        >
-                    </h1>
-                    <div class="mt-2 flex flex-wrap gap-2">
-                        <Badge v-if="series.status" variant="default">{{
-                            series.status
-                        }}</Badge>
-                        <Badge
-                            :variant="
-                                series.monitored ? 'default' : 'secondary'
-                            "
-                        >
-                            {{ series.monitored ? 'Monitored' : 'Unmonitored' }}
-                        </Badge>
-                        <Badge v-if="series.network" variant="outline">{{
-                            series.network
-                        }}</Badge>
-                    </div>
+        <div class="rounded-xl border border-border bg-card p-6">
+            <div class="flex flex-col gap-6 md:flex-row">
+                <div class="shrink-0">
+                    <img
+                        v-if="posterUrl()"
+                        :src="posterUrl() ?? ''"
+                        :alt="series.title"
+                        class="w-[180px] rounded-md border border-border bg-muted object-cover"
+                    />
+                    <Poster v-else :hint="series.title" size="lg" />
                 </div>
 
-                <p v-if="series.overview" class="text-muted-foreground">
-                    {{ series.overview }}
-                </p>
-
-                <div class="grid grid-cols-2 gap-4 md:grid-cols-4">
+                <div class="flex-1 space-y-4">
                     <div>
-                        <p class="text-xs text-muted-foreground">Network</p>
-                        <p class="font-medium">{{ series.network ?? '-' }}</p>
-                    </div>
-                    <div>
-                        <p class="text-xs text-muted-foreground">Runtime</p>
-                        <p class="font-medium">
-                            {{ series.runtime ? `${series.runtime} min` : '-' }}
-                        </p>
-                    </div>
-                    <div>
-                        <p class="text-xs text-muted-foreground">Root Folder</p>
-                        <p
-                            class="truncate font-medium"
-                            :title="series.root_folder_path ?? ''"
+                        <h1
+                            class="text-[22px] leading-tight font-semibold tracking-tight"
                         >
-                            {{ series.root_folder_path ?? '-' }}
-                        </p>
+                            {{ series.title }}
+                            <span
+                                v-if="series.year"
+                                class="font-mono-tabular text-[15px] font-normal text-muted-foreground"
+                            >
+                                ({{ series.year }})
+                            </span>
+                        </h1>
+                        <div class="mt-2 flex flex-wrap items-center gap-1.5">
+                            <StatusPill
+                                v-if="series.status"
+                                :status="series.status"
+                            />
+                            <Pill
+                                :variant="series.monitored ? 'ok' : 'default'"
+                                :dot="series.monitored"
+                            >
+                                {{
+                                    series.monitored
+                                        ? 'Monitored'
+                                        : 'Unmonitored'
+                                }}
+                            </Pill>
+                            <Pill v-if="series.network">{{
+                                series.network
+                            }}</Pill>
+                        </div>
                     </div>
-                    <div>
-                        <p class="text-xs text-muted-foreground">
-                            Quality Profile
-                        </p>
-                        <p class="font-medium">{{ qualityName() }}</p>
-                    </div>
-                    <div>
-                        <p class="text-xs text-muted-foreground">Files</p>
-                        <p class="font-medium">
-                            {{ series.episode_file_count }} /
-                            {{ series.episode_count }}
-                        </p>
-                    </div>
-                    <div>
-                        <p class="text-xs text-muted-foreground">
-                            Size on Disk
-                        </p>
-                        <p class="font-medium">
-                            {{ formatSize(series.size_on_disk) }}
-                        </p>
-                    </div>
-                    <div>
-                        <p class="text-xs text-muted-foreground">Seasons</p>
-                        <p class="font-medium">{{ series.season_count }}</p>
+
+                    <p
+                        v-if="series.overview"
+                        class="max-w-[640px] text-[13px] leading-relaxed text-muted-foreground"
+                    >
+                        {{ series.overview }}
+                    </p>
+
+                    <div
+                        class="grid grid-cols-2 gap-x-6 gap-y-3 md:grid-cols-4"
+                    >
+                        <div>
+                            <div
+                                class="text-[11.5px] font-semibold tracking-[0.05em] text-muted-foreground uppercase"
+                            >
+                                Network
+                            </div>
+                            <div class="mt-0.5 text-[13px]">
+                                {{ series.network ?? '-' }}
+                            </div>
+                        </div>
+                        <div>
+                            <div
+                                class="text-[11.5px] font-semibold tracking-[0.05em] text-muted-foreground uppercase"
+                            >
+                                Runtime
+                            </div>
+                            <div class="font-mono-tabular mt-0.5 text-[13px]">
+                                {{
+                                    series.runtime
+                                        ? `${series.runtime} min`
+                                        : '-'
+                                }}
+                            </div>
+                        </div>
+                        <div>
+                            <div
+                                class="text-[11.5px] font-semibold tracking-[0.05em] text-muted-foreground uppercase"
+                            >
+                                Quality profile
+                            </div>
+                            <div class="mt-0.5 text-[13px]">
+                                {{ qualityName() }}
+                            </div>
+                        </div>
+                        <div>
+                            <div
+                                class="text-[11.5px] font-semibold tracking-[0.05em] text-muted-foreground uppercase"
+                            >
+                                Seasons
+                            </div>
+                            <div class="font-mono-tabular mt-0.5 text-[13px]">
+                                {{ series.season_count }}
+                            </div>
+                        </div>
+                        <div>
+                            <div
+                                class="text-[11.5px] font-semibold tracking-[0.05em] text-muted-foreground uppercase"
+                            >
+                                Files
+                            </div>
+                            <div class="font-mono-tabular mt-0.5 text-[13px]">
+                                {{ series.episode_file_count }} /
+                                {{ series.episode_count }}
+                            </div>
+                        </div>
+                        <div>
+                            <div
+                                class="text-[11.5px] font-semibold tracking-[0.05em] text-muted-foreground uppercase"
+                            >
+                                Size on disk
+                            </div>
+                            <div class="font-mono-tabular mt-0.5 text-[13px]">
+                                {{ formatSize(series.size_on_disk) }}
+                            </div>
+                        </div>
+                        <div class="md:col-span-2">
+                            <div
+                                class="text-[11.5px] font-semibold tracking-[0.05em] text-muted-foreground uppercase"
+                            >
+                                Root folder
+                            </div>
+                            <div
+                                class="font-mono-tabular mt-0.5 truncate text-[13px]"
+                                :title="series.root_folder_path ?? ''"
+                            >
+                                {{ series.root_folder_path ?? '-' }}
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>
         </div>
 
         <div class="space-y-3">
-            <h2 class="text-xl font-semibold tracking-tight">Seasons</h2>
+            <h2 class="text-[18px] leading-tight font-semibold tracking-tight">
+                Seasons
+            </h2>
 
             <WhenVisible data="episodes">
                 <template #fallback>
-                    <Card
+                    <div
                         v-for="season in series.seasons"
                         :key="`skeleton-${season.season_number}`"
+                        class="flex items-center justify-between rounded-xl border border-border bg-card px-4 py-3"
                     >
-                        <CardHeader>
-                            <div class="flex items-center justify-between">
-                                <div class="flex items-center gap-3">
-                                    <ChevronRight class="size-4" />
-                                    <CardTitle class="text-base">
-                                        {{
-                                            season.season_number === 0
-                                                ? 'Specials'
-                                                : `Season ${season.season_number}`
-                                        }}
-                                    </CardTitle>
-                                    <Skeleton class="h-5 w-20 rounded-full" />
-                                </div>
-                                <Skeleton class="h-4 w-32" />
-                            </div>
-                        </CardHeader>
-                    </Card>
+                        <div class="flex items-center gap-3">
+                            <ChevronRight
+                                class="size-4 text-muted-foreground"
+                            />
+                            <span class="text-[14px] font-semibold">
+                                {{
+                                    season.season_number === 0
+                                        ? 'Specials'
+                                        : `Season ${season.season_number}`
+                                }}
+                            </span>
+                            <Skeleton class="h-4 w-16 rounded-full" />
+                        </div>
+                        <Skeleton class="h-4 w-32" />
+                    </div>
                     <p
                         v-if="series.seasons.length === 0"
-                        class="text-muted-foreground"
+                        class="text-[13px] text-muted-foreground"
                     >
                         No seasons available.
                     </p>
                 </template>
 
-                <Card
+                <div
                     v-for="season in series.seasons"
                     :key="season.season_number"
+                    class="overflow-hidden rounded-xl border border-border bg-card"
                 >
                     <Collapsible
                         :open="openSeasons[season.season_number] ?? false"
                     >
                         <CollapsibleTrigger as-child>
-                            <CardHeader
-                                class="cursor-pointer hover:bg-muted/50"
+                            <button
+                                type="button"
+                                class="flex w-full cursor-pointer items-center justify-between gap-4 px-4 py-3 text-left transition-colors hover:bg-bg-hover"
                                 @click="toggleSeason(season.season_number)"
                             >
-                                <div class="flex items-center justify-between">
-                                    <div class="flex items-center gap-3">
-                                        <ChevronRight
-                                            class="size-4 transition-transform"
-                                            :class="
-                                                openSeasons[
-                                                    season.season_number
-                                                ]
-                                                    ? 'rotate-90'
-                                                    : ''
-                                            "
-                                        />
-                                        <CardTitle class="text-base">
-                                            {{
-                                                season.season_number === 0
-                                                    ? 'Specials'
-                                                    : `Season ${season.season_number}`
-                                            }}
-                                        </CardTitle>
-                                        <Badge
-                                            :variant="
-                                                season.monitored
-                                                    ? 'default'
-                                                    : 'secondary'
-                                            "
-                                        >
-                                            {{
-                                                season.monitored
-                                                    ? 'Monitored'
-                                                    : 'Unmonitored'
-                                            }}
-                                        </Badge>
-                                    </div>
-                                    <div
-                                        class="flex items-center gap-4 text-sm text-muted-foreground"
+                                <div class="flex items-center gap-3">
+                                    <ChevronRight
+                                        class="size-4 text-muted-foreground transition-transform"
+                                        :class="
+                                            openSeasons[season.season_number]
+                                                ? 'rotate-90'
+                                                : ''
+                                        "
+                                    />
+                                    <span class="text-[14px] font-semibold">
+                                        {{
+                                            season.season_number === 0
+                                                ? 'Specials'
+                                                : `Season ${season.season_number}`
+                                        }}
+                                    </span>
+                                    <Pill
+                                        :variant="
+                                            season.monitored ? 'ok' : 'default'
+                                        "
+                                        :dot="season.monitored"
                                     >
-                                        <span class="flex items-center gap-1">
-                                            <Activity class="size-4" />
+                                        {{
+                                            season.monitored
+                                                ? 'Monitored'
+                                                : 'Unmonitored'
+                                        }}
+                                    </Pill>
+                                </div>
+                                <div
+                                    class="flex items-center gap-4 text-[12px] text-muted-foreground"
+                                >
+                                    <span class="flex items-center gap-1.5">
+                                        <Activity class="size-3.5" />
+                                        <span class="font-mono-tabular">
                                             {{ season.episode_file_count }} /
                                             {{ season.episode_count }}
                                         </span>
-                                        <span class="flex items-center gap-1">
-                                            <HardDrive class="size-4" />
+                                    </span>
+                                    <span class="flex items-center gap-1.5">
+                                        <HardDrive class="size-3.5" />
+                                        <span class="font-mono-tabular">
                                             {{
                                                 formatSize(season.size_on_disk)
                                             }}
                                         </span>
-                                    </div>
+                                    </span>
                                 </div>
-                            </CardHeader>
+                            </button>
                         </CollapsibleTrigger>
                         <CollapsibleContent>
-                            <CardContent>
+                            <div class="border-t border-border px-4 py-3">
                                 <div class="space-y-2">
                                     <div
                                         v-for="episode in episodesForSeason(
                                             season.season_number,
                                         )"
                                         :key="`${episode.season_number}-${episode.episode_number}`"
-                                        class="flex items-center justify-between rounded-md border p-3"
+                                        class="flex items-center justify-between gap-4 rounded-md border border-border bg-bg-hover/30 px-3 py-2"
                                     >
                                         <div class="min-w-0 flex-1">
-                                            <p class="font-medium">
+                                            <p class="text-[13px] font-medium">
                                                 <span
-                                                    class="text-muted-foreground"
-                                                    >{{
-                                                        episode.episode_number
-                                                    }}.</span
+                                                    class="font-mono-tabular text-muted-foreground"
                                                 >
+                                                    {{
+                                                        episode.episode_number
+                                                    }}.
+                                                </span>
                                                 {{ episode.title ?? 'TBA' }}
                                             </p>
                                             <p
                                                 v-if="episode.overview"
-                                                class="truncate text-sm text-muted-foreground"
+                                                class="truncate text-[12px] text-muted-foreground"
                                             >
                                                 {{ episode.overview }}
                                             </p>
@@ -452,16 +505,16 @@ function sonarrSeriesUrl(): string | null {
                                         <div class="flex items-center gap-3">
                                             <span
                                                 v-if="episode.air_date"
-                                                class="flex items-center gap-1 text-sm text-muted-foreground"
+                                                class="font-mono-tabular flex items-center gap-1.5 text-[12px] text-muted-foreground"
                                             >
-                                                <Calendar class="size-4" />
+                                                <Calendar class="size-3.5" />
                                                 {{ episode.air_date }}
                                             </span>
-                                            <Badge
+                                            <Pill
                                                 :variant="
                                                     episode.has_file
-                                                        ? 'default'
-                                                        : 'outline'
+                                                        ? 'ok'
+                                                        : 'warn'
                                                 "
                                             >
                                                 {{
@@ -469,7 +522,7 @@ function sonarrSeriesUrl(): string | null {
                                                         ? 'Downloaded'
                                                         : 'Missing'
                                                 }}
-                                            </Badge>
+                                            </Pill>
                                         </div>
                                     </div>
                                     <p
@@ -478,19 +531,19 @@ function sonarrSeriesUrl(): string | null {
                                                 season.season_number,
                                             ).length === 0
                                         "
-                                        class="py-4 text-center text-sm text-muted-foreground"
+                                        class="py-3 text-center text-[12px] text-muted-foreground"
                                     >
                                         No episodes available.
                                     </p>
                                 </div>
-                            </CardContent>
+                            </div>
                         </CollapsibleContent>
                     </Collapsible>
-                </Card>
+                </div>
 
                 <p
                     v-if="series.seasons.length === 0"
-                    class="text-muted-foreground"
+                    class="text-[13px] text-muted-foreground"
                 >
                     No seasons available.
                 </p>

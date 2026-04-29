@@ -26,7 +26,7 @@ test('SearchIndexersTool returns release rows for the given query', function ():
         ]),
     ]);
 
-    $result = json_decode((string) (new SearchIndexersTool)->handle(new Request(['query' => 'Demo'])), true);
+    $result = json_decode((new SearchIndexersTool)->handle(new Request(['query' => 'Demo'])), true);
 
     expect($result)->toHaveCount(2);
     expect($result[0]['title'])->toBe('Demo.S01E01.1080p');
@@ -35,7 +35,7 @@ test('SearchIndexersTool returns release rows for the given query', function ():
 test('SearchIndexersTool returns tool_failed when no Prowlarr connection is configured', function (): void {
     $this->connection->delete();
 
-    $result = json_decode((string) (new SearchIndexersTool)->handle(new Request(['query' => 'Demo'])), true);
+    $result = json_decode((new SearchIndexersTool)->handle(new Request(['query' => 'Demo'])), true);
 
     expect($result['error'])->toBe('tool_failed');
 });
@@ -52,7 +52,7 @@ test('ListIndexersTool returns the configured indexers list', function (): void 
         ]),
     ]);
 
-    $result = json_decode((string) (new ListIndexersTool)->handle(new Request([])), true);
+    $result = json_decode((new ListIndexersTool)->handle(new Request([])), true);
 
     expect($result)->toHaveCount(2);
     expect($result[0]['name'])->toBe('Indexer One');

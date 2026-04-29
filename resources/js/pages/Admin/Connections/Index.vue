@@ -120,16 +120,16 @@ function svcId(type: Connection['type']): string {
     const t = String(type).toLowerCase();
 
     if (t.includes('jellyseerr') || t.includes('seerr')) {
-return 'seerr';
-}
+        return 'seerr';
+    }
 
     return t;
 }
 
 function statusKey(connection: Connection): string {
     if (!connection.is_active) {
-return 'inactive';
-}
+        return 'inactive';
+    }
 
     return connection.health_status ?? 'unknown';
 }
@@ -162,14 +162,6 @@ function checkVersion(connection: Connection) {
         preserveScroll: true,
     });
 }
-
-function shortToken(token: string | null | undefined): string {
-    if (!token) {
-return '—';
-}
-
-    return `••••••••${token.slice(-4)}`;
-}
 </script>
 
 <template>
@@ -189,9 +181,7 @@ return '—';
                 >
                     Service connections
                 </h1>
-                <p
-                    class="mt-1 max-w-[640px] text-[13px] text-muted-foreground"
-                >
+                <p class="mt-1 max-w-[640px] text-[13px] text-muted-foreground">
                     One row per upstream service. Webhook URLs and tokens are
                     auto-generated; rotate by clearing the field on edit.
                 </p>
@@ -214,7 +204,7 @@ return '—';
                                 'URL',
                                 'Health',
                                 'Last seen',
-                                'Token',
+                                'API key',
                                 '',
                             ]"
                             :key="h"
@@ -265,10 +255,14 @@ return '—';
                             {{ connection.last_seen_human ?? 'never' }}
                         </td>
                         <td class="px-3 py-2.5">
-                            <span
-                                class="font-mono-tabular rounded border border-border bg-bg-elev px-2 py-0.5 text-[11px]"
-                                >{{ shortToken(connection.api_key) }}</span
+                            <Pill
+                                :variant="
+                                    connection.api_key_set ? 'ok' : 'warn'
+                                "
+                                :dot="connection.api_key_set"
                             >
+                                {{ connection.api_key_set ? 'Set' : 'Missing' }}
+                            </Pill>
                         </td>
                         <td class="px-3 py-2.5 text-right">
                             <div class="inline-flex items-center gap-1">
@@ -327,7 +321,9 @@ return '—';
                                         </DropdownMenuItem>
                                         <DropdownMenuSeparator />
                                         <DropdownMenuItem
-                                            @click="toggleConnection(connection)"
+                                            @click="
+                                                toggleConnection(connection)
+                                            "
                                         >
                                             <Power class="mr-2 size-4" />
                                             {{

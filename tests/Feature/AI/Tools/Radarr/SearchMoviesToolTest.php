@@ -24,7 +24,7 @@ test('searches Radarr movies catalog by query', function (): void {
         ]),
     ]);
 
-    $result = json_decode((string) (new SearchMoviesTool)->handle(new Request(['query' => 'Inception'])), true);
+    $result = json_decode((new SearchMoviesTool)->handle(new Request(['query' => 'Inception'])), true);
 
     expect($result)->toHaveCount(1);
     expect($result[0]['title'])->toBe('Inception');
@@ -33,7 +33,7 @@ test('searches Radarr movies catalog by query', function (): void {
 test('returns tool_failed when no Radarr connection is configured', function (): void {
     $this->connection->delete();
 
-    $result = json_decode((string) (new SearchMoviesTool)->handle(new Request(['query' => 'Inception'])), true);
+    $result = json_decode((new SearchMoviesTool)->handle(new Request(['query' => 'Inception'])), true);
 
     expect($result['error'])->toBe('tool_failed');
 });

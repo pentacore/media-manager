@@ -16,7 +16,7 @@ test('queues a delete_movie ActionRequest with the right payload', function (): 
         'requires_approval' => true,
     ]);
 
-    $result = json_decode((string) (new DeleteMovieTool)->handle(new Request([
+    $result = json_decode((new DeleteMovieTool)->handle(new Request([
         'movie_id' => 42,
         'delete_files' => true,
     ])), true);
@@ -31,7 +31,7 @@ test('queues a delete_movie ActionRequest with the right payload', function (): 
 });
 
 test('reports no_action_type_config when delete_movie rule is missing', function (): void {
-    $result = json_decode((string) (new DeleteMovieTool)->handle(new Request([
+    $result = json_decode((new DeleteMovieTool)->handle(new Request([
         'movie_id' => 42,
         'delete_files' => true,
     ])), true);

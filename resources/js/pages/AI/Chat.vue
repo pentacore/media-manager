@@ -71,8 +71,8 @@ async function sendMessage(continuationPayload?: {
         const text = input.value.trim();
 
         if (!text || sending.value) {
-return;
-}
+            return;
+        }
 
         bodyMessage = text;
         messages.value.push({ role: 'user', text, ts: Date.now() });
@@ -146,8 +146,8 @@ return;
 
 function approveWorkflow(message: ChatMessage): void {
     if (!message.workflow || message.workflowResolved) {
-return;
-}
+        return;
+    }
 
     message.workflowResolved = 'approved';
     sendMessage({
@@ -159,8 +159,8 @@ return;
 
 function declineWorkflow(message: ChatMessage): void {
     if (!message.workflow || message.workflowResolved) {
-return;
-}
+        return;
+    }
 
     message.workflowResolved = 'declined';
     sendMessage({
@@ -193,9 +193,7 @@ function onKey(event: KeyboardEvent) {
         style="grid-template-columns: 1fr 280px"
     >
         <!-- Main chat -->
-        <div
-            class="flex min-h-0 flex-col border-r border-border"
-        >
+        <div class="flex min-h-0 flex-col border-r border-border">
             <!-- Header -->
             <div
                 class="flex items-center justify-between border-b border-border px-6 py-3.5"
@@ -215,7 +213,7 @@ function onKey(event: KeyboardEvent) {
                         class="flex items-center gap-0.5 rounded-md border border-border bg-bg-elev p-0.5"
                     >
                         <button
-                            v-for="m in (['advisory', 'executive'] as const)"
+                            v-for="m in ['advisory', 'executive'] as const"
                             :key="m"
                             type="button"
                             :class="
@@ -269,9 +267,7 @@ function onKey(event: KeyboardEvent) {
                     </span>
 
                     <div class="min-w-0 flex-1">
-                        <div
-                            class="mb-1 text-[11.5px] text-muted-foreground"
-                        >
+                        <div class="mb-1 text-[11.5px] text-muted-foreground">
                             {{ m.role === 'user' ? 'You' : 'MediaAgent' }}
                         </div>
                         <div
@@ -297,9 +293,7 @@ function onKey(event: KeyboardEvent) {
                                         "
                                         class="text-[10px]"
                                     >
-                                        {{
-                                            m.workflowResolved ?? 'awaiting'
-                                        }}
+                                        {{ m.workflowResolved ?? 'awaiting' }}
                                     </Pill>
                                 </span>
                             </div>
@@ -371,9 +365,7 @@ function onKey(event: KeyboardEvent) {
             </div>
 
             <!-- Composer -->
-            <div
-                class="border-t border-border bg-bg-elev p-5"
-            >
+            <div class="border-t border-border bg-bg-elev p-5">
                 <div
                     v-if="error"
                     class="mb-2 rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive"
@@ -434,9 +426,7 @@ function onKey(event: KeyboardEvent) {
         </div>
 
         <!-- Sidebar -->
-        <aside
-            class="flex min-h-0 flex-col gap-4 overflow-y-auto p-5"
-        >
+        <aside class="flex min-h-0 flex-col gap-4 overflow-y-auto p-5">
             <div>
                 <div
                     class="mb-2 text-[11.5px] font-semibold tracking-[0.05em] text-muted-foreground uppercase"

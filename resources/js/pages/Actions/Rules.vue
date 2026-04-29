@@ -63,9 +63,7 @@ function setApproval(rule: RuleRow, value: boolean) {
             <div class="mb-1.5 text-[13px] text-muted-foreground">
                 Actions <span class="text-fg-subtle">/</span> Approval rules
             </div>
-            <h1
-                class="text-[22px] leading-tight font-semibold tracking-tight"
-            >
+            <h1 class="text-[22px] leading-tight font-semibold tracking-tight">
                 Approval rules
             </h1>
             <p class="mt-1 max-w-[640px] text-[13px] text-muted-foreground">
@@ -115,9 +113,7 @@ function setApproval(rule: RuleRow, value: boolean) {
                             >
                                 {{ rule.type }}
                             </div>
-                            <div
-                                class="mt-0.5 text-[11.5px] text-fg-subtle"
-                            >
+                            <div class="mt-0.5 text-[11.5px] text-fg-subtle">
                                 {{ rule.label }}
                             </div>
                         </td>
@@ -128,18 +124,14 @@ function setApproval(rule: RuleRow, value: boolean) {
                             <Toggle
                                 :model-value="rule.is_enabled"
                                 :label="rule.is_enabled ? 'on' : 'off'"
-                                @update:model-value="
-                                    (v) => setEnabled(rule, v)
-                                "
+                                @update:model-value="(v) => setEnabled(rule, v)"
                             />
                         </td>
                         <td class="px-3 py-3">
                             <Toggle
                                 :model-value="rule.requires_approval"
                                 :label="
-                                    rule.requires_approval
-                                        ? 'required'
-                                        : 'auto'
+                                    rule.requires_approval ? 'required' : 'auto'
                                 "
                                 @update:model-value="
                                     (v) => setApproval(rule, v)

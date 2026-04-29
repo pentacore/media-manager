@@ -1,11 +1,6 @@
 <script setup lang="ts">
 import { Head, router } from '@inertiajs/vue3';
-import {
-    Calendar,
-    Cpu,
-    Download,
-    Sparkles,
-} from 'lucide-vue-next';
+import { Calendar, Cpu, Download, Sparkles } from 'lucide-vue-next';
 import { computed, onMounted, ref, watch } from 'vue';
 import ActivityLogController from '@/actions/App/Http/Controllers/ActivityLogController';
 import { InitialsAvatar, Pill, SvcChip } from '@/components/mm';
@@ -103,8 +98,8 @@ function refresh(): void {
 
 function formatTime(iso: string | null): string {
     if (!iso) {
-return '—';
-}
+        return '—';
+    }
 
     const date = new Date(iso);
 
@@ -141,30 +136,30 @@ function applyFilters(next: { action?: string; service_id?: number | null }) {
 
 function svcId(name: string | null | undefined): string {
     if (!name) {
-return 'system';
-}
+        return 'system';
+    }
 
     const t = name.toLowerCase();
 
     if (t.includes('jellyseerr') || t.includes('seerr')) {
-return 'seerr';
-}
+        return 'seerr';
+    }
 
     if (t.includes('sonarr')) {
-return 'sonarr';
-}
+        return 'sonarr';
+    }
 
     if (t.includes('radarr')) {
-return 'radarr';
-}
+        return 'radarr';
+    }
 
     if (t.includes('emby')) {
-return 'emby';
-}
+        return 'emby';
+    }
 
     if (t.includes('prowlarr')) {
-return 'prowlarr';
-}
+        return 'prowlarr';
+    }
 
     return 'system';
 }
@@ -173,40 +168,40 @@ function statusVariant(
     action: string,
 ): 'ok' | 'warn' | 'danger' | 'info' | 'default' {
     if (/delete|remove|fail/.test(action)) {
-return 'danger';
-}
+        return 'danger';
+    }
 
     if (/timeout|degrad|warn/.test(action)) {
-return 'warn';
-}
+        return 'warn';
+    }
 
     if (/import|grab|approve|complete|added/.test(action)) {
-return 'ok';
-}
+        return 'ok';
+    }
 
     return 'info';
 }
 
 function channelLabel(action: string): string {
     if (/webhook|received/.test(action)) {
-return 'webhook';
-}
+        return 'webhook';
+    }
 
     if (/ai|tool/.test(action)) {
-return 'ai';
-}
+        return 'ai';
+    }
 
     if (/monitor|health/.test(action)) {
-return 'monitor';
-}
+        return 'monitor';
+    }
 
     return 'web';
 }
 
 function goToPage(url: string | null) {
     if (!url) {
-return;
-}
+        return;
+    }
 
     router.get(url, {}, { preserveState: true, preserveScroll: true });
 }
@@ -257,9 +252,7 @@ function setService(id: 'all' | number): void {
                 <h1 class="text-[22px] font-semibold tracking-tight">
                     Activity log
                 </h1>
-                <p
-                    class="mt-1 max-w-[640px] text-[13px] text-muted-foreground"
-                >
+                <p class="mt-1 max-w-[640px] text-[13px] text-muted-foreground">
                     Append-only audit feed. Every webhook, tool call, and admin
                     write — same source as the dashboard.
                 </p>
@@ -381,10 +374,7 @@ function setService(id: 'all' | number): void {
                 >
                     <Cpu class="size-3" />system
                 </span>
-                <span
-                    v-else
-                    class="flex w-32 items-center gap-2 truncate"
-                >
+                <span v-else class="flex w-32 items-center gap-2 truncate">
                     <InitialsAvatar :name="log.user_name" :size="20" />
                     <span class="truncate text-[12.5px]">{{
                         log.user_name
@@ -395,11 +385,7 @@ function setService(id: 'all' | number): void {
                     :id="svcId(log.service_name)"
                     :label="log.service_name"
                 />
-                <span
-                    v-else
-                    class="text-[12px] text-fg-subtle"
-                    >—</span
-                >
+                <span v-else class="text-[12px] text-fg-subtle">—</span>
                 <span
                     class="font-mono-tabular min-w-[160px] text-[12px] text-foreground"
                 >
@@ -410,7 +396,9 @@ function setService(id: 'all' | number): void {
                 >
                     {{ log.description }}
                 </span>
-                <Pill class="text-[10.5px]">{{ channelLabel(log.action) }}</Pill>
+                <Pill class="text-[10.5px]">{{
+                    channelLabel(log.action)
+                }}</Pill>
                 <Pill :variant="statusVariant(log.action)" dot>ok</Pill>
             </div>
             <div
@@ -427,8 +415,7 @@ function setService(id: 'all' | number): void {
             class="flex flex-wrap items-center justify-between gap-2"
         >
             <p class="text-sm text-muted-foreground">
-                Page {{ logs.meta.current_page }} of
-                {{ logs.meta.last_page }} —
+                Page {{ logs.meta.current_page }} of {{ logs.meta.last_page }} —
                 <span class="font-mono-tabular">{{ logs.meta.total }}</span>
                 entries
             </p>

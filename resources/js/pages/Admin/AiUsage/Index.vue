@@ -1,11 +1,6 @@
 <script setup lang="ts">
 import { Head, router } from '@inertiajs/vue3';
-import {
-    ChevronDown,
-    ChevronRight,
-    Download,
-    Sparkles,
-} from 'lucide-vue-next';
+import { ChevronDown, ChevronRight, Download, Sparkles } from 'lucide-vue-next';
 import { computed, ref } from 'vue';
 import AiModelPriceController from '@/actions/App/Http/Controllers/Admin/AiModelPriceController';
 import AiUsageController from '@/actions/App/Http/Controllers/Admin/AiUsageController';
@@ -148,8 +143,8 @@ function loadFromModel(key: string) {
     selectedLoadKey.value = key;
 
     if (!key) {
-return;
-}
+        return;
+    }
 
     const [provider, model] = key.split('|');
     const priced = props.priced_models.find(
@@ -157,8 +152,8 @@ return;
     );
 
     if (!priced) {
-return;
-}
+        return;
+    }
 
     form.value = {
         input: parseFloat(priced.input_per_mtok),
@@ -198,16 +193,16 @@ function formatCost(value: string | number): string {
     const n = typeof value === 'string' ? parseFloat(value) : value;
 
     if (n < 0.01 && n > 0) {
-return `$${n.toFixed(5)}`;
-}
+        return `$${n.toFixed(5)}`;
+    }
 
     return `$${n.toFixed(2)}`;
 }
 
 function costDelta(actual: string, projected: string | undefined): string {
     if (projected === undefined) {
-return '';
-}
+        return '';
+    }
 
     const a = parseFloat(actual);
     const p = parseFloat(projected);
@@ -242,8 +237,8 @@ function formatTimestamp(value: string): string {
     });
 
     if (sameDay) {
-return time;
-}
+        return time;
+    }
 
     const date = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 
@@ -266,9 +261,7 @@ return time;
                 >
                     AI usage
                 </h1>
-                <p
-                    class="mt-1 max-w-[640px] text-[13px] text-muted-foreground"
-                >
+                <p class="mt-1 max-w-[640px] text-[13px] text-muted-foreground">
                     Per-call ledger with token counts, latency, and cost.
                     Pricing pulled from
                     <a
@@ -283,7 +276,7 @@ return time;
                     class="flex items-center gap-0.5 rounded-md border border-border bg-bg-elev p-0.5"
                 >
                     <button
-                        v-for="opt in (['24h', '7d', '30d'] as const)"
+                        v-for="opt in ['24h', '7d', '30d'] as const"
                         :key="opt"
                         type="button"
                         :class="
@@ -356,7 +349,9 @@ return time;
             </button>
             <div v-if="panelOpen" class="space-y-4 p-4">
                 <div class="space-y-2">
-                    <Label class="text-xs">Load rates from existing model</Label>
+                    <Label class="text-xs"
+                        >Load rates from existing model</Label
+                    >
                     <Select
                         :model-value="selectedLoadKey"
                         @update:model-value="
@@ -385,15 +380,13 @@ return time;
 
                 <div class="grid gap-3 md:grid-cols-5">
                     <div
-                        v-for="field in (
-                            [
-                                ['input', 'Input'],
-                                ['output', 'Output'],
-                                ['cache_read', 'Cache read'],
-                                ['cache_write', 'Cache write'],
-                                ['reasoning', 'Reasoning'],
-                            ] as const
-                        )"
+                        v-for="field in [
+                            ['input', 'Input'],
+                            ['output', 'Output'],
+                            ['cache_read', 'Cache read'],
+                            ['cache_write', 'Cache write'],
+                            ['reasoning', 'Reasoning'],
+                        ] as const"
                         :key="field[0]"
                         class="space-y-1"
                     >
@@ -627,7 +620,7 @@ return time;
                         class="border-b border-border last:border-b-0 hover:bg-bg-hover"
                     >
                         <td
-                            class="font-mono-tabular px-3 py-2 text-[11.5px] text-fg-subtle whitespace-nowrap"
+                            class="font-mono-tabular px-3 py-2 text-[11.5px] whitespace-nowrap text-fg-subtle"
                         >
                             {{ formatTimestamp(row.created_at) }}
                         </td>
@@ -657,9 +650,7 @@ return time;
                             class="font-mono-tabular px-3 py-2 text-right text-accent"
                         >
                             {{
-                                formatCost(
-                                    indexedScenarioRecent[row.id] ?? '0',
-                                )
+                                formatCost(indexedScenarioRecent[row.id] ?? '0')
                             }}
                         </td>
                         <td class="px-3 py-2">

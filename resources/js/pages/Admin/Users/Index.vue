@@ -79,20 +79,20 @@ function rolePillVariant(
     const v = roleValue(role);
 
     if (v === 'admin') {
-return 'info';
-}
+        return 'info';
+    }
 
     if (v === 'member') {
-return 'ok';
-}
+        return 'ok';
+    }
 
     return 'default';
 }
 
 function authMethod(ssoProvider: string | null): string {
     if (!ssoProvider) {
-return 'local';
-}
+        return 'local';
+    }
 
     return ssoProvider.charAt(0).toUpperCase() + ssoProvider.slice(1);
 }
@@ -278,13 +278,7 @@ function deleteUser(user: UserItem) {
                 <thead>
                     <tr>
                         <th
-                            v-for="h in [
-                                'User',
-                                'Role',
-                                'Auth',
-                                'Joined',
-                                '',
-                            ]"
+                            v-for="h in ['User', 'Role', 'Auth', 'Joined', '']"
                             :key="h"
                             class="border-b border-border bg-card px-3 py-2 text-left text-[11.5px] font-medium tracking-[0.05em] text-muted-foreground uppercase"
                         >
@@ -302,9 +296,9 @@ function deleteUser(user: UserItem) {
                             <span class="flex items-center gap-2.5">
                                 <InitialsAvatar :name="user.name" :size="24" />
                                 <span>
-                                    <div class="font-medium">{{
-                                        user.name
-                                    }}</div>
+                                    <div class="font-medium">
+                                        {{ user.name }}
+                                    </div>
                                     <div
                                         class="text-[11.5px] text-muted-foreground"
                                     >
@@ -336,9 +330,11 @@ function deleteUser(user: UserItem) {
                                     </SelectItem>
                                 </SelectContent>
                             </Select>
-                            <Pill v-else :variant="rolePillVariant(user.role)">{{
-                                roleLabel(user.role)
-                            }}</Pill>
+                            <Pill
+                                v-else
+                                :variant="rolePillVariant(user.role)"
+                                >{{ roleLabel(user.role) }}</Pill
+                            >
                         </td>
                         <td
                             class="font-mono-tabular px-3 py-2.5 text-[11.5px] text-muted-foreground"
@@ -360,9 +356,7 @@ function deleteUser(user: UserItem) {
                             >
                                 Delete
                             </Button>
-                            <span
-                                v-else
-                                class="text-[11.5px] text-fg-subtle"
+                            <span v-else class="text-[11.5px] text-fg-subtle"
                                 >You</span
                             >
                         </td>

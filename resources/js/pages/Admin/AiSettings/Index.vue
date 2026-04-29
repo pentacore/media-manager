@@ -55,9 +55,7 @@ const selectedModel = ref(props.settings.model);
             <div class="mb-1.5 text-[13px] text-muted-foreground">
                 Admin <span class="text-fg-subtle">/</span> AI settings
             </div>
-            <h1
-                class="text-[22px] leading-tight font-semibold tracking-tight"
-            >
+            <h1 class="text-[22px] leading-tight font-semibold tracking-tight">
                 AI settings
             </h1>
             <p class="mt-1 max-w-[640px] text-[13px] text-muted-foreground">
@@ -124,9 +122,7 @@ const selectedModel = ref(props.settings.model);
                             v-model="selectedModel"
                             :default-value="settings.model"
                         >
-                            <SelectTrigger
-                                class="h-8 max-w-[320px] text-sm"
-                            >
+                            <SelectTrigger class="h-8 max-w-[320px] text-sm">
                                 <SelectValue placeholder="Select a model" />
                             </SelectTrigger>
                             <SelectContent>

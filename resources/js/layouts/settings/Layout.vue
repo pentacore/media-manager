@@ -26,10 +26,7 @@ const { isCurrentOrParentUrl } = useCurrentUrl();
                 >
                     Settings
                 </div>
-                <nav
-                    class="flex flex-col gap-0.5"
-                    aria-label="Settings"
-                >
+                <nav class="flex flex-col gap-0.5" aria-label="Settings">
                     <Link
                         v-for="item in sidebarNavItems"
                         :key="toUrl(item.href)"

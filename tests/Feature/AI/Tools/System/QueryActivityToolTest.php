@@ -13,7 +13,7 @@ test('emby scope returns recent playback entries', function (): void {
 
     $tool = new QueryActivityTool;
 
-    $result = json_decode((string) $tool->handle(new Request(['scope' => 'emby', 'since_days' => null, 'media_type' => null, 'limit' => null])), true);
+    $result = json_decode($tool->handle(new Request(['scope' => 'emby', 'since_days' => null, 'media_type' => null, 'limit' => null])), true);
 
     expect($result['scope'])->toBe('emby');
     expect($result['entries'])->toHaveCount(3);
@@ -24,7 +24,7 @@ test('system scope returns recent activity logs', function (): void {
 
     $tool = new QueryActivityTool;
 
-    $result = json_decode((string) $tool->handle(new Request(['scope' => 'system', 'since_days' => null, 'media_type' => null, 'limit' => null])), true);
+    $result = json_decode($tool->handle(new Request(['scope' => 'system', 'since_days' => null, 'media_type' => null, 'limit' => null])), true);
 
     expect($result['scope'])->toBe('system');
     expect($result['entries'])->toHaveCount(2);

@@ -16,12 +16,7 @@ import {
 } from 'lucide-vue-next';
 import { computed, onMounted, ref } from 'vue';
 import RequestController from '@/actions/App/Http/Controllers/Media/RequestController';
-import {
-    InitialsAvatar,
-    Poster,
-    StatusPill,
-    SvcChip,
-} from '@/components/mm';
+import { InitialsAvatar, Poster, StatusPill, SvcChip } from '@/components/mm';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useRealtimeReload } from '@/composables/useRealtimeReload';
@@ -88,8 +83,8 @@ const isAdmin = computed(() => {
     const role = page.props.auth.user?.role;
 
     if (!role) {
-return false;
-}
+        return false;
+    }
 
     const value = typeof role === 'string' ? role : role.value;
 
@@ -126,12 +121,12 @@ function statusKey(status: number | null): FilterId | 'failed' | 'unknown' {
 
 const visible = computed<SeerrRequest[]>(() => {
     if (!props.requests) {
-return [];
-}
+        return [];
+    }
 
     if (filter.value === 'all') {
-return props.requests.data;
-}
+        return props.requests.data;
+    }
 
     return props.requests.data.filter(
         (req) => statusKey(req.status) === filter.value,
@@ -140,73 +135,73 @@ return props.requests.data;
 
 function counts(id: FilterId): number {
     if (!props.summary) {
-return 0;
-}
+        return 0;
+    }
 
     if (id === 'all') {
-return props.summary.total;
-}
+        return props.summary.total;
+    }
 
     if (id === 'pending') {
-return props.summary.pending;
-}
+        return props.summary.pending;
+    }
 
     if (id === 'approved') {
-return props.summary.approved;
-}
+        return props.summary.approved;
+    }
 
     if (id === 'declined') {
-return props.summary.declined;
-}
+        return props.summary.declined;
+    }
 
     if (id === 'available') {
-return props.summary.available ?? 0;
-}
+        return props.summary.available ?? 0;
+    }
 
     return 0;
 }
 
 function mediaTypeLabel(type: string | null): string {
     if (type === 'movie') {
-return 'Movie';
-}
+        return 'Movie';
+    }
 
     if (type === 'tv') {
-return 'Series';
-}
+        return 'Series';
+    }
 
     return type ?? 'Unknown';
 }
 
 function formatTime(iso: string | null): string {
     if (!iso) {
-return '—';
-}
+        return '—';
+    }
 
     const ms = Date.now() - new Date(iso).getTime();
     const m = Math.floor(ms / 60_000);
 
     if (m < 1) {
-return 'just now';
-}
+        return 'just now';
+    }
 
     if (m < 60) {
-return `${m}m ago`;
-}
+        return `${m}m ago`;
+    }
 
     const h = Math.floor(m / 60);
 
     if (h < 24) {
-return `${h}h ago`;
-}
+        return `${h}h ago`;
+    }
 
     return `${Math.floor(h / 24)}d ago`;
 }
 
 function seerrUrl(req: SeerrRequest): string | null {
     if (req.tmdb_id === null) {
-return null;
-}
+        return null;
+    }
 
     const path = req.media_type === 'movie' ? 'movie' : 'tv';
 
@@ -215,8 +210,8 @@ return null;
 
 function tmdbUrl(req: SeerrRequest): string | null {
     if (req.tmdb_id === null) {
-return null;
-}
+        return null;
+    }
 
     const path = req.media_type === 'movie' ? 'movie' : 'tv';
 
@@ -225,8 +220,8 @@ return null;
 
 function tvdbUrl(req: SeerrRequest): string | null {
     if (req.tvdb_id === null || req.media_type !== 'tv') {
-return null;
-}
+        return null;
+    }
 
     return `https://thetvdb.com/dereferrer/series/${req.tvdb_id}`;
 }
@@ -279,8 +274,8 @@ const rangeText = computed(() => {
     const m = meta.value;
 
     if (!m) {
-return '';
-}
+        return '';
+    }
 
     const start = (m.current_page - 1) * m.per_page + 1;
     const end = Math.min(m.current_page * m.per_page, m.total);
@@ -364,12 +359,15 @@ return '';
                 class="flex gap-3.5 rounded-xl border border-border bg-card p-3.5"
             >
                 <Poster
-                    :hint="(req.media_title ?? 'media').toLowerCase().slice(0, 12)"
+                    :hint="
+                        (req.media_title ?? 'media').toLowerCase().slice(0, 12)
+                    "
                     size="lg"
                 />
                 <div class="flex min-w-0 flex-1 flex-col gap-1.5">
                     <div class="flex items-center justify-between">
-                        <span class="font-mono-tabular text-[11px] text-fg-subtle"
+                        <span
+                            class="font-mono-tabular text-[11px] text-fg-subtle"
                             >req_{{ req.id }}</span
                         >
                         <StatusPill :status="statusKey(req.status)" />
@@ -382,10 +380,7 @@ return '';
                     <div class="text-[12px] text-muted-foreground">
                         {{ mediaTypeLabel(req.media_type) }}
                     </div>
-                    <div
-                        v-if="req.requester"
-                        class="flex items-center gap-2"
-                    >
+                    <div v-if="req.requester" class="flex items-center gap-2">
                         <InitialsAvatar :name="req.requester" :size="20" />
                         <span class="text-[12px]">{{ req.requester }}</span>
                         <span class="text-[12px] text-fg-subtle">·</span>
@@ -503,7 +498,10 @@ return '';
         </div>
 
         <!-- Pagination -->
-        <div v-if="meta && meta.last_page > 1" class="flex items-center justify-between">
+        <div
+            v-if="meta && meta.last_page > 1"
+            class="flex items-center justify-between"
+        >
             <p class="text-sm text-muted-foreground">{{ rangeText }}</p>
             <div class="flex items-center gap-2">
                 <Button

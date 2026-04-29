@@ -1,6 +1,12 @@
 <script setup lang="ts">
 import { Head, Link } from '@inertiajs/vue3';
-import { ExternalLink, Filter, Plus, RefreshCcw, Search } from 'lucide-vue-next';
+import {
+    ExternalLink,
+    Filter,
+    Plus,
+    RefreshCcw,
+    Search,
+} from 'lucide-vue-next';
 import { computed, onMounted, ref } from 'vue';
 import MovieController from '@/actions/App/Http/Controllers/Media/MovieController';
 import { Pill, Poster, SvcChip } from '@/components/mm';
@@ -62,12 +68,12 @@ onMounted(subscribeReload);
 const query = ref('');
 const visible = computed<Movie[]>(() => {
     if (!props.movies) {
-return [];
-}
+        return [];
+    }
 
     if (!query.value) {
-return props.movies;
-}
+        return props.movies;
+    }
 
     const q = query.value.toLowerCase();
 
@@ -85,20 +91,20 @@ const totalSize = computed(() => {
 
 function formatSize(bytes: number): string {
     if (!bytes || bytes <= 0) {
-return '0 B';
-}
+        return '0 B';
+    }
 
     const tb = bytes / 1024 ** 4;
 
     if (tb >= 1) {
-return `${tb.toFixed(2)} TB`;
-}
+        return `${tb.toFixed(2)} TB`;
+    }
 
     const gb = bytes / 1024 ** 3;
 
     if (gb >= 1) {
-return `${gb.toFixed(1)} GB`;
-}
+        return `${gb.toFixed(1)} GB`;
+    }
 
     const mb = bytes / 1024 ** 2;
 
@@ -107,8 +113,8 @@ return `${gb.toFixed(1)} GB`;
 
 function qualityName(id: number | null): string {
     if (id === null) {
-return '—';
-}
+        return '—';
+    }
 
     return props.qualityProfiles?.find((p) => p.id === id)?.name ?? '—';
 }
@@ -116,7 +122,11 @@ return '—';
 function is4k(movie: Movie): boolean {
     const profile = qualityName(movie.quality_profile_id).toLowerCase();
 
-    return profile.includes('2160') || profile.includes('uhd') || profile.includes('4k');
+    return (
+        profile.includes('2160') ||
+        profile.includes('uhd') ||
+        profile.includes('4k')
+    );
 }
 </script>
 
@@ -134,13 +144,8 @@ function is4k(movie: Movie): boolean {
                         >Movies</span
                     >
                 </div>
-                <h1 class="text-[22px] font-semibold tracking-tight">
-                    Movies
-                </h1>
-                <p
-                    v-if="movies"
-                    class="mt-1 text-[13px] text-muted-foreground"
-                >
+                <h1 class="text-[22px] font-semibold tracking-tight">Movies</h1>
+                <p v-if="movies" class="mt-1 text-[13px] text-muted-foreground">
                     {{ movies.length }} titles ·
                     <span class="font-mono-tabular">{{ totalSize }}</span> on
                     disk
@@ -164,7 +169,7 @@ function is4k(movie: Movie): boolean {
             class="flex flex-wrap items-center gap-3 rounded-xl border border-border bg-card p-3"
         >
             <div
-                class="flex h-8 flex-1 min-w-[240px] items-center gap-2 rounded-md border border-border bg-bg-elev px-3"
+                class="flex h-8 min-w-[240px] flex-1 items-center gap-2 rounded-md border border-border bg-bg-elev px-3"
             >
                 <Search class="size-3.5 text-fg-subtle" />
                 <input

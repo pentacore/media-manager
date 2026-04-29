@@ -76,17 +76,17 @@ const query = ref('');
 
 const visible = computed<Series[]>(() => {
     if (!props.series) {
-return [];
-}
+        return [];
+    }
 
     return props.series.filter((s) => {
         if (monitoredFilter.value === 'monitored' && !s.monitored) {
-return false;
-}
+            return false;
+        }
 
         if (monitoredFilter.value === 'unmonitored' && s.monitored) {
-return false;
-}
+            return false;
+        }
 
         if (
             query.value &&
@@ -101,8 +101,7 @@ return false;
 
 const counts = computed(() => {
     const all = props.series?.length ?? 0;
-    const monitored =
-        props.series?.filter((s) => s.monitored).length ?? 0;
+    const monitored = props.series?.filter((s) => s.monitored).length ?? 0;
 
     return { all, monitored, unmonitored: all - monitored };
 });
@@ -118,20 +117,20 @@ const totalSize = computed(() => {
 
 function formatSize(bytes: number): string {
     if (!bytes || bytes <= 0) {
-return '0 B';
-}
+        return '0 B';
+    }
 
     const tb = bytes / 1024 ** 4;
 
     if (tb >= 1) {
-return `${tb.toFixed(1)} TB`;
-}
+        return `${tb.toFixed(1)} TB`;
+    }
 
     const gb = bytes / 1024 ** 3;
 
     if (gb >= 1) {
-return `${gb.toFixed(1)} GB`;
-}
+        return `${gb.toFixed(1)} GB`;
+    }
 
     const mb = bytes / 1024 ** 2;
 
@@ -140,8 +139,8 @@ return `${gb.toFixed(1)} GB`;
 
 function qualityName(id: number | null): string {
     if (id === null || !props.qualityProfiles) {
-return '—';
-}
+        return '—';
+    }
 
     return (
         props.qualityProfiles.find((profile) => profile.id === id)?.name ?? '—'
@@ -150,19 +149,16 @@ return '—';
 
 function progressPct(item: Series): number {
     if (!item.episode_count) {
-return 0;
-}
+        return 0;
+    }
 
-    return Math.min(
-        100,
-        (item.episode_file_count / item.episode_count) * 100,
-    );
+    return Math.min(100, (item.episode_file_count / item.episode_count) * 100);
 }
 
 function sonarrSeriesUrl(slug: string | null): string | null {
     if (!slug) {
-return null;
-}
+        return null;
+    }
 
     return `${props.connection.url}/series/${slug}`;
 }
@@ -211,7 +207,7 @@ return null;
             class="flex flex-wrap items-center gap-3 rounded-xl border border-border bg-card p-3"
         >
             <div
-                class="flex h-8 flex-1 min-w-[240px] items-center gap-2 rounded-md border border-border bg-bg-elev px-3"
+                class="flex h-8 min-w-[240px] flex-1 items-center gap-2 rounded-md border border-border bg-bg-elev px-3"
             >
                 <Search class="size-3.5 text-fg-subtle" />
                 <input

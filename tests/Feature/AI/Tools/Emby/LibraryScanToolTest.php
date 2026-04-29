@@ -15,7 +15,7 @@ test('queues an emby_library_scan ActionRequest', function (): void {
         'requires_approval' => false,
     ]);
 
-    $result = json_decode((string) (new LibraryScanTool)->handle(new Request([])), true);
+    $result = json_decode((new LibraryScanTool)->handle(new Request([])), true);
 
     expect($result['queued'])->toBeTrue();
 

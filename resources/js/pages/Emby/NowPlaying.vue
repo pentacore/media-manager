@@ -55,8 +55,8 @@ let reloading = false;
 
 function scheduleReload(): void {
     if (reloadTimer || reloading) {
-return;
-}
+        return;
+    }
 
     reloadTimer = setTimeout(() => {
         reloadTimer = null;
@@ -82,8 +82,8 @@ onBeforeUnmount(() => {
 
 function formatTicks(ticks: number | null): string {
     if (!ticks) {
-return '0:00';
-}
+        return '0:00';
+    }
 
     const total = Math.floor(ticks / 10_000_000);
     const h = Math.floor(total / 3600);
@@ -102,8 +102,8 @@ function progressPct(session: Session): number {
     const total = session.now_playing?.run_time_ticks ?? 0;
 
     if (!total) {
-return 0;
-}
+        return 0;
+    }
 
     return Math.min(100, Math.max(0, (pos / total) * 100));
 }
@@ -191,7 +191,11 @@ function remainingTicks(session: Session): number {
             >
                 <div class="flex gap-4 p-4">
                     <Poster
-                        :hint="(session.now_playing?.name ?? 'media').toLowerCase().slice(0, 12)"
+                        :hint="
+                            (session.now_playing?.name ?? 'media')
+                                .toLowerCase()
+                                .slice(0, 12)
+                        "
                         size="xl"
                     />
                     <div class="flex min-w-0 flex-1 flex-col gap-1.5">
@@ -209,9 +213,7 @@ function remainingTicks(session: Session): number {
                                 >session #{{ session.id?.slice(-6) ?? i }}</span
                             >
                         </div>
-                        <div
-                            class="text-[17px] leading-tight font-semibold"
-                        >
+                        <div class="text-[17px] leading-tight font-semibold">
                             {{ session.now_playing?.name ?? 'Unknown' }}
                         </div>
                         <div
@@ -242,7 +244,9 @@ function remainingTicks(session: Session): number {
                             >
                                 <div
                                     class="h-full rounded-full bg-accent"
-                                    :style="{ width: `${progressPct(session)}%` }"
+                                    :style="{
+                                        width: `${progressPct(session)}%`,
+                                    }"
                                 />
                             </div>
                             <div
@@ -270,9 +274,7 @@ function remainingTicks(session: Session): number {
                         </div>
                     </div>
                 </div>
-                <div
-                    class="flex gap-2 border-t border-border px-4 py-2.5"
-                >
+                <div class="flex gap-2 border-t border-border px-4 py-2.5">
                     <Button
                         variant="ghost"
                         size="sm"

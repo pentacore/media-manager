@@ -104,6 +104,7 @@ class AiModelPriceSeeder extends Seeder
             $row['batch_cache_write_per_mtok'] = round($row['cache_write_per_mtok'] * $batchDiscount, 4);
             $row['batch_reasoning_per_mtok'] = round($row['reasoning_per_mtok'] * $batchDiscount, 4);
         }
+
         unset($row);
 
         foreach ($defaults as $default) {

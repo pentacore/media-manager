@@ -13,7 +13,7 @@ test('returns the service status array as JSON', function (): void {
 
     $tool = new GetServiceStatusTool;
 
-    $result = json_decode((string) $tool->handle(new Request([])), true);
+    $result = json_decode($tool->handle(new Request([])), true);
 
     expect($result['services'])->toHaveCount(2);
     expect(collect($result['services'])->pluck('name')->all())->toContain('Demo Sonarr', 'Demo Radarr');
