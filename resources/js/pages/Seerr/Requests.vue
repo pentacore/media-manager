@@ -60,6 +60,7 @@ interface Summary {
     approved: number;
     declined: number;
     available?: number;
+    processing?: number;
 }
 
 const props = defineProps<{
@@ -103,11 +104,18 @@ const isAdmin = computed(() => {
     return value === 'admin';
 });
 
-type FilterId = 'pending' | 'approved' | 'available' | 'declined' | 'all';
+type FilterId =
+    | 'pending'
+    | 'approved'
+    | 'processing'
+    | 'available'
+    | 'declined'
+    | 'all';
 
 const TABS: { id: FilterId; label: string }[] = [
     { id: 'pending', label: 'Pending review' },
     { id: 'approved', label: 'Approved' },
+    { id: 'processing', label: 'Requested' },
     { id: 'available', label: 'Now available' },
     { id: 'declined', label: 'Declined' },
     { id: 'all', label: 'All' },
@@ -208,6 +216,10 @@ function counts(id: FilterId): number {
 
     if (id === 'available') {
         return props.summary.available ?? 0;
+    }
+
+    if (id === 'processing') {
+        return props.summary.processing ?? 0;
     }
 
     return 0;
@@ -367,6 +379,7 @@ const rangeText = computed(() => {
                 >
                     {{ summary.pending }} pending ·
                     {{ summary.approved }} approved ·
+                    {{ summary.processing ?? 0 }} requested ·
                     {{ summary.available ?? 0 }} available ·
                     {{ summary.declined }} declined
                 </p>

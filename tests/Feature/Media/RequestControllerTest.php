@@ -201,22 +201,34 @@ test('summary falls back to zeros when count endpoint fails', function (): void 
         );
 });
 
-test('summary exposes available count from filter=available pageInfo', function (): void {
+test('summary exposes available and processing counts from probe pageInfo', function (): void {
     $member = User::factory()->member()->create();
 
     Http::fake([
         'seerr.local:5055/api/v1/request/count' => Http::response([
             'total' => 75, 'pending' => 5, 'approved' => 60, 'declined' => 10,
         ]),
-        'seerr.local:5055/api/v1/request*' => fn ($request) => str_contains((string) $request->url(), 'filter=available')
-            ? Http::response([
-                'pageInfo' => ['page' => 1, 'pages' => 1, 'pageSize' => 1, 'results' => 42],
-                'results' => [],
-            ])
-            : Http::response([
+        'seerr.local:5055/api/v1/request*' => function ($request) {
+            $url = (string) $request->url();
+            if (str_contains($url, 'filter=available')) {
+                return Http::response([
+                    'pageInfo' => ['page' => 1, 'pages' => 1, 'pageSize' => 1, 'results' => 42],
+                    'results' => [],
+                ]);
+            }
+
+            if (str_contains($url, 'filter=processing')) {
+                return Http::response([
+                    'pageInfo' => ['page' => 1, 'pages' => 1, 'pageSize' => 1, 'results' => 7],
+                    'results' => [],
+                ]);
+            }
+
+            return Http::response([
                 'pageInfo' => ['page' => 1, 'pages' => 1, 'pageSize' => 50, 'results' => 0],
                 'results' => [],
-            ]),
+            ]);
+        },
     ]);
 
     $this->actingAs($member)
@@ -226,6 +238,7 @@ test('summary exposes available count from filter=available pageInfo', function 
             ->loadDeferredProps('default', function ($page): void {
                 $page
                     ->where('summary.available', 42)
+                    ->where('summary.processing', 7)
                     ->where('summary.approved', 60)
                     ->where('summary.declined', 10);
             })
@@ -233,6 +246,43 @@ test('summary exposes available count from filter=available pageInfo', function 
 
     Http::assertSent(fn ($request): bool => str_contains((string) $request->url(), 'filter=available')
         && str_contains((string) $request->url(), 'take=1')
+    );
+    Http::assertSent(fn ($request): bool => str_contains((string) $request->url(), 'filter=processing')
+        && str_contains((string) $request->url(), 'take=1')
+    );
+});
+
+test('processing filter passes through to Seerr filter=processing', function (): void {
+    $member = User::factory()->member()->create();
+
+    Http::fake([
+        'seerr.local:5055/api/v1/request/count' => Http::response([
+            'total' => 1, 'pending' => 0, 'approved' => 1, 'declined' => 0,
+        ]),
+        'seerr.local:5055/api/v1/movie/900' => Http::response(['id' => 900, 'title' => 'Stuck Movie']),
+        'seerr.local:5055/api/v1/request*' => Http::response([
+            'pageInfo' => ['page' => 1, 'pages' => 1, 'pageSize' => 50, 'results' => 1],
+            'results' => [
+                ['id' => 99, 'status' => 2, 'type' => 'movie', 'media' => ['mediaType' => 'movie', 'tmdbId' => 900, 'status' => 3]],
+            ],
+        ]),
+    ]);
+
+    $this->actingAs($member)
+        ->get(route('media.requests.index', ['status' => 'processing']))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->loadDeferredProps('default', function ($page): void {
+                $page
+                    ->has('requests.data', 1)
+                    ->where('requests.data.0.id', 99)
+                    ->where('requests.data.0.media_title', 'Stuck Movie');
+            })
+        );
+
+    Http::assertSent(fn ($request): bool => $request->method() === 'GET'
+        && str_contains((string) $request->url(), 'filter=processing')
+        && str_contains((string) $request->url(), 'take=50')
     );
 });
 

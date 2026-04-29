@@ -34,6 +34,7 @@ class RequestController extends Controller
         'all' => null,
         'pending' => 'pending',
         'approved' => null,
+        'processing' => 'processing',
         'available' => 'available',
         'declined' => null,
     ];
@@ -244,7 +245,7 @@ class RequestController extends Controller
     }
 
     /**
-     * @return array{total: int, pending: int, approved: int, declined: int, available: int}
+     * @return array{total: int, pending: int, approved: int, declined: int, available: int, processing: int}
      */
     private function loadSummary(ServiceConnection $serviceConnection): array
     {
@@ -253,27 +254,35 @@ class RequestController extends Controller
         try {
             $counts = $seerrClient->getRequestCount();
         } catch (RequestException|ConnectionException) {
-            return ['total' => 0, 'pending' => 0, 'approved' => 0, 'declined' => 0, 'available' => 0];
+            return ['total' => 0, 'pending' => 0, 'approved' => 0, 'declined' => 0, 'available' => 0, 'processing' => 0];
         }
 
-        // /request/count does not break out an `available` bucket, so we
-        // ask Seerr for one row of `filter=available` and read the total
-        // from pageInfo. Keeps the tab badge truthful without paginating.
-        $available = 0;
-        try {
-            $availableResponse = $seerrClient->getRequests(['filter' => 'available', 'take' => 1]);
-            $available = (int) ($availableResponse['pageInfo']['results'] ?? 0);
-        } catch (RequestException|ConnectionException) {
-            // Leave zero; the rest of the summary still renders.
-        }
-
+        // /request/count does not break out the `available` and `processing`
+        // buckets, so we probe Seerr for one row of each and read the total
+        // from pageInfo. Keeps the tab badges truthful without paginating.
         return [
             'total' => (int) ($counts['total'] ?? 0),
             'pending' => (int) ($counts['pending'] ?? 0),
             'approved' => (int) ($counts['approved'] ?? 0),
             'declined' => (int) ($counts['declined'] ?? 0),
-            'available' => $available,
+            'available' => $this->probeFilterTotal($seerrClient, 'available'),
+            'processing' => $this->probeFilterTotal($seerrClient, 'processing'),
         ];
+    }
+
+    /**
+     * Read the total request count for a given Seerr filter by asking
+     * for a single row and inspecting pageInfo.results.
+     */
+    private function probeFilterTotal(SeerrClient $seerrClient, string $filter): int
+    {
+        try {
+            $response = $seerrClient->getRequests(['filter' => $filter, 'take' => 1]);
+        } catch (RequestException|ConnectionException) {
+            return 0;
+        }
+
+        return (int) ($response['pageInfo']['results'] ?? 0);
     }
 
     /**
