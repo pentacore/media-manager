@@ -173,6 +173,227 @@ test('malformed scenario is ignored', function (): void {
         );
 });
 
+test('show returns invocation detail with breakdown using the row snapshot', function (): void {
+    $admin = User::factory()->admin()->create();
+    $owner = User::factory()->member()->create(['name' => 'Stella']);
+
+    $record = AiUsageRecord::create([
+        'invocation_id' => 'inv-detail',
+        'agent_class' => MediaAgent::class,
+        'provider' => 'openai',
+        'model' => 'gpt-5-mini',
+        'prompt_tokens' => 1_000_000,
+        'completion_tokens' => 500_000,
+        'cache_read_input_tokens' => 0,
+        'cache_write_input_tokens' => 0,
+        'reasoning_tokens' => 0,
+        'tool_calls_count' => 0,
+        'input_per_mtok' => 0.40,
+        'output_per_mtok' => 1.60,
+        'cache_read_per_mtok' => 0,
+        'cache_write_per_mtok' => 0,
+        'reasoning_per_mtok' => 0,
+        'price_source' => 'live',
+        'user_id' => $owner->id,
+        'status' => 'success',
+    ]);
+
+    $this->actingAs($admin)
+        ->getJson(route('admin.ai-usage.show', $record))
+        ->assertOk()
+        ->assertJsonPath('record.invocation_id', 'inv-detail')
+        ->assertJsonPath('user.name', 'Stella')
+        ->assertJsonPath('rates.source', 'snapshot')
+        ->assertJsonPath('rates.input_per_mtok', fn ($v): bool => abs((float) $v - 0.40) < 0.0001)
+        ->assertJsonPath('total_cost', fn ($v): bool => abs((float) $v - 1.20) < 0.0001);
+});
+
+test('show falls back to the live catalog rate when no snapshot exists', function (): void {
+    $admin = User::factory()->admin()->create();
+
+    AiModelPrice::create([
+        'provider' => 'openai',
+        'model' => 'gpt-5-mini',
+        'input_per_mtok' => 0.40,
+        'output_per_mtok' => 1.60,
+        'cache_read_per_mtok' => 0,
+        'cache_write_per_mtok' => 0,
+        'reasoning_per_mtok' => 0,
+    ]);
+
+    $record = AiUsageRecord::create([
+        'invocation_id' => 'inv-bare',
+        'agent_class' => MediaAgent::class,
+        'provider' => 'openai',
+        'model' => 'gpt-5-mini',
+        'prompt_tokens' => 1_000_000,
+        'completion_tokens' => 0,
+        'cache_read_input_tokens' => 0,
+        'cache_write_input_tokens' => 0,
+        'reasoning_tokens' => 0,
+        'tool_calls_count' => 0,
+        'status' => 'success',
+    ]);
+
+    $this->actingAs($admin)
+        ->getJson(route('admin.ai-usage.show', $record))
+        ->assertOk()
+        ->assertJsonPath('rates.source', 'catalog')
+        ->assertJsonPath('total_cost', fn ($v): bool => abs((float) $v - 0.40) < 0.0001);
+});
+
+test('show flags fully unpriced rows', function (): void {
+    $admin = User::factory()->admin()->create();
+
+    $record = AiUsageRecord::create([
+        'invocation_id' => 'inv-unp',
+        'agent_class' => MediaAgent::class,
+        'provider' => 'openai',
+        'model' => 'mystery-model',
+        'prompt_tokens' => 1_000_000,
+        'completion_tokens' => 0,
+        'cache_read_input_tokens' => 0,
+        'cache_write_input_tokens' => 0,
+        'reasoning_tokens' => 0,
+        'tool_calls_count' => 0,
+        'status' => 'success',
+    ]);
+
+    $this->actingAs($admin)
+        ->getJson(route('admin.ai-usage.show', $record))
+        ->assertOk()
+        ->assertJsonPath('rates.source', 'unpriced')
+        ->assertJsonPath('total_cost', 0);
+});
+
+test('show returns scenario breakdown when scenario rates are provided', function (): void {
+    $admin = User::factory()->admin()->create();
+
+    $record = AiUsageRecord::create([
+        'invocation_id' => 'inv-scn',
+        'agent_class' => MediaAgent::class,
+        'provider' => 'openai',
+        'model' => 'gpt-5-mini',
+        'prompt_tokens' => 1_000_000,
+        'completion_tokens' => 0,
+        'cache_read_input_tokens' => 0,
+        'cache_write_input_tokens' => 0,
+        'reasoning_tokens' => 0,
+        'tool_calls_count' => 0,
+        'status' => 'success',
+    ]);
+
+    $this->actingAs($admin)
+        ->getJson(route('admin.ai-usage.show', [
+            'aiUsageRecord' => $record,
+            'scenario' => [
+                'input' => 2.00,
+                'output' => 5.00,
+                'cache_read' => 0,
+                'cache_write' => 0,
+                'reasoning' => 0,
+            ],
+        ]))
+        ->assertOk()
+        ->assertJsonPath('scenario_total_cost', fn ($v): bool => abs((float) $v - 2.00) < 0.0001);
+});
+
+test('assignPrice copies rates from the picked catalog entry', function (): void {
+    $admin = User::factory()->admin()->create();
+
+    AiModelPrice::create([
+        'provider' => 'anthropic',
+        'model' => 'claude-haiku-4-5',
+        'input_per_mtok' => 1.00,
+        'output_per_mtok' => 5.00,
+        'cache_read_per_mtok' => 0.10,
+        'cache_write_per_mtok' => 1.25,
+        'reasoning_per_mtok' => 0,
+    ]);
+
+    $record = AiUsageRecord::create([
+        'invocation_id' => 'inv-asn',
+        'agent_class' => MediaAgent::class,
+        'provider' => 'anthropic',
+        'model' => 'claude-haiku-4-5',
+        'prompt_tokens' => 1_000_000,
+        'completion_tokens' => 0,
+        'cache_read_input_tokens' => 0,
+        'cache_write_input_tokens' => 0,
+        'reasoning_tokens' => 0,
+        'tool_calls_count' => 0,
+        'status' => 'success',
+    ]);
+
+    $this->actingAs($admin)
+        ->from(route('admin.ai-usage.index'))
+        ->post(route('admin.ai-usage.assign-price', $record), [
+            'provider' => 'anthropic',
+            'model' => 'claude-haiku-4-5',
+        ])
+        ->assertRedirect(route('admin.ai-usage.index'));
+
+    $record->refresh();
+
+    expect((float) $record->input_per_mtok)->toBe(1.00)
+        ->and((float) $record->output_per_mtok)->toBe(5.00)
+        ->and($record->price_source)->toBe('assigned');
+});
+
+test('assignPrice rejects an unknown provider+model pair', function (): void {
+    $admin = User::factory()->admin()->create();
+
+    $record = AiUsageRecord::create([
+        'invocation_id' => 'inv-bad',
+        'agent_class' => MediaAgent::class,
+        'provider' => 'openai',
+        'model' => 'gpt-5-mini',
+        'prompt_tokens' => 0,
+        'completion_tokens' => 0,
+        'cache_read_input_tokens' => 0,
+        'cache_write_input_tokens' => 0,
+        'reasoning_tokens' => 0,
+        'tool_calls_count' => 0,
+        'status' => 'success',
+    ]);
+
+    $this->actingAs($admin)
+        ->post(route('admin.ai-usage.assign-price', $record), [
+            'provider' => 'nope',
+            'model' => 'nope',
+        ])
+        ->assertNotFound();
+});
+
+test('non-admin cannot drill into invocation detail or assign price', function (): void {
+    $member = User::factory()->member()->create();
+
+    $record = AiUsageRecord::create([
+        'invocation_id' => 'inv-priv',
+        'agent_class' => MediaAgent::class,
+        'provider' => 'openai',
+        'model' => 'gpt-5-mini',
+        'prompt_tokens' => 0,
+        'completion_tokens' => 0,
+        'cache_read_input_tokens' => 0,
+        'cache_write_input_tokens' => 0,
+        'reasoning_tokens' => 0,
+        'tool_calls_count' => 0,
+        'status' => 'success',
+    ]);
+
+    $this->actingAs($member)
+        ->getJson(route('admin.ai-usage.show', $record))
+        ->assertForbidden();
+
+    $this->actingAs($member)
+        ->postJson(route('admin.ai-usage.assign-price', $record), [
+            'provider' => 'openai',
+            'model' => 'gpt-5-mini',
+        ])
+        ->assertForbidden();
+});
+
 test('priced_models is included in page props', function (): void {
     $admin = User::factory()->admin()->create();
 

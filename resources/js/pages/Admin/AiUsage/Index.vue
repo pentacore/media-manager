@@ -6,6 +6,13 @@ import AiModelPriceController from '@/actions/App/Http/Controllers/Admin/AiModel
 import AiUsageController from '@/actions/App/Http/Controllers/Admin/AiUsageController';
 import { InitialsAvatar, Pill, StatCard } from '@/components/mm';
 import { Button } from '@/components/ui/button';
+import {
+    Dialog,
+    DialogContent,
+    DialogFooter,
+    DialogHeader,
+    DialogTitle,
+} from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import {
@@ -64,6 +71,53 @@ interface ScenarioRates {
     cache_read: number;
     cache_write: number;
     reasoning: number;
+}
+
+interface BreakdownLine {
+    label: string;
+    tokens: number;
+    rate: number;
+    cost: number;
+}
+
+interface InvocationDetail {
+    record: {
+        id: number;
+        invocation_id: string;
+        agent_class: string | null;
+        provider: string | null;
+        model: string | null;
+        prompt_tokens: number;
+        completion_tokens: number;
+        cache_read_input_tokens: number;
+        cache_write_input_tokens: number;
+        reasoning_tokens: number;
+        tool_calls_count: number;
+        price_source: string | null;
+        conversation_id: string | null;
+        status: string;
+        created_at: string | null;
+    };
+    user: { id: number; name: string } | null;
+    tools: Array<{
+        id: number;
+        tool_class: string;
+        tool_invocation_id: string | null;
+        status: string;
+        created_at: string | null;
+    }>;
+    rates: {
+        source: 'snapshot' | 'catalog' | 'unpriced';
+        input_per_mtok: number;
+        output_per_mtok: number;
+        cache_read_per_mtok: number;
+        cache_write_per_mtok: number;
+        reasoning_per_mtok: number;
+    };
+    breakdown: BreakdownLine[];
+    total_cost: number;
+    scenario_breakdown: BreakdownLine[] | null;
+    scenario_total_cost: number | null;
 }
 
 const props = defineProps<{
@@ -193,6 +247,96 @@ function clearScenario() {
         AiUsageController.index.url({ query: { window: props.window } }),
         { preserveScroll: true },
     );
+}
+
+const detail = ref<InvocationDetail | null>(null);
+const detailLoading = ref(false);
+const detailError = ref<string | null>(null);
+const assignKey = ref<string>('');
+const assigning = ref(false);
+
+async function openDetail(row: RecentRow) {
+    detail.value = null;
+    detailError.value = null;
+    detailLoading.value = true;
+    assignKey.value = '';
+
+    try {
+        const url = AiUsageController.show.url(
+            { aiUsageRecord: row.id },
+            props.scenario ? { query: { scenario: { ...props.scenario } } } : {},
+        );
+        const response = await fetch(url, {
+            headers: { Accept: 'application/json' },
+            credentials: 'same-origin',
+        });
+
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}`);
+        }
+
+        detail.value = (await response.json()) as InvocationDetail;
+    } catch (error) {
+        detailError.value =
+            error instanceof Error ? error.message : 'Failed to load detail';
+    } finally {
+        detailLoading.value = false;
+    }
+}
+
+function closeDetail() {
+    detail.value = null;
+    detailError.value = null;
+    assignKey.value = '';
+}
+
+function assignPrice() {
+    if (!detail.value || !assignKey.value) {
+        return;
+    }
+
+    const [provider, model] = assignKey.value.split('|');
+    const recordId = detail.value.record.id;
+
+    assigning.value = true;
+
+    router.post(
+        AiUsageController.assignPrice.url({ aiUsageRecord: recordId }),
+        { provider, model },
+        {
+            preserveScroll: true,
+            preserveState: true,
+            onSuccess: () => {
+                assigning.value = false;
+                openDetail({ id: recordId } as RecentRow);
+            },
+            onError: () => {
+                assigning.value = false;
+            },
+        },
+    );
+}
+
+function rateSourceLabel(source: 'snapshot' | 'catalog' | 'unpriced'): string {
+    return source === 'snapshot'
+        ? 'Snapshot at call time'
+        : source === 'catalog'
+          ? 'Live catalog price'
+          : 'Unpriced';
+}
+
+function rateSourceVariant(
+    source: 'snapshot' | 'catalog' | 'unpriced',
+): 'ok' | 'info' | 'warn' {
+    return source === 'snapshot'
+        ? 'ok'
+        : source === 'catalog'
+          ? 'info'
+          : 'warn';
+}
+
+function formatRate(value: number): string {
+    return `$${value.toFixed(4)}`;
 }
 
 function formatCost(value: string | number): string {
@@ -626,7 +770,8 @@ function formatTimestamp(value: string): string {
                     <tr
                         v-for="row in recent"
                         :key="row.id"
-                        class="border-b border-border last:border-b-0 hover:bg-bg-hover"
+                        class="cursor-pointer border-b border-border last:border-b-0 hover:bg-bg-hover"
+                        @click="openDetail(row)"
                     >
                         <td
                             class="font-mono-tabular px-3 py-2 text-[11.5px] whitespace-nowrap text-fg-subtle"
@@ -684,5 +829,336 @@ function formatTimestamp(value: string): string {
                 </tbody>
             </table>
         </div>
+
+        <!-- Detail modal -->
+        <Dialog
+            :open="detail !== null || detailLoading || detailError !== null"
+            @update:open="(v) => !v && closeDetail()"
+        >
+            <DialogContent class="max-w-3xl">
+                <DialogHeader>
+                    <DialogTitle>Invocation detail</DialogTitle>
+                </DialogHeader>
+
+                <div
+                    v-if="detailLoading"
+                    class="px-2 py-8 text-center text-sm text-muted-foreground"
+                >
+                    Loading…
+                </div>
+                <div
+                    v-else-if="detailError"
+                    class="px-2 py-8 text-center text-sm text-destructive"
+                >
+                    {{ detailError }}
+                </div>
+                <div v-else-if="detail" class="space-y-5">
+                    <!-- Meta header -->
+                    <div class="grid gap-3 md:grid-cols-3">
+                        <div>
+                            <div
+                                class="text-[11px] font-medium tracking-[0.05em] text-muted-foreground uppercase"
+                            >
+                                When
+                            </div>
+                            <div class="font-mono-tabular text-[12px]">
+                                {{
+                                    detail.record.created_at
+                                        ? formatTimestamp(
+                                              detail.record.created_at,
+                                          )
+                                        : '—'
+                                }}
+                            </div>
+                        </div>
+                        <div>
+                            <div
+                                class="text-[11px] font-medium tracking-[0.05em] text-muted-foreground uppercase"
+                            >
+                                User
+                            </div>
+                            <div class="text-[13px]">
+                                {{ detail.user?.name ?? '—' }}
+                            </div>
+                        </div>
+                        <div>
+                            <div
+                                class="text-[11px] font-medium tracking-[0.05em] text-muted-foreground uppercase"
+                            >
+                                Status
+                            </div>
+                            <Pill
+                                :variant="
+                                    detail.record.status === 'success'
+                                        ? 'ok'
+                                        : 'danger'
+                                "
+                                dot
+                            >
+                                {{ detail.record.status }}
+                            </Pill>
+                        </div>
+                        <div>
+                            <div
+                                class="text-[11px] font-medium tracking-[0.05em] text-muted-foreground uppercase"
+                            >
+                                Provider / Model
+                            </div>
+                            <div class="font-mono-tabular text-[12px]">
+                                {{ detail.record.provider ?? '—' }} /
+                                {{ detail.record.model ?? '—' }}
+                            </div>
+                        </div>
+                        <div>
+                            <div
+                                class="text-[11px] font-medium tracking-[0.05em] text-muted-foreground uppercase"
+                            >
+                                Agent
+                            </div>
+                            <div
+                                class="font-mono-tabular text-[12px] break-all"
+                            >
+                                {{
+                                    detail.record.agent_class
+                                        ?.split('\\')
+                                        .pop() ?? '—'
+                                }}
+                            </div>
+                        </div>
+                        <div>
+                            <div
+                                class="text-[11px] font-medium tracking-[0.05em] text-muted-foreground uppercase"
+                            >
+                                Invocation
+                            </div>
+                            <div
+                                class="font-mono-tabular text-[12px] break-all"
+                            >
+                                {{ detail.record.invocation_id }}
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Pricing source banner -->
+                    <div
+                        class="flex items-center justify-between rounded-md border border-border bg-bg-elev px-3 py-2"
+                    >
+                        <div class="flex items-center gap-2 text-[12px]">
+                            <span class="text-muted-foreground">Pricing:</span>
+                            <Pill
+                                :variant="rateSourceVariant(detail.rates.source)"
+                            >
+                                {{ rateSourceLabel(detail.rates.source) }}
+                            </Pill>
+                            <span
+                                v-if="detail.record.price_source === 'assigned'"
+                                class="text-muted-foreground"
+                                >(retroactively assigned)</span
+                            >
+                        </div>
+                        <div
+                            v-if="detail.rates.source === 'unpriced'"
+                            class="text-[12px] text-warning"
+                        >
+                            No price available — assign one below to recompute
+                            cost.
+                        </div>
+                    </div>
+
+                    <!-- Cost breakdown -->
+                    <div
+                        class="overflow-hidden rounded-md border border-border"
+                    >
+                        <table
+                            class="w-full border-collapse text-[12px]"
+                        >
+                            <thead>
+                                <tr class="bg-bg-elev">
+                                    <th
+                                        class="px-3 py-2 text-left font-medium text-muted-foreground"
+                                    >
+                                        Component
+                                    </th>
+                                    <th
+                                        class="px-3 py-2 text-right font-medium text-muted-foreground"
+                                    >
+                                        Tokens
+                                    </th>
+                                    <th
+                                        class="px-3 py-2 text-right font-medium text-muted-foreground"
+                                    >
+                                        Rate / 1M
+                                    </th>
+                                    <th
+                                        class="px-3 py-2 text-right font-medium text-muted-foreground"
+                                    >
+                                        Cost
+                                    </th>
+                                    <th
+                                        v-if="detail.scenario_breakdown"
+                                        class="px-3 py-2 text-right font-medium text-muted-foreground"
+                                    >
+                                        Scenario
+                                    </th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr
+                                    v-for="(line, idx) in detail.breakdown"
+                                    :key="line.label"
+                                    class="border-t border-border"
+                                >
+                                    <td class="px-3 py-2">{{ line.label }}</td>
+                                    <td
+                                        class="font-mono-tabular px-3 py-2 text-right"
+                                    >
+                                        {{ formatNumber(line.tokens) }}
+                                    </td>
+                                    <td
+                                        class="font-mono-tabular px-3 py-2 text-right"
+                                    >
+                                        {{ formatRate(line.rate) }}
+                                    </td>
+                                    <td
+                                        class="font-mono-tabular px-3 py-2 text-right"
+                                    >
+                                        {{ formatCost(line.cost) }}
+                                    </td>
+                                    <td
+                                        v-if="detail.scenario_breakdown"
+                                        class="font-mono-tabular px-3 py-2 text-right text-accent"
+                                    >
+                                        {{
+                                            formatCost(
+                                                detail.scenario_breakdown[idx]
+                                                    .cost,
+                                            )
+                                        }}
+                                    </td>
+                                </tr>
+                                <tr
+                                    class="border-t-2 border-border bg-bg-elev font-semibold"
+                                >
+                                    <td class="px-3 py-2" colspan="3">Total</td>
+                                    <td
+                                        class="font-mono-tabular px-3 py-2 text-right"
+                                    >
+                                        {{ formatCost(detail.total_cost) }}
+                                    </td>
+                                    <td
+                                        v-if="detail.scenario_total_cost !== null"
+                                        class="font-mono-tabular px-3 py-2 text-right text-accent"
+                                    >
+                                        {{
+                                            formatCost(
+                                                detail.scenario_total_cost,
+                                            )
+                                        }}
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <!-- Tools -->
+                    <div v-if="detail.tools.length > 0">
+                        <div
+                            class="mb-2 text-[11px] font-semibold tracking-[0.06em] text-muted-foreground uppercase"
+                        >
+                            Tools used ({{ detail.tools.length }})
+                        </div>
+                        <ul class="space-y-1">
+                            <li
+                                v-for="tool in detail.tools"
+                                :key="tool.id"
+                                class="flex items-center justify-between rounded border border-border bg-card px-3 py-1.5 text-[12px]"
+                            >
+                                <span
+                                    class="font-mono-tabular truncate"
+                                    :title="tool.tool_class"
+                                >
+                                    {{ tool.tool_class.split('\\').pop() }}
+                                </span>
+                                <Pill
+                                    :variant="
+                                        tool.status === 'success'
+                                            ? 'ok'
+                                            : 'danger'
+                                    "
+                                    dot
+                                >
+                                    {{ tool.status }}
+                                </Pill>
+                            </li>
+                        </ul>
+                    </div>
+
+                    <!-- Retroactive price assignment -->
+                    <div
+                        v-if="
+                            detail.rates.source === 'unpriced' ||
+                            detail.record.price_source !== 'assigned'
+                        "
+                        class="rounded-md border border-border bg-card p-3"
+                    >
+                        <div class="mb-2 flex items-center justify-between">
+                            <Label
+                                class="text-[11px] font-semibold tracking-[0.06em] text-muted-foreground uppercase"
+                            >
+                                {{
+                                    detail.rates.source === 'unpriced'
+                                        ? 'Assign price from catalog'
+                                        : 'Override with a different catalog model'
+                                }}
+                            </Label>
+                        </div>
+                        <div class="flex items-center gap-2">
+                            <Select
+                                :model-value="assignKey"
+                                @update:model-value="
+                                    (value) =>
+                                        (assignKey =
+                                            typeof value === 'string'
+                                                ? value
+                                                : '')
+                                "
+                            >
+                                <SelectTrigger class="h-8 flex-1 text-xs">
+                                    <SelectValue placeholder="Pick a catalog model…" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem
+                                        v-for="model in priced_models"
+                                        :key="`${model.provider}|${model.model}`"
+                                        :value="`${model.provider}|${model.model}`"
+                                    >
+                                        {{ model.provider }} / {{ model.model }}
+                                    </SelectItem>
+                                </SelectContent>
+                            </Select>
+                            <Button
+                                size="sm"
+                                class="h-8 text-xs"
+                                :disabled="!assignKey || assigning"
+                                @click="assignPrice"
+                            >
+                                {{ assigning ? 'Assigning…' : 'Assign' }}
+                            </Button>
+                        </div>
+                    </div>
+                </div>
+
+                <DialogFooter>
+                    <Button
+                        size="sm"
+                        variant="outline"
+                        class="h-7 text-xs"
+                        @click="closeDetail"
+                    >
+                        Close
+                    </Button>
+                </DialogFooter>
+            </DialogContent>
+        </Dialog>
     </div>
 </template>

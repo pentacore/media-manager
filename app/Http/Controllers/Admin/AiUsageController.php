@@ -6,9 +6,12 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Models\AiModelPrice;
+use App\Models\AiUsageRecord;
 use App\Services\AiUsage\AiUsageReporting;
 use App\Services\AiUsage\Scenario;
 use Carbon\CarbonImmutable;
+use Illuminate\Http\JsonResponse;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -54,6 +57,56 @@ class AiUsageController extends Controller
         }
 
         return Inertia::render('Admin/AiUsage/Index', $page);
+    }
+
+    /**
+     * Detail payload for the row drill-down modal. Returns plain JSON
+     * (fetched from the page, not Inertia-driven) because the modal
+     * surfaces alongside the index without a route change.
+     */
+    public function show(Request $request, AiUsageRecord $aiUsageRecord, AiUsageReporting $aiUsageReporting): JsonResponse
+    {
+        $scenario = Scenario::fromArray((array) $request->input('scenario', []));
+
+        return new JsonResponse($aiUsageReporting->invocationDetail($aiUsageRecord, $scenario));
+    }
+
+    /**
+     * Retroactively price an invocation by copying rates from a catalog
+     * entry. The picked model's rates are stamped onto the row and
+     * price_source flips to 'assigned' so the cost expression uses them
+     * instead of (or in addition to) the live catalog match.
+     */
+    public function assignPrice(Request $request, AiUsageRecord $aiUsageRecord): RedirectResponse
+    {
+        $validated = $request->validate([
+            'provider' => ['required', 'string'],
+            'model' => ['required', 'string'],
+        ]);
+
+        $aiModelPrice = AiModelPrice::query()
+            ->where('provider', $validated['provider'])
+            ->where('model', $validated['model'])
+            ->firstOrFail();
+
+        $aiUsageRecord->update([
+            'input_per_mtok' => $aiModelPrice->input_per_mtok,
+            'output_per_mtok' => $aiModelPrice->output_per_mtok,
+            'cache_read_per_mtok' => $aiModelPrice->cache_read_per_mtok,
+            'cache_write_per_mtok' => $aiModelPrice->cache_write_per_mtok,
+            'reasoning_per_mtok' => $aiModelPrice->reasoning_per_mtok,
+            'price_source' => 'assigned',
+        ]);
+
+        Inertia::flash('toast', [
+            'type' => 'success',
+            'message' => __('Pricing assigned from :provider/:model.', [
+                'provider' => $aiModelPrice->provider,
+                'model' => $aiModelPrice->model,
+            ]),
+        ]);
+
+        return back();
     }
 
     /**

@@ -412,8 +412,8 @@ test('declined filter paginates locally using the count endpoint as the total', 
     }
 
     $movieFakes = [];
-    foreach ($declinedTmdbIds as $tmdb) {
-        $movieFakes['seerr.local:5055/api/v1/movie/'.$tmdb] = Http::response(['id' => $tmdb, 'title' => 'Movie '.$tmdb]);
+    foreach ($declinedTmdbIds as $declinedTmdbId) {
+        $movieFakes['seerr.local:5055/api/v1/movie/'.$declinedTmdbId] = Http::response(['id' => $declinedTmdbId, 'title' => 'Movie '.$declinedTmdbId]);
     }
 
     Http::fake(array_merge($movieFakes, [

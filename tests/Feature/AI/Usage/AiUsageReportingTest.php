@@ -207,6 +207,38 @@ test('totals still uses exact match when no dated suffix is present', function (
     expect((float) $totals['total_cost'])->toBe(0.40);
 });
 
+test('totals prefer the row snapshot over the live catalog price', function (): void {
+    // Live catalog says input is $0.40, but the row was recorded when input
+    // was $1.00 — the snapshot should win so historical cost stays anchored
+    // to whatever the price was at call time.
+    seedPrice('openai', 'gpt-5-mini', input: 0.40, output: 1.60);
+
+    seedUsage([
+        'prompt_tokens' => 1_000_000,
+        'input_per_mtok' => 1.00,
+        'output_per_mtok' => 0,
+        'cache_read_per_mtok' => 0,
+        'cache_write_per_mtok' => 0,
+        'reasoning_per_mtok' => 0,
+        'price_source' => 'live',
+    ]);
+
+    $totals = resolve(AiUsageReporting::class)->totals(CarbonImmutable::now()->subDay());
+
+    expect((float) $totals['total_cost'])->toBe(1.00);
+});
+
+test('totals fall back to live catalog when snapshot is null', function (): void {
+    seedPrice('openai', 'gpt-5-mini', input: 0.40, output: 1.60);
+
+    // No snapshot fields set — listener missed it / row pre-dates snapshots.
+    seedUsage(['prompt_tokens' => 1_000_000]);
+
+    $totals = resolve(AiUsageReporting::class)->totals(CarbonImmutable::now()->subDay());
+
+    expect((float) $totals['total_cost'])->toBe(0.40);
+});
+
 test('totals with scenario accepts fractional rates', function (): void {
     seedUsage([
         'prompt_tokens' => 1_000_000,

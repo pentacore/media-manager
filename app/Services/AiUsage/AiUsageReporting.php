@@ -4,6 +4,10 @@ declare(strict_types=1);
 
 namespace App\Services\AiUsage;
 
+use App\Models\AiModelPrice;
+use App\Models\AiToolInvocation;
+use App\Models\AiUsageRecord;
+use App\Models\User;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Query\Builder;
 use Illuminate\Support\Collection;
@@ -108,12 +112,186 @@ class AiUsageReporting
     }
 
     /**
+     * Per-invocation detail for the admin drill-down: token counts, the
+     * pricing source actually used to cost it, the breakdown that produced
+     * the total, the tools the agent called, plus an optional scenario
+     * recompute. The catalog rate falls back from the snapshot when the
+     * snapshot is null, mirroring costExpression()'s COALESCE chain.
+     *
+     * @return array{
+     *     record: array<string, mixed>,
+     *     user: array{id: int, name: string}|null,
+     *     tools: array<int, array<string, mixed>>,
+     *     rates: array{
+     *         source: 'snapshot'|'catalog'|'unpriced',
+     *         input_per_mtok: float,
+     *         output_per_mtok: float,
+     *         cache_read_per_mtok: float,
+     *         cache_write_per_mtok: float,
+     *         reasoning_per_mtok: float
+     *     },
+     *     breakdown: array<int, array{label: string, tokens: int, rate: float, cost: float}>,
+     *     total_cost: float,
+     *     scenario_breakdown: array<int, array{label: string, tokens: int, rate: float, cost: float}>|null,
+     *     scenario_total_cost: float|null
+     * }
+     */
+    public function invocationDetail(AiUsageRecord $aiUsageRecord, ?Scenario $scenario = null): array
+    {
+        $aiUsageRecord->loadMissing('user');
+
+        $catalog = AiModelPrice::query()
+            ->where('provider', $aiUsageRecord->provider)
+            ->where('model', preg_replace('/-\d{4}-\d{2}-\d{2}$/', '', (string) $aiUsageRecord->model))
+            ->first();
+
+        $rates = [
+            'input_per_mtok' => $this->resolveRate($aiUsageRecord->input_per_mtok, $catalog?->input_per_mtok),
+            'output_per_mtok' => $this->resolveRate($aiUsageRecord->output_per_mtok, $catalog?->output_per_mtok),
+            'cache_read_per_mtok' => $this->resolveRate($aiUsageRecord->cache_read_per_mtok, $catalog?->cache_read_per_mtok),
+            'cache_write_per_mtok' => $this->resolveRate($aiUsageRecord->cache_write_per_mtok, $catalog?->cache_write_per_mtok),
+            'reasoning_per_mtok' => $this->resolveRate($aiUsageRecord->reasoning_per_mtok, $catalog?->reasoning_per_mtok),
+        ];
+
+        $rateSource = match (true) {
+            $aiUsageRecord->input_per_mtok !== null => 'snapshot',
+            $catalog instanceof AiModelPrice => 'catalog',
+            default => 'unpriced',
+        };
+
+        $tokens = [
+            'input' => $aiUsageRecord->prompt_tokens,
+            'output' => $aiUsageRecord->completion_tokens,
+            'cache_read' => $aiUsageRecord->cache_read_input_tokens,
+            'cache_write' => $aiUsageRecord->cache_write_input_tokens,
+            'reasoning' => $aiUsageRecord->reasoning_tokens,
+        ];
+
+        $breakdown = $this->buildBreakdown($tokens, [
+            'input' => $rates['input_per_mtok'],
+            'output' => $rates['output_per_mtok'],
+            'cache_read' => $rates['cache_read_per_mtok'],
+            'cache_write' => $rates['cache_write_per_mtok'],
+            'reasoning' => $rates['reasoning_per_mtok'],
+        ]);
+
+        $tools = AiToolInvocation::query()
+            ->where('invocation_id', $aiUsageRecord->invocation_id)
+            ->orderBy('id')
+            ->get(['id', 'tool_class', 'tool_invocation_id', 'status', 'created_at'])
+            ->map(fn (AiToolInvocation $aiToolInvocation): array => [
+                'id' => $aiToolInvocation->id,
+                'tool_class' => $aiToolInvocation->tool_class,
+                'tool_invocation_id' => $aiToolInvocation->tool_invocation_id,
+                'status' => $aiToolInvocation->status,
+                'created_at' => $aiToolInvocation->created_at?->toIso8601String(),
+            ])
+            ->all();
+
+        [$scenarioBreakdown, $scenarioTotal] = $this->scenarioBreakdown($tokens, $scenario);
+
+        return [
+            'record' => [
+                'id' => $aiUsageRecord->id,
+                'invocation_id' => $aiUsageRecord->invocation_id,
+                'agent_class' => $aiUsageRecord->agent_class,
+                'provider' => $aiUsageRecord->provider,
+                'model' => $aiUsageRecord->model,
+                'prompt_tokens' => $aiUsageRecord->prompt_tokens,
+                'completion_tokens' => $aiUsageRecord->completion_tokens,
+                'cache_read_input_tokens' => $aiUsageRecord->cache_read_input_tokens,
+                'cache_write_input_tokens' => $aiUsageRecord->cache_write_input_tokens,
+                'reasoning_tokens' => $aiUsageRecord->reasoning_tokens,
+                'tool_calls_count' => $aiUsageRecord->tool_calls_count,
+                'price_source' => $aiUsageRecord->price_source,
+                'conversation_id' => $aiUsageRecord->conversation_id,
+                'status' => $aiUsageRecord->status,
+                'created_at' => $aiUsageRecord->created_at?->toIso8601String(),
+            ],
+            'user' => $aiUsageRecord->user instanceof User ? [
+                'id' => $aiUsageRecord->user->id,
+                'name' => $aiUsageRecord->user->name,
+            ] : null,
+            'tools' => $tools,
+            'rates' => array_merge(['source' => $rateSource], $rates),
+            'breakdown' => $breakdown,
+            'total_cost' => array_sum(array_column($breakdown, 'cost')),
+            'scenario_breakdown' => $scenarioBreakdown,
+            'scenario_total_cost' => $scenarioTotal,
+        ];
+    }
+
+    private function resolveRate(?string $snapshot, ?string $catalog): float
+    {
+        if ($snapshot !== null) {
+            return (float) $snapshot;
+        }
+
+        if ($catalog !== null) {
+            return (float) $catalog;
+        }
+
+        return 0.0;
+    }
+
+    /**
+     * @param  array<string, int>  $tokens
+     * @param  array<string, float>  $rates
+     * @return array<int, array{label: string, tokens: int, rate: float, cost: float}>
+     */
+    private function buildBreakdown(array $tokens, array $rates): array
+    {
+        $labels = [
+            'input' => 'Input',
+            'output' => 'Output',
+            'cache_read' => 'Cache read',
+            'cache_write' => 'Cache write',
+            'reasoning' => 'Reasoning',
+        ];
+
+        $rows = [];
+
+        foreach ($labels as $key => $label) {
+            $rows[] = [
+                'label' => $label,
+                'tokens' => $tokens[$key],
+                'rate' => $rates[$key],
+                'cost' => $tokens[$key] * $rates[$key] / 1_000_000,
+            ];
+        }
+
+        return $rows;
+    }
+
+    /**
+     * @param  array<string, int>  $tokens
+     * @return array{0: array<int, array{label: string, tokens: int, rate: float, cost: float}>|null, 1: float|null}
+     */
+    private function scenarioBreakdown(array $tokens, ?Scenario $scenario): array
+    {
+        if (! $scenario instanceof Scenario) {
+            return [null, null];
+        }
+
+        $breakdown = $this->buildBreakdown($tokens, [
+            'input' => $scenario->inputPerMtok,
+            'output' => $scenario->outputPerMtok,
+            'cache_read' => $scenario->cacheReadPerMtok,
+            'cache_write' => $scenario->cacheWritePerMtok,
+            'reasoning' => $scenario->reasoningPerMtok,
+        ]);
+
+        return [$breakdown, array_sum(array_column($breakdown, 'cost'))];
+    }
+
+    /**
      * Returns SQL expression + bindings for the cost-per-row computation.
      *
-     * - Without scenario: joins ai_model_prices and uses table rates (cost is
-     *   zero for unpriced models).
+     * - Without scenario: prefers the per-row snapshot rates captured at call
+     *   time (or assigned retroactively); falls back to live ai_model_prices
+     *   when the snapshot is null. Cost is zero for rows that match neither.
      * - With scenario: uses the scenario's flat rates uniformly across all
-     *   rows, ignoring ai_model_prices entirely.
+     *   rows, ignoring both snapshot and catalog.
      *
      * @return array{0: string, 1: array<int, float>}
      */
@@ -122,16 +300,13 @@ class AiUsageReporting
         if (! $scenario instanceof Scenario) {
             return [
                 '
-                    COALESCE(
-                        (
-                            ai_usage_records.prompt_tokens * COALESCE(ai_model_prices.input_per_mtok, 0)
-                            + ai_usage_records.completion_tokens * COALESCE(ai_model_prices.output_per_mtok, 0)
-                            + ai_usage_records.cache_read_input_tokens * COALESCE(ai_model_prices.cache_read_per_mtok, 0)
-                            + ai_usage_records.cache_write_input_tokens * COALESCE(ai_model_prices.cache_write_per_mtok, 0)
-                            + ai_usage_records.reasoning_tokens * COALESCE(ai_model_prices.reasoning_per_mtok, 0)
-                        ) / 1000000.0,
-                        0
-                    )
+                    (
+                        ai_usage_records.prompt_tokens * COALESCE(ai_usage_records.input_per_mtok, ai_model_prices.input_per_mtok, 0)
+                        + ai_usage_records.completion_tokens * COALESCE(ai_usage_records.output_per_mtok, ai_model_prices.output_per_mtok, 0)
+                        + ai_usage_records.cache_read_input_tokens * COALESCE(ai_usage_records.cache_read_per_mtok, ai_model_prices.cache_read_per_mtok, 0)
+                        + ai_usage_records.cache_write_input_tokens * COALESCE(ai_usage_records.cache_write_per_mtok, ai_model_prices.cache_write_per_mtok, 0)
+                        + ai_usage_records.reasoning_tokens * COALESCE(ai_usage_records.reasoning_per_mtok, ai_model_prices.reasoning_per_mtok, 0)
+                    ) / 1000000.0
                 ',
                 [],
             ];

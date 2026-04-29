@@ -39,6 +39,8 @@ Route::middleware(['auth', 'verified', 'password.set', 'role:admin'])->prefix('a
 
     Route::get('ai-usage', [AiUsageController::class, 'index'])->name('ai-usage.index');
     Route::get('ai-usage/export', [AiUsageController::class, 'export'])->name('ai-usage.export');
+    Route::get('ai-usage/{aiUsageRecord}', [AiUsageController::class, 'show'])->name('ai-usage.show');
+    Route::post('ai-usage/{aiUsageRecord}/assign-price', [AiUsageController::class, 'assignPrice'])->name('ai-usage.assign-price');
 
     Route::get('ai-prices', [AiModelPriceController::class, 'index'])->name('ai-prices.index');
     Route::post('ai-prices', [AiModelPriceController::class, 'store'])->name('ai-prices.store');

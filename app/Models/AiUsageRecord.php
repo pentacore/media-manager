@@ -10,6 +10,7 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Override;
 
 /**
  * @property int $id
@@ -23,6 +24,12 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  * @property int $cache_write_input_tokens
  * @property int $reasoning_tokens
  * @property int $tool_calls_count
+ * @property string|null $input_per_mtok
+ * @property string|null $output_per_mtok
+ * @property string|null $cache_read_per_mtok
+ * @property string|null $cache_write_per_mtok
+ * @property string|null $reasoning_per_mtok
+ * @property string|null $price_source
  * @property int|null $user_id
  * @property string|null $conversation_id
  * @property string $status
@@ -46,6 +53,12 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
     'cache_write_input_tokens',
     'reasoning_tokens',
     'tool_calls_count',
+    'input_per_mtok',
+    'output_per_mtok',
+    'cache_read_per_mtok',
+    'cache_write_per_mtok',
+    'reasoning_per_mtok',
+    'price_source',
     'user_id',
     'conversation_id',
     'status',
@@ -53,6 +66,21 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 class AiUsageRecord extends Model
 {
     use HasFactory;
+
+    /**
+     * @return array<string, string>
+     */
+    #[Override]
+    protected function casts(): array
+    {
+        return [
+            'input_per_mtok' => 'decimal:4',
+            'output_per_mtok' => 'decimal:4',
+            'cache_read_per_mtok' => 'decimal:4',
+            'cache_write_per_mtok' => 'decimal:4',
+            'reasoning_per_mtok' => 'decimal:4',
+        ];
+    }
 
     /**
      * @return BelongsTo<User, $this>
