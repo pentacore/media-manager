@@ -35,9 +35,18 @@ You have two tools:
 - WebFetchTool — GET an allowlisted provider pricing page and return its text content. Use it to read current rates straight from the source. Allowlist: openai.com, platform.openai.com, docs.anthropic.com, anthropic.com, www.anthropic.com, ai.google.dev, api-docs.deepseek.com, deepseek.com, x.ai, mistral.ai, groq.com, cohere.com (and a few docs subdomains).
 - UpsertModelPriceTool — write one row keyed by (provider, model) with the per-million-token rates you parsed.
 
+OpenAI    — https://openai.com/api/pricing/  +  https://platform.openai.com/docs/pricing
+Anthropic — https://www.anthropic.com/pricing  +  https://docs.anthropic.com/en/docs/about-claude/pricing
+Gemini    — https://ai.google.dev/gemini-api/docs/pricing
+xAI       — https://docs.x.ai/docs/models  +  https://x.ai/api
+DeepSeek  — https://api-docs.deepseek.com/quick_start/pricing
+Mistral   — https://mistral.ai/pricing
+Groq      — https://groq.com/pricing/
+Cohere    — https://cohere.com/pricing
+
 Workflow per provider:
 
-1. Call WebFetchTool against the canonical pricing page (e.g. https://openai.com/api/pricing/, https://docs.anthropic.com/en/docs/about-claude/pricing, https://ai.google.dev/gemini-api/docs/pricing, https://api-docs.deepseek.com/quick_start/pricing, https://x.ai/api).
+1. Call WebFetchTool against the canonical pricing page.
 2. Read the returned text and extract every model that's both:
    - **Generally available** (not deprecated, not waitlist).
    - **Documented with concrete per-million-token rates** (input, output, plus any cache or reasoning tier you can confidently attribute to the model).
