@@ -201,34 +201,24 @@ test('summary falls back to zeros when count endpoint fails', function (): void 
         );
 });
 
-test('summary exposes available and processing counts from probe pageInfo', function (): void {
+test('summary exposes every status bucket reported by /request/count', function (): void {
     $member = User::factory()->member()->create();
 
     Http::fake([
         'seerr.local:5055/api/v1/request/count' => Http::response([
-            'total' => 75, 'pending' => 5, 'approved' => 60, 'declined' => 10,
+            'total' => 100,
+            'movie' => 60,
+            'tv' => 40,
+            'pending' => 5,
+            'approved' => 30,
+            'processing' => 7,
+            'available' => 48,
+            'declined' => 10,
         ]),
-        'seerr.local:5055/api/v1/request*' => function ($request) {
-            $url = (string) $request->url();
-            if (str_contains($url, 'filter=available')) {
-                return Http::response([
-                    'pageInfo' => ['page' => 1, 'pages' => 1, 'pageSize' => 1, 'results' => 42],
-                    'results' => [],
-                ]);
-            }
-
-            if (str_contains($url, 'filter=processing')) {
-                return Http::response([
-                    'pageInfo' => ['page' => 1, 'pages' => 1, 'pageSize' => 1, 'results' => 7],
-                    'results' => [],
-                ]);
-            }
-
-            return Http::response([
-                'pageInfo' => ['page' => 1, 'pages' => 1, 'pageSize' => 50, 'results' => 0],
-                'results' => [],
-            ]);
-        },
+        'seerr.local:5055/api/v1/request*' => Http::response([
+            'pageInfo' => ['page' => 1, 'pages' => 1, 'pageSize' => 50, 'results' => 0],
+            'results' => [],
+        ]),
     ]);
 
     $this->actingAs($member)
@@ -237,17 +227,22 @@ test('summary exposes available and processing counts from probe pageInfo', func
         ->assertInertia(fn ($page) => $page
             ->loadDeferredProps('default', function ($page): void {
                 $page
-                    ->where('summary.available', 42)
+                    ->where('summary.total', 100)
+                    ->where('summary.pending', 5)
+                    ->where('summary.approved', 30)
                     ->where('summary.processing', 7)
-                    ->where('summary.approved', 60)
-                    ->where('summary.declined', 10);
+                    ->where('summary.available', 48)
+                    ->where('summary.declined', 10)
+                    ->missing('summary.movie')
+                    ->missing('summary.tv');
             })
         );
 
-    Http::assertSent(fn ($request): bool => str_contains((string) $request->url(), 'filter=available')
+    // Counts come straight from /request/count now — no per-filter probing.
+    Http::assertNotSent(fn ($request): bool => str_contains((string) $request->url(), 'filter=available')
         && str_contains((string) $request->url(), 'take=1')
     );
-    Http::assertSent(fn ($request): bool => str_contains((string) $request->url(), 'filter=processing')
+    Http::assertNotSent(fn ($request): bool => str_contains((string) $request->url(), 'filter=processing')
         && str_contains((string) $request->url(), 'take=1')
     );
 });

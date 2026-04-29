@@ -260,44 +260,50 @@ class RequestController extends Controller
     }
 
     /**
-     * @return array{total: int, pending: int, approved: int, declined: int, available: int, processing: int}
+     * Status keys we surface as request tabs. Sourced verbatim from
+     * Seerr's /request/count payload (minus the movie/tv breakdown,
+     * which is media-type, not status).
+     */
+    private const array SUMMARY_STATUS_KEYS = [
+        'pending',
+        'approved',
+        'processing',
+        'available',
+        'declined',
+    ];
+
+    /**
+     * @return array<string, int>
      */
     private function loadSummary(ServiceConnection $serviceConnection): array
     {
-        $seerrClient = new SeerrClient($serviceConnection);
-
         try {
-            $counts = $seerrClient->getRequestCount();
+            $counts = new SeerrClient($serviceConnection)->getRequestCount();
         } catch (RequestException|ConnectionException) {
-            return ['total' => 0, 'pending' => 0, 'approved' => 0, 'declined' => 0, 'available' => 0, 'processing' => 0];
+            return $this->emptySummary();
         }
 
-        // /request/count does not break out the `available` and `processing`
-        // buckets, so we probe Seerr for one row of each and read the total
-        // from pageInfo. Keeps the tab badges truthful without paginating.
-        return [
-            'total' => (int) ($counts['total'] ?? 0),
-            'pending' => (int) ($counts['pending'] ?? 0),
-            'approved' => (int) ($counts['approved'] ?? 0),
-            'declined' => (int) ($counts['declined'] ?? 0),
-            'available' => $this->probeFilterTotal($seerrClient, 'available'),
-            'processing' => $this->probeFilterTotal($seerrClient, 'processing'),
-        ];
+        $summary = ['total' => (int) ($counts['total'] ?? 0)];
+
+        foreach (self::SUMMARY_STATUS_KEYS as $key) {
+            $summary[$key] = (int) ($counts[$key] ?? 0);
+        }
+
+        return $summary;
     }
 
     /**
-     * Read the total request count for a given Seerr filter by asking
-     * for a single row and inspecting pageInfo.results.
+     * @return array<string, int>
      */
-    private function probeFilterTotal(SeerrClient $seerrClient, string $filter): int
+    private function emptySummary(): array
     {
-        try {
-            $response = $seerrClient->getRequests(['filter' => $filter, 'take' => 1]);
-        } catch (RequestException|ConnectionException) {
-            return 0;
+        $summary = ['total' => 0];
+
+        foreach (self::SUMMARY_STATUS_KEYS as $key) {
+            $summary[$key] = 0;
         }
 
-        return (int) ($response['pageInfo']['results'] ?? 0);
+        return $summary;
     }
 
     /**
