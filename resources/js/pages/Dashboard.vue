@@ -73,6 +73,12 @@ const props = defineProps<{
     services: ServiceItem[];
     recentActivity: ActivityItem[];
     pendingApprovals: PendingApproval[];
+    sparklines: {
+        webhooks: number[];
+        actions: number[];
+        failed_actions: number[];
+        streams: number[];
+    };
     nowPlaying?: NowPlayingItem[];
 }>();
 
@@ -139,14 +145,14 @@ const healthyServices = computed(
         props.services.filter((service) => service.health === 'healthy').length,
 );
 
-// Placeholder sparkline series until service_metrics is wired.
-const sparkA = [
-    4, 6, 5, 8, 7, 9, 10, 8, 11, 12, 10, 13, 14, 12, 15, 16, 14, 17,
-];
-const sparkB = [
-    12, 11, 13, 12, 14, 13, 15, 14, 13, 15, 16, 14, 15, 17, 16, 15, 18, 17,
-];
-const sparkC = [2, 3, 2, 4, 3, 5, 4, 3, 5, 4, 6, 5, 4, 6, 5, 7, 6, 5];
+// Hourly buckets pulled from webhook_events / action_requests /
+// emby_activities by DashboardMetricsRepository — oldest first.
+const webhookSpark = computed<number[]>(() => props.sparklines.webhooks);
+const actionSpark = computed<number[]>(() => props.sparklines.actions);
+const streamSpark = computed<number[]>(() => props.sparklines.streams);
+// Per-service services-online sparkline isn't tracked yet; reuse the
+// actions stream as a coarse "activity" line for that card.
+const servicesSpark = computed<number[]>(() => props.sparklines.actions);
 
 function formatRelative(iso: string | null): string {
     if (!iso) {
@@ -294,19 +300,19 @@ onMounted(() => {
                 label="Services online"
                 :value="`${healthyServices} / ${totalServices}`"
                 :hint="`${stats.activeServices} active connections`"
-                :spark="sparkB"
+                :spark="servicesSpark"
             />
             <StatCard
                 label="Webhooks · 24h"
                 :value="recentWebhooks.toString()"
                 hint="ingest stream"
-                :spark="sparkA"
+                :spark="webhookSpark"
             />
             <StatCard
                 label="Actions · 24h"
                 :value="recentActions.toString()"
                 :hint="`${pendingActions} pending · ${failedActions} failed`"
-                :spark="sparkC"
+                :spark="actionSpark"
             >
                 <template v-if="failedActions > 0" #accent>
                     <Pill variant="warn"
@@ -319,7 +325,7 @@ onMounted(() => {
                 label="Streams · now"
                 :value="currentNowPlaying.length.toString()"
                 hint="live Emby sessions"
-                :spark="sparkB"
+                :spark="streamSpark"
             />
         </div>
 

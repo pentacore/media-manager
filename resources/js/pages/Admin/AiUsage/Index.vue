@@ -240,8 +240,13 @@ function formatTimestamp(value: string): string {
         minute: '2-digit',
         hour12: false,
     });
-    if (sameDay) return time;
+
+    if (sameDay) {
+return time;
+}
+
     const date = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+
     return `${date} ${time}`;
 }
 </script>

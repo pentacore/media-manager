@@ -23,6 +23,17 @@ class ServiceConnectionUpdateRequest extends FormRequest
             // The controller filters empty strings so they never overwrite state.
             'api_key' => ['nullable', 'string', 'max:500'],
             'webhook_token' => ['nullable', 'string', 'min:10', 'max:500'],
+            // Disk-display preferences for the Service Health page. Only
+            // meaningful for sonarr/radarr connections, but accepted on any
+            // type so the form can store/restore the picker state.
+            'disk_mode' => ['nullable', 'string', 'in:all,selected,sum'],
+            'disk_paths' => ['nullable', 'array'],
+            'disk_paths.*' => ['string', 'max:500'],
+            // disk_display is a path → metric map. The "sum" pseudo-path
+            // controls the aggregated row when disk_mode=sum. Allowed
+            // values: free / used / both.
+            'disk_display' => ['nullable', 'array'],
+            'disk_display.*' => ['string', 'in:free,used,both'],
         ];
     }
 }

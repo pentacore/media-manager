@@ -23,6 +23,7 @@ interface DiskSpace {
     label: string | null;
     free_space: number | null;
     total_space: number | null;
+    display?: 'free' | 'used' | 'both';
 }
 
 interface Indexer {
@@ -137,7 +138,9 @@ const overallUptime = computed<number | null>(() => {
         (v): v is number => typeof v === 'number',
     );
 
-    if (samples.length === 0) return null;
+    if (samples.length === 0) {
+return null;
+}
 
     return samples.reduce((acc, v) => acc + v, 0) / samples.length;
 });
@@ -193,22 +196,16 @@ return 'seerr';
     return t;
 }
 
-function diskFree(connectionId: number): { free: number; total: number } | null {
-    const disks = props.diskSpace?.[connectionId];
+function disksFor(connectionId: number): DiskSpace[] | undefined {
+    return props.diskSpace?.[connectionId];
+}
 
-    if (!disks || disks.length === 0) {
+function diskUsed(disk: DiskSpace): number | null {
+    if (disk.free_space === null || disk.total_space === null) {
 return null;
 }
 
-    let free = 0;
-    let total = 0;
-
-    for (const disk of disks) {
-        free += disk.free_space ?? 0;
-        total += disk.total_space ?? 0;
-    }
-
-    return { free, total };
+    return Math.max(0, disk.total_space - disk.free_space);
 }
 
 function indexersFor(connectionId: number): Indexer[] | undefined {
@@ -229,10 +226,6 @@ function avgLatencyFor(connectionId: number): number | null {
     return props.metrics?.avg_latency?.[connectionId] ?? null;
 }
 
-function uptimeFor(connectionId: number): number | null {
-    return props.metrics?.uptime?.[connectionId] ?? null;
-}
-
 function bucketColor(status: string): string {
     switch (status) {
         case 'healthy':
@@ -248,10 +241,17 @@ function bucketColor(status: string): string {
 }
 
 function barHeight(bucket: MetricBucket): number {
-    if (bucket.status === 'gap') return 20;
-    if (!bucket.latency_ms) return 60;
+    if (bucket.status === 'gap') {
+return 20;
+}
+
+    if (!bucket.latency_ms) {
+return 60;
+}
+
     // 0-500ms maps to 30-100%; clamp for outliers.
     const pct = 30 + Math.min(70, (bucket.latency_ms / 500) * 70);
+
     return Math.round(pct);
 }
 </script>
@@ -465,17 +465,53 @@ function barHeight(bucket: MetricBucket): number {
 
                     <!-- Disk + indexer rows -->
                     <div
-                        v-if="diskFree(connection.id)"
-                        class="mt-2 flex items-center gap-2 text-[11.5px] text-muted-foreground"
+                        v-if="
+                            disksFor(connection.id) &&
+                            disksFor(connection.id)!.length > 0
+                        "
+                        class="mt-2 flex flex-col gap-1"
                     >
-                        <HardDrive class="size-3.5" />
-                        <span class="font-mono-tabular">{{
-                            formatSize(diskFree(connection.id)!.free)
-                        }}</span>
-                        <span>free of</span>
-                        <span class="font-mono-tabular">{{
-                            formatSize(diskFree(connection.id)!.total)
-                        }}</span>
+                        <div
+                            v-for="(disk, idx) in disksFor(connection.id)"
+                            :key="`${connection.id}-disk-${idx}-${disk.path}`"
+                            class="flex items-center gap-2 text-[11.5px] text-muted-foreground"
+                        >
+                            <HardDrive class="size-3.5" />
+                            <span
+                                v-if="disk.label && disk.label !== disk.path"
+                                class="text-foreground"
+                                >{{ disk.label }}</span
+                            >
+                            <span
+                                v-else-if="disk.path"
+                                class="font-mono-tabular text-foreground"
+                                >{{ disk.path }}</span
+                            >
+                            <span class="text-fg-subtle">·</span>
+                            <template v-if="(disk.display ?? 'both') === 'free'">
+                                <span class="font-mono-tabular">{{
+                                    formatSize(disk.free_space)
+                                }}</span>
+                                <span>free</span>
+                            </template>
+                            <template
+                                v-else-if="(disk.display ?? 'both') === 'used'"
+                            >
+                                <span class="font-mono-tabular">{{
+                                    formatSize(diskUsed(disk))
+                                }}</span>
+                                <span>used</span>
+                            </template>
+                            <template v-else>
+                                <span class="font-mono-tabular">{{
+                                    formatSize(disk.free_space)
+                                }}</span>
+                                <span>free of</span>
+                                <span class="font-mono-tabular">{{
+                                    formatSize(disk.total_space)
+                                }}</span>
+                            </template>
+                        </div>
                     </div>
 
                     <div

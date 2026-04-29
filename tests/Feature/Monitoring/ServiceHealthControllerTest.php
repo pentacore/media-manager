@@ -287,3 +287,119 @@ test('inactive Prowlarr connection is absent from prowlarrIndexers map', functio
             )
         );
 });
+
+test('disk-mode=selected filters disks to chosen paths', function (): void {
+    $user = User::factory()->create();
+
+    $connection = ServiceConnection::factory()->sonarr()->create([
+        'url' => 'http://sonarr.local:8989',
+        'settings' => ['disk' => ['mode' => 'selected', 'paths' => ['/movies']]],
+    ]);
+
+    Http::fake([
+        'sonarr.local:8989/api/v3/diskspace' => Http::response([
+            ['path' => '/movies', 'label' => 'movies', 'freeSpace' => 100, 'totalSpace' => 200],
+            ['path' => '/tv', 'label' => 'tv', 'freeSpace' => 300, 'totalSpace' => 600],
+        ]),
+    ]);
+
+    $this->actingAs($user)
+        ->get(route('monitoring.service-health'))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->loadDeferredProps(fn ($page) => $page
+                ->has('diskSpace.'.$connection->id, 1)
+                ->where(sprintf('diskSpace.%d.0.path', $connection->id), '/movies')
+            )
+        );
+});
+
+test('disk-mode=sum collapses chosen paths into a single total row', function (): void {
+    $user = User::factory()->create();
+
+    $connection = ServiceConnection::factory()->radarr()->create([
+        'url' => 'http://radarr.local:7878',
+        'settings' => ['disk' => ['mode' => 'sum', 'paths' => ['/movies', '/4k']]],
+    ]);
+
+    Http::fake([
+        'radarr.local:7878/api/v3/diskspace' => Http::response([
+            ['path' => '/movies', 'label' => 'movies', 'freeSpace' => 100, 'totalSpace' => 200],
+            ['path' => '/4k', 'label' => '4k', 'freeSpace' => 50, 'totalSpace' => 400],
+            ['path' => '/other', 'label' => 'other', 'freeSpace' => 999, 'totalSpace' => 1000],
+        ]),
+    ]);
+
+    $this->actingAs($user)
+        ->get(route('monitoring.service-health'))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->loadDeferredProps(fn ($page) => $page
+                ->has('diskSpace.'.$connection->id, 1)
+                ->where(sprintf('diskSpace.%d.0.path', $connection->id), 'sum')
+                ->where(sprintf('diskSpace.%d.0.free_space', $connection->id), 150)
+                ->where(sprintf('diskSpace.%d.0.total_space', $connection->id), 600)
+            )
+        );
+});
+
+test('disk display=used carries used metric on each row', function (): void {
+    $user = User::factory()->create();
+
+    $connection = ServiceConnection::factory()->sonarr()->create([
+        'url' => 'http://sonarr.local:8989',
+        'settings' => ['disk' => [
+            'mode' => 'all',
+            'paths' => [],
+            'display' => ['/movies' => 'used'],
+        ]],
+    ]);
+
+    Http::fake([
+        'sonarr.local:8989/api/v3/diskspace' => Http::response([
+            ['path' => '/movies', 'label' => 'movies', 'freeSpace' => 100, 'totalSpace' => 200],
+            ['path' => '/tv', 'label' => 'tv', 'freeSpace' => 300, 'totalSpace' => 600],
+        ]),
+    ]);
+
+    $this->actingAs($user)
+        ->get(route('monitoring.service-health'))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->loadDeferredProps(fn ($page) => $page
+                ->where(sprintf('diskSpace.%d.0.display', $connection->id), 'used')
+                ->where(sprintf('diskSpace.%d.1.display', $connection->id), 'both')
+            )
+        );
+});
+
+test('disk display sum=free attaches metric to the synthetic sum row', function (): void {
+    $user = User::factory()->create();
+
+    $connection = ServiceConnection::factory()->radarr()->create([
+        'url' => 'http://radarr.local:7878',
+        'settings' => ['disk' => [
+            'mode' => 'sum',
+            'paths' => ['/movies', '/4k'],
+            'display' => ['sum' => 'free'],
+        ]],
+    ]);
+
+    Http::fake([
+        'radarr.local:7878/api/v3/diskspace' => Http::response([
+            ['path' => '/movies', 'label' => 'movies', 'freeSpace' => 100, 'totalSpace' => 200],
+            ['path' => '/4k', 'label' => '4k', 'freeSpace' => 50, 'totalSpace' => 400],
+        ]),
+    ]);
+
+    $this->actingAs($user)
+        ->get(route('monitoring.service-health'))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->loadDeferredProps(fn ($page) => $page
+                ->where(sprintf('diskSpace.%d.0.path', $connection->id), 'sum')
+                ->where(sprintf('diskSpace.%d.0.display', $connection->id), 'free')
+                ->where(sprintf('diskSpace.%d.0.free_space', $connection->id), 150)
+            )
+        );
+});

@@ -48,6 +48,7 @@ class ServiceMetricsRepository
             if ($minutesAgo < 0) {
                 continue;
             }
+
             if ($minutesAgo > 59) {
                 continue;
             }
@@ -194,6 +195,7 @@ class ServiceMetricsRepository
             if ($minutesAgo < 0) {
                 continue;
             }
+
             if ($minutesAgo > 59) {
                 continue;
             }

@@ -12,6 +12,7 @@ use App\Models\ActionRequest;
 use App\Models\ActivityLog;
 use App\Models\ServiceConnection;
 use App\Models\WebhookEvent;
+use App\Services\DashboardMetrics\DashboardMetricsRepository;
 use App\Services\Emby\EmbyClient;
 use App\Services\ServiceMetrics\ServiceMetricsRepository;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
@@ -23,8 +24,11 @@ use Inertia\Response;
 
 class DashboardController extends Controller
 {
-    public function __invoke(Request $request, ServiceMetricsRepository $serviceMetricsRepository): Response
-    {
+    public function __invoke(
+        Request $request,
+        ServiceMetricsRepository $serviceMetricsRepository,
+        DashboardMetricsRepository $dashboardMetricsRepository,
+    ): Response {
         $services = ServiceConnection::query()
             ->orderBy('type')
             ->get();
@@ -98,6 +102,12 @@ class DashboardController extends Controller
                         ?? 'manual',
                     'created_at' => $actionRequest->created_at?->toISOString(),
                 ]),
+            'sparklines' => [
+                'webhooks' => $dashboardMetricsRepository->webhookSparkline(),
+                'actions' => $dashboardMetricsRepository->actionSparkline(),
+                'failed_actions' => $dashboardMetricsRepository->failedActionSparkline(),
+                'streams' => $dashboardMetricsRepository->streamSparkline(),
+            ],
             'nowPlaying' => Inertia::defer(fn (): array => $this->loadNowPlaying()),
         ]);
     }

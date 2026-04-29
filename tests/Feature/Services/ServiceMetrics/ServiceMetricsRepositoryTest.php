@@ -44,7 +44,9 @@ test('last60Minutes places samples in the correct minute bucket', function (): v
 });
 
 test('last60Minutes prefers the worst observed status within a minute', function (): void {
-    $now = CarbonImmutable::now();
+    // Pin the clock at a minute boundary so both samples land in the
+    // same bucket regardless of when the suite runs.
+    $now = CarbonImmutable::now()->startOfMinute();
     $bucketTime = $now->subMinutes(5);
 
     ServiceMetric::factory()->create([

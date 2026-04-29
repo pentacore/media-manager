@@ -51,6 +51,10 @@ class ServiceConnectionController extends Controller
 
     public function edit(ServiceConnection $serviceConnection): Response
     {
+        $diskSettings = is_array($serviceConnection->settings['disk'] ?? null)
+            ? $serviceConnection->settings['disk']
+            : ['mode' => 'all', 'paths' => [], 'display' => []];
+
         return Inertia::render('Admin/Connections/Edit', [
             'connection' => [
                 'id' => $serviceConnection->id,
@@ -60,12 +64,53 @@ class ServiceConnectionController extends Controller
                 'api_key_set' => $serviceConnection->api_key !== '' && $serviceConnection->api_key !== null,
                 'webhook_token_set' => $serviceConnection->webhook_token !== '' && $serviceConnection->webhook_token !== null,
                 'is_active' => $serviceConnection->is_active,
+                'disk' => [
+                    'mode' => $diskSettings['mode'] ?? 'all',
+                    'paths' => array_values($diskSettings['paths'] ?? []),
+                    'display' => is_array($diskSettings['display'] ?? null)
+                        ? $diskSettings['display']
+                        : [],
+                ],
             ],
             'serviceTypes' => ServiceType::mapForSelect(labelKey: 'label'),
             'indexers' => $serviceConnection->type === ServiceType::Prowlarr
                 ? Inertia::defer(fn (): array => $this->loadProwlarrIndexers($serviceConnection))
                 : [],
+            'availableDiskPaths' => in_array($serviceConnection->type, [ServiceType::Sonarr, ServiceType::Radarr], true)
+                ? Inertia::defer(fn (): array => $this->loadAvailableDiskPaths($serviceConnection))
+                : [],
         ]);
+    }
+
+    /**
+     * @return array<int, array{path: string, label: string|null}>
+     */
+    private function loadAvailableDiskPaths(ServiceConnection $serviceConnection): array
+    {
+        if (! $serviceConnection->is_active) {
+            return [];
+        }
+
+        try {
+            $client = resolve(ServiceClientFactory::class)->make($serviceConnection);
+
+            if (! method_exists($client, 'getDiskSpace')) {
+                return [];
+            }
+
+            $entries = $client->getDiskSpace();
+        } catch (Throwable $throwable) {
+            Log::warning('Failed to load disk paths for connection edit page', [
+                'connection_id' => $serviceConnection->id,
+                'exception' => $throwable::class,
+            ]);
+
+            return [];
+        }
+
+        return array_values(array_filter(array_map(static fn (array $entry): ?array => isset($entry['path']) && is_string($entry['path'])
+                ? ['path' => $entry['path'], 'label' => $entry['label'] ?? null]
+                : null, $entries)));
     }
 
     /**
@@ -105,6 +150,31 @@ class ServiceConnectionController extends Controller
             if (! is_string($value) || trim($value) === '') {
                 unset($validated[$secretField]);
             }
+        }
+
+        // Pull disk preferences out of the flat payload and merge them
+        // into the connection's settings JSON so the rest of the update
+        // path stays unaware of them.
+        $diskMode = $validated['disk_mode'] ?? null;
+        $diskPaths = $validated['disk_paths'] ?? null;
+        $diskDisplay = $validated['disk_display'] ?? null;
+        unset(
+            $validated['disk_mode'],
+            $validated['disk_paths'],
+            $validated['disk_display'],
+        );
+
+        if ($diskMode !== null || $diskPaths !== null || $diskDisplay !== null) {
+            $existingSettings = $serviceConnection->settings ?? [];
+            $existingSettings['disk'] = [
+                'mode' => $diskMode ?? 'all',
+                'paths' => array_values(array_filter(
+                    $diskPaths ?? [],
+                    static fn (mixed $path): bool => is_string($path) && trim($path) !== '',
+                )),
+                'display' => is_array($diskDisplay) ? $diskDisplay : [],
+            ];
+            $validated['settings'] = $existingSettings;
         }
 
         $serviceConnection->update($validated);
