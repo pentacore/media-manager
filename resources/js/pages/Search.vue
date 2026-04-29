@@ -331,9 +331,12 @@ const seerrStatusKey = (status: number | null): string => {
                     {{ s.label }}
                 </button>
                 <span class="ml-auto text-[11.5px] text-fg-subtle">
-                    <template v-if="query"
-                        >{{ libraryCount + requestCount }} results</template
-                    >
+                    <template v-if="query">
+                        <span class="font-mono-tabular">{{ libraryCount }}</span>
+                        library ·
+                        <span class="font-mono-tabular">{{ requestCount }}</span>
+                        requests
+                    </template>
                     <template v-else>type to search</template>
                 </span>
             </div>
