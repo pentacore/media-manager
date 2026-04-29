@@ -7,6 +7,7 @@ use App\Http\Controllers\Auth\AuthentikController;
 use App\Http\Controllers\Auth\EmbyAuthController;
 use App\Http\Controllers\Auth\InviteController;
 use App\Http\Controllers\DashboardController;
+use App\Http\Controllers\NotificationController;
 use Illuminate\Support\Facades\Route;
 use Laravel\Fortify\Features;
 
@@ -18,6 +19,11 @@ Route::middleware(['auth', 'verified', 'password.set'])->group(function (): void
     Route::get('dashboard', DashboardController::class)->name('dashboard');
     Route::get('activity-log', [ActivityLogController::class, 'index'])->name('activity-log');
     Route::get('activity-log/export', [ActivityLogController::class, 'export'])->name('activity-log.export');
+
+    Route::get('notifications', [NotificationController::class, 'index'])->name('notifications.index');
+    Route::patch('notifications/read-all', [NotificationController::class, 'markAllRead'])->name('notifications.read-all');
+    Route::patch('notifications/{notification}/read', [NotificationController::class, 'markRead'])->name('notifications.read');
+    Route::delete('notifications/{notification}', [NotificationController::class, 'destroy'])->name('notifications.destroy');
 });
 
 Route::middleware('guest')->group(function (): void {

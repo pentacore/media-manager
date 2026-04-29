@@ -1,5 +1,9 @@
 <script setup lang="ts">
+import { Link, usePage } from '@inertiajs/vue3';
 import { Bell, ChevronRight, Command, Search, Sparkles } from 'lucide-vue-next';
+import { computed } from 'vue';
+import AIChatController from '@/actions/App/Http/Controllers/AI/ChatController';
+import NotificationController from '@/actions/App/Http/Controllers/NotificationController';
 import Breadcrumbs from '@/components/Breadcrumbs.vue';
 import ConnectionStatusIndicator from '@/components/ConnectionStatusIndicator.vue';
 import { Button } from '@/components/ui/button';
@@ -17,6 +21,34 @@ withDefaults(
 );
 
 const palette = useCommandPalette();
+const page = usePage();
+
+const unreadNotifications = computed<number>(
+    () =>
+        (
+            page.props as unknown as {
+                nav?: { unreadNotifications?: number };
+            }
+        ).nav?.unreadNotifications ?? 0,
+);
+
+const aiEnabled = computed(() =>
+    Boolean(
+        (page.props as unknown as { ai?: { enabled?: boolean } }).ai?.enabled,
+    ),
+);
+
+const isAdmin = computed(() => {
+    const role = page.props.auth.user?.role;
+
+    if (!role) {
+        return false;
+    }
+
+    const value = typeof role === 'string' ? role : role.value;
+
+    return value === 'admin';
+});
 </script>
 
 <template>
@@ -48,22 +80,35 @@ const palette = useCommandPalette();
                     <Command class="size-2.5" />K
                 </kbd>
             </button>
-            <Button
-                variant="ghost"
-                size="icon"
-                class="size-8"
-                title="Notifications"
+            <Link :href="NotificationController.index.url()" class="relative">
+                <Button
+                    variant="ghost"
+                    size="icon"
+                    class="size-8"
+                    title="Notifications"
+                >
+                    <Bell class="size-4" />
+                </Button>
+                <span
+                    v-if="unreadNotifications > 0"
+                    class="font-mono-tabular absolute -top-0.5 -right-0.5 inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-accent px-1 text-[10px] font-semibold text-accent-foreground"
+                >
+                    {{ unreadNotifications > 99 ? '99+' : unreadNotifications }}
+                </span>
+            </Link>
+            <Link
+                v-if="aiEnabled && isAdmin"
+                :href="AIChatController.index.url()"
             >
-                <Bell class="size-4" />
-            </Button>
-            <Button
-                variant="ghost"
-                size="icon"
-                class="size-8"
-                title="AI assistant"
-            >
-                <Sparkles class="size-4" />
-            </Button>
+                <Button
+                    variant="ghost"
+                    size="icon"
+                    class="size-8"
+                    title="AI assistant"
+                >
+                    <Sparkles class="size-4" />
+                </Button>
+            </Link>
             <ConnectionStatusIndicator />
         </div>
     </header>

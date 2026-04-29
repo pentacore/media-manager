@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { Form, Head, router } from '@inertiajs/vue3';
-import { Plus, Trash2 } from 'lucide-vue-next';
+import { Plus, RefreshCcw, Trash2 } from 'lucide-vue-next';
 import { ref } from 'vue';
 import AiModelPriceController from '@/actions/App/Http/Controllers/Admin/AiModelPriceController';
 import InputError from '@/components/InputError.vue';
@@ -64,6 +64,25 @@ defineOptions({
 
 const showCreateDialog = ref(false);
 const editing = ref<PriceRow | null>(null);
+const refreshing = ref(false);
+
+function refreshPrices() {
+    if (refreshing.value) {
+        return;
+    }
+
+    refreshing.value = true;
+    router.post(
+        AiModelPriceController.refresh.url(),
+        {},
+        {
+            preserveScroll: true,
+            onFinish: () => {
+                refreshing.value = false;
+            },
+        },
+    );
+}
 
 function startEdit(price: PriceRow) {
     editing.value = { ...price };
@@ -157,12 +176,25 @@ const priciest = ref(
                     spend shows up.
                 </p>
             </div>
-            <Dialog v-model:open="showCreateDialog">
-                <DialogTrigger as-child>
-                    <Button size="sm" class="h-7 gap-1.5 text-xs">
-                        <Plus class="size-3.5" />Add model price
-                    </Button>
-                </DialogTrigger>
+            <div class="flex items-center gap-2">
+                <Button
+                    variant="outline"
+                    size="sm"
+                    class="h-7 gap-1.5 text-xs"
+                    :disabled="refreshing"
+                    @click="refreshPrices"
+                >
+                    <RefreshCcw
+                        class="size-3.5"
+                        :class="{ 'animate-spin': refreshing }"
+                    />Refresh from catalog
+                </Button>
+                <Dialog v-model:open="showCreateDialog">
+                    <DialogTrigger as-child>
+                        <Button size="sm" class="h-7 gap-1.5 text-xs">
+                            <Plus class="size-3.5" />Add model price
+                        </Button>
+                    </DialogTrigger>
                 <DialogContent>
                     <DialogHeader>
                         <DialogTitle>Add model price</DialogTitle>
@@ -248,7 +280,8 @@ const priciest = ref(
                         </DialogFooter>
                     </Form>
                 </DialogContent>
-            </Dialog>
+                </Dialog>
+            </div>
         </div>
 
         <!-- Stat cards -->

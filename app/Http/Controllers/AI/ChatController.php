@@ -5,10 +5,12 @@ declare(strict_types=1);
 namespace App\Http\Controllers\AI;
 
 use App\Ai\Agents\MediaAgent;
+use App\Enums\AiMode;
 use App\Enums\AiProposedWorkflowStatus;
 use App\Http\Controllers\Controller;
 use App\Models\AiProposedWorkflow;
 use App\Models\User;
+use App\Settings\AiSettings;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\Client\RequestException;
 use Illuminate\Http\JsonResponse;
@@ -33,10 +35,15 @@ class ChatController extends Controller
             'conversation_id' => ['nullable', 'string', 'uuid'],
             'workflow_id' => ['nullable', 'string', 'uuid'],
             'workflow_action' => ['nullable', 'string', 'in:approved,declined'],
+            'mode' => ['nullable', 'string', 'in:advisory,executive'],
         ]);
 
         $conversationId = $validated['conversation_id'] ?? null;
         $user = $request->user();
+
+        if (isset($validated['mode'])) {
+            resolve(AiSettings::class)->withMode(AiMode::from($validated['mode']));
+        }
 
         if ($conversationId !== null && ! $this->conversationBelongsToUser($conversationId, $user)) {
             return response()->json(['message' => 'Conversation not found.'], 404);

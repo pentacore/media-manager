@@ -21,8 +21,6 @@
 - [ ] Add an agent that refreshes the configured AI prices, and a button to refresh the prices in the AI Prices page
 - [ ] Notifications button doesnt do anything, add a page for notifications and seed it with some data
 - [ ] The AI Assistant button in the top bar does nothing, does this button possibly bring anything useful to the table?
-
-NEW ITEMS:
 - [x] Add link emby account function into the user settings page, allow admins to manually link emby accounts by username
 - [x] Import from emby button doesnt do anything in the "Users" page
 - [x] the K hotkey doesnt work
@@ -33,3 +31,4 @@ NEW ITEMS:
 - [x] The "now available" button in the requests page doesnt work
 - [ ] The realtime updates seems flaky in a lot of pages, like the service health page for example, it should update the status of the services without needing to refresh the page, but it doesnt always do that, check all pages for similar issues
 - [x] Id like to log all incoming webhooks (Toggleable in the admin settings), and then be able to see the payloads in an admin-only page, this would be really useful for debugging and also just to have a record of all incoming webhooks, especially if you have a lot of them coming in
+- [ ] The VerifyWebhookToken needs to also check query params for a token, since not all services can set a header for this. And we should also expose the webhook URL for a service in the connections edit page (Maybe with a copy button on the connections list)

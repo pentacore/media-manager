@@ -27,3 +27,7 @@ Schedule::command(BroadcastDashboardStats::class)
 Schedule::command('ai:prune-proposed-workflows')
     ->daily()
     ->withoutOverlapping();
+
+Schedule::command('ai:refresh-prices')
+    ->weekly()
+    ->withoutOverlapping();

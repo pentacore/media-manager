@@ -17,6 +17,7 @@ use App\Models\WebhookEvent;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Str;
 
 /**
  * Synthetic timeline data so a fresh local install lands on a populated
@@ -30,10 +31,6 @@ class DemoActivitySeeder extends Seeder
 
     public function run(): void
     {
-        if (ActivityLog::where('description', 'like', '['.self::DEMO_TAG.']%')->exists()) {
-            return;
-        }
-
         $admin = User::query()->where('role', 'admin')->first()
             ?? User::factory()->admin()->create([
                 'name' => 'Demo Admin',
@@ -44,11 +41,95 @@ class DemoActivitySeeder extends Seeder
         $services = ServiceConnection::query()->get()
             ->keyBy(fn (ServiceConnection $c): string => $c->type->value);
 
-        $this->seedWebhookEvents($services);
-        $this->seedActionRequests($services);
-        $this->seedEmbyActivity($admin, $services);
-        $this->seedActivityLog($admin, $services);
-        $this->seedServiceMetrics($services);
+        $hasDemoActivity = ActivityLog::where('description', 'like', '['.self::DEMO_TAG.']%')->exists();
+
+        if (! $hasDemoActivity) {
+            $this->seedWebhookEvents($services);
+            $this->seedActionRequests($services);
+            $this->seedEmbyActivity($admin, $services);
+            $this->seedActivityLog($admin, $services);
+            $this->seedServiceMetrics($services);
+        }
+
+        if ($admin->notifications()->count() === 0) {
+            $this->seedNotifications($admin);
+        }
+    }
+
+    /**
+     * Demo notifications spanning a few categories so the bell badge
+     * and Notifications page have content to render.
+     */
+    private function seedNotifications(User $admin): void
+    {
+        $now = CarbonImmutable::now();
+        $entries = [
+            [
+                'type' => 'App\\Notifications\\ActionRequiresApproval',
+                'data' => [
+                    'service' => 'sonarr',
+                    'title' => 'Series delete needs approval',
+                    'message' => 'AI assistant queued "Severance" for deletion (2 seasons, 96 GB).',
+                    'link' => '/actions',
+                ],
+                'when' => $now->subMinutes(2),
+                'read' => false,
+            ],
+            [
+                'type' => 'App\\Notifications\\IndexerHealthDegraded',
+                'data' => [
+                    'service' => 'prowlarr',
+                    'title' => 'Indexer rss feed timed out',
+                    'message' => 'nzb.cat returned no results for the last 6 minutes — Sonarr fallback in use.',
+                    'link' => '/monitoring/service-health',
+                ],
+                'when' => $now->subMinutes(14),
+                'read' => false,
+            ],
+            [
+                'type' => 'App\\Notifications\\WatchSessionStarted',
+                'data' => [
+                    'service' => 'emby',
+                    'title' => 'james started The Bear',
+                    'message' => 'S03E08 · Living Room · 4K HDR.',
+                    'link' => '/monitoring/now-playing',
+                ],
+                'when' => $now->subHour(),
+                'read' => true,
+            ],
+            [
+                'type' => 'App\\Notifications\\NewVersionAvailable',
+                'data' => [
+                    'service' => 'radarr',
+                    'title' => 'Radarr update available',
+                    'message' => '5.10.4 → 5.11.0 (manual upgrade).',
+                    'link' => '/admin/connections',
+                ],
+                'when' => $now->subHours(3),
+                'read' => false,
+            ],
+            [
+                'type' => 'App\\Notifications\\AiBudgetWarning',
+                'data' => [
+                    'title' => '80% of monthly AI budget used',
+                    'message' => 'Spend $12.40 of $15.00 — remainder estimated to last 5 days.',
+                    'link' => '/admin/ai-usage',
+                ],
+                'when' => $now->subHours(6),
+                'read' => true,
+            ],
+        ];
+
+        foreach ($entries as $entry) {
+            $admin->notifications()->create([
+                'id' => (string) Str::uuid7(),
+                'type' => $entry['type'],
+                'data' => $entry['data'],
+                'read_at' => $entry['read'] ? $entry['when']->addMinutes(2) : null,
+                'created_at' => $entry['when'],
+                'updated_at' => $entry['when'],
+            ]);
+        }
     }
 
     /**

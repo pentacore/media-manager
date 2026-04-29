@@ -8,6 +8,7 @@ use App\Enums\ActionRequestStatus;
 use App\Http\Resources\SharedUserResource;
 use App\Models\ActionRequest;
 use App\Models\EmbyActivity;
+use App\Models\User;
 use App\Providers\AIServiceProvider;
 use Illuminate\Http\Request;
 use Inertia\Middleware;
@@ -57,25 +58,26 @@ class HandleInertiaRequests extends Middleware
             'ai' => [
                 'enabled' => AIServiceProvider::enabled(),
             ],
-            'nav' => $user ? $this->navCounts() : ['pendingActions' => 0, 'activeSessions' => 0],
+            'nav' => $user ? $this->navCounts($user) : ['pendingActions' => 0, 'activeSessions' => 0, 'unreadNotifications' => 0],
             'sidebarOpen' => ! $request->hasCookie('sidebar_state') || $request->cookie('sidebar_state') === 'true',
         ];
     }
 
     /**
-     * Lightweight counts for sidebar badges. Cheap queries — both count rows
-     * with indexed columns and bound clauses. Live updates layer on top via
+     * Lightweight counts for sidebar / topbar badges. Cheap queries —
+     * indexed columns and bound clauses. Live updates layer on top via
      * the sidebar's WS subscriptions.
      *
-     * @return array{pendingActions: int, activeSessions: int}
+     * @return array{pendingActions: int, activeSessions: int, unreadNotifications: int}
      */
-    private function navCounts(): array
+    private function navCounts(User $user): array
     {
         return [
             'pendingActions' => ActionRequest::where('status', ActionRequestStatus::Pending)->count(),
             'activeSessions' => EmbyActivity::where('action', 'played')
                 ->where('updated_at', '>=', now()->subMinutes(10))
                 ->count(),
+            'unreadNotifications' => $user->unreadNotifications()->count(),
         ];
     }
 }
