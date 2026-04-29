@@ -25,6 +25,7 @@ class EmbyClient
         return Http::baseUrl(rtrim($this->connection->url, '/'))
             ->withHeaders(['X-Emby-Token' => $this->connection->api_key])
             ->timeout(10)
+            ->withUserAgent('MediaManager/'.config('app.version').' '.class_basename($this))
             ->connectTimeout(3)
             ->retry(
                 times: 3,

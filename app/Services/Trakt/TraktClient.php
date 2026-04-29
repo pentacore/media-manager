@@ -27,6 +27,7 @@ class TraktClient
                 'trakt-api-version' => '2',
                 'Content-Type' => 'application/json',
             ])
+            ->withUserAgent('MediaManager/'.config('app.version').' '.class_basename($this))
             ->acceptJson()
             ->timeout(10)
             ->connectTimeout(3);

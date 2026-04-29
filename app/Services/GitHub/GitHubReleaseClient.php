@@ -34,6 +34,7 @@ class GitHubReleaseClient
         try {
             $response = Http::baseUrl(self::BASE_URL)
                 ->withHeaders($headers)
+                ->withUserAgent('MediaManager/'.config('app.version').' '.class_basename($this))
                 ->timeout(10)
                 ->connectTimeout(3)
                 ->retry(2, 500, throw: false)

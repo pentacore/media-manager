@@ -25,6 +25,7 @@ abstract class ArrClient
             ->withHeaders(['X-Api-Key' => $this->connection->api_key])
             ->timeout(10)
             ->connectTimeout(3)
+            ->withUserAgent('MediaManager/'.config('app.version').' '.class_basename($this))
             ->retry(
                 times: 3,
                 sleepMilliseconds: fn (int $attempt): int => $attempt * 500,

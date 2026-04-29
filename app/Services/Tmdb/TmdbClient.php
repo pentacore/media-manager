@@ -22,6 +22,7 @@ class TmdbClient
         throw_if(empty($apiKey), RuntimeException::class, 'TMDB API key is not configured.');
 
         return Http::baseUrl(rtrim((string) config('services.tmdb.base_url'), '/'))
+            ->withUserAgent('MediaManager/'.config('app.version').' '.class_basename($this))
             ->withToken((string) $apiKey)
             ->acceptJson()
             ->timeout(10)
