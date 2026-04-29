@@ -57,6 +57,7 @@ interface Connection {
     url: string;
     api_key_set: boolean;
     webhook_token_set: boolean;
+    webhook_url: string;
     is_active: boolean;
     disk: {
         mode: 'all' | 'selected' | 'sum';
@@ -198,6 +199,14 @@ function generateWebhookToken() {
         b.toString(16).padStart(2, '0'),
     ).join('');
     copied.value = false;
+}
+
+const webhookUrlCopied = ref(false);
+
+function copyWebhookUrl() {
+    navigator.clipboard.writeText(props.connection.webhook_url);
+    webhookUrlCopied.value = true;
+    setTimeout(() => (webhookUrlCopied.value = false), 2000);
 }
 
 function copyWebhookToken() {
@@ -431,10 +440,51 @@ function testIndexer(indexerId: number): void {
                         </div>
                         <p class="text-sm text-muted-foreground">
                             Configure this token in the service's webhook
-                            settings as the X-Webhook-Token header. Leave blank
-                            to keep the existing value.
+                            settings as the X-Webhook-Token header — or use the
+                            URL below as-is, which appends ?token= for services
+                            (Sonarr/Radarr/Prowlarr) that don't support custom
+                            headers. Leave blank to keep the existing value.
                         </p>
                         <InputError :message="errors.webhook_token" />
+                    </div>
+
+                    <div class="space-y-2">
+                        <Label>Webhook URL</Label>
+                        <div class="flex gap-2">
+                            <Input
+                                readonly
+                                :value="connection.webhook_url"
+                                class="font-mono-tabular text-xs"
+                                @click="
+                                    (e: Event) =>
+                                        (e.target as HTMLInputElement).select()
+                                "
+                            />
+                            <TooltipProvider :delay-duration="0">
+                                <Tooltip>
+                                    <TooltipTrigger as-child>
+                                        <Button
+                                            type="button"
+                                            variant="outline"
+                                            size="icon"
+                                            @click="copyWebhookUrl"
+                                        >
+                                            <ClipboardCopy class="size-4" />
+                                        </Button>
+                                    </TooltipTrigger>
+                                    <TooltipContent>{{
+                                        webhookUrlCopied
+                                            ? 'Copied!'
+                                            : 'Copy webhook URL'
+                                    }}</TooltipContent>
+                                </Tooltip>
+                            </TooltipProvider>
+                        </div>
+                        <p class="text-sm text-muted-foreground">
+                            Paste this into the upstream service's webhook
+                            configuration. The token in the URL is in addition
+                            to the X-Webhook-Token header — either is accepted.
+                        </p>
                     </div>
 
                     <div v-if="supportsDiskPicker" class="space-y-3 pt-2">

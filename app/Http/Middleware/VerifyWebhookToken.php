@@ -24,7 +24,15 @@ class VerifyWebhookToken
 
         abort_unless($connection, 404);
 
+        // Header is preferred, but Sonarr/Radarr/Prowlarr's webhook
+        // configuration only lets you append the URL — not custom
+        // headers — so accept ?token=… as a fallback for those services.
         $token = $request->header('X-Webhook-Token');
+
+        if (! is_string($token) || $token === '') {
+            $queryToken = $request->query('token');
+            $token = is_string($queryToken) ? $queryToken : null;
+        }
 
         abort_if(
             ! is_string($token) || $token === '' || ! hash_equals((string) $connection->webhook_token, $token),

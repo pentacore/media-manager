@@ -63,6 +63,7 @@ class ServiceConnectionController extends Controller
                 'url' => $serviceConnection->url,
                 'api_key_set' => $serviceConnection->api_key !== '' && $serviceConnection->api_key !== null,
                 'webhook_token_set' => $serviceConnection->webhook_token !== '' && $serviceConnection->webhook_token !== null,
+                'webhook_url' => $this->webhookUrlFor($serviceConnection),
                 'is_active' => $serviceConnection->is_active,
                 'disk' => [
                     'mode' => $diskSettings['mode'] ?? 'all',
@@ -80,6 +81,26 @@ class ServiceConnectionController extends Controller
                 ? Inertia::defer(fn (): array => $this->loadAvailableDiskPaths($serviceConnection))
                 : [],
         ]);
+    }
+
+    /**
+     * Build the URL the upstream service should POST to. Used in the
+     * connection edit page so admins can copy/paste it into the
+     * Sonarr/Radarr/etc. webhook setup screens. Includes the
+     * ?token=… fallback for services that can't set custom headers.
+     */
+    private function webhookUrlFor(ServiceConnection $serviceConnection): string
+    {
+        $base = route('webhooks.handle', [
+            'service' => $serviceConnection->type->value,
+            'connection' => $serviceConnection->id,
+        ]);
+
+        $token = $serviceConnection->webhook_token;
+
+        return is_string($token) && $token !== ''
+            ? $base.'?token='.urlencode($token)
+            : $base;
     }
 
     /**
