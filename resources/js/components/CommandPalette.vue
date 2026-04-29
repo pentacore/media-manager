@@ -88,12 +88,23 @@ const filteredLinks = computed(() => {
     );
 });
 
-useEventListener('keydown', (event: KeyboardEvent) => {
-    if (event.key === 'k' && (event.metaKey || event.ctrlKey)) {
-        event.preventDefault();
-        open.value = !open.value;
-    }
-});
+// Bind on document with capture so browser-level Cmd/Ctrl+K shortcuts
+// (Chrome/Firefox address-bar search) don't intercept it before us.
+useEventListener(
+    () => document,
+    'keydown',
+    (event: KeyboardEvent) => {
+        if (
+            (event.key === 'k' || event.key === 'K') &&
+            (event.metaKey || event.ctrlKey)
+        ) {
+            event.preventDefault();
+            event.stopPropagation();
+            open.value = !open.value;
+        }
+    },
+    { capture: true },
+);
 
 watch(open, (next) => {
     if (next) {

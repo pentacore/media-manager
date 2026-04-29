@@ -5,6 +5,7 @@ declare(strict_types=1);
 use App\Http\Controllers\Admin\AiModelPriceController;
 use App\Http\Controllers\Admin\AiSettingsController;
 use App\Http\Controllers\Admin\AiUsageController;
+use App\Http\Controllers\Admin\EmbyLinkController;
 use App\Http\Controllers\Admin\ProwlarrTestIndexerController;
 use App\Http\Controllers\Admin\ServiceConnectionController;
 use App\Http\Controllers\Admin\UserController;
@@ -29,6 +30,8 @@ Route::middleware(['auth', 'verified', 'password.set', 'role:admin'])->prefix('a
     Route::post('users', [UserController::class, 'store'])->name('users.store');
     Route::patch('users/{user}/role', [UserController::class, 'updateRole'])->name('users.update-role');
     Route::delete('users/{user}', [UserController::class, 'destroy'])->name('users.destroy');
+    Route::post('users/{user}/link-emby', [EmbyLinkController::class, 'link'])->name('users.link-emby');
+    Route::post('users/import-from-emby', [EmbyLinkController::class, 'import'])->name('users.import-from-emby');
 
     Route::get('ai-settings', [AiSettingsController::class, 'index'])->name('ai-settings.index');
     Route::put('ai-settings', [AiSettingsController::class, 'update'])->name('ai-settings.update');

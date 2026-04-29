@@ -373,6 +373,7 @@ function pipelineState(
                     </Button>
                 </div>
                 <Link
+                    v-if="isAdmin"
                     :href="ActionTypeConfigController.index.url()"
                     class="inline-flex h-7 items-center gap-1.5 rounded-md border border-border bg-card px-2 text-xs font-medium text-foreground transition-colors hover:bg-bg-hover"
                 >

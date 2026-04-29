@@ -210,8 +210,11 @@ const totals = computed(() => {
 
 function applyFilters(next: { media_type?: string; since?: number }) {
     const merged = {
-        media_type: next.media_type ?? props.filters.media_type,
-        since: next.since ?? props.filters.since,
+        media_type:
+            'media_type' in next
+                ? (next.media_type ?? '')
+                : props.filters.media_type,
+        since: 'since' in next ? (next.since ?? 7) : props.filters.since,
     };
 
     const query: Record<string, string | number> = {};
@@ -225,7 +228,6 @@ function applyFilters(next: { media_type?: string; since?: number }) {
     }
 
     router.get(WatchHistoryController.index.url(), query, {
-        preserveState: true,
         preserveScroll: true,
         replace: true,
     });
@@ -298,7 +300,8 @@ function currentFilter(): string {
                     Watch history
                 </h1>
                 <p class="mt-1 text-[13px] text-muted-foreground">
-                    {{ activities.meta.total }} entries · synced from Emby
+                    {{ activities.meta.total }} entries · recorded from Emby
+                    playback webhooks
                 </p>
             </div>
             <div class="flex items-center gap-2">

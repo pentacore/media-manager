@@ -118,10 +118,16 @@ function applyFilters(next: {
     service_id?: number | null;
     since?: number;
 }) {
+    // ?? would treat an explicit null (intent: clear the filter) as
+    // "fall through to the current value", so distinguish "key present"
+    // from "key absent" with `in`.
     const merged = {
-        action: next.action ?? props.filters.action,
-        service_id: next.service_id ?? props.filters.service_id,
-        since: next.since ?? props.filters.since,
+        action: 'action' in next ? (next.action ?? '') : props.filters.action,
+        service_id:
+            'service_id' in next
+                ? next.service_id
+                : props.filters.service_id,
+        since: 'since' in next ? (next.since ?? 24) : props.filters.since,
     };
 
     const query: Record<string, string | number> = {};
@@ -139,7 +145,6 @@ function applyFilters(next: {
     }
 
     router.get(ActivityLogController.index.url(), query, {
-        preserveState: true,
         preserveScroll: true,
         replace: true,
     });

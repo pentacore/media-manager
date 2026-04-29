@@ -21,9 +21,17 @@ class ProfileController extends Controller
      */
     public function edit(Request $request): Response
     {
+        $user = $request->user();
+        $link = $user?->embyUserLinks()->first();
+
         return Inertia::render('settings/Profile', [
-            'mustVerifyEmail' => $request->user() instanceof MustVerifyEmail,
+            'mustVerifyEmail' => $user instanceof MustVerifyEmail,
             'status' => $request->session()->get('status'),
+            'embyLink' => $link === null ? null : [
+                'id' => $link->id,
+                'emby_username' => $link->emby_username,
+                'created_at' => $link->created_at?->toIso8601String(),
+            ],
         ]);
     }
 

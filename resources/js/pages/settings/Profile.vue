@@ -1,22 +1,32 @@
 <script setup lang="ts">
-import { Form, Head, Link, usePage } from '@inertiajs/vue3';
+import { Form, Head, Link, router, usePage } from '@inertiajs/vue3';
+import { Link2 } from 'lucide-vue-next';
 import { computed } from 'vue';
+import UserLinkController from '@/actions/App/Http/Controllers/Emby/UserLinkController';
 import ProfileController from '@/actions/App/Http/Controllers/Settings/ProfileController';
 import DeleteUser from '@/components/DeleteUser.vue';
 import InputError from '@/components/InputError.vue';
-import { Field } from '@/components/mm';
+import { Field, Pill, SvcChip } from '@/components/mm';
+import PasswordInput from '@/components/PasswordInput.vue';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Separator } from '@/components/ui/separator';
 import { edit } from '@/routes/profile';
 import { send } from '@/routes/verification';
 
+interface EmbyLink {
+    id: number;
+    emby_username: string;
+    created_at: string | null;
+}
+
 type Props = {
     mustVerifyEmail: boolean;
     status?: string;
+    embyLink: EmbyLink | null;
 };
 
-defineProps<Props>();
+const props = defineProps<Props>();
 
 defineOptions({
     layout: {
@@ -31,6 +41,20 @@ defineOptions({
 
 const page = usePage();
 const user = computed(() => page.props.auth.user);
+
+function unlinkEmby() {
+    if (!props.embyLink) {
+        return;
+    }
+
+    if (!confirm(`Unlink Emby account "${props.embyLink.emby_username}"?`)) {
+        return;
+    }
+
+    router.delete(UserLinkController.destroy.url(props.embyLink.id), {
+        preserveScroll: true,
+    });
+}
 </script>
 
 <template>
@@ -142,6 +166,112 @@ const user = computed(() => page.props.auth.user);
                 </div>
             </div>
         </Form>
+
+        <div>
+            <h2 class="text-[18px] leading-tight font-semibold tracking-tight">
+                Emby account
+            </h2>
+            <p class="mt-1 max-w-[640px] text-[13px] text-muted-foreground">
+                Link your Emby login so playback events show up in your watch
+                history.
+            </p>
+        </div>
+
+        <div class="rounded-xl border border-border bg-card p-6">
+            <div v-if="embyLink" class="flex items-center justify-between gap-4">
+                <div class="flex items-center gap-2.5">
+                    <SvcChip id="emby" />
+                    <div>
+                        <div class="text-[14px] font-semibold">
+                            {{ embyLink.emby_username }}
+                        </div>
+                        <div class="font-mono-tabular text-[11.5px] text-muted-foreground">
+                            Linked
+                            {{
+                                embyLink.created_at
+                                    ? new Date(
+                                          embyLink.created_at,
+                                      ).toLocaleDateString()
+                                    : '—'
+                            }}
+                        </div>
+                    </div>
+                </div>
+                <div class="flex items-center gap-2">
+                    <Pill variant="ok" dot>connected</Pill>
+                    <Button
+                        variant="destructive"
+                        size="sm"
+                        class="h-8 text-xs"
+                        @click="unlinkEmby"
+                    >
+                        Unlink
+                    </Button>
+                </div>
+            </div>
+
+            <Form
+                v-else
+                v-bind="UserLinkController.store.post()"
+                v-slot="{ errors, processing }"
+                class="space-y-4"
+            >
+                <div
+                    class="grid items-start gap-6"
+                    style="grid-template-columns: 200px 1fr"
+                >
+                    <Field
+                        label="Emby username"
+                        hint="The display name you use to sign in to Emby."
+                    >
+                        <span />
+                    </Field>
+                    <div>
+                        <Input
+                            id="emby-username"
+                            class="h-8 max-w-[360px] text-sm"
+                            name="emby_username"
+                            required
+                            placeholder="rachel"
+                        />
+                        <InputError :message="errors.emby_username" class="mt-1" />
+                    </div>
+                </div>
+                <Separator />
+                <div
+                    class="grid items-start gap-6"
+                    style="grid-template-columns: 200px 1fr"
+                >
+                    <Field
+                        label="Emby password"
+                        hint="Verifies it's actually you. Stored only as a session check, not retained."
+                    >
+                        <span />
+                    </Field>
+                    <div>
+                        <PasswordInput
+                            id="emby-password"
+                            name="password"
+                            class="h-8 max-w-[360px] text-sm"
+                            required
+                            placeholder="Emby password"
+                        />
+                        <InputError :message="errors.password" class="mt-1" />
+                    </div>
+                </div>
+                <div class="flex justify-end">
+                    <Button
+                        size="sm"
+                        type="submit"
+                        :disabled="processing"
+                        class="h-8 text-xs"
+                    >
+                        <Link2 class="size-3.5" />
+                        Link Emby account
+                    </Button>
+                </div>
+            </Form>
+        </div>
 
         <DeleteUser />
     </div>

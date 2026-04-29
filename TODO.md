@@ -29,6 +29,7 @@ NEW ITEMS:
 - How is the WAtch history actually supposed to work? it says "Synced from emby" but i cant see anything actually being synced anywhere
 - In the activity log i cant click back to "all" filter
 - Hide the approval rules button in Action Queue for non-admins
-- The time scale buttons in the actibity log doesnt work unless you do a manual refresh, this seems to be true for a lot of the pages
+- The time scale buttons in the actibity log doesnt work unless you do a manual refresh, this seems true for a lot of the pages
 - The "now available" button in the requests page doesnt work
 - The realtime updates seems flaky in a lot of pages, like the service health page for example, it should update the status of the services without needing to refresh the page, but it doesnt always do that, check all pages for similar issues
+- Id like to log all incoming webhooks (Toggleable in the admin settings), and then be able to see the payloads in an admin-only page, this would be really useful for debugging and also just to have a record of all incoming webhooks, especially if you have a lot of them coming in

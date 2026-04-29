@@ -2,6 +2,7 @@
 import { Form, Head, router, usePage } from '@inertiajs/vue3';
 import { Plus, Upload } from 'lucide-vue-next';
 import { computed, ref } from 'vue';
+import EmbyLinkController from '@/actions/App/Http/Controllers/Admin/EmbyLinkController';
 import UserController from '@/actions/App/Http/Controllers/Admin/UserController';
 import UserLinkController from '@/actions/App/Http/Controllers/Emby/UserLinkController';
 import InputError from '@/components/InputError.vue';
@@ -129,6 +130,46 @@ function unlinkEmby(user: UserItem) {
         preserveScroll: true,
     });
 }
+
+const linkDialogUserId = ref<number | null>(null);
+const linkDialogUserName = ref<string>('');
+const linkDialogEmbyUsername = ref<string>('');
+
+function openLinkDialog(user: UserItem) {
+    linkDialogUserId.value = user.id;
+    linkDialogUserName.value = user.name;
+    linkDialogEmbyUsername.value = '';
+}
+
+function closeLinkDialog() {
+    linkDialogUserId.value = null;
+    linkDialogUserName.value = '';
+    linkDialogEmbyUsername.value = '';
+}
+
+const importing = ref(false);
+
+function importFromEmby() {
+    if (importing.value) {
+        return;
+    }
+
+    if (!confirm('Import every Emby user as a viewer account here? Existing accounts and links are skipped.')) {
+        return;
+    }
+
+    importing.value = true;
+    router.post(
+        EmbyLinkController.import.url(),
+        {},
+        {
+            preserveScroll: true,
+            onFinish: () => {
+                importing.value = false;
+            },
+        },
+    );
+}
 </script>
 
 <template>
@@ -152,7 +193,13 @@ function unlinkEmby(user: UserItem) {
                 </p>
             </div>
             <div class="flex items-center gap-2">
-                <Button variant="outline" size="sm" class="h-7 gap-1.5 text-xs">
+                <Button
+                    variant="outline"
+                    size="sm"
+                    class="h-7 gap-1.5 text-xs"
+                    :disabled="importing"
+                    @click="importFromEmby"
+                >
                     <Upload class="size-3.5" />Import from Emby
                 </Button>
                 <Dialog v-model:open="showCreateDialog">
@@ -383,9 +430,14 @@ function unlinkEmby(user: UserItem) {
                                     unlink
                                 </button>
                             </span>
-                            <span v-else class="text-[11.5px] text-fg-subtle">
-                                —
-                            </span>
+                            <button
+                                v-else
+                                type="button"
+                                class="text-[11.5px] text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
+                                @click="openLinkDialog(user)"
+                            >
+                                Link Emby
+                            </button>
                         </td>
                         <td
                             class="font-mono-tabular px-3 py-2.5 text-[11.5px] text-fg-subtle"
@@ -418,5 +470,58 @@ function unlinkEmby(user: UserItem) {
                 </tbody>
             </table>
         </div>
+
+        <Dialog
+            :open="linkDialogUserId !== null"
+            @update:open="(value) => !value && closeLinkDialog()"
+        >
+            <DialogContent>
+                <Form
+                    v-if="linkDialogUserId"
+                    :action="EmbyLinkController.link.url(linkDialogUserId)"
+                    method="post"
+                    :options="{ preserveScroll: true }"
+                    v-slot="{ errors, processing }"
+                    class="space-y-4"
+                    @success="closeLinkDialog"
+                >
+                    <DialogHeader>
+                        <DialogTitle>
+                            Link {{ linkDialogUserName }} to an Emby account
+                        </DialogTitle>
+                        <DialogDescription>
+                            Type the Emby username. The account is found via
+                            the configured Emby connection — no password
+                            needed.
+                        </DialogDescription>
+                    </DialogHeader>
+
+                    <div class="space-y-2">
+                        <Label for="link-emby-username">Emby username</Label>
+                        <Input
+                            id="link-emby-username"
+                            v-model="linkDialogEmbyUsername"
+                            name="emby_username"
+                            required
+                            placeholder="e.g. rachel"
+                        />
+                        <InputError :message="errors.emby_username" />
+                    </div>
+
+                    <DialogFooter>
+                        <Button
+                            type="button"
+                            variant="outline"
+                            @click="closeLinkDialog"
+                        >
+                            Cancel
+                        </Button>
+                        <Button type="submit" :disabled="processing">
+                            Link account
+                        </Button>
+                    </DialogFooter>
+                </Form>
+            </DialogContent>
+        </Dialog>
     </div>
 </template>
