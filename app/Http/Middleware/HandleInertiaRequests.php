@@ -10,6 +10,7 @@ use App\Models\ActionRequest;
 use App\Models\EmbyActivity;
 use App\Models\User;
 use App\Providers\AIServiceProvider;
+use App\Services\Library\InterventionCounter;
 use Illuminate\Http\Request;
 use Inertia\Middleware;
 use Override;
@@ -58,7 +59,7 @@ class HandleInertiaRequests extends Middleware
             'ai' => [
                 'enabled' => AIServiceProvider::enabled(),
             ],
-            'nav' => $user ? $this->navCounts($user) : ['pendingActions' => 0, 'activeSessions' => 0, 'unreadNotifications' => 0],
+            'nav' => $user ? $this->navCounts($user) : ['pendingActions' => 0, 'activeSessions' => 0, 'unreadNotifications' => 0, 'libraryIntervention' => 0],
             'sidebarOpen' => ! $request->hasCookie('sidebar_state') || $request->cookie('sidebar_state') === 'true',
         ];
     }
@@ -68,7 +69,7 @@ class HandleInertiaRequests extends Middleware
      * indexed columns and bound clauses. Live updates layer on top via
      * the sidebar's WS subscriptions.
      *
-     * @return array{pendingActions: int, activeSessions: int, unreadNotifications: int}
+     * @return array{pendingActions: int, activeSessions: int, unreadNotifications: int, libraryIntervention: int}
      */
     private function navCounts(User $user): array
     {
@@ -78,6 +79,10 @@ class HandleInertiaRequests extends Middleware
                 ->where('updated_at', '>=', now()->subMinutes(10))
                 ->count(),
             'unreadNotifications' => $user->unreadNotifications()->count(),
+            // Backed by a cache so this stays cheap; the scheduled job
+            // refreshes the value every 5 minutes and webhooks force an
+            // immediate recompute when a stuck import lands.
+            'libraryIntervention' => resolve(InterventionCounter::class)->get(),
         ];
     }
 }

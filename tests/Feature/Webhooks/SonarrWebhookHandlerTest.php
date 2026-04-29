@@ -9,6 +9,7 @@ use App\Models\ActivityLog;
 use App\Models\ServiceConnection;
 use App\Models\WebhookEvent;
 use App\Services\Sonarr\SonarrWebhookHandler;
+use Illuminate\Support\Facades\Http;
 
 beforeEach(function (): void {
     $this->connection = ServiceConnection::factory()->sonarr()->create();
@@ -187,6 +188,43 @@ test('EpisodeFileDelete writes ActivityLog', function (): void {
         'service_connection_id' => $this->connection->id,
         'action' => 'webhook.sonarr.episode_file_deleted',
     ]);
+});
+
+test('ManualInteractionRequired event writes ActivityLog and triggers intervention recompute', function (): void {
+    Http::fake([
+        '*/api/v3/queue*' => Http::response(['records' => []]),
+    ]);
+    $this->connection->update(['url' => 'http://sonarr.fake:8989', 'is_active' => true]);
+
+    $webhookEvent = WebhookEvent::factory()->create([
+        'service_connection_id' => $this->connection->id,
+        'event_type' => 'ManualInteractionRequired',
+        'payload' => [
+            'eventType' => 'ManualInteractionRequired',
+            'series' => ['id' => 88, 'title' => 'Stuck Show', 'tvdbId' => 9999],
+            'episodes' => [
+                ['seasonNumber' => 1, 'episodeNumber' => 1, 'title' => 'Pilot'],
+            ],
+            'downloadId' => 'TORRENT_ABC',
+            'downloadClient' => 'qbittorrent',
+            'downloadInfo' => [
+                'title' => 'Stuck.Show.S01E01.mkv',
+                'size' => 1_000_000,
+            ],
+            'downloadStatusMessages' => [
+                ['title' => 'Stuck.Show.S01E01.mkv', 'messages' => ['Sample folder is not allowed']],
+            ],
+        ],
+    ]);
+
+    resolve(SonarrWebhookHandler::class)->handle($webhookEvent);
+
+    $log = ActivityLog::where('action', 'webhook.sonarr.manual_interaction_required')->first();
+    expect($log)->not->toBeNull();
+    expect($log->description)->toContain('Stuck Show');
+    expect($log->subject_id)->toBe(88);
+    expect($log->metadata['download_id'])->toBe('TORRENT_ABC');
+    expect($log->metadata['status_messages'][0]['messages'][0])->toBe('Sample folder is not allowed');
 });
 
 test('Health event writes ActivityLog with level/type/wikiUrl metadata', function (): void {

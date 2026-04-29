@@ -9,6 +9,7 @@ use App\Models\ActivityLog;
 use App\Models\ServiceConnection;
 use App\Models\WebhookEvent;
 use App\Services\Radarr\RadarrWebhookHandler;
+use Illuminate\Support\Facades\Http;
 
 beforeEach(function (): void {
     $this->connection = ServiceConnection::factory()->radarr()->create();
@@ -170,6 +171,39 @@ test('MovieFileDelete writes ActivityLog', function (): void {
         'service_connection_id' => $this->connection->id,
         'action' => 'webhook.radarr.movie_file_deleted',
     ]);
+});
+
+test('ManualInteractionRequired event writes ActivityLog and triggers intervention recompute', function (): void {
+    Http::fake([
+        '*/api/v3/queue*' => Http::response(['records' => []]),
+    ]);
+    $this->connection->update(['url' => 'http://radarr.fake:7878', 'is_active' => true]);
+
+    $webhookEvent = WebhookEvent::factory()->create([
+        'service_connection_id' => $this->connection->id,
+        'event_type' => 'ManualInteractionRequired',
+        'payload' => [
+            'eventType' => 'ManualInteractionRequired',
+            'movie' => ['id' => 77, 'title' => 'Stuck Movie', 'tmdbId' => 9999, 'imdbId' => 'tt000'],
+            'downloadId' => 'NZB_XYZ',
+            'downloadClient' => 'sabnzbd',
+            'downloadInfo' => [
+                'title' => 'Stuck.Movie.2026.mkv',
+                'size' => 5_000_000,
+            ],
+            'downloadStatusMessages' => [
+                ['title' => 'Stuck.Movie.2026.mkv', 'messages' => ['Sample folder is not allowed']],
+            ],
+        ],
+    ]);
+
+    resolve(RadarrWebhookHandler::class)->handle($webhookEvent);
+
+    $log = ActivityLog::where('action', 'webhook.radarr.manual_interaction_required')->first();
+    expect($log)->not->toBeNull();
+    expect($log->description)->toContain('Stuck Movie');
+    expect($log->subject_id)->toBe(77);
+    expect($log->metadata['download_id'])->toBe('NZB_XYZ');
 });
 
 test('Health event writes ActivityLog with level/type/wikiUrl metadata', function (): void {

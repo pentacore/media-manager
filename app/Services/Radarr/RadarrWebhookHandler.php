@@ -7,6 +7,7 @@ namespace App\Services\Radarr;
 use App\Cache\Services\RadarrCache;
 use App\Models\WebhookEvent;
 use App\Services\Actions\ActionOrchestrator;
+use App\Services\Library\InterventionCounter;
 use App\Services\Webhook\AbstractWebhookHandler;
 use Illuminate\Support\Facades\Log;
 
@@ -32,6 +33,7 @@ class RadarrWebhookHandler extends AbstractWebhookHandler
             'MovieAdded' => $this->handleMovieAdded($webhookEvent, $payload),
             'MovieDelete' => $this->handleMovieDelete($webhookEvent, $payload),
             'MovieFileDelete' => $this->handleMovieFileDelete($webhookEvent, $payload),
+            'ManualInteractionRequired' => $this->handleManualInteractionRequired($webhookEvent, $payload),
             'Health' => $this->handleHealth($webhookEvent, $payload, 'health'),
             'HealthRestored' => $this->handleHealth($webhookEvent, $payload, 'health_restored'),
             'ApplicationUpdate' => $this->handleApplicationUpdate($webhookEvent, $payload),
@@ -206,6 +208,38 @@ class RadarrWebhookHandler extends AbstractWebhookHandler
             ],
             subjectId: $payload['movie']['id'] ?? null,
         );
+    }
+
+    /**
+     * @param  array<string, mixed>  $payload
+     */
+    private function handleManualInteractionRequired(WebhookEvent $webhookEvent, array $payload): void
+    {
+        $movieTitle = $payload['movie']['title'] ?? 'Unknown movie';
+        $download = is_array($payload['downloadInfo'] ?? null) ? $payload['downloadInfo'] : [];
+        $messages = is_array($payload['downloadStatusMessages'] ?? null) ? $payload['downloadStatusMessages'] : [];
+
+        $this->logActivity(
+            $webhookEvent,
+            'manual_interaction_required',
+            sprintf('Radarr needs manual import for "%s".', $movieTitle),
+            metadata: [
+                'movie_id' => $payload['movie']['id'] ?? null,
+                'tmdb_id' => $payload['movie']['tmdbId'] ?? null,
+                'imdb_id' => $payload['movie']['imdbId'] ?? null,
+                'download_id' => $payload['downloadId'] ?? ($download['downloadId'] ?? null),
+                'download_client' => $payload['downloadClient'] ?? null,
+                'download_title' => $download['title'] ?? null,
+                'release_size' => $download['size'] ?? null,
+                'status_messages' => $messages,
+            ],
+            subjectId: $payload['movie']['id'] ?? null,
+        );
+
+        // The library activity badge needs to reflect the new stuck import
+        // immediately — without this it would only update on the next
+        // scheduled poll (5 min) or page reload.
+        resolve(InterventionCounter::class)->recompute();
     }
 
     /**

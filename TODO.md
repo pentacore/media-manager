@@ -52,8 +52,8 @@
     - [ ] Add a page to see the history of activities from both Sonarr and Radarr, with filters for things like "Import failed", "Pending", "Completed", etc, and also show any relevant information about the activity (For example if an import failed, show the error message that was returned)
     - [x] Allow managing the activites from both Sonarr and Radarr, for example if an episode is pending for a long time, allow the user to either retry the import or block the episode from being imported (This is especially useful for things that are pending because they cant be imported for some reason, for example if the file is in a format that cant be imported, or if the file is missing, etc)
     - [x] Allow blocking activities from both Sonarr and Radarr
-    - [ ] Support the "On manual interaction required" webhook event, and allow the user to manually trigger the activity from the activity log page
-    - [ ] Regular check for activites and show a badge with the amount of activites that needs manual intervention in the sidebar
+    - [x] Support the "On manual interaction required" webhook event, and allow the user to manually trigger the activity from the activity log page
+    - [x] Regular check for activites and show a badge with the amount of activites that needs manual intervention in the sidebar
 - Allow clearing, editing or otherwise manage seerr requests
     - [x] Add a button to clear seerr requests, maybe with options to clear all, clear only completed, clear only cancelled, etc
     - [ ] Allow editing seerr requests, for example if a request is pending for a long time, allow the user to edit the request and change the quality or something like that to see if it helps with getting the request fulfilled

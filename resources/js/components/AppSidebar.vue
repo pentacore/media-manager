@@ -80,24 +80,34 @@ const aiEnabled = computed(() =>
 
 const initialNav = (
     page.props as unknown as {
-        nav?: { pendingActions?: number; activeSessions?: number };
+        nav?: {
+            pendingActions?: number;
+            activeSessions?: number;
+            libraryIntervention?: number;
+        };
     }
 ).nav;
 
 const pendingActions = ref(initialNav?.pendingActions ?? 0);
 const activeSessions = ref(initialNav?.activeSessions ?? 0);
+const libraryIntervention = ref(initialNav?.libraryIntervention ?? 0);
 const recentSessionIds = new Set<number>();
 
 watchEffect(() => {
     const nav = (
         page.props as unknown as {
-            nav?: { pendingActions?: number; activeSessions?: number };
+            nav?: {
+                pendingActions?: number;
+                activeSessions?: number;
+                libraryIntervention?: number;
+            };
         }
     ).nav;
 
     if (nav) {
         pendingActions.value = nav.pendingActions ?? 0;
         activeSessions.value = nav.activeSessions ?? 0;
+        libraryIntervention.value = nav.libraryIntervention ?? 0;
     }
 });
 
@@ -194,12 +204,20 @@ onMounted(() => {
             },
         );
 
+    privateChannel('dashboard').listen(
+        '.LibraryInterventionChanged',
+        (event: { count: number }) => {
+            libraryIntervention.value = event.count;
+        },
+    );
+
     activitySessionTimer = setInterval(pruneStaleSessions, 60_000);
 });
 
 onUnmounted(() => {
     leaveChannel('emby.activity');
     leaveChannel('members.actions');
+    leaveChannel('dashboard');
 
     if (activitySessionTimer) {
         clearInterval(activitySessionTimer);
@@ -221,7 +239,7 @@ const overviewNavItems = computed<NavItem[]>(() => [
     },
 ]);
 
-const mediaNavItems: NavItem[] = [
+const mediaNavItems = computed<NavItem[]>(() => [
     {
         title: 'TV Series',
         href: SeriesController.index.url(),
@@ -251,8 +269,9 @@ const mediaNavItems: NavItem[] = [
         title: 'Library activity',
         href: LibraryActivityController.queue.url(),
         icon: Activity,
+        badge: () => libraryIntervention.value,
     },
-];
+]);
 
 const liveNavItems = computed<NavItem[]>(() => [
     {

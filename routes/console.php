@@ -36,3 +36,8 @@ Schedule::command('sabnzbd:poll-history')
     ->everyFiveMinutes()
     ->withoutOverlapping()
     ->runInBackground();
+
+Schedule::command('library:refresh-intervention-count')
+    ->everyFiveMinutes()
+    ->withoutOverlapping()
+    ->runInBackground();

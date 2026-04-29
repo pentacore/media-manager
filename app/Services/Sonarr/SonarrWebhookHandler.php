@@ -7,6 +7,7 @@ namespace App\Services\Sonarr;
 use App\Cache\Services\SonarrCache;
 use App\Models\WebhookEvent;
 use App\Services\Actions\ActionOrchestrator;
+use App\Services\Library\InterventionCounter;
 use App\Services\Webhook\AbstractWebhookHandler;
 use Illuminate\Support\Facades\Log;
 
@@ -32,6 +33,7 @@ class SonarrWebhookHandler extends AbstractWebhookHandler
             'SeriesAdd' => $this->handleSeriesAdd($webhookEvent, $payload),
             'SeriesDelete' => $this->handleSeriesDelete($webhookEvent, $payload),
             'EpisodeFileDelete' => $this->handleEpisodeFileDelete($webhookEvent, $payload),
+            'ManualInteractionRequired' => $this->handleManualInteractionRequired($webhookEvent, $payload),
             'Health' => $this->handleHealth($webhookEvent, $payload, 'health'),
             'HealthRestored' => $this->handleHealth($webhookEvent, $payload, 'health_restored'),
             'ApplicationUpdate' => $this->handleApplicationUpdate($webhookEvent, $payload),
@@ -213,6 +215,39 @@ class SonarrWebhookHandler extends AbstractWebhookHandler
             ],
             subjectId: $payload['series']['id'] ?? null,
         );
+    }
+
+    /**
+     * @param  array<string, mixed>  $payload
+     */
+    private function handleManualInteractionRequired(WebhookEvent $webhookEvent, array $payload): void
+    {
+        $seriesTitle = $payload['series']['title'] ?? 'Unknown series';
+        $episodes = is_array($payload['episodes'] ?? null) ? $payload['episodes'] : [];
+        $download = is_array($payload['downloadInfo'] ?? null) ? $payload['downloadInfo'] : [];
+        $messages = is_array($payload['downloadStatusMessages'] ?? null) ? $payload['downloadStatusMessages'] : [];
+
+        $this->logActivity(
+            $webhookEvent,
+            'manual_interaction_required',
+            sprintf('Sonarr needs manual import for "%s" (%d episode(s)).', $seriesTitle, count($episodes)),
+            metadata: [
+                'series_id' => $payload['series']['id'] ?? null,
+                'tvdb_id' => $payload['series']['tvdbId'] ?? null,
+                'episodes' => $episodes,
+                'download_id' => $payload['downloadId'] ?? ($download['downloadId'] ?? null),
+                'download_client' => $payload['downloadClient'] ?? null,
+                'download_title' => $download['title'] ?? null,
+                'release_size' => $download['size'] ?? null,
+                'status_messages' => $messages,
+            ],
+            subjectId: $payload['series']['id'] ?? null,
+        );
+
+        // The library activity badge needs to reflect the new stuck import
+        // immediately — without this it would only update on the next
+        // scheduled poll (5 min) or page reload.
+        resolve(InterventionCounter::class)->recompute();
     }
 
     /**

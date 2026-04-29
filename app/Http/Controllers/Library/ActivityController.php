@@ -163,6 +163,7 @@ class ActivityController extends Controller
             if ($base['path'] === null) {
                 continue;
             }
+
             if ($base['quality'] === null) {
                 continue;
             }
@@ -176,6 +177,7 @@ class ActivityController extends Controller
                 if ($seriesId === null) {
                     continue;
                 }
+
                 if ($episodeIds === []) {
                     continue;
                 }
