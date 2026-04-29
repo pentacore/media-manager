@@ -592,3 +592,79 @@ test('approve handles connection failure gracefully', function (): void {
         ->post(route('media.requests.approve', 42))
         ->assertRedirect(route('media.requests.index'));
 });
+
+test('admin can bulk-clear available requests', function (): void {
+    $admin = User::factory()->admin()->create();
+
+    Http::fake([
+        'seerr.local:5055/api/v1/request*' => Http::sequence()
+            ->push([
+                'pageInfo' => ['page' => 1, 'pages' => 1, 'pageSize' => 100, 'results' => 2],
+                'results' => [
+                    ['id' => 11, 'status' => 5, 'media' => ['mediaType' => 'movie', 'tmdbId' => 1]],
+                    ['id' => 22, 'status' => 5, 'media' => ['mediaType' => 'movie', 'tmdbId' => 2]],
+                ],
+            ])
+            ->push(['ok' => true])
+            ->push(['ok' => true]),
+    ]);
+
+    $this->actingAs($admin)
+        ->from(route('media.requests.index'))
+        ->post(route('media.requests.clear'), ['status' => 'available'])
+        ->assertRedirect(route('media.requests.index', ['status' => 'available']))
+        ->assertSessionHas('inertia.flash_data.toast.type', 'success');
+
+    Http::assertSent(fn ($request): bool => $request->method() === 'DELETE'
+        && str_ends_with((string) $request->url(), '/api/v1/request/11')
+    );
+    Http::assertSent(fn ($request): bool => $request->method() === 'DELETE'
+        && str_ends_with((string) $request->url(), '/api/v1/request/22')
+    );
+});
+
+test('bulk-clear declined uses local status filter', function (): void {
+    $admin = User::factory()->admin()->create();
+
+    Http::fake([
+        'seerr.local:5055/api/v1/request*' => Http::sequence()
+            ->push([
+                'pageInfo' => ['page' => 1, 'pages' => 1, 'pageSize' => 100, 'results' => 2],
+                'results' => [
+                    ['id' => 30, 'status' => 3, 'media' => ['mediaType' => 'movie', 'tmdbId' => 1]],
+                    ['id' => 31, 'status' => 1, 'media' => ['mediaType' => 'movie', 'tmdbId' => 2]],
+                ],
+            ])
+            ->push(['ok' => true]),
+    ]);
+
+    $this->actingAs($admin)
+        ->from(route('media.requests.index'))
+        ->post(route('media.requests.clear'), ['status' => 'declined'])
+        ->assertRedirect(route('media.requests.index', ['status' => 'declined']));
+
+    Http::assertSent(fn ($request): bool => $request->method() === 'DELETE'
+        && str_ends_with((string) $request->url(), '/api/v1/request/30')
+    );
+    Http::assertNotSent(fn ($request): bool => $request->method() === 'DELETE'
+        && str_ends_with((string) $request->url(), '/api/v1/request/31')
+    );
+});
+
+test('bulk-clear rejects non-clearable status', function (): void {
+    $admin = User::factory()->admin()->create();
+
+    $this->actingAs($admin)
+        ->from(route('media.requests.index'))
+        ->post(route('media.requests.clear'), ['status' => 'pending'])
+        ->assertRedirect(route('media.requests.index'))
+        ->assertSessionHas('inertia.flash_data.toast.type', 'error');
+});
+
+test('member cannot bulk-clear', function (): void {
+    $member = User::factory()->member()->create();
+
+    $this->actingAs($member)
+        ->post(route('media.requests.clear'), ['status' => 'completed'])
+        ->assertForbidden();
+});

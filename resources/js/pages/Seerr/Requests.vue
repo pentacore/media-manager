@@ -4,6 +4,7 @@ import {
     Check,
     ChevronLeft,
     ChevronRight,
+    ChevronsDown,
     Database,
     ExternalLink,
     RefreshCcw,
@@ -22,6 +23,14 @@ import {
     SvcChip,
 } from '@/components/mm';
 import { Button } from '@/components/ui/button';
+import {
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuLabel,
+    DropdownMenuSeparator,
+    DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import {
     Select,
     SelectContent,
@@ -331,6 +340,56 @@ function retryRequest(req: SeerrRequest) {
     });
 }
 
+const CLEARABLE_STATUSES = [
+    'completed',
+    'available',
+    'declined',
+    'failed',
+] as const;
+type ClearableStatus = (typeof CLEARABLE_STATUSES)[number];
+
+const CLEAR_LABELS: Record<ClearableStatus, string> = {
+    completed: 'Clear completed',
+    available: 'Clear available',
+    declined: 'Clear declined',
+    failed: 'Clear failed',
+};
+
+const CLEAR_DESCRIPTIONS: Record<ClearableStatus, string> = {
+    completed: 'requests already imported and watched',
+    available: 'requests whose media is already in the library',
+    declined: 'requests an admin has rejected',
+    failed: 'requests Seerr could not push to Sonarr/Radarr',
+};
+
+const clearing = ref(false);
+
+function clearByStatus(status: ClearableStatus): void {
+    if (clearing.value) {
+        return;
+    }
+
+    if (
+        !confirm(
+            `Permanently delete every ${status} Seerr request (${CLEAR_DESCRIPTIONS[status]})? This cannot be undone.`,
+        )
+    ) {
+        return;
+    }
+
+    clearing.value = true;
+    router.post(
+        RequestController.clear.url(),
+        { status },
+        {
+            preserveScroll: true,
+            onFinish: () => {
+                clearing.value = false;
+            },
+        },
+    );
+}
+
 function goToPage(targetPage: number) {
     const query: Record<string, string | number> = { page: targetPage };
 
@@ -423,6 +482,31 @@ const rangeText = computed(() => {
                         :class="{ 'animate-spin': syncing }"
                     />Sync Seerr
                 </Button>
+                <DropdownMenu v-if="isAdmin">
+                    <DropdownMenuTrigger as-child>
+                        <Button
+                            variant="outline"
+                            size="sm"
+                            class="h-7 gap-1.5 text-xs"
+                            :disabled="clearing"
+                        >
+                            <Trash2 class="size-3.5" />Clear
+                            <ChevronsDown class="size-3" />
+                        </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end" class="w-56">
+                        <DropdownMenuLabel>Bulk delete</DropdownMenuLabel>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem
+                            v-for="status in CLEARABLE_STATUSES"
+                            :key="status"
+                            class="text-destructive focus:text-destructive"
+                            @select="clearByStatus(status)"
+                        >
+                            {{ CLEAR_LABELS[status] }}
+                        </DropdownMenuItem>
+                    </DropdownMenuContent>
+                </DropdownMenu>
                 <OpenInServiceButton
                     :href="props.connection.url"
                     label="Open Seerr"

@@ -42,6 +42,9 @@ Route::middleware(['auth', 'verified', 'password.set', 'role:member'])
             ->whereNumber('id')
             ->middleware('role:admin')
             ->name('requests.destroy');
+        Route::post('requests/clear', [RequestController::class, 'clear'])
+            ->middleware('role:admin')
+            ->name('requests.clear');
 
         // Unified search
         Route::get('search', [SearchController::class, 'index'])->name('search.index');

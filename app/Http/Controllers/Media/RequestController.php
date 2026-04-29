@@ -126,6 +126,138 @@ class RequestController extends Controller
         return back();
     }
 
+    /** Statuses the bulk-clear UI is allowed to target. */
+    public const array CLEARABLE_STATUSES = ['completed', 'available', 'declined', 'failed'];
+
+    /** Cap on rows deleted in a single clear call so a misclick can't wipe thousands silently. */
+    private const int CLEAR_HARD_LIMIT = 500;
+
+    /**
+     * Bulk-delete every Seerr request matching a given status. Walks the
+     * paginated upstream list, deletes each match, and busts the cache
+     * once at the end. Returns to the page with a count toast.
+     */
+    public function clear(Request $request): RedirectResponse
+    {
+        $status = (string) $request->input('status');
+
+        if (! in_array($status, self::CLEARABLE_STATUSES, true)) {
+            Inertia::flash('toast', ['type' => 'error', 'message' => __('Invalid status for bulk clear.')]);
+
+            return back();
+        }
+
+        try {
+            $connection = ServiceConnection::resolveActive(ServiceType::Seerr);
+        } catch (ModelNotFoundException) {
+            return $this->noConnectionRedirect();
+        }
+
+        $seerrClient = new SeerrClient($connection);
+
+        try {
+            $ids = $this->collectIdsForStatus($seerrClient, $status, self::CLEAR_HARD_LIMIT);
+        } catch (RequestException|ConnectionException) {
+            Inertia::flash('toast', ['type' => 'error', 'message' => __('Failed to enumerate Seerr requests.')]);
+
+            return back();
+        }
+
+        if ($ids === []) {
+            Inertia::flash('toast', ['type' => 'success', 'message' => __('Nothing to clear — no :status requests.', ['status' => $status])]);
+
+            return back();
+        }
+
+        $deleted = 0;
+        $failed = 0;
+
+        foreach ($ids as $id) {
+            try {
+                $seerrClient->deleteRequest($id);
+                $deleted++;
+            } catch (RequestException|ConnectionException) {
+                $failed++;
+            }
+        }
+
+        new SeerrCache($connection)->bustAll();
+
+        if ($failed === 0) {
+            Inertia::flash('toast', ['type' => 'success', 'message' => __('Cleared :n :status request(s).', ['n' => $deleted, 'status' => $status])]);
+        } else {
+            Inertia::flash('toast', ['type' => 'warning', 'message' => __('Cleared :ok of :total :status request(s); :fail failed.', ['ok' => $deleted, 'total' => $deleted + $failed, 'fail' => $failed, 'status' => $status])]);
+        }
+
+        return to_route('media.requests.index', ['status' => $status]);
+    }
+
+    /**
+     * Walk Seerr's paginated /request list and collect IDs whose effective
+     * status matches the target. Native filter strings (`completed`,
+     * `available`, `failed`) are passed straight to Seerr; statuses Seerr
+     * doesn't filter on (`declined` → status code 3) are matched locally.
+     *
+     * @return array<int, int>
+     *
+     * @throws RequestException|ConnectionException
+     */
+    private function collectIdsForStatus(SeerrClient $seerrClient, string $status, int $hardLimit): array
+    {
+        $perPage = self::LOCAL_FILTER_PAGE_SIZE;
+        $params = ['take' => $perPage, 'sort' => 'added'];
+
+        $upstreamFilter = match ($status) {
+            'completed' => 'completed',
+            'available' => 'available',
+            'failed' => 'failed',
+            default => null,
+        };
+
+        $localStatusValue = match ($status) {
+            'declined' => 3,
+            default => null,
+        };
+
+        if ($upstreamFilter !== null) {
+            $params['filter'] = $upstreamFilter;
+        }
+
+        $ids = [];
+
+        for ($pageIndex = 0; $pageIndex < self::LOCAL_FILTER_MAX_PAGES; $pageIndex++) {
+            $params['skip'] = $pageIndex * $perPage;
+            $response = $seerrClient->getRequests($params);
+
+            $rows = is_array($response['results'] ?? null) ? $response['results'] : [];
+            if ($rows === []) {
+                break;
+            }
+
+            foreach ($rows as $row) {
+                if ($localStatusValue !== null && (int) ($row['status'] ?? 0) !== $localStatusValue) {
+                    continue;
+                }
+
+                $id = (int) ($row['id'] ?? 0);
+                if ($id > 0) {
+                    $ids[] = $id;
+                    if (count($ids) >= $hardLimit) {
+                        return $ids;
+                    }
+                }
+            }
+
+            $pageInfo = is_array($response['pageInfo'] ?? null) ? $response['pageInfo'] : [];
+            $totalPages = (int) ($pageInfo['pages'] ?? 0);
+            if ($totalPages > 0 && $pageIndex + 1 >= $totalPages) {
+                break;
+            }
+        }
+
+        return $ids;
+    }
+
     /**
      * @return array{data: array<int, array<string, mixed>>, meta: array<string, int>}
      */
