@@ -120,8 +120,11 @@ interface InvocationDetail {
     scenario_total_cost: number | null;
 }
 
+type WindowKey = 'today' | '24h' | '7d' | '30d';
+
 const props = defineProps<{
-    window: '24h' | '7d' | '30d';
+    window: WindowKey;
+    windows: WindowKey[];
     totals: Totals;
     by_model: AggregateRow[];
     by_provider: AggregateRow[];
@@ -426,7 +429,7 @@ function formatTimestamp(value: string): string {
                     class="flex items-center gap-0.5 rounded-md border border-border bg-bg-elev p-0.5"
                 >
                     <button
-                        v-for="opt in ['24h', '7d', '30d'] as const"
+                        v-for="opt in props.windows"
                         :key="opt"
                         type="button"
                         :class="
@@ -439,7 +442,7 @@ function formatTimestamp(value: string): string {
                         "
                         @click="setWindow(opt)"
                     >
-                        {{ opt }}
+                        {{ opt === 'today' ? 'Today' : opt }}
                     </button>
                 </div>
                 <a

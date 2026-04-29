@@ -22,6 +22,9 @@ class ActivityLogController extends Controller
      */
     private const array RANGE_HOURS = [1, 6, 24, 72, 168, 720];
 
+    /** Special ?since= value: cutoff snaps to start of the local day. */
+    private const string TODAY = 'today';
+
     public function index(Request $request): Response
     {
         $action = $request->string('action')->toString();
@@ -66,6 +69,7 @@ class ActivityLogController extends Controller
                     ])
                     ->all(),
                 'rangeHours' => self::RANGE_HOURS,
+                'todayValue' => self::TODAY,
             ],
         ]);
     }
@@ -115,7 +119,7 @@ class ActivityLogController extends Controller
     /**
      * @return Builder<ActivityLog>
      */
-    private function buildBuilder(string $action, int $serviceId, int $since): Builder
+    private function buildBuilder(string $action, int $serviceId, int|string $since): Builder
     {
         $builder = ActivityLog::query()->latest();
 
@@ -127,15 +131,33 @@ class ActivityLogController extends Controller
             $builder->where('service_connection_id', $serviceId);
         }
 
-        $builder->where('created_at', '>=', CarbonImmutable::now()->subHours($since));
+        $builder->where('created_at', '>=', $this->cutoffFor($since));
 
         return $builder;
     }
 
-    private function resolveSince(Request $request): int
+    /**
+     * "today" snaps to the local midnight; numeric values walk back N hours
+     * from now. Mixed return type keeps the wire format honest — frontend
+     * sends `since=today` literally instead of pretending it's a number.
+     */
+    private function resolveSince(Request $request): int|string
     {
-        $since = $request->integer('since', 24);
+        $raw = $request->string('since', '24')->toString();
 
-        return in_array($since, self::RANGE_HOURS, true) ? $since : 24;
+        if ($raw === self::TODAY) {
+            return self::TODAY;
+        }
+
+        $hours = (int) $raw;
+
+        return in_array($hours, self::RANGE_HOURS, true) ? $hours : 24;
+    }
+
+    private function cutoffFor(int|string $since): CarbonImmutable
+    {
+        return $since === self::TODAY
+            ? CarbonImmutable::today()
+            : CarbonImmutable::now()->subHours($since);
     }
 }

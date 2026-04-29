@@ -5,6 +5,7 @@ declare(strict_types=1);
 use App\Models\ActivityLog;
 use App\Models\ServiceConnection;
 use App\Models\User;
+use Carbon\CarbonImmutable;
 
 beforeEach(function (): void {
     config()->set('inertia.ssr.enabled', false);
@@ -57,6 +58,42 @@ test('action filter scopes the result set', function (): void {
             ->has('logs.data', 2)
             ->where('filters.action', 'deleted')
         );
+});
+
+test('since=today only returns rows from the local current day', function (): void {
+    $user = User::factory()->create();
+
+    CarbonImmutable::setTestNow(CarbonImmutable::create(2026, 4, 29, 14, 30));
+
+    ActivityLog::factory()->create([
+        'user_id' => $user->id,
+        'created_at' => CarbonImmutable::create(2026, 4, 29, 0, 5),
+    ]);
+    ActivityLog::factory()->create([
+        'user_id' => $user->id,
+        'created_at' => CarbonImmutable::create(2026, 4, 28, 23, 30),
+    ]);
+
+    $this->actingAs($user)
+        ->get(route('activity-log', ['since' => 'today']))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->component('ActivityLog')
+            ->where('filters.since', 'today')
+            ->where('logs.meta.total', 1)
+            ->where('filterOptions.todayValue', 'today')
+        );
+
+    CarbonImmutable::setTestNow();
+});
+
+test('unknown since value falls back to default 24h', function (): void {
+    $user = User::factory()->create();
+
+    $this->actingAs($user)
+        ->get(route('activity-log', ['since' => 'forever']))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page->where('filters.since', 24));
 });
 
 test('service filter scopes the result set', function (): void {

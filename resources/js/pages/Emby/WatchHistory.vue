@@ -45,8 +45,8 @@ const props = defineProps<{
         links: PaginatorLink[];
         meta: PaginatorMeta;
     };
-    filters: { media_type: string; since: number };
-    filterOptions: { rangeDays: number[] };
+    filters: { media_type: string; since: number | 'today' };
+    filterOptions: { rangeDays: number[]; todayValue: 'today' };
 }>();
 
 defineOptions({
@@ -215,7 +215,10 @@ const totals = computed(() => {
     };
 });
 
-function applyFilters(next: { media_type?: string; since?: number }) {
+function applyFilters(next: {
+    media_type?: string;
+    since?: number | 'today';
+}) {
     const merged = {
         media_type:
             'media_type' in next
@@ -245,16 +248,20 @@ function onMediaTypeChange(value: unknown) {
     applyFilters({ media_type: v === 'all' ? '' : v });
 }
 
-function setRange(days: number) {
-    applyFilters({ since: days });
+function setRange(value: number | 'today') {
+    applyFilters({ since: value });
 }
 
-function rangeLabel(days: number): string {
-    if (days === 1) {
+function rangeLabel(value: number | 'today'): string {
+    if (value === 'today') {
+        return 'Today';
+    }
+
+    if (value === 1) {
         return '24h';
     }
 
-    return `${days}d`;
+    return `${value}d`;
 }
 
 const exportUrl = computed(() => {
@@ -330,20 +337,23 @@ function currentFilter(): string {
                 >
                     <Calendar class="ml-1.5 size-3.5 text-muted-foreground" />
                     <button
-                        v-for="days in filterOptions.rangeDays"
-                        :key="days"
+                        v-for="value in [
+                            filterOptions.todayValue,
+                            ...filterOptions.rangeDays,
+                        ]"
+                        :key="value"
                         type="button"
                         :class="
                             cn(
                                 'inline-flex h-6 items-center rounded-[4px] px-2 text-[11.5px] font-medium transition-colors',
-                                filters.since === days
+                                filters.since === value
                                     ? 'bg-accent text-accent-foreground'
                                     : 'text-muted-foreground hover:bg-bg-hover hover:text-foreground',
                             )
                         "
-                        @click="setRange(days)"
+                        @click="setRange(value)"
                     >
-                        {{ rangeLabel(days) }}
+                        {{ rangeLabel(value) }}
                     </button>
                 </div>
                 <a

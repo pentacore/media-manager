@@ -23,6 +23,9 @@ class WatchHistoryController extends Controller
     /** Allowed time-range buckets for ?since= (in days). */
     private const array RANGE_DAYS = [1, 7, 30, 90];
 
+    /** Special ?since= value: cutoff snaps to start of the local day. */
+    private const string TODAY = 'today';
+
     public function index(Request $request): Response
     {
         $since = $this->resolveSince($request);
@@ -50,6 +53,7 @@ class WatchHistoryController extends Controller
             ],
             'filterOptions' => [
                 'rangeDays' => self::RANGE_DAYS,
+                'todayValue' => self::TODAY,
             ],
         ]);
     }
@@ -75,7 +79,8 @@ class WatchHistoryController extends Controller
         $builder = $this->buildBuilder($request, $since)
             ->with('embyUserLink:id,emby_username,user_id');
 
-        $filename = sprintf('watch-history-%dd-%s.csv', $since, now()->format('Ymd-His'));
+        $sinceLabel = $since === self::TODAY ? 'today' : sprintf('%dd', $since);
+        $filename = sprintf('watch-history-%s-%s.csv', $sinceLabel, now()->format('Ymd-His'));
 
         return new StreamedResponse(function () use ($builder): void {
             $handle = fopen('php://output', 'wb');
@@ -118,7 +123,7 @@ class WatchHistoryController extends Controller
     /**
      * @return Builder<EmbyActivity>
      */
-    private function buildBuilder(Request $request, int $since): Builder
+    private function buildBuilder(Request $request, int|string $since): Builder
     {
         $user = $request->user();
 
@@ -133,15 +138,28 @@ class WatchHistoryController extends Controller
             $builder->where('media_type', $request->string('media_type')->toString());
         }
 
-        $builder->where('created_at', '>=', CarbonImmutable::now()->subDays($since));
+        $builder->where('created_at', '>=', $this->cutoffFor($since));
 
         return $builder;
     }
 
-    private function resolveSince(Request $request): int
+    private function resolveSince(Request $request): int|string
     {
-        $since = $request->integer('since', 7);
+        $raw = $request->string('since', '7')->toString();
 
-        return in_array($since, self::RANGE_DAYS, true) ? $since : 7;
+        if ($raw === self::TODAY) {
+            return self::TODAY;
+        }
+
+        $days = (int) $raw;
+
+        return in_array($days, self::RANGE_DAYS, true) ? $days : 7;
+    }
+
+    private function cutoffFor(int|string $since): CarbonImmutable
+    {
+        return $since === self::TODAY
+            ? CarbonImmutable::today()
+            : CarbonImmutable::now()->subDays($since);
     }
 }

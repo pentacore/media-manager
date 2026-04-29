@@ -38,12 +38,13 @@ const props = defineProps<{
     filters: {
         action: string;
         service_id: number | null;
-        since: number;
+        since: number | 'today';
     };
     filterOptions: {
         actions: string[];
         services: ServiceOption[];
         rangeHours: number[];
+        todayValue: 'today';
     };
 }>();
 
@@ -116,7 +117,7 @@ function formatTime(iso: string | null): string {
 function applyFilters(next: {
     action?: string;
     service_id?: number | null;
-    since?: number;
+    since?: number | 'today';
 }) {
     // ?? would treat an explicit null (intent: clear the filter) as
     // "fall through to the current value", so distinguish "key present"
@@ -148,6 +149,22 @@ function applyFilters(next: {
         preserveScroll: true,
         replace: true,
     });
+}
+
+function setRange(value: number | 'today'): void {
+    applyFilters({ since: value });
+}
+
+function rangeButtonLabel(value: number | 'today'): string {
+    if (value === 'today') {
+        return 'Today';
+    }
+
+    if (value <= 24) {
+        return `${value}h`;
+    }
+
+    return `${Math.round(value / 24)}d`;
 }
 
 function svcId(name: string | null | undefined): string {
@@ -257,22 +274,6 @@ function setService(id: 'all' | number): void {
     applyFilters({ service_id: id });
 }
 
-function setRange(hours: number): void {
-    applyFilters({ since: hours });
-}
-
-function rangeLabel(hours: number): string {
-    if (hours <= 24) {
-        return `${hours}h`;
-    }
-
-    if (hours <= 168) {
-        return `${Math.round(hours / 24)}d`;
-    }
-
-    return `${Math.round(hours / 24)}d`;
-}
-
 function exportUrl(): string {
     const params = new URLSearchParams();
 
@@ -318,20 +319,23 @@ function exportUrl(): string {
                         class="ml-1.5 size-3.5 text-muted-foreground"
                     />
                     <button
-                        v-for="hours in filterOptions.rangeHours"
-                        :key="hours"
+                        v-for="value in [
+                            filterOptions.todayValue,
+                            ...filterOptions.rangeHours,
+                        ]"
+                        :key="value"
                         type="button"
                         :class="
                             cn(
                                 'inline-flex h-6 items-center rounded-[4px] px-2 text-[11.5px] font-medium transition-colors',
-                                filters.since === hours
+                                filters.since === value
                                     ? 'bg-accent text-accent-foreground'
                                     : 'text-muted-foreground hover:bg-bg-hover hover:text-foreground',
                             )
                         "
-                        @click="setRange(hours)"
+                        @click="setRange(value)"
                     >
-                        {{ rangeLabel(hours) }}
+                        {{ rangeButtonLabel(value) }}
                     </button>
                 </div>
                 <a

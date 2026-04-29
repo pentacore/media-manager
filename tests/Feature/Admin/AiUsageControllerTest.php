@@ -108,6 +108,58 @@ test('invalid window falls back to 7d', function (): void {
         ->assertInertia(fn ($page) => $page->where('window', '7d'));
 });
 
+test('window=today narrows recent invocations to the current local day', function (): void {
+    $admin = User::factory()->admin()->create();
+
+    AiModelPrice::create([
+        'provider' => 'openai',
+        'model' => 'gpt-5-mini',
+        'input_per_mtok' => 0.40,
+        'output_per_mtok' => 1.60,
+        'cache_read_per_mtok' => 0,
+        'cache_write_per_mtok' => 0,
+        'reasoning_per_mtok' => 0,
+    ]);
+
+    CarbonImmutable::setTestNow(CarbonImmutable::create(2026, 4, 29, 14, 30));
+
+    DB::table('ai_usage_records')->insert([
+        [
+            'invocation_id' => 'today-row',
+            'agent_class' => MediaAgent::class,
+            'provider' => 'openai',
+            'model' => 'gpt-5-mini',
+            'prompt_tokens' => 1, 'completion_tokens' => 1,
+            'cache_read_input_tokens' => 0, 'cache_write_input_tokens' => 0, 'reasoning_tokens' => 0,
+            'tool_calls_count' => 0, 'status' => 'success',
+            'created_at' => CarbonImmutable::create(2026, 4, 29, 1, 0),
+            'updated_at' => CarbonImmutable::create(2026, 4, 29, 1, 0),
+        ],
+        [
+            'invocation_id' => 'yesterday-row',
+            'agent_class' => MediaAgent::class,
+            'provider' => 'openai',
+            'model' => 'gpt-5-mini',
+            'prompt_tokens' => 1, 'completion_tokens' => 1,
+            'cache_read_input_tokens' => 0, 'cache_write_input_tokens' => 0, 'reasoning_tokens' => 0,
+            'tool_calls_count' => 0, 'status' => 'success',
+            'created_at' => CarbonImmutable::create(2026, 4, 28, 23, 30),
+            'updated_at' => CarbonImmutable::create(2026, 4, 28, 23, 30),
+        ],
+    ]);
+
+    $this->actingAs($admin)
+        ->get(route('admin.ai-usage.index', ['window' => 'today']))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->where('window', 'today')
+            ->where('windows.0', 'today')
+            ->where('totals.total_invocations', 1)
+        );
+
+    CarbonImmutable::setTestNow();
+});
+
 test('scenario query param adds projected props to the page', function (): void {
     $admin = User::factory()->admin()->create();
 

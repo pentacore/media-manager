@@ -5,6 +5,7 @@ declare(strict_types=1);
 use App\Models\EmbyActivity;
 use App\Models\EmbyUserLink;
 use App\Models\User;
+use Carbon\CarbonImmutable;
 
 beforeEach(function (): void {
     config()->set('inertia.ssr.enabled', false);
@@ -92,6 +93,42 @@ test('viewer sees zero activities when they have no emby link', function (): voi
         ->assertInertia(fn ($page) => $page
             ->has('activities.data', 0)
         );
+});
+
+test('since=today only returns activities from the local current day', function (): void {
+    $admin = User::factory()->admin()->create();
+    $link = EmbyUserLink::factory()->create();
+
+    CarbonImmutable::setTestNow(CarbonImmutable::create(2026, 4, 29, 14, 30));
+
+    EmbyActivity::factory()->create([
+        'emby_user_link_id' => $link->id,
+        'created_at' => CarbonImmutable::create(2026, 4, 29, 1, 0),
+    ]);
+    EmbyActivity::factory()->create([
+        'emby_user_link_id' => $link->id,
+        'created_at' => CarbonImmutable::create(2026, 4, 28, 23, 30),
+    ]);
+
+    $this->actingAs($admin)
+        ->get(route('monitoring.watch-history', ['since' => 'today']))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->where('filters.since', 'today')
+            ->has('activities.data', 1)
+            ->where('filterOptions.todayValue', 'today')
+        );
+
+    CarbonImmutable::setTestNow();
+});
+
+test('unknown since value falls back to default 7d', function (): void {
+    $admin = User::factory()->admin()->create();
+
+    $this->actingAs($admin)
+        ->get(route('monitoring.watch-history', ['since' => 'forever']))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page->where('filters.since', 7));
 });
 
 test('results are paginated at 25 per page', function (): void {

@@ -19,21 +19,19 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class AiUsageController extends Controller
 {
-    private const array WINDOWS = [
-        '24h' => 1,
-        '7d' => 7,
-        '30d' => 30,
-    ];
+    /**
+     * Allowed ?window= values, in display order. Numeric entries map to a
+     * `subDays(N)` cutoff; the special `today` key snaps to the local
+     * midnight instead.
+     */
+    private const array WINDOWS = ['today', '24h', '7d', '30d'];
+
+    private const string DEFAULT_WINDOW = '7d';
 
     public function index(Request $request, AiUsageReporting $aiUsageReporting): Response
     {
-        $window = $request->string('window', '7d')->value();
-
-        if (! array_key_exists($window, self::WINDOWS)) {
-            $window = '7d';
-        }
-
-        $since = CarbonImmutable::now()->subDays(self::WINDOWS[$window]);
+        $window = $this->resolveWindow($request);
+        $since = $this->cutoffFor($window);
         $scenario = Scenario::fromArray((array) $request->input('scenario', []));
 
         $page = [
@@ -47,6 +45,7 @@ class AiUsageController extends Controller
                 ->orderBy('model')
                 ->get(['provider', 'model', 'input_per_mtok', 'output_per_mtok', 'cache_read_per_mtok', 'cache_write_per_mtok', 'reasoning_per_mtok']),
             'scenario' => $scenario?->toArray(),
+            'windows' => self::WINDOWS,
         ];
 
         if ($scenario instanceof Scenario) {
@@ -116,13 +115,8 @@ class AiUsageController extends Controller
      */
     public function export(Request $request, AiUsageReporting $aiUsageReporting): StreamedResponse
     {
-        $window = $request->string('window', '7d')->value();
-
-        if (! array_key_exists($window, self::WINDOWS)) {
-            $window = '7d';
-        }
-
-        $since = CarbonImmutable::now()->subDays(self::WINDOWS[$window]);
+        $window = $this->resolveWindow($request);
+        $since = $this->cutoffFor($window);
         $scenario = Scenario::fromArray((array) $request->input('scenario', []));
 
         $rows = $aiUsageReporting->recentInvocations($since, $scenario, 10_000);
@@ -162,5 +156,23 @@ class AiUsageController extends Controller
             'Content-Disposition' => sprintf('attachment; filename="%s"', $filename),
             'Cache-Control' => 'no-store',
         ]);
+    }
+
+    private function resolveWindow(Request $request): string
+    {
+        $window = $request->string('window', self::DEFAULT_WINDOW)->value();
+
+        return in_array($window, self::WINDOWS, true) ? $window : self::DEFAULT_WINDOW;
+    }
+
+    private function cutoffFor(string $window): CarbonImmutable
+    {
+        return match ($window) {
+            'today' => CarbonImmutable::today(),
+            '24h' => CarbonImmutable::now()->subDay(),
+            '7d' => CarbonImmutable::now()->subDays(7),
+            '30d' => CarbonImmutable::now()->subDays(30),
+            default => CarbonImmutable::now()->subDays(7),
+        };
     }
 }
