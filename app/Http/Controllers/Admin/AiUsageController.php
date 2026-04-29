@@ -83,7 +83,8 @@ class AiUsageController extends Controller
                 'id', 'created_at', 'user', 'provider', 'model',
                 'prompt_tokens', 'completion_tokens', 'tool_calls',
                 'total_tokens', 'cost_usd', 'status',
-            ]);
+            ],
+                escape: '\\');
 
             foreach ($rows as $row) {
                 fputcsv($handle, [
@@ -98,7 +99,8 @@ class AiUsageController extends Controller
                     $row->total_tokens,
                     number_format((float) $row->cost, 6, '.', ''),
                     $row->status,
-                ]);
+                ],
+                    escape: '\\');
             }
 
             fclose($handle);

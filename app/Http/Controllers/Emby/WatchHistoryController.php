@@ -66,25 +66,27 @@ class WatchHistoryController extends Controller
                 'id', 'started_at', 'emby_user', 'media_type', 'media_title',
                 'series_title', 'duration_seconds', 'play_position_seconds',
                 'completion_pct', 'action',
-            ]);
+            ],
+                escape: '\\');
 
-            $builder->lazyById(500)->each(function (EmbyActivity $activity) use ($handle): void {
-                $duration = $activity->duration_ticks ?? 0;
-                $position = $activity->play_position ?? 0;
+            $builder->lazyById(500)->each(function (EmbyActivity $embyActivity) use ($handle): void {
+                $duration = $embyActivity->duration_ticks ?? 0;
+                $position = $embyActivity->play_position ?? 0;
                 $completion = $duration > 0 ? round(min(100, $position / $duration * 100), 1) : 0;
 
                 fputcsv($handle, [
-                    $activity->id,
-                    $activity->created_at?->toIso8601String(),
-                    $activity->embyUserLink?->emby_username,
-                    $activity->media_type,
-                    $activity->media_title,
-                    $activity->series_title,
+                    $embyActivity->id,
+                    $embyActivity->created_at?->toIso8601String(),
+                    $embyActivity->embyUserLink?->emby_username,
+                    $embyActivity->media_type,
+                    $embyActivity->media_title,
+                    $embyActivity->series_title,
                     intdiv((int) $duration, 10_000_000),
                     intdiv((int) $position, 10_000_000),
                     $completion,
-                    $activity->action,
-                ]);
+                    $embyActivity->action,
+                ],
+                    escape: '\\');
             });
 
             fclose($handle);

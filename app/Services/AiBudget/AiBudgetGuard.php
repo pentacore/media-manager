@@ -11,6 +11,7 @@ use App\Services\AiUsage\AiUsageReporting;
 use App\Settings\AiSettings;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\Notification;
+use Throwable;
 
 /**
  * Enforces the per-month AI spend caps configured in AiSettings.
@@ -48,9 +49,7 @@ class AiBudgetGuard
 
         $spend = $this->currentMonthSpend();
 
-        if ($hard !== null && $spend >= $hard) {
-            throw new AiBudgetExceededException($spend, $hard);
-        }
+        throw_if($hard !== null && $spend >= $hard, AiBudgetExceededException::class, $spend, $hard);
 
         if ($soft !== null && $spend >= $soft && $this->shouldNotifySoftLimit()) {
             $this->dispatchSoftLimitNotification($spend, $soft);
@@ -94,7 +93,7 @@ class AiBudgetGuard
 
         try {
             $when = CarbonImmutable::parse($stamp);
-        } catch (\Throwable) {
+        } catch (Throwable) {
             return true;
         }
 

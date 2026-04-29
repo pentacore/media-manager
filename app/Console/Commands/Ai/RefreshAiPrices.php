@@ -17,12 +17,12 @@ class RefreshAiPrices extends Command
     {
         $this->info('Running PriceFetcherAgent — this fetches live pricing from provider pages.');
 
-        $response = (new PriceFetcherAgent)->prompt(
+        $agentResponse = (new PriceFetcherAgent)->prompt(
             'Refresh the catalog now. Visit the canonical pricing page for OpenAI, Anthropic, Google Gemini, DeepSeek, xAI, and Mistral. Upsert one row per generally-available text/chat model with up-to-date input, output, cache, and reasoning rates. Skip image / audio / embedding products.'
         );
 
         $this->line('');
-        $this->line($response->text);
+        $this->line($agentResponse->text);
         $this->line('');
         $this->info('Done.');
 

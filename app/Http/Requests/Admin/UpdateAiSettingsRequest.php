@@ -7,6 +7,7 @@ namespace App\Http\Requests\Admin;
 use App\Enums\AiMode;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
+use Override;
 
 class UpdateAiSettingsRequest extends FormRequest
 {
@@ -26,6 +27,7 @@ class UpdateAiSettingsRequest extends FormRequest
     /**
      * @return array<string, string>
      */
+    #[Override]
     public function messages(): array
     {
         return [

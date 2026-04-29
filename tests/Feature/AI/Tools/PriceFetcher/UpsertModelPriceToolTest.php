@@ -19,9 +19,9 @@ test('creates a new price row when (provider, model) does not exist', function (
 
     expect($result['upserted'])->toBeTrue();
 
-    $row = AiModelPrice::query()->where('provider', 'openai')->where('model', 'gpt-x-test')->firstOrFail();
-    expect((float) $row->input_per_mtok)->toBe(1.25)
-        ->and((float) $row->output_per_mtok)->toBe(5.0);
+    $aiModelPrice = AiModelPrice::query()->where('provider', 'openai')->where('model', 'gpt-x-test')->firstOrFail();
+    expect((float) $aiModelPrice->input_per_mtok)->toBe(1.25)
+        ->and((float) $aiModelPrice->output_per_mtok)->toBe(5.0);
 });
 
 test('updates the existing row in place rather than creating a duplicate', function (): void {

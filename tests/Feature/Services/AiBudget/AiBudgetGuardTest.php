@@ -100,6 +100,7 @@ test('saving a new soft cap clears the notified-at stamp so it can fire again', 
     $aiSettings = resolve(AiSettings::class);
 
     $aiSettings->markSoftBudgetNotified('2026-04-15T12:00:00+00:00');
+
     expect($aiSettings->softBudgetNotifiedAt())->not->toBeNull();
 
     $aiSettings->setSoftBudgetUsd(5.0);
@@ -114,9 +115,9 @@ test('hard cap exception carries the spend and cap for the controller', function
     try {
         resolve(AiBudgetGuard::class)->enforce();
         $this->fail('expected exception');
-    } catch (AiBudgetExceededException $exception) {
-        expect($exception->hardCapUsd)->toBe(1.0)
-            ->and($exception->spendUsd)->toBeGreaterThan(2.0);
+    } catch (AiBudgetExceededException $aiBudgetExceededException) {
+        expect($aiBudgetExceededException->hardCapUsd)->toBe(1.0)
+            ->and($aiBudgetExceededException->spendUsd)->toBeGreaterThan(2.0);
     }
 });
 

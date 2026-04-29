@@ -89,18 +89,18 @@ class ActivityLogController extends Controller
         return new StreamedResponse(function () use ($builder): void {
             $handle = fopen('php://output', 'wb');
 
-            $builder->lazyById(500)->each(function (ActivityLog $log) use ($handle): void {
+            $builder->lazyById(500)->each(function (ActivityLog $activityLog) use ($handle): void {
                 fwrite($handle, json_encode([
-                    'id' => $log->id,
-                    'created_at' => $log->created_at?->toIso8601String(),
-                    'user' => $log->user?->name,
-                    'service' => $log->serviceConnection?->name,
-                    'service_type' => $log->serviceConnection?->type->value,
-                    'action' => $log->action,
-                    'description' => $log->description,
-                    'subject_type' => $log->subject_type,
-                    'subject_id' => $log->subject_id,
-                    'metadata' => $log->metadata,
+                    'id' => $activityLog->id,
+                    'created_at' => $activityLog->created_at?->toIso8601String(),
+                    'user' => $activityLog->user?->name,
+                    'service' => $activityLog->serviceConnection?->name,
+                    'service_type' => $activityLog->serviceConnection?->type->value,
+                    'action' => $activityLog->action,
+                    'description' => $activityLog->description,
+                    'subject_type' => $activityLog->subject_type,
+                    'subject_id' => $activityLog->subject_id,
+                    'metadata' => $activityLog->metadata,
                 ], JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES)."\n");
             });
 

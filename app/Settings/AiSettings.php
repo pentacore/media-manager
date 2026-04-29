@@ -23,14 +23,14 @@ class AiSettings
      * Used by the chat surface so a user can flip between Advisory and
      * Executive for a single turn without mutating global state.
      */
-    private ?AiMode $modeOverride = null;
+    private ?AiMode $aiMode = null;
 
     public function __construct(private readonly AppSettings $appSettings) {}
 
     public function mode(): AiMode
     {
-        if ($this->modeOverride instanceof AiMode) {
-            return $this->modeOverride;
+        if ($this->aiMode instanceof AiMode) {
+            return $this->aiMode;
         }
 
         $value = (string) $this->appSettings->get(
@@ -43,7 +43,7 @@ class AiSettings
 
     public function withMode(AiMode $aiMode): void
     {
-        $this->modeOverride = $aiMode;
+        $this->aiMode = $aiMode;
     }
 
     public function model(): string

@@ -132,7 +132,7 @@ class EmbyLinkController extends Controller
             // Synthesize a placeholder email so the user record satisfies
             // the unique-email constraint without colliding. Admin can
             // edit it after the import.
-            $email = sprintf('emby+%s@local.invalid', strtolower(preg_replace('/[^A-Za-z0-9]/', '', (string) $embyName)));
+            $email = sprintf('emby+%s@local.invalid', strtolower((string) preg_replace('/[^A-Za-z0-9]/', '', (string) $embyName)));
 
             $user = User::query()->where('email', $email)->first();
 

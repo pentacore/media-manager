@@ -14,7 +14,7 @@ test('agent declares both pricing tools', function (): void {
 
     expect($agent)->toBeInstanceOf(HasTools::class);
 
-    $names = collect($agent->tools())->map(fn ($tool) => $tool::class)->all();
+    $names = collect($agent->tools())->map(fn ($tool): string => $tool::class)->all();
     expect($names)
         ->toContain(WebFetchTool::class)
         ->toContain(UpsertModelPriceTool::class);

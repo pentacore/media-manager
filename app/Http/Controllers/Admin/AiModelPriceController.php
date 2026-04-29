@@ -90,7 +90,7 @@ class AiModelPriceController extends Controller
             'message' => __('Refreshed via PriceFetcherAgent. :added new, :total total. :summary', [
                 'added' => $added,
                 'total' => $after,
-                'summary' => mb_substr((string) $response->text, 0, 200),
+                'summary' => mb_substr($response->text, 0, 200),
             ]),
         ]);
 

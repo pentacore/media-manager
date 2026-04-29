@@ -39,7 +39,7 @@ class DemoActivitySeeder extends Seeder
 
         /** @var Collection<string, ServiceConnection> $services */
         $services = ServiceConnection::query()->get()
-            ->keyBy(fn (ServiceConnection $c): string => $c->type->value);
+            ->keyBy(fn (ServiceConnection $serviceConnection): string => $serviceConnection->type->value);
 
         $hasDemoActivity = ActivityLog::where('description', 'like', '['.self::DEMO_TAG.']%')->exists();
 
@@ -60,7 +60,7 @@ class DemoActivitySeeder extends Seeder
      * Demo notifications spanning a few categories so the bell badge
      * and Notifications page have content to render.
      */
-    private function seedNotifications(User $admin): void
+    private function seedNotifications(User $user): void
     {
         $now = CarbonImmutable::now();
         $entries = [
@@ -121,7 +121,7 @@ class DemoActivitySeeder extends Seeder
         ];
 
         foreach ($entries as $entry) {
-            $admin->notifications()->create([
+            $user->notifications()->create([
                 'id' => (string) Str::uuid7(),
                 'type' => $entry['type'],
                 'data' => $entry['data'],
@@ -227,14 +227,14 @@ class DemoActivitySeeder extends Seeder
      *
      * @param  Collection<string, ServiceConnection>  $services
      */
-    private function seedEmbyActivity(User $admin, Collection $services): void
+    private function seedEmbyActivity(User $user, Collection $services): void
     {
         if ($services->get('emby') === null) {
             return;
         }
 
         $link = EmbyUserLink::firstOrCreate(
-            ['user_id' => $admin->id],
+            ['user_id' => $user->id],
             ['emby_user_id' => 'demo-emby-user', 'emby_username' => 'demo'],
         );
 
@@ -289,7 +289,7 @@ class DemoActivitySeeder extends Seeder
      *
      * @param  Collection<string, ServiceConnection>  $services
      */
-    private function seedActivityLog(User $admin, Collection $services): void
+    private function seedActivityLog(User $user, Collection $services): void
     {
         $now = CarbonImmutable::now();
         $entries = [
@@ -309,7 +309,7 @@ class DemoActivitySeeder extends Seeder
             $service = $services->get($row['svc']);
             $when = $now->subMinutes($i * 7 + random_int(1, 4));
             ActivityLog::create([
-                'user_id' => $admin->id,
+                'user_id' => $user->id,
                 'service_connection_id' => $service?->id,
                 'action' => $row['action'],
                 'description' => '['.self::DEMO_TAG.'] '.$row['desc'],

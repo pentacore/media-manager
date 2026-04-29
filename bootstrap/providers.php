@@ -1,13 +1,8 @@
 <?php
 
-declare(strict_types=1);
-
-use App\Providers\AIServiceProvider;
-use App\Providers\AppServiceProvider;
-use App\Providers\FortifyServiceProvider;
-
 return [
-    AIServiceProvider::class,
-    AppServiceProvider::class,
-    FortifyServiceProvider::class,
+    App\Providers\AIServiceProvider::class,
+    App\Providers\AppServiceProvider::class,
+    App\Providers\FortifyServiceProvider::class,
+    App\Providers\TelescopeServiceProvider::class,
 ];
