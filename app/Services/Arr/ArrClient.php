@@ -122,4 +122,29 @@ abstract class ArrClient
             ->throw()
             ->json() ?? [];
     }
+
+    /**
+     * Remove a row from the download queue. Caller controls whether to
+     * also evict it from the download client (`removeFromClient`),
+     * remember it so it never returns (`blocklist`), and whether the
+     * post-removal re-search is skipped (`skipRedownload`).
+     *
+     * @throws RequestException|ConnectionException
+     */
+    public function removeQueueItem(
+        int $id,
+        bool $removeFromClient = true,
+        bool $blocklist = false,
+        bool $skipRedownload = true,
+    ): void {
+        $query = http_build_query([
+            'removeFromClient' => $removeFromClient ? 'true' : 'false',
+            'blocklist' => $blocklist ? 'true' : 'false',
+            'skipRedownload' => $skipRedownload ? 'true' : 'false',
+        ]);
+
+        $this->buildClient()
+            ->delete(sprintf('/api/%s/queue/%d?%s', $this->apiVersion, $id, $query))
+            ->throw();
+    }
 }

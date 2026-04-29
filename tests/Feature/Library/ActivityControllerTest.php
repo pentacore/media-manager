@@ -121,6 +121,94 @@ test('queue surfaces errors per service when an upstream call fails', function (
         );
 });
 
+test('admin can remove a Sonarr queue item without blocklisting', function (): void {
+    ServiceConnection::factory()->sonarr()->create([
+        'url' => 'http://sonarr.local:8989',
+    ]);
+
+    Http::fake([
+        'sonarr.local:8989/api/v3/queue/42*' => Http::response('', 200),
+    ]);
+
+    $admin = User::factory()->admin()->create();
+
+    $this->actingAs($admin)
+        ->from(route('media.library.activity.queue'))
+        ->post(route('media.library.activity.queue.remove', ['service' => 'sonarr', 'id' => 42]), ['verb' => 'remove'])
+        ->assertRedirect(route('media.library.activity.queue'))
+        ->assertSessionHas('inertia.flash_data.toast.type', 'success');
+
+    Http::assertSent(fn ($request): bool => $request->method() === 'DELETE'
+        && str_contains((string) $request->url(), '/api/v3/queue/42')
+        && str_contains((string) $request->url(), 'blocklist=false')
+        && str_contains((string) $request->url(), 'skipRedownload=true')
+    );
+});
+
+test('admin can blocklist and re-search a Radarr queue item', function (): void {
+    ServiceConnection::factory()->radarr()->create([
+        'url' => 'http://radarr.local:7878',
+    ]);
+
+    Http::fake([
+        'radarr.local:7878/api/v3/queue/77*' => Http::response('', 200),
+    ]);
+
+    $admin = User::factory()->admin()->create();
+
+    $this->actingAs($admin)
+        ->from(route('media.library.activity.queue'))
+        ->post(route('media.library.activity.queue.remove', ['service' => 'radarr', 'id' => 77]), ['verb' => 'block'])
+        ->assertRedirect(route('media.library.activity.queue'))
+        ->assertSessionHas('inertia.flash_data.toast.type', 'success');
+
+    Http::assertSent(fn ($request): bool => $request->method() === 'DELETE'
+        && str_contains((string) $request->url(), '/api/v3/queue/77')
+        && str_contains((string) $request->url(), 'blocklist=true')
+        && str_contains((string) $request->url(), 'skipRedownload=false')
+    );
+});
+
+test('member cannot remove a queue item', function (): void {
+    $member = User::factory()->member()->create();
+
+    $this->actingAs($member)
+        ->post(route('media.library.activity.queue.remove', ['service' => 'sonarr', 'id' => 1]), ['verb' => 'remove'])
+        ->assertForbidden();
+});
+
+test('queue removal rejects an unknown verb', function (): void {
+    ServiceConnection::factory()->sonarr()->create([
+        'url' => 'http://sonarr.local:8989',
+    ]);
+
+    $admin = User::factory()->admin()->create();
+
+    $this->actingAs($admin)
+        ->from(route('media.library.activity.queue'))
+        ->post(route('media.library.activity.queue.remove', ['service' => 'sonarr', 'id' => 1]), ['verb' => 'nuke'])
+        ->assertRedirect(route('media.library.activity.queue'))
+        ->assertSessionHas('inertia.flash_data.toast.type', 'error');
+});
+
+test('queue removal reports upstream HTTP failure', function (): void {
+    ServiceConnection::factory()->sonarr()->create([
+        'url' => 'http://sonarr.local:8989',
+    ]);
+
+    Http::fake([
+        'sonarr.local:8989/api/v3/queue/9*' => Http::response('Server Error', 500),
+    ]);
+
+    $admin = User::factory()->admin()->create();
+
+    $this->actingAs($admin)
+        ->from(route('media.library.activity.queue'))
+        ->post(route('media.library.activity.queue.remove', ['service' => 'sonarr', 'id' => 9]), ['verb' => 'remove'])
+        ->assertRedirect(route('media.library.activity.queue'))
+        ->assertSessionHas('inertia.flash_data.toast.type', 'error');
+});
+
 test('queue is empty when no Sonarr or Radarr connection is configured', function (): void {
     $member = User::factory()->member()->create();
 

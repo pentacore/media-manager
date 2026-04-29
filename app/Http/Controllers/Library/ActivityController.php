@@ -7,11 +7,14 @@ namespace App\Http\Controllers\Library;
 use App\Enums\ServiceType;
 use App\Http\Controllers\Controller;
 use App\Models\ServiceConnection;
+use App\Services\Arr\ArrClient;
 use App\Services\Radarr\RadarrClient;
 use App\Services\Sonarr\SonarrClient;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\RequestException;
+use Illuminate\Http\RedirectResponse;
+use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -28,6 +31,73 @@ class ActivityController extends Controller
         return Inertia::render('Library/Activity', [
             'queue' => Inertia::defer(fn (): array => $this->loadCombinedQueue()),
         ]);
+    }
+
+    /**
+     * Drop a stuck or unwanted item from the *arr download queue. Verb
+     * controls intent: `remove` strips it from the queue without further
+     * action; `block` additionally blocklists the release and triggers a
+     * re-search so the next better match downloads instead.
+     */
+    public function removeQueueItem(Request $request, string $service, int $id): RedirectResponse
+    {
+        $verb = (string) $request->input('verb', 'remove');
+
+        if (! in_array($verb, ['remove', 'block'], true)) {
+            return $this->flashAndBack('error', __('Invalid removal verb.'));
+        }
+
+        $client = $this->resolveClient($service);
+        if (! $client instanceof ArrClient) {
+            return $this->flashAndBack('error', __('Unknown service.'));
+        }
+
+        try {
+            $client->removeQueueItem(
+                id: $id,
+                removeFromClient: true,
+                blocklist: $verb === 'block',
+                skipRedownload: $verb === 'remove',
+            );
+        } catch (RequestException|ConnectionException $throwable) {
+            return $this->flashAndBack('error', __('Queue removal failed: :msg', ['msg' => $throwable->getMessage()]));
+        }
+
+        return $this->flashAndBack(
+            'success',
+            $verb === 'block'
+                ? __('Removed and blocklisted; a fresh search will run.')
+                : __('Removed from queue.'),
+        );
+    }
+
+    private function resolveClient(string $service): ?ArrClient
+    {
+        $type = match ($service) {
+            'sonarr' => ServiceType::Sonarr,
+            'radarr' => ServiceType::Radarr,
+            default => null,
+        };
+
+        if ($type === null) {
+            return null;
+        }
+
+        $connection = $this->safeResolve($type);
+        if (! $connection instanceof ServiceConnection) {
+            return null;
+        }
+
+        return $service === 'sonarr'
+            ? new SonarrClient($connection)
+            : new RadarrClient($connection);
+    }
+
+    private function flashAndBack(string $type, string $message): RedirectResponse
+    {
+        Inertia::flash('toast', ['type' => $type, 'message' => $message]);
+
+        return back();
     }
 
     /**

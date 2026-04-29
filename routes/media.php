@@ -53,4 +53,9 @@ Route::middleware(['auth', 'verified', 'password.set', 'role:member'])
         // Combined Sonarr + Radarr download queue
         Route::get('library/activity/queue', [LibraryActivityController::class, 'queue'])
             ->name('library.activity.queue');
+        Route::post('library/activity/queue/{service}/{id}/remove', [LibraryActivityController::class, 'removeQueueItem'])
+            ->whereIn('service', ['sonarr', 'radarr'])
+            ->whereNumber('id')
+            ->middleware('role:admin')
+            ->name('library.activity.queue.remove');
     });
