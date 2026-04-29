@@ -233,6 +233,10 @@ function sonarrSeriesUrl(slug: string | null): string | null {
                     />Sync
                 </Button>
                 <OpenInServiceButton
+                    :href="`${props.connection.url}/activity/queue`"
+                    label="Activity"
+                />
+                <OpenInServiceButton
                     :href="props.connection.url"
                     label="Open Sonarr"
                 />

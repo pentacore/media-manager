@@ -48,7 +48,7 @@
     - [x] Radarr in Movies
     - [x] Sabnzbd in Downloads
 - [ ] Id like to be able to see and manage the Activites from both Sonarr and Radarr (For example if a movie/episode cant be imported for any reason or if its pending), maybe even a page to see their history and blocklists
-    - [ ] Add a button to open the activity log in Sonarr and Radarr
+    - [x] Add a button to open the activity log in Sonarr and Radarr
     - [ ] Add a page to see the history of activities from both Sonarr and Radarr, with filters for things like "Import failed", "Pending", "Completed", etc, and also show any relevant information about the activity (For example if an import failed, show the error message that was returned)
     - [ ] Allow managing the activites from both Sonarr and Radarr, for example if an episode is pending for a long time, allow the user to either retry the import or block the episode from being imported (This is especially useful for things that are pending because they cant be imported for some reason, for example if the file is in a format that cant be imported, or if the file is missing, etc)
     - [ ] Allow blocking activities from both Sonarr and Radarr

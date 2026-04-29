@@ -236,6 +236,10 @@ function is4k(movie: Movie): boolean {
                     />Sync
                 </Button>
                 <OpenInServiceButton
+                    :href="`${props.connection.url}/activity/queue`"
+                    label="Activity"
+                />
+                <OpenInServiceButton
                     :href="props.connection.url"
                     label="Open Radarr"
                 />
