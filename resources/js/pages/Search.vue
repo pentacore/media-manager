@@ -1,8 +1,7 @@
 <script setup lang="ts">
-import { Head, Link, router } from '@inertiajs/vue3';
+import { Head, router } from '@inertiajs/vue3';
 import {
     AlertCircle,
-    Antenna,
     Clock,
     Command,
     ExternalLink,
@@ -12,7 +11,6 @@ import {
 } from 'lucide-vue-next';
 import { computed, onMounted, ref, useTemplateRef } from 'vue';
 import SearchController from '@/actions/App/Http/Controllers/Media/SearchController';
-import SearchIndexersController from '@/actions/App/Http/Controllers/Prowlarr/SearchIndexersController';
 import { Pill, Poster, StatusPill, SvcChip } from '@/components/mm';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -70,12 +68,28 @@ interface Connections {
     seerr: ConnectionInfo | null;
 }
 
+interface IndexerResult {
+    guid: string | null;
+    title: string | null;
+    tracker: string | null;
+    category: string | null;
+    size_bytes: number | null;
+    seeders: number | null;
+    leechers: number | null;
+    age: string | null;
+    download_url: string | null;
+    info_url: string | null;
+    score: number | null;
+}
+
 const props = defineProps<{
     query: string;
+    scope?: 'all' | 'library' | 'requests' | 'indexers';
     connections: Connections;
     seriesResults?: ServiceResult<SeriesResult>;
     movieResults?: ServiceResult<MovieResult>;
     requestResults?: ServiceResult<RequestResult>;
+    indexerResults?: ServiceResult<IndexerResult>;
 }>();
 
 defineOptions({
@@ -92,7 +106,7 @@ const submitting = ref(false);
 const searchInput = useTemplateRef<HTMLInputElement>('searchInput');
 
 type Scope = 'all' | 'library' | 'requests' | 'indexers';
-const scope = ref<Scope>('all');
+const scope = ref<Scope>(props.scope ?? 'all');
 
 const SCOPES: { id: Scope; label: string }[] = [
     { id: 'all', label: 'All' },
@@ -108,12 +122,12 @@ onMounted(() => {
 
 function submitSearch() {
     if (submitting.value) {
-return;
-}
+        return;
+    }
 
     router.get(
         SearchController.index.url(),
-        { q: query.value },
+        { q: query.value, scope: scope.value },
         {
             preserveScroll: true,
             onStart: () => {
@@ -124,6 +138,20 @@ return;
             },
         },
     );
+}
+
+function setScope(next: Scope) {
+    if (scope.value === next) {
+return;
+}
+
+    scope.value = next;
+
+    // Re-issue the same query so the controller can hydrate the indexer
+    // results (or release them) without an extra click on the search box.
+    if (query.value) {
+        submitSearch();
+    }
 }
 
 function clearQuery() {
@@ -163,6 +191,22 @@ const showRequests = computed(
     () => scope.value === 'all' || scope.value === 'requests',
 );
 const showIndexers = computed(() => scope.value === 'indexers');
+
+function formatSize(bytes: number | null): string {
+    if (bytes === null || bytes === undefined) {
+return '—';
+}
+
+    if (bytes === 0) {
+return '0 B';
+}
+
+    const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(1024));
+    const value = bytes / Math.pow(1024, i);
+
+    return `${value.toFixed(1)} ${units[i]}`;
+}
 
 const seerrStatusKey = (status: number | null): string => {
     switch (status) {
@@ -250,7 +294,7 @@ const RECENT = [
                                 : 'text-muted-foreground hover:bg-bg-hover hover:text-foreground',
                         )
                     "
-                    @click="scope = s.id"
+                    @click="setScope(s.id)"
                 >
                     {{ s.label }}
                 </button>
@@ -522,27 +566,118 @@ const RECENT = [
                     >
                         Indexer releases
                     </span>
+                    <Pill v-if="indexerResults">{{
+                        indexerResults.results.length
+                    }}</Pill>
                 </div>
                 <span class="text-xs text-fg-subtle"
                     >indexer hits excluded from "All" by default</span
                 >
             </div>
-            <div class="flex flex-col items-center gap-3 px-4 py-9">
-                <Antenna class="size-6 text-fg-subtle" />
-                <p class="max-w-[420px] text-center text-sm text-muted-foreground">
-                    Prowlarr indexer hits aren't wired into the unified search
-                    yet. Open the dedicated indexer search for this query.
-                </p>
-                <Link
-                    :href="
-                        SearchIndexersController().url +
-                        (query ? `?q=${encodeURIComponent(query)}` : '')
-                    "
-                    class="inline-flex h-7 items-center gap-1.5 rounded-md bg-accent px-3 text-xs font-medium text-accent-foreground hover:bg-accent/90"
-                >
-                    <Antenna class="size-3.5" />Open indexer search
-                </Link>
+
+            <Alert v-if="indexerResults?.error" variant="destructive">
+                <AlertCircle class="size-4" />
+                <AlertTitle>Prowlarr unavailable</AlertTitle>
+                <AlertDescription>{{
+                    indexerResults.error
+                }}</AlertDescription>
+            </Alert>
+
+            <div v-if="!indexerResults" class="space-y-2 p-4">
+                <Skeleton
+                    v-for="i in 6"
+                    :key="`idx-skel-${i}`"
+                    class="h-9 w-full rounded-md"
+                />
             </div>
+            <div
+                v-else-if="indexerResults.results.length === 0"
+                class="px-4 py-6 text-sm text-fg-subtle"
+            >
+                No indexer hits.
+            </div>
+            <table v-else class="w-full border-collapse text-[13px]">
+                <thead>
+                    <tr>
+                        <th
+                            v-for="h in [
+                                'Release',
+                                'Tracker',
+                                'Cat',
+                                'Size',
+                                'S / L',
+                                'Age',
+                                '',
+                            ]"
+                            :key="h"
+                            class="border-b border-border bg-card px-3 py-2 text-left text-[11.5px] font-medium tracking-[0.05em] text-muted-foreground uppercase"
+                        >
+                            {{ h }}
+                        </th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr
+                        v-for="(hit, i) in indexerResults.results"
+                        :key="hit.guid ?? i"
+                        class="border-b border-border last:border-b-0 hover:bg-bg-hover"
+                    >
+                        <td class="px-3 py-2.5">
+                            <a
+                                v-if="hit.info_url"
+                                :href="hit.info_url"
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                class="font-mono-tabular block max-w-[520px] truncate text-[12px] font-medium hover:text-accent"
+                            >
+                                {{ hit.title }}
+                            </a>
+                            <span
+                                v-else
+                                class="font-mono-tabular block max-w-[520px] truncate text-[12px] font-medium"
+                                >{{ hit.title }}</span
+                            >
+                        </td>
+                        <td class="px-3 py-2.5">
+                            <Pill>{{ hit.tracker ?? '—' }}</Pill>
+                        </td>
+                        <td
+                            class="font-mono-tabular px-3 py-2.5 text-[11.5px] text-muted-foreground"
+                        >
+                            {{ hit.category ?? '—' }}
+                        </td>
+                        <td
+                            class="font-mono-tabular px-3 py-2.5 text-[12px]"
+                        >
+                            {{ formatSize(hit.size_bytes) }}
+                        </td>
+                        <td class="font-mono-tabular px-3 py-2.5 text-[12px]">
+                            <span class="text-success">{{
+                                hit.seeders ?? '—'
+                            }}</span>
+                            <span class="text-fg-subtle"
+                                >/ {{ hit.leechers ?? '—' }}</span
+                            >
+                        </td>
+                        <td
+                            class="font-mono-tabular px-3 py-2.5 text-[11.5px] text-fg-subtle"
+                        >
+                            {{ hit.age ?? '—' }}
+                        </td>
+                        <td class="px-3 py-2.5 text-right">
+                            <a
+                                v-if="hit.download_url"
+                                :href="hit.download_url"
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                class="inline-flex h-6 items-center gap-1 rounded-md border border-border px-2 text-[11.5px] hover:bg-bg-hover"
+                            >
+                                Grab
+                            </a>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
         </section>
     </div>
 </template>

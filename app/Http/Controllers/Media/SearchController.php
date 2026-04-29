@@ -7,10 +7,12 @@ namespace App\Http\Controllers\Media;
 use App\Enums\ServiceType;
 use App\Http\Controllers\Controller;
 use App\Models\ServiceConnection;
+use App\Services\Prowlarr\ProwlarrClient;
 use App\Services\Radarr\RadarrClient;
 use App\Services\Seerr\SeerrClient;
 use App\Services\Seerr\SeerrTitleResolver;
 use App\Services\Sonarr\SonarrClient;
+use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
@@ -30,12 +32,19 @@ class SearchController extends Controller
     {
         $request->validate([
             'q' => ['nullable', 'string', 'max:500'],
+            'scope' => ['nullable', 'string', 'in:all,library,requests,indexers'],
         ]);
 
         $term = trim((string) $request->query('q', ''));
+        $scope = (string) $request->query('scope', 'all');
+
+        // Indexers are heavy and noisy, so they are opt-in: only fire the
+        // Prowlarr fan-out when the user explicitly switches to that scope.
+        $includeIndexers = $term !== '' && $scope === 'indexers';
 
         return Inertia::render('Search', [
             'query' => $term,
+            'scope' => $scope,
             'connections' => $this->resolveConnectionUrls(),
             'seriesResults' => $term === ''
                 ? ['results' => [], 'error' => null]
@@ -46,6 +55,9 @@ class SearchController extends Controller
             'requestResults' => $term === ''
                 ? ['results' => [], 'error' => null]
                 : Inertia::defer(fn (): array => $this->searchSeerr($term)),
+            'indexerResults' => $includeIndexers
+                ? Inertia::defer(fn (): array => $this->searchIndexers($term))
+                : ['results' => [], 'error' => null],
         ]);
     }
 
@@ -177,6 +189,62 @@ class SearchController extends Controller
 
         return [
             'results' => array_values($matches),
+            'error' => null,
+        ];
+    }
+
+    /**
+     * Fan out a Prowlarr indexer search and return a release table the
+     * unified-search page can render. Each row carries title / tracker /
+     * size / seeders / leechers / age / category / quality score.
+     *
+     * @return array{results: array<int, array<string, mixed>>, error: ?string}
+     */
+    private function searchIndexers(string $term): array
+    {
+        try {
+            $connection = ServiceConnection::resolveActive(ServiceType::Prowlarr);
+        } catch (ModelNotFoundException) {
+            return ['results' => [], 'error' => 'No active Prowlarr connection configured.'];
+        }
+
+        try {
+            $hits = new ProwlarrClient($connection)->searchIndexers($term);
+        } catch (Throwable $throwable) {
+            return $this->serviceFailure('prowlarr', $throwable);
+        }
+
+        $rows = array_map(static function (array $hit): array {
+            $publishDate = $hit['publishDate'] ?? null;
+            $age = null;
+
+            if (is_string($publishDate) && $publishDate !== '') {
+                try {
+                    $age = CarbonImmutable::parse($publishDate)->diffForHumans();
+                } catch (Throwable) {
+                    $age = null;
+                }
+            }
+
+            return [
+                'guid' => $hit['guid'] ?? null,
+                'title' => $hit['title'] ?? null,
+                'tracker' => $hit['indexer'] ?? null,
+                'category' => $hit['categories'][0]['name'] ?? null,
+                'size_bytes' => $hit['size'] ?? null,
+                'seeders' => $hit['seeders'] ?? null,
+                'leechers' => $hit['leechers'] ?? null,
+                'age' => $age,
+                'download_url' => $hit['downloadUrl'] ?? null,
+                'info_url' => $hit['infoUrl'] ?? null,
+                // Prowlarr returns a quality-style score in 0-100 only for
+                // some indexers; expose what's there but don't synthesise.
+                'score' => $hit['qualityWeight'] ?? null,
+            ];
+        }, $hits);
+
+        return [
+            'results' => array_slice($rows, 0, self::MAX_RESULTS),
             'error' => null,
         ];
     }

@@ -321,3 +321,63 @@ test('search reports no-connection errors when services are not configured', fun
             )
         );
 });
+
+test('default scope skips Prowlarr fan-out entirely', function (): void {
+    $member = User::factory()->member()->create();
+    ServiceConnection::factory()->prowlarr()->create([
+        'url' => 'http://prowlarr.local:9696',
+    ]);
+
+    Http::fake();
+
+    $this->actingAs($member)
+        ->get(route('media.search.index', ['q' => 'severance']))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->where('indexerResults.results', [])
+            ->where('indexerResults.error', null)
+        );
+
+    // Sonarr/Radarr/Seerr requests can still go out via deferred props,
+    // but Prowlarr must not have been touched.
+    Http::assertNotSent(fn ($request): bool => str_contains((string) $request->url(), 'prowlarr'));
+});
+
+test('scope=indexers fans out to Prowlarr and returns release rows', function (): void {
+    $member = User::factory()->member()->create();
+    ServiceConnection::factory()->prowlarr()->create([
+        'url' => 'http://prowlarr.local:9696',
+        'api_key' => 'test',
+    ]);
+
+    Http::fake([
+        'prowlarr.local:9696/api/v1/search*' => Http::response([
+            [
+                'guid' => 'guid-1',
+                'title' => 'Severance.S02E07.1080p.WEB-DL.x264',
+                'indexer' => 'ETTV',
+                'categories' => [['name' => 'TV/HD']],
+                'size' => 2_500_000_000,
+                'seeders' => 412,
+                'leechers' => 18,
+                'publishDate' => now()->subMinutes(12)->toIso8601String(),
+                'downloadUrl' => 'http://example/dl/1.torrent',
+                'infoUrl' => 'http://example/info/1',
+                'qualityWeight' => 96,
+            ],
+        ]),
+    ]);
+
+    $this->actingAs($member)
+        ->get(route('media.search.index', ['q' => 'severance', 'scope' => 'indexers']))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->loadDeferredProps(fn ($page) => $page
+                ->has('indexerResults.results', 1)
+                ->where('indexerResults.results.0.title', 'Severance.S02E07.1080p.WEB-DL.x264')
+                ->where('indexerResults.results.0.tracker', 'ETTV')
+                ->where('indexerResults.results.0.size_bytes', 2_500_000_000)
+                ->where('indexerResults.results.0.seeders', 412)
+            )
+        );
+});

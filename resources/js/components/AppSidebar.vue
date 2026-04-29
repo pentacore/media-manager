@@ -2,7 +2,6 @@
 import { Link, usePage } from '@inertiajs/vue3';
 import {
     Activity as ActivityIcon,
-    Antenna,
     BarChart3,
     Brain,
     DollarSign,
@@ -39,7 +38,6 @@ import RequestController from '@/actions/App/Http/Controllers/Media/RequestContr
 import SearchController from '@/actions/App/Http/Controllers/Media/SearchController';
 import SeriesController from '@/actions/App/Http/Controllers/Media/SeriesController';
 import ServiceHealthController from '@/actions/App/Http/Controllers/Monitoring/ServiceHealthController';
-import SearchIndexersController from '@/actions/App/Http/Controllers/Prowlarr/SearchIndexersController';
 import AppLogo from '@/components/AppLogo.vue';
 import NavMain from '@/components/NavMain.vue';
 import NavUser from '@/components/NavUser.vue';
@@ -252,11 +250,6 @@ const monitoringNavItems = computed<NavItem[]>(() => [
         title: 'Watch History',
         href: WatchHistoryController().url,
         icon: History,
-    },
-    {
-        title: 'Indexer Search',
-        href: SearchIndexersController().url,
-        icon: Antenna,
     },
     {
         title: 'Service Health',
