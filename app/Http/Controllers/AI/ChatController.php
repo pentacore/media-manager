@@ -10,6 +10,8 @@ use App\Enums\AiProposedWorkflowStatus;
 use App\Http\Controllers\Controller;
 use App\Models\AiProposedWorkflow;
 use App\Models\User;
+use App\Services\AiBudget\AiBudgetExceededException;
+use App\Services\AiBudget\AiBudgetGuard;
 use App\Settings\AiSettings;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\Client\RequestException;
@@ -43,6 +45,15 @@ class ChatController extends Controller
 
         if (isset($validated['mode'])) {
             resolve(AiSettings::class)->withMode(AiMode::from($validated['mode']));
+        }
+
+        try {
+            resolve(AiBudgetGuard::class)->enforce();
+        } catch (AiBudgetExceededException $aiBudgetExceededException) {
+            return response()->json([
+                'error' => 'budget_exceeded',
+                'message' => $aiBudgetExceededException->getMessage(),
+            ], 402);
         }
 
         if ($conversationId !== null && ! $this->conversationBelongsToUser($conversationId, $user)) {

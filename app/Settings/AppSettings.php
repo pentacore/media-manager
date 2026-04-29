@@ -24,6 +24,15 @@ class AppSettings
 
     public function set(string $key, mixed $value): void
     {
+        // The `value` column is NOT NULL — a null setter is the canonical
+        // "clear it" signal, so route it through forget() instead of
+        // attempting an insert that would crash on the constraint.
+        if ($value === null) {
+            $this->forget($key);
+
+            return;
+        }
+
         AppSetting::updateOrCreate(['key' => $key], ['value' => $value]);
         Cache::forget(self::CACHE_PREFIX.$key);
     }

@@ -12,6 +12,12 @@ class AiSettings
 
     public const MODEL_KEY = 'ai.model';
 
+    public const SOFT_BUDGET_KEY = 'ai.budget.soft_monthly_usd';
+
+    public const HARD_BUDGET_KEY = 'ai.budget.hard_monthly_usd';
+
+    public const SOFT_BUDGET_NOTIFIED_AT_KEY = 'ai.budget.soft_notified_at';
+
     /**
      * Per-request override that takes precedence over the persisted mode.
      * Used by the chat surface so a user can flip between Advisory and
@@ -58,5 +64,70 @@ class AiSettings
     public function setModel(string $model): void
     {
         $this->appSettings->set(self::MODEL_KEY, $model);
+    }
+
+    /**
+     * Monthly soft cap in USD. Triggers a one-shot notification when
+     * spend crosses this number; AI keeps running. Null = no soft cap.
+     */
+    public function softBudgetUsd(): ?float
+    {
+        return $this->budgetUsd(self::SOFT_BUDGET_KEY);
+    }
+
+    /**
+     * Monthly hard cap in USD. Once reached, AI requests are refused
+     * until the calendar month ticks over. Null = no hard cap.
+     */
+    public function hardBudgetUsd(): ?float
+    {
+        return $this->budgetUsd(self::HARD_BUDGET_KEY);
+    }
+
+    public function setSoftBudgetUsd(?float $usd): void
+    {
+        $this->appSettings->set(self::SOFT_BUDGET_KEY, $usd);
+        // Resetting the cap clears the "already notified" stamp so a
+        // new period (or a higher cap) gets a fresh notification when
+        // the threshold is crossed again.
+        $this->appSettings->set(self::SOFT_BUDGET_NOTIFIED_AT_KEY, null);
+    }
+
+    public function setHardBudgetUsd(?float $usd): void
+    {
+        $this->appSettings->set(self::HARD_BUDGET_KEY, $usd);
+    }
+
+    /**
+     * Returns the most recent ISO date the soft-limit notification was
+     * sent — used so we don't spam admins on every request once the
+     * threshold has been crossed within the current month.
+     */
+    public function softBudgetNotifiedAt(): ?string
+    {
+        $value = $this->appSettings->get(self::SOFT_BUDGET_NOTIFIED_AT_KEY);
+
+        return is_string($value) && $value !== '' ? $value : null;
+    }
+
+    public function markSoftBudgetNotified(?string $isoDate = null): void
+    {
+        $this->appSettings->set(
+            self::SOFT_BUDGET_NOTIFIED_AT_KEY,
+            $isoDate ?? now()->toIso8601String(),
+        );
+    }
+
+    private function budgetUsd(string $key): ?float
+    {
+        $value = $this->appSettings->get($key);
+
+        if ($value === null || $value === '') {
+            return null;
+        }
+
+        $float = (float) $value;
+
+        return $float > 0 ? $float : null;
     }
 }

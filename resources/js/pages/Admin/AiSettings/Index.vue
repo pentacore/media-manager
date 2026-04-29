@@ -1,10 +1,11 @@
 <script setup lang="ts">
 import { Form, Head } from '@inertiajs/vue3';
-import { ref } from 'vue';
+import { computed, ref } from 'vue';
 import AiSettingsController from '@/actions/App/Http/Controllers/Admin/AiSettingsController';
 import InputError from '@/components/InputError.vue';
-import { Field } from '@/components/mm';
+import { Field, Pill } from '@/components/mm';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import {
     Select,
     SelectContent,
@@ -25,10 +26,20 @@ interface ModeOption {
 interface AiSettingsState {
     mode: string;
     model: string;
+    soft_budget_usd: number | null;
+    hard_budget_usd: number | null;
+}
+
+interface BudgetSnapshot {
+    spend: number;
+    soft: number | null;
+    hard: number | null;
+    soft_notified_at: string | null;
 }
 
 const props = defineProps<{
     settings: AiSettingsState;
+    budget: BudgetSnapshot;
     modes: ModeOption[];
     models: Record<string, string[]>;
 }>();
@@ -44,6 +55,38 @@ defineOptions({
 
 const selectedMode = ref(props.settings.mode);
 const selectedModel = ref(props.settings.model);
+
+function formatUsd(value: number | null): string {
+    if (value === null) {
+        return '—';
+    }
+
+    return new Intl.NumberFormat('en-US', {
+        style: 'currency',
+        currency: 'USD',
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
+    }).format(value);
+}
+
+const budgetState = computed<{
+    label: string;
+    variant: 'ok' | 'warn' | 'danger' | 'default';
+}>(() => {
+    if (props.budget.hard !== null && props.budget.spend >= props.budget.hard) {
+        return { label: 'Hard cap reached — AI requests blocked', variant: 'danger' };
+    }
+
+    if (props.budget.soft !== null && props.budget.spend >= props.budget.soft) {
+        return { label: 'Soft cap reached — admins notified', variant: 'warn' };
+    }
+
+    if (props.budget.soft === null && props.budget.hard === null) {
+        return { label: 'No budget caps configured', variant: 'default' };
+    }
+
+    return { label: 'Within caps', variant: 'ok' };
+});
 </script>
 
 <template>
@@ -144,6 +187,114 @@ const selectedModel = ref(props.settings.model);
                             </SelectContent>
                         </Select>
                         <InputError :message="errors.model" class="mt-1" />
+                    </div>
+                </div>
+
+                <Separator />
+
+                <div
+                    class="grid items-start gap-6"
+                    style="grid-template-columns: 200px 1fr"
+                >
+                    <Field
+                        label="Soft monthly budget"
+                        hint="Triggers a one-shot notification to admins when current-month spend crosses this amount. Leave blank to disable."
+                    >
+                        <span />
+                    </Field>
+                    <div>
+                        <div class="relative max-w-[200px]">
+                            <span
+                                class="font-mono-tabular pointer-events-none absolute top-1/2 left-2 -translate-y-1/2 text-[12px] text-muted-foreground"
+                            >
+                                $
+                            </span>
+                            <Input
+                                id="soft_budget_usd"
+                                name="soft_budget_usd"
+                                type="number"
+                                step="0.01"
+                                min="0"
+                                class="h-8 pl-5 text-sm"
+                                :default-value="settings.soft_budget_usd ?? ''"
+                                placeholder="No soft cap"
+                            />
+                        </div>
+                        <InputError
+                            :message="errors.soft_budget_usd"
+                            class="mt-1"
+                        />
+                    </div>
+                </div>
+
+                <div
+                    class="grid items-start gap-6"
+                    style="grid-template-columns: 200px 1fr"
+                >
+                    <Field
+                        label="Hard monthly budget"
+                        hint="Refuses new AI requests once current-month spend reaches this amount. Resets at the start of each calendar month. Leave blank to disable."
+                    >
+                        <span />
+                    </Field>
+                    <div>
+                        <div class="relative max-w-[200px]">
+                            <span
+                                class="font-mono-tabular pointer-events-none absolute top-1/2 left-2 -translate-y-1/2 text-[12px] text-muted-foreground"
+                            >
+                                $
+                            </span>
+                            <Input
+                                id="hard_budget_usd"
+                                name="hard_budget_usd"
+                                type="number"
+                                step="0.01"
+                                min="0"
+                                class="h-8 pl-5 text-sm"
+                                :default-value="settings.hard_budget_usd ?? ''"
+                                placeholder="No hard cap"
+                            />
+                        </div>
+                        <InputError
+                            :message="errors.hard_budget_usd"
+                            class="mt-1"
+                        />
+                    </div>
+                </div>
+
+                <div
+                    class="rounded-md border border-border bg-bg-elev px-3 py-2.5 text-[12px]"
+                >
+                    <div class="flex items-center justify-between gap-3">
+                        <span class="text-muted-foreground">
+                            Current month spend
+                        </span>
+                        <span class="font-mono-tabular font-semibold">
+                            {{ formatUsd(budget.spend) }}
+                        </span>
+                    </div>
+                    <div
+                        v-if="budget.soft !== null"
+                        class="mt-1 flex items-center justify-between gap-3"
+                    >
+                        <span class="text-muted-foreground">Soft cap</span>
+                        <span class="font-mono-tabular text-muted-foreground">
+                            {{ formatUsd(budget.soft) }}
+                        </span>
+                    </div>
+                    <div
+                        v-if="budget.hard !== null"
+                        class="mt-1 flex items-center justify-between gap-3"
+                    >
+                        <span class="text-muted-foreground">Hard cap</span>
+                        <span class="font-mono-tabular text-muted-foreground">
+                            {{ formatUsd(budget.hard) }}
+                        </span>
+                    </div>
+                    <div class="mt-2 flex items-center justify-end">
+                        <Pill :variant="budgetState.variant" :dot="budgetState.variant !== 'default'">
+                            {{ budgetState.label }}
+                        </Pill>
                     </div>
                 </div>
 

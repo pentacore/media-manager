@@ -32,5 +32,7 @@
 - [ ] The realtime updates seems flaky in a lot of pages, like the service health page for example, it should update the status of the services without needing to refresh the page, but it doesnt always do that, check all pages for similar issues
 - [x] Id like to log all incoming webhooks (Toggleable in the admin settings), and then be able to see the payloads in an admin-only page, this would be really useful for debugging and also just to have a record of all incoming webhooks, especially if you have a lot of them coming in
 - [x] The VerifyWebhookToken needs to also check query params for a token, since not all services can set a header for this. And we should also expose the webhook URL for a service in the connections edit page (Maybe with a copy button on the connections list)
-- [ ] Add a "Soft AI budget limit" setting and a "Hard AI budget limit" setting, trigger a notification on the soft limit and stop the AI from running if the hard limit is reached.
+- [x] Add a "Soft AI budget limit" setting and a "Hard AI budget limit" setting, trigger a notification on the soft limit and stop the AI from running if the hard limit is reached.
 - [x] The webhook URL doesnt show in its input field in the connection edit page
+- [ ] Add a Toggle to the webhook log that changes if webhooks should be captured and stored or not
+- [ ] The Seer search still seems flaky, when i search for FBI (Which there should be requests for), no results show up
