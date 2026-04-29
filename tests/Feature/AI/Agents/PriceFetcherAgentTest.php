@@ -21,19 +21,20 @@ test('agent declares both pricing tools', function (): void {
         ->toContain(UpsertModelPriceTool::class);
 });
 
-test('admin refresh endpoint runs the faked agent and surfaces its summary', function (): void {
+test('admin refresh endpoint queues the agent and toasts the queued state', function (): void {
     PriceFetcherAgent::fake(['Refreshed 6 OpenAI models, skipped DeepSeek (fetch_failed).']);
 
     $admin = User::factory()->admin()->create();
 
+    // Sync queue (phpunit.xml) runs the job inline, so the agent still
+    // executes inside this POST. The flashed toast now reports "queued"
+    // because the controller no longer waits for the agent — progress is
+    // surfaced via the admin.ai-prices broadcast channel instead.
     $this->actingAs($admin)
         ->post(route('admin.ai-prices.refresh'))
         ->assertRedirect(route('admin.ai-prices.index'))
-        ->assertInertiaFlash('toast');
-
-    $flash = session()->get('inertia.flash_data', []);
-    expect($flash['toast']['type'])->toBe('success')
-        ->and($flash['toast']['message'])->toContain('Refreshed');
+        ->assertSessionHas('inertia.flash_data.toast.type', 'success')
+        ->assertSessionHas('inertia.flash_data.toast.message', fn (string $message): bool => str_contains($message, 'queued'));
 });
 
 test('non-admins cannot trigger a price refresh', function (): void {

@@ -116,3 +116,36 @@ test('viewer can still join their own private user channel', function (): void {
         ])
         ->assertOk();
 });
+
+test('admin can join the admin.ai-prices channel', function (): void {
+    $admin = User::factory()->admin()->create();
+
+    $this->actingAs($admin)
+        ->post('/broadcasting/auth', [
+            'socket_id' => '1234.1234567',
+            'channel_name' => 'private-admin.ai-prices',
+        ])
+        ->assertOk();
+});
+
+test('member cannot join the admin.ai-prices channel', function (): void {
+    $member = User::factory()->member()->create();
+
+    $this->actingAs($member)
+        ->post('/broadcasting/auth', [
+            'socket_id' => '1234.1234567',
+            'channel_name' => 'private-admin.ai-prices',
+        ])
+        ->assertForbidden();
+});
+
+test('viewer cannot join the admin.ai-prices channel', function (): void {
+    $viewer = User::factory()->create();
+
+    $this->actingAs($viewer)
+        ->post('/broadcasting/auth', [
+            'socket_id' => '1234.1234567',
+            'channel_name' => 'private-admin.ai-prices',
+        ])
+        ->assertForbidden();
+});

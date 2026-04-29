@@ -2,8 +2,13 @@
 
 declare(strict_types=1);
 
+use App\Events\AiPriceRefreshStateChanged;
+use App\Jobs\RefreshAiPricesJob;
 use App\Models\AiModelPrice;
 use App\Models\User;
+use Illuminate\Support\Facades\Bus;
+use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Event;
 
 test('guests cannot access AI prices', function (): void {
     $this->get(route('admin.ai-prices.index'))
@@ -99,6 +104,68 @@ test('admin can update a price', function (): void {
         ->assertRedirect(route('admin.ai-prices.index'));
 
     expect((float) $price->fresh()->input_per_mtok)->toBe(0.50);
+});
+
+test('refresh queues a job, broadcasts queued state, and sets the running flag', function (): void {
+    Bus::fake();
+    Event::fake([AiPriceRefreshStateChanged::class]);
+    Cache::forget(RefreshAiPricesJob::LOCK_KEY);
+
+    $admin = User::factory()->admin()->create();
+
+    $this->actingAs($admin)
+        ->post(route('admin.ai-prices.refresh'))
+        ->assertRedirect(route('admin.ai-prices.index'))
+        ->assertSessionHas('inertia.flash_data.toast.type', 'success');
+
+    Bus::assertDispatched(fn (RefreshAiPricesJob $refreshAiPricesJob) => $refreshAiPricesJob->triggeredBy->is($admin));
+
+    Event::assertDispatched(fn (AiPriceRefreshStateChanged $aiPriceRefreshStateChanged): bool => $aiPriceRefreshStateChanged->state === AiPriceRefreshStateChanged::STATE_QUEUED
+        && $aiPriceRefreshStateChanged->triggeredBy?->is($admin));
+
+    expect(RefreshAiPricesJob::isRunning())->toBeTrue();
+});
+
+test('refresh refuses to dispatch a second job while one is running', function (): void {
+    Bus::fake();
+    Event::fake([AiPriceRefreshStateChanged::class]);
+    Cache::forget(RefreshAiPricesJob::LOCK_KEY);
+
+    $admin = User::factory()->admin()->create();
+
+    // First call acquires the lock.
+    $this->actingAs($admin)
+        ->post(route('admin.ai-prices.refresh'))
+        ->assertRedirect(route('admin.ai-prices.index'))
+        ->assertSessionHas('inertia.flash_data.toast.type', 'success');
+
+    Bus::assertDispatchedTimes(RefreshAiPricesJob::class, 1);
+
+    // Second call hits the lock and is rejected.
+    $this->actingAs($admin)
+        ->post(route('admin.ai-prices.refresh'))
+        ->assertRedirect(route('admin.ai-prices.index'))
+        ->assertSessionHas('inertia.flash_data.toast.type', 'error');
+
+    Bus::assertDispatchedTimes(RefreshAiPricesJob::class, 1);
+});
+
+test('index exposes the refresh_running flag', function (): void {
+    Cache::forget(RefreshAiPricesJob::LOCK_KEY);
+
+    $admin = User::factory()->admin()->create();
+
+    $this->actingAs($admin)
+        ->get(route('admin.ai-prices.index'))
+        ->assertInertia(fn ($page) => $page->where('refresh_running', false));
+
+    RefreshAiPricesJob::tryLock($admin->id);
+
+    $this->actingAs($admin)
+        ->get(route('admin.ai-prices.index'))
+        ->assertInertia(fn ($page) => $page->where('refresh_running', true));
+
+    Cache::forget(RefreshAiPricesJob::LOCK_KEY);
 });
 
 test('admin can delete a price', function (): void {

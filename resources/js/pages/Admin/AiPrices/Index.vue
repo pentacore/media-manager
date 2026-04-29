@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { Form, Head, router } from '@inertiajs/vue3';
 import { Plus, RefreshCcw, Trash2 } from 'lucide-vue-next';
-import { ref } from 'vue';
+import { onMounted, onUnmounted, ref } from 'vue';
+import { toast } from 'vue-sonner';
 import AiModelPriceController from '@/actions/App/Http/Controllers/Admin/AiModelPriceController';
 import InputError from '@/components/InputError.vue';
 import { Pill, StatCard } from '@/components/mm';
@@ -16,6 +17,7 @@ import {
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { useWebSocket } from '@/composables/useWebSocket';
 import { dashboard } from '@/routes';
 
 interface PriceRow {
@@ -51,6 +53,7 @@ const BATCH_FIELD: Record<RateField, keyof PriceRow> = {
 
 const props = defineProps<{
     prices: PriceRow[];
+    refresh_running: boolean;
 }>();
 
 defineOptions({
@@ -64,25 +67,77 @@ defineOptions({
 
 const showCreateDialog = ref(false);
 const editing = ref<PriceRow | null>(null);
-const refreshing = ref(false);
+const refreshing = ref(props.refresh_running);
+
+const PRICE_REFRESH_CHANNEL = 'admin.ai-prices';
+
+interface PriceRefreshPayload {
+    state: 'queued' | 'running' | 'succeeded' | 'failed';
+    triggered_by: { id: number; name: string } | null;
+    summary: string | null;
+    error: string | null;
+    added: number | null;
+    total: number | null;
+    occurred_at: string;
+}
 
 function refreshPrices() {
     if (refreshing.value) {
         return;
     }
 
+    // Optimistically flip the button so admins get instant feedback even
+    // before the broadcast lands. The job will keep us in this state until
+    // succeeded/failed arrives.
     refreshing.value = true;
     router.post(
         AiModelPriceController.refresh.url(),
         {},
         {
             preserveScroll: true,
-            onFinish: () => {
-                refreshing.value = false;
-            },
+            preserveState: true,
         },
     );
 }
+
+function handleRefreshState(payload: PriceRefreshPayload): void {
+    if (payload.state === 'queued' || payload.state === 'running') {
+        refreshing.value = true;
+
+        return;
+    }
+
+    refreshing.value = false;
+
+    if (payload.state === 'succeeded') {
+        const triggered = payload.triggered_by
+            ? ` triggered by ${payload.triggered_by.name}`
+            : '';
+        toast.success('Price refresh complete', {
+            description: `${payload.added ?? 0} new, ${payload.total ?? 0} total${triggered}.`,
+        });
+        router.reload({ only: ['prices'], preserveScroll: true });
+
+        return;
+    }
+
+    toast.error('Price refresh failed', {
+        description: payload.error ?? 'Unknown error',
+    });
+}
+
+const { privateChannel, leaveChannel } = useWebSocket();
+
+onMounted(() => {
+    privateChannel(PRICE_REFRESH_CHANNEL).listen(
+        '.AiPriceRefreshStateChanged',
+        (event: PriceRefreshPayload) => handleRefreshState(event),
+    );
+});
+
+onUnmounted(() => {
+    leaveChannel(PRICE_REFRESH_CHANNEL);
+});
 
 function startEdit(price: PriceRow) {
     editing.value = { ...price };

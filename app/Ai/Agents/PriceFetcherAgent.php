@@ -4,20 +4,37 @@ declare(strict_types=1);
 
 namespace App\Ai\Agents;
 
+use App\Ai\Middleware\AttributesToUser;
 use App\Ai\Tools\PriceFetcher\UpsertModelPriceTool;
 use App\Ai\Tools\PriceFetcher\WebFetchTool;
+use App\Models\User;
 use App\Settings\AiSettings;
 use Laravel\Ai\Attributes\MaxSteps;
 use Laravel\Ai\Contracts\Agent;
+use Laravel\Ai\Contracts\HasMiddleware;
 use Laravel\Ai\Contracts\HasTools;
 use Laravel\Ai\Contracts\Tool;
 use Laravel\Ai\Promptable;
 use Stringable;
 
 #[MaxSteps(40)]
-class PriceFetcherAgent implements Agent, HasTools
+class PriceFetcherAgent implements Agent, HasMiddleware, HasTools
 {
     use Promptable;
+
+    private ?User $user = null;
+
+    /**
+     * Stamp the run with the user who kicked it off so RecordAgentUsage can
+     * attribute spend / budget impact. Required when invoked from a queued
+     * job where Auth::id() resolves to null.
+     */
+    public function forUser(User $user): static
+    {
+        $this->user = $user;
+
+        return $this;
+    }
 
     public function model(): string
     {
@@ -80,5 +97,15 @@ PROMPT;
             resolve(WebFetchTool::class),
             resolve(UpsertModelPriceTool::class),
         ];
+    }
+
+    /**
+     * @return array<int, object>
+     */
+    public function middleware(): array
+    {
+        return $this->user instanceof User
+            ? [new AttributesToUser($this->user)]
+            : [];
     }
 }

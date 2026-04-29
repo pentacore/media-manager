@@ -25,3 +25,8 @@ Broadcast::channel('members.sabnzbd', fn (User $user): bool => $user->role->isAt
 Broadcast::channel('emby.activity', fn (User $user): bool => true);
 Broadcast::channel('dashboard', fn (User $user): bool => true);
 Broadcast::channel('activity', fn (User $user): bool => true);
+
+// AI price refresh job lifecycle. Admin-only — the AI Prices page is gated
+// the same way and the payload exposes refresh internals (summary text,
+// failure messages) that aren't relevant outside admin tooling.
+Broadcast::channel('admin.ai-prices', fn (User $user): bool => $user->role === UserRole::Admin);

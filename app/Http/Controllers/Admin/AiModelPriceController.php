@@ -4,16 +4,16 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers\Admin;
 
-use App\Ai\Agents\PriceFetcherAgent;
+use App\Events\AiPriceRefreshStateChanged;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Admin\StoreAiModelPriceRequest;
 use App\Http\Requests\Admin\UpdateAiModelPriceRequest;
+use App\Jobs\RefreshAiPricesJob;
 use App\Models\AiModelPrice;
 use Illuminate\Http\RedirectResponse;
-use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Auth;
 use Inertia\Inertia;
 use Inertia\Response;
-use Throwable;
 
 class AiModelPriceController extends Controller
 {
@@ -24,6 +24,7 @@ class AiModelPriceController extends Controller
                 ->orderBy('provider')
                 ->orderBy('model')
                 ->get(),
+            'refresh_running' => RefreshAiPricesJob::isRunning(),
         ]);
     }
 
@@ -55,43 +56,37 @@ class AiModelPriceController extends Controller
     }
 
     /**
-     * Spin up the PriceFetcherAgent. The agent visits provider pricing
-     * pages with WebFetchTool and writes rates back via
-     * UpsertModelPriceTool — no hardcoded catalog. Synchronous; finishes
-     * in a few seconds because the agent only fans out to ~6 hosts.
+     * Queue a PriceFetcherAgent run. The agent reaches out to ~6 provider
+     * pricing pages and can take 30+ seconds, so we hand it to the queue and
+     * surface progress via the admin.ai-prices broadcast channel. A cache
+     * lock guarantees only one refresh runs at a time across all admins.
      */
     public function refresh(): RedirectResponse
     {
-        $before = AiModelPrice::query()->count();
+        $user = Auth::user();
 
-        try {
-            $response = (new PriceFetcherAgent)->prompt(
-                'Refresh the catalog now. Visit the canonical pricing page for OpenAI, Anthropic, Google Gemini, DeepSeek, xAI, and Mistral. Upsert one row per generally-available text/chat model with up-to-date input, output, cache, and reasoning rates. Skip image / audio / embedding products.'
-            );
-        } catch (Throwable $throwable) {
-            Log::error('PriceFetcherAgent run failed.', [
-                'exception' => $throwable::class,
-                'message' => $throwable->getMessage(),
-            ]);
-
+        if (! RefreshAiPricesJob::tryLock($user->id)) {
             Inertia::flash('toast', [
                 'type' => 'error',
-                'message' => __('Price refresh failed: :msg', ['msg' => $throwable->getMessage()]),
+                'message' => __('A price refresh is already running. Wait for it to finish.'),
             ]);
 
             return to_route('admin.ai-prices.index');
         }
 
-        $after = AiModelPrice::query()->count();
-        $added = max(0, $after - $before);
+        // Fire QUEUED before dispatch so the broadcast ordering matches the
+        // prod queue lifecycle even when tests run with QUEUE_CONNECTION=sync
+        // (which invokes handle() inline during dispatch()).
+        event(new AiPriceRefreshStateChanged(
+            state: AiPriceRefreshStateChanged::STATE_QUEUED,
+            triggeredBy: $user,
+        ));
+
+        dispatch(new RefreshAiPricesJob($user));
 
         Inertia::flash('toast', [
             'type' => 'success',
-            'message' => __('Refreshed via PriceFetcherAgent. :added new, :total total. :summary', [
-                'added' => $added,
-                'total' => $after,
-                'summary' => mb_substr($response->text, 0, 200),
-            ]),
+            'message' => __('Price refresh queued. Updates will appear automatically.'),
         ]);
 
         return to_route('admin.ai-prices.index');
