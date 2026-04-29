@@ -40,3 +40,10 @@
 - [ ] Currently, after triggering an AI Price Refresh, the usage gets stored as system user, it should be stored as the user that triggered the refresh, and the price that was used should be the new price, not the old price, since the refresh is what triggers the new price to be fetched and stored, this is really important for being able to track how much each user is spending on AI requests, especially if you have the soft/hard budget limits implemented like i mentioned in the previous point.
 - [ ] The AI Price Refresh should queue up a job to run in the background, 
     - [ ] (Awaiting support in the prisma-php/prisma package for batching) maybe make use of batching if the model supports it (Then we will also need a job that regularly checks the job status, and calls any tools it requests and then posts the updated data), also allow setting a specific model to use for this functionality.
+- [ ] Add a button to open the service
+    - [ ] Emby in Now Playing, Watch history
+    - [ ] Seer in requests
+    - [ ] Sonarr in TV Series
+    - [ ] Radarr in Movies
+    - [ ] Sabnzbd in Downloads
+- [ ] Id like to be able to see and manage the Activites from both Sonarr and Radarr (For example if a movie/episode cant be imported for any reason or if its pending), maybe even a page to see their history and blocklists
