@@ -75,6 +75,12 @@ class UpsertModelPriceTool extends BaseTool
     }
 
     /**
+     * Every property is marked required because OpenAI's strict tool
+     * schema demands that `required` enumerate the full property list.
+     * Pass 0 for tiers that don't apply (e.g. cache_write_per_mtok for
+     * OpenAI, where they only bill cache reads); the agent prompt
+     * already calls this out.
+     *
      * @return array<string, Type>
      */
     public function schema(JsonSchema $schema): array
@@ -93,21 +99,29 @@ class UpsertModelPriceTool extends BaseTool
                 ->description('USD per 1,000,000 output tokens.')
                 ->required(),
             'cache_read_per_mtok' => $schema->number()
-                ->description('USD per 1,000,000 cached-input tokens read. 0 if the model does not bill cache reads separately.'),
+                ->description('USD per 1,000,000 cached-input tokens read. 0 if the model does not bill cache reads separately.')
+                ->required(),
             'cache_write_per_mtok' => $schema->number()
-                ->description('USD per 1,000,000 cache-write tokens (Anthropic prompt-caching writes). 0 if N/A.'),
+                ->description('USD per 1,000,000 cache-write tokens (Anthropic prompt-caching writes). 0 if N/A.')
+                ->required(),
             'reasoning_per_mtok' => $schema->number()
-                ->description('USD per 1,000,000 reasoning tokens (o-series, Gemini thinking). 0 if the model does not surface a reasoning rate.'),
+                ->description('USD per 1,000,000 reasoning tokens (o-series, Gemini thinking). 0 if the model does not surface a reasoning rate.')
+                ->required(),
             'batch_input_per_mtok' => $schema->number()
-                ->description('USD per 1,000,000 batch-input tokens. 0 if no batch tier exists.'),
+                ->description('USD per 1,000,000 batch-input tokens. 0 if no batch tier exists.')
+                ->required(),
             'batch_output_per_mtok' => $schema->number()
-                ->description('USD per 1,000,000 batch-output tokens. 0 if N/A.'),
+                ->description('USD per 1,000,000 batch-output tokens. 0 if N/A.')
+                ->required(),
             'batch_cache_read_per_mtok' => $schema->number()
-                ->description('USD per 1,000,000 batch cache-read tokens. 0 if N/A.'),
+                ->description('USD per 1,000,000 batch cache-read tokens. 0 if N/A.')
+                ->required(),
             'batch_cache_write_per_mtok' => $schema->number()
-                ->description('USD per 1,000,000 batch cache-write tokens. 0 if N/A.'),
+                ->description('USD per 1,000,000 batch cache-write tokens. 0 if N/A.')
+                ->required(),
             'batch_reasoning_per_mtok' => $schema->number()
-                ->description('USD per 1,000,000 batch reasoning tokens. 0 if N/A.'),
+                ->description('USD per 1,000,000 batch reasoning tokens. 0 if N/A.')
+                ->required(),
         ];
     }
 }
