@@ -6,6 +6,7 @@ import NowPlayingController from '@/actions/App/Http/Controllers/Emby/NowPlaying
 import {
     InitialsAvatar,
     LiveDot,
+    OpenInServiceButton,
     Pill,
     Poster,
     SvcChip,
@@ -37,7 +38,10 @@ interface Session {
     play_state: PlayState | null;
 }
 
-const props = defineProps<{ sessions?: Session[] }>();
+const props = defineProps<{
+    connection: { url: string };
+    sessions?: Session[];
+}>();
 
 defineOptions({
     layout: {
@@ -164,6 +168,10 @@ function remainingTicks(session: Session): number {
             </div>
             <div class="flex items-center gap-2">
                 <Pill variant="ok" dot>Reverb connected</Pill>
+                <OpenInServiceButton
+                    :href="props.connection.url"
+                    label="Open Emby"
+                />
                 <Button
                     variant="outline"
                     size="sm"

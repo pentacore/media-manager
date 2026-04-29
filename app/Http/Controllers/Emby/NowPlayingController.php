@@ -28,6 +28,9 @@ class NowPlayingController extends Controller
         }
 
         return Inertia::render('Emby/NowPlaying', [
+            'connection' => [
+                'url' => rtrim($connection->url, '/'),
+            ],
             'sessions' => Inertia::defer(function () use ($connection): array {
                 try {
                     $sessions = new EmbyClient($connection)->getActiveSessions();

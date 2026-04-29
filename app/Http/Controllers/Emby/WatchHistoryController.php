@@ -4,12 +4,15 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers\Emby;
 
+use App\Enums\ServiceType;
 use App\Enums\UserRole;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\EmbyActivityResource;
 use App\Models\EmbyActivity;
+use App\Models\ServiceConnection;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -30,6 +33,7 @@ class WatchHistoryController extends Controller
         $lengthAwarePaginator = $builder->paginate(25)->withQueryString();
 
         return Inertia::render('Emby/WatchHistory', [
+            'connection' => $this->resolveConnectionPayload(),
             'activities' => [
                 'data' => EmbyActivityResource::collection($lengthAwarePaginator->getCollection())->toArray($request),
                 'links' => $lengthAwarePaginator->linkCollection()->toArray(),
@@ -48,6 +52,20 @@ class WatchHistoryController extends Controller
                 'rangeDays' => self::RANGE_DAYS,
             ],
         ]);
+    }
+
+    /**
+     * @return array{url: string}|null
+     */
+    private function resolveConnectionPayload(): ?array
+    {
+        try {
+            $connection = ServiceConnection::resolveActive(ServiceType::Emby);
+        } catch (ModelNotFoundException) {
+            return null;
+        }
+
+        return ['url' => rtrim($connection->url, '/')];
     }
 
     public function export(Request $request): StreamedResponse

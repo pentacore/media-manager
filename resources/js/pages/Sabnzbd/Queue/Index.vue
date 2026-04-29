@@ -3,7 +3,7 @@ import { Head, router } from '@inertiajs/vue3';
 import { Pause, Play, RefreshCw, Trash2 } from 'lucide-vue-next';
 import { onMounted, onUnmounted } from 'vue';
 import QueueController from '@/actions/App/Http/Controllers/Sabnzbd/QueueController';
-import { Pill, StatCard } from '@/components/mm';
+import { OpenInServiceButton, Pill, StatCard } from '@/components/mm';
 import { Button } from '@/components/ui/button';
 import {
     Select,
@@ -46,6 +46,12 @@ interface Queue {
     diskspace2?: string;
 }
 
+interface SabnzbdConnection {
+    id: number;
+    name: string;
+    url: string;
+}
+
 interface History {
     slots?: HistorySlot[];
     total_size?: string;
@@ -55,7 +61,7 @@ interface History {
 
 const props = defineProps<{
     configured: boolean;
-    connection: { id: number; name: string } | null;
+    connection: SabnzbdConnection | null;
     queue: Queue;
     history: History;
     paused: boolean;
@@ -171,6 +177,10 @@ function statusVariant(
                 </p>
             </div>
             <div class="flex gap-2" v-if="configured">
+                <OpenInServiceButton
+                    :href="props.connection?.url"
+                    label="Open SABnzbd"
+                />
                 <Button
                     size="sm"
                     variant="outline"

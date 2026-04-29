@@ -36,6 +36,7 @@ class QueueController extends Controller
                 'connection' => [
                     'id' => $connection->id,
                     'name' => $connection->name,
+                    'url' => rtrim($connection->url, '/'),
                 ],
                 'queue' => $queue,
                 'history' => $history,

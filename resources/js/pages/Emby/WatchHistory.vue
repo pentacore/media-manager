@@ -3,7 +3,13 @@ import { Head, router, usePage } from '@inertiajs/vue3';
 import { Calendar, Download, Sparkles } from 'lucide-vue-next';
 import { computed, onMounted, watch } from 'vue';
 import WatchHistoryController from '@/actions/App/Http/Controllers/Emby/WatchHistoryController';
-import { InitialsAvatar, Pill, StatCard, SvcChip } from '@/components/mm';
+import {
+    InitialsAvatar,
+    OpenInServiceButton,
+    Pill,
+    StatCard,
+    SvcChip,
+} from '@/components/mm';
 import { Button } from '@/components/ui/button';
 import {
     Select,
@@ -33,6 +39,7 @@ interface PaginatorMeta {
 }
 
 const props = defineProps<{
+    connection: { url: string } | null;
     activities: {
         data: Activity[];
         links: PaginatorLink[];
@@ -345,6 +352,10 @@ function currentFilter(): string {
                 >
                     <Download class="size-3.5" />Export CSV
                 </a>
+                <OpenInServiceButton
+                    :href="props.connection?.url"
+                    label="Open Emby"
+                />
             </div>
         </div>
 

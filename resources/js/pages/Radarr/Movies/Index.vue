@@ -3,7 +3,7 @@ import { Head, Link, router } from '@inertiajs/vue3';
 import { ExternalLink, Plus, RefreshCcw, Search } from 'lucide-vue-next';
 import { computed, onMounted, ref } from 'vue';
 import MovieController from '@/actions/App/Http/Controllers/Media/MovieController';
-import { Pill, Poster, SvcChip } from '@/components/mm';
+import { OpenInServiceButton, Pill, Poster, SvcChip } from '@/components/mm';
 import { Button } from '@/components/ui/button';
 import {
     Select,
@@ -235,6 +235,10 @@ function is4k(movie: Movie): boolean {
                         :class="{ 'animate-spin': syncing }"
                     />Sync
                 </Button>
+                <OpenInServiceButton
+                    :href="props.connection.url"
+                    label="Open Radarr"
+                />
                 <Link :href="MovieController.create.url()">
                     <Button size="sm" class="h-7 gap-1.5 text-xs">
                         <Plus class="size-3.5" />Add movie

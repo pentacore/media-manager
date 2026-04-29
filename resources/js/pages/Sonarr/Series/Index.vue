@@ -10,7 +10,7 @@ import {
 } from 'lucide-vue-next';
 import { computed, onMounted, ref } from 'vue';
 import SeriesController from '@/actions/App/Http/Controllers/Media/SeriesController';
-import { Pill, Poster, SvcChip } from '@/components/mm';
+import { OpenInServiceButton, Pill, Poster, SvcChip } from '@/components/mm';
 import { Button } from '@/components/ui/button';
 import {
     Select,
@@ -232,6 +232,10 @@ function sonarrSeriesUrl(slug: string | null): string | null {
                         :class="{ 'animate-spin': syncing }"
                     />Sync
                 </Button>
+                <OpenInServiceButton
+                    :href="props.connection.url"
+                    label="Open Sonarr"
+                />
                 <Link :href="SeriesController.create.url()">
                     <Button size="sm" class="h-7 gap-1.5 text-xs">
                         <Plus class="size-3.5" />Add series

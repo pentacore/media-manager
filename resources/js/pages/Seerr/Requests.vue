@@ -15,7 +15,13 @@ import {
 } from 'lucide-vue-next';
 import { computed, onMounted, ref } from 'vue';
 import RequestController from '@/actions/App/Http/Controllers/Media/RequestController';
-import { InitialsAvatar, Poster, StatusPill, SvcChip } from '@/components/mm';
+import {
+    InitialsAvatar,
+    OpenInServiceButton,
+    Poster,
+    StatusPill,
+    SvcChip,
+} from '@/components/mm';
 import { Button } from '@/components/ui/button';
 import {
     Select,
@@ -397,6 +403,10 @@ const rangeText = computed(() => {
                         :class="{ 'animate-spin': syncing }"
                     />Sync Seerr
                 </Button>
+                <OpenInServiceButton
+                    :href="props.connection.url"
+                    label="Open Seerr"
+                />
             </div>
         </div>
 

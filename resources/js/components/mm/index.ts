@@ -8,3 +8,4 @@ export { default as InitialsAvatar } from './InitialsAvatar.vue';
 export { default as StatCard } from './StatCard.vue';
 export { default as Field } from './Field.vue';
 export { default as Toggle } from './Toggle.vue';
+export { default as OpenInServiceButton } from './OpenInServiceButton.vue';
