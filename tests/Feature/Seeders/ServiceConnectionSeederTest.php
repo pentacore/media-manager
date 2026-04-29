@@ -11,7 +11,7 @@ beforeEach(function (): void {
     // Force all env vars to empty so .env-baked values don't leak into tests.
     // putenv('KEY=') with empty RHS sets it to '', which the seeder treats as "unset"
     // (same as getenv returning false) and generates a random token.
-    foreach (['SONARR', 'RADARR', 'EMBY', 'SEERR', 'PROWLARR'] as $prefix) {
+    foreach (['SONARR', 'RADARR', 'EMBY', 'SEERR', 'PROWLARR', 'SABNZBD'] as $prefix) {
         putenv($prefix.'_URL=');
         putenv($prefix.'_API_KEY=');
         putenv($prefix.'_WEBHOOK_TOKEN=');
@@ -20,7 +20,7 @@ beforeEach(function (): void {
 });
 
 afterEach(function (): void {
-    foreach (['SONARR', 'RADARR', 'EMBY', 'SEERR', 'PROWLARR'] as $prefix) {
+    foreach (['SONARR', 'RADARR', 'EMBY', 'SEERR', 'PROWLARR', 'SABNZBD'] as $prefix) {
         putenv($prefix.'_URL');
         putenv($prefix.'_API_KEY');
         putenv($prefix.'_WEBHOOK_TOKEN');
