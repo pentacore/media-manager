@@ -209,6 +209,124 @@ test('queue removal reports upstream HTTP failure', function (): void {
         ->assertSessionHas('inertia.flash_data.toast.type', 'error');
 });
 
+test('admin can list manual import candidates for a Sonarr download', function (): void {
+    ServiceConnection::factory()->sonarr()->create([
+        'url' => 'http://sonarr.local:8989',
+    ]);
+
+    Http::fake([
+        'sonarr.local:8989/api/v3/manualimport*' => Http::response([
+            [
+                'path' => '/downloads/Show.S01E01.mkv',
+                'name' => 'Show.S01E01',
+                'size' => 1_000_000_000,
+                'series' => ['id' => 12, 'title' => 'Severance'],
+                'episodes' => [
+                    ['id' => 555, 'seasonNumber' => 1, 'episodeNumber' => 1, 'title' => 'Pilot'],
+                ],
+                'quality' => ['quality' => ['id' => 4, 'name' => 'WEBDL-1080p']],
+                'languages' => [['id' => 1, 'name' => 'English']],
+                'releaseGroup' => 'GROUP',
+                'releaseType' => 'singleEpisode',
+                'rejections' => [],
+            ],
+        ]),
+    ]);
+
+    $admin = User::factory()->admin()->create();
+
+    $this->actingAs($admin)
+        ->getJson(route('media.library.activity.manual-import.candidates', [
+            'service' => 'sonarr',
+            'downloadId' => 'ABC123',
+        ]))
+        ->assertOk()
+        ->assertJsonPath('candidates.0.series_title', 'Severance')
+        ->assertJsonPath('candidates.0.quality', 'WEBDL-1080p')
+        ->assertJsonPath('candidates.0.episodes.0.episode', 1);
+});
+
+test('admin can execute a Sonarr manual import end-to-end', function (): void {
+    ServiceConnection::factory()->sonarr()->create([
+        'url' => 'http://sonarr.local:8989',
+    ]);
+
+    Http::fake([
+        'sonarr.local:8989/api/v3/manualimport*' => Http::response([
+            [
+                'path' => '/downloads/Show.S01E01.mkv',
+                'series' => ['id' => 12, 'title' => 'Severance'],
+                'episodes' => [['id' => 555, 'seasonNumber' => 1, 'episodeNumber' => 1]],
+                'quality' => ['quality' => ['id' => 4]],
+                'languages' => [['id' => 1]],
+                'releaseGroup' => 'GROUP',
+                'releaseType' => 'singleEpisode',
+                'rejections' => [],
+            ],
+        ]),
+        'sonarr.local:8989/api/v3/command' => Http::response(['id' => 99], 200),
+    ]);
+
+    $admin = User::factory()->admin()->create();
+
+    $this->actingAs($admin)
+        ->from(route('media.library.activity.queue'))
+        ->post(route('media.library.activity.manual-import.execute', ['service' => 'sonarr']), [
+            'download_id' => 'ABC123',
+        ])
+        ->assertRedirect(route('media.library.activity.queue'))
+        ->assertSessionHas('inertia.flash_data.toast.type', 'success');
+
+    Http::assertSent(fn ($request): bool => $request->method() === 'POST'
+        && str_ends_with((string) $request->url(), '/api/v3/command')
+        && $request->data()['name'] === 'ManualImport'
+        && ($request->data()['files'][0]['seriesId'] ?? null) === 12
+        && ($request->data()['files'][0]['episodeIds'] ?? []) === [555]
+        && ($request->data()['files'][0]['downloadId'] ?? null) === 'ABC123'
+    );
+});
+
+test('manual import drops candidates without a foreign key', function (): void {
+    ServiceConnection::factory()->radarr()->create([
+        'url' => 'http://radarr.local:7878',
+    ]);
+
+    Http::fake([
+        'radarr.local:7878/api/v3/manualimport*' => Http::response([
+            // Missing movie.id — should be skipped.
+            [
+                'path' => '/downloads/Mystery.mkv',
+                'quality' => ['quality' => ['id' => 1]],
+                'languages' => [['id' => 1]],
+                'rejections' => [],
+            ],
+        ]),
+    ]);
+
+    $admin = User::factory()->admin()->create();
+
+    $this->actingAs($admin)
+        ->from(route('media.library.activity.queue'))
+        ->post(route('media.library.activity.manual-import.execute', ['service' => 'radarr']), [
+            'download_id' => 'XYZ',
+        ])
+        ->assertRedirect(route('media.library.activity.queue'))
+        ->assertSessionHas('inertia.flash_data.toast.type', 'error');
+
+    // Command endpoint should never be hit when there's nothing valid to send.
+    Http::assertNotSent(fn ($request): bool => str_ends_with((string) $request->url(), '/api/v3/command'));
+});
+
+test('member cannot trigger manual import', function (): void {
+    $member = User::factory()->member()->create();
+
+    $this->actingAs($member)
+        ->post(route('media.library.activity.manual-import.execute', ['service' => 'sonarr']), [
+            'download_id' => 'ABC',
+        ])
+        ->assertForbidden();
+});
+
 test('queue is empty when no Sonarr or Radarr connection is configured', function (): void {
     $member = User::factory()->member()->create();
 

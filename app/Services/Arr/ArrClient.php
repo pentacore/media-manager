@@ -124,6 +124,25 @@ abstract class ArrClient
     }
 
     /**
+     * Discover candidate files for a manual import. `downloadId` ties the
+     * candidates back to a stuck queue item; both Sonarr and Radarr also
+     * accept `folder` for ad-hoc imports. The response is the raw
+     * ManualImportResource[] from upstream — caller maps it.
+     *
+     * @param  array<string, mixed>  $params
+     * @return array<int, array<string, mixed>>
+     *
+     * @throws RequestException|ConnectionException
+     */
+    public function getManualImport(array $params): array
+    {
+        return $this->buildClient()
+            ->get(sprintf('/api/%s/manualimport', $this->apiVersion), $params)
+            ->throw()
+            ->json() ?? [];
+    }
+
+    /**
      * Remove a row from the download queue. Caller controls whether to
      * also evict it from the download client (`removeFromClient`),
      * remember it so it never returns (`blocklist`), and whether the

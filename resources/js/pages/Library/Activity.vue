@@ -1,10 +1,23 @@
 <script setup lang="ts">
 import { Head, router, usePage } from '@inertiajs/vue3';
-import { ExternalLink, MoreVertical, RefreshCcw } from 'lucide-vue-next';
+import {
+    AlertTriangle,
+    ExternalLink,
+    Loader2,
+    MoreVertical,
+    RefreshCcw,
+} from 'lucide-vue-next';
 import { computed, ref } from 'vue';
 import LibraryActivityController from '@/actions/App/Http/Controllers/Library/ActivityController';
 import { Pill, SvcChip } from '@/components/mm';
 import { Button } from '@/components/ui/button';
+import {
+    Dialog,
+    DialogContent,
+    DialogFooter,
+    DialogHeader,
+    DialogTitle,
+} from '@/components/ui/dialog';
 import {
     DropdownMenu,
     DropdownMenuContent,
@@ -41,6 +54,32 @@ interface QueuePayload {
     rows: QueueRow[];
     errors: string[];
     services: { sonarr?: boolean; radarr?: boolean };
+}
+
+interface ManualImportEpisode {
+    season: number | null;
+    episode: number | null;
+    title: string | null;
+}
+
+interface ManualImportRejection {
+    reason: string;
+    type: string | null;
+}
+
+interface ManualImportCandidate {
+    path: string | null;
+    name: string | null;
+    size: number | null;
+    quality: string | null;
+    release_group: string | null;
+    languages: string[];
+    rejections: ManualImportRejection[];
+    series_title?: string | null;
+    season?: number | null;
+    episodes?: ManualImportEpisode[];
+    movie_title?: string | null;
+    movie_year?: number | null;
 }
 
 const props = defineProps<{ queue?: QueuePayload }>();
@@ -99,6 +138,105 @@ function removeQueueItem(row: QueueRow, verb: 'remove' | 'block'): void {
             },
         },
     );
+}
+
+// Manual import dialog state.
+const importingRow = ref<QueueRow | null>(null);
+const importLoading = ref(false);
+const importError = ref<string | null>(null);
+const importCandidates = ref<ManualImportCandidate[]>([]);
+const importSubmitting = ref(false);
+
+function openManualImport(row: QueueRow): void {
+    if (!row.download_id) {
+        return;
+    }
+
+    importingRow.value = row;
+    importCandidates.value = [];
+    importError.value = null;
+    importLoading.value = true;
+
+    fetch(
+        LibraryActivityController.manualImportCandidates.url({
+            service: row.service,
+            downloadId: row.download_id,
+        }),
+        { headers: { Accept: 'application/json' }, credentials: 'same-origin' },
+    )
+        .then(async (response) => {
+            const body = await response.json();
+            if (!response.ok) {
+                importError.value = body.error ?? `Request failed (${response.status})`;
+
+                return;
+            }
+
+            importCandidates.value = body.candidates ?? [];
+        })
+        .catch((error: unknown) => {
+            importError.value = error instanceof Error ? error.message : 'Network error';
+        })
+        .finally(() => {
+            importLoading.value = false;
+        });
+}
+
+function closeManualImport(): void {
+    if (importSubmitting.value) {
+        return;
+    }
+
+    importingRow.value = null;
+    importCandidates.value = [];
+    importError.value = null;
+}
+
+function submitManualImport(): void {
+    const row = importingRow.value;
+    if (!row || !row.download_id) {
+        return;
+    }
+
+    importSubmitting.value = true;
+    router.post(
+        LibraryActivityController.executeManualImport.url({ service: row.service }),
+        { download_id: row.download_id },
+        {
+            preserveScroll: true,
+            onSuccess: () => {
+                importingRow.value = null;
+                router.reload({ only: ['queue'] });
+            },
+            onFinish: () => {
+                importSubmitting.value = false;
+            },
+        },
+    );
+}
+
+function importableCount(): number {
+    return importCandidates.value.filter((c) => c.rejections.length === 0).length;
+}
+
+function candidateLabel(candidate: ManualImportCandidate): string {
+    if (candidate.series_title) {
+        const ep = (candidate.episodes ?? []).map((e) =>
+            e.season !== null && e.episode !== null
+                ? `S${String(e.season).padStart(2, '0')}E${String(e.episode).padStart(2, '0')}`
+                : '',
+        ).filter(Boolean).join(', ');
+
+        return ep ? `${candidate.series_title} · ${ep}` : (candidate.series_title ?? '');
+    }
+
+    if (candidate.movie_title) {
+        return candidate.movie_year
+            ? `${candidate.movie_title} (${candidate.movie_year})`
+            : candidate.movie_title;
+    }
+
+    return candidate.name ?? '—';
 }
 
 function refresh(): void {
@@ -361,6 +499,12 @@ const filteredRows = computed<QueueRow[]>(() => {
                                         <DropdownMenuLabel>Manage queue item</DropdownMenuLabel>
                                         <DropdownMenuSeparator />
                                         <DropdownMenuItem
+                                            :disabled="!row.download_id"
+                                            @select="openManualImport(row)"
+                                        >
+                                            Manual import…
+                                        </DropdownMenuItem>
+                                        <DropdownMenuItem
                                             @select="removeQueueItem(row, 'remove')"
                                         >
                                             Remove from queue
@@ -379,5 +523,102 @@ const filteredRows = computed<QueueRow[]>(() => {
                 </tbody>
             </table>
         </div>
+
+        <!-- Manual import dialog -->
+        <Dialog
+            :open="importingRow !== null"
+            @update:open="(v) => !v && closeManualImport()"
+        >
+            <DialogContent v-if="importingRow" class="sm:max-w-2xl">
+                <DialogHeader>
+                    <DialogTitle>
+                        Manual import — {{ importingRow.title ?? 'queue item' }}
+                    </DialogTitle>
+                </DialogHeader>
+                <div
+                    v-if="importLoading"
+                    class="flex items-center gap-2 py-6 text-sm text-muted-foreground"
+                >
+                    <Loader2 class="size-4 animate-spin" />
+                    Discovering candidates…
+                </div>
+                <div
+                    v-else-if="importError"
+                    class="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-[12px] text-destructive"
+                >
+                    {{ importError }}
+                </div>
+                <div
+                    v-else-if="importCandidates.length === 0"
+                    class="rounded-md border border-border bg-bg-elev px-3 py-3 text-sm text-muted-foreground"
+                >
+                    No candidate files were returned. Sonarr/Radarr may not
+                    see anything to import for this download yet.
+                </div>
+                <div v-else class="max-h-[55vh] space-y-2 overflow-y-auto">
+                    <div
+                        v-for="(candidate, idx) in importCandidates"
+                        :key="idx"
+                        class="rounded-md border border-border bg-card p-3"
+                    >
+                        <div class="text-[13px] font-medium">
+                            {{ candidateLabel(candidate) }}
+                        </div>
+                        <div
+                            class="mt-1 flex flex-wrap items-center gap-2 text-[11.5px] text-muted-foreground"
+                        >
+                            <Pill v-if="candidate.quality" variant="info">
+                                {{ candidate.quality }}
+                            </Pill>
+                            <span v-if="candidate.release_group">{{
+                                candidate.release_group
+                            }}</span>
+                            <span v-if="candidate.languages.length > 0">
+                                {{ candidate.languages.join(', ') }}
+                            </span>
+                            <span v-if="candidate.size">{{
+                                formatBytes(candidate.size)
+                            }}</span>
+                        </div>
+                        <div
+                            v-if="candidate.rejections.length > 0"
+                            class="mt-2 space-y-1 rounded border border-warn/30 bg-warn/5 p-2 text-[11.5px] text-warn"
+                        >
+                            <div
+                                v-for="(rejection, ri) in candidate.rejections"
+                                :key="ri"
+                                class="flex items-start gap-1.5"
+                            >
+                                <AlertTriangle class="mt-0.5 size-3" />
+                                <span>{{ rejection.reason }}</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <DialogFooter>
+                    <Button
+                        variant="ghost"
+                        :disabled="importSubmitting"
+                        @click="closeManualImport"
+                    >
+                        Cancel
+                    </Button>
+                    <Button
+                        :disabled="
+                            importSubmitting ||
+                            importLoading ||
+                            importCandidates.length === 0
+                        "
+                        @click="submitManualImport"
+                    >
+                        <Loader2
+                            v-if="importSubmitting"
+                            class="mr-1.5 size-3.5 animate-spin"
+                        />Import {{ importableCount() }} of
+                        {{ importCandidates.length }} file(s)
+                    </Button>
+                </DialogFooter>
+            </DialogContent>
+        </Dialog>
     </div>
 </template>

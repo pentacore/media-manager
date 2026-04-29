@@ -13,6 +13,7 @@ use App\Services\Sonarr\SonarrClient;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\RequestException;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -69,6 +70,189 @@ class ActivityController extends Controller
                 ? __('Removed and blocklisted; a fresh search will run.')
                 : __('Removed from queue.'),
         );
+    }
+
+    /**
+     * Look up the candidate files Sonarr/Radarr will offer up if we ask
+     * it to manually import this stuck download. Returned shape is the
+     * upstream ManualImportResource trimmed to what the modal needs.
+     */
+    public function manualImportCandidates(string $service, string $downloadId): JsonResponse
+    {
+        $client = $this->resolveClient($service);
+        if (! $client instanceof ArrClient) {
+            return new JsonResponse(['error' => 'Unknown service.'], 422);
+        }
+
+        try {
+            $candidates = $client->getManualImport(['downloadId' => $downloadId]);
+        } catch (RequestException|ConnectionException $throwable) {
+            return new JsonResponse(['error' => $throwable->getMessage()], 502);
+        }
+
+        return new JsonResponse([
+            'candidates' => array_values(array_map(
+                fn (array $candidate): array => $this->mapCandidate($candidate, $service),
+                $candidates,
+            )),
+        ]);
+    }
+
+    /**
+     * Trigger the ManualImport command. We re-fetch candidates server-side
+     * so the caller cannot inject paths or rewrite the foreign keys —
+     * frontend only supplies the downloadId we already showed it.
+     */
+    public function executeManualImport(Request $request, string $service): RedirectResponse
+    {
+        $downloadId = (string) $request->input('download_id');
+        if ($downloadId === '') {
+            return $this->flashAndBack('error', __('Missing downloadId.'));
+        }
+
+        $client = $this->resolveClient($service);
+        if (! $client instanceof ArrClient) {
+            return $this->flashAndBack('error', __('Unknown service.'));
+        }
+
+        try {
+            $candidates = $client->getManualImport(['downloadId' => $downloadId]);
+        } catch (RequestException|ConnectionException $throwable) {
+            return $this->flashAndBack('error', __('Could not enumerate import candidates: :msg', ['msg' => $throwable->getMessage()]));
+        }
+
+        $files = $this->candidatesToImportPayload($candidates, $service, $downloadId);
+        if ($files === []) {
+            return $this->flashAndBack('error', __('Sonarr/Radarr returned no importable files for this download.'));
+        }
+
+        try {
+            $client->runCommand('ManualImport', [
+                'files' => $files,
+                'importMode' => 'auto',
+            ]);
+        } catch (RequestException|ConnectionException $throwable) {
+            return $this->flashAndBack('error', __('Manual import failed: :msg', ['msg' => $throwable->getMessage()]));
+        }
+
+        return $this->flashAndBack('success', __('Manual import queued (:n file(s)).', ['n' => count($files)]));
+    }
+
+    /**
+     * Convert raw candidates into the file shape Sonarr/Radarr expect on
+     * the ManualImport command. Drops candidates that lack the required
+     * foreign key (Sonarr → seriesId+episodeIds, Radarr → movieId).
+     *
+     * @param  array<int, array<string, mixed>>  $candidates
+     * @return array<int, array<string, mixed>>
+     */
+    private function candidatesToImportPayload(array $candidates, string $service, string $downloadId): array
+    {
+        $files = [];
+
+        foreach ($candidates as $candidate) {
+            $base = [
+                'path' => $candidate['path'] ?? null,
+                'folderName' => $candidate['folderName'] ?? null,
+                'quality' => $candidate['quality'] ?? null,
+                'languages' => $candidate['languages'] ?? [],
+                'releaseGroup' => $candidate['releaseGroup'] ?? null,
+                'indexerFlags' => $candidate['indexerFlags'] ?? 0,
+                'downloadId' => $downloadId,
+            ];
+            if ($base['path'] === null) {
+                continue;
+            }
+            if ($base['quality'] === null) {
+                continue;
+            }
+
+            if ($service === 'sonarr') {
+                $seriesId = $candidate['series']['id'] ?? null;
+                $episodeIds = array_values(array_filter(array_map(
+                    static fn (array $episode): ?int => isset($episode['id']) ? (int) $episode['id'] : null,
+                    is_array($candidate['episodes'] ?? null) ? $candidate['episodes'] : [],
+                )));
+                if ($seriesId === null) {
+                    continue;
+                }
+                if ($episodeIds === []) {
+                    continue;
+                }
+
+                $files[] = [
+                    ...$base,
+                    'seriesId' => $seriesId,
+                    'episodeIds' => $episodeIds,
+                    'releaseType' => $candidate['releaseType'] ?? null,
+                ];
+
+                continue;
+            }
+
+            $movieId = $candidate['movie']['id'] ?? null;
+            if ($movieId === null) {
+                continue;
+            }
+
+            $files[] = [
+                ...$base,
+                'movieId' => $movieId,
+            ];
+        }
+
+        return $files;
+    }
+
+    /**
+     * Trim a candidate down to what the modal renders so we don't ship
+     * the entire upstream payload (which can be huge per file).
+     *
+     * @param  array<string, mixed>  $candidate
+     * @return array<string, mixed>
+     */
+    private function mapCandidate(array $candidate, string $service): array
+    {
+        $shared = [
+            'path' => $candidate['path'] ?? null,
+            'name' => $candidate['name'] ?? ($candidate['relativePath'] ?? null),
+            'size' => $candidate['size'] ?? null,
+            'quality' => $candidate['quality']['quality']['name'] ?? null,
+            'release_group' => $candidate['releaseGroup'] ?? null,
+            'languages' => array_values(array_map(
+                static fn (array $language): ?string => $language['name'] ?? null,
+                is_array($candidate['languages'] ?? null) ? $candidate['languages'] : [],
+            )),
+            'rejections' => array_values(array_map(
+                static fn (array $rejection): array => [
+                    'reason' => $rejection['reason'] ?? '',
+                    'type' => $rejection['type'] ?? null,
+                ],
+                is_array($candidate['rejections'] ?? null) ? $candidate['rejections'] : [],
+            )),
+        ];
+
+        if ($service === 'sonarr') {
+            return [
+                ...$shared,
+                'series_title' => $candidate['series']['title'] ?? null,
+                'season' => $candidate['seasonNumber'] ?? null,
+                'episodes' => array_values(array_map(
+                    static fn (array $episode): array => [
+                        'season' => $episode['seasonNumber'] ?? null,
+                        'episode' => $episode['episodeNumber'] ?? null,
+                        'title' => $episode['title'] ?? null,
+                    ],
+                    is_array($candidate['episodes'] ?? null) ? $candidate['episodes'] : [],
+                )),
+            ];
+        }
+
+        return [
+            ...$shared,
+            'movie_title' => $candidate['movie']['title'] ?? null,
+            'movie_year' => $candidate['movie']['year'] ?? null,
+        ];
     }
 
     private function resolveClient(string $service): ?ArrClient
@@ -227,6 +411,7 @@ class ActivityController extends Controller
             'status_messages' => $record['statusMessages'] ?? [],
             'added' => $record['added'] ?? null,
             'quality' => $record['quality']['quality']['name'] ?? null,
+            'download_id' => $record['downloadId'] ?? null,
         ];
     }
 
@@ -259,6 +444,7 @@ class ActivityController extends Controller
             'status_messages' => $record['statusMessages'] ?? [],
             'added' => $record['added'] ?? null,
             'quality' => $record['quality']['quality']['name'] ?? null,
+            'download_id' => $record['downloadId'] ?? null,
         ];
     }
 }
