@@ -35,7 +35,7 @@ test('queue index pulls live queue + history when configured', function (): void
     ]);
 
     Http::fake([
-        'sab.local:8080/sabnzbd/api*' => Http::sequence()
+        'sab.local:8080/api*' => Http::sequence()
             ->push(['queue' => ['paused' => false, 'slots' => [['nzo_id' => 'x', 'filename' => 'foo']]]])
             ->push(['history' => ['slots' => []]]),
     ]);
@@ -58,7 +58,7 @@ test('pauseSlot endpoint logs activity and flashes a toast', function (): void {
     ]);
 
     Http::fake([
-        'sab.local:8080/sabnzbd/api*' => Http::response(['status' => true]),
+        'sab.local:8080/api*' => Http::response(['status' => true]),
     ]);
 
     $this->actingAs($this->user)
@@ -90,7 +90,7 @@ test('reprioritize accepts valid priority and writes activity', function (): voi
     ]);
 
     Http::fake([
-        'sab.local:8080/sabnzbd/api*' => Http::response(['status' => true]),
+        'sab.local:8080/api*' => Http::response(['status' => true]),
     ]);
 
     $this->actingAs($this->user)

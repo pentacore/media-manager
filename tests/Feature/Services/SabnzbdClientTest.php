@@ -20,7 +20,7 @@ beforeEach(function (): void {
 
 test('getVersion sends mode=version with X-Apikey header and output=json', function (): void {
     Http::fake([
-        'sab.local:8080/sabnzbd/api*' => Http::response(['version' => '4.2.0']),
+        'sab.local:8080/api*' => Http::response(['version' => '4.2.0']),
     ]);
 
     $result = $this->client->getVersion();
@@ -33,7 +33,7 @@ test('getVersion sends mode=version with X-Apikey header and output=json', funct
 
 test('getQueue returns the queue payload', function (): void {
     Http::fake([
-        'sab.local:8080/sabnzbd/api*' => Http::response([
+        'sab.local:8080/api*' => Http::response([
             'queue' => [
                 'paused' => false,
                 'speed' => '1.2 M',
@@ -50,7 +50,7 @@ test('getQueue returns the queue payload', function (): void {
 
 test('getHistory passes last_history_update when sinceUnix provided', function (): void {
     Http::fake([
-        'sab.local:8080/sabnzbd/api*' => Http::response([
+        'sab.local:8080/api*' => Http::response([
             'history' => ['slots' => []],
         ]),
     ]);
@@ -63,7 +63,7 @@ test('getHistory passes last_history_update when sinceUnix provided', function (
 
 test('pauseSlot sends queue/pause/{nzo} request', function (): void {
     Http::fake([
-        'sab.local:8080/sabnzbd/api*' => Http::response(['status' => true]),
+        'sab.local:8080/api*' => Http::response(['status' => true]),
     ]);
 
     expect($this->client->pauseSlot('NZO-1'))->toBeTrue();
@@ -75,7 +75,7 @@ test('pauseSlot sends queue/pause/{nzo} request', function (): void {
 
 test('deleteSlot sends queue/delete/{nzo} request', function (): void {
     Http::fake([
-        'sab.local:8080/sabnzbd/api*' => Http::response(['status' => true]),
+        'sab.local:8080/api*' => Http::response(['status' => true]),
     ]);
 
     expect($this->client->deleteSlot('NZO-2'))->toBeTrue();
@@ -86,7 +86,7 @@ test('deleteSlot sends queue/delete/{nzo} request', function (): void {
 
 test('changePriority sends value+value2 with priority integer', function (): void {
     Http::fake([
-        'sab.local:8080/sabnzbd/api*' => Http::response(['status' => true]),
+        'sab.local:8080/api*' => Http::response(['status' => true]),
     ]);
 
     expect($this->client->changePriority('NZO-3', 2))->toBeTrue();
@@ -98,7 +98,7 @@ test('changePriority sends value+value2 with priority integer', function (): voi
 
 test('getDiskSpace maps SABnzbd queue payload to Sonarr-shaped rows', function (): void {
     Http::fake([
-        'sab.local:8080/sabnzbd/api*' => Http::response([
+        'sab.local:8080/api*' => Http::response([
             'queue' => [
                 'diskspace1' => '120.5',
                 'diskspacetotal1' => '500',

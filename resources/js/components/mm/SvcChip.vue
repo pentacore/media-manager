@@ -10,6 +10,7 @@ type Service =
     | 'seerr'
     | 'jellyseerr'
     | 'prowlarr'
+    | 'sabnzbd'
     | 'tmdb'
     | 'trakt'
     | 'system'
@@ -34,6 +35,8 @@ const colorClass = computed(() => {
             return 'text-svc-seerr';
         case 'prowlarr':
             return 'text-svc-prowlarr';
+        case 'sabnzbd':
+            return 'text-svc-sabnzbd';
         default:
             return 'text-muted-foreground';
     }
@@ -56,6 +59,8 @@ const labelText = computed(() => {
             return 'Seerr';
         case 'prowlarr':
             return 'Prowlarr';
+        case 'sabnzbd':
+            return 'SABnzbd';
         case 'tmdb':
             return 'TMDB';
         case 'trakt':

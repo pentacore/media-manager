@@ -47,7 +47,7 @@ class SabnzbdClient
      */
     private function request(array $extra): array
     {
-        $params = array_merge(['output' => 'json'], $extra);
+        $params = array_merge(['output' => 'json', 'apikey' => $this->connection->api_key], $extra);
 
         return $this->buildClient()->get('/api', $params)->throw()->json() ?? [];
     }

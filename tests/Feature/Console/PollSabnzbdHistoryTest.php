@@ -21,7 +21,7 @@ test('command logs completed and failed slots and advances the cursor', function
     ]);
 
     Http::fake([
-        'sab.local:8080/sabnzbd/api*' => Http::response([
+        'sab.local:8080/api*' => Http::response([
             'history' => [
                 'slots' => [
                     [

@@ -148,7 +148,7 @@ test('handles sabnzbd via getVersion', function (): void {
         'url' => 'http://sab.local:8080',
     ]);
 
-    Http::fake(['sab.local:8080/sabnzbd/api*' => Http::response(['version' => '4.2.0'])]);
+    Http::fake(['sab.local:8080/api*' => Http::response(['version' => '4.2.0'])]);
 
     new PingServiceHealth($connection)->handle();
 
