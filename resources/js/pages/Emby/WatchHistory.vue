@@ -13,6 +13,7 @@ import {
     SelectValue,
 } from '@/components/ui/select';
 import { useRealtimeList } from '@/composables/useRealtimeList';
+import { cn } from '@/lib/utils';
 import { dashboard } from '@/routes';
 import type { EmbyActivityResource } from '@/typefinder/resources/EmbyActivityResource';
 
@@ -37,14 +38,15 @@ const props = defineProps<{
         links: PaginatorLink[];
         meta: PaginatorMeta;
     };
-    filters: { media_type: string };
+    filters: { media_type: string; since: number };
+    filterOptions: { rangeDays: number[] };
 }>();
 
 defineOptions({
     layout: {
         breadcrumbs: [
             { title: 'Live', href: dashboard().url },
-            { title: 'Watch history', href: WatchHistoryController().url },
+            { title: 'Watch history', href: WatchHistoryController.index.url() },
         ],
     },
 });
@@ -206,14 +208,62 @@ const totals = computed(() => {
     };
 });
 
+function applyFilters(next: { media_type?: string; since?: number }) {
+    const merged = {
+        media_type: next.media_type ?? props.filters.media_type,
+        since: next.since ?? props.filters.since,
+    };
+
+    const query: Record<string, string | number> = {};
+
+    if (merged.media_type) {
+        query.media_type = merged.media_type;
+    }
+
+    if (merged.since && merged.since !== 7) {
+        query.since = merged.since;
+    }
+
+    router.get(WatchHistoryController.index.url(), query, {
+        preserveState: true,
+        preserveScroll: true,
+        replace: true,
+    });
+}
+
 function onMediaTypeChange(value: unknown) {
     const v = typeof value === 'string' ? value : '';
-    router.get(
-        WatchHistoryController().url,
-        v === 'all' ? {} : { media_type: v },
-        { preserveState: true, preserveScroll: true, replace: true },
-    );
+    applyFilters({ media_type: v === 'all' ? '' : v });
 }
+
+function setRange(days: number) {
+    applyFilters({ since: days });
+}
+
+function rangeLabel(days: number): string {
+    if (days === 1) {
+        return '24h';
+    }
+
+    return `${days}d`;
+}
+
+const exportUrl = computed(() => {
+    const params = new URLSearchParams();
+
+    if (props.filters.media_type) {
+        params.set('media_type', props.filters.media_type);
+    }
+
+    if (props.filters.since !== 7) {
+        params.set('since', String(props.filters.since));
+    }
+
+    const qs = params.toString();
+    const base = WatchHistoryController.exportMethod.url();
+
+    return qs ? `${base}?${qs}` : base;
+});
 
 function goToPage(url: string | null) {
     if (!url) {
@@ -265,12 +315,33 @@ function currentFilter(): string {
                         <SelectItem value="episode">Episode</SelectItem>
                     </SelectContent>
                 </Select>
-                <Button variant="outline" size="sm" class="h-7 gap-1.5 text-xs">
-                    <Calendar class="size-3.5" />Last 7 days
-                </Button>
-                <Button variant="outline" size="sm" class="h-7 gap-1.5 text-xs">
+                <div
+                    class="inline-flex h-7 items-center rounded-md border border-border bg-card p-0.5"
+                >
+                    <Calendar class="ml-1.5 size-3.5 text-muted-foreground" />
+                    <button
+                        v-for="days in filterOptions.rangeDays"
+                        :key="days"
+                        type="button"
+                        :class="
+                            cn(
+                                'inline-flex h-6 items-center rounded-[4px] px-2 text-[11.5px] font-medium transition-colors',
+                                filters.since === days
+                                    ? 'bg-accent text-accent-foreground'
+                                    : 'text-muted-foreground hover:bg-bg-hover hover:text-foreground',
+                            )
+                        "
+                        @click="setRange(days)"
+                    >
+                        {{ rangeLabel(days) }}
+                    </button>
+                </div>
+                <a
+                    :href="exportUrl"
+                    class="inline-flex h-7 items-center gap-1.5 rounded-md border border-border bg-card px-2 text-xs font-medium text-foreground transition-colors hover:bg-bg-hover"
+                >
                     <Download class="size-3.5" />Export CSV
-                </Button>
+                </a>
             </div>
         </div>
 

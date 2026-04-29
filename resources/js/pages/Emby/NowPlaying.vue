@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { Head, router } from '@inertiajs/vue3';
 import { MoreHorizontal, Pause, RefreshCcw, X } from 'lucide-vue-next';
-import { onBeforeUnmount, onMounted, watch } from 'vue';
+import { onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import NowPlayingController from '@/actions/App/Http/Controllers/Emby/NowPlayingController';
 import {
     InitialsAvatar,
@@ -47,6 +47,22 @@ defineOptions({
         ],
     },
 });
+
+const refreshing = ref(false);
+
+function manualRefresh(): void {
+    if (refreshing.value) {
+        return;
+    }
+
+    refreshing.value = true;
+    router.reload({
+        only: ['sessions'],
+        onFinish: () => {
+            refreshing.value = false;
+        },
+    });
+}
 
 const { subscribe, nowPlaying } = useEmbyActivity();
 
@@ -152,9 +168,13 @@ function remainingTicks(session: Session): number {
                     variant="outline"
                     size="sm"
                     class="h-7 gap-1.5 text-xs"
-                    @click="router.reload({ only: ['sessions'] })"
+                    :disabled="refreshing"
+                    @click="manualRefresh"
                 >
-                    <RefreshCcw class="size-3.5" />Force refresh
+                    <RefreshCcw
+                        class="size-3.5"
+                        :class="{ 'animate-spin': refreshing }"
+                    />Refresh
                 </Button>
             </div>
         </div>

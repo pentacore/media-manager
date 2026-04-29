@@ -21,3 +21,10 @@
 - Add an agent that refreshes the configured AI prices, and a button to refresh the prices in the AI Prices page
 - Notifications button doesnt do anything, add a page for notifications and seed it with some data
 - The AI Assistant button in the top bar does nothing, does this button possibly bring anything useful to the table?
+
+NEW ITEMS:
+- Add link emby account function into the user settings page, allow admins to manually link emby accounts by username
+- Import from emby button doesnt do anything in the "Users" page
+- the K hotkey doesnt work
+- How is the WAtch history actually supposed to work? it says "Synced from emby" but i cant see anything actually being synced anywhere
+- In the activity log i cant click back to "all" filter

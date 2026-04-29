@@ -12,6 +12,7 @@ use Carbon\CarbonImmutable;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class AiUsageController extends Controller
 {
@@ -53,5 +54,58 @@ class AiUsageController extends Controller
         }
 
         return Inertia::render('Admin/AiUsage/Index', $page);
+    }
+
+    /**
+     * Stream the priced invocation rows for the active window as CSV.
+     * Honours the same window + optional scenario as index() so the file
+     * mirrors the on-screen totals.
+     */
+    public function export(Request $request, AiUsageReporting $aiUsageReporting): StreamedResponse
+    {
+        $window = $request->string('window', '7d')->value();
+
+        if (! array_key_exists($window, self::WINDOWS)) {
+            $window = '7d';
+        }
+
+        $since = CarbonImmutable::now()->subDays(self::WINDOWS[$window]);
+        $scenario = Scenario::fromArray((array) $request->input('scenario', []));
+
+        $rows = $aiUsageReporting->recentInvocations($since, $scenario, 10_000);
+
+        $filename = sprintf('ai-usage-%s-%s.csv', $window, now()->format('Ymd-His'));
+
+        return new StreamedResponse(function () use ($rows): void {
+            $handle = fopen('php://output', 'wb');
+
+            fputcsv($handle, [
+                'id', 'created_at', 'user', 'provider', 'model',
+                'prompt_tokens', 'completion_tokens', 'tool_calls',
+                'total_tokens', 'cost_usd', 'status',
+            ]);
+
+            foreach ($rows as $row) {
+                fputcsv($handle, [
+                    $row->id,
+                    $row->created_at,
+                    $row->user_name ?? '—',
+                    $row->provider,
+                    $row->model,
+                    $row->prompt_tokens,
+                    $row->completion_tokens,
+                    $row->tool_calls_count,
+                    $row->total_tokens,
+                    number_format((float) $row->cost, 6, '.', ''),
+                    $row->status,
+                ]);
+            }
+
+            fclose($handle);
+        }, 200, [
+            'Content-Type' => 'text/csv',
+            'Content-Disposition' => sprintf('attachment; filename="%s"', $filename),
+            'Cache-Control' => 'no-store',
+        ]);
     }
 }

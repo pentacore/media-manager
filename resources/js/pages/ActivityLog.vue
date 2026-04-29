@@ -38,10 +38,12 @@ const props = defineProps<{
     filters: {
         action: string;
         service_id: number | null;
+        since: number;
     };
     filterOptions: {
         actions: string[];
         services: ServiceOption[];
+        rangeHours: number[];
     };
 }>();
 
@@ -49,7 +51,7 @@ defineOptions({
     layout: {
         breadcrumbs: [
             { title: 'Live', href: dashboard().url },
-            { title: 'Activity log', href: ActivityLogController().url },
+            { title: 'Activity log', href: ActivityLogController.index.url() },
         ],
     },
 });
@@ -111,10 +113,15 @@ function formatTime(iso: string | null): string {
     });
 }
 
-function applyFilters(next: { action?: string; service_id?: number | null }) {
+function applyFilters(next: {
+    action?: string;
+    service_id?: number | null;
+    since?: number;
+}) {
     const merged = {
         action: next.action ?? props.filters.action,
         service_id: next.service_id ?? props.filters.service_id,
+        since: next.since ?? props.filters.since,
     };
 
     const query: Record<string, string | number> = {};
@@ -127,7 +134,11 @@ function applyFilters(next: { action?: string; service_id?: number | null }) {
         query.service_id = merged.service_id;
     }
 
-    router.get(ActivityLogController().url, query, {
+    if (merged.since && merged.since !== 24) {
+        query.since = merged.since;
+    }
+
+    router.get(ActivityLogController.index.url(), query, {
         preserveState: true,
         preserveScroll: true,
         replace: true,
@@ -240,6 +251,43 @@ function setService(id: 'all' | number): void {
 
     applyFilters({ service_id: id });
 }
+
+function setRange(hours: number): void {
+    applyFilters({ since: hours });
+}
+
+function rangeLabel(hours: number): string {
+    if (hours <= 24) {
+        return `${hours}h`;
+    }
+
+    if (hours <= 168) {
+        return `${Math.round(hours / 24)}d`;
+    }
+
+    return `${Math.round(hours / 24)}d`;
+}
+
+function exportUrl(): string {
+    const params = new URLSearchParams();
+
+    if (props.filters.action) {
+        params.set('action', props.filters.action);
+    }
+
+    if (props.filters.service_id) {
+        params.set('service_id', String(props.filters.service_id));
+    }
+
+    if (props.filters.since !== 24) {
+        params.set('since', String(props.filters.since));
+    }
+
+    const qs = params.toString();
+    const base = ActivityLogController.exportMethod.url();
+
+    return qs ? `${base}?${qs}` : base;
+}
 </script>
 
 <template>
@@ -258,12 +306,36 @@ function setService(id: 'all' | number): void {
                 </p>
             </div>
             <div class="flex items-center gap-2">
-                <Button variant="outline" size="sm" class="h-7 gap-1.5 text-xs">
-                    <Calendar class="size-3.5" />Last 24h
-                </Button>
-                <Button variant="outline" size="sm" class="h-7 gap-1.5 text-xs">
+                <div
+                    class="inline-flex h-7 items-center rounded-md border border-border bg-card p-0.5"
+                >
+                    <Calendar
+                        class="ml-1.5 size-3.5 text-muted-foreground"
+                    />
+                    <button
+                        v-for="hours in filterOptions.rangeHours"
+                        :key="hours"
+                        type="button"
+                        :class="
+                            cn(
+                                'inline-flex h-6 items-center rounded-[4px] px-2 text-[11.5px] font-medium transition-colors',
+                                filters.since === hours
+                                    ? 'bg-accent text-accent-foreground'
+                                    : 'text-muted-foreground hover:bg-bg-hover hover:text-foreground',
+                            )
+                        "
+                        @click="setRange(hours)"
+                    >
+                        {{ rangeLabel(hours) }}
+                    </button>
+                </div>
+                <a
+                    :href="exportUrl()"
+                    class="inline-flex h-7 items-center gap-1.5 rounded-md border border-border bg-card px-2 text-xs font-medium text-foreground transition-colors hover:bg-bg-hover"
+                    title="Newline-delimited JSON — one log row per line, suitable for jq or log shippers"
+                >
                     <Download class="size-3.5" />Export NDJSON
-                </Button>
+                </a>
             </div>
         </div>
 

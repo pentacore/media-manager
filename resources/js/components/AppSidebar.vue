@@ -247,17 +247,17 @@ const liveNavItems = computed<NavItem[]>(() => [
     },
     {
         title: 'Watch history',
-        href: WatchHistoryController().url,
+        href: WatchHistoryController.index.url(),
         icon: Clock,
     },
     {
         title: 'Service Health',
-        href: ServiceHealthController().url,
+        href: ServiceHealthController.index.url(),
         icon: HeartPulse,
     },
     {
         title: 'Activity log',
-        href: ActivityLogController().url,
+        href: ActivityLogController.index.url(),
         icon: ScrollText,
     },
 ]);

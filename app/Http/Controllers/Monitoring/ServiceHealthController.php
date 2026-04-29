@@ -7,6 +7,7 @@ namespace App\Http\Controllers\Monitoring;
 use App\Enums\ServiceType;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\ServiceConnectionResource;
+use App\Jobs\PingServiceHealth;
 use App\Models\ServiceConnection;
 use App\Services\Prowlarr\ProwlarrClient;
 use App\Services\Radarr\RadarrClient;
@@ -16,6 +17,7 @@ use App\Services\Sonarr\SonarrClient;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\RequestException;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -23,7 +25,29 @@ use Throwable;
 
 class ServiceHealthController extends Controller
 {
-    public function __invoke(Request $request, ServiceMetricsRepository $serviceMetricsRepository): Response
+    /**
+     * Synchronously dispatch a PingServiceHealth job for every active
+     * connection so the user gets a fresh metric strip on next refresh.
+     * Bounded by the number of configured services (small N), so we run
+     * it inline instead of behind the queue.
+     */
+    public function runChecks(): RedirectResponse
+    {
+        $connections = ServiceConnection::query()->where('is_active', true)->get();
+
+        foreach ($connections as $connection) {
+            PingServiceHealth::dispatchSync($connection);
+        }
+
+        Inertia::flash('toast', [
+            'type' => 'success',
+            'message' => __('Health checks queued for :count service(s).', ['count' => $connections->count()]),
+        ]);
+
+        return back();
+    }
+
+    public function index(Request $request, ServiceMetricsRepository $serviceMetricsRepository): Response
     {
         $connections = ServiceConnection::orderBy('type')->orderBy('name')->get();
         $ids = $connections->pluck('id')->all();

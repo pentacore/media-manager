@@ -48,7 +48,7 @@ const quickLinks = computed<QuickLink[]>(() => [
     { title: 'Dashboard', href: dashboard().url, icon: LayoutGrid },
     {
         title: 'Activity Log',
-        href: ActivityLogController().url,
+        href: ActivityLogController.index.url(),
         icon: ScrollText,
     },
     { title: 'Series', href: SeriesController.index.url(), icon: Tv },
@@ -61,12 +61,12 @@ const quickLinks = computed<QuickLink[]>(() => [
     },
     {
         title: 'Watch History',
-        href: WatchHistoryController().url,
+        href: WatchHistoryController.index.url(),
         icon: History,
     },
     {
         title: 'Service Health',
-        href: ServiceHealthController().url,
+        href: ServiceHealthController.index.url(),
         icon: HeartPulse,
     },
     {

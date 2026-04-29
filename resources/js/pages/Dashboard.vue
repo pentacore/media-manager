@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Head, Link, usePage } from '@inertiajs/vue3';
+import { Head, Link, router, usePage } from '@inertiajs/vue3';
 import {
     AlertTriangle,
     Check,
@@ -8,7 +8,7 @@ import {
     RefreshCcw,
     X,
 } from 'lucide-vue-next';
-import { computed, onMounted } from 'vue';
+import { computed, onMounted, ref } from 'vue';
 import ActionRequestController from '@/actions/App/Http/Controllers/Actions/ActionRequestController';
 import ActivityLogController from '@/actions/App/Http/Controllers/ActivityLogController';
 import {
@@ -150,6 +150,22 @@ const healthyServices = computed(
 const webhookSpark = computed<number[]>(() => props.sparklines.webhooks);
 const actionSpark = computed<number[]>(() => props.sparklines.actions);
 const streamSpark = computed<number[]>(() => props.sparklines.streams);
+
+const refreshing = ref(false);
+
+function refresh() {
+    if (refreshing.value) {
+        return;
+    }
+
+    refreshing.value = true;
+    router.reload({
+        only: ['stats', 'services', 'sparklines', 'nowPlaying', 'pendingApprovals'],
+        onFinish: () => {
+            refreshing.value = false;
+        },
+    });
+}
 // Per-service services-online sparkline isn't tracked yet; reuse the
 // actions stream as a coarse "activity" line for that card.
 const servicesSpark = computed<number[]>(() => props.sparklines.actions);
@@ -281,9 +297,14 @@ onMounted(() => {
             <div class="flex items-center gap-2">
                 <button
                     type="button"
-                    class="inline-flex h-7 items-center gap-1.5 rounded-md border border-border bg-card px-2 text-xs font-medium text-foreground transition-colors hover:bg-bg-hover"
+                    :disabled="refreshing"
+                    class="inline-flex h-7 items-center gap-1.5 rounded-md border border-border bg-card px-2 text-xs font-medium text-foreground transition-colors hover:bg-bg-hover disabled:cursor-wait disabled:opacity-60"
+                    @click="refresh"
                 >
-                    <RefreshCcw class="size-3.5" />Refresh
+                    <RefreshCcw
+                        class="size-3.5"
+                        :class="{ 'animate-spin': refreshing }"
+                    />Refresh
                 </button>
                 <Link
                     :href="ActionRequestController.index.url()"
@@ -352,7 +373,7 @@ onMounted(() => {
                             <Filter class="size-3.5" />All services
                         </button>
                         <Link
-                            :href="ActivityLogController().url"
+                            :href="ActivityLogController.index.url()"
                             class="inline-flex h-7 items-center rounded-md px-2 text-xs font-medium text-muted-foreground transition-colors hover:bg-bg-hover hover:text-foreground"
                         >
                             View log →

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Head, router, usePage } from '@inertiajs/vue3';
+import { Head, Link, router, usePage } from '@inertiajs/vue3';
 import {
     AlertTriangle,
     Inbox,
@@ -9,6 +9,7 @@ import {
 } from 'lucide-vue-next';
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import ActionRequestController from '@/actions/App/Http/Controllers/Actions/ActionRequestController';
+import ActionTypeConfigController from '@/actions/App/Http/Controllers/Actions/ActionTypeConfigController';
 import { Field, InitialsAvatar, StatusPill, SvcChip } from '@/components/mm';
 import { Button } from '@/components/ui/button';
 import { useRealtimeList } from '@/composables/useRealtimeList';
@@ -173,10 +174,20 @@ function setFilter(id: string): void {
     );
 }
 
+const refreshing = ref(false);
+
 function refresh(): void {
+    if (refreshing.value) {
+        return;
+    }
+
+    refreshing.value = true;
     router.reload({
         only: ['requests'],
         onSuccess: () => resume(),
+        onFinish: () => {
+            refreshing.value = false;
+        },
     });
 }
 
@@ -361,20 +372,23 @@ function pipelineState(
                         Refresh
                     </Button>
                 </div>
-                <Button
-                    variant="outline"
-                    size="sm"
-                    class="h-7 gap-1.5 px-2 text-xs"
+                <Link
+                    :href="ActionTypeConfigController.index.url()"
+                    class="inline-flex h-7 items-center gap-1.5 rounded-md border border-border bg-card px-2 text-xs font-medium text-foreground transition-colors hover:bg-bg-hover"
                 >
                     <SettingsIcon class="size-3.5" />Approval rules
-                </Button>
+                </Link>
                 <Button
                     variant="outline"
                     size="sm"
                     class="h-7 gap-1.5 px-2 text-xs"
+                    :disabled="refreshing"
                     @click="refresh"
                 >
-                    <RefreshCcw class="size-3.5" />Refresh
+                    <RefreshCcw
+                        class="size-3.5"
+                        :class="{ 'animate-spin': refreshing }"
+                    />Refresh
                 </Button>
             </div>
         </div>

@@ -129,6 +129,12 @@ function setWindow(value: string) {
     );
 }
 
+const exportUrl = computed(() =>
+    AiUsageController.exportMethod.url({
+        query: buildQuery({ window: props.window }),
+    }),
+);
+
 function buildQuery(extra: Record<string, string>): QueryParams {
     const query: QueryParams = { ...extra };
 
@@ -292,9 +298,12 @@ function formatTimestamp(value: string): string {
                         {{ opt }}
                     </button>
                 </div>
-                <Button variant="outline" size="sm" class="h-7 gap-1.5 text-xs">
+                <a
+                    :href="exportUrl"
+                    class="inline-flex h-7 items-center gap-1.5 rounded-md border border-border bg-card px-2 text-xs font-medium text-foreground transition-colors hover:bg-bg-hover"
+                >
                     <Download class="size-3.5" />Export CSV
-                </Button>
+                </a>
             </div>
         </div>
 

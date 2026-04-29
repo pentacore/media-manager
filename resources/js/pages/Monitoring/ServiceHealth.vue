@@ -1,16 +1,15 @@
 <script setup lang="ts">
-import { Head } from '@inertiajs/vue3';
+import { Head, router } from '@inertiajs/vue3';
 import {
     AlertTriangle,
     ArrowUp,
-    Calendar,
     Check,
     HardDrive,
     RefreshCcw,
     Server,
     X,
 } from 'lucide-vue-next';
-import { computed, onMounted } from 'vue';
+import { computed, onMounted, ref } from 'vue';
 import ServiceHealthController from '@/actions/App/Http/Controllers/Monitoring/ServiceHealthController';
 import { Pill, StatCard, StatusPill, SvcChip } from '@/components/mm';
 import { Button } from '@/components/ui/button';
@@ -57,10 +56,31 @@ defineOptions({
     layout: {
         breadcrumbs: [
             { title: 'Live', href: dashboard().url },
-            { title: 'Service Health', href: ServiceHealthController().url },
+            { title: 'Service Health', href: ServiceHealthController.index.url() },
         ],
     },
 });
+
+const checking = ref(false);
+
+function runChecks(): void {
+    if (checking.value) {
+        return;
+    }
+
+    checking.value = true;
+    router.post(
+        ServiceHealthController.runChecks.url(),
+        {},
+        {
+            preserveScroll: true,
+            preserveState: true,
+            onFinish: () => {
+                checking.value = false;
+            },
+        },
+    );
+}
 
 const {
     services: liveServices,
@@ -272,11 +292,21 @@ function barHeight(bucket: MetricBucket): number {
                 </p>
             </div>
             <div class="flex items-center gap-2">
-                <Button variant="outline" size="sm" class="h-7 gap-1.5 text-xs">
-                    <Calendar class="size-3.5" />Last 24h
-                </Button>
-                <Button size="sm" class="h-7 gap-1.5 text-xs">
-                    <RefreshCcw class="size-3.5" />Run check now
+                <span
+                    class="font-mono-tabular inline-flex h-7 items-center rounded-md border border-border bg-bg-elev px-2.5 text-[11.5px] text-muted-foreground"
+                >
+                    Strip · last 60 min
+                </span>
+                <Button
+                    size="sm"
+                    class="h-7 gap-1.5 text-xs"
+                    :disabled="checking"
+                    @click="runChecks"
+                >
+                    <RefreshCcw
+                        class="size-3.5"
+                        :class="{ 'animate-spin': checking }"
+                    />Run check now
                 </Button>
             </div>
         </div>

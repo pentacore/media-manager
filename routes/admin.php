@@ -34,6 +34,7 @@ Route::middleware(['auth', 'verified', 'password.set', 'role:admin'])->prefix('a
     Route::put('ai-settings', [AiSettingsController::class, 'update'])->name('ai-settings.update');
 
     Route::get('ai-usage', [AiUsageController::class, 'index'])->name('ai-usage.index');
+    Route::get('ai-usage/export', [AiUsageController::class, 'export'])->name('ai-usage.export');
 
     Route::get('ai-prices', [AiModelPriceController::class, 'index'])->name('ai-prices.index');
     Route::post('ai-prices', [AiModelPriceController::class, 'store'])->name('ai-prices.store');

@@ -16,7 +16,8 @@ Route::inertia('/', 'Welcome', [
 
 Route::middleware(['auth', 'verified', 'password.set'])->group(function (): void {
     Route::get('dashboard', DashboardController::class)->name('dashboard');
-    Route::get('activity-log', ActivityLogController::class)->name('activity-log');
+    Route::get('activity-log', [ActivityLogController::class, 'index'])->name('activity-log');
+    Route::get('activity-log/export', [ActivityLogController::class, 'export'])->name('activity-log.export');
 });
 
 Route::middleware('guest')->group(function (): void {
