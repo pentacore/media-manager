@@ -6,7 +6,6 @@ import {
     Command,
     ExternalLink,
     Search as SearchIcon,
-    Sparkles,
     X,
 } from 'lucide-vue-next';
 import { computed, onMounted, ref, useTemplateRef } from 'vue';
@@ -109,21 +108,67 @@ type Scope = 'all' | 'library' | 'requests' | 'indexers';
 const scope = ref<Scope>(props.scope ?? 'all');
 
 const SCOPES: { id: Scope; label: string }[] = [
-    { id: 'all', label: 'All' },
+    { id: 'all', label: 'Library + Requests' },
     { id: 'library', label: 'Library' },
     { id: 'requests', label: 'Requests' },
     { id: 'indexers', label: 'Indexers' },
 ];
 
+const RECENT_KEY = 'mm:search:recent';
+const RECENT_MAX = 8;
+const recentQueries = ref<string[]>([]);
+
+function loadRecent(): void {
+    try {
+        const raw = localStorage.getItem(RECENT_KEY);
+        recentQueries.value = raw ? JSON.parse(raw) : [];
+    } catch {
+        recentQueries.value = [];
+    }
+}
+
+function pushRecent(term: string): void {
+    const t = term.trim();
+
+    if (!t) {
+        return;
+    }
+
+    const next = [t, ...recentQueries.value.filter((q) => q !== t)].slice(
+        0,
+        RECENT_MAX,
+    );
+    recentQueries.value = next;
+
+    try {
+        localStorage.setItem(RECENT_KEY, JSON.stringify(next));
+    } catch {
+        // localStorage full or disabled — fail silently, in-memory copy still works.
+    }
+}
+
+function clearRecent(): void {
+    recentQueries.value = [];
+
+    try {
+        localStorage.removeItem(RECENT_KEY);
+    } catch {
+        // best-effort
+    }
+}
+
 onMounted(() => {
     searchInput.value?.focus();
     searchInput.value?.select();
+    loadRecent();
 });
 
 function submitSearch() {
     if (submitting.value) {
         return;
     }
+
+    pushRecent(query.value);
 
     router.get(
         SearchController.index.url(),
@@ -223,13 +268,6 @@ const seerrStatusKey = (status: number | null): string => {
     }
 };
 
-const SUGGESTED = ['Trending today', 'On your watchlist', 'Indexer health'];
-const RECENT = [
-    'severance s2',
-    'dune part two',
-    'past lives',
-    'oppenheimer 4k',
-];
 </script>
 
 <template>
@@ -302,18 +340,26 @@ const RECENT = [
         </div>
 
         <!-- Empty state -->
-        <div v-if="!query" class="grid gap-4 lg:grid-cols-2">
+        <div v-if="!query">
             <div
+                v-if="recentQueries.length > 0"
                 class="overflow-hidden rounded-xl border border-border bg-card"
             >
                 <div
-                    class="border-b border-border px-4 py-3 text-[12px] font-semibold tracking-[0.06em] text-muted-foreground uppercase"
+                    class="flex items-center justify-between border-b border-border px-4 py-3 text-[12px] font-semibold tracking-[0.06em] text-muted-foreground uppercase"
                 >
-                    Recent
+                    <span>Recent searches</span>
+                    <button
+                        type="button"
+                        class="text-[11px] font-medium text-muted-foreground normal-case tracking-normal hover:text-foreground"
+                        @click="clearRecent"
+                    >
+                        Clear
+                    </button>
                 </div>
                 <div class="flex flex-col p-3">
                     <button
-                        v-for="r in RECENT"
+                        v-for="r in recentQueries"
                         :key="r"
                         type="button"
                         class="flex items-center gap-2.5 rounded-md px-2 py-2 text-left text-[13px] hover:bg-bg-hover"
@@ -328,23 +374,11 @@ const RECENT = [
                 </div>
             </div>
             <div
-                class="overflow-hidden rounded-xl border border-border bg-card"
+                v-else
+                class="rounded-xl border border-dashed border-border p-8 text-center text-[13px] text-muted-foreground"
             >
-                <div
-                    class="border-b border-border px-4 py-3 text-[12px] font-semibold tracking-[0.06em] text-muted-foreground uppercase"
-                >
-                    Suggested
-                </div>
-                <div class="flex flex-col p-3">
-                    <div
-                        v-for="r in SUGGESTED"
-                        :key="r"
-                        class="flex items-center gap-2.5 rounded-md px-2 py-2 text-[13px]"
-                    >
-                        <Sparkles class="size-3.5 text-accent" />
-                        <span>{{ r }}</span>
-                    </div>
-                </div>
+                Type to search across the library, requests, and indexers.
+                Recent searches will show up here.
             </div>
         </div>
 

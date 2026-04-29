@@ -6,7 +6,6 @@ import {
     ChevronRight,
     Database,
     ExternalLink,
-    Filter,
     Play,
     RefreshCcw,
     RefreshCw,
@@ -18,6 +17,13 @@ import { computed, onMounted, ref } from 'vue';
 import RequestController from '@/actions/App/Http/Controllers/Media/RequestController';
 import { InitialsAvatar, Poster, StatusPill, SvcChip } from '@/components/mm';
 import { Button } from '@/components/ui/button';
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useRealtimeReload } from '@/composables/useRealtimeReload';
 import { cn } from '@/lib/utils';
@@ -52,7 +58,7 @@ interface Summary {
 
 const props = defineProps<{
     connection: { url: string };
-    filters: { page: number };
+    filters: { page: number; status: FilterId };
     requests?: { data: SeerrRequest[]; meta: Meta };
     summary?: Summary;
 }>();
@@ -92,7 +98,6 @@ const isAdmin = computed(() => {
 });
 
 type FilterId = 'pending' | 'approved' | 'available' | 'declined' | 'all';
-const filter = ref<FilterId>('pending');
 
 const TABS: { id: FilterId; label: string }[] = [
     { id: 'pending', label: 'Pending review' },
@@ -101,6 +106,35 @@ const TABS: { id: FilterId; label: string }[] = [
     { id: 'declined', label: 'Declined' },
     { id: 'all', label: 'All' },
 ];
+
+const userFilter = ref<string>('all');
+const syncing = ref(false);
+
+function setStatus(id: FilterId): void {
+    if (id === props.filters.status) {
+        return;
+    }
+
+    router.get(
+        RequestController.index.url(),
+        id === 'pending' ? {} : { status: id },
+        { preserveScroll: true, preserveState: true, replace: true },
+    );
+}
+
+function syncSeerr(): void {
+    if (syncing.value) {
+        return;
+    }
+
+    syncing.value = true;
+    router.reload({
+        only: ['requests', 'summary'],
+        onFinish: () => {
+            syncing.value = false;
+        },
+    });
+}
 
 function statusKey(status: number | null): FilterId | 'failed' | 'unknown' {
     switch (status) {
@@ -119,17 +153,29 @@ function statusKey(status: number | null): FilterId | 'failed' | 'unknown' {
     }
 }
 
+const userOptions = computed<string[]>(() => {
+    const set = new Set<string>();
+
+    for (const req of props.requests?.data ?? []) {
+        if (req.requester) {
+            set.add(req.requester);
+        }
+    }
+
+    return [...set].sort();
+});
+
 const visible = computed<SeerrRequest[]>(() => {
     if (!props.requests) {
         return [];
     }
 
-    if (filter.value === 'all') {
+    if (userFilter.value === 'all') {
         return props.requests.data;
     }
 
     return props.requests.data.filter(
-        (req) => statusKey(req.status) === filter.value,
+        (req) => req.requester === userFilter.value,
     );
 });
 
@@ -262,7 +308,13 @@ function retryRequest(req: SeerrRequest) {
 }
 
 function goToPage(targetPage: number) {
-    router.get(RequestController.index.url({ query: { page: targetPage } }));
+    const query: Record<string, string | number> = { page: targetPage };
+
+    if (props.filters.status !== 'pending') {
+        query.status = props.filters.status;
+    }
+
+    router.get(RequestController.index.url({ query }));
 }
 
 const meta = computed(() => props.requests?.meta);
@@ -315,11 +367,35 @@ const rangeText = computed(() => {
                 <Skeleton v-else class="mt-1 h-5 w-64" />
             </div>
             <div class="flex items-center gap-2">
-                <Button variant="outline" size="sm" class="h-7 gap-1.5 text-xs">
-                    <Filter class="size-3.5" />User
-                </Button>
-                <Button variant="outline" size="sm" class="h-7 gap-1.5 text-xs">
-                    <RefreshCcw class="size-3.5" />Sync Seerr
+                <Select
+                    v-if="userOptions.length > 0"
+                    v-model="userFilter"
+                >
+                    <SelectTrigger class="h-7 w-32 text-xs">
+                        <SelectValue placeholder="User" />
+                    </SelectTrigger>
+                    <SelectContent>
+                        <SelectItem value="all">All users</SelectItem>
+                        <SelectItem
+                            v-for="user in userOptions"
+                            :key="user"
+                            :value="user"
+                        >
+                            {{ user }}
+                        </SelectItem>
+                    </SelectContent>
+                </Select>
+                <Button
+                    variant="outline"
+                    size="sm"
+                    class="h-7 gap-1.5 text-xs"
+                    :disabled="syncing"
+                    @click="syncSeerr"
+                >
+                    <RefreshCcw
+                        class="size-3.5"
+                        :class="{ 'animate-spin': syncing }"
+                    />Sync Seerr
                 </Button>
             </div>
         </div>
@@ -333,12 +409,12 @@ const rangeText = computed(() => {
                 :class="
                     cn(
                         'inline-flex h-7 items-center gap-1.5 rounded-md px-2.5 text-xs font-medium transition-colors',
-                        filter === tab.id
+                        filters.status === tab.id
                             ? 'bg-accent text-accent-foreground'
                             : 'text-muted-foreground hover:bg-bg-hover hover:text-foreground',
                     )
                 "
-                @click="filter = tab.id"
+                @click="setStatus(tab.id)"
             >
                 {{ tab.label }}
                 <span class="font-mono-tabular text-[11px] opacity-70">{{

@@ -24,6 +24,17 @@ class RequestController extends Controller
         private readonly SeerrTitleResolver $seerrTitleResolver,
     ) {}
 
+    /**
+     * Allowed status filters mapped to the Seerr `filter` query param.
+     */
+    private const array STATUS_FILTERS = [
+        'all' => null,
+        'pending' => 'pending',
+        'approved' => 'approved',
+        'available' => 'available',
+        'declined' => 'declined',
+    ];
+
     public function index(Request $request): Response|RedirectResponse
     {
         try {
@@ -34,11 +45,16 @@ class RequestController extends Controller
 
         $page = max(1, (int) $request->query('page', 1));
         $perPage = 50;
+        $status = (string) $request->query('status', 'pending');
+
+        if (! array_key_exists($status, self::STATUS_FILTERS)) {
+            $status = 'pending';
+        }
 
         return Inertia::render('Seerr/Requests', [
             'connection' => ['url' => rtrim($connection->url, '/')],
-            'filters' => ['page' => $page],
-            'requests' => Inertia::defer(fn (): array => $this->loadRequests($connection, $page, $perPage)),
+            'filters' => ['page' => $page, 'status' => $status],
+            'requests' => Inertia::defer(fn (): array => $this->loadRequests($connection, $page, $perPage, $status)),
             'summary' => Inertia::defer(fn (): array => $this->loadSummary($connection)),
         ]);
     }
@@ -94,16 +110,23 @@ class RequestController extends Controller
     /**
      * @return array{data: array<int, array<string, mixed>>, meta: array<string, int>}
      */
-    private function loadRequests(ServiceConnection $serviceConnection, int $page, int $perPage): array
+    private function loadRequests(ServiceConnection $serviceConnection, int $page, int $perPage, string $status = 'pending'): array
     {
         $seerrClient = new SeerrClient($serviceConnection);
 
+        $params = [
+            'take' => $perPage,
+            'skip' => ($page - 1) * $perPage,
+            'sort' => 'added',
+        ];
+
+        $filter = self::STATUS_FILTERS[$status] ?? null;
+        if ($filter !== null) {
+            $params['filter'] = $filter;
+        }
+
         try {
-            $response = $seerrClient->getRequests([
-                'take' => $perPage,
-                'skip' => ($page - 1) * $perPage,
-                'sort' => 'added',
-            ]);
+            $response = $seerrClient->getRequests($params);
         } catch (RequestException|ConnectionException) {
             return [
                 'data' => [],

@@ -1,16 +1,17 @@
 <script setup lang="ts">
-import { Head, Link } from '@inertiajs/vue3';
-import {
-    ExternalLink,
-    Filter,
-    Plus,
-    RefreshCcw,
-    Search,
-} from 'lucide-vue-next';
+import { Head, Link, router } from '@inertiajs/vue3';
+import { ExternalLink, Plus, RefreshCcw, Search } from 'lucide-vue-next';
 import { computed, onMounted, ref } from 'vue';
 import MovieController from '@/actions/App/Http/Controllers/Media/MovieController';
 import { Pill, Poster, SvcChip } from '@/components/mm';
 import { Button } from '@/components/ui/button';
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useRealtimeReload } from '@/composables/useRealtimeReload';
 import { dashboard } from '@/routes';
@@ -66,18 +67,87 @@ const { subscribe: subscribeReload } = useRealtimeReload<{
 onMounted(subscribeReload);
 
 const query = ref('');
+const profileFilter = ref<string>('all');
+const yearFilter = ref<string>('all');
+const studioFilter = ref<string>('all');
+const syncing = ref(false);
+
+function syncMovies(): void {
+    if (syncing.value) {
+        return;
+    }
+
+    syncing.value = true;
+    router.reload({
+        only: ['movies', 'qualityProfiles'],
+        onFinish: () => {
+            syncing.value = false;
+        },
+    });
+}
+
+const yearOptions = computed<number[]>(() => {
+    const years = new Set<number>();
+
+    for (const m of props.movies ?? []) {
+        if (m.year) {
+            years.add(m.year);
+        }
+    }
+
+    return [...years].sort((a, b) => b - a);
+});
+
+const studioOptions = computed<string[]>(() => {
+    const studios = new Set<string>();
+
+    for (const m of props.movies ?? []) {
+        const studio = (m as Movie & { studio?: string | null }).studio;
+
+        if (studio) {
+            studios.add(studio);
+        }
+    }
+
+    return [...studios].sort();
+});
+
 const visible = computed<Movie[]>(() => {
     if (!props.movies) {
         return [];
     }
 
-    if (!query.value) {
-        return props.movies;
-    }
-
     const q = query.value.toLowerCase();
 
-    return props.movies.filter((m) => m.title.toLowerCase().includes(q));
+    return props.movies.filter((m) => {
+        if (q && !m.title.toLowerCase().includes(q)) {
+            return false;
+        }
+
+        if (
+            profileFilter.value !== 'all' &&
+            String(m.quality_profile_id ?? '') !== profileFilter.value
+        ) {
+            return false;
+        }
+
+        if (
+            yearFilter.value !== 'all' &&
+            String(m.year ?? '') !== yearFilter.value
+        ) {
+            return false;
+        }
+
+        if (studioFilter.value !== 'all') {
+            const studio = (m as Movie & { studio?: string | null }).studio;
+
+            if ((studio ?? '') !== studioFilter.value) {
+                return false;
+            }
+        }
+
+        return true;
+    });
 });
 
 const totalSize = computed(() => {
@@ -153,8 +223,17 @@ function is4k(movie: Movie): boolean {
                 <Skeleton v-else class="mt-1 h-4 w-48" />
             </div>
             <div class="flex items-center gap-2">
-                <Button variant="outline" size="sm" class="h-7 gap-1.5 text-xs">
-                    <RefreshCcw class="size-3.5" />Sync
+                <Button
+                    variant="outline"
+                    size="sm"
+                    class="h-7 gap-1.5 text-xs"
+                    :disabled="syncing"
+                    @click="syncMovies"
+                >
+                    <RefreshCcw
+                        class="size-3.5"
+                        :class="{ 'animate-spin': syncing }"
+                    />Sync
                 </Button>
                 <Link :href="MovieController.create.url()">
                     <Button size="sm" class="h-7 gap-1.5 text-xs">
@@ -178,15 +257,51 @@ function is4k(movie: Movie): boolean {
                     class="flex-1 bg-transparent text-[13px] outline-none placeholder:text-fg-subtle"
                 />
             </div>
-            <Button variant="outline" size="sm" class="h-7 gap-1.5 text-xs">
-                <Filter class="size-3.5" />Quality
-            </Button>
-            <Button variant="outline" size="sm" class="h-7 gap-1.5 text-xs">
-                <Filter class="size-3.5" />Year
-            </Button>
-            <Button variant="outline" size="sm" class="h-7 gap-1.5 text-xs">
-                <Filter class="size-3.5" />Studio
-            </Button>
+            <Select v-model="profileFilter">
+                <SelectTrigger class="h-7 w-32 text-xs">
+                    <SelectValue placeholder="Quality" />
+                </SelectTrigger>
+                <SelectContent>
+                    <SelectItem value="all">All quality</SelectItem>
+                    <SelectItem
+                        v-for="profile in qualityProfiles ?? []"
+                        :key="profile.id"
+                        :value="String(profile.id)"
+                    >
+                        {{ profile.name }}
+                    </SelectItem>
+                </SelectContent>
+            </Select>
+            <Select v-model="yearFilter">
+                <SelectTrigger class="h-7 w-24 text-xs">
+                    <SelectValue placeholder="Year" />
+                </SelectTrigger>
+                <SelectContent>
+                    <SelectItem value="all">All years</SelectItem>
+                    <SelectItem
+                        v-for="year in yearOptions"
+                        :key="year"
+                        :value="String(year)"
+                    >
+                        {{ year }}
+                    </SelectItem>
+                </SelectContent>
+            </Select>
+            <Select v-if="studioOptions.length > 0" v-model="studioFilter">
+                <SelectTrigger class="h-7 w-32 text-xs">
+                    <SelectValue placeholder="Studio" />
+                </SelectTrigger>
+                <SelectContent>
+                    <SelectItem value="all">All studios</SelectItem>
+                    <SelectItem
+                        v-for="studio in studioOptions"
+                        :key="studio"
+                        :value="studio"
+                    >
+                        {{ studio }}
+                    </SelectItem>
+                </SelectContent>
+            </Select>
         </div>
 
         <!-- Grid -->

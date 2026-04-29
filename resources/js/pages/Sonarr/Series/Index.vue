@@ -1,9 +1,8 @@
 <script setup lang="ts">
-import { Head, Link } from '@inertiajs/vue3';
+import { Head, Link, router } from '@inertiajs/vue3';
 import {
     Database,
     ExternalLink,
-    Filter,
     Layers,
     Plus,
     RefreshCcw,
@@ -13,6 +12,13 @@ import { computed, onMounted, ref } from 'vue';
 import SeriesController from '@/actions/App/Http/Controllers/Media/SeriesController';
 import { Pill, Poster, SvcChip } from '@/components/mm';
 import { Button } from '@/components/ui/button';
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useRealtimeReload } from '@/composables/useRealtimeReload';
 import { cn } from '@/lib/utils';
@@ -72,7 +78,23 @@ onMounted(subscribeReload);
 
 const view = ref<'grid' | 'table'>('grid');
 const monitoredFilter = ref<'all' | 'monitored' | 'unmonitored'>('all');
+const profileFilter = ref<string>('all');
 const query = ref('');
+const syncing = ref(false);
+
+function syncSeries(): void {
+    if (syncing.value) {
+        return;
+    }
+
+    syncing.value = true;
+    router.reload({
+        only: ['series', 'qualityProfiles'],
+        onFinish: () => {
+            syncing.value = false;
+        },
+    });
+}
 
 const visible = computed<Series[]>(() => {
     if (!props.series) {
@@ -85,6 +107,13 @@ const visible = computed<Series[]>(() => {
         }
 
         if (monitoredFilter.value === 'unmonitored' && s.monitored) {
+            return false;
+        }
+
+        if (
+            profileFilter.value !== 'all' &&
+            String(s.quality_profile_id ?? '') !== profileFilter.value
+        ) {
             return false;
         }
 
@@ -191,8 +220,17 @@ function sonarrSeriesUrl(slug: string | null): string | null {
                 </p>
             </div>
             <div class="flex items-center gap-2">
-                <Button variant="outline" size="sm" class="h-7 gap-1.5 text-xs">
-                    <RefreshCcw class="size-3.5" />Sync
+                <Button
+                    variant="outline"
+                    size="sm"
+                    class="h-7 gap-1.5 text-xs"
+                    :disabled="syncing"
+                    @click="syncSeries"
+                >
+                    <RefreshCcw
+                        class="size-3.5"
+                        :class="{ 'animate-spin': syncing }"
+                    />Sync
                 </Button>
                 <Link :href="SeriesController.create.url()">
                     <Button size="sm" class="h-7 gap-1.5 text-xs">
@@ -250,9 +288,21 @@ function sonarrSeriesUrl(slug: string | null): string | null {
                 </button>
             </div>
 
-            <Button variant="outline" size="sm" class="h-7 gap-1.5 text-xs">
-                <Filter class="size-3.5" />Profile
-            </Button>
+            <Select v-model="profileFilter">
+                <SelectTrigger class="h-7 w-32 text-xs">
+                    <SelectValue placeholder="Profile" />
+                </SelectTrigger>
+                <SelectContent>
+                    <SelectItem value="all">All profiles</SelectItem>
+                    <SelectItem
+                        v-for="profile in qualityProfiles ?? []"
+                        :key="profile.id"
+                        :value="String(profile.id)"
+                    >
+                        {{ profile.name }}
+                    </SelectItem>
+                </SelectContent>
+            </Select>
 
             <div
                 class="flex items-center gap-1 rounded-md border border-border bg-bg-elev p-0.5"

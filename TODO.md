@@ -28,3 +28,7 @@ NEW ITEMS:
 - the K hotkey doesnt work
 - How is the WAtch history actually supposed to work? it says "Synced from emby" but i cant see anything actually being synced anywhere
 - In the activity log i cant click back to "all" filter
+- Hide the approval rules button in Action Queue for non-admins
+- The time scale buttons in the actibity log doesnt work unless you do a manual refresh
+- The "now available" button in the requests page doesnt work
+- The realtime updates seems flaky in a lot of pages, like the service health page
