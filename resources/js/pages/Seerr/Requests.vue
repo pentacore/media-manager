@@ -61,6 +61,7 @@ interface Summary {
     declined: number;
     available?: number;
     processing?: number;
+    completed?: number;
 }
 
 const props = defineProps<{
@@ -110,6 +111,7 @@ type FilterId =
     | 'approved'
     | 'processing'
     | 'available'
+    | 'completed'
     | 'declined'
     | 'all';
 
@@ -118,6 +120,7 @@ const TABS: { id: FilterId; label: string }[] = [
     { id: 'approved', label: 'Approved' },
     { id: 'processing', label: 'Requested' },
     { id: 'available', label: 'Now available' },
+    { id: 'completed', label: 'Completed' },
     { id: 'declined', label: 'Declined' },
     { id: 'all', label: 'All' },
 ];
@@ -221,6 +224,10 @@ function counts(id: FilterId): number {
 
     if (id === 'processing') {
         return props.summary.processing ?? 0;
+    }
+
+    if (id === 'completed') {
+        return props.summary.completed ?? 0;
     }
 
     return 0;
@@ -396,6 +403,7 @@ const rangeText = computed(() => {
                     {{ summary.approved }} approved ·
                     {{ summary.processing ?? 0 }} requested ·
                     {{ summary.available ?? 0 }} available ·
+                    {{ summary.completed ?? 0 }} completed ·
                     {{ summary.declined }} declined
                 </p>
                 <Skeleton v-else class="mt-1 h-5 w-64" />
@@ -526,9 +534,9 @@ const rangeText = computed(() => {
                             :href="embyUrl(req)!"
                             target="_blank"
                             rel="noopener noreferrer"
-                            class="flex h-7 flex-1 items-center justify-center gap-1.5 rounded-md border border-border bg-card px-2 text-xs font-medium hover:bg-bg-hover"
+                            class="flex h-7 flex-1 items-center justify-center gap-1.5 rounded-md border border-border bg-card px-2 text-xs font-medium whitespace-nowrap hover:bg-bg-hover"
                         >
-                            <Play class="size-3.5" />Open in Emby
+                            <Play class="size-3.5" />Open Emby
                         </a>
                         <a
                             v-else

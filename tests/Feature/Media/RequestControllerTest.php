@@ -213,6 +213,7 @@ test('summary exposes every status bucket reported by /request/count', function 
             'approved' => 30,
             'processing' => 7,
             'available' => 48,
+            'completed' => 80,
             'declined' => 10,
         ]),
         'seerr.local:5055/api/v1/request*' => Http::response([
@@ -232,6 +233,7 @@ test('summary exposes every status bucket reported by /request/count', function 
                     ->where('summary.approved', 30)
                     ->where('summary.processing', 7)
                     ->where('summary.available', 48)
+                    ->where('summary.completed', 80)
                     ->where('summary.declined', 10)
                     ->missing('summary.movie')
                     ->missing('summary.tv');

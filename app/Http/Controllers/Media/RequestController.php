@@ -36,6 +36,7 @@ class RequestController extends Controller
         'approved' => null,
         'processing' => 'processing',
         'available' => 'available',
+        'completed' => 'completed',
         'declined' => null,
     ];
 
@@ -269,6 +270,7 @@ class RequestController extends Controller
         'approved',
         'processing',
         'available',
+        'completed',
         'declined',
     ];
 
