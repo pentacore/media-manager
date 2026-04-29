@@ -34,16 +34,25 @@
 - [x] The VerifyWebhookToken needs to also check query params for a token, since not all services can set a header for this. And we should also expose the webhook URL for a service in the connections edit page (Maybe with a copy button on the connections list)
 - [x] Add a "Soft AI budget limit" setting and a "Hard AI budget limit" setting, trigger a notification on the soft limit and stop the AI from running if the hard limit is reached.
 - [x] The webhook URL doesnt show in its input field in the connection edit page
-- [ ] Add a Toggle to the webhook log that changes if webhooks should be captured and stored or not
-- [ ] The Seer search still seems flaky, when i search for FBI (Which there should be requests for), no results show up
+- [x] Add a Toggle to the webhook log that changes if webhooks should be captured and stored or not
+- [x] The Seer search still seems flaky, when i search for FBI (Which there should be requests for), no results show up
 - [ ] Allow clicking an AI usage entry to see details about the request (Tools used, input tokens, output tokens, full pricing breakdown), also save the price that was used for the request, if no price was available at the time, allow setting it from the model pricing page by selecting a model (Remember to support the what-if scenario)
 - [ ] Currently, after triggering an AI Price Refresh, the usage gets stored as system user, it should be stored as the user that triggered the refresh, and the price that was used should be the new price, not the old price, since the refresh is what triggers the new price to be fetched and stored, this is really important for being able to track how much each user is spending on AI requests, especially if you have the soft/hard budget limits implemented like i mentioned in the previous point.
-- [ ] The AI Price Refresh should queue up a job to run in the background, 
+- [ ] The AI Price Refresh should queue up a job to run in the background
+    - [ ] To begin with, we can just queue up a job and have it run in the background (Somehow we need the frontend to know if the job is done or not, so we cant queue up multiple jobs if one is already running, and we can show a loading state on the refresh button while the job is running)
     - [ ] (Awaiting support in the prisma-php/prisma package for batching) maybe make use of batching if the model supports it (Then we will also need a job that regularly checks the job status, and calls any tools it requests and then posts the updated data), also allow setting a specific model to use for this functionality.
-- [ ] Add a button to open the service
-    - [ ] Emby in Now Playing, Watch history
-    - [ ] Seer in requests
-    - [ ] Sonarr in TV Series
-    - [ ] Radarr in Movies
-    - [ ] Sabnzbd in Downloads
+- [x] Add a button to open the service
+    - [x] Emby in Now Playing, Watch history
+    - [x] Seer in requests
+    - [x] Sonarr in TV Series
+    - [x] Radarr in Movies
+    - [x] Sabnzbd in Downloads
 - [ ] Id like to be able to see and manage the Activites from both Sonarr and Radarr (For example if a movie/episode cant be imported for any reason or if its pending), maybe even a page to see their history and blocklists
+    - [ ] Add a button to open the activity log in Sonarr and Radarr
+    - [ ] Add a page to see the history of activities from both Sonarr and Radarr, with filters for things like "Import failed", "Pending", "Completed", etc, and also show any relevant information about the activity (For example if an import failed, show the error message that was returned)
+    - [ ] Allow managing the activites from both Sonarr and Radarr, for example if an episode is pending for a long time, allow the user to either retry the import or block the episode from being imported (This is especially useful for things that are pending because they cant be imported for some reason, for example if the file is in a format that cant be imported, or if the file is missing, etc)
+    - [ ] Allow blocking activities from both Sonarr and Radarr
+    - [ ] Support the "On manual interaction required" webhook event, and allow the user to manually trigger the activity from the activity log page
+- Allow clearing, editing or otherwise manage seerr requests
+    - [ ] Add a button to clear seerr requests, maybe with options to clear all, clear only completed, clear only cancelled, etc
+    - [ ] Allow editing seerr requests, for example if a request is pending for a long time, allow the user to edit the request and change the quality or something like that to see if it helps with getting the request fulfilled
