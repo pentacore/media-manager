@@ -71,10 +71,25 @@ class RequestController extends Controller
 
         return Inertia::render('Seerr/Requests', [
             'connection' => ['url' => rtrim($connection->url, '/')],
+            'embyConnection' => $this->resolveEmbyConnectionPayload(),
             'filters' => ['page' => $page, 'status' => $status],
             'requests' => Inertia::defer(fn (): array => $this->loadRequests($connection, $page, $perPage, $status)),
             'summary' => Inertia::defer(fn (): array => $this->loadSummary($connection)),
         ]);
+    }
+
+    /**
+     * @return array{url: string}|null
+     */
+    private function resolveEmbyConnectionPayload(): ?array
+    {
+        try {
+            $embyConnection = ServiceConnection::resolveActive(ServiceType::Emby);
+        } catch (ModelNotFoundException) {
+            return null;
+        }
+
+        return ['url' => rtrim($embyConnection->url, '/')];
     }
 
     public function destroy(int $id): RedirectResponse
@@ -295,9 +310,17 @@ class RequestController extends Controller
         $mediaType = $req['type'] ?? ($req['media']['mediaType'] ?? null);
         $tmdbId = $req['media']['tmdbId'] ?? null;
 
+        // When the underlying media is fully AVAILABLE in Seerr's local DB,
+        // surface that to the UI in place of the raw request status. The
+        // Vue side keys "Open in Emby" / "Now available" off status === 5,
+        // so without this an approved-and-grabbed item would still render
+        // as plain "Approved" with a Seerr-only View detail link.
+        $mediaStatus = $req['media']['status'] ?? null;
+        $status = $mediaStatus === 5 ? 5 : ($req['status'] ?? null);
+
         return [
             'id' => $req['id'] ?? null,
-            'status' => $req['status'] ?? null,
+            'status' => $status,
             'media_type' => $mediaType,
             'media_title' => $this->seerrTitleResolver->titleFor($req, $titles),
             'tmdb_id' => $tmdbId,

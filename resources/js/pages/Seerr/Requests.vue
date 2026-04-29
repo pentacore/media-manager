@@ -65,6 +65,7 @@ interface Summary {
 
 const props = defineProps<{
     connection: { url: string };
+    embyConnection: { url: string } | null;
     filters: { page: number; status: FilterId };
     requests?: { data: SeerrRequest[]; meta: Meta };
     summary?: Summary;
@@ -270,6 +271,20 @@ function seerrUrl(req: SeerrRequest): string | null {
     const path = req.media_type === 'movie' ? 'movie' : 'tv';
 
     return `${props.connection.url}/${path}/${req.tmdb_id}`;
+}
+
+function embyUrl(req: SeerrRequest): string | null {
+    if (!props.embyConnection) {
+        return null;
+    }
+
+    if (!req.media_title) {
+        return `${props.embyConnection.url}/web/index.html`;
+    }
+
+    const query = encodeURIComponent(req.media_title);
+
+    return `${props.embyConnection.url}/web/index.html#!/search?query=${query}`;
 }
 
 function tmdbUrl(req: SeerrRequest): string | null {
@@ -507,8 +522,8 @@ const rangeText = computed(() => {
                             </Button>
                         </template>
                         <a
-                            v-else-if="req.status === 5"
-                            :href="seerrUrl(req) ?? '#'"
+                            v-else-if="req.status === 5 && embyUrl(req)"
+                            :href="embyUrl(req)!"
                             target="_blank"
                             rel="noopener noreferrer"
                             class="flex h-7 flex-1 items-center justify-center gap-1.5 rounded-md border border-border bg-card px-2 text-xs font-medium hover:bg-bg-hover"
