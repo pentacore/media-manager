@@ -187,7 +187,7 @@ const priciest = ref(
                     <RefreshCcw
                         class="size-3.5"
                         :class="{ 'animate-spin': refreshing }"
-                    />Refresh from catalog
+                    />Refresh online
                 </Button>
                 <Dialog v-model:open="showCreateDialog">
                     <DialogTrigger as-child>

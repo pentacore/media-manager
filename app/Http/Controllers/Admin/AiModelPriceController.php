@@ -4,14 +4,16 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers\Admin;
 
+use App\Ai\Agents\PriceFetcherAgent;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Admin\StoreAiModelPriceRequest;
 use App\Http\Requests\Admin\UpdateAiModelPriceRequest;
 use App\Models\AiModelPrice;
-use Database\Seeders\AiModelPriceSeeder;
 use Illuminate\Http\RedirectResponse;
+use Illuminate\Support\Facades\Log;
 use Inertia\Inertia;
 use Inertia\Response;
+use Throwable;
 
 class AiModelPriceController extends Controller
 {
@@ -53,21 +55,42 @@ class AiModelPriceController extends Controller
     }
 
     /**
-     * Re-apply the bundled AiModelPriceSeeder so existing rows pick up
-     * any rate / catalog changes shipped in code. Mirror of the
-     * `ai:refresh-prices` Artisan command.
+     * Spin up the PriceFetcherAgent. The agent visits provider pricing
+     * pages with WebFetchTool and writes rates back via
+     * UpsertModelPriceTool — no hardcoded catalog. Synchronous; finishes
+     * in a few seconds because the agent only fans out to ~6 hosts.
      */
-    public function refresh(AiModelPriceSeeder $aiModelPriceSeeder): RedirectResponse
+    public function refresh(): RedirectResponse
     {
         $before = AiModelPrice::query()->count();
-        $aiModelPriceSeeder->run();
+
+        try {
+            $response = (new PriceFetcherAgent)->prompt(
+                'Refresh the catalog now. Visit the canonical pricing page for OpenAI, Anthropic, Google Gemini, DeepSeek, xAI, and Mistral. Upsert one row per generally-available text/chat model with up-to-date input, output, cache, and reasoning rates. Skip image / audio / embedding products.'
+            );
+        } catch (Throwable $throwable) {
+            Log::error('PriceFetcherAgent run failed.', [
+                'exception' => $throwable::class,
+                'message' => $throwable->getMessage(),
+            ]);
+
+            Inertia::flash('toast', [
+                'type' => 'error',
+                'message' => __('Price refresh failed: :msg', ['msg' => $throwable->getMessage()]),
+            ]);
+
+            return to_route('admin.ai-prices.index');
+        }
+
         $after = AiModelPrice::query()->count();
+        $added = max(0, $after - $before);
 
         Inertia::flash('toast', [
             'type' => 'success',
-            'message' => __('Refreshed AI model prices. :added new, :total total.', [
-                'added' => max(0, $after - $before),
+            'message' => __('Refreshed via PriceFetcherAgent. :added new, :total total. :summary', [
+                'added' => $added,
                 'total' => $after,
+                'summary' => mb_substr((string) $response->text, 0, 200),
             ]),
         ]);
 

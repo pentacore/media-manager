@@ -33,3 +33,4 @@
 - [x] Id like to log all incoming webhooks (Toggleable in the admin settings), and then be able to see the payloads in an admin-only page, this would be really useful for debugging and also just to have a record of all incoming webhooks, especially if you have a lot of them coming in
 - [x] The VerifyWebhookToken needs to also check query params for a token, since not all services can set a header for this. And we should also expose the webhook URL for a service in the connections edit page (Maybe with a copy button on the connections list)
 - [ ] Add a "Soft AI budget limit" setting and a "Hard AI budget limit" setting, trigger a notification on the soft limit and stop the AI from running if the hard limit is reached.
+- [x] The webhook URL doesnt show in its input field in the connection edit page

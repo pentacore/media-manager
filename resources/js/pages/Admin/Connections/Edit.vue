@@ -453,7 +453,8 @@ function testIndexer(indexerId: number): void {
                         <div class="flex gap-2">
                             <Input
                                 readonly
-                                :value="connection.webhook_url"
+                                :default-value="connection.webhook_url"
+                                :model-value="connection.webhook_url"
                                 class="font-mono-tabular text-xs"
                                 @click="
                                     (e: Event) =>
