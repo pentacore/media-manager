@@ -5,11 +5,12 @@ import AiSettingsController from '@/actions/App/Http/Controllers/Admin/AiSetting
 import InputError from '@/components/InputError.vue';
 import { Field } from '@/components/mm';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import {
     Select,
     SelectContent,
+    SelectGroup,
     SelectItem,
+    SelectLabel,
     SelectTrigger,
     SelectValue,
 } from '@/components/ui/select';
@@ -29,6 +30,7 @@ interface AiSettingsState {
 const props = defineProps<{
     settings: AiSettingsState;
     modes: ModeOption[];
+    models: Record<string, string[]>;
 }>();
 
 defineOptions({
@@ -41,6 +43,7 @@ defineOptions({
 });
 
 const selectedMode = ref(props.settings.mode);
+const selectedModel = ref(props.settings.model);
 </script>
 
 <template>
@@ -111,17 +114,39 @@ const selectedMode = ref(props.settings.mode);
                 >
                     <Field
                         label="Model"
-                        hint="Free-form string — must match a model id supported by a configured laravel/ai provider (e.g. claude-sonnet-4-6, gpt-5-mini, gemini-3-flash)."
+                        hint="Pick a model from the pricing catalog. Add new entries via Admin → AI prices."
                     >
                         <span />
                     </Field>
                     <div>
-                        <Input
-                            id="model"
+                        <Select
                             name="model"
-                            class="h-8 max-w-[320px] text-sm"
+                            v-model="selectedModel"
                             :default-value="settings.model"
-                        />
+                        >
+                            <SelectTrigger
+                                class="h-8 max-w-[320px] text-sm"
+                            >
+                                <SelectValue placeholder="Select a model" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectGroup
+                                    v-for="(modelList, provider) in models"
+                                    :key="provider"
+                                >
+                                    <SelectLabel class="capitalize">
+                                        {{ provider }}
+                                    </SelectLabel>
+                                    <SelectItem
+                                        v-for="modelId in modelList"
+                                        :key="modelId"
+                                        :value="modelId"
+                                    >
+                                        {{ modelId }}
+                                    </SelectItem>
+                                </SelectGroup>
+                            </SelectContent>
+                        </Select>
                         <InputError :message="errors.model" class="mt-1" />
                     </div>
                 </div>
