@@ -123,6 +123,15 @@ interface InvocationDetail {
 
 type WindowKey = 'today' | '24h' | '7d' | '30d';
 
+interface FreeTierRow {
+    provider: string;
+    model: string;
+    used_input: number;
+    used_output: number;
+    free_input: number;
+    free_output: number;
+}
+
 const props = defineProps<{
     window: WindowKey;
     windows: WindowKey[];
@@ -136,6 +145,7 @@ const props = defineProps<{
     scenario_by_model?: AggregateRow[];
     scenario_by_provider?: AggregateRow[];
     scenario_recent?: RecentRow[];
+    free_tier: FreeTierRow[];
 }>();
 
 defineOptions({
@@ -481,6 +491,87 @@ function formatTimestamp(value: string): string {
                 :value="formatNumber(totals.total_tool_calls)"
                 hint="across all invocations"
             />
+        </div>
+
+        <!-- Free tier this month -->
+        <div
+            v-if="props.free_tier.length > 0"
+            class="overflow-hidden rounded-xl border border-border bg-card"
+        >
+            <div
+                class="flex items-center justify-between border-b border-border px-4 py-3"
+            >
+                <span
+                    class="text-[12px] font-semibold tracking-[0.06em] text-muted-foreground uppercase"
+                >
+                    Free tier · this month
+                </span>
+                <span class="text-[11.5px] text-muted-foreground">
+                    Spend above subtracts what's still under quota.
+                </span>
+            </div>
+            <div class="divide-y divide-border">
+                <div
+                    v-for="row in props.free_tier"
+                    :key="`${row.provider}/${row.model}`"
+                    class="grid items-center gap-3 px-4 py-2.5 md:grid-cols-[200px,1fr,1fr]"
+                >
+                    <div>
+                        <div class="font-mono-tabular text-[12.5px] font-medium">
+                            {{ row.model }}
+                        </div>
+                        <div class="text-[11px] text-muted-foreground">
+                            {{ row.provider }}
+                        </div>
+                    </div>
+                    <div
+                        v-for="bar in [
+                            {
+                                label: 'Input',
+                                used: row.used_input,
+                                cap: row.free_input,
+                            },
+                            {
+                                label: 'Output',
+                                used: row.used_output,
+                                cap: row.free_output,
+                            },
+                        ]"
+                        :key="bar.label"
+                        class="space-y-1"
+                    >
+                        <div
+                            class="flex items-center justify-between text-[11px]"
+                        >
+                            <span class="text-muted-foreground">{{ bar.label }}</span>
+                            <span class="font-mono-tabular">
+                                {{ formatNumber(bar.used) }} /
+                                {{
+                                    bar.cap > 0
+                                        ? formatNumber(bar.cap)
+                                        : '— no cap'
+                                }}
+                            </span>
+                        </div>
+                        <div
+                            class="h-1.5 overflow-hidden rounded-full bg-bg-elev"
+                        >
+                            <div
+                                v-if="bar.cap > 0"
+                                class="h-full transition-all"
+                                :class="
+                                    bar.used >= bar.cap
+                                        ? 'bg-destructive'
+                                        : bar.used / bar.cap > 0.8
+                                          ? 'bg-warning'
+                                          : 'bg-success'
+                                "
+                                :style="`width: ${Math.min(100, (bar.used / bar.cap) * 100)}%`"
+                            />
+                        </div>
+                    </div>
+                </div>
+            </div>
         </div>
 
         <!-- Scenario panel -->

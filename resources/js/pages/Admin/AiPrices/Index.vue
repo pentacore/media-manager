@@ -34,6 +34,8 @@ interface PriceRow {
     batch_cache_read_per_mtok: string | null;
     batch_cache_write_per_mtok: string | null;
     batch_reasoning_per_mtok: string | null;
+    free_input_tokens_per_month: number | null;
+    free_output_tokens_per_month: number | null;
 }
 
 type RateField =
@@ -325,6 +327,36 @@ const priciest = ref(
                                 />
                                 <InputError
                                     :message="errors.reasoning_per_mtok"
+                                />
+                            </div>
+                            <div class="space-y-2">
+                                <Label for="free_input_tokens_per_month"
+                                    >Free input / month</Label
+                                >
+                                <Input
+                                    id="free_input_tokens_per_month"
+                                    name="free_input_tokens_per_month"
+                                    type="number"
+                                    min="0"
+                                    placeholder="leave blank if none"
+                                />
+                                <InputError
+                                    :message="errors.free_input_tokens_per_month"
+                                />
+                            </div>
+                            <div class="space-y-2">
+                                <Label for="free_output_tokens_per_month"
+                                    >Free output / month</Label
+                                >
+                                <Input
+                                    id="free_output_tokens_per_month"
+                                    name="free_output_tokens_per_month"
+                                    type="number"
+                                    min="0"
+                                    placeholder="leave blank if none"
+                                />
+                                <InputError
+                                    :message="errors.free_output_tokens_per_month"
                                 />
                             </div>
                         </div>
@@ -634,6 +666,42 @@ const priciest = ref(
                                 :default-value="editing.reasoning_per_mtok"
                             />
                             <InputError :message="errors.reasoning_per_mtok" />
+                        </div>
+                        <div class="space-y-2">
+                            <Label for="edit_free_input"
+                                >Free input / month</Label
+                            >
+                            <Input
+                                id="edit_free_input"
+                                name="free_input_tokens_per_month"
+                                type="number"
+                                min="0"
+                                placeholder="leave blank if none"
+                                :default-value="
+                                    editing.free_input_tokens_per_month ?? ''
+                                "
+                            />
+                            <InputError
+                                :message="errors.free_input_tokens_per_month"
+                            />
+                        </div>
+                        <div class="space-y-2">
+                            <Label for="edit_free_output"
+                                >Free output / month</Label
+                            >
+                            <Input
+                                id="edit_free_output"
+                                name="free_output_tokens_per_month"
+                                type="number"
+                                min="0"
+                                placeholder="leave blank if none"
+                                :default-value="
+                                    editing.free_output_tokens_per_month ?? ''
+                                "
+                            />
+                            <InputError
+                                :message="errors.free_output_tokens_per_month"
+                            />
                         </div>
                     </div>
                     <DialogFooter>

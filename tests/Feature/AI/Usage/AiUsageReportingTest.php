@@ -239,6 +239,84 @@ test('totals fall back to live catalog when snapshot is null', function (): void
     expect((float) $totals['total_cost'])->toBe(0.40);
 });
 
+test('totals subtracts free-tier consumption from gross cost', function (): void {
+    AiModelPrice::create([
+        'provider' => 'openai',
+        'model' => 'gpt-5-mini',
+        'input_per_mtok' => 0.40,
+        'output_per_mtok' => 1.60,
+        'cache_read_per_mtok' => 0,
+        'cache_write_per_mtok' => 0,
+        'reasoning_per_mtok' => 0,
+        'free_input_tokens_per_month' => 500_000,
+        'free_output_tokens_per_month' => 200_000,
+    ]);
+
+    seedUsage(['prompt_tokens' => 1_000_000, 'completion_tokens' => 500_000]);
+
+    $totals = resolve(AiUsageReporting::class)->totals(CarbonImmutable::now()->subDay());
+
+    // Gross: 1M * 0.40 + 0.5M * 1.60 = 0.40 + 0.80 = 1.20
+    // Free:  0.5M * 0.40 + 0.2M * 1.60 = 0.20 + 0.32 = 0.52
+    // Net:   1.20 - 0.52 = 0.68
+    expect((float) $totals['total_cost'])->toBe(0.68);
+});
+
+test('totals never go negative when usage stays under the free quota', function (): void {
+    AiModelPrice::create([
+        'provider' => 'openai',
+        'model' => 'gpt-5-mini',
+        'input_per_mtok' => 0.40,
+        'output_per_mtok' => 1.60,
+        'cache_read_per_mtok' => 0,
+        'cache_write_per_mtok' => 0,
+        'reasoning_per_mtok' => 0,
+        'free_input_tokens_per_month' => 5_000_000,
+        'free_output_tokens_per_month' => 5_000_000,
+    ]);
+
+    seedUsage(['prompt_tokens' => 1_000_000, 'completion_tokens' => 500_000]);
+
+    $totals = resolve(AiUsageReporting::class)->totals(CarbonImmutable::now()->subDay());
+
+    expect((float) $totals['total_cost'])->toBe(0.0);
+});
+
+test('freeTierStatus reports per-model usage vs cap', function (): void {
+    AiModelPrice::create([
+        'provider' => 'openai',
+        'model' => 'gpt-5-mini',
+        'input_per_mtok' => 0.40,
+        'output_per_mtok' => 1.60,
+        'cache_read_per_mtok' => 0,
+        'cache_write_per_mtok' => 0,
+        'reasoning_per_mtok' => 0,
+        'free_input_tokens_per_month' => 1_000_000,
+        'free_output_tokens_per_month' => 500_000,
+    ]);
+
+    seedUsage(['prompt_tokens' => 200_000, 'completion_tokens' => 50_000]);
+    seedUsage(['prompt_tokens' => 100_000, 'completion_tokens' => 100_000]);
+
+    $rows = resolve(AiUsageReporting::class)->freeTierStatus(CarbonImmutable::now()->startOfMonth());
+
+    expect($rows)->toHaveCount(1);
+    expect($rows[0]['model'])->toBe('gpt-5-mini');
+    expect($rows[0]['used_input'])->toBe(300_000);
+    expect($rows[0]['used_output'])->toBe(150_000);
+    expect($rows[0]['free_input'])->toBe(1_000_000);
+    expect($rows[0]['free_output'])->toBe(500_000);
+});
+
+test('freeTierStatus skips models without a configured quota', function (): void {
+    seedPrice('openai', 'gpt-5-mini', input: 0.40, output: 1.60);
+    seedUsage(['prompt_tokens' => 1_000]);
+
+    $rows = resolve(AiUsageReporting::class)->freeTierStatus(CarbonImmutable::now()->startOfMonth());
+
+    expect($rows)->toBeEmpty();
+});
+
 test('totals with scenario accepts fractional rates', function (): void {
     seedUsage([
         'prompt_tokens' => 1_000_000,

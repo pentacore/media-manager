@@ -42,12 +42,119 @@ class AiUsageReporting
             ', $costBindings)
             ->first();
 
+        $totalCost = (float) ($row->total_cost ?? 0);
+
+        // Free-tier subtraction is meaningless under a scenario projection
+        // (the user is asking "what if rates were X?", not "what would I
+        // bill?"), so only net out the included tokens for the live view.
+        if (! $scenario instanceof Scenario) {
+            $totalCost = max(0.0, $totalCost - $this->freeTierDiscount($since));
+        }
+
         return [
             'total_invocations' => (int) ($row->total_invocations ?? 0),
             'total_tool_calls' => (int) ($row->total_tool_calls ?? 0),
             'total_tokens' => (int) ($row->total_tokens ?? 0),
-            'total_cost' => (string) ($row->total_cost ?? '0'),
+            'total_cost' => number_format($totalCost, 6, '.', ''),
         ];
+    }
+
+    /**
+     * Per-(provider, model) breakdown of how much of each model's
+     * configured free monthly quota has been consumed in the window.
+     * Drives the "Free tier" panel + the net total cost computation.
+     *
+     * @return array<int, array{provider: string, model: string, used_input: int, used_output: int, free_input: int, free_output: int}>
+     */
+    public function freeTierStatus(CarbonImmutable $since): array
+    {
+        $usage = DB::table('ai_usage_records')
+            ->where('ai_usage_records.created_at', '>=', $since)
+            ->whereNotNull('ai_usage_records.provider')
+            ->whereNotNull('ai_usage_records.model')
+            ->selectRaw('
+                ai_usage_records.provider,
+                ai_usage_records.model,
+                COALESCE(SUM(ai_usage_records.prompt_tokens), 0) AS used_input,
+                COALESCE(SUM(ai_usage_records.completion_tokens), 0) AS used_output
+            ')
+            ->groupBy('ai_usage_records.provider', 'ai_usage_records.model')
+            ->get();
+
+        $rows = [];
+
+        foreach ($usage as $row) {
+            $price = AiModelPrice::query()
+                ->where('provider', $row->provider)
+                ->where('model', preg_replace('/-\d{4}-\d{2}-\d{2}$/', '', (string) $row->model))
+                ->first();
+
+            $freeInput = $price?->free_input_tokens_per_month;
+            $freeOutput = $price?->free_output_tokens_per_month;
+
+            // Skip rows with no configured quota — there's nothing useful
+            // to report and the panel would just be noise.
+            if ($freeInput === null && $freeOutput === null) {
+                continue;
+            }
+
+            $rows[] = [
+                'provider' => (string) $row->provider,
+                'model' => (string) $row->model,
+                'used_input' => (int) $row->used_input,
+                'used_output' => (int) $row->used_output,
+                'free_input' => (int) ($freeInput ?? 0),
+                'free_output' => (int) ($freeOutput ?? 0),
+            ];
+        }
+
+        return $rows;
+    }
+
+    /**
+     * Sum of "tokens that fell under the free quota × catalog rate" for
+     * every priced model in the window. Subtracted from the gross cost
+     * so the displayed Spend reflects what the provider would actually
+     * bill.
+     */
+    private function freeTierDiscount(CarbonImmutable $since): float
+    {
+        $usage = DB::table('ai_usage_records')
+            ->where('ai_usage_records.created_at', '>=', $since)
+            ->whereNotNull('ai_usage_records.provider')
+            ->whereNotNull('ai_usage_records.model')
+            ->selectRaw('
+                ai_usage_records.provider,
+                ai_usage_records.model,
+                COALESCE(SUM(ai_usage_records.prompt_tokens), 0) AS used_input,
+                COALESCE(SUM(ai_usage_records.completion_tokens), 0) AS used_output
+            ')
+            ->groupBy('ai_usage_records.provider', 'ai_usage_records.model')
+            ->get();
+
+        $discount = 0.0;
+
+        foreach ($usage as $row) {
+            $price = AiModelPrice::query()
+                ->where('provider', $row->provider)
+                ->where('model', preg_replace('/-\d{4}-\d{2}-\d{2}$/', '', (string) $row->model))
+                ->first();
+
+            if (! $price instanceof AiModelPrice) {
+                continue;
+            }
+
+            $freeInput = (int) ($price->free_input_tokens_per_month ?? 0);
+            $freeOutput = (int) ($price->free_output_tokens_per_month ?? 0);
+
+            $forgivenInput = min((int) $row->used_input, $freeInput);
+            $forgivenOutput = min((int) $row->used_output, $freeOutput);
+
+            $discount += $forgivenInput * (float) $price->input_per_mtok / 1_000_000.0;
+            $discount += $forgivenOutput * (float) $price->output_per_mtok / 1_000_000.0;
+        }
+
+        return $discount;
     }
 
     /**

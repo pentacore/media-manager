@@ -46,6 +46,10 @@ class AiUsageController extends Controller
                 ->get(['provider', 'model', 'input_per_mtok', 'output_per_mtok', 'cache_read_per_mtok', 'cache_write_per_mtok', 'reasoning_per_mtok']),
             'scenario' => $scenario?->toArray(),
             'windows' => self::WINDOWS,
+            // Per-(provider, model) free quota usage for the panel below
+            // the stat cards. Sized by month rather than by the active
+            // window because the cap itself resets monthly.
+            'free_tier' => $aiUsageReporting->freeTierStatus(CarbonImmutable::now()->startOfMonth()),
         ];
 
         if ($scenario instanceof Scenario) {

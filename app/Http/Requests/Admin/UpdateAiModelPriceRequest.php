@@ -25,6 +25,8 @@ class UpdateAiModelPriceRequest extends FormRequest
             'batch_cache_read_per_mtok' => ['nullable', 'numeric', 'min:0', 'max:9999.9999'],
             'batch_cache_write_per_mtok' => ['nullable', 'numeric', 'min:0', 'max:9999.9999'],
             'batch_reasoning_per_mtok' => ['nullable', 'numeric', 'min:0', 'max:9999.9999'],
+            'free_input_tokens_per_month' => ['nullable', 'integer', 'min:0'],
+            'free_output_tokens_per_month' => ['nullable', 'integer', 'min:0'],
         ];
     }
 }

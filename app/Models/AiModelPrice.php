@@ -25,6 +25,8 @@ use Override;
  * @property string|null $batch_cache_read_per_mtok
  * @property string|null $batch_cache_write_per_mtok
  * @property string|null $batch_reasoning_per_mtok
+ * @property int|null $free_input_tokens_per_month
+ * @property int|null $free_output_tokens_per_month
  * @property CarbonImmutable|null $created_at
  * @property CarbonImmutable|null $updated_at
  *
@@ -47,6 +49,8 @@ use Override;
     'batch_cache_read_per_mtok',
     'batch_cache_write_per_mtok',
     'batch_reasoning_per_mtok',
+    'free_input_tokens_per_month',
+    'free_output_tokens_per_month',
 ])]
 class AiModelPrice extends Model
 {
@@ -69,6 +73,8 @@ class AiModelPrice extends Model
             'batch_cache_read_per_mtok' => 'decimal:4',
             'batch_cache_write_per_mtok' => 'decimal:4',
             'batch_reasoning_per_mtok' => 'decimal:4',
+            'free_input_tokens_per_month' => 'integer',
+            'free_output_tokens_per_month' => 'integer',
         ];
     }
 }
