@@ -17,6 +17,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\ServiceProvider;
 use Illuminate\Validation\Rules\Password;
+use Laravel\Telescope\TelescopeApplicationServiceProvider;
 use Override;
 use SocialiteProviders\Authentik\AuthentikExtendSocialite;
 use SocialiteProviders\Manager\SocialiteWasCalled;
@@ -31,6 +32,13 @@ class AppServiceProvider extends ServiceProvider
     {
         $this->app->singleton(AppSettings::class);
         $this->app->singleton(AiSettings::class);
+
+        // Telescope is a require-dev package; the wrapper provider extends
+        // Laravel\Telescope\TelescopeApplicationServiceProvider, so registering
+        // it without the package present would fatal on autoload.
+        if ($this->app->environment('local') && class_exists(TelescopeApplicationServiceProvider::class)) {
+            $this->app->register(TelescopeServiceProvider::class);
+        }
     }
 
     /**

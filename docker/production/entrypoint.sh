@@ -37,8 +37,15 @@ case "$role" in
         warm_caches
         # Idempotent symlink — `--force` would unlink+symlink and race other
         # web replicas sharing a storage volume, briefly 404-ing public assets.
+        # Only swallow the "already exists" race-loss; other failures (perms,
+        # missing public/) should still abort boot.
         if [[ ! -L public/storage ]]; then
-            php artisan storage:link || true
+            link_err=$(php artisan storage:link 2>&1) || {
+                if ! grep -qiE 'already exists' <<<"$link_err"; then
+                    echo "$link_err" >&2
+                    exit 1
+                fi
+            }
         fi
         # Octane worker mode on FrankenPHP: framework boots once per worker and is reused
         # across requests. --workers=auto sizes to CPU count; --max-requests recycles workers
@@ -76,18 +83,13 @@ case "$role" in
         exec php artisan reverb:start --host=0.0.0.0 --port=8080 --no-interaction
         ;;
 
-    horizon)
-        warm_caches
-        exec php artisan horizon
-        ;;
-
     migrate)
-        exec php artisan migrate --force
+        exec php artisan migrate --force --isolated
         ;;
 
     *)
         echo "Unknown CONTAINER_ROLE: $role" >&2
-        echo "Valid roles: web, queue, scheduler, reverb, horizon, migrate" >&2
+        echo "Valid roles: web, queue, scheduler, reverb, migrate" >&2
         exit 1
         ;;
 esac

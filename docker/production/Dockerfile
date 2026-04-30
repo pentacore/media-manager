@@ -52,9 +52,7 @@ FROM dunglas/frankenphp:1-php8.5-alpine AS runtime
 
 ENV APP_ENV=production \
     APP_DEBUG=false \
-    CONTAINER_ROLE=web \
-    RUN_MIGRATIONS=false \
-    OCTANE_SERVER=frankenphp
+    RUN_MIGRATIONS=false
 
 RUN apk add --no-cache \
         bash \
@@ -104,7 +102,9 @@ USER app
 # 8080: web role (FrankenPHP/Caddy) OR reverb role — different roles run in different containers
 EXPOSE 8080
 
-HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
+STOPSIGNAL SIGTERM
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \
     CMD /usr/local/bin/healthcheck
 
 ENTRYPOINT ["/usr/local/bin/entrypoint"]
