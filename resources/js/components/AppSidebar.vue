@@ -78,36 +78,31 @@ const aiEnabled = computed(() =>
     ),
 );
 
-const initialNav = (
-    page.props as unknown as {
-        nav?: {
-            pendingActions?: number;
-            activeSessions?: number;
-            libraryIntervention?: number;
-        };
-    }
-).nav;
+interface NavCounts {
+    pendingActions?: number;
+    activeSessions?: number;
+    libraryIntervention?: number;
+    sabnzbdDownloads?: { queued: number; completed: number };
+}
+
+const initialNav = (page.props as unknown as { nav?: NavCounts }).nav;
 
 const pendingActions = ref(initialNav?.pendingActions ?? 0);
 const activeSessions = ref(initialNav?.activeSessions ?? 0);
 const libraryIntervention = ref(initialNav?.libraryIntervention ?? 0);
+const sabnzbdQueued = ref(initialNav?.sabnzbdDownloads?.queued ?? 0);
+const sabnzbdCompleted = ref(initialNav?.sabnzbdDownloads?.completed ?? 0);
 const recentSessionIds = new Set<number>();
 
 watchEffect(() => {
-    const nav = (
-        page.props as unknown as {
-            nav?: {
-                pendingActions?: number;
-                activeSessions?: number;
-                libraryIntervention?: number;
-            };
-        }
-    ).nav;
+    const nav = (page.props as unknown as { nav?: NavCounts }).nav;
 
     if (nav) {
         pendingActions.value = nav.pendingActions ?? 0;
         activeSessions.value = nav.activeSessions ?? 0;
         libraryIntervention.value = nav.libraryIntervention ?? 0;
+        sabnzbdQueued.value = nav.sabnzbdDownloads?.queued ?? 0;
+        sabnzbdCompleted.value = nav.sabnzbdDownloads?.completed ?? 0;
     }
 });
 
@@ -204,12 +199,20 @@ onMounted(() => {
             },
         );
 
-    privateChannel('dashboard').listen(
-        '.LibraryInterventionChanged',
-        (event: { count: number }) => {
-            libraryIntervention.value = event.count;
-        },
-    );
+    privateChannel('dashboard')
+        .listen(
+            '.LibraryInterventionChanged',
+            (event: { count: number }) => {
+                libraryIntervention.value = event.count;
+            },
+        )
+        .listen(
+            '.SabnzbdDownloadCountsChanged',
+            (event: { queued: number; completed: number }) => {
+                sabnzbdQueued.value = event.queued;
+                sabnzbdCompleted.value = event.completed;
+            },
+        );
 
     activitySessionTimer = setInterval(pruneStaleSessions, 60_000);
 });
@@ -264,6 +267,10 @@ const mediaNavItems = computed<NavItem[]>(() => [
         title: 'Downloads',
         href: SabnzbdQueueController.index.url(),
         icon: Download,
+        // Show "queued + still-in-history" so the badge surfaces both
+        // active downloads and stuck post-processing rows. SAB prunes
+        // imported items itself, so anything here means "needs a look".
+        badge: () => sabnzbdQueued.value + sabnzbdCompleted.value,
     },
     {
         title: 'Library activity',

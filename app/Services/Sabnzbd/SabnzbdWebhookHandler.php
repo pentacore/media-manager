@@ -42,6 +42,13 @@ class SabnzbdWebhookHandler extends AbstractWebhookHandler
         if ($webhookEvent->serviceConnection !== null) {
             new SabnzbdCache($webhookEvent->serviceConnection)->bustAll();
         }
+
+        // Counts shift on the events that move things in/out of the
+        // queue or finish a download. Other events (alerts, pause,
+        // startup) don't change counts so skip the upstream round-trip.
+        if (in_array($eventType, ['complete', 'failed', 'queue_done'], true)) {
+            resolve(SabnzbdDownloadCounter::class)->recompute();
+        }
     }
 
     /**

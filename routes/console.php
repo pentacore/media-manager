@@ -41,3 +41,8 @@ Schedule::command('library:refresh-intervention-count')
     ->everyFiveMinutes()
     ->withoutOverlapping()
     ->runInBackground();
+
+Schedule::command('sabnzbd:refresh-download-counts')
+    ->everyFiveMinutes()
+    ->withoutOverlapping()
+    ->runInBackground();

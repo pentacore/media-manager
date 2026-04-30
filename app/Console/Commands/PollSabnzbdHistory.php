@@ -14,6 +14,7 @@ use Illuminate\Console\Command;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\RequestException;
 use Illuminate\Support\Facades\Date;
+use Illuminate\Support\Facades\Log;
 use Override;
 use Throwable;
 
@@ -94,6 +95,17 @@ class PollSabnzbdHistory extends Command
         $action = $status === 'Failed'
             ? 'sabnzbd.download.failed'
             : 'sabnzbd.download.completed';
+
+        $category = $slot['category'] ?? null;
+        if (is_string($category) && in_array($category, $serviceConnection->settings['hidden_categories'] ?? [], true)) {
+            Log::debug('Skipping hidden category', [
+                'service_connection_id' => $serviceConnection->id,
+                'nzo_id' => $nzoId,
+                'category' => $category,
+            ]);
+
+            return;
+        }
 
         ActivityLog::create([
             'service_connection_id' => $serviceConnection->id,

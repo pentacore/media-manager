@@ -5,6 +5,8 @@ declare(strict_types=1);
 use App\Models\ActivityLog;
 use App\Models\ServiceConnection;
 use App\Models\User;
+use App\Services\Sabnzbd\SabnzbdDownloadCounter;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
 
 beforeEach(function (): void {
@@ -12,6 +14,9 @@ beforeEach(function (): void {
     config()->set('inertia.testing.ensure_pages_exist', false);
     Http::preventStrayRequests();
     $this->user = User::factory()->member()->create();
+    // Pre-warm the SAB download counter cache so the shared Inertia
+    // middleware doesn't double-fetch SAB on every page render.
+    Cache::put(SabnzbdDownloadCounter::CACHE_KEY, ['queued' => 0, 'completed' => 0], 60);
 });
 
 test('guests are redirected from the queue page', function (): void {

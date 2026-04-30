@@ -11,6 +11,7 @@ use App\Models\EmbyActivity;
 use App\Models\User;
 use App\Providers\AIServiceProvider;
 use App\Services\Library\InterventionCounter;
+use App\Services\Sabnzbd\SabnzbdDownloadCounter;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
 use Inertia\Middleware;
@@ -61,7 +62,7 @@ class HandleInertiaRequests extends Middleware
             'ai' => [
                 'enabled' => AIServiceProvider::enabled(),
             ],
-            'nav' => $user ? $this->navCounts($user) : ['pendingActions' => 0, 'activeSessions' => 0, 'unreadNotifications' => 0, 'libraryIntervention' => 0],
+            'nav' => $user ? $this->navCounts($user) : ['pendingActions' => 0, 'activeSessions' => 0, 'unreadNotifications' => 0, 'libraryIntervention' => 0, 'sabnzbdDownloads' => ['queued' => 0, 'completed' => 0]],
             'sidebarOpen' => ! $request->hasCookie('sidebar_state') || $request->cookie('sidebar_state') === 'true',
         ];
     }
@@ -71,7 +72,7 @@ class HandleInertiaRequests extends Middleware
      * indexed columns and bound clauses. Live updates layer on top via
      * the sidebar's WS subscriptions.
      *
-     * @return array{pendingActions: int, activeSessions: int, unreadNotifications: int, libraryIntervention: int}
+     * @return array{pendingActions: int, activeSessions: int, unreadNotifications: int, libraryIntervention: int, sabnzbdDownloads: array{queued: int, completed: int}}
      */
     private function navCounts(User $user): array
     {
@@ -88,6 +89,7 @@ class HandleInertiaRequests extends Middleware
             // inline once so the badge isn't silently zero for the first
             // five minutes after deploy.
             'libraryIntervention' => $this->libraryInterventionCount(),
+            'sabnzbdDownloads' => $this->sabnzbdDownloadCounts(),
         ];
     }
 
@@ -108,6 +110,24 @@ class HandleInertiaRequests extends Middleware
             return $interventionCounter->recompute();
         } catch (Throwable) {
             return 0;
+        }
+    }
+
+    /**
+     * @return array{queued: int, completed: int}
+     */
+    private function sabnzbdDownloadCounts(): array
+    {
+        $sabnzbdDownloadCounter = resolve(SabnzbdDownloadCounter::class);
+
+        if (Cache::has(SabnzbdDownloadCounter::CACHE_KEY)) {
+            return $sabnzbdDownloadCounter->get();
+        }
+
+        try {
+            return $sabnzbdDownloadCounter->recompute();
+        } catch (Throwable) {
+            return ['queued' => 0, 'completed' => 0];
         }
     }
 }

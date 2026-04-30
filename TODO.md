@@ -68,11 +68,11 @@
 - [x] Re-label all the activities inb the activity log, for example "sabnzbd.download.completed" should be "Download completed" or something like that
 - [x] Narrow window hides some actions without adding a horizontal scrollbar, thats not great. Library activity is one example.
 - [x] i dont see any badge on the library activity sidebar entry, even though there are at least 1 that needs manual intervention.
-- [ ] Add a badge to the downloads entry in the sidebar, showing how many queued and completed downloads there are.
+- [x] Add a badge to the downloads entry in the sidebar, showing how many queued and completed downloads there are.
 - [ ] Sabnzbd webhook support, Sabnzbd has support for a notification script, this can be used to send webhooks to the app. https://sabnzbd.org/wiki/configuration/4.5/scripts/notification-scripts
     - [x] Create a webhook script that can be copied from the edit connection page
     - [x] Add a webhook type for sabnzbd
-    - [ ] Reload the sabnzbd downloads count on relevant webhooks
+    - [x] Reload the sabnzbd downloads count on relevant webhooks
     - [x] Cache busting on relevant webhooks
     - [ ] Warning notifications on space running out
 - [ ] Notification support for incoming warning/error webhooks
