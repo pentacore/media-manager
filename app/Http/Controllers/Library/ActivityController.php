@@ -22,15 +22,16 @@ use Inertia\Response;
 class ActivityController extends Controller
 {
     /**
-     * Combined Sonarr + Radarr download queue. Both *arr APIs paginate
-     * server-side, so we ask each one for the same page slice and stitch
-     * the rows together client-side, tagged by service. Future work will
-     * add filtering and history/blocklist tabs (TODO L52-55).
+     * Combined Sonarr + Radarr activity view. Both the live download queue
+     * and the recent grab/import/failure history are deferred so the
+     * shell renders before the *arr round-trips finish; the Vue side
+     * pivots between them with a tab toggle.
      */
     public function queue(): Response
     {
         return Inertia::render('Library/Activity', [
             'queue' => Inertia::defer(fn (): array => $this->loadCombinedQueue()),
+            'history' => Inertia::defer(fn (): array => $this->loadCombinedHistory()),
         ]);
     }
 
@@ -310,6 +311,146 @@ class ActivityController extends Controller
         usort($rows, fn (array $a, array $b): int => strcmp((string) ($b['added'] ?? ''), (string) ($a['added'] ?? '')));
 
         return ['rows' => $rows, 'errors' => $errors, 'services' => $services];
+    }
+
+    /** Page size per service for the merged history table. */
+    private const int HISTORY_PAGE_SIZE = 50;
+
+    /**
+     * @return array{rows: array<int, array<string, mixed>>, errors: array<int, string>, services: array<string, bool>}
+     */
+    private function loadCombinedHistory(): array
+    {
+        $rows = [];
+        $errors = [];
+        $services = [];
+
+        $sonarr = $this->safeResolve(ServiceType::Sonarr);
+        $services['sonarr'] = $sonarr instanceof ServiceConnection;
+        if ($sonarr instanceof ServiceConnection) {
+            $rows = [...$rows, ...$this->fetchSonarrHistory($sonarr, $errors)];
+        }
+
+        $radarr = $this->safeResolve(ServiceType::Radarr);
+        $services['radarr'] = $radarr instanceof ServiceConnection;
+        if ($radarr instanceof ServiceConnection) {
+            $rows = [...$rows, ...$this->fetchRadarrHistory($radarr, $errors)];
+        }
+
+        usort($rows, fn (array $a, array $b): int => strcmp((string) ($b['date'] ?? ''), (string) ($a['date'] ?? '')));
+
+        return ['rows' => $rows, 'errors' => $errors, 'services' => $services];
+    }
+
+    /**
+     * @param  array<int, string>  $errors
+     * @return array<int, array<string, mixed>>
+     */
+    private function fetchSonarrHistory(ServiceConnection $serviceConnection, array &$errors): array
+    {
+        try {
+            $payload = new SonarrClient($serviceConnection)->getHistory([
+                'page' => 1,
+                'pageSize' => self::HISTORY_PAGE_SIZE,
+                'sortKey' => 'date',
+                'sortDirection' => 'descending',
+                'includeSeries' => 'true',
+                'includeEpisode' => 'true',
+            ]);
+        } catch (RequestException|ConnectionException $throwable) {
+            $errors[] = 'Sonarr: '.$throwable->getMessage();
+
+            return [];
+        }
+
+        $records = is_array($payload['records'] ?? null) ? $payload['records'] : [];
+
+        return array_map(
+            fn (array $record): array => $this->mapSonarrHistory($record, $serviceConnection),
+            $records,
+        );
+    }
+
+    /**
+     * @param  array<int, string>  $errors
+     * @return array<int, array<string, mixed>>
+     */
+    private function fetchRadarrHistory(ServiceConnection $serviceConnection, array &$errors): array
+    {
+        try {
+            $payload = new RadarrClient($serviceConnection)->getHistory([
+                'page' => 1,
+                'pageSize' => self::HISTORY_PAGE_SIZE,
+                'sortKey' => 'date',
+                'sortDirection' => 'descending',
+                'includeMovie' => 'true',
+            ]);
+        } catch (RequestException|ConnectionException $throwable) {
+            $errors[] = 'Radarr: '.$throwable->getMessage();
+
+            return [];
+        }
+
+        $records = is_array($payload['records'] ?? null) ? $payload['records'] : [];
+
+        return array_map(
+            fn (array $record): array => $this->mapRadarrHistory($record, $serviceConnection),
+            $records,
+        );
+    }
+
+    /**
+     * @param  array<string, mixed>  $record
+     * @return array<string, mixed>
+     */
+    private function mapSonarrHistory(array $record, ServiceConnection $serviceConnection): array
+    {
+        $series = is_array($record['series'] ?? null) ? $record['series'] : [];
+        $episode = is_array($record['episode'] ?? null) ? $record['episode'] : [];
+
+        $title = ($series['title'] ?? null) ?: ($record['sourceTitle'] ?? null);
+        $subtitle = $episode === []
+            ? null
+            : sprintf('S%02dE%02d · %s', (int) ($episode['seasonNumber'] ?? 0), (int) ($episode['episodeNumber'] ?? 0), $episode['title'] ?? '');
+
+        return [
+            'id' => $record['id'] ?? null,
+            'service' => 'sonarr',
+            'service_url' => rtrim($serviceConnection->url, '/'),
+            'event_type' => $record['eventType'] ?? null,
+            'title' => $title,
+            'subtitle' => $subtitle,
+            'source_title' => $record['sourceTitle'] ?? null,
+            'quality' => $record['quality']['quality']['name'] ?? null,
+            'download_client' => $record['downloadClient'] ?? null,
+            'date' => $record['date'] ?? null,
+            'data' => $record['data'] ?? null,
+        ];
+    }
+
+    /**
+     * @param  array<string, mixed>  $record
+     * @return array<string, mixed>
+     */
+    private function mapRadarrHistory(array $record, ServiceConnection $serviceConnection): array
+    {
+        $movie = is_array($record['movie'] ?? null) ? $record['movie'] : [];
+        $title = ($movie['title'] ?? null) ?: ($record['sourceTitle'] ?? null);
+        $year = $movie['year'] ?? null;
+
+        return [
+            'id' => $record['id'] ?? null,
+            'service' => 'radarr',
+            'service_url' => rtrim($serviceConnection->url, '/'),
+            'event_type' => $record['eventType'] ?? null,
+            'title' => $title,
+            'subtitle' => $year === null ? null : (string) $year,
+            'source_title' => $record['sourceTitle'] ?? null,
+            'quality' => $record['quality']['quality']['name'] ?? null,
+            'download_client' => $record['downloadClient'] ?? null,
+            'date' => $record['date'] ?? null,
+            'data' => $record['data'] ?? null,
+        ];
     }
 
     private function safeResolve(ServiceType $serviceType): ?ServiceConnection

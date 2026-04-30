@@ -70,6 +70,10 @@ test('combined queue merges Sonarr and Radarr records and tags them by service',
                 ],
             ],
         ]),
+        // Queue tests don't care about history but the controller defers
+        // both, and `loadDeferredProps('default')` triggers everything.
+        'sonarr.local:8989/api/v3/history*' => Http::response(['records' => []]),
+        'radarr.local:7878/api/v3/history*' => Http::response(['records' => []]),
     ]);
 
     $member = User::factory()->member()->create();
@@ -103,6 +107,7 @@ test('queue surfaces errors per service when an upstream call fails', function (
 
     Http::fake([
         'sonarr.local:8989/api/v3/queue*' => Http::response('Server Error', 500),
+        'sonarr.local:8989/api/v3/history*' => Http::response(['records' => []]),
     ]);
 
     $member = User::factory()->member()->create();
@@ -325,6 +330,67 @@ test('member cannot trigger manual import', function (): void {
             'download_id' => 'ABC',
         ])
         ->assertForbidden();
+});
+
+test('history merges Sonarr and Radarr records sorted newest first', function (): void {
+    ServiceConnection::factory()->sonarr()->create([
+        'url' => 'http://sonarr.local:8989',
+        'api_key' => 'sonarr-key',
+    ]);
+    ServiceConnection::factory()->radarr()->create([
+        'url' => 'http://radarr.local:7878',
+        'api_key' => 'radarr-key',
+    ]);
+
+    Http::fake([
+        'sonarr.local:8989/api/v3/queue*' => Http::response(['records' => []]),
+        'radarr.local:7878/api/v3/queue*' => Http::response(['records' => []]),
+        'sonarr.local:8989/api/v3/history*' => Http::response([
+            'records' => [
+                [
+                    'id' => 1,
+                    'eventType' => 'grabbed',
+                    'sourceTitle' => 'Severance.S01E01.WEBDL-1080p.mkv',
+                    'series' => ['title' => 'Severance'],
+                    'episode' => ['seasonNumber' => 1, 'episodeNumber' => 1, 'title' => 'Pilot'],
+                    'quality' => ['quality' => ['name' => 'WEBDL-1080p']],
+                    'date' => '2026-04-30T08:00:00Z',
+                ],
+            ],
+        ]),
+        'radarr.local:7878/api/v3/history*' => Http::response([
+            'records' => [
+                [
+                    'id' => 99,
+                    'eventType' => 'downloadFailed',
+                    'sourceTitle' => 'Dune.2021.Bluray-1080p.mkv',
+                    'movie' => ['title' => 'Dune', 'year' => 2021],
+                    'quality' => ['quality' => ['name' => 'Bluray-1080p']],
+                    'date' => '2026-04-30T09:00:00Z',
+                ],
+            ],
+        ]),
+    ]);
+
+    $member = User::factory()->member()->create();
+
+    $this->actingAs($member)
+        ->get(route('media.library.activity.queue'))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->component('Library/Activity')
+            ->loadDeferredProps('default', function ($page): void {
+                $page
+                    ->where('history.services.sonarr', true)
+                    ->where('history.services.radarr', true)
+                    ->has('history.rows', 2)
+                    ->where('history.rows.0.service', 'radarr')
+                    ->where('history.rows.0.event_type', 'downloadFailed')
+                    ->where('history.rows.1.service', 'sonarr')
+                    ->where('history.rows.1.event_type', 'grabbed')
+                    ->where('history.rows.1.subtitle', 'S01E01 · Pilot');
+            })
+        );
 });
 
 test('queue is empty when no Sonarr or Radarr connection is configured', function (): void {

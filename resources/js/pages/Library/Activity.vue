@@ -56,6 +56,26 @@ interface QueuePayload {
     services: { sonarr?: boolean; radarr?: boolean };
 }
 
+interface HistoryRow {
+    id: number;
+    service: 'sonarr' | 'radarr';
+    service_url: string;
+    event_type: string | null;
+    title: string | null;
+    subtitle: string | null;
+    source_title: string | null;
+    quality: string | null;
+    download_client: string | null;
+    date: string | null;
+    data: Record<string, unknown> | null;
+}
+
+interface HistoryPayload {
+    rows: HistoryRow[];
+    errors: string[];
+    services: { sonarr?: boolean; radarr?: boolean };
+}
+
 interface ManualImportEpisode {
     season: number | null;
     episode: number | null;
@@ -82,7 +102,10 @@ interface ManualImportCandidate {
     movie_year?: number | null;
 }
 
-const props = defineProps<{ queue?: QueuePayload }>();
+const props = defineProps<{
+    queue?: QueuePayload;
+    history?: HistoryPayload;
+}>();
 
 defineOptions({
     layout: {
@@ -107,6 +130,58 @@ const isAdmin = computed(() => {
 
 const refreshing = ref(false);
 const serviceFilter = ref<'all' | 'sonarr' | 'radarr'>('all');
+const activeTab = ref<'queue' | 'history'>('queue');
+
+const filteredHistoryRows = computed<HistoryRow[]>(() => {
+    const all = props.history?.rows ?? [];
+    if (serviceFilter.value === 'all') {
+        return all;
+    }
+
+    return all.filter((row) => row.service === serviceFilter.value);
+});
+
+function eventVariant(eventType: string | null): 'ok' | 'warn' | 'danger' | 'info' | 'default' {
+    switch (eventType) {
+        case 'downloadFolderImported':
+        case 'movieFolderImported':
+            return 'ok';
+        case 'downloadFailed':
+            return 'danger';
+        case 'downloadIgnored':
+        case 'episodeFileDeleted':
+        case 'movieFileDeleted':
+            return 'warn';
+        case 'grabbed':
+            return 'info';
+        default:
+            return 'default';
+    }
+}
+
+function eventLabel(eventType: string | null): string {
+    if (!eventType) {
+        return '—';
+    }
+
+    return eventType.replace(/([A-Z])/g, ' $1').toLowerCase().trim();
+}
+
+function formatDate(iso: string | null): string {
+    if (!iso) {
+        return '—';
+    }
+
+    const d = new Date(iso);
+
+    return d.toLocaleString([], {
+        month: 'short',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: false,
+    });
+}
 const acting = ref<string | null>(null);
 
 function actionKey(row: QueueRow, verb: string): string {
@@ -246,7 +321,7 @@ function refresh(): void {
 
     refreshing.value = true;
     router.reload({
-        only: ['queue'],
+        only: activeTab.value === 'queue' ? ['queue'] : ['history'],
         onFinish: () => {
             refreshing.value = false;
         },
@@ -327,13 +402,43 @@ const filteredRows = computed<QueueRow[]>(() => {
                 <h1 class="text-[22px] leading-tight font-semibold tracking-tight">
                     Library activity
                 </h1>
-                <p class="mt-1 max-w-[640px] text-[13px] text-muted-foreground">
+                <p
+                    v-if="activeTab === 'queue'"
+                    class="mt-1 max-w-[640px] text-[13px] text-muted-foreground"
+                >
                     Combined Sonarr + Radarr download queue. Stuck imports
                     surface here with their tracked state so you can act
                     before falling behind.
                 </p>
+                <p
+                    v-else
+                    class="mt-1 max-w-[640px] text-[13px] text-muted-foreground"
+                >
+                    Recent grabs, imports, deletions, and failures from
+                    both services — newest first.
+                </p>
             </div>
             <div class="flex items-center gap-2">
+                <div
+                    class="inline-flex h-7 items-center rounded-md border border-border bg-card p-0.5"
+                    role="tablist"
+                    aria-label="Activity view"
+                >
+                    <button
+                        v-for="tab in (['queue', 'history'] as const)"
+                        :key="tab"
+                        type="button"
+                        :class="[
+                            'inline-flex h-6 items-center rounded-[4px] px-2.5 text-[11.5px] font-medium capitalize transition-colors',
+                            activeTab === tab
+                                ? 'bg-accent text-accent-foreground'
+                                : 'text-muted-foreground hover:bg-bg-hover hover:text-foreground',
+                        ]"
+                        @click="activeTab = tab"
+                    >
+                        {{ tab }}
+                    </button>
+                </div>
                 <div
                     class="inline-flex h-7 items-center rounded-md border border-border bg-card p-0.5"
                     role="tablist"
@@ -368,6 +473,8 @@ const filteredRows = computed<QueueRow[]>(() => {
             </div>
         </div>
 
+        <!-- Queue tab -->
+        <template v-if="activeTab === 'queue'">
         <!-- Errors -->
         <div
             v-if="queue && queue.errors.length > 0"
@@ -523,6 +630,97 @@ const filteredRows = computed<QueueRow[]>(() => {
                 </tbody>
             </table>
         </div>
+        </template>
+
+        <!-- History tab -->
+        <template v-if="activeTab === 'history'">
+            <div
+                v-if="history && history.errors.length > 0"
+                class="rounded-md border border-warn/30 bg-warn/10 px-3 py-2 text-[12px] text-warn"
+            >
+                <div
+                    v-for="(error, index) in history.errors"
+                    :key="index"
+                >
+                    {{ error }}
+                </div>
+            </div>
+
+            <div v-if="!history" class="space-y-2">
+                <Skeleton v-for="n in 8" :key="n" class="h-12 w-full" />
+            </div>
+
+            <div
+                v-else-if="filteredHistoryRows.length === 0"
+                class="rounded-xl border border-border bg-card px-4 py-10 text-center text-sm text-muted-foreground"
+            >
+                <template v-if="!history.services.sonarr && !history.services.radarr">
+                    No active Sonarr or Radarr connection configured.
+                </template>
+                <template v-else>
+                    No recent history yet.
+                </template>
+            </div>
+
+            <div v-else class="overflow-hidden rounded-xl border border-border bg-card">
+                <table class="w-full border-collapse text-[13px]">
+                    <thead>
+                        <tr>
+                            <th
+                                v-for="header in [
+                                    'Service',
+                                    'Event',
+                                    'Title',
+                                    'Quality',
+                                    'When',
+                                ]"
+                                :key="header"
+                                class="border-b border-border bg-card px-3 py-2 text-left text-[11.5px] font-medium tracking-[0.05em] text-muted-foreground uppercase"
+                            >
+                                {{ header }}
+                            </th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr
+                            v-for="row in filteredHistoryRows"
+                            :key="`${row.service}-${row.id}`"
+                            class="border-b border-border last:border-b-0 hover:bg-bg-hover"
+                        >
+                            <td class="px-3 py-2.5">
+                                <SvcChip :id="row.service" />
+                            </td>
+                            <td class="px-3 py-2.5">
+                                <Pill :variant="eventVariant(row.event_type)">
+                                    {{ eventLabel(row.event_type) }}
+                                </Pill>
+                            </td>
+                            <td class="px-3 py-2.5">
+                                <div class="font-medium">{{ row.title ?? '—' }}</div>
+                                <div
+                                    v-if="row.subtitle"
+                                    class="text-[11.5px] text-muted-foreground"
+                                >
+                                    {{ row.subtitle }}
+                                </div>
+                                <div
+                                    v-if="row.source_title"
+                                    class="font-mono-tabular mt-1 text-[11px] text-fg-subtle break-all"
+                                >
+                                    {{ row.source_title }}
+                                </div>
+                            </td>
+                            <td class="px-3 py-2.5 text-[12px]">
+                                {{ row.quality ?? '—' }}
+                            </td>
+                            <td class="font-mono-tabular px-3 py-2.5 text-[12px] text-muted-foreground">
+                                {{ formatDate(row.date) }}
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </template>
 
         <!-- Manual import dialog -->
         <Dialog
