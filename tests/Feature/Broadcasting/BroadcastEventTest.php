@@ -236,8 +236,11 @@ test('DashboardStatsUpdated broadcasts on dashboard channel via the queue', func
     $event = new DashboardStatsUpdated(
         activeServices: 3,
         totalServices: 5,
+        healthyServices: 4,
         recentWebhooks: 12,
         pendingActions: 2,
+        recentActions: 8,
+        failedActions: 1,
     );
 
     // Must be queued, not ShouldBroadcastNow — a Reverb outage on the inline path
@@ -248,8 +251,15 @@ test('DashboardStatsUpdated broadcasts on dashboard channel via the queue', func
     expect($event->broadcastAs())->toBe('DashboardStatsUpdated');
 
     $payload = $event->broadcastWith();
-    expect($payload)->toHaveKeys(['activeServices', 'totalServices', 'recentWebhooks', 'pendingActions', 'updatedAt']);
+    expect($payload)->toHaveKeys([
+        'activeServices', 'totalServices', 'healthyServices',
+        'recentWebhooks', 'pendingActions', 'recentActions', 'failedActions',
+        'updatedAt',
+    ]);
     expect($payload['activeServices'])->toBe(3);
+    expect($payload['healthyServices'])->toBe(4);
+    expect($payload['recentActions'])->toBe(8);
+    expect($payload['failedActions'])->toBe(1);
 });
 
 test('webhook intake survives a broken broadcaster because dashboard rebroadcast is queued', function (): void {

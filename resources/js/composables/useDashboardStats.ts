@@ -5,8 +5,11 @@ import { useWebSocket } from '@/composables/useWebSocket';
 export interface DashboardStats {
     activeServices: number;
     totalServices: number;
+    healthyServices: number;
     recentWebhooks: number;
     pendingActions: number;
+    recentActions: number;
+    failedActions: number;
     updatedAt: string;
 }
 

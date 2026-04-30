@@ -9,7 +9,7 @@ import {
     Server,
     X,
 } from 'lucide-vue-next';
-import { computed, onMounted, ref } from 'vue';
+import { computed, onMounted, onUnmounted, ref } from 'vue';
 import ServiceHealthController from '@/actions/App/Http/Controllers/Monitoring/ServiceHealthController';
 import { Pill, StatCard, StatusPill, SvcChip } from '@/components/mm';
 import { Button } from '@/components/ui/button';
@@ -180,12 +180,35 @@ function formatSize(bytes: number | null): string {
     return `${value.toFixed(1)} ${units[i]}`;
 }
 
+// Reactive "now" so relative time labels tick without waiting for a
+// websocket event. The 30s cadence matches the granularity of the
+// labels we render (just now / Nm ago / Nh ago) so we never refresh
+// for nothing.
+const nowTick = ref(Date.now());
+let nowTickTimer: ReturnType<typeof setInterval> | null = null;
+
+onMounted(() => {
+    nowTickTimer = setInterval(() => {
+        nowTick.value = Date.now();
+    }, 30_000);
+});
+
+onUnmounted(() => {
+    if (nowTickTimer !== null) {
+        clearInterval(nowTickTimer);
+        nowTickTimer = null;
+    }
+});
+
 function formatTime(iso: string | null): string {
     if (!iso) {
         return 'never';
     }
 
-    const ms = Date.now() - new Date(iso).getTime();
+    // Read nowTick so Vue invalidates this expression when the timer
+    // fires. The actual value comes from Date.now() — the tick is just
+    // there to mark the dependency.
+    const ms = nowTick.value - new Date(iso).getTime();
     const m = Math.floor(ms / 60_000);
 
     if (m < 1) {

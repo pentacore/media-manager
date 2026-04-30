@@ -39,6 +39,7 @@ const props = defineProps<{
         links: PaginatorLink[];
         meta: PaginatorMeta;
     };
+    statusCounts: Record<string, number>;
     filters: { status: string };
 }>();
 
@@ -139,17 +140,41 @@ function applyStatusChange(payload: StatusChangePayload): void {
     }
 }
 
+// Tab counts depend on a global aggregate that the in-memory liveRequests
+// list can't compute (it's capped at one page). Reload the prop on every
+// status-change event so the strip stays in sync with the DB.
+let statusCountsReloadTimer: ReturnType<typeof setTimeout> | null = null;
+function scheduleStatusCountsReload(): void {
+    if (statusCountsReloadTimer !== null) {
+        return;
+    }
+
+    statusCountsReloadTimer = setTimeout(() => {
+        statusCountsReloadTimer = null;
+        router.reload({ only: ['statusCounts'] });
+    }, 500);
+}
+
 onMounted(() => {
     subscribeCreated();
 
-    privateChannel(ACTIONS_CHANNEL).listen(
-        '.ActionRequestStatusChanged',
-        (event: StatusChangePayload) => applyStatusChange(event),
-    );
+    privateChannel(ACTIONS_CHANNEL)
+        .listen(
+            '.ActionRequestStatusChanged',
+            (event: StatusChangePayload) => {
+                applyStatusChange(event);
+                scheduleStatusCountsReload();
+            },
+        )
+        .listen('.ActionRequestCreated', () => scheduleStatusCountsReload());
 });
 
 onUnmounted(() => {
     leaveChannel(ACTIONS_CHANNEL);
+    if (statusCountsReloadTimer !== null) {
+        clearTimeout(statusCountsReloadTimer);
+        statusCountsReloadTimer = null;
+    }
 });
 
 const TABS: { id: string; label: string }[] = [
@@ -298,10 +323,13 @@ function payloadDetail(row: ActionRequestRow): string {
 
 function statusCount(id: string): number {
     if (id === 'all') {
-        return props.requests.meta.total;
+        return Object.values(props.statusCounts).reduce(
+            (sum, n) => sum + n,
+            0,
+        );
     }
 
-    return visibleRequests.value.filter((row) => row.status === id).length;
+    return props.statusCounts[id] ?? 0;
 }
 
 function pipelineState(

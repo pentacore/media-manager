@@ -127,8 +127,12 @@ const { items: liveActivity, subscribe: subscribeActivity } =
         cap: 10,
     });
 
-const recentActions = computed(() => props.stats.recentActions);
-const failedActions = computed(() => props.stats.failedActions);
+const recentActions = computed(
+    () => liveStats.value?.recentActions ?? props.stats.recentActions,
+);
+const failedActions = computed(
+    () => liveStats.value?.failedActions ?? props.stats.failedActions,
+);
 const recentWebhooks = computed(
     () => liveStats.value?.recentWebhooks ?? props.stats.recentWebhooks,
 );

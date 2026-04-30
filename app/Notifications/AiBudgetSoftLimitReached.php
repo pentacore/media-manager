@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Notifications;
 
 use Illuminate\Bus\Queueable;
+use Illuminate\Notifications\Messages\BroadcastMessage;
 use Illuminate\Notifications\Notification;
 
 class AiBudgetSoftLimitReached extends Notification
@@ -21,7 +22,7 @@ class AiBudgetSoftLimitReached extends Notification
      */
     public function via(object $notifiable): array
     {
-        return ['database'];
+        return ['database', 'broadcast'];
     }
 
     /**
@@ -41,5 +42,14 @@ class AiBudgetSoftLimitReached extends Notification
             'spend_usd' => $this->spendUsd,
             'soft_cap_usd' => $this->softCapUsd,
         ];
+    }
+
+    /**
+     * Mirrors toArray so the websocket payload matches what the
+     * Notifications page renders for already-persisted rows.
+     */
+    public function toBroadcast(object $notifiable): BroadcastMessage
+    {
+        return new BroadcastMessage($this->toArray($notifiable));
     }
 }

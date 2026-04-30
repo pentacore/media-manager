@@ -19,8 +19,11 @@ class DashboardStatsUpdated implements ShouldBroadcast
     public function __construct(
         public int $activeServices,
         public int $totalServices,
+        public int $healthyServices,
         public int $recentWebhooks,
         public int $pendingActions,
+        public int $recentActions,
+        public int $failedActions,
     ) {}
 
     public function broadcastOn(): PrivateChannel
@@ -41,8 +44,11 @@ class DashboardStatsUpdated implements ShouldBroadcast
         return [
             'activeServices' => $this->activeServices,
             'totalServices' => $this->totalServices,
+            'healthyServices' => $this->healthyServices,
             'recentWebhooks' => $this->recentWebhooks,
             'pendingActions' => $this->pendingActions,
+            'recentActions' => $this->recentActions,
+            'failedActions' => $this->failedActions,
             'updatedAt' => now()->toISOString(),
         ];
     }

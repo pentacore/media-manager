@@ -44,8 +44,32 @@ class ActionRequestController extends Controller
                     'per_page' => $lengthAwarePaginator->perPage(),
                 ],
             ],
+            // Per-status totals for the tab strip — page-paginated rows
+            // can't drive these accurately, especially when the user is
+            // already filtered to a single status. Refreshed via partial
+            // Inertia reload on each ActionRequestStatusChanged broadcast.
+            'statusCounts' => $this->statusCounts(),
             'filters' => ['status' => $status],
         ]);
+    }
+
+    /**
+     * @return array<string, int>
+     */
+    private function statusCounts(): array
+    {
+        $counts = ActionRequest::query()
+            ->selectRaw('status, COUNT(*) as total')
+            ->groupBy('status')
+            ->pluck('total', 'status')
+            ->all();
+
+        $out = [];
+        foreach (ActionRequestStatus::cases() as $case) {
+            $out[$case->value] = (int) ($counts[$case->value] ?? 0);
+        }
+
+        return $out;
     }
 
     public function approve(Request $request, ActionRequest $actionRequest): RedirectResponse

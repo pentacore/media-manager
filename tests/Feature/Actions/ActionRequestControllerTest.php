@@ -59,6 +59,24 @@ test('members see sanitized action results in request listings', function (): vo
         );
 });
 
+test('index exposes per-status counts independent of the active filter', function (): void {
+    $member = User::factory()->member()->create();
+    ActionRequest::factory()->count(2)->create(['status' => ActionRequestStatus::Pending]);
+    ActionRequest::factory()->count(3)->completed()->create();
+    ActionRequest::factory()->create(['status' => ActionRequestStatus::Executing]);
+
+    // The page is filtered to "pending" but the strip should still know
+    // there are completed and executing items in the database.
+    $this->actingAs($member)
+        ->get(route('actions.requests.index', ['status' => 'pending']))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->where('statusCounts.pending', 2)
+            ->where('statusCounts.completed', 3)
+            ->where('statusCounts.executing', 1)
+        );
+});
+
 test('status filter narrows results', function (): void {
     $member = User::factory()->member()->create();
     ActionRequest::factory()->count(2)->create(['status' => ActionRequestStatus::Pending]);

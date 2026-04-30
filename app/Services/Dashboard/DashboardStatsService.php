@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Services\Dashboard;
 
 use App\Enums\ActionRequestStatus;
+use App\Enums\HealthStatus;
 use App\Events\DashboardStatsUpdated;
 use App\Models\ActionRequest;
 use App\Models\ServiceConnection;
@@ -13,15 +14,21 @@ use App\Models\WebhookEvent;
 class DashboardStatsService
 {
     /**
-     * @return array{activeServices: int, totalServices: int, recentWebhooks: int, pendingActions: int}
+     * @return array{activeServices: int, totalServices: int, healthyServices: int, recentWebhooks: int, pendingActions: int, recentActions: int, failedActions: int}
      */
     public function snapshot(): array
     {
+        $since = now()->subDay();
+
         return [
             'activeServices' => ServiceConnection::where('is_active', true)->count(),
             'totalServices' => ServiceConnection::count(),
-            'recentWebhooks' => WebhookEvent::where('created_at', '>=', now()->subDay())->count(),
+            'healthyServices' => ServiceConnection::where('health_status', HealthStatus::Healthy)->count(),
+            'recentWebhooks' => WebhookEvent::where('created_at', '>=', $since)->count(),
             'pendingActions' => ActionRequest::where('status', ActionRequestStatus::Pending)->count(),
+            'recentActions' => ActionRequest::where('created_at', '>=', $since)->count(),
+            'failedActions' => ActionRequest::where('status', ActionRequestStatus::Failed)
+                ->where('created_at', '>=', $since)->count(),
         ];
     }
 
@@ -32,8 +39,11 @@ class DashboardStatsService
         $dashboardStatsUpdated = new DashboardStatsUpdated(
             activeServices: $snapshot['activeServices'],
             totalServices: $snapshot['totalServices'],
+            healthyServices: $snapshot['healthyServices'],
             recentWebhooks: $snapshot['recentWebhooks'],
             pendingActions: $snapshot['pendingActions'],
+            recentActions: $snapshot['recentActions'],
+            failedActions: $snapshot['failedActions'],
         );
 
         event($dashboardStatsUpdated);
