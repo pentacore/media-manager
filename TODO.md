@@ -56,7 +56,7 @@
     - [x] Regular check for activites and show a badge with the amount of activites that needs manual intervention in the sidebar
 - Allow clearing, editing or otherwise manage seerr requests
     - [x] Add a button to clear seerr requests, maybe with options to clear all, clear only completed, clear only cancelled, etc
-    - [ ] Allow editing seerr requests, for example if a request is pending for a long time, allow the user to edit the request and change the quality or something like that to see if it helps with getting the request fulfilled
+    - [x] Allow editing seerr requests, for example if a request is pending for a long time, allow the user to edit the request and change the quality or something like that to see if it helps with getting the request fulfilled
 - [ ] So me providers have a free-tier or a minimum amount before they start charging, id like to support that, for example if a provider has a free-tier of 1000 tokens, we shouldnt start counting the usage for that provider until the user has used more than 1000 tokens, and we should also show how many free tokens they have left in the AI usage page, this is really important for users to be able to manage their costs and not get surprised by a big bill at the end of the month, especially if they are using a provider that has a free-tier or a minimum amount before they start charging. I guess we'll need to set this per model or maybe per provider
 - [x] Add a Today filter to all time scale filters
 - [x] The MediaAgent should respect the model configured in AISettings

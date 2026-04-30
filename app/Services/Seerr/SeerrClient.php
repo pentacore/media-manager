@@ -88,6 +88,24 @@ class SeerrClient
     }
 
     /**
+     * PUT a full request body to Seerr — the upstream contract requires
+     * mediaType + mediaId in every payload, so callers should merge
+     * incoming changes onto the existing request before invoking this.
+     *
+     * @param  array<string, mixed>  $payload
+     * @return array<string, mixed>
+     *
+     * @throws RequestException|ConnectionException
+     */
+    public function updateRequest(int $id, array $payload): array
+    {
+        return $this->buildClient()
+            ->put(sprintf('/api/%s/request/%d', $this->apiVersion, $id), $payload)
+            ->throw()
+            ->json() ?? [];
+    }
+
+    /**
      * Update a request's status to approve or decline.
      *
      * @return array<string, mixed>

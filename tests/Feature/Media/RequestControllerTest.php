@@ -593,6 +593,90 @@ test('approve handles connection failure gracefully', function (): void {
         ->assertRedirect(route('media.requests.index'));
 });
 
+test('admin can fetch edit options for a TV request from Sonarr', function (): void {
+    $admin = User::factory()->admin()->create();
+    ServiceConnection::factory()->sonarr()->create([
+        'url' => 'http://sonarr.local:8989',
+        'api_key' => 'sonarr-key',
+    ]);
+
+    Http::fake([
+        'seerr.local:5055/api/v1/request/42' => Http::response([
+            'id' => 42,
+            'media' => ['id' => 100, 'mediaType' => 'tv', 'tmdbId' => 1396],
+            'profileId' => 7,
+            'rootFolder' => '/tv',
+            'serverId' => 0,
+            'is4k' => false,
+        ]),
+        'sonarr.local:8989/api/v3/qualityprofile' => Http::response([
+            ['id' => 7, 'name' => 'HD-1080p'],
+            ['id' => 9, 'name' => 'Ultra-HD'],
+        ]),
+        'sonarr.local:8989/api/v3/rootfolder' => Http::response([
+            ['path' => '/tv', 'freeSpace' => 1_000_000_000],
+        ]),
+    ]);
+
+    $this->actingAs($admin)
+        ->getJson(route('media.requests.edit-options', 42))
+        ->assertOk()
+        ->assertJsonPath('media_type', 'tv')
+        ->assertJsonPath('current.profile_id', 7)
+        ->assertJsonPath('current.media_id', 100)
+        ->assertJsonPath('profiles.1.name', 'Ultra-HD')
+        ->assertJsonPath('root_folders.0.path', '/tv');
+});
+
+test('admin can update a request and the PUT carries the merged body', function (): void {
+    $admin = User::factory()->admin()->create();
+
+    Http::fake([
+        'seerr.local:5055/api/v1/request/42' => Http::sequence()
+            ->push([
+                'id' => 42,
+                'media' => ['id' => 100, 'mediaType' => 'movie', 'tmdbId' => 603],
+                'profileId' => 7,
+                'rootFolder' => '/movies',
+                'serverId' => 0,
+                'is4k' => false,
+                'tags' => [3],
+            ])
+            ->push(['ok' => true]),
+    ]);
+
+    $this->actingAs($admin)
+        ->from(route('media.requests.index'))
+        ->put(route('media.requests.update', 42), [
+            'profile_id' => 9,
+            'root_folder' => '/movies-uhd',
+        ])
+        ->assertRedirect(route('media.requests.index'))
+        ->assertSessionHas('inertia.flash_data.toast.type', 'success');
+
+    Http::assertSent(fn ($request): bool => $request->method() === 'PUT'
+        && str_ends_with((string) $request->url(), '/api/v1/request/42')
+        && ($request->data()['mediaType'] ?? null) === 'movie'
+        && ($request->data()['mediaId'] ?? null) === 100
+        && ($request->data()['profileId'] ?? null) === 9
+        && ($request->data()['rootFolder'] ?? null) === '/movies-uhd'
+        && ($request->data()['serverId'] ?? null) === 0
+        && ($request->data()['is4k'] ?? null) === false
+        && ($request->data()['tags'] ?? null) === [3]
+    );
+});
+
+test('member cannot edit a Seerr request', function (): void {
+    $member = User::factory()->member()->create();
+
+    $this->actingAs($member)
+        ->put(route('media.requests.update', 42), [
+            'profile_id' => 9,
+            'root_folder' => '/movies',
+        ])
+        ->assertForbidden();
+});
+
 test('admin can bulk-clear available requests', function (): void {
     $admin = User::factory()->admin()->create();
 

@@ -46,6 +46,14 @@ Route::middleware(['auth', 'verified', 'password.set', 'role:member'])
         Route::post('requests/clear', [RequestController::class, 'clear'])
             ->middleware('role:admin')
             ->name('requests.clear');
+        Route::get('requests/{id}/edit-options', [RequestController::class, 'editOptions'])
+            ->whereNumber('id')
+            ->middleware('role:admin')
+            ->name('requests.edit-options');
+        Route::put('requests/{id}', [RequestController::class, 'update'])
+            ->whereNumber('id')
+            ->middleware('role:admin')
+            ->name('requests.update');
 
         // Unified search
         Route::get('search', [SearchController::class, 'index'])->name('search.index');

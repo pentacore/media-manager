@@ -8,11 +8,15 @@ use App\Cache\Services\SeerrCache;
 use App\Enums\ServiceType;
 use App\Http\Controllers\Controller;
 use App\Models\ServiceConnection;
+use App\Services\Arr\ArrClient;
+use App\Services\Radarr\RadarrClient;
 use App\Services\Seerr\SeerrClient;
 use App\Services\Seerr\SeerrTitleResolver;
+use App\Services\Sonarr\SonarrClient;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\RequestException;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -124,6 +128,157 @@ class RequestController extends Controller
         Inertia::flash('toast', ['type' => 'success', 'message' => __('Request retry triggered.')]);
 
         return back();
+    }
+
+    /**
+     * Returns the current request snapshot plus the quality profiles and
+     * root folders the matching Sonarr/Radarr exposes — Seerr does NOT
+     * expose its own /service config endpoint we can use, so we read
+     * profile lists straight from the *arr that owns the media.
+     */
+    public function editOptions(int $id): JsonResponse
+    {
+        try {
+            $connection = ServiceConnection::resolveActive(ServiceType::Seerr);
+        } catch (ModelNotFoundException) {
+            return new JsonResponse(['error' => 'no_seerr_connection'], 422);
+        }
+
+        try {
+            $request = new SeerrClient($connection)->getRequestById($id);
+        } catch (RequestException|ConnectionException $throwable) {
+            return new JsonResponse(['error' => $throwable->getMessage()], 502);
+        }
+
+        $mediaType = (string) ($request['media']['mediaType'] ?? $request['type'] ?? '');
+        $arrClient = $this->resolveArrFor($mediaType);
+        if (! $arrClient instanceof ArrClient) {
+            return new JsonResponse(['error' => 'no_arr_for_media_type'], 422);
+        }
+
+        try {
+            $profiles = $arrClient->getQualityProfiles();
+            $rootFolders = $arrClient->getRootFolders();
+        } catch (RequestException|ConnectionException $throwable) {
+            return new JsonResponse(['error' => 'arr_unreachable: '.$throwable->getMessage()], 502);
+        }
+
+        return new JsonResponse([
+            'media_type' => $mediaType,
+            'current' => [
+                'profile_id' => $request['profileId'] ?? null,
+                'root_folder' => $request['rootFolder'] ?? null,
+                'server_id' => $request['serverId'] ?? null,
+                'is4k' => (bool) ($request['is4k'] ?? false),
+                'media_id' => $request['media']['id'] ?? null,
+            ],
+            'profiles' => array_values(array_map(
+                static fn (array $profile): array => [
+                    'id' => $profile['id'] ?? null,
+                    'name' => $profile['name'] ?? null,
+                ],
+                $profiles,
+            )),
+            'root_folders' => array_values(array_map(
+                static fn (array $folder): array => [
+                    'path' => $folder['path'] ?? null,
+                    'free_space' => $folder['freeSpace'] ?? null,
+                ],
+                $rootFolders,
+            )),
+        ]);
+    }
+
+    /**
+     * Apply a profile / root folder change to a Seerr request. We re-read
+     * the existing row first so the upstream PUT — which requires the
+     * full media descriptor on every call — keeps mediaType + mediaId +
+     * serverId + is4k aligned with Seerr's stored values; the caller can
+     * only override the two fields they're supposed to be editing.
+     */
+    public function update(Request $request, int $id): RedirectResponse
+    {
+        $validated = $request->validate([
+            'profile_id' => ['required', 'integer'],
+            'root_folder' => ['required', 'string'],
+        ]);
+
+        try {
+            $connection = ServiceConnection::resolveActive(ServiceType::Seerr);
+        } catch (ModelNotFoundException) {
+            return $this->noConnectionRedirect();
+        }
+
+        $seerrClient = new SeerrClient($connection);
+
+        try {
+            $existing = $seerrClient->getRequestById($id);
+        } catch (RequestException|ConnectionException $throwable) {
+            Inertia::flash('toast', ['type' => 'error', 'message' => __('Failed to load request: :msg', ['msg' => $throwable->getMessage()])]);
+
+            return back();
+        }
+
+        $mediaType = $existing['media']['mediaType'] ?? $existing['type'] ?? null;
+        $mediaId = $existing['media']['id'] ?? null;
+        if ($mediaType === null || $mediaId === null) {
+            Inertia::flash('toast', ['type' => 'error', 'message' => __('Request is missing media metadata.')]);
+
+            return back();
+        }
+
+        $payload = [
+            'mediaType' => $mediaType,
+            'mediaId' => (int) $mediaId,
+            'serverId' => $existing['serverId'] ?? null,
+            'profileId' => (int) $validated['profile_id'],
+            'rootFolder' => $validated['root_folder'],
+            'is4k' => (bool) ($existing['is4k'] ?? false),
+        ];
+
+        if (isset($existing['languageProfileId'])) {
+            $payload['languageProfileId'] = $existing['languageProfileId'];
+        }
+
+        if (isset($existing['tags']) && is_array($existing['tags'])) {
+            $payload['tags'] = $existing['tags'];
+        }
+
+        try {
+            $seerrClient->updateRequest($id, $payload);
+            new SeerrCache($connection)->bustAll();
+        } catch (RequestException|ConnectionException $throwable) {
+            Inertia::flash('toast', ['type' => 'error', 'message' => __('Seerr rejected the update: :msg', ['msg' => $throwable->getMessage()])]);
+
+            return back();
+        }
+
+        Inertia::flash('toast', ['type' => 'success', 'message' => __('Request updated.')]);
+
+        return back();
+    }
+
+    private function resolveArrFor(string $mediaType): ?ArrClient
+    {
+        $arrType = match ($mediaType) {
+            'tv' => ServiceType::Sonarr,
+            'movie' => ServiceType::Radarr,
+            default => null,
+        };
+
+        if ($arrType === null) {
+            return null;
+        }
+
+        try {
+            $connection = ServiceConnection::resolveActive($arrType);
+        } catch (ModelNotFoundException) {
+            return null;
+        }
+
+        return $arrType === ServiceType::Sonarr
+            ? new SonarrClient($connection)
+            : new RadarrClient($connection);
     }
 
     /** Statuses the bulk-clear UI is allowed to target. */

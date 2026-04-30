@@ -7,6 +7,8 @@ import {
     ChevronsDown,
     Database,
     ExternalLink,
+    Loader2,
+    Pencil,
     RefreshCcw,
     RefreshCw,
     Trash2,
@@ -24,6 +26,13 @@ import {
 } from '@/components/mm';
 import { Button } from '@/components/ui/button';
 import {
+    Dialog,
+    DialogContent,
+    DialogFooter,
+    DialogHeader,
+    DialogTitle,
+} from '@/components/ui/dialog';
+import {
     DropdownMenu,
     DropdownMenuContent,
     DropdownMenuItem,
@@ -31,6 +40,7 @@ import {
     DropdownMenuSeparator,
     DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import { Label } from '@/components/ui/label';
 import {
     Select,
     SelectContent,
@@ -340,6 +350,106 @@ function retryRequest(req: SeerrRequest) {
     });
 }
 
+interface EditOptions {
+    media_type: string | null;
+    current: {
+        profile_id: number | null;
+        root_folder: string | null;
+        server_id: number | null;
+        is4k: boolean;
+        media_id: number | null;
+    };
+    profiles: { id: number | null; name: string | null }[];
+    root_folders: { path: string | null; free_space: number | null }[];
+}
+
+const editingRequest = ref<SeerrRequest | null>(null);
+const editLoading = ref(false);
+const editError = ref<string | null>(null);
+const editOptions = ref<EditOptions | null>(null);
+const editProfileId = ref<string>('');
+const editRootFolder = ref<string>('');
+const editSubmitting = ref(false);
+
+function openEdit(req: SeerrRequest): void {
+    editingRequest.value = req;
+    editOptions.value = null;
+    editError.value = null;
+    editLoading.value = true;
+    editProfileId.value = '';
+    editRootFolder.value = '';
+
+    fetch(RequestController.editOptions.url(req.id), {
+        headers: { Accept: 'application/json' },
+        credentials: 'same-origin',
+    })
+        .then(async (response) => {
+            const body = (await response.json()) as
+                | EditOptions
+                | { error: string };
+
+            if (!response.ok) {
+                editError.value =
+                    'error' in body
+                        ? body.error
+                        : `Request failed (${response.status})`;
+
+                return;
+            }
+
+            const opts = body as EditOptions;
+            editOptions.value = opts;
+            editProfileId.value =
+                opts.current.profile_id !== null
+                    ? String(opts.current.profile_id)
+                    : '';
+            editRootFolder.value = opts.current.root_folder ?? '';
+        })
+        .catch((error: unknown) => {
+            editError.value =
+                error instanceof Error ? error.message : 'Network error';
+        })
+        .finally(() => {
+            editLoading.value = false;
+        });
+}
+
+function closeEdit(): void {
+    if (editSubmitting.value) {
+        return;
+    }
+
+    editingRequest.value = null;
+    editOptions.value = null;
+    editError.value = null;
+}
+
+function submitEdit(): void {
+    const req = editingRequest.value;
+    if (!req || editProfileId.value === '' || editRootFolder.value === '') {
+        return;
+    }
+
+    editSubmitting.value = true;
+    router.put(
+        RequestController.update.url(req.id),
+        {
+            profile_id: Number(editProfileId.value),
+            root_folder: editRootFolder.value,
+        },
+        {
+            preserveScroll: true,
+            onSuccess: () => {
+                editingRequest.value = null;
+                router.reload({ only: ['requests', 'summary'] });
+            },
+            onFinish: () => {
+                editSubmitting.value = false;
+            },
+        },
+    );
+}
+
 const CLEARABLE_STATUSES = [
     'completed',
     'available',
@@ -631,6 +741,15 @@ const rangeText = computed(() => {
                             v-if="isAdmin"
                             type="button"
                             class="inline-flex size-7 items-center justify-center rounded-md text-muted-foreground hover:bg-bg-hover"
+                            title="Edit profile / root folder"
+                            @click="openEdit(req)"
+                        >
+                            <Pencil class="size-3.5" />
+                        </button>
+                        <button
+                            v-if="isAdmin"
+                            type="button"
+                            class="inline-flex size-7 items-center justify-center rounded-md text-muted-foreground hover:bg-bg-hover"
                             title="Retry"
                             @click="retryRequest(req)"
                         >
@@ -697,5 +816,91 @@ const rangeText = computed(() => {
                 </Button>
             </div>
         </div>
+
+        <!-- Edit request dialog -->
+        <Dialog
+            :open="editingRequest !== null"
+            @update:open="(v) => !v && closeEdit()"
+        >
+            <DialogContent v-if="editingRequest" class="sm:max-w-lg">
+                <DialogHeader>
+                    <DialogTitle>
+                        Edit request — {{ editingRequest.media_title ?? 'item' }}
+                    </DialogTitle>
+                </DialogHeader>
+                <div
+                    v-if="editLoading"
+                    class="flex items-center gap-2 py-6 text-sm text-muted-foreground"
+                >
+                    <Loader2 class="size-4 animate-spin" />
+                    Loading options…
+                </div>
+                <div
+                    v-else-if="editError"
+                    class="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-[12px] text-destructive"
+                >
+                    {{ editError }}
+                </div>
+                <div v-else-if="editOptions" class="space-y-4">
+                    <div class="space-y-2">
+                        <Label>Quality profile</Label>
+                        <Select v-model="editProfileId">
+                            <SelectTrigger>
+                                <SelectValue placeholder="Pick a profile" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem
+                                    v-for="profile in editOptions.profiles"
+                                    :key="profile.id ?? 0"
+                                    :value="String(profile.id ?? 0)"
+                                >
+                                    {{ profile.name ?? 'Unnamed' }}
+                                </SelectItem>
+                            </SelectContent>
+                        </Select>
+                    </div>
+                    <div class="space-y-2">
+                        <Label>Root folder</Label>
+                        <Select v-model="editRootFolder">
+                            <SelectTrigger>
+                                <SelectValue placeholder="Pick a folder" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem
+                                    v-for="folder in editOptions.root_folders"
+                                    :key="folder.path ?? ''"
+                                    :value="folder.path ?? ''"
+                                >
+                                    {{ folder.path ?? '—' }}
+                                </SelectItem>
+                            </SelectContent>
+                        </Select>
+                    </div>
+                </div>
+                <DialogFooter>
+                    <Button
+                        variant="ghost"
+                        :disabled="editSubmitting"
+                        @click="closeEdit"
+                    >
+                        Cancel
+                    </Button>
+                    <Button
+                        :disabled="
+                            editSubmitting ||
+                            editLoading ||
+                            editProfileId === '' ||
+                            editRootFolder === ''
+                        "
+                        @click="submitEdit"
+                    >
+                        <Loader2
+                            v-if="editSubmitting"
+                            class="mr-1.5 size-3.5 animate-spin"
+                        />Save changes
+                    </Button>
+                </DialogFooter>
+            </DialogContent>
+        </Dialog>
     </div>
 </template>
