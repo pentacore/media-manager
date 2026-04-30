@@ -20,6 +20,7 @@ import {
     Sparkles,
     Tv,
     Users,
+    ListTodo,
     Webhook as WebhookIcon,
 } from 'lucide-vue-next';
 import { computed, onMounted, onUnmounted, ref, watchEffect } from 'vue';
@@ -27,6 +28,7 @@ import ActionRequestController from '@/actions/App/Http/Controllers/Actions/Acti
 import ActionTypeConfigController from '@/actions/App/Http/Controllers/Actions/ActionTypeConfigController';
 import ActivityLogController from '@/actions/App/Http/Controllers/ActivityLogController';
 import AiModelPriceController from '@/actions/App/Http/Controllers/Admin/AiModelPriceController';
+import JobsController from '@/actions/App/Http/Controllers/Admin/JobsController';
 import AiSettingsController from '@/actions/App/Http/Controllers/Admin/AiSettingsController';
 import AiUsageController from '@/actions/App/Http/Controllers/Admin/AiUsageController';
 import ServiceConnectionController from '@/actions/App/Http/Controllers/Admin/ServiceConnectionController';
@@ -347,6 +349,11 @@ const adminNavItems: NavItem[] = [
         title: 'Webhook Log',
         href: WebhookLogController.index.url(),
         icon: WebhookIcon,
+    },
+    {
+        title: 'Jobs',
+        href: JobsController.index.url(),
+        icon: ListTodo,
     },
 ];
 </script>

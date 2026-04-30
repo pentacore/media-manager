@@ -6,6 +6,7 @@ use App\Http\Controllers\Admin\AiModelPriceController;
 use App\Http\Controllers\Admin\AiSettingsController;
 use App\Http\Controllers\Admin\AiUsageController;
 use App\Http\Controllers\Admin\EmbyLinkController;
+use App\Http\Controllers\Admin\JobsController;
 use App\Http\Controllers\Admin\ProwlarrTestIndexerController;
 use App\Http\Controllers\Admin\ServiceConnectionController;
 use App\Http\Controllers\Admin\UserController;
@@ -51,4 +52,6 @@ Route::middleware(['auth', 'verified', 'password.set', 'role:admin'])->prefix('a
     Route::get('webhook-log', [WebhookLogController::class, 'index'])->name('webhook-log.index');
     Route::put('webhook-log/settings', [WebhookLogController::class, 'updateSettings'])->name('webhook-log.update-settings');
     Route::get('webhook-log/{webhookEvent}', [WebhookLogController::class, 'show'])->name('webhook-log.show');
+
+    Route::get('jobs', [JobsController::class, 'index'])->name('jobs.index');
 });
