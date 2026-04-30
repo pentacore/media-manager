@@ -738,7 +738,7 @@ const filteredRows = computed<QueueRow[]>(() => {
                 </template>
             </div>
 
-            <div v-else class="overflow-hidden rounded-xl border border-border bg-card">
+            <div v-else class="overflow-x-auto rounded-xl border border-border bg-card">
                 <table class="w-full border-collapse text-[13px]">
                     <thead>
                         <tr>

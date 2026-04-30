@@ -231,6 +231,61 @@ function channelLabel(action: string): string {
     return 'web';
 }
 
+const SERVICE_LABELS: Record<string, string> = {
+    sonarr: 'Sonarr',
+    radarr: 'Radarr',
+    seerr: 'Seerr',
+    prowlarr: 'Prowlarr',
+    sabnzbd: 'SABnzbd',
+    emby: 'Emby',
+};
+
+// Map raw action strings (e.g. `webhook.sabnzbd.download.completed`,
+// `action_request.created`, `sabnzbd.slot.deleted`) into a human label
+// for the activity log row. Falls back to the original action if the
+// shape is unfamiliar so we never lose information silently.
+function humanizeAction(action: string): string {
+    if (!action) {
+        return '—';
+    }
+
+    const parts = action.split('.');
+
+    // webhook.{service}.{event...} — keep the service chip first.
+    if (parts.length >= 3 && parts[0] === 'webhook') {
+        const service = SERVICE_LABELS[parts[1]] ?? capitalize(parts[1]);
+        const event = parts.slice(2).join('_');
+
+        return `${service} · ${capitalize(event.replace(/_/g, ' '))}`;
+    }
+
+    // `sabnzbd.queue.paused`, `sabnzbd.slot.deleted`, `sabnzbd.download.completed`
+    if (parts.length >= 2 && SERVICE_LABELS[parts[0]]) {
+        const service = SERVICE_LABELS[parts[0]];
+        const rest = parts.slice(1).join(' ').replace(/_/g, ' ');
+
+        return `${service} · ${capitalize(rest)}`;
+    }
+
+    // `action_request.created` — generic "category · verb" shape.
+    if (parts.length === 2) {
+        const category = capitalize(parts[0].replace(/_/g, ' '));
+        const verb = capitalize(parts[1].replace(/_/g, ' '));
+
+        return `${category} · ${verb}`;
+    }
+
+    return capitalize(action.replace(/[._]/g, ' '));
+}
+
+function capitalize(value: string): string {
+    if (!value) {
+        return '';
+    }
+
+    return value.charAt(0).toUpperCase() + value.slice(1);
+}
+
 function goToPage(url: string | null) {
     if (!url) {
         return;
@@ -468,9 +523,10 @@ function exportUrl(): string {
                 />
                 <span v-else class="text-[12px] text-fg-subtle">—</span>
                 <span
-                    class="font-mono-tabular min-w-[160px] text-[12px] text-foreground"
+                    class="min-w-[160px] text-[12px] text-foreground"
+                    :title="log.action"
                 >
-                    {{ log.action }}
+                    {{ humanizeAction(log.action) }}
                 </span>
                 <span
                     class="min-w-0 flex-1 truncate text-[12.5px] text-muted-foreground"

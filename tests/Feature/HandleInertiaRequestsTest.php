@@ -3,7 +3,11 @@
 declare(strict_types=1);
 
 use App\Enums\UserRole;
+use App\Models\ServiceConnection;
 use App\Models\User;
+use App\Services\Library\InterventionCounter;
+use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Http;
 
 beforeEach(function (): void {
     config()->set('inertia.testing.ensure_pages_exist', false);
@@ -45,4 +49,42 @@ test('shared auth.user is null for guests', function (): void {
     $this->get(route('home'))
         ->assertOk()
         ->assertInertia(fn ($page) => $page->where('auth.user', null));
+});
+
+test('libraryIntervention warms a cold cache on first request', function (): void {
+    Cache::forget(InterventionCounter::CACHE_KEY);
+
+    ServiceConnection::factory()->sonarr()->create([
+        'url' => 'http://sonarr.local:8989',
+        'api_key' => 'k',
+    ]);
+
+    Http::fake([
+        'sonarr.local:8989/api/v3/queue*' => Http::response([
+            'records' => [
+                ['trackedDownloadStatus' => 'warning', 'trackedDownloadState' => 'importBlocked'],
+                ['trackedDownloadStatus' => 'ok', 'trackedDownloadState' => 'downloading'],
+            ],
+        ]),
+    ]);
+
+    $user = User::factory()->member()->create();
+
+    $this->actingAs($user)
+        ->get(route('dashboard'))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page->where('nav.libraryIntervention', 1));
+
+    expect(Cache::get(InterventionCounter::CACHE_KEY))->toBe(1);
+});
+
+test('libraryIntervention reads cache when already populated', function (): void {
+    Cache::put(InterventionCounter::CACHE_KEY, 7, 60);
+
+    $user = User::factory()->member()->create();
+
+    $this->actingAs($user)
+        ->get(route('dashboard'))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page->where('nav.libraryIntervention', 7));
 });

@@ -65,3 +65,15 @@
 - [x] Improve seerr caching between tabs, for example when switching between completed and pending requests, the data gets refetched, we should cache the data for at least a few minutes to avoid unnecessary requests and also to make the UI more responsive when switching between tabs.
 - [x] Cache busting on relevant webhooks, and then we can increase the TTL on the cache for the Arr suite and seerr, since their api is so slow
 - [x] Allow filtering certain sabnzbd categories from showing, i have some less... savoury downloads that shouldnt be shown anywhere in the app
+- [x] Re-label all the activities inb the activity log, for example "sabnzbd.download.completed" should be "Download completed" or something like that
+- [x] Narrow window hides some actions without adding a horizontal scrollbar, thats not great. Library activity is one example.
+- [x] i dont see any badge on the library activity sidebar entry, even though there are at least 1 that needs manual intervention.
+- [ ] Add a badge to the downloads entry in the sidebar, showing how many queued and completed downloads there are.
+- [ ] Sabnzbd webhook support, Sabnzbd has support for a notification script, this can be used to send webhooks to the app. https://sabnzbd.org/wiki/configuration/4.5/scripts/notification-scripts
+    - [ ] Create a webhook script that can be copied from the edit connection page
+    - [ ] Add a webhook type for sabnzbd
+    - [ ] Reload the sabnzbd downloads count on relevant webhooks
+    - [ ] Cache busting on relevant webhooks
+    - [ ] Warning notifications on space running out
+- [ ] Notification support for incoming warning/error webhooks
+- [ ] In the admin area, add a job tracking page, to track the status of all jobs that are queued up or recurring.
