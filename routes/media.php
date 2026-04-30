@@ -66,6 +66,11 @@ Route::middleware(['auth', 'verified', 'password.set', 'role:member'])
             ->whereNumber('id')
             ->middleware('role:admin')
             ->name('library.activity.queue.remove');
+        Route::post('library/activity/queue/{service}/{id}/grab', [LibraryActivityController::class, 'grabQueueItem'])
+            ->whereIn('service', ['sonarr', 'radarr'])
+            ->whereNumber('id')
+            ->middleware('role:admin')
+            ->name('library.activity.queue.grab');
         Route::get('library/activity/manual-import/{service}/{downloadId}', [LibraryActivityController::class, 'manualImportCandidates'])
             ->whereIn('service', ['sonarr', 'radarr'])
             ->middleware('role:admin')

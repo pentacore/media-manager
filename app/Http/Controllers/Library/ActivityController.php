@@ -36,6 +36,28 @@ class ActivityController extends Controller
     }
 
     /**
+     * Skip the RSS-sync delay on a queued release and grab it now.
+     * Common for stuck "delay" status rows where the user knows the
+     * release is good and doesn't want to wait an hour for the next
+     * indexer poll.
+     */
+    public function grabQueueItem(string $service, int $id): RedirectResponse
+    {
+        $client = $this->resolveClient($service);
+        if (! $client instanceof ArrClient) {
+            return $this->flashAndBack('error', __('Unknown service.'));
+        }
+
+        try {
+            $client->grabQueueItem($id);
+        } catch (RequestException|ConnectionException $throwable) {
+            return $this->flashAndBack('error', __('Force grab failed: :msg', ['msg' => $throwable->getMessage()]));
+        }
+
+        return $this->flashAndBack('success', __('Grab triggered.'));
+    }
+
+    /**
      * Drop a stuck or unwanted item from the *arr download queue. Verb
      * controls intent: `remove` strips it from the queue without further
      * action; `block` additionally blocklists the release and triggers a

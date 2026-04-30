@@ -143,6 +143,23 @@ abstract class ArrClient
     }
 
     /**
+     * Force-grab a queued release immediately, bypassing any RSS sync
+     * delay or scheduled retry. Sonarr/Radarr both expose this as
+     * POST /api/v3/queue/grab/{id} with no body.
+     *
+     * @return array<string, mixed>
+     *
+     * @throws RequestException|ConnectionException
+     */
+    public function grabQueueItem(int $id): array
+    {
+        return $this->buildClient()
+            ->post(sprintf('/api/%s/queue/grab/%d', $this->apiVersion, $id))
+            ->throw()
+            ->json() ?? [];
+    }
+
+    /**
      * Remove a row from the download queue. Caller controls whether to
      * also evict it from the download client (`removeFromClient`),
      * remember it so it never returns (`blocklist`), and whether the

@@ -126,6 +126,36 @@ test('queue surfaces errors per service when an upstream call fails', function (
         );
 });
 
+test('admin can force-grab a delayed Sonarr queue item', function (): void {
+    ServiceConnection::factory()->sonarr()->create([
+        'url' => 'http://sonarr.local:8989',
+    ]);
+
+    Http::fake([
+        'sonarr.local:8989/api/v3/queue/grab/55' => Http::response(['id' => 55, 'status' => 'downloading'], 200),
+    ]);
+
+    $admin = User::factory()->admin()->create();
+
+    $this->actingAs($admin)
+        ->from(route('media.library.activity.queue'))
+        ->post(route('media.library.activity.queue.grab', ['service' => 'sonarr', 'id' => 55]))
+        ->assertRedirect(route('media.library.activity.queue'))
+        ->assertSessionHas('inertia.flash_data.toast.type', 'success');
+
+    Http::assertSent(fn ($request): bool => $request->method() === 'POST'
+        && str_ends_with((string) $request->url(), '/api/v3/queue/grab/55')
+    );
+});
+
+test('member cannot force-grab a queue item', function (): void {
+    $member = User::factory()->member()->create();
+
+    $this->actingAs($member)
+        ->post(route('media.library.activity.queue.grab', ['service' => 'sonarr', 'id' => 55]))
+        ->assertForbidden();
+});
+
 test('admin can remove a Sonarr queue item without blocklisting', function (): void {
     ServiceConnection::factory()->sonarr()->create([
         'url' => 'http://sonarr.local:8989',
