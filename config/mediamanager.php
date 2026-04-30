@@ -36,9 +36,11 @@ return [
     |--------------------------------------------------------------------------
     |
     | Slow external-API reads (Sonarr/Radarr/Seerr/Prowlarr/Tmdb/Trakt) are
-    | wrapped in tagged Cache stores under app/Cache/Services. TTLs are short
-    | by default; webhook handlers and local action executors bust per-service
-    | tags when relevant state changes.
+    | wrapped in tagged Cache stores under app/Cache/Services. Webhook
+    | handlers and local action executors bust per-service tags whenever
+    | upstream state actually changes, so the TTLs below are sized for
+    | "between webhooks" — generous on the assumption that the cache will
+    | be invalidated as soon as something the user did affects it.
     |
     */
 
@@ -48,12 +50,16 @@ return [
         'store' => env('MEDIAMANAGER_CACHE_STORE', 'redis'),
 
         'ttl' => [
-            // Paginated lists, searches, summaries.
-            'list' => (int) env('MEDIAMANAGER_CACHE_TTL_LIST', 60),
+            // Paginated lists, searches, summaries. Long enough that
+            // switching between Seerr/Sonarr tabs feels instant; bust on
+            // any webhook event keeps it from going stale.
+            'list' => (int) env('MEDIAMANAGER_CACHE_TTL_LIST', 300),
             // Single-entity reads (e.g. one series, one movie, one request).
-            'entity' => (int) env('MEDIAMANAGER_CACHE_TTL_ENTITY', 300),
-            // Slow-changing third-party metadata (TMDB title/credits, Trakt lists).
-            'metadata' => (int) env('MEDIAMANAGER_CACHE_TTL_METADATA', 600),
+            'entity' => (int) env('MEDIAMANAGER_CACHE_TTL_ENTITY', 600),
+            // Slow-changing third-party metadata (TMDB title/credits, Trakt
+            // lists) — these aren't bust on our webhooks because we don't
+            // own the upstream state, so half an hour is the safety margin.
+            'metadata' => (int) env('MEDIAMANAGER_CACHE_TTL_METADATA', 1800),
         ],
     ],
 

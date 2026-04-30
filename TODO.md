@@ -61,5 +61,5 @@
 - [x] Add a Today filter to all time scale filters
 - [x] The MediaAgent should respect the model configured in AISettings
 - [x] The ai usage details window needs to be scrollable and have a max height. Maybe also store the result message from the AI agent
-- [ ] Improve seerr caching between tabs, for example when switching between completed and pending requests, the data gets refetched, we should cache the data for at least a few minutes to avoid unnecessary requests and also to make the UI more responsive when switching between tabs.
-- [ ] Cache busting on relevant webhooks, and then we can increase the TTL on the cache for the Arr suite and seerr, since their api is so slow
+- [x] Improve seerr caching between tabs, for example when switching between completed and pending requests, the data gets refetched, we should cache the data for at least a few minutes to avoid unnecessary requests and also to make the UI more responsive when switching between tabs.
+- [x] Cache busting on relevant webhooks, and then we can increase the TTL on the cache for the Arr suite and seerr, since their api is so slow
