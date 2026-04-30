@@ -164,6 +164,20 @@ function eventLabel(eventType: string | null): string {
         return '—';
     }
 
+    switch (eventType) {
+        case 'downloadFolderImported':
+        case 'movieFolderImported':
+            return 'imported';
+        case 'episodeFileDeleted':
+            return 'episode deleted';
+        case 'movieFileDeleted':
+            return 'movie deleted';
+        case 'downloadFailed':
+            return 'failed';
+        case 'downloadIgnored':
+            return 'ignored';
+    }
+
     return eventType.replace(/([A-Z])/g, ' $1').toLowerCase().trim();
 }
 
@@ -186,6 +200,28 @@ const acting = ref<string | null>(null);
 
 function actionKey(row: QueueRow, verb: string): string {
     return `${row.service}-${row.id}-${verb}`;
+}
+
+function forceGrab(row: QueueRow): void {
+    if (!confirm(`Force grab "${row.title ?? 'this item'}" now? This bypasses the RSS sync delay.`)) {
+        return;
+    }
+
+    const key = actionKey(row, 'grab');
+    acting.value = key;
+    router.post(
+        LibraryActivityController.grabQueueItem.url({ service: row.service, id: row.id }),
+        {},
+        {
+            preserveScroll: true,
+            onSuccess: () => router.reload({ only: ['queue'] }),
+            onFinish: () => {
+                if (acting.value === key) {
+                    acting.value = null;
+                }
+            },
+        },
+    );
 }
 
 function removeQueueItem(row: QueueRow, verb: 'remove' | 'block'): void {
@@ -371,7 +407,42 @@ function trackedVariant(row: QueueRow): 'ok' | 'warn' | 'danger' | 'info' {
 }
 
 function statusLabel(row: QueueRow): string {
-    return row.tracked_state ?? row.status ?? 'unknown';
+    const raw = row.tracked_state ?? row.status ?? 'unknown';
+
+    switch (raw) {
+        case 'importPending':
+            return 'import pending';
+        case 'importBlocked':
+            return 'import blocked';
+        case 'importing':
+            return 'importing';
+        case 'imported':
+            return 'imported';
+        case 'failedPending':
+            return 'failed pending';
+        case 'downloadClientUnavailable':
+            return 'client offline';
+        case 'downloading':
+            return 'downloading';
+        case 'queued':
+            return 'queued';
+        case 'paused':
+            return 'paused';
+        case 'completed':
+            return 'completed';
+        case 'failed':
+            return 'failed';
+        case 'warning':
+            return 'warning';
+        case 'delay':
+            return 'delayed';
+        case 'fallback':
+            return 'fallback';
+        case 'ignored':
+            return 'ignored';
+    }
+
+    return raw.replace(/([A-Z])/g, ' $1').toLowerCase().trim();
 }
 
 function timeleftLabel(row: QueueRow): string {
@@ -605,6 +676,11 @@ const filteredRows = computed<QueueRow[]>(() => {
                                     <DropdownMenuContent align="end" class="w-52">
                                         <DropdownMenuLabel>Manage queue item</DropdownMenuLabel>
                                         <DropdownMenuSeparator />
+                                        <DropdownMenuItem
+                                            @select="forceGrab(row)"
+                                        >
+                                            Force grab now
+                                        </DropdownMenuItem>
                                         <DropdownMenuItem
                                             :disabled="!row.download_id"
                                             @select="openManualImport(row)"
