@@ -23,6 +23,7 @@ use Override;
  * @property int $cache_read_input_tokens
  * @property int $cache_write_input_tokens
  * @property int $reasoning_tokens
+ * @property string|null $response_text
  * @property int $tool_calls_count
  * @property string|null $input_per_mtok
  * @property string|null $output_per_mtok
@@ -52,6 +53,7 @@ use Override;
     'cache_read_input_tokens',
     'cache_write_input_tokens',
     'reasoning_tokens',
+    'response_text',
     'tool_calls_count',
     'input_per_mtok',
     'output_per_mtok',

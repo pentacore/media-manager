@@ -203,6 +203,7 @@ class AiUsageReporting
                 'cache_write_input_tokens' => $aiUsageRecord->cache_write_input_tokens,
                 'reasoning_tokens' => $aiUsageRecord->reasoning_tokens,
                 'tool_calls_count' => $aiUsageRecord->tool_calls_count,
+                'response_text' => $aiUsageRecord->response_text,
                 'price_source' => $aiUsageRecord->price_source,
                 'conversation_id' => $aiUsageRecord->conversation_id,
                 'status' => $aiUsageRecord->status,

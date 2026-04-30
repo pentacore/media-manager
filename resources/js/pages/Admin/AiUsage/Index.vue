@@ -93,6 +93,7 @@ interface InvocationDetail {
         cache_write_input_tokens: number;
         reasoning_tokens: number;
         tool_calls_count: number;
+        response_text: string | null;
         price_source: string | null;
         conversation_id: string | null;
         status: string;
@@ -838,7 +839,7 @@ function formatTimestamp(value: string): string {
             :open="detail !== null || detailLoading || detailError !== null"
             @update:open="(v) => !v && closeDetail()"
         >
-            <DialogContent class="max-w-3xl">
+            <DialogContent class="flex max-h-[85vh] max-w-3xl flex-col">
                 <DialogHeader>
                     <DialogTitle>Invocation detail</DialogTitle>
                 </DialogHeader>
@@ -855,7 +856,10 @@ function formatTimestamp(value: string): string {
                 >
                     {{ detailError }}
                 </div>
-                <div v-else-if="detail" class="space-y-5">
+                <div
+                    v-else-if="detail"
+                    class="-mr-2 flex-1 space-y-5 overflow-y-auto pr-2"
+                >
                     <!-- Meta header -->
                     <div class="grid gap-3 md:grid-cols-3">
                         <div>
@@ -940,6 +944,25 @@ function formatTimestamp(value: string): string {
                                 {{ detail.record.invocation_id }}
                             </div>
                         </div>
+                    </div>
+
+                    <!-- Final assistant response -->
+                    <div
+                        v-if="detail.record.response_text"
+                        class="rounded-md border border-border bg-bg-elev"
+                    >
+                        <div
+                            class="flex items-center justify-between border-b border-border px-3 py-1.5"
+                        >
+                            <span
+                                class="text-[11px] font-medium tracking-[0.05em] text-muted-foreground uppercase"
+                            >
+                                Assistant response
+                            </span>
+                        </div>
+                        <pre
+                            class="max-h-72 overflow-y-auto px-3 py-2 text-[12px] leading-snug whitespace-pre-wrap break-words"
+                        >{{ detail.record.response_text }}</pre>
                     </div>
 
                     <!-- Pricing source banner -->

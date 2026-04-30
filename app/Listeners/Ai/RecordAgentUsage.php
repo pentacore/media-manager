@@ -30,6 +30,9 @@ class RecordAgentUsage
             'cache_read_input_tokens' => $usage->cacheReadInputTokens,
             'cache_write_input_tokens' => $usage->cacheWriteInputTokens,
             'reasoning_tokens' => $usage->reasoningTokens,
+            // Cap at 64 KB so a runaway tool-stuffed reply can't bloat the
+            // row. Detail-modal use only — we don't index or search this.
+            'response_text' => $this->truncateResponseText($response->text ?? null),
             'tool_calls_count' => AiToolInvocation::where('invocation_id', $agentPrompted->invocationId)->count(),
             'input_per_mtok' => $snapshot['input_per_mtok'] ?? null,
             'output_per_mtok' => $snapshot['output_per_mtok'] ?? null,
@@ -45,6 +48,21 @@ class RecordAgentUsage
             'conversation_id' => $response->conversationId,
             'status' => 'success',
         ]);
+    }
+
+    private const int RESPONSE_TEXT_MAX_BYTES = 65_536;
+
+    private function truncateResponseText(?string $text): ?string
+    {
+        if ($text === null || $text === '') {
+            return null;
+        }
+
+        if (mb_strlen($text, '8bit') <= self::RESPONSE_TEXT_MAX_BYTES) {
+            return $text;
+        }
+
+        return mb_strcut($text, 0, self::RESPONSE_TEXT_MAX_BYTES - 3, 'UTF-8').'…';
     }
 
     /**

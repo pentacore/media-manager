@@ -260,6 +260,30 @@ test('show returns invocation detail with breakdown using the row snapshot', fun
         ->assertJsonPath('total_cost', fn ($v): bool => abs((float) $v - 1.20) < 0.0001);
 });
 
+test('show exposes the persisted assistant response_text', function (): void {
+    $admin = User::factory()->admin()->create();
+
+    $record = AiUsageRecord::create([
+        'invocation_id' => 'inv-text',
+        'agent_class' => MediaAgent::class,
+        'provider' => 'openai',
+        'model' => 'gpt-5-mini',
+        'prompt_tokens' => 100,
+        'completion_tokens' => 50,
+        'cache_read_input_tokens' => 0,
+        'cache_write_input_tokens' => 0,
+        'reasoning_tokens' => 0,
+        'tool_calls_count' => 0,
+        'response_text' => 'Hello from the assistant.',
+        'status' => 'success',
+    ]);
+
+    $this->actingAs($admin)
+        ->getJson(route('admin.ai-usage.show', $record))
+        ->assertOk()
+        ->assertJsonPath('record.response_text', 'Hello from the assistant.');
+});
+
 test('show falls back to the live catalog rate when no snapshot exists', function (): void {
     $admin = User::factory()->admin()->create();
 

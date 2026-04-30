@@ -60,6 +60,6 @@
 - [ ] So me providers have a free-tier or a minimum amount before they start charging, id like to support that, for example if a provider has a free-tier of 1000 tokens, we shouldnt start counting the usage for that provider until the user has used more than 1000 tokens, and we should also show how many free tokens they have left in the AI usage page, this is really important for users to be able to manage their costs and not get surprised by a big bill at the end of the month, especially if they are using a provider that has a free-tier or a minimum amount before they start charging. I guess we'll need to set this per model or maybe per provider
 - [x] Add a Today filter to all time scale filters
 - [x] The MediaAgent should respect the model configured in AISettings
-- [ ] The ai usage details window needs to be scrollable and have a max height. Maybe also store the result message from the AI agent
+- [x] The ai usage details window needs to be scrollable and have a max height. Maybe also store the result message from the AI agent
 - [ ] Improve seerr caching between tabs, for example when switching between completed and pending requests, the data gets refetched, we should cache the data for at least a few minutes to avoid unnecessary requests and also to make the UI more responsive when switching between tabs.
 - [ ] Cache busting on relevant webhooks, and then we can increase the TTL on the cache for the Arr suite and seerr, since their api is so slow

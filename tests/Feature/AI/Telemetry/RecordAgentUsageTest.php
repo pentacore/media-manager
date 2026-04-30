@@ -22,11 +22,12 @@ function makeAgentPrompted(
     Meta $meta,
     ?string $conversationId = null,
     ?object $conversationUser = null,
+    string $responseText = 'response text',
 ): AgentPrompted {
     $agentPrompt = new ReflectionClass(AgentPrompt::class)->newInstanceWithoutConstructor();
     new ReflectionProperty(AgentPrompt::class, 'agent')->setValue($agentPrompt, $agent);
 
-    $response = new AgentResponse($invocationId, 'response text', $usage, $meta);
+    $response = new AgentResponse($invocationId, $responseText, $usage, $meta);
     $response->conversationId = $conversationId;
     $response->conversationUser = $conversationUser;
 
@@ -103,4 +104,37 @@ test('handles missing conversation user gracefully', function (): void {
     $row = AiUsageRecord::where('invocation_id', 'inv-anon')->firstOrFail();
     expect($row->user_id)->toBeNull();
     expect($row->conversation_id)->toBeNull();
+});
+
+test('persists the agent response text on the row', function (): void {
+    $agentPrompted = makeAgentPrompted(
+        invocationId: 'inv-with-text',
+        agent: new MediaAgent,
+        usage: new Usage,
+        meta: new Meta(provider: 'openai', model: 'gpt-5-mini'),
+        responseText: 'Found 3 series matching "severance".',
+    );
+
+    (new RecordAgentUsage)->handle($agentPrompted);
+
+    expect(AiUsageRecord::where('invocation_id', 'inv-with-text')->value('response_text'))
+        ->toBe('Found 3 series matching "severance".');
+});
+
+test('truncates response text past 64 KB with an ellipsis suffix', function (): void {
+    $longText = str_repeat('a', 70_000);
+    $agentPrompted = makeAgentPrompted(
+        invocationId: 'inv-long',
+        agent: new MediaAgent,
+        usage: new Usage,
+        meta: new Meta(provider: 'openai', model: 'gpt-5-mini'),
+        responseText: $longText,
+    );
+
+    (new RecordAgentUsage)->handle($agentPrompted);
+
+    $stored = AiUsageRecord::where('invocation_id', 'inv-long')->value('response_text');
+
+    expect(strlen((string) $stored))->toBeLessThanOrEqual(65_536);
+    expect($stored)->toEndWith('…');
 });
