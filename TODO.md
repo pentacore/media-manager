@@ -74,6 +74,6 @@
     - [x] Add a webhook type for sabnzbd
     - [x] Reload the sabnzbd downloads count on relevant webhooks
     - [x] Cache busting on relevant webhooks
-    - [ ] Warning notifications on space running out
-- [ ] Notification support for incoming warning/error webhooks
+    - [x] Warning notifications on space running out
+- [x] Notification support for incoming warning/error webhooks
 - [ ] In the admin area, add a job tracking page, to track the status of all jobs that are queued up or recurring.

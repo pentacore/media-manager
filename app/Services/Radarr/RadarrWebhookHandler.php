@@ -5,11 +5,15 @@ declare(strict_types=1);
 namespace App\Services\Radarr;
 
 use App\Cache\Services\RadarrCache;
+use App\Enums\UserRole;
+use App\Models\User;
 use App\Models\WebhookEvent;
+use App\Notifications\ServiceWarning;
 use App\Services\Actions\ActionOrchestrator;
 use App\Services\Library\InterventionCounter;
 use App\Services\Webhook\AbstractWebhookHandler;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Notification;
 
 class RadarrWebhookHandler extends AbstractWebhookHandler
 {
@@ -248,6 +252,7 @@ class RadarrWebhookHandler extends AbstractWebhookHandler
     private function handleHealth(WebhookEvent $webhookEvent, array $payload, string $kind): void
     {
         $message = (string) ($payload['message'] ?? 'Unknown health event');
+        $level = (string) ($payload['level'] ?? 'ok');
 
         $this->logActivity(
             $webhookEvent,
@@ -259,6 +264,20 @@ class RadarrWebhookHandler extends AbstractWebhookHandler
                 'wiki_url' => $payload['wikiUrl'] ?? null,
             ],
         );
+
+        if ($kind !== 'health' || ! in_array($level, ['warning', 'error'], true)) {
+            return;
+        }
+
+        $admins = User::query()->where('role', UserRole::Admin)->get();
+        if ($admins->isNotEmpty()) {
+            Notification::send($admins, new ServiceWarning(
+                service: 'radarr',
+                title: (string) ($payload['type'] ?? 'Radarr health'),
+                message: $message,
+                level: $level,
+            ));
+        }
     }
 
     /**

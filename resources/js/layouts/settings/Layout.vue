@@ -6,11 +6,13 @@ import { cn, toUrl } from '@/lib/utils';
 import { edit as editAppearance } from '@/routes/appearance';
 import { edit as editProfile } from '@/routes/profile';
 import { edit as editSecurity } from '@/routes/security';
+import { edit as editNotifications } from '@/routes/settings/notifications';
 import type { NavItem } from '@/types';
 
 const sidebarNavItems: NavItem[] = [
     { title: 'Profile', href: editProfile() },
     { title: 'Security', href: editSecurity() },
+    { title: 'Notifications', href: editNotifications() },
     { title: 'Appearance', href: editAppearance() },
 ];
 

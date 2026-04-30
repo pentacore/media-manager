@@ -5,11 +5,15 @@ declare(strict_types=1);
 namespace App\Services\Sonarr;
 
 use App\Cache\Services\SonarrCache;
+use App\Enums\UserRole;
+use App\Models\User;
 use App\Models\WebhookEvent;
+use App\Notifications\ServiceWarning;
 use App\Services\Actions\ActionOrchestrator;
 use App\Services\Library\InterventionCounter;
 use App\Services\Webhook\AbstractWebhookHandler;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Notification;
 
 class SonarrWebhookHandler extends AbstractWebhookHandler
 {
@@ -256,6 +260,7 @@ class SonarrWebhookHandler extends AbstractWebhookHandler
     private function handleHealth(WebhookEvent $webhookEvent, array $payload, string $kind): void
     {
         $message = (string) ($payload['message'] ?? 'Unknown health event');
+        $level = (string) ($payload['level'] ?? 'ok');
 
         $this->logActivity(
             $webhookEvent,
@@ -267,6 +272,22 @@ class SonarrWebhookHandler extends AbstractWebhookHandler
                 'wiki_url' => $payload['wikiUrl'] ?? null,
             ],
         );
+
+        // health_restored is informational; only the live `Health` event
+        // with a non-ok level deserves a notification.
+        if ($kind !== 'health' || ! in_array($level, ['warning', 'error'], true)) {
+            return;
+        }
+
+        $admins = User::query()->where('role', UserRole::Admin)->get();
+        if ($admins->isNotEmpty()) {
+            Notification::send($admins, new ServiceWarning(
+                service: 'sonarr',
+                title: (string) ($payload['type'] ?? 'Sonarr health'),
+                message: $message,
+                level: $level,
+            ));
+        }
     }
 
     /**

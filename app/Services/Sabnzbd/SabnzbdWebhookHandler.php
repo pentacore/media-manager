@@ -5,9 +5,13 @@ declare(strict_types=1);
 namespace App\Services\Sabnzbd;
 
 use App\Cache\Services\SabnzbdCache;
+use App\Enums\UserRole;
+use App\Models\User;
 use App\Models\WebhookEvent;
+use App\Notifications\ServiceWarning;
 use App\Services\Webhook\AbstractWebhookHandler;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Notification;
 
 class SabnzbdWebhookHandler extends AbstractWebhookHandler
 {
@@ -98,8 +102,9 @@ class SabnzbdWebhookHandler extends AbstractWebhookHandler
 
     /**
      * Warning / error / disk_full all share the same shape and produce
-     * the same activity entry; the per-user notification dispatch lives
-     * in Phase D and reads this same severity tag from metadata.
+     * the same activity entry. Each one also fires a per-user
+     * ServiceWarning notification so admins who have opted in get a
+     * heads-up before a queue silently grinds to a halt.
      *
      * @param  array<string, mixed>  $payload
      */
@@ -119,6 +124,16 @@ class SabnzbdWebhookHandler extends AbstractWebhookHandler
                 'message' => $message,
             ],
         );
+
+        $admins = User::query()->where('role', UserRole::Admin)->get();
+        if ($admins->isNotEmpty()) {
+            Notification::send($admins, new ServiceWarning(
+                service: 'sabnzbd',
+                title: $title,
+                message: $message,
+                level: $severity,
+            ));
+        }
     }
 
     /**

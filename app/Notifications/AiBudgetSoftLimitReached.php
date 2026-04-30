@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Notifications;
 
+use App\Services\Notifications\PreferenceResolver;
 use Illuminate\Bus\Queueable;
 use Illuminate\Notifications\Messages\BroadcastMessage;
 use Illuminate\Notifications\Notification;
@@ -22,7 +23,8 @@ class AiBudgetSoftLimitReached extends Notification
      */
     public function via(object $notifiable): array
     {
-        return ['database', 'broadcast'];
+        return resolve(PreferenceResolver::class)
+            ->channelsFor($notifiable, self::class, 'warning');
     }
 
     /**

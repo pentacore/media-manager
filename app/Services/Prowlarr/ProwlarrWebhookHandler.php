@@ -4,11 +4,15 @@ declare(strict_types=1);
 
 namespace App\Services\Prowlarr;
 
+use App\Enums\UserRole;
 use App\Jobs\FetchLatestServiceVersion;
 use App\Jobs\PingServiceHealth;
+use App\Models\User;
 use App\Models\WebhookEvent;
+use App\Notifications\ServiceWarning;
 use App\Services\Webhook\AbstractWebhookHandler;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Notification;
 
 class ProwlarrWebhookHandler extends AbstractWebhookHandler
 {
@@ -58,6 +62,7 @@ class ProwlarrWebhookHandler extends AbstractWebhookHandler
     private function handleHealth(WebhookEvent $webhookEvent, array $payload, string $kind): void
     {
         $message = (string) ($payload['message'] ?? 'Unknown health event');
+        $level = (string) ($payload['level'] ?? 'ok');
 
         $this->logActivity(
             $webhookEvent,
@@ -73,6 +78,20 @@ class ProwlarrWebhookHandler extends AbstractWebhookHandler
         // Re-ping so the connection's stored health state catches up immediately
         // instead of waiting for the next scheduled tick.
         dispatch(new PingServiceHealth($webhookEvent->serviceConnection));
+
+        if ($kind !== 'health' || ! in_array($level, ['warning', 'error'], true)) {
+            return;
+        }
+
+        $admins = User::query()->where('role', UserRole::Admin)->get();
+        if ($admins->isNotEmpty()) {
+            Notification::send($admins, new ServiceWarning(
+                service: 'prowlarr',
+                title: (string) ($payload['type'] ?? 'Prowlarr health'),
+                message: $message,
+                level: $level,
+            ));
+        }
     }
 
     /**
