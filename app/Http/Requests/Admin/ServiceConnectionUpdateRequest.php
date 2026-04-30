@@ -34,6 +34,12 @@ class ServiceConnectionUpdateRequest extends FormRequest
             // values: free / used / both.
             'disk_display' => ['nullable', 'array'],
             'disk_display.*' => ['string', 'in:free,used,both'],
+            // SABnzbd-only: list of category names whose queue/history
+            // rows should be hidden everywhere in the app. Other types
+            // can submit it freely; the controller only persists it for
+            // the matching connection types.
+            'hidden_categories' => ['nullable', 'array'],
+            'hidden_categories.*' => ['string', 'max:100'],
         ];
     }
 }

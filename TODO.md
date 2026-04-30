@@ -54,6 +54,7 @@
     - [x] Allow blocking activities from both Sonarr and Radarr
     - [x] Support the "On manual interaction required" webhook event, and allow the user to manually trigger the activity from the activity log page
     - [x] Regular check for activites and show a badge with the amount of activites that needs manual intervention in the sidebar
+    - [x] Action to trigger download of delayed downloads
 - Allow clearing, editing or otherwise manage seerr requests
     - [x] Add a button to clear seerr requests, maybe with options to clear all, clear only completed, clear only cancelled, etc
     - [x] Allow editing seerr requests, for example if a request is pending for a long time, allow the user to edit the request and change the quality or something like that to see if it helps with getting the request fulfilled
@@ -63,4 +64,4 @@
 - [x] The ai usage details window needs to be scrollable and have a max height. Maybe also store the result message from the AI agent
 - [x] Improve seerr caching between tabs, for example when switching between completed and pending requests, the data gets refetched, we should cache the data for at least a few minutes to avoid unnecessary requests and also to make the UI more responsive when switching between tabs.
 - [x] Cache busting on relevant webhooks, and then we can increase the TTL on the cache for the Arr suite and seerr, since their api is so slow
-- [ ] Allow filtering certain sabnzbd categories from showing, i have some less... savoury downloads that shouldnt be shown anywhere in the app
+- [x] Allow filtering certain sabnzbd categories from showing, i have some less... savoury downloads that shouldnt be shown anywhere in the app

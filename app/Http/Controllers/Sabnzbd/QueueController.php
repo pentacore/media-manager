@@ -28,8 +28,16 @@ class QueueController extends Controller
             $connection = ServiceConnection::resolveActive(ServiceType::SABnzbd);
             $client = $this->client($connection);
 
-            $queue = $client->getQueue();
-            $history = $client->getHistory();
+            $queue = $this->filterByCategory(
+                $client->getQueue(),
+                'cat',
+                $connection,
+            );
+            $history = $this->filterByCategory(
+                $client->getHistory(),
+                'category',
+                $connection,
+            );
 
             return Inertia::render('Sabnzbd/Queue/Index', [
                 'configured' => true,
@@ -130,6 +138,36 @@ class QueueController extends Controller
         }
 
         return back();
+    }
+
+    /**
+     * Drop slots whose category matches the connection's hidden list. The
+     * `noslots` / pagination totals stay as-is — they reflect what
+     * SABnzbd reports — so the user-visible "X items hidden" delta is
+     * implicit. Categories with no `cat`/`category` field on the slot
+     * are kept (treated as uncategorised).
+     *
+     * @param  array<string, mixed>  $payload
+     * @return array<string, mixed>
+     */
+    private function filterByCategory(array $payload, string $field, ServiceConnection $serviceConnection): array
+    {
+        $hidden = $serviceConnection->settings['hidden_categories'] ?? null;
+        if (! is_array($hidden) || $hidden === []) {
+            return $payload;
+        }
+
+        $slots = is_array($payload['slots'] ?? null) ? $payload['slots'] : [];
+        $payload['slots'] = array_values(array_filter(
+            $slots,
+            static function (array $slot) use ($field, $hidden): bool {
+                $category = $slot[$field] ?? null;
+
+                return ! is_string($category) || ! in_array($category, $hidden, true);
+            },
+        ));
+
+        return $payload;
     }
 
     private function client(ServiceConnection $serviceConnection): SabnzbdClient

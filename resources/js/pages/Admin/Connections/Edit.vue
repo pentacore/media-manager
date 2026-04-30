@@ -64,6 +64,7 @@ interface Connection {
         paths: string[];
         display: Record<string, 'free' | 'used' | 'both'>;
     };
+    hidden_categories?: string[];
 }
 
 interface Indexer {
@@ -125,6 +126,20 @@ const diskDisplay = reactive<Record<string, DiskMetric>>({
 
 const supportsDiskPicker = computed(
     () => typeValue === 'sonarr' || typeValue === 'radarr',
+);
+
+const supportsHiddenCategories = computed(() => typeValue === 'sabnzbd');
+
+// Backend stores `hidden_categories` as a string[] under settings; the
+// form edits a single comma-separated text field for simplicity.
+const hiddenCategoriesText = ref<string>(
+    (props.connection.hidden_categories ?? []).join(', '),
+);
+const hiddenCategoriesList = computed<string[]>(() =>
+    hiddenCategoriesText.value
+        .split(',')
+        .map((s) => s.trim())
+        .filter((s) => s.length > 0),
 );
 
 function toggleDiskPath(path: string): void {
@@ -654,6 +669,32 @@ function testIndexer(indexerId: number): void {
                             type="hidden"
                             :name="`disk_display[${entry[0]}]`"
                             :value="entry[1]"
+                        />
+                    </div>
+
+                    <div v-if="supportsHiddenCategories" class="space-y-3 pt-2">
+                        <div>
+                            <Label for="hidden_categories">
+                                Hidden categories
+                            </Label>
+                            <p class="text-sm text-muted-foreground">
+                                Comma-separated SABnzbd categories whose queue
+                                and history rows should be hidden everywhere
+                                in the app. Leave empty to show everything.
+                            </p>
+                        </div>
+                        <Input
+                            id="hidden_categories"
+                            v-model="hiddenCategoriesText"
+                            placeholder="e.g. adult, private"
+                            autocomplete="off"
+                        />
+                        <input
+                            v-for="category in hiddenCategoriesList"
+                            :key="category"
+                            type="hidden"
+                            name="hidden_categories[]"
+                            :value="category"
                         />
                     </div>
 

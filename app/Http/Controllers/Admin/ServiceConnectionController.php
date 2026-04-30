@@ -72,6 +72,9 @@ class ServiceConnectionController extends Controller
                         ? $diskSettings['display']
                         : [],
                 ],
+                'hidden_categories' => is_array($serviceConnection->settings['hidden_categories'] ?? null)
+                    ? array_values($serviceConnection->settings['hidden_categories'])
+                    : [],
             ],
             'serviceTypes' => ServiceType::mapForSelect(labelKey: 'label'),
             'indexers' => $serviceConnection->type === ServiceType::Prowlarr
@@ -179,14 +182,16 @@ class ServiceConnectionController extends Controller
         $diskMode = $validated['disk_mode'] ?? null;
         $diskPaths = $validated['disk_paths'] ?? null;
         $diskDisplay = $validated['disk_display'] ?? null;
+        $hiddenCategories = $validated['hidden_categories'] ?? null;
         unset(
             $validated['disk_mode'],
             $validated['disk_paths'],
             $validated['disk_display'],
+            $validated['hidden_categories'],
         );
 
         if ($diskMode !== null || $diskPaths !== null || $diskDisplay !== null) {
-            $existingSettings = $serviceConnection->settings ?? [];
+            $existingSettings = $validated['settings'] ?? $serviceConnection->settings ?? [];
             $existingSettings['disk'] = [
                 'mode' => $diskMode ?? 'all',
                 'paths' => array_values(array_filter(
@@ -195,6 +200,15 @@ class ServiceConnectionController extends Controller
                 )),
                 'display' => is_array($diskDisplay) ? $diskDisplay : [],
             ];
+            $validated['settings'] = $existingSettings;
+        }
+
+        if ($hiddenCategories !== null && $serviceConnection->type === ServiceType::SABnzbd) {
+            $existingSettings = $validated['settings'] ?? $serviceConnection->settings ?? [];
+            $existingSettings['hidden_categories'] = array_values(array_filter(
+                $hiddenCategories,
+                static fn (mixed $category): bool => is_string($category) && trim($category) !== '',
+            ));
             $validated['settings'] = $existingSettings;
         }
 

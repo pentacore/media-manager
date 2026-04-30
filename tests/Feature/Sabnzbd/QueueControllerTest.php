@@ -51,6 +51,68 @@ test('queue index pulls live queue + history when configured', function (): void
         );
 });
 
+test('hidden_categories filters out matching slots from queue and history', function (): void {
+    ServiceConnection::factory()->sabnzbd()->create([
+        'url' => 'http://sab.local:8080',
+        'api_key' => 'k',
+        'settings' => ['hidden_categories' => ['adult', 'private']],
+    ]);
+
+    Http::fake([
+        'sab.local:8080/api*' => Http::sequence()
+            ->push([
+                'queue' => [
+                    'paused' => false,
+                    'slots' => [
+                        ['nzo_id' => 'a', 'filename' => 'visible.nzb', 'cat' => 'movies'],
+                        ['nzo_id' => 'b', 'filename' => 'hidden.nzb', 'cat' => 'adult'],
+                        ['nzo_id' => 'c', 'filename' => 'untagged.nzb'],
+                    ],
+                ],
+            ])
+            ->push([
+                'history' => [
+                    'slots' => [
+                        ['nzo_id' => 'h1', 'name' => 'visible-history', 'category' => 'tv'],
+                        ['nzo_id' => 'h2', 'name' => 'hidden-history', 'category' => 'private'],
+                    ],
+                ],
+            ]),
+    ]);
+
+    $this->actingAs($this->user)
+        ->get(route('sabnzbd.queue.index'))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->has('queue.slots', 2)
+            ->where('queue.slots.0.nzo_id', 'a')
+            ->where('queue.slots.1.nzo_id', 'c')
+            ->has('history.slots', 1)
+            ->where('history.slots.0.nzo_id', 'h1')
+        );
+});
+
+test('admin can persist hidden_categories on a sabnzbd connection', function (): void {
+    $admin = User::factory()->admin()->create();
+    $connection = ServiceConnection::factory()->sabnzbd()->create([
+        'url' => 'http://sab.local:8080',
+        'api_key' => 'k',
+    ]);
+
+    $response = $this->actingAs($admin)
+        ->put(route('admin.connections.update', $connection), [
+            'type' => 'sabnzbd',
+            'name' => $connection->name,
+            'url' => $connection->url,
+            'hidden_categories' => ['adult', 'private'],
+        ]);
+
+    $response->assertRedirect(route('admin.connections.index'));
+
+    expect($connection->fresh()->settings['hidden_categories'])
+        ->toBe(['adult', 'private']);
+});
+
 test('pauseSlot endpoint logs activity and flashes a toast', function (): void {
     $connection = ServiceConnection::factory()->sabnzbd()->create([
         'url' => 'http://sab.local:8080',
