@@ -9,6 +9,7 @@ use App\Models\WebhookEvent;
 use App\Services\Emby\EmbyWebhookHandler;
 use App\Services\Prowlarr\ProwlarrWebhookHandler;
 use App\Services\Radarr\RadarrWebhookHandler;
+use App\Services\Sabnzbd\SabnzbdWebhookHandler;
 use App\Services\Seerr\SeerrWebhookHandler;
 use App\Services\Sonarr\SonarrWebhookHandler;
 use App\Services\Webhook\WebhookHandler;
@@ -97,6 +98,7 @@ class ProcessWebhookEvent implements ShouldQueue
             ServiceType::Radarr => RadarrWebhookHandler::class,
             ServiceType::Seerr => SeerrWebhookHandler::class,
             ServiceType::Prowlarr => ProwlarrWebhookHandler::class,
+            ServiceType::SABnzbd => SabnzbdWebhookHandler::class,
         };
 
         if (! class_exists($class)) {

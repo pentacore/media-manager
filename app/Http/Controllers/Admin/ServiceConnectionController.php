@@ -75,6 +75,9 @@ class ServiceConnectionController extends Controller
                 'hidden_categories' => is_array($serviceConnection->settings['hidden_categories'] ?? null)
                     ? array_values($serviceConnection->settings['hidden_categories'])
                     : [],
+                'sabnzbd_webhook_script' => $serviceConnection->type === ServiceType::SABnzbd
+                    ? $this->sabnzbdNotificationScriptFor($serviceConnection)
+                    : null,
             ],
             'serviceTypes' => ServiceType::mapForSelect(labelKey: 'label'),
             'indexers' => $serviceConnection->type === ServiceType::Prowlarr
@@ -84,6 +87,56 @@ class ServiceConnectionController extends Controller
                 ? Inertia::defer(fn (): array => $this->loadAvailableDiskPaths($serviceConnection))
                 : [],
         ]);
+    }
+
+    /**
+     * SABnzbd has no native HTTP webhook; it does support notification
+     * scripts that get exec'd with SAB_* env vars. We render a copy-
+     * pastable Python 3 script (stdlib only) that admins drop into
+     * SABnzbd's `scripts/` folder and select under Notifications. The
+     * URL embeds the per-connection token, so the script needs no
+     * configuration of its own.
+     */
+    private function sabnzbdNotificationScriptFor(ServiceConnection $serviceConnection): string
+    {
+        $url = $this->webhookUrlFor($serviceConnection);
+
+        return <<<PYTHON
+            #!/usr/bin/env python3
+            # MediaManager SABnzbd notification script.
+            # Drop into SAB's scripts folder, then pick it under
+            # Settings → Notifications → "Run script".
+            import json
+            import os
+            import sys
+            import urllib.request
+
+            WEBHOOK_URL = "{$url}"
+
+            payload = {
+                "eventType": os.environ.get("SAB_NOTIFICATION_TYPE", ""),
+                "title": os.environ.get("SAB_TITLE", ""),
+                "message": os.environ.get("SAB_MSG", ""),
+                "hostname": os.environ.get("SAB_HOSTNAME", ""),
+                "version": os.environ.get("SAB_VERSION", ""),
+                "category": os.environ.get("SAB_CAT", ""),
+                "name": os.environ.get("SAB_NAME", ""),
+            }
+
+            req = urllib.request.Request(
+                WEBHOOK_URL,
+                data=json.dumps(payload).encode("utf-8"),
+                headers={"Content-Type": "application/json"},
+                method="POST",
+            )
+
+            try:
+                with urllib.request.urlopen(req, timeout=5) as resp:
+                    sys.exit(0 if 200 <= resp.status < 300 else 1)
+            except Exception as exc:
+                print(f"MediaManager webhook delivery failed: {exc}", file=sys.stderr)
+                sys.exit(1)
+            PYTHON;
     }
 
     /**
