@@ -48,6 +48,7 @@ interface QueueRow {
     status_messages: { title: string; messages: string[] }[];
     added: string | null;
     quality: string | null;
+    download_id: string | null;
 }
 
 interface QueuePayload {

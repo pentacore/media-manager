@@ -118,7 +118,7 @@ function handleRefreshState(payload: PriceRefreshPayload): void {
         toast.success('Price refresh complete', {
             description: `${payload.added ?? 0} new, ${payload.total ?? 0} total${triggered}.`,
         });
-        router.reload({ only: ['prices'], preserveScroll: true });
+        router.reload({ only: ['prices'] });
 
         return;
     }
