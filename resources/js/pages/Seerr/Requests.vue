@@ -426,6 +426,7 @@ function closeEdit(): void {
 
 function submitEdit(): void {
     const req = editingRequest.value;
+
     if (!req || editProfileId.value === '' || editRootFolder.value === '') {
         return;
     }

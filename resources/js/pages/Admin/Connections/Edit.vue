@@ -229,6 +229,7 @@ const sabScriptCopied = ref(false);
 
 function copySabScript(): void {
     const script = props.connection.sabnzbd_webhook_script;
+
     if (!script) {
         return;
     }

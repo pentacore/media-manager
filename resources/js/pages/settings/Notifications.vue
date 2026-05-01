@@ -55,10 +55,21 @@ const SEVERITY_LABELS: Record<string, string> = {
 const PENDING_CHANNELS = new Set(['mail', 'ntfy']);
 
 function channelLabel(channel: string): string {
-    if (channel === 'database') return 'In-app';
-    if (channel === 'broadcast') return 'Toast / live';
-    if (channel === 'mail') return 'Email';
-    if (channel === 'ntfy') return 'ntfy';
+    if (channel === 'database') {
+        return 'In-app';
+    }
+
+    if (channel === 'broadcast') {
+        return 'Toast / live';
+    }
+
+    if (channel === 'mail') {
+        return 'Email';
+    }
+
+    if (channel === 'ntfy') {
+        return 'ntfy';
+    }
 
     return channel;
 }

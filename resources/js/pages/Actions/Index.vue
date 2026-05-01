@@ -168,6 +168,7 @@ onMounted(() => {
 
 onUnmounted(() => {
     leaveChannel(ACTIONS_CHANNEL);
+
     if (statusCountsReloadTimer !== null) {
         clearTimeout(statusCountsReloadTimer);
         statusCountsReloadTimer = null;

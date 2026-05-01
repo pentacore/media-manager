@@ -28,9 +28,9 @@ import ActionRequestController from '@/actions/App/Http/Controllers/Actions/Acti
 import ActionTypeConfigController from '@/actions/App/Http/Controllers/Actions/ActionTypeConfigController';
 import ActivityLogController from '@/actions/App/Http/Controllers/ActivityLogController';
 import AiModelPriceController from '@/actions/App/Http/Controllers/Admin/AiModelPriceController';
-import JobsController from '@/actions/App/Http/Controllers/Admin/JobsController';
 import AiSettingsController from '@/actions/App/Http/Controllers/Admin/AiSettingsController';
 import AiUsageController from '@/actions/App/Http/Controllers/Admin/AiUsageController';
+import JobsController from '@/actions/App/Http/Controllers/Admin/JobsController';
 import ServiceConnectionController from '@/actions/App/Http/Controllers/Admin/ServiceConnectionController';
 import UserController from '@/actions/App/Http/Controllers/Admin/UserController';
 import WebhookLogController from '@/actions/App/Http/Controllers/Admin/WebhookLogController';

@@ -122,6 +122,7 @@ defineOptions({
 const page = usePage();
 const isAdmin = computed(() => {
     const role = page.props.auth.user?.role;
+
     if (!role) {
         return false;
     }
@@ -137,6 +138,7 @@ const activeTab = ref<'queue' | 'history'>('queue');
 
 const filteredHistoryRows = computed<HistoryRow[]>(() => {
     const all = props.history?.rows ?? [];
+
     if (serviceFilter.value === 'all') {
         return all;
     }
@@ -295,6 +297,7 @@ function openManualImport(row: QueueRow): void {
     )
         .then(async (response) => {
             const body = await response.json();
+
             if (!response.ok) {
                 importError.value =
                     body.error ?? `Request failed (${response.status})`;
@@ -325,6 +328,7 @@ function closeManualImport(): void {
 
 function submitManualImport(): void {
     const row = importingRow.value;
+
     if (!row || !row.download_id) {
         return;
     }
@@ -400,6 +404,7 @@ function formatBytes(bytes: number | null): string {
     const units = ['B', 'KB', 'MB', 'GB', 'TB'];
     let value = bytes;
     let unitIndex = 0;
+
     while (value >= 1024 && unitIndex < units.length - 1) {
         value /= 1024;
         unitIndex++;
@@ -489,6 +494,7 @@ function timeleftLabel(row: QueueRow): string {
 
 const filteredRows = computed<QueueRow[]>(() => {
     const all = props.queue?.rows ?? [];
+
     if (serviceFilter.value === 'all') {
         return all;
     }
