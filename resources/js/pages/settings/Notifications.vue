@@ -55,10 +55,21 @@ const SEVERITY_LABELS: Record<string, string> = {
 const PENDING_CHANNELS = new Set(['mail', 'ntfy']);
 
 function channelLabel(channel: string): string {
-    if (channel === 'database') return 'In-app';
-    if (channel === 'broadcast') return 'Toast / live';
-    if (channel === 'mail') return 'Email';
-    if (channel === 'ntfy') return 'ntfy';
+    if (channel === 'database') {
+        return 'In-app';
+    }
+
+    if (channel === 'broadcast') {
+        return 'Toast / live';
+    }
+
+    if (channel === 'mail') {
+        return 'Email';
+    }
+
+    if (channel === 'ntfy') {
+        return 'ntfy';
+    }
 
     return channel;
 }
@@ -73,9 +84,10 @@ function save(): void {
             preferences: working.map((entry) => ({
                 class: entry.class,
                 severities: Object.fromEntries(
-                    Object.entries(entry.severities).map(
-                        ([sev, flags]) => [sev, { ...flags }],
-                    ),
+                    Object.entries(entry.severities).map(([sev, flags]) => [
+                        sev,
+                        { ...flags },
+                    ]),
                 ),
             })),
         },
@@ -159,7 +171,9 @@ function save(): void {
                                                 channel as keyof SeverityFlags
                                             ]
                                         "
-                                        :disabled="PENDING_CHANNELS.has(channel)"
+                                        :disabled="
+                                            PENDING_CHANNELS.has(channel)
+                                        "
                                         class="size-4 rounded border-border accent-accent disabled:opacity-40"
                                     />
                                 </td>

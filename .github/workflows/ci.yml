@@ -73,15 +73,28 @@ jobs:
       - name: Install npm dependencies
         run: npm ci
 
-      - name: Prepare environment
+      # .env.example targets sail (DB_HOST=pgsql). js-lint runs on sqlite to
+      # avoid spinning a pg service just for type generation. No .env file —
+      # APP_KEY/DB_* are passed as env vars and Laravel reads them directly.
+      - name: Prepare sqlite + run migrations
+        env:
+          APP_KEY: base64:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=
+          APP_ENV: testing
+          DB_CONNECTION: sqlite
+          DB_DATABASE: database/database.sqlite
+          TELESCOPE_ENABLED: 'false'
         run: |
-          cp .env.example .env
-          php artisan key:generate
           mkdir -p database
           touch database/database.sqlite
           php artisan migrate --force --no-interaction
 
       - name: Generate Wayfinder + Typefinder type definitions
+        env:
+          APP_KEY: base64:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=
+          APP_ENV: testing
+          DB_CONNECTION: sqlite
+          DB_DATABASE: database/database.sqlite
+          TELESCOPE_ENABLED: 'false'
         run: |
           php artisan wayfinder:generate --with-form
           php artisan typefinder:generate
@@ -182,6 +195,9 @@ jobs:
 
       - name: Install npm dependencies
         run: npm ci
+
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps chromium
 
       - name: Prepare environment
         run: |

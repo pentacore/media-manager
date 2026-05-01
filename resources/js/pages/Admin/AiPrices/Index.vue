@@ -118,7 +118,7 @@ function handleRefreshState(payload: PriceRefreshPayload): void {
         toast.success('Price refresh complete', {
             description: `${payload.added ?? 0} new, ${payload.total ?? 0} total${triggered}.`,
         });
-        router.reload({ only: ['prices'], preserveScroll: true });
+        router.reload({ only: ['prices'] });
 
         return;
     }
@@ -252,121 +252,130 @@ const priciest = ref(
                             <Plus class="size-3.5" />Add model price
                         </Button>
                     </DialogTrigger>
-                <DialogContent>
-                    <DialogHeader>
-                        <DialogTitle>Add model price</DialogTitle>
-                    </DialogHeader>
-                    <Form
-                        v-bind="AiModelPriceController.store.post()"
-                        class="space-y-4"
-                        v-slot="{ errors, processing }"
-                        @success="showCreateDialog = false"
-                    >
-                        <div class="space-y-2">
-                            <Label for="provider">Provider</Label>
-                            <Input
-                                id="provider"
-                                name="provider"
-                                placeholder="openai, anthropic, gemini, …"
-                            />
-                            <InputError :message="errors.provider" />
-                        </div>
-                        <div class="space-y-2">
-                            <Label for="model">Model</Label>
-                            <Input
-                                id="model"
-                                name="model"
-                                placeholder="gpt-5-mini"
-                            />
-                            <InputError :message="errors.model" />
-                        </div>
-                        <div class="grid grid-cols-2 gap-4">
-                            <div
-                                v-for="field in [
-                                    ['input_per_mtok', 'Input ($/M)'],
-                                    ['output_per_mtok', 'Output ($/M)'],
-                                    ['cache_read_per_mtok', 'Cache Read ($/M)'],
-                                    [
-                                        'cache_write_per_mtok',
-                                        'Cache Write ($/M)',
-                                    ],
-                                ] as const"
-                                :key="field[0]"
-                                class="space-y-2"
-                            >
-                                <Label :for="field[0]">{{ field[1] }}</Label>
+                    <DialogContent>
+                        <DialogHeader>
+                            <DialogTitle>Add model price</DialogTitle>
+                        </DialogHeader>
+                        <Form
+                            v-bind="AiModelPriceController.store.post()"
+                            class="space-y-4"
+                            v-slot="{ errors, processing }"
+                            @success="showCreateDialog = false"
+                        >
+                            <div class="space-y-2">
+                                <Label for="provider">Provider</Label>
                                 <Input
-                                    :id="field[0]"
-                                    :name="field[0]"
-                                    type="number"
-                                    step="0.0001"
-                                    min="0"
+                                    id="provider"
+                                    name="provider"
+                                    placeholder="openai, anthropic, gemini, …"
                                 />
-                                <InputError
-                                    :message="
-                                        errors[
-                                            field[0] as
-                                                | 'input_per_mtok'
-                                                | 'output_per_mtok'
-                                                | 'cache_read_per_mtok'
-                                                | 'cache_write_per_mtok'
-                                        ]
-                                    "
-                                />
-                            </div>
-                            <div class="col-span-2 space-y-2">
-                                <Label for="reasoning_per_mtok"
-                                    >Reasoning ($/M)</Label
-                                >
-                                <Input
-                                    id="reasoning_per_mtok"
-                                    name="reasoning_per_mtok"
-                                    type="number"
-                                    step="0.0001"
-                                    min="0"
-                                />
-                                <InputError
-                                    :message="errors.reasoning_per_mtok"
-                                />
+                                <InputError :message="errors.provider" />
                             </div>
                             <div class="space-y-2">
-                                <Label for="free_input_tokens_per_month"
-                                    >Free input / month</Label
-                                >
+                                <Label for="model">Model</Label>
                                 <Input
-                                    id="free_input_tokens_per_month"
-                                    name="free_input_tokens_per_month"
-                                    type="number"
-                                    min="0"
-                                    placeholder="leave blank if none"
+                                    id="model"
+                                    name="model"
+                                    placeholder="gpt-5-mini"
                                 />
-                                <InputError
-                                    :message="errors.free_input_tokens_per_month"
-                                />
+                                <InputError :message="errors.model" />
                             </div>
-                            <div class="space-y-2">
-                                <Label for="free_output_tokens_per_month"
-                                    >Free output / month</Label
+                            <div class="grid grid-cols-2 gap-4">
+                                <div
+                                    v-for="field in [
+                                        ['input_per_mtok', 'Input ($/M)'],
+                                        ['output_per_mtok', 'Output ($/M)'],
+                                        [
+                                            'cache_read_per_mtok',
+                                            'Cache Read ($/M)',
+                                        ],
+                                        [
+                                            'cache_write_per_mtok',
+                                            'Cache Write ($/M)',
+                                        ],
+                                    ] as const"
+                                    :key="field[0]"
+                                    class="space-y-2"
                                 >
-                                <Input
-                                    id="free_output_tokens_per_month"
-                                    name="free_output_tokens_per_month"
-                                    type="number"
-                                    min="0"
-                                    placeholder="leave blank if none"
-                                />
-                                <InputError
-                                    :message="errors.free_output_tokens_per_month"
-                                />
+                                    <Label :for="field[0]">{{
+                                        field[1]
+                                    }}</Label>
+                                    <Input
+                                        :id="field[0]"
+                                        :name="field[0]"
+                                        type="number"
+                                        step="0.0001"
+                                        min="0"
+                                    />
+                                    <InputError
+                                        :message="
+                                            errors[
+                                                field[0] as
+                                                    | 'input_per_mtok'
+                                                    | 'output_per_mtok'
+                                                    | 'cache_read_per_mtok'
+                                                    | 'cache_write_per_mtok'
+                                            ]
+                                        "
+                                    />
+                                </div>
+                                <div class="col-span-2 space-y-2">
+                                    <Label for="reasoning_per_mtok"
+                                        >Reasoning ($/M)</Label
+                                    >
+                                    <Input
+                                        id="reasoning_per_mtok"
+                                        name="reasoning_per_mtok"
+                                        type="number"
+                                        step="0.0001"
+                                        min="0"
+                                    />
+                                    <InputError
+                                        :message="errors.reasoning_per_mtok"
+                                    />
+                                </div>
+                                <div class="space-y-2">
+                                    <Label for="free_input_tokens_per_month"
+                                        >Free input / month</Label
+                                    >
+                                    <Input
+                                        id="free_input_tokens_per_month"
+                                        name="free_input_tokens_per_month"
+                                        type="number"
+                                        min="0"
+                                        placeholder="leave blank if none"
+                                    />
+                                    <InputError
+                                        :message="
+                                            errors.free_input_tokens_per_month
+                                        "
+                                    />
+                                </div>
+                                <div class="space-y-2">
+                                    <Label for="free_output_tokens_per_month"
+                                        >Free output / month</Label
+                                    >
+                                    <Input
+                                        id="free_output_tokens_per_month"
+                                        name="free_output_tokens_per_month"
+                                        type="number"
+                                        min="0"
+                                        placeholder="leave blank if none"
+                                    />
+                                    <InputError
+                                        :message="
+                                            errors.free_output_tokens_per_month
+                                        "
+                                    />
+                                </div>
                             </div>
-                        </div>
-                        <DialogFooter>
-                            <Button type="submit" :disabled="processing"
-                                >Save</Button
-                            >
-                        </DialogFooter>
-                    </Form>
-                </DialogContent>
+                            <DialogFooter>
+                                <Button type="submit" :disabled="processing"
+                                    >Save</Button
+                                >
+                            </DialogFooter>
+                        </Form>
+                    </DialogContent>
                 </Dialog>
             </div>
         </div>

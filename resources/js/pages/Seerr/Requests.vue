@@ -426,6 +426,7 @@ function closeEdit(): void {
 
 function submitEdit(): void {
     const req = editingRequest.value;
+
     if (!req || editProfileId.value === '' || editRootFolder.value === '') {
         return;
     }
@@ -562,10 +563,7 @@ const rangeText = computed(() => {
                 <Skeleton v-else class="mt-1 h-5 w-64" />
             </div>
             <div class="flex items-center gap-2">
-                <Select
-                    v-if="userOptions.length > 0"
-                    v-model="userFilter"
-                >
+                <Select v-if="userOptions.length > 0" v-model="userFilter">
                     <SelectTrigger class="h-7 w-32 text-xs">
                         <SelectValue placeholder="User" />
                     </SelectTrigger>
@@ -825,7 +823,8 @@ const rangeText = computed(() => {
             <DialogContent v-if="editingRequest" class="sm:max-w-lg">
                 <DialogHeader>
                     <DialogTitle>
-                        Edit request — {{ editingRequest.media_title ?? 'item' }}
+                        Edit request —
+                        {{ editingRequest.media_title ?? 'item' }}
                     </DialogTitle>
                 </DialogHeader>
                 <div

@@ -56,7 +56,10 @@ defineOptions({
     layout: {
         breadcrumbs: [
             { title: 'Live', href: dashboard().url },
-            { title: 'Service Health', href: ServiceHealthController.index.url() },
+            {
+                title: 'Service Health',
+                href: ServiceHealthController.index.url(),
+            },
         ],
     },
 });

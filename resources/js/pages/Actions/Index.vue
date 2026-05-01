@@ -159,18 +159,16 @@ onMounted(() => {
     subscribeCreated();
 
     privateChannel(ACTIONS_CHANNEL)
-        .listen(
-            '.ActionRequestStatusChanged',
-            (event: StatusChangePayload) => {
-                applyStatusChange(event);
-                scheduleStatusCountsReload();
-            },
-        )
+        .listen('.ActionRequestStatusChanged', (event: StatusChangePayload) => {
+            applyStatusChange(event);
+            scheduleStatusCountsReload();
+        })
         .listen('.ActionRequestCreated', () => scheduleStatusCountsReload());
 });
 
 onUnmounted(() => {
     leaveChannel(ACTIONS_CHANNEL);
+
     if (statusCountsReloadTimer !== null) {
         clearTimeout(statusCountsReloadTimer);
         statusCountsReloadTimer = null;
@@ -323,10 +321,7 @@ function payloadDetail(row: ActionRequestRow): string {
 
 function statusCount(id: string): number {
     if (id === 'all') {
-        return Object.values(props.statusCounts).reduce(
-            (sum, n) => sum + n,
-            0,
-        );
+        return Object.values(props.statusCounts).reduce((sum, n) => sum + n, 0);
     }
 
     return props.statusCounts[id] ?? 0;

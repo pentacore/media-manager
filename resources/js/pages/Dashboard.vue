@@ -164,7 +164,13 @@ function refresh() {
 
     refreshing.value = true;
     router.reload({
-        only: ['stats', 'services', 'sparklines', 'nowPlaying', 'pendingApprovals'],
+        only: [
+            'stats',
+            'services',
+            'sparklines',
+            'nowPlaying',
+            'pendingApprovals',
+        ],
         onFinish: () => {
             refreshing.value = false;
         },

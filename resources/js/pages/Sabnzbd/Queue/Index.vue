@@ -137,9 +137,7 @@ function changePriority(nzoId: string, priority: string): void {
     });
 }
 
-function statusVariant(
-    status: string,
-): 'ok' | 'danger' | 'default' {
+function statusVariant(status: string): 'ok' | 'danger' | 'default' {
     const lower = status.toLowerCase();
 
     if (lower === 'completed' || lower === 'ok') {
@@ -169,11 +167,13 @@ function statusVariant(
                 >
                     Downloads
                 </h1>
-                <p
-                    class="mt-1 max-w-[640px] text-[13px] text-muted-foreground"
-                >
+                <p class="mt-1 max-w-[640px] text-[13px] text-muted-foreground">
                     Live SABnzbd queue and recent history.
-                    {{ connection?.name ? `Connected to ${connection.name}.` : '' }}
+                    {{
+                        connection?.name
+                            ? `Connected to ${connection.name}.`
+                            : ''
+                    }}
                 </p>
             </div>
             <div class="flex gap-2" v-if="configured">
@@ -195,10 +195,7 @@ function statusVariant(
                     :variant="paused ? 'default' : 'outline'"
                     @click="toggleQueue"
                 >
-                    <component
-                        :is="paused ? Play : Pause"
-                        class="size-3.5"
-                    />
+                    <component :is="paused ? Play : Pause" class="size-3.5" />
                     {{ paused ? 'Resume queue' : 'Pause queue' }}
                 </Button>
             </div>
@@ -213,7 +210,10 @@ function statusVariant(
             start tracking downloads here.
         </div>
 
-        <div v-else-if="error" class="rounded-xl border border-destructive/40 bg-destructive/10 p-4 text-sm text-destructive">
+        <div
+            v-else-if="error"
+            class="rounded-xl border border-destructive/40 bg-destructive/10 p-4 text-sm text-destructive"
+        >
             {{ error }}
         </div>
 
@@ -300,7 +300,11 @@ function statusVariant(
                                 <Select
                                     :model-value="String(slot.priority)"
                                     @update:model-value="
-                                        (v) => changePriority(slot.nzo_id, String(v))
+                                        (v) =>
+                                            changePriority(
+                                                slot.nzo_id,
+                                                String(v),
+                                            )
                                     "
                                 >
                                     <SelectTrigger class="h-7 w-24 text-xs">
@@ -308,7 +312,9 @@ function statusVariant(
                                     </SelectTrigger>
                                     <SelectContent>
                                         <SelectItem
-                                            v-for="(label, value) in PRIORITY_LABELS"
+                                            v-for="(
+                                                label, value
+                                            ) in PRIORITY_LABELS"
                                             :key="value"
                                             :value="value"
                                         >

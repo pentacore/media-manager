@@ -32,7 +32,10 @@ defineProps<{
 defineOptions({
     layout: {
         breadcrumbs: [
-            { title: 'Notifications', href: NotificationController.index.url() },
+            {
+                title: 'Notifications',
+                href: NotificationController.index.url(),
+            },
         ],
     },
 });
@@ -173,7 +176,7 @@ function shortType(type: string): string {
                         {{ n.data.message }}
                     </p>
                     <div
-                        class="mt-1 flex items-center gap-3 font-mono-tabular text-[11px] text-fg-subtle"
+                        class="font-mono-tabular mt-1 flex items-center gap-3 text-[11px] text-fg-subtle"
                     >
                         <span>{{ formatTime(n.created_at) }}</span>
                         <span>{{ shortType(n.type) }}</span>

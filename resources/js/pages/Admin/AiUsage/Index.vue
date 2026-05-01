@@ -278,7 +278,9 @@ async function openDetail(row: RecentRow) {
     try {
         const url = AiUsageController.show.url(
             { aiUsageRecord: row.id },
-            props.scenario ? { query: { scenario: { ...props.scenario } } } : {},
+            props.scenario
+                ? { query: { scenario: { ...props.scenario } } }
+                : {},
         );
         const response = await fetch(url, {
             headers: { Accept: 'application/json' },
@@ -517,7 +519,9 @@ function formatTimestamp(value: string): string {
                     class="grid items-center gap-3 px-4 py-2.5 md:grid-cols-[200px,1fr,1fr]"
                 >
                     <div>
-                        <div class="font-mono-tabular text-[12.5px] font-medium">
+                        <div
+                            class="font-mono-tabular text-[12.5px] font-medium"
+                        >
                             {{ row.model }}
                         </div>
                         <div class="text-[11px] text-muted-foreground">
@@ -543,7 +547,9 @@ function formatTimestamp(value: string): string {
                         <div
                             class="flex items-center justify-between text-[11px]"
                         >
-                            <span class="text-muted-foreground">{{ bar.label }}</span>
+                            <span class="text-muted-foreground">{{
+                                bar.label
+                            }}</span>
                             <span class="font-mono-tabular">
                                 {{ formatNumber(bar.used) }} /
                                 {{
@@ -1052,8 +1058,9 @@ function formatTimestamp(value: string): string {
                             </span>
                         </div>
                         <pre
-                            class="max-h-72 overflow-y-auto px-3 py-2 text-[12px] leading-snug whitespace-pre-wrap break-words"
-                        >{{ detail.record.response_text }}</pre>
+                            class="max-h-72 overflow-y-auto px-3 py-2 text-[12px] leading-snug break-words whitespace-pre-wrap"
+                            >{{ detail.record.response_text }}</pre
+                        >
                     </div>
 
                     <!-- Pricing source banner -->
@@ -1063,7 +1070,9 @@ function formatTimestamp(value: string): string {
                         <div class="flex items-center gap-2 text-[12px]">
                             <span class="text-muted-foreground">Pricing:</span>
                             <Pill
-                                :variant="rateSourceVariant(detail.rates.source)"
+                                :variant="
+                                    rateSourceVariant(detail.rates.source)
+                                "
                             >
                                 {{ rateSourceLabel(detail.rates.source) }}
                             </Pill>
@@ -1086,9 +1095,7 @@ function formatTimestamp(value: string): string {
                     <div
                         class="overflow-hidden rounded-md border border-border"
                     >
-                        <table
-                            class="w-full border-collapse text-[12px]"
-                        >
+                        <table class="w-full border-collapse text-[12px]">
                             <thead>
                                 <tr class="bg-bg-elev">
                                     <th
@@ -1163,7 +1170,9 @@ function formatTimestamp(value: string): string {
                                         {{ formatCost(detail.total_cost) }}
                                     </td>
                                     <td
-                                        v-if="detail.scenario_total_cost !== null"
+                                        v-if="
+                                            detail.scenario_total_cost !== null
+                                        "
                                         class="font-mono-tabular px-3 py-2 text-right text-accent"
                                     >
                                         {{
@@ -1241,7 +1250,9 @@ function formatTimestamp(value: string): string {
                                 "
                             >
                                 <SelectTrigger class="h-8 flex-1 text-xs">
-                                    <SelectValue placeholder="Pick a catalog model…" />
+                                    <SelectValue
+                                        placeholder="Pick a catalog model…"
+                                    />
                                 </SelectTrigger>
                                 <SelectContent>
                                     <SelectItem

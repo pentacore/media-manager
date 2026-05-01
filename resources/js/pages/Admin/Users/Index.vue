@@ -121,7 +121,11 @@ function unlinkEmby(user: UserItem) {
         return;
     }
 
-    if (!confirm(`Unlink Emby account "${user.emby_username}" from ${user.name}?`)) {
+    if (
+        !confirm(
+            `Unlink Emby account "${user.emby_username}" from ${user.name}?`,
+        )
+    ) {
         return;
     }
 
@@ -154,7 +158,11 @@ function importFromEmby() {
         return;
     }
 
-    if (!confirm('Import every Emby user as a viewer account here? Existing accounts and links are skipped.')) {
+    if (
+        !confirm(
+            'Import every Emby user as a viewer account here? Existing accounts and links are skipped.',
+        )
+    ) {
         return;
     }
 
@@ -490,9 +498,8 @@ function importFromEmby() {
                             Link {{ linkDialogUserName }} to an Emby account
                         </DialogTitle>
                         <DialogDescription>
-                            Type the Emby username. The account is found via
-                            the configured Emby connection — no password
-                            needed.
+                            Type the Emby username. The account is found via the
+                            configured Emby connection — no password needed.
                         </DialogDescription>
                     </DialogHeader>
 

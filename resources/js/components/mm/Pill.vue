@@ -37,7 +37,7 @@ const variantClasses = computed(() => {
     <span
         :class="
             cn(
-                'inline-flex h-[22px] items-center gap-1.5 rounded-full border px-2 text-[11.5px] font-medium tabular-nums whitespace-nowrap',
+                'inline-flex h-[22px] items-center gap-1.5 rounded-full border px-2 text-[11.5px] font-medium whitespace-nowrap tabular-nums',
                 variantClasses,
                 props.class,
             )

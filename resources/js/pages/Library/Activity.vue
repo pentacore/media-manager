@@ -48,6 +48,7 @@ interface QueueRow {
     status_messages: { title: string; messages: string[] }[];
     added: string | null;
     quality: string | null;
+    download_id: string | null;
 }
 
 interface QueuePayload {
@@ -111,7 +112,10 @@ defineOptions({
     layout: {
         breadcrumbs: [
             { title: 'Media', href: dashboard().url },
-            { title: 'Library activity', href: LibraryActivityController.queue.url() },
+            {
+                title: 'Library activity',
+                href: LibraryActivityController.queue.url(),
+            },
         ],
     },
 });
@@ -119,6 +123,7 @@ defineOptions({
 const page = usePage();
 const isAdmin = computed(() => {
     const role = page.props.auth.user?.role;
+
     if (!role) {
         return false;
     }
@@ -134,6 +139,7 @@ const activeTab = ref<'queue' | 'history'>('queue');
 
 const filteredHistoryRows = computed<HistoryRow[]>(() => {
     const all = props.history?.rows ?? [];
+
     if (serviceFilter.value === 'all') {
         return all;
     }
@@ -141,7 +147,9 @@ const filteredHistoryRows = computed<HistoryRow[]>(() => {
     return all.filter((row) => row.service === serviceFilter.value);
 });
 
-function eventVariant(eventType: string | null): 'ok' | 'warn' | 'danger' | 'info' | 'default' {
+function eventVariant(
+    eventType: string | null,
+): 'ok' | 'warn' | 'danger' | 'info' | 'default' {
     switch (eventType) {
         case 'downloadFolderImported':
         case 'movieFolderImported':
@@ -178,7 +186,10 @@ function eventLabel(eventType: string | null): string {
             return 'ignored';
     }
 
-    return eventType.replace(/([A-Z])/g, ' $1').toLowerCase().trim();
+    return eventType
+        .replace(/([A-Z])/g, ' $1')
+        .toLowerCase()
+        .trim();
 }
 
 function formatDate(iso: string | null): string {
@@ -203,14 +214,21 @@ function actionKey(row: QueueRow, verb: string): string {
 }
 
 function forceGrab(row: QueueRow): void {
-    if (!confirm(`Force grab "${row.title ?? 'this item'}" now? This bypasses the RSS sync delay.`)) {
+    if (
+        !confirm(
+            `Force grab "${row.title ?? 'this item'}" now? This bypasses the RSS sync delay.`,
+        )
+    ) {
         return;
     }
 
     const key = actionKey(row, 'grab');
     acting.value = key;
     router.post(
-        LibraryActivityController.grabQueueItem.url({ service: row.service, id: row.id }),
+        LibraryActivityController.grabQueueItem.url({
+            service: row.service,
+            id: row.id,
+        }),
         {},
         {
             preserveScroll: true,
@@ -237,7 +255,10 @@ function removeQueueItem(row: QueueRow, verb: 'remove' | 'block'): void {
     const key = actionKey(row, verb);
     acting.value = key;
     router.post(
-        LibraryActivityController.removeQueueItem.url({ service: row.service, id: row.id }),
+        LibraryActivityController.removeQueueItem.url({
+            service: row.service,
+            id: row.id,
+        }),
         { verb },
         {
             preserveScroll: true,
@@ -277,8 +298,10 @@ function openManualImport(row: QueueRow): void {
     )
         .then(async (response) => {
             const body = await response.json();
+
             if (!response.ok) {
-                importError.value = body.error ?? `Request failed (${response.status})`;
+                importError.value =
+                    body.error ?? `Request failed (${response.status})`;
 
                 return;
             }
@@ -286,7 +309,8 @@ function openManualImport(row: QueueRow): void {
             importCandidates.value = body.candidates ?? [];
         })
         .catch((error: unknown) => {
-            importError.value = error instanceof Error ? error.message : 'Network error';
+            importError.value =
+                error instanceof Error ? error.message : 'Network error';
         })
         .finally(() => {
             importLoading.value = false;
@@ -305,13 +329,16 @@ function closeManualImport(): void {
 
 function submitManualImport(): void {
     const row = importingRow.value;
+
     if (!row || !row.download_id) {
         return;
     }
 
     importSubmitting.value = true;
     router.post(
-        LibraryActivityController.executeManualImport.url({ service: row.service }),
+        LibraryActivityController.executeManualImport.url({
+            service: row.service,
+        }),
         { download_id: row.download_id },
         {
             preserveScroll: true,
@@ -327,18 +354,24 @@ function submitManualImport(): void {
 }
 
 function importableCount(): number {
-    return importCandidates.value.filter((c) => c.rejections.length === 0).length;
+    return importCandidates.value.filter((c) => c.rejections.length === 0)
+        .length;
 }
 
 function candidateLabel(candidate: ManualImportCandidate): string {
     if (candidate.series_title) {
-        const ep = (candidate.episodes ?? []).map((e) =>
-            e.season !== null && e.episode !== null
-                ? `S${String(e.season).padStart(2, '0')}E${String(e.episode).padStart(2, '0')}`
-                : '',
-        ).filter(Boolean).join(', ');
+        const ep = (candidate.episodes ?? [])
+            .map((e) =>
+                e.season !== null && e.episode !== null
+                    ? `S${String(e.season).padStart(2, '0')}E${String(e.episode).padStart(2, '0')}`
+                    : '',
+            )
+            .filter(Boolean)
+            .join(', ');
 
-        return ep ? `${candidate.series_title} · ${ep}` : (candidate.series_title ?? '');
+        return ep
+            ? `${candidate.series_title} · ${ep}`
+            : (candidate.series_title ?? '');
     }
 
     if (candidate.movie_title) {
@@ -372,6 +405,7 @@ function formatBytes(bytes: number | null): string {
     const units = ['B', 'KB', 'MB', 'GB', 'TB'];
     let value = bytes;
     let unitIndex = 0;
+
     while (value >= 1024 && unitIndex < units.length - 1) {
         value /= 1024;
         unitIndex++;
@@ -399,7 +433,10 @@ function trackedVariant(row: QueueRow): 'ok' | 'warn' | 'danger' | 'info' {
         return 'danger';
     }
 
-    if (row.tracked_state === 'importBlocked' || row.tracked_state === 'importPending') {
+    if (
+        row.tracked_state === 'importBlocked' ||
+        row.tracked_state === 'importPending'
+    ) {
         return 'warn';
     }
 
@@ -442,7 +479,10 @@ function statusLabel(row: QueueRow): string {
             return 'ignored';
     }
 
-    return raw.replace(/([A-Z])/g, ' $1').toLowerCase().trim();
+    return raw
+        .replace(/([A-Z])/g, ' $1')
+        .toLowerCase()
+        .trim();
 }
 
 function timeleftLabel(row: QueueRow): string {
@@ -455,6 +495,7 @@ function timeleftLabel(row: QueueRow): string {
 
 const filteredRows = computed<QueueRow[]>(() => {
     const all = props.queue?.rows ?? [];
+
     if (serviceFilter.value === 'all') {
         return all;
     }
@@ -470,7 +511,9 @@ const filteredRows = computed<QueueRow[]>(() => {
         <!-- Hero -->
         <div class="flex items-end justify-between gap-3">
             <div>
-                <h1 class="text-[22px] leading-tight font-semibold tracking-tight">
+                <h1
+                    class="text-[22px] leading-tight font-semibold tracking-tight"
+                >
                     Library activity
                 </h1>
                 <p
@@ -478,15 +521,15 @@ const filteredRows = computed<QueueRow[]>(() => {
                     class="mt-1 max-w-[640px] text-[13px] text-muted-foreground"
                 >
                     Combined Sonarr + Radarr download queue. Stuck imports
-                    surface here with their tracked state so you can act
-                    before falling behind.
+                    surface here with their tracked state so you can act before
+                    falling behind.
                 </p>
                 <p
                     v-else
                     class="mt-1 max-w-[640px] text-[13px] text-muted-foreground"
                 >
-                    Recent grabs, imports, deletions, and failures from
-                    both services — newest first.
+                    Recent grabs, imports, deletions, and failures from both
+                    services — newest first.
                 </p>
             </div>
             <div class="flex items-center gap-2">
@@ -496,7 +539,7 @@ const filteredRows = computed<QueueRow[]>(() => {
                     aria-label="Activity view"
                 >
                     <button
-                        v-for="tab in (['queue', 'history'] as const)"
+                        v-for="tab in ['queue', 'history'] as const"
                         :key="tab"
                         type="button"
                         :class="[
@@ -515,7 +558,7 @@ const filteredRows = computed<QueueRow[]>(() => {
                     role="tablist"
                 >
                     <button
-                        v-for="value in (['all', 'sonarr', 'radarr'] as const)"
+                        v-for="value in ['all', 'sonarr', 'radarr'] as const"
                         :key="value"
                         type="button"
                         :class="[
@@ -546,178 +589,211 @@ const filteredRows = computed<QueueRow[]>(() => {
 
         <!-- Queue tab -->
         <template v-if="activeTab === 'queue'">
-        <!-- Errors -->
-        <div
-            v-if="queue && queue.errors.length > 0"
-            class="rounded-md border border-warn/30 bg-warn/10 px-3 py-2 text-[12px] text-warn"
-        >
+            <!-- Errors -->
             <div
-                v-for="(error, index) in queue.errors"
-                :key="index"
+                v-if="queue && queue.errors.length > 0"
+                class="border-warn/30 bg-warn/10 text-warn rounded-md border px-3 py-2 text-[12px]"
             >
-                {{ error }}
+                <div v-for="(error, index) in queue.errors" :key="index">
+                    {{ error }}
+                </div>
             </div>
-        </div>
 
-        <!-- Loading -->
-        <div v-if="!queue" class="space-y-2">
-            <Skeleton v-for="n in 5" :key="n" class="h-14 w-full" />
-        </div>
+            <!-- Loading -->
+            <div v-if="!queue" class="space-y-2">
+                <Skeleton v-for="n in 5" :key="n" class="h-14 w-full" />
+            </div>
 
-        <!-- Empty -->
-        <div
-            v-else-if="filteredRows.length === 0"
-            class="rounded-xl border border-border bg-card px-4 py-10 text-center text-sm text-muted-foreground"
-        >
-            <template v-if="!queue.services.sonarr && !queue.services.radarr">
-                No active Sonarr or Radarr connection configured.
-            </template>
-            <template v-else>
-                Nothing in the queue right now — both services are caught up.
-            </template>
-        </div>
+            <!-- Empty -->
+            <div
+                v-else-if="filteredRows.length === 0"
+                class="rounded-xl border border-border bg-card px-4 py-10 text-center text-sm text-muted-foreground"
+            >
+                <template
+                    v-if="!queue.services.sonarr && !queue.services.radarr"
+                >
+                    No active Sonarr or Radarr connection configured.
+                </template>
+                <template v-else>
+                    Nothing in the queue right now — both services are caught
+                    up.
+                </template>
+            </div>
 
-        <!-- Rows -->
-        <div v-else class="overflow-hidden rounded-xl border border-border bg-card">
-            <table class="w-full border-collapse text-[13px]">
-                <thead>
-                    <tr>
-                        <th
-                            v-for="header in [
-                                'Service',
-                                'Title',
-                                'Quality',
-                                'State',
-                                'Size',
-                                'Time left',
-                                '',
-                            ]"
-                            :key="header"
-                            class="border-b border-border bg-card px-3 py-2 text-left text-[11.5px] font-medium tracking-[0.05em] text-muted-foreground uppercase"
+            <!-- Rows -->
+            <div
+                v-else
+                class="overflow-hidden rounded-xl border border-border bg-card"
+            >
+                <table class="w-full border-collapse text-[13px]">
+                    <thead>
+                        <tr>
+                            <th
+                                v-for="header in [
+                                    'Service',
+                                    'Title',
+                                    'Quality',
+                                    'State',
+                                    'Size',
+                                    'Time left',
+                                    '',
+                                ]"
+                                :key="header"
+                                class="border-b border-border bg-card px-3 py-2 text-left text-[11.5px] font-medium tracking-[0.05em] text-muted-foreground uppercase"
+                            >
+                                {{ header }}
+                            </th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr
+                            v-for="row in filteredRows"
+                            :key="`${row.service}-${row.id}`"
+                            class="border-b border-border last:border-b-0 hover:bg-bg-hover"
                         >
-                            {{ header }}
-                        </th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <tr
-                        v-for="row in filteredRows"
-                        :key="`${row.service}-${row.id}`"
-                        class="border-b border-border last:border-b-0 hover:bg-bg-hover"
-                    >
-                        <td class="px-3 py-2.5">
-                            <SvcChip :id="row.service" />
-                        </td>
-                        <td class="px-3 py-2.5">
-                            <div class="font-medium">{{ row.title ?? '—' }}</div>
-                            <div
-                                v-if="row.subtitle"
-                                class="text-[11.5px] text-muted-foreground"
-                            >
-                                {{ row.subtitle }}
-                            </div>
-                            <div
-                                v-if="row.error_message"
-                                class="mt-1 text-[11.5px] text-destructive"
-                            >
-                                {{ row.error_message }}
-                            </div>
-                            <div
-                                v-for="(message, mi) in row.status_messages"
-                                :key="mi"
-                                class="mt-1 text-[11.5px] text-warn"
-                            >
-                                <span class="font-medium">{{ message.title }}:</span>
-                                {{ message.messages.join('; ') }}
-                            </div>
-                        </td>
-                        <td class="px-3 py-2.5 text-[12px]">
-                            {{ row.quality ?? '—' }}
-                        </td>
-                        <td class="px-3 py-2.5">
-                            <Pill :variant="trackedVariant(row)">
-                                {{ statusLabel(row) }}
-                            </Pill>
-                        </td>
-                        <td class="font-mono-tabular px-3 py-2.5 text-right text-[12px]">
-                            <div>{{ formatBytes(row.size) }}</div>
-                            <div class="text-[11px] text-muted-foreground">
-                                {{ progress(row) }}%
-                            </div>
-                        </td>
-                        <td class="font-mono-tabular px-3 py-2.5 text-right text-[12px]">
-                            {{ timeleftLabel(row) }}
-                        </td>
-                        <td class="px-3 py-2.5 text-right">
-                            <div class="flex items-center justify-end gap-1">
-                                <a
-                                    :href="`${row.service_url}/activity/queue`"
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    class="inline-flex items-center gap-1 text-[12px] text-muted-foreground hover:text-foreground"
+                            <td class="px-3 py-2.5">
+                                <SvcChip :id="row.service" />
+                            </td>
+                            <td class="px-3 py-2.5">
+                                <div class="font-medium">
+                                    {{ row.title ?? '—' }}
+                                </div>
+                                <div
+                                    v-if="row.subtitle"
+                                    class="text-[11.5px] text-muted-foreground"
                                 >
-                                    <ExternalLink class="size-3.5" />Open
-                                </a>
-                                <DropdownMenu v-if="isAdmin">
-                                    <DropdownMenuTrigger as-child>
-                                        <Button
-                                            variant="ghost"
-                                            size="sm"
-                                            class="size-7 p-0"
-                                            :disabled="
-                                                acting === actionKey(row, 'remove') ||
-                                                acting === actionKey(row, 'block')
-                                            "
-                                            :aria-label="`Manage ${row.title ?? 'queue item'}`"
+                                    {{ row.subtitle }}
+                                </div>
+                                <div
+                                    v-if="row.error_message"
+                                    class="mt-1 text-[11.5px] text-destructive"
+                                >
+                                    {{ row.error_message }}
+                                </div>
+                                <div
+                                    v-for="(message, mi) in row.status_messages"
+                                    :key="mi"
+                                    class="text-warn mt-1 text-[11.5px]"
+                                >
+                                    <span class="font-medium"
+                                        >{{ message.title }}:</span
+                                    >
+                                    {{ message.messages.join('; ') }}
+                                </div>
+                            </td>
+                            <td class="px-3 py-2.5 text-[12px]">
+                                {{ row.quality ?? '—' }}
+                            </td>
+                            <td class="px-3 py-2.5">
+                                <Pill :variant="trackedVariant(row)">
+                                    {{ statusLabel(row) }}
+                                </Pill>
+                            </td>
+                            <td
+                                class="font-mono-tabular px-3 py-2.5 text-right text-[12px]"
+                            >
+                                <div>{{ formatBytes(row.size) }}</div>
+                                <div class="text-[11px] text-muted-foreground">
+                                    {{ progress(row) }}%
+                                </div>
+                            </td>
+                            <td
+                                class="font-mono-tabular px-3 py-2.5 text-right text-[12px]"
+                            >
+                                {{ timeleftLabel(row) }}
+                            </td>
+                            <td class="px-3 py-2.5 text-right">
+                                <div
+                                    class="flex items-center justify-end gap-1"
+                                >
+                                    <a
+                                        :href="`${row.service_url}/activity/queue`"
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        class="inline-flex items-center gap-1 text-[12px] text-muted-foreground hover:text-foreground"
+                                    >
+                                        <ExternalLink class="size-3.5" />Open
+                                    </a>
+                                    <DropdownMenu v-if="isAdmin">
+                                        <DropdownMenuTrigger as-child>
+                                            <Button
+                                                variant="ghost"
+                                                size="sm"
+                                                class="size-7 p-0"
+                                                :disabled="
+                                                    acting ===
+                                                        actionKey(
+                                                            row,
+                                                            'remove',
+                                                        ) ||
+                                                    acting ===
+                                                        actionKey(row, 'block')
+                                                "
+                                                :aria-label="`Manage ${row.title ?? 'queue item'}`"
+                                            >
+                                                <MoreVertical
+                                                    class="size-3.5"
+                                                />
+                                            </Button>
+                                        </DropdownMenuTrigger>
+                                        <DropdownMenuContent
+                                            align="end"
+                                            class="w-52"
                                         >
-                                            <MoreVertical class="size-3.5" />
-                                        </Button>
-                                    </DropdownMenuTrigger>
-                                    <DropdownMenuContent align="end" class="w-52">
-                                        <DropdownMenuLabel>Manage queue item</DropdownMenuLabel>
-                                        <DropdownMenuSeparator />
-                                        <DropdownMenuItem
-                                            @select="forceGrab(row)"
-                                        >
-                                            Force grab now
-                                        </DropdownMenuItem>
-                                        <DropdownMenuItem
-                                            :disabled="!row.download_id"
-                                            @select="openManualImport(row)"
-                                        >
-                                            Manual import…
-                                        </DropdownMenuItem>
-                                        <DropdownMenuItem
-                                            @select="removeQueueItem(row, 'remove')"
-                                        >
-                                            Remove from queue
-                                        </DropdownMenuItem>
-                                        <DropdownMenuItem
-                                            class="text-destructive focus:text-destructive"
-                                            @select="removeQueueItem(row, 'block')"
-                                        >
-                                            Blocklist & retry
-                                        </DropdownMenuItem>
-                                    </DropdownMenuContent>
-                                </DropdownMenu>
-                            </div>
-                        </td>
-                    </tr>
-                </tbody>
-            </table>
-        </div>
+                                            <DropdownMenuLabel
+                                                >Manage queue
+                                                item</DropdownMenuLabel
+                                            >
+                                            <DropdownMenuSeparator />
+                                            <DropdownMenuItem
+                                                @select="forceGrab(row)"
+                                            >
+                                                Force grab now
+                                            </DropdownMenuItem>
+                                            <DropdownMenuItem
+                                                :disabled="!row.download_id"
+                                                @select="openManualImport(row)"
+                                            >
+                                                Manual import…
+                                            </DropdownMenuItem>
+                                            <DropdownMenuItem
+                                                @select="
+                                                    removeQueueItem(
+                                                        row,
+                                                        'remove',
+                                                    )
+                                                "
+                                            >
+                                                Remove from queue
+                                            </DropdownMenuItem>
+                                            <DropdownMenuItem
+                                                class="text-destructive focus:text-destructive"
+                                                @select="
+                                                    removeQueueItem(
+                                                        row,
+                                                        'block',
+                                                    )
+                                                "
+                                            >
+                                                Blocklist & retry
+                                            </DropdownMenuItem>
+                                        </DropdownMenuContent>
+                                    </DropdownMenu>
+                                </div>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
         </template>
 
         <!-- History tab -->
         <template v-if="activeTab === 'history'">
             <div
                 v-if="history && history.errors.length > 0"
-                class="rounded-md border border-warn/30 bg-warn/10 px-3 py-2 text-[12px] text-warn"
+                class="border-warn/30 bg-warn/10 text-warn rounded-md border px-3 py-2 text-[12px]"
             >
-                <div
-                    v-for="(error, index) in history.errors"
-                    :key="index"
-                >
+                <div v-for="(error, index) in history.errors" :key="index">
                     {{ error }}
                 </div>
             </div>
@@ -730,15 +806,18 @@ const filteredRows = computed<QueueRow[]>(() => {
                 v-else-if="filteredHistoryRows.length === 0"
                 class="rounded-xl border border-border bg-card px-4 py-10 text-center text-sm text-muted-foreground"
             >
-                <template v-if="!history.services.sonarr && !history.services.radarr">
+                <template
+                    v-if="!history.services.sonarr && !history.services.radarr"
+                >
                     No active Sonarr or Radarr connection configured.
                 </template>
-                <template v-else>
-                    No recent history yet.
-                </template>
+                <template v-else> No recent history yet. </template>
             </div>
 
-            <div v-else class="overflow-x-auto rounded-xl border border-border bg-card">
+            <div
+                v-else
+                class="overflow-x-auto rounded-xl border border-border bg-card"
+            >
                 <table class="w-full border-collapse text-[13px]">
                     <thead>
                         <tr>
@@ -772,7 +851,9 @@ const filteredRows = computed<QueueRow[]>(() => {
                                 </Pill>
                             </td>
                             <td class="px-3 py-2.5">
-                                <div class="font-medium">{{ row.title ?? '—' }}</div>
+                                <div class="font-medium">
+                                    {{ row.title ?? '—' }}
+                                </div>
                                 <div
                                     v-if="row.subtitle"
                                     class="text-[11.5px] text-muted-foreground"
@@ -781,7 +862,7 @@ const filteredRows = computed<QueueRow[]>(() => {
                                 </div>
                                 <div
                                     v-if="row.source_title"
-                                    class="font-mono-tabular mt-1 text-[11px] text-fg-subtle break-all"
+                                    class="font-mono-tabular mt-1 text-[11px] break-all text-fg-subtle"
                                 >
                                     {{ row.source_title }}
                                 </div>
@@ -789,7 +870,9 @@ const filteredRows = computed<QueueRow[]>(() => {
                             <td class="px-3 py-2.5 text-[12px]">
                                 {{ row.quality ?? '—' }}
                             </td>
-                            <td class="font-mono-tabular px-3 py-2.5 text-[12px] text-muted-foreground">
+                            <td
+                                class="font-mono-tabular px-3 py-2.5 text-[12px] text-muted-foreground"
+                            >
                                 {{ formatDate(row.date) }}
                             </td>
                         </tr>
@@ -826,8 +909,8 @@ const filteredRows = computed<QueueRow[]>(() => {
                     v-else-if="importCandidates.length === 0"
                     class="rounded-md border border-border bg-bg-elev px-3 py-3 text-sm text-muted-foreground"
                 >
-                    No candidate files were returned. Sonarr/Radarr may not
-                    see anything to import for this download yet.
+                    No candidate files were returned. Sonarr/Radarr may not see
+                    anything to import for this download yet.
                 </div>
                 <div v-else class="max-h-[55vh] space-y-2 overflow-y-auto">
                     <div
@@ -856,7 +939,7 @@ const filteredRows = computed<QueueRow[]>(() => {
                         </div>
                         <div
                             v-if="candidate.rejections.length > 0"
-                            class="mt-2 space-y-1 rounded border border-warn/30 bg-warn/5 p-2 text-[11.5px] text-warn"
+                            class="border-warn/30 bg-warn/5 text-warn mt-2 space-y-1 rounded border p-2 text-[11.5px]"
                         >
                             <div
                                 v-for="(rejection, ri) in candidate.rejections"

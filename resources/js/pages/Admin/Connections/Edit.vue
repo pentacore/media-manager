@@ -229,6 +229,7 @@ const sabScriptCopied = ref(false);
 
 function copySabScript(): void {
     const script = props.connection.sabnzbd_webhook_script;
+
     if (!script) {
         return;
     }
@@ -693,8 +694,8 @@ function testIndexer(indexerId: number): void {
                             </Label>
                             <p class="text-sm text-muted-foreground">
                                 Comma-separated SABnzbd categories whose queue
-                                and history rows should be hidden everywhere
-                                in the app. Leave empty to show everything.
+                                and history rows should be hidden everywhere in
+                                the app. Leave empty to show everything.
                             </p>
                         </div>
                         <Input
@@ -741,7 +742,8 @@ function testIndexer(indexerId: number): void {
                         </div>
                         <pre
                             class="max-h-72 overflow-auto rounded-md border border-border bg-bg-elev p-3 text-[11.5px] leading-snug"
-                            >{{ connection.sabnzbd_webhook_script }}</pre>
+                            >{{ connection.sabnzbd_webhook_script }}</pre
+                        >
                     </div>
 
                     <div class="flex gap-2 pt-4">

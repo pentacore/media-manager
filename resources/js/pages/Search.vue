@@ -267,7 +267,6 @@ const seerrStatusKey = (status: number | null): string => {
             return 'unknown';
     }
 };
-
 </script>
 
 <template>
@@ -332,9 +331,13 @@ const seerrStatusKey = (status: number | null): string => {
                 </button>
                 <span class="ml-auto text-[11.5px] text-fg-subtle">
                     <template v-if="query">
-                        <span class="font-mono-tabular">{{ libraryCount }}</span>
+                        <span class="font-mono-tabular">{{
+                            libraryCount
+                        }}</span>
                         library ·
-                        <span class="font-mono-tabular">{{ requestCount }}</span>
+                        <span class="font-mono-tabular">{{
+                            requestCount
+                        }}</span>
                         requests
                     </template>
                     <template v-else>type to search</template>
@@ -354,7 +357,7 @@ const seerrStatusKey = (status: number | null): string => {
                     <span>Recent searches</span>
                     <button
                         type="button"
-                        class="text-[11px] font-medium text-muted-foreground normal-case tracking-normal hover:text-foreground"
+                        class="text-[11px] font-medium tracking-normal text-muted-foreground normal-case hover:text-foreground"
                         @click="clearRecent"
                     >
                         Clear
