@@ -125,9 +125,7 @@ function applyFilters(next: {
     const merged = {
         action: 'action' in next ? (next.action ?? '') : props.filters.action,
         service_id:
-            'service_id' in next
-                ? next.service_id
-                : props.filters.service_id,
+            'service_id' in next ? next.service_id : props.filters.service_id,
         since: 'since' in next ? (next.since ?? 24) : props.filters.since,
     };
 
@@ -370,9 +368,7 @@ function exportUrl(): string {
                 <div
                     class="inline-flex h-7 items-center rounded-md border border-border bg-card p-0.5"
                 >
-                    <Calendar
-                        class="ml-1.5 size-3.5 text-muted-foreground"
-                    />
+                    <Calendar class="ml-1.5 size-3.5 text-muted-foreground" />
                     <button
                         v-for="value in [
                             filterOptions.todayValue,

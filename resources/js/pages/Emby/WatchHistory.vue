@@ -53,7 +53,10 @@ defineOptions({
     layout: {
         breadcrumbs: [
             { title: 'Live', href: dashboard().url },
-            { title: 'Watch history', href: WatchHistoryController.index.url() },
+            {
+                title: 'Watch history',
+                href: WatchHistoryController.index.url(),
+            },
         ],
     },
 });
@@ -215,10 +218,7 @@ const totals = computed(() => {
     };
 });
 
-function applyFilters(next: {
-    media_type?: string;
-    since?: number | 'today';
-}) {
+function applyFilters(next: { media_type?: string; since?: number | 'today' }) {
     const merged = {
         media_type:
             'media_type' in next

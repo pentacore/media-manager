@@ -202,12 +202,9 @@ onMounted(() => {
         );
 
     privateChannel('dashboard')
-        .listen(
-            '.LibraryInterventionChanged',
-            (event: { count: number }) => {
-                libraryIntervention.value = event.count;
-            },
-        )
+        .listen('.LibraryInterventionChanged', (event: { count: number }) => {
+            libraryIntervention.value = event.count;
+        })
         .listen(
             '.SabnzbdDownloadCountsChanged',
             (event: { queued: number; completed: number }) => {

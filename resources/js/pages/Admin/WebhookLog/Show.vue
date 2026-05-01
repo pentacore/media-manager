@@ -73,9 +73,7 @@ function formatTime(iso: string | null): string {
                 </Pill>
             </div>
 
-            <div
-                class="mt-4 grid gap-x-6 gap-y-2 text-[13px] sm:grid-cols-2"
-            >
+            <div class="mt-4 grid gap-x-6 gap-y-2 text-[13px] sm:grid-cols-2">
                 <div>
                     <div
                         class="text-[11.5px] font-semibold tracking-[0.05em] text-muted-foreground uppercase"
@@ -135,7 +133,8 @@ function formatTime(iso: string | null): string {
             </div>
             <pre
                 class="max-h-[60vh] overflow-auto p-4 font-mono text-[12px] leading-relaxed text-foreground"
-            >{{ payloadJson }}</pre>
+                >{{ payloadJson }}</pre
+            >
         </div>
     </div>
 </template>

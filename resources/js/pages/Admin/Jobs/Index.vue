@@ -91,7 +91,9 @@ function shortClass(name: string): string {
                 <div class="mb-1.5 text-[13px] text-muted-foreground">
                     Admin <span class="text-fg-subtle">/</span> Jobs
                 </div>
-                <h1 class="text-[22px] leading-tight font-semibold tracking-tight">
+                <h1
+                    class="text-[22px] leading-tight font-semibold tracking-tight"
+                >
                     Jobs
                 </h1>
                 <p class="mt-1 max-w-[640px] text-[13px] text-muted-foreground">
@@ -115,20 +117,36 @@ function shortClass(name: string): string {
         </div>
 
         <!-- Queued -->
-        <section class="overflow-hidden rounded-xl border border-border bg-card">
-            <div class="flex items-center justify-between border-b border-border px-4 py-3">
-                <span class="text-[12px] font-semibold tracking-[0.06em] text-muted-foreground uppercase">
+        <section
+            class="overflow-hidden rounded-xl border border-border bg-card"
+        >
+            <div
+                class="flex items-center justify-between border-b border-border px-4 py-3"
+            >
+                <span
+                    class="text-[12px] font-semibold tracking-[0.06em] text-muted-foreground uppercase"
+                >
                     Queued ({{ queued.length }})
                 </span>
             </div>
-            <div v-if="queued.length === 0" class="px-4 py-6 text-center text-sm text-muted-foreground">
+            <div
+                v-if="queued.length === 0"
+                class="px-4 py-6 text-center text-sm text-muted-foreground"
+            >
                 Queue is empty.
             </div>
             <table v-else class="w-full border-collapse text-[13px]">
                 <thead>
                     <tr>
                         <th
-                            v-for="header in ['ID', 'Queue', 'Class', 'Attempts', 'Reserved', 'Created']"
+                            v-for="header in [
+                                'ID',
+                                'Queue',
+                                'Class',
+                                'Attempts',
+                                'Reserved',
+                                'Created',
+                            ]"
                             :key="header"
                             class="border-b border-border bg-card px-3 py-2 text-left text-[11.5px] font-medium tracking-[0.05em] text-muted-foreground uppercase"
                         >
@@ -142,15 +160,25 @@ function shortClass(name: string): string {
                         :key="job.id"
                         class="border-b border-border last:border-b-0 hover:bg-bg-hover"
                     >
-                        <td class="font-mono-tabular px-3 py-2.5 text-[12px]">{{ job.id }}</td>
+                        <td class="font-mono-tabular px-3 py-2.5 text-[12px]">
+                            {{ job.id }}
+                        </td>
                         <td class="px-3 py-2.5">{{ job.queue }}</td>
-                        <td class="px-3 py-2.5" :title="job.class">{{ shortClass(job.class) }}</td>
-                        <td class="font-mono-tabular px-3 py-2.5 text-right">{{ job.attempts }}</td>
+                        <td class="px-3 py-2.5" :title="job.class">
+                            {{ shortClass(job.class) }}
+                        </td>
+                        <td class="font-mono-tabular px-3 py-2.5 text-right">
+                            {{ job.attempts }}
+                        </td>
                         <td class="px-3 py-2.5">
-                            <Pill v-if="job.reserved" variant="info">Reserved</Pill>
+                            <Pill v-if="job.reserved" variant="info"
+                                >Reserved</Pill
+                            >
                             <span v-else class="text-fg-subtle">—</span>
                         </td>
-                        <td class="font-mono-tabular px-3 py-2.5 text-[12px] text-muted-foreground">
+                        <td
+                            class="font-mono-tabular px-3 py-2.5 text-[12px] text-muted-foreground"
+                        >
                             {{ formatDate(job.created_at) }}
                         </td>
                     </tr>
@@ -159,20 +187,34 @@ function shortClass(name: string): string {
         </section>
 
         <!-- Failed -->
-        <section class="overflow-hidden rounded-xl border border-border bg-card">
-            <div class="flex items-center justify-between border-b border-border px-4 py-3">
-                <span class="text-[12px] font-semibold tracking-[0.06em] text-muted-foreground uppercase">
+        <section
+            class="overflow-hidden rounded-xl border border-border bg-card"
+        >
+            <div
+                class="flex items-center justify-between border-b border-border px-4 py-3"
+            >
+                <span
+                    class="text-[12px] font-semibold tracking-[0.06em] text-muted-foreground uppercase"
+                >
                     Recent failures ({{ failed.length }})
                 </span>
             </div>
-            <div v-if="failed.length === 0" class="px-4 py-6 text-center text-sm text-muted-foreground">
+            <div
+                v-if="failed.length === 0"
+                class="px-4 py-6 text-center text-sm text-muted-foreground"
+            >
                 No failed jobs.
             </div>
             <table v-else class="w-full border-collapse text-[13px]">
                 <thead>
                     <tr>
                         <th
-                            v-for="header in ['Class', 'Queue', 'Exception', 'Failed at']"
+                            v-for="header in [
+                                'Class',
+                                'Queue',
+                                'Exception',
+                                'Failed at',
+                            ]"
                             :key="header"
                             class="border-b border-border bg-card px-3 py-2 text-left text-[11.5px] font-medium tracking-[0.05em] text-muted-foreground uppercase"
                         >
@@ -186,17 +228,26 @@ function shortClass(name: string): string {
                         :key="job.uuid"
                         class="border-b border-border last:border-b-0 hover:bg-bg-hover"
                     >
-                        <td class="px-3 py-2.5" :title="job.class">{{ shortClass(job.class) }}</td>
+                        <td class="px-3 py-2.5" :title="job.class">
+                            {{ shortClass(job.class) }}
+                        </td>
                         <td class="px-3 py-2.5">{{ job.queue }}</td>
                         <td class="px-3 py-2.5">
-                            <div class="font-mono-tabular text-[11.5px] text-destructive">
+                            <div
+                                class="font-mono-tabular text-[11.5px] text-destructive"
+                            >
                                 {{ shortClass(job.exception_class) }}
                             </div>
-                            <div class="mt-0.5 text-[12px] text-muted-foreground" :title="job.message">
+                            <div
+                                class="mt-0.5 text-[12px] text-muted-foreground"
+                                :title="job.message"
+                            >
                                 {{ job.message }}
                             </div>
                         </td>
-                        <td class="font-mono-tabular px-3 py-2.5 text-[12px] text-muted-foreground">
+                        <td
+                            class="font-mono-tabular px-3 py-2.5 text-[12px] text-muted-foreground"
+                        >
                             {{ formatDate(job.failed_at) }}
                         </td>
                     </tr>
@@ -205,20 +256,33 @@ function shortClass(name: string): string {
         </section>
 
         <!-- Scheduled -->
-        <section class="overflow-hidden rounded-xl border border-border bg-card">
-            <div class="flex items-center justify-between border-b border-border px-4 py-3">
-                <span class="text-[12px] font-semibold tracking-[0.06em] text-muted-foreground uppercase">
+        <section
+            class="overflow-hidden rounded-xl border border-border bg-card"
+        >
+            <div
+                class="flex items-center justify-between border-b border-border px-4 py-3"
+            >
+                <span
+                    class="text-[12px] font-semibold tracking-[0.06em] text-muted-foreground uppercase"
+                >
                     Scheduled ({{ scheduled.length }})
                 </span>
             </div>
-            <div v-if="scheduled.length === 0" class="px-4 py-6 text-center text-sm text-muted-foreground">
+            <div
+                v-if="scheduled.length === 0"
+                class="px-4 py-6 text-center text-sm text-muted-foreground"
+            >
                 No scheduled commands.
             </div>
             <table v-else class="w-full border-collapse text-[13px]">
                 <thead>
                     <tr>
                         <th
-                            v-for="header in ['Command', 'Schedule', 'Next run']"
+                            v-for="header in [
+                                'Command',
+                                'Schedule',
+                                'Next run',
+                            ]"
                             :key="header"
                             class="border-b border-border bg-card px-3 py-2 text-left text-[11.5px] font-medium tracking-[0.05em] text-muted-foreground uppercase"
                         >
@@ -245,7 +309,9 @@ function shortClass(name: string): string {
                         <td class="font-mono-tabular px-3 py-2.5 text-[12px]">
                             {{ command.expression }}
                         </td>
-                        <td class="font-mono-tabular px-3 py-2.5 text-[12px] text-muted-foreground">
+                        <td
+                            class="font-mono-tabular px-3 py-2.5 text-[12px] text-muted-foreground"
+                        >
                             {{ formatDate(command.next_run) }}
                         </td>
                     </tr>

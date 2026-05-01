@@ -74,7 +74,10 @@ const budgetState = computed<{
     variant: 'ok' | 'warn' | 'danger' | 'default';
 }>(() => {
     if (props.budget.hard !== null && props.budget.spend >= props.budget.hard) {
-        return { label: 'Hard cap reached — AI requests blocked', variant: 'danger' };
+        return {
+            label: 'Hard cap reached — AI requests blocked',
+            variant: 'danger',
+        };
     }
 
     if (props.budget.soft !== null && props.budget.spend >= props.budget.soft) {
@@ -292,7 +295,10 @@ const budgetState = computed<{
                         </span>
                     </div>
                     <div class="mt-2 flex items-center justify-end">
-                        <Pill :variant="budgetState.variant" :dot="budgetState.variant !== 'default'">
+                        <Pill
+                            :variant="budgetState.variant"
+                            :dot="budgetState.variant !== 'default'"
+                        >
                             {{ budgetState.label }}
                         </Pill>
                     </div>

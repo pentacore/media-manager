@@ -178,14 +178,19 @@ function unlinkEmby() {
         </div>
 
         <div class="rounded-xl border border-border bg-card p-6">
-            <div v-if="embyLink" class="flex items-center justify-between gap-4">
+            <div
+                v-if="embyLink"
+                class="flex items-center justify-between gap-4"
+            >
                 <div class="flex items-center gap-2.5">
                     <SvcChip id="emby" />
                     <div>
                         <div class="text-[14px] font-semibold">
                             {{ embyLink.emby_username }}
                         </div>
-                        <div class="font-mono-tabular text-[11.5px] text-muted-foreground">
+                        <div
+                            class="font-mono-tabular text-[11.5px] text-muted-foreground"
+                        >
                             Linked
                             {{
                                 embyLink.created_at
@@ -234,7 +239,10 @@ function unlinkEmby() {
                             required
                             placeholder="rachel"
                         />
-                        <InputError :message="errors.emby_username" class="mt-1" />
+                        <InputError
+                            :message="errors.emby_username"
+                            class="mt-1"
+                        />
                     </div>
                 </div>
                 <Separator />

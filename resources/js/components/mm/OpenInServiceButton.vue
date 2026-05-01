@@ -21,11 +21,7 @@ withDefaults(
         rel="noopener noreferrer"
         class="inline-flex"
     >
-        <Button
-            variant="outline"
-            size="sm"
-            class="h-7 gap-1.5 text-xs"
-        >
+        <Button variant="outline" size="sm" class="h-7 gap-1.5 text-xs">
             <ExternalLink class="size-3.5" />{{ label }}
         </Button>
     </a>

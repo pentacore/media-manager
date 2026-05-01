@@ -97,7 +97,10 @@ defineOptions({
     },
 });
 
-function applyFilters(next: { service_id?: number | null; event_type?: string }) {
+function applyFilters(next: {
+    service_id?: number | null;
+    event_type?: string;
+}) {
     const merged = {
         service_id:
             'service_id' in next ? next.service_id : props.filters.service_id,
@@ -243,7 +246,7 @@ function svcId(type: string | null): string {
                 </SelectContent>
             </Select>
             <span
-                class="ml-auto font-mono-tabular text-[11.5px] text-muted-foreground"
+                class="font-mono-tabular ml-auto text-[11.5px] text-muted-foreground"
             >
                 {{ events.meta.total }} events
             </span>
@@ -289,9 +292,7 @@ function svcId(type: string | null): string {
                                 <span>{{ event.service_name ?? '—' }}</span>
                             </span>
                         </td>
-                        <td
-                            class="font-mono-tabular px-3 py-2.5 text-[12px]"
-                        >
+                        <td class="font-mono-tabular px-3 py-2.5 text-[12px]">
                             {{ event.event_type ?? '—' }}
                         </td>
                         <td class="px-3 py-2.5">
@@ -299,7 +300,9 @@ function svcId(type: string | null): string {
                                 :variant="event.processed_at ? 'ok' : 'warn'"
                                 :dot="!!event.processed_at"
                             >
-                                {{ event.processed_at ? 'processed' : 'pending' }}
+                                {{
+                                    event.processed_at ? 'processed' : 'pending'
+                                }}
                             </Pill>
                         </td>
                         <td

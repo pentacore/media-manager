@@ -73,9 +73,10 @@ function save(): void {
             preferences: working.map((entry) => ({
                 class: entry.class,
                 severities: Object.fromEntries(
-                    Object.entries(entry.severities).map(
-                        ([sev, flags]) => [sev, { ...flags }],
-                    ),
+                    Object.entries(entry.severities).map(([sev, flags]) => [
+                        sev,
+                        { ...flags },
+                    ]),
                 ),
             })),
         },
@@ -159,7 +160,9 @@ function save(): void {
                                                 channel as keyof SeverityFlags
                                             ]
                                         "
-                                        :disabled="PENDING_CHANNELS.has(channel)"
+                                        :disabled="
+                                            PENDING_CHANNELS.has(channel)
+                                        "
                                         class="size-4 rounded border-border accent-accent disabled:opacity-40"
                                     />
                                 </td>
