@@ -132,7 +132,7 @@ return [
     |
     */
 
-    'views' => (bool) env('FORTIFY_VIEWS', false),
+    'views' => (bool) env('FORTIFY_VIEWS', true),
 
     /*
     |--------------------------------------------------------------------------
