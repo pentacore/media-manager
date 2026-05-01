@@ -1,8 +1,13 @@
 name: Generate Wayfinder + Typefinder types
 description: |
-  Boots a minimal Laravel install (sqlite + migrations) so wayfinder:generate
+  Boots a minimal Laravel install (postgres + migrations) so wayfinder:generate
   and typefinder:generate can emit TypeScript types. Used to pre-build types
   before any Vite build that runs with SKIP_TYPE_GENERATION=1.
+
+  Caller must provide a postgres service and pass DB_CONNECTION / DB_HOST /
+  DB_PORT / DB_DATABASE / DB_USERNAME / DB_PASSWORD env to this step. Postgres
+  (not sqlite) so typefinder reads accurate column types (jsonb, timestamptz,
+  varchar lengths) matching production.
 
 inputs:
   php-version:
@@ -17,7 +22,7 @@ runs:
       uses: shivammathur/setup-php@v2
       with:
         php-version: ${{ inputs.php-version }}
-        extensions: pdo_sqlite, sqlite3
+        extensions: pdo_pgsql, pgsql
         tools: composer:v2
         coverage: none
 
@@ -34,17 +39,13 @@ runs:
 
     # Laravel refuses to boot without APP_KEY, but nothing in migrate / wayfinder /
     # typefinder actually *uses* it — a dummy 32-byte key just satisfies the bootstrapper.
-    # No .env file: env vars take precedence and config/*.php fallbacks (sqlite,
-    # database/database.sqlite) cover the rest.
+    # No .env file: env vars take precedence; DB_* must come from the caller.
     - name: Generate Wayfinder + Typefinder types
       shell: bash
       env:
         APP_KEY: base64:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=
         APP_ENV: production
       run: |
-        mkdir -p database
-        touch database/database.sqlite
         php artisan migrate --force --no-interaction
         php artisan wayfinder:generate --with-form
         php artisan typefinder:generate
-        rm -f database/database.sqlite

@@ -23,11 +23,33 @@ jobs:
       packages: write
       id-token: write
 
+    services:
+      pgsql:
+        image: postgres:18-alpine
+        env:
+          POSTGRES_DB: app
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U postgres"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=10
+
     steps:
       - uses: actions/checkout@v6
 
       - name: Pre-generate Wayfinder + Typefinder types
         uses: ./.github/actions/generate-types
+        env:
+          DB_CONNECTION: pgsql
+          DB_HOST: 127.0.0.1
+          DB_PORT: 5432
+          DB_DATABASE: app
+          DB_USERNAME: postgres
+          DB_PASSWORD: postgres
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
