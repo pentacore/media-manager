@@ -7,24 +7,23 @@
 version: 2
 updates:
   - package-ecosystem: composer
+    target-branch: develop
     directory: /
     schedule:
       interval: weekly
     commit-message:
-      prefix: chore
-      prefix-development: chore
       include: scope
 
   - package-ecosystem: npm
+    target-branch: develop
     directory: /
     schedule:
       interval: weekly
     commit-message:
-      prefix: chore
-      prefix-development: chore
       include: scope
 
   - package-ecosystem: github-actions
+    target-branch: develop
     directory: /
     schedule:
       interval: weekly
@@ -32,9 +31,9 @@ updates:
       prefix: 'ci(deps)'
 
   - package-ecosystem: docker
+    target-branch: develop
     directory: /docker/production
     schedule:
       interval: weekly
     commit-message:
-      prefix: chore
       include: scope
