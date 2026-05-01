@@ -18,7 +18,7 @@ return [
     |
     */
 
-    'enable' => env('CLOCKWORK_ENABLE'),
+    'enable' => env('CLOCKWORK_ENABLE', false),
 
     /*
     |------------------------------------------------------------------------------------------------------------------
@@ -146,7 +146,7 @@ return [
     |
     */
 
-    'web' => env('CLOCKWORK_WEB', true),
+    'web' => env('CLOCKWORK_WEB', false),
 
     /*
     |------------------------------------------------------------------------------------------------------------------
@@ -159,7 +159,7 @@ return [
     |
     */
 
-    'toolbar' => env('CLOCKWORK_TOOLBAR', true),
+    'toolbar' => env('CLOCKWORK_TOOLBAR', false),
 
     /*
     |------------------------------------------------------------------------------------------------------------------
@@ -339,8 +339,8 @@ return [
 
     'authentication' => env('CLOCKWORK_AUTHENTICATION', false),
 
-    // Password for the simple authentication
-    'authentication_password' => env('CLOCKWORK_AUTHENTICATION_PASSWORD', 'VerySecretPassword'),
+    // Password for the simple authentication. No default — must be set explicitly to use simple auth.
+    'authentication_password' => env('CLOCKWORK_AUTHENTICATION_PASSWORD'),
 
     /*
     |------------------------------------------------------------------------------------------------------------------

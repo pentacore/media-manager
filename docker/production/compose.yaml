@@ -1,0 +1,110 @@
+# Production stack — deploy with: `docker compose -f docker/production/compose.yaml --env-file .env up -d`
+#
+# Image is built by .github/workflows/docker.yml and pushed to GHCR. Override with IMAGE env var.
+# All app roles share one image; CONTAINER_ROLE selects entrypoint behavior.
+# Reverse proxy (traefik/caddy/nginx) terminates TLS in front of `web` and `reverb` services.
+#
+# One-shot migration container runs first; web/queue/scheduler/reverb start after it exits 0.
+
+x-app: &app
+  image: ${IMAGE:-ghcr.io/martinclaesson/mediamanager:latest}
+  restart: unless-stopped
+  env_file: .env
+  depends_on:
+    pgsql:
+      condition: service_healthy
+    valkey:
+      condition: service_healthy
+    typesense:
+      condition: service_started
+    migrate:
+      condition: service_completed_successfully
+  volumes:
+    - app-storage:/app/storage/app
+    - app-public-storage:/app/storage/app/public
+
+services:
+  pgsql:
+    image: postgres:18-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${DB_DATABASE}
+      POSTGRES_USER: ${DB_USERNAME}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+    volumes:
+      - pgsql-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U ${DB_USERNAME} -d ${DB_DATABASE}']
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+  valkey:
+    image: valkey/valkey:8-alpine
+    restart: unless-stopped
+    command: ['valkey-server', '--appendonly', 'yes', '--save', '60', '1000']
+    volumes:
+      - valkey-data:/data
+    healthcheck:
+      test: ['CMD', 'valkey-cli', 'ping']
+      interval: 10s
+      timeout: 3s
+      retries: 10
+
+  typesense:
+    image: typesense/typesense:27.1
+    restart: unless-stopped
+    command: ['--data-dir=/data', '--api-key=${TYPESENSE_API_KEY}', '--enable-cors']
+    volumes:
+      - typesense-data:/data
+    healthcheck:
+      test: ['CMD-SHELL', "curl -fsS http://127.0.0.1:8108/health || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+  migrate:
+    image: ${IMAGE:-ghcr.io/martinclaesson/mediamanager:latest}
+    restart: 'no'
+    env_file: .env
+    environment:
+      CONTAINER_ROLE: migrate
+    depends_on:
+      pgsql:
+        condition: service_healthy
+    volumes:
+      - app-storage:/app/storage/app
+      - app-public-storage:/app/storage/app/public
+
+  web:
+    <<: *app
+    environment:
+      CONTAINER_ROLE: web
+    ports:
+      - '${WEB_PORT:-8080}:8080'
+
+  queue:
+    <<: *app
+    environment:
+      CONTAINER_ROLE: queue
+
+  scheduler:
+    <<: *app
+    environment:
+      CONTAINER_ROLE: scheduler
+
+  reverb:
+    <<: *app
+    environment:
+      CONTAINER_ROLE: reverb
+    ports:
+      - '${REVERB_BIND_PORT:-8081}:8080'
+
+volumes:
+  pgsql-data:
+  valkey-data:
+  typesense-data:
+  app-storage:
+  app-public-storage:

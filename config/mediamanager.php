@@ -22,8 +22,9 @@ return [
 
         // Operating mode: 'executive' (current behavior) or 'advisory'
         // (every ActionRequest queues as Pending regardless of ActionTypeConfig
-        // and destructive tools refuse to queue).
-        'mode' => env('MEDIAMANAGER_AI_MODE', 'executive'),
+        // and destructive tools refuse to queue). Default 'advisory' so opt-in
+        // execution requires explicit env override.
+        'mode' => env('MEDIAMANAGER_AI_MODE', 'advisory'),
 
         // Default model for MediaAgent. Free-form string — must match a model
         // identifier supported by a configured laravel/ai provider.

@@ -83,7 +83,7 @@ return [
         ],
 
         RequestTerminated::class => [
-            // FlushUploadedFiles::class,
+            FlushUploadedFiles::class,
         ],
 
         TaskReceived::class => [
@@ -107,8 +107,8 @@ return [
         OperationTerminated::class => [
             FlushOnce::class,
             FlushTemporaryContainerInstances::class,
-            // DisconnectFromDatabases::class,
-            // CollectGarbage::class,
+            DisconnectFromDatabases::class,
+            CollectGarbage::class,
         ],
 
         WorkerErrorOccurred::class => [
@@ -152,10 +152,7 @@ return [
     */
 
     'tables' => [
-        'example:1000' => [
-            'name' => 'string:1000',
-            'votes' => 'int',
-        ],
+        //
     ],
 
     /*
@@ -208,7 +205,7 @@ return [
     |
     */
 
-    'garbage' => 50,
+    'garbage' => (int) env('OCTANE_GARBAGE', 50),
 
     /*
     |--------------------------------------------------------------------------
@@ -221,6 +218,6 @@ return [
     |
     */
 
-    'max_execution_time' => 30,
+    'max_execution_time' => (int) env('OCTANE_MAX_EXECUTION_TIME', 30),
 
 ];
