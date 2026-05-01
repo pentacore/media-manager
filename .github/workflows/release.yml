@@ -1,0 +1,87 @@
+name: release
+
+# Runs after `ci` completes successfully on main or develop. Reads conventional
+# commits since the last tag, decides next version, generates release notes,
+# and pushes a `v{version}` tag — which docker.yml consumes to build versioned
+# images.
+#
+# main    → stable channel,    tags vX.Y.Z,             commits CHANGELOG.md back
+# develop → prerelease channel, tags vX.Y.Z-develop.N,   no CHANGELOG mutation
+
+on:
+  workflow_run:
+    workflows: [ci]
+    types: [completed]
+    branches: [main, develop]
+
+concurrency:
+  group: release-${{ github.event.workflow_run.head_branch }}
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+  issues: write
+  pull-requests: write
+  id-token: write
+
+jobs:
+  release:
+    name: semantic-release
+    runs-on: ubuntu-latest
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    outputs:
+      published: ${{ steps.sr.outputs.new_release_published }}
+      version: ${{ steps.sr.outputs.new_release_version }}
+
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          persist-credentials: true
+          ref: ${{ github.event.workflow_run.head_sha }}
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          cache: npm
+
+      - name: Install npm dependencies
+        run: npm ci
+
+      - name: Stage releaserc for branch
+        env:
+          BRANCH: ${{ github.event.workflow_run.head_branch }}
+        run: |
+          if [ "$BRANCH" = "main" ]; then
+            cp .releaserc.main.json .releaserc.json
+          else
+            cp .releaserc.develop.json .releaserc.json
+          fi
+
+      - id: sr
+        uses: cycjimmy/semantic-release-action@v4
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  sync-develop:
+    name: sync main → develop
+    needs: release
+    runs-on: ubuntu-latest
+    if: ${{ github.event.workflow_run.head_branch == 'main' && needs.release.outputs.published == 'true' }}
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          persist-credentials: true
+          ref: develop
+
+      - name: Merge main into develop
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git fetch origin main
+          git merge --no-ff origin/main -m 'chore: sync main into develop'
+          git push origin develop
