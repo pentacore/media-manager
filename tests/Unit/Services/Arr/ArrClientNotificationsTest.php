@@ -52,9 +52,9 @@ test('configureWebhook POSTs when no matching notification exists', function ():
     expect($result['id'])->toBe(99);
 
     Http::assertSentInOrder([
-        fn ($request) => $request->method() === 'GET'
-            && str_ends_with($request->url(), '/api/v3/notification'),
-        function ($request) {
+        fn ($request): bool => $request->method() === 'GET'
+            && str_ends_with((string) $request->url(), '/api/v3/notification'),
+        function ($request): bool {
             if ($request->method() !== 'POST') {
                 return false;
             }
@@ -101,12 +101,12 @@ test('configureWebhook PUTs when notification with same name exists', function (
 
     expect($result['id'])->toBe(42);
 
-    Http::assertSent(function ($request) {
+    Http::assertSent(function ($request): bool {
         if ($request->method() !== 'PUT') {
             return false;
         }
 
-        return str_ends_with($request->url(), '/api/v3/notification/42')
+        return str_ends_with((string) $request->url(), '/api/v3/notification/42')
             && collect($request->data()['fields'])->firstWhere('name', 'url')['value']
                 === 'https://app.local/api/webhooks/sonarr/1?token=t';
     });
@@ -133,8 +133,8 @@ test('configureWebhook ignores existing notification of a different implementati
 
     expect($result['id'])->toBe(100);
 
-    Http::assertSent(fn ($request) => $request->method() === 'POST'
-        && str_ends_with($request->url(), '/api/v3/notification'));
+    Http::assertSent(fn ($request): bool => $request->method() === 'POST'
+        && str_ends_with((string) $request->url(), '/api/v3/notification'));
 
-    Http::assertNotSent(fn ($request) => $request->method() === 'PUT');
+    Http::assertNotSent(fn ($request): bool => $request->method() === 'PUT');
 });

@@ -38,8 +38,8 @@ test('admin can configure webhook on a sonarr connection', function (): void {
         ->assertRedirect(route('admin.connections.edit', $connection))
         ->assertSessionHas('success');
 
-    Http::assertSent(fn ($request) => $request->method() === 'POST'
-        && str_ends_with($request->url(), '/api/v3/notification')
+    Http::assertSent(fn ($request): bool => $request->method() === 'POST'
+        && str_ends_with((string) $request->url(), '/api/v3/notification')
         && collect($request->data()['fields'])->firstWhere('name', 'url')['value']
             === route('webhooks.handle', [
                 'service' => 'sonarr',

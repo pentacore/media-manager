@@ -375,9 +375,7 @@ class ServiceConnectionController extends Controller
         try {
             $client = resolve(ServiceClientFactory::class)->make($serviceConnection);
 
-            if (! $client instanceof ArrClient) {
-                throw new RuntimeException('Resolved client is not an ArrClient instance.');
-            }
+            throw_unless($client instanceof ArrClient, RuntimeException::class, 'Resolved client is not an ArrClient instance.');
 
             $callbackUrl = $this->webhookUrlFor($serviceConnection);
             $client->configureWebhook($callbackUrl);
