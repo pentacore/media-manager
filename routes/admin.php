@@ -25,6 +25,8 @@ Route::middleware(['auth', 'verified', 'password.set', 'role:admin'])->prefix('a
         ->name('connections.check-health');
     Route::post('connections/{serviceConnection}/check-version', [ServiceConnectionController::class, 'checkVersion'])
         ->name('connections.check-version');
+    Route::post('connections/{serviceConnection}/configure-webhook', [ServiceConnectionController::class, 'configureWebhook'])
+        ->name('connections.configure-webhook');
     Route::post('connections/{serviceConnection}/prowlarr/test-indexer/{indexerId}', ProwlarrTestIndexerController::class)
         ->name('connections.prowlarr.test-indexer');
 
