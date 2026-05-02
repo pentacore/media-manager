@@ -71,10 +71,14 @@ jobs:
       # (GitHub safety rule against recursive runs). docker.yml therefore
       # never fires from semantic-release tags. Manually dispatch it
       # against the new tag so the release image gets built.
+      #
+      # GITHUB_TOKEN cannot dispatch workflows from a workflow_run-triggered
+      # job (HTTP 403, same recursion guard), so this step uses a PAT with
+      # `actions: write` on this repo stored as RELEASE_DISPATCH_PAT.
       - name: Trigger docker build for new tag
         if: ${{ steps.sr.outputs.new_release_published == 'true' }}
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.RELEASE_DISPATCH_PAT }}
           TAG: v${{ steps.sr.outputs.new_release_version }}
         run: gh workflow run docker.yml --repo "$GITHUB_REPOSITORY" --ref "$TAG"
 
