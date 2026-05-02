@@ -34,11 +34,15 @@ jobs:
       version: ${{ steps.sr.outputs.new_release_version }}
 
     steps:
+      # Checkout the current branch tip (not workflow_run.head_sha). If a PR
+      # merged after the triggering ci kicked off, head_sha is behind tip and
+      # semantic-release refuses to publish ("local branch is behind remote").
+      # Operating on the tip means we always release the latest commit.
       - uses: actions/checkout@v6
         with:
           fetch-depth: 0
           persist-credentials: true
-          ref: ${{ github.event.workflow_run.head_sha }}
+          ref: ${{ github.event.workflow_run.head_branch }}
 
       - uses: actions/setup-node@v6
         with:
