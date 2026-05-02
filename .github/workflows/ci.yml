@@ -1,8 +1,11 @@
 name: ci
 
 on:
+  # Push: main only (gates semantic-release via workflow_run). PRs into
+  # develop/main run via pull_request — no need to also run on the post-merge
+  # push since the same code already passed the PR check.
   push:
-    branches: [main, master, develop]
+    branches: [main]
   pull_request:
 
 concurrency:
