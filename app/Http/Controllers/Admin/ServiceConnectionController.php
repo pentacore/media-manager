@@ -12,6 +12,7 @@ use App\Http\Resources\ServiceConnectionResource;
 use App\Jobs\FetchLatestServiceVersion;
 use App\Jobs\PingServiceHealth;
 use App\Models\ServiceConnection;
+use App\Services\Arr\ArrClient;
 use App\Services\Prowlarr\ProwlarrClient;
 use App\Services\ServiceClientFactory;
 use Illuminate\Http\JsonResponse;
@@ -20,6 +21,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 use Inertia\Inertia;
 use Inertia\Response;
+use RuntimeException;
 use Throwable;
 
 class ServiceConnectionController extends Controller
@@ -64,6 +66,7 @@ class ServiceConnectionController extends Controller
                 'api_key_set' => $serviceConnection->api_key !== '' && $serviceConnection->api_key !== null,
                 'webhook_token_set' => $serviceConnection->webhook_token !== '' && $serviceConnection->webhook_token !== null,
                 'webhook_url' => $this->webhookUrlFor($serviceConnection),
+                'supports_webhook_configuration' => $serviceConnection->type->supportsWebhookConfiguration(),
                 'is_active' => $serviceConnection->is_active,
                 'disk' => [
                     'mode' => $diskSettings['mode'] ?? 'all',
@@ -352,5 +355,52 @@ class ServiceConnectionController extends Controller
                 'message' => 'Connection failed: '.$throwable->getMessage(),
             ], 422);
         }
+    }
+
+    public function configureWebhook(ServiceConnection $serviceConnection): RedirectResponse
+    {
+        if (! $serviceConnection->type->supportsWebhookConfiguration()) {
+            Inertia::flash('toast', [
+                'type' => 'error',
+                'message' => __(':type does not support automatic webhook configuration.', [
+                    'type' => $serviceConnection->type->label(),
+                ]),
+            ]);
+
+            return back()->withErrors([
+                'configure_webhook' => 'Service type does not support automatic webhook configuration.',
+            ]);
+        }
+
+        try {
+            $client = resolve(ServiceClientFactory::class)->make($serviceConnection);
+
+            throw_unless($client instanceof ArrClient, RuntimeException::class, 'Resolved client is not an ArrClient instance.');
+
+            $callbackUrl = $this->webhookUrlFor($serviceConnection);
+            $client->configureWebhook($callbackUrl);
+        } catch (Throwable $throwable) {
+            Log::warning('Failed to configure webhook on upstream service', [
+                'connection_id' => $serviceConnection->id,
+                'exception' => $throwable::class,
+                'message' => $throwable->getMessage(),
+            ]);
+
+            Inertia::flash('toast', [
+                'type' => 'error',
+                'message' => __('Failed to configure webhook: :error', ['error' => $throwable->getMessage()]),
+            ]);
+
+            return back()->withErrors([
+                'configure_webhook' => $throwable->getMessage(),
+            ]);
+        }
+
+        Inertia::flash('toast', [
+            'type' => 'success',
+            'message' => __('Webhook configured on :name.', ['name' => $serviceConnection->name]),
+        ]);
+
+        return back()->with('success', true);
     }
 }

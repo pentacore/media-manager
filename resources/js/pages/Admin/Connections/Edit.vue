@@ -7,6 +7,7 @@ import {
     EyeOff,
     Plug,
     RefreshCw,
+    Wand2,
 } from 'lucide-vue-next';
 import { computed, reactive, ref } from 'vue';
 import ProwlarrTestIndexerController from '@/actions/App/Http/Controllers/Admin/ProwlarrTestIndexerController';
@@ -44,6 +45,7 @@ import {
     TooltipProvider,
     TooltipTrigger,
 } from '@/components/ui/tooltip';
+import { copyToClipboard } from '@/lib/clipboard';
 
 interface ServiceTypeOption {
     value: string;
@@ -58,6 +60,7 @@ interface Connection {
     api_key_set: boolean;
     webhook_token_set: boolean;
     webhook_url: string;
+    supports_webhook_configuration: boolean;
     is_active: boolean;
     disk: {
         mode: 'all' | 'selected' | 'sum';
@@ -179,6 +182,23 @@ const diskDisplayEntries = computed<Array<[string, DiskMetric]>>(() => {
     return entries;
 });
 
+const configuringWebhook = ref(false);
+
+function configureWebhookOnService(): void {
+    configuringWebhook.value = true;
+
+    router.post(
+        ServiceConnectionController.configureWebhook(props.connection.id).url,
+        {},
+        {
+            preserveScroll: true,
+            onFinish: () => {
+                configuringWebhook.value = false;
+            },
+        },
+    );
+}
+
 interface TestConnectionResponse {
     success: boolean;
     message: string;
@@ -219,32 +239,47 @@ function generateWebhookToken() {
 
 const webhookUrlCopied = ref(false);
 
-function copyWebhookUrl() {
-    navigator.clipboard.writeText(props.connection.webhook_url);
+async function copyWebhookUrl() {
+    const ok = await copyToClipboard(props.connection.webhook_url);
+
+    if (!ok) {
+        return;
+    }
+
     webhookUrlCopied.value = true;
     setTimeout(() => (webhookUrlCopied.value = false), 2000);
 }
 
 const sabScriptCopied = ref(false);
 
-function copySabScript(): void {
+async function copySabScript(): Promise<void> {
     const script = props.connection.sabnzbd_webhook_script;
 
     if (!script) {
         return;
     }
 
-    navigator.clipboard.writeText(script);
+    const ok = await copyToClipboard(script);
+
+    if (!ok) {
+        return;
+    }
+
     sabScriptCopied.value = true;
     setTimeout(() => (sabScriptCopied.value = false), 2000);
 }
 
-function copyWebhookToken() {
+async function copyWebhookToken() {
     if (!webhookToken.value) {
         return;
     }
 
-    navigator.clipboard.writeText(webhookToken.value);
+    const ok = await copyToClipboard(webhookToken.value);
+
+    if (!ok) {
+        return;
+    }
+
     copied.value = true;
     setTimeout(() => (copied.value = false), 2000);
 }
@@ -509,12 +544,36 @@ function testIndexer(indexerId: number): void {
                                             : 'Copy webhook URL'
                                     }}</TooltipContent>
                                 </Tooltip>
+                                <Tooltip
+                                    v-if="
+                                        connection.supports_webhook_configuration
+                                    "
+                                >
+                                    <TooltipTrigger as-child>
+                                        <Button
+                                            type="button"
+                                            variant="outline"
+                                            size="icon"
+                                            :disabled="configuringWebhook"
+                                            @click="configureWebhookOnService"
+                                        >
+                                            <Wand2 class="size-4" />
+                                        </Button>
+                                    </TooltipTrigger>
+                                    <TooltipContent>{{
+                                        configuringWebhook
+                                            ? 'Configuring…'
+                                            : 'Configure on service'
+                                    }}</TooltipContent>
+                                </Tooltip>
                             </TooltipProvider>
                         </div>
                         <p class="text-sm text-muted-foreground">
                             Paste this into the upstream service's webhook
-                            configuration. The token in the URL is in addition
-                            to the X-Webhook-Token header — either is accepted.
+                            configuration — or click the wand button to push it
+                            automatically (Sonarr/Radarr/Prowlarr only). The
+                            token in the URL is in addition to the
+                            X-Webhook-Token header — either is accepted.
                         </p>
                     </div>
 

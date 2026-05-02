@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers;
 
+use App\Enums\ServiceType;
 use App\Events\WebhookReceived;
 use App\Jobs\ProcessWebhookEvent;
 use App\Models\ServiceConnection;
@@ -26,7 +27,7 @@ class WebhookController extends Controller
         /** @var ServiceConnection $connection */
         $connection = $request->attributes->get('service_connection');
         $payload = $request->all();
-        $eventType = (string) $request->input('eventType', 'unknown');
+        $eventType = $this->extractEventType($request, $connection->type);
         $payloadHash = WebhookEvent::payloadHash($payload);
 
         $duplicate = WebhookEvent::query()
@@ -53,5 +54,19 @@ class WebhookController extends Controller
         dispatch(new ProcessWebhookEvent($webhookEvent));
 
         return response()->json(['status' => 'received']);
+    }
+
+    private function extractEventType(Request $request, ServiceType $serviceType): string
+    {
+        $key = match ($serviceType) {
+            ServiceType::Emby => 'Event',
+            ServiceType::Seerr => 'notification_type',
+            ServiceType::Sonarr,
+            ServiceType::Radarr,
+            ServiceType::Prowlarr,
+            ServiceType::SABnzbd => 'eventType',
+        };
+
+        return (string) $request->input($key, 'unknown');
     }
 }

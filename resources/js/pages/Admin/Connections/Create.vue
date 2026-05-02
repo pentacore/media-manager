@@ -27,6 +27,7 @@ import {
     TooltipProvider,
     TooltipTrigger,
 } from '@/components/ui/tooltip';
+import { copyToClipboard } from '@/lib/clipboard';
 
 interface ServiceTypeOption {
     value: string;
@@ -99,12 +100,17 @@ function generateWebhookToken() {
     copied.value = false;
 }
 
-function copyWebhookToken() {
+async function copyWebhookToken() {
     if (!webhookToken.value) {
         return;
     }
 
-    navigator.clipboard.writeText(webhookToken.value);
+    const ok = await copyToClipboard(webhookToken.value);
+
+    if (!ok) {
+        return;
+    }
+
     copied.value = true;
     setTimeout(() => (copied.value = false), 2000);
 }
