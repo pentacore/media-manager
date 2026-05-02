@@ -1,3 +1,20 @@
+# [1.1.0](https://github.com/pentacore/media-manager/compare/v1.0.3...v1.1.0) (2026-05-02)
+
+
+### Bug Fixes
+
+* **arr:** only treat existing Webhook notifications as upsert targets ([f0019b1](https://github.com/pentacore/media-manager/commit/f0019b1ac93e91c97bc8f0606ecd8500a54595c3))
+* **ui:** use clipboard helper to avoid undefined navigator.clipboard in HTTP contexts ([46cd31b](https://github.com/pentacore/media-manager/commit/46cd31bbb482389a3c4a84bf98da423eb1fa1411))
+* **webhooks:** extract event_type per service instead of camelCase only ([8ffbd71](https://github.com/pentacore/media-manager/commit/8ffbd713d4a133da7967d9bba5e638c3366cca6f))
+
+
+### Features
+
+* **admin:** add configureWebhook action to push our webhook into Sonarr/Radarr/Prowlarr ([709edee](https://github.com/pentacore/media-manager/commit/709edeeab3f46930a159b14da22cac542f31e1c0))
+* **arr:** add notification CRUD + configureWebhook upsert on ArrClient ([bc3a4d9](https://github.com/pentacore/media-manager/commit/bc3a4d9a608a31a331cc659528ed3ffc6386990e))
+* **ui:** add 'Configure on service' button on connection edit page ([2fd699b](https://github.com/pentacore/media-manager/commit/2fd699bb7c466c51d29672f936448f1fc7ac0900))
+* **ui:** add copyToClipboard helper with secure-context fallback ([4253914](https://github.com/pentacore/media-manager/commit/4253914759a1f1fc8f57e0b6b1d2fca42185b7e8))
+
 ## [1.0.3](https://github.com/pentacore/media-manager/compare/v1.0.2...v1.0.3) (2026-05-02)
 
 ## [1.0.2](https://github.com/pentacore/media-manager/compare/v1.0.1...v1.0.2) (2026-05-02)
