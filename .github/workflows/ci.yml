@@ -11,7 +11,7 @@ concurrency:
 
 env:
   PHP_VERSION: '8.5'
-  NODE_VERSION: '24'
+  NODE_VERSION: '25'
 
 jobs:
   php-lint:
