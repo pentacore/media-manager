@@ -12,6 +12,7 @@ import { computed, reactive, ref } from 'vue';
 import ProwlarrTestIndexerController from '@/actions/App/Http/Controllers/Admin/ProwlarrTestIndexerController';
 import ServiceConnectionController from '@/actions/App/Http/Controllers/Admin/ServiceConnectionController';
 import InputError from '@/components/InputError.vue';
+import { copyToClipboard } from '@/lib/clipboard';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
@@ -219,32 +220,47 @@ function generateWebhookToken() {
 
 const webhookUrlCopied = ref(false);
 
-function copyWebhookUrl() {
-    navigator.clipboard.writeText(props.connection.webhook_url);
+async function copyWebhookUrl() {
+    const ok = await copyToClipboard(props.connection.webhook_url);
+
+    if (!ok) {
+        return;
+    }
+
     webhookUrlCopied.value = true;
     setTimeout(() => (webhookUrlCopied.value = false), 2000);
 }
 
 const sabScriptCopied = ref(false);
 
-function copySabScript(): void {
+async function copySabScript(): Promise<void> {
     const script = props.connection.sabnzbd_webhook_script;
 
     if (!script) {
         return;
     }
 
-    navigator.clipboard.writeText(script);
+    const ok = await copyToClipboard(script);
+
+    if (!ok) {
+        return;
+    }
+
     sabScriptCopied.value = true;
     setTimeout(() => (sabScriptCopied.value = false), 2000);
 }
 
-function copyWebhookToken() {
+async function copyWebhookToken() {
     if (!webhookToken.value) {
         return;
     }
 
-    navigator.clipboard.writeText(webhookToken.value);
+    const ok = await copyToClipboard(webhookToken.value);
+
+    if (!ok) {
+        return;
+    }
+
     copied.value = true;
     setTimeout(() => (copied.value = false), 2000);
 }

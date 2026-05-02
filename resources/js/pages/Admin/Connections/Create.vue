@@ -4,6 +4,7 @@ import { ClipboardCopy, Eye, EyeOff, Plug, RefreshCw } from 'lucide-vue-next';
 import { computed, ref } from 'vue';
 import ServiceConnectionController from '@/actions/App/Http/Controllers/Admin/ServiceConnectionController';
 import InputError from '@/components/InputError.vue';
+import { copyToClipboard } from '@/lib/clipboard';
 import { Button } from '@/components/ui/button';
 import {
     Card,
@@ -99,12 +100,17 @@ function generateWebhookToken() {
     copied.value = false;
 }
 
-function copyWebhookToken() {
+async function copyWebhookToken() {
     if (!webhookToken.value) {
         return;
     }
 
-    navigator.clipboard.writeText(webhookToken.value);
+    const ok = await copyToClipboard(webhookToken.value);
+
+    if (!ok) {
+        return;
+    }
+
     copied.value = true;
     setTimeout(() => (copied.value = false), 2000);
 }
