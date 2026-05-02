@@ -4,7 +4,6 @@ import { ClipboardCopy, Eye, EyeOff, Plug, RefreshCw } from 'lucide-vue-next';
 import { computed, ref } from 'vue';
 import ServiceConnectionController from '@/actions/App/Http/Controllers/Admin/ServiceConnectionController';
 import InputError from '@/components/InputError.vue';
-import { copyToClipboard } from '@/lib/clipboard';
 import { Button } from '@/components/ui/button';
 import {
     Card,
@@ -28,6 +27,7 @@ import {
     TooltipProvider,
     TooltipTrigger,
 } from '@/components/ui/tooltip';
+import { copyToClipboard } from '@/lib/clipboard';
 
 interface ServiceTypeOption {
     value: string;

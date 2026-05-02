@@ -13,7 +13,6 @@ import { computed, reactive, ref } from 'vue';
 import ProwlarrTestIndexerController from '@/actions/App/Http/Controllers/Admin/ProwlarrTestIndexerController';
 import ServiceConnectionController from '@/actions/App/Http/Controllers/Admin/ServiceConnectionController';
 import InputError from '@/components/InputError.vue';
-import { copyToClipboard } from '@/lib/clipboard';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
@@ -46,6 +45,7 @@ import {
     TooltipProvider,
     TooltipTrigger,
 } from '@/components/ui/tooltip';
+import { copyToClipboard } from '@/lib/clipboard';
 
 interface ServiceTypeOption {
     value: string;

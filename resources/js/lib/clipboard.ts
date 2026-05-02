@@ -20,6 +20,7 @@ export async function copyToClipboard(text: string): Promise<boolean> {
     ) {
         try {
             await navigator.clipboard.writeText(text);
+
             return true;
         } catch {
             // fall through to legacy path
@@ -45,6 +46,7 @@ export async function copyToClipboard(text: string): Promise<boolean> {
         textarea.select();
         textarea.setSelectionRange(0, text.length);
         const ok = document.execCommand('copy');
+
         return ok;
     } catch {
         return false;
