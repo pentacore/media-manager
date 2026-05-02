@@ -42,7 +42,7 @@
         "@inertiajs/vite": "^3.0.0",
         "@inertiajs/vue3": "^3.0.0",
         "@tanstack/vue-table": "^8.21.3",
-        "@vueuse/core": "^12.8.2",
+        "@vueuse/core": "^14.3.0",
         "class-variance-authority": "^0.7.1",
         "clsx": "^2.1.1",
         "laravel-echo": "^2.3.4",
