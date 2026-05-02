@@ -11,16 +11,12 @@ updates:
     directory: /
     schedule:
       interval: weekly
-    commit-message:
-      include: scope
 
   - package-ecosystem: npm
     target-branch: develop
     directory: /
     schedule:
       interval: weekly
-    commit-message:
-      include: scope
 
   - package-ecosystem: github-actions
     target-branch: develop
@@ -35,5 +31,3 @@ updates:
     directory: /docker/production
     schedule:
       interval: weekly
-    commit-message:
-      include: scope
