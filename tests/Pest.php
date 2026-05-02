@@ -46,6 +46,10 @@ pest()->extend(TestCase::class)
 
         config()->set('mediamanager.cache.store', 'array');
         Cache::store('array')->flush();
+
+        // Inertia hydration on slow CI / parallel workers can outrun the
+        // default 5s assertion wait. Bump to 15s for browser tests only.
+        Pest\Browser\Playwright\Playwright::setTimeout(15_000);
     })
     ->in('Browser');
 
