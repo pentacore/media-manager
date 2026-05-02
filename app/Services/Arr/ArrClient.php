@@ -183,4 +183,112 @@ abstract class ArrClient
             ->delete(sprintf('/api/%s/queue/%d?%s', $this->apiVersion, $id, $query))
             ->throw();
     }
+
+    /**
+     * @return array<int, array<string, mixed>>
+     *
+     * @throws RequestException|ConnectionException
+     */
+    public function getNotifications(): array
+    {
+        return $this->buildClient()
+            ->get(sprintf('/api/%s/notification', $this->apiVersion))
+            ->throw()
+            ->json() ?? [];
+    }
+
+    /**
+     * @param  array<string, mixed>  $payload
+     * @return array<string, mixed>
+     *
+     * @throws RequestException|ConnectionException
+     */
+    public function createNotification(array $payload): array
+    {
+        return $this->buildClient()
+            ->post(sprintf('/api/%s/notification', $this->apiVersion), $payload)
+            ->throw()
+            ->json() ?? [];
+    }
+
+    /**
+     * @param  array<string, mixed>  $payload
+     * @return array<string, mixed>
+     *
+     * @throws RequestException|ConnectionException
+     */
+    public function updateNotification(int $id, array $payload): array
+    {
+        return $this->buildClient()
+            ->put(sprintf('/api/%s/notification/%d', $this->apiVersion, $id), $payload)
+            ->throw()
+            ->json() ?? [];
+    }
+
+    /**
+     * @throws RequestException|ConnectionException
+     */
+    public function deleteNotification(int $id): void
+    {
+        $this->buildClient()
+            ->delete(sprintf('/api/%s/notification/%d', $this->apiVersion, $id))
+            ->throw();
+    }
+
+    /**
+     * Upsert a Webhook-implementation notification on the upstream service so
+     * the user doesn't have to copy/paste anything into Sonarr/Radarr/Prowlarr.
+     *
+     * Looks up an existing notification by `$notificationName`. If found, PUT
+     * with the new url/method; otherwise POST a fresh one. Returns the upstream
+     * payload so the caller can surface the assigned id.
+     *
+     * @return array<string, mixed>
+     *
+     * @throws RequestException|ConnectionException
+     */
+    public function configureWebhook(string $callbackUrl, string $notificationName = 'MediaManager'): array
+    {
+        $existing = collect($this->getNotifications())
+            ->first(static fn (array $entry): bool => ($entry['name'] ?? null) === $notificationName);
+
+        $payload = [
+            'name' => $notificationName,
+            'implementation' => 'Webhook',
+            'implementationName' => 'Webhook',
+            'configContract' => 'WebhookSettings',
+            'onGrab' => true,
+            'onDownload' => true,
+            'onUpgrade' => true,
+            'onRename' => true,
+            'onSeriesAdd' => true,
+            'onSeriesDelete' => true,
+            'onEpisodeFileDelete' => true,
+            'onEpisodeFileDeleteForUpgrade' => true,
+            'onMovieAdded' => true,
+            'onMovieDelete' => true,
+            'onMovieFileDelete' => true,
+            'onMovieFileDeleteForUpgrade' => true,
+            'onHealthIssue' => true,
+            'onHealthRestored' => true,
+            'onApplicationUpdate' => true,
+            'onManualInteractionRequired' => true,
+            'includeHealthWarnings' => true,
+            'tags' => [],
+            'fields' => [
+                ['name' => 'url', 'value' => $callbackUrl],
+                ['name' => 'method', 'value' => 1],
+                ['name' => 'username', 'value' => ''],
+                ['name' => 'password', 'value' => ''],
+            ],
+        ];
+
+        if (is_array($existing) && isset($existing['id'])) {
+            $payload['id'] = (int) $existing['id'];
+
+            return $this->updateNotification((int) $existing['id'], $payload);
+        }
+
+        return $this->createNotification($payload);
+    }
 }
