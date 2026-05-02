@@ -545,7 +545,9 @@ function testIndexer(indexerId: number): void {
                                     }}</TooltipContent>
                                 </Tooltip>
                                 <Tooltip
-                                    v-if="connection.supports_webhook_configuration"
+                                    v-if="
+                                        connection.supports_webhook_configuration
+                                    "
                                 >
                                     <TooltipTrigger as-child>
                                         <Button
