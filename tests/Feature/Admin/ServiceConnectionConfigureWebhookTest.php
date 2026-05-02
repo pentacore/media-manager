@@ -54,9 +54,8 @@ test('configure webhook is a no-op (422) for service types without notification 
     $this->actingAs($admin)
         ->from(route('admin.connections.edit', $connection))
         ->post(route('admin.connections.configure-webhook', $connection))
-        ->assertRedirect(route('admin.connections.edit', $connection));
-
-    expect(session('errors'))->not->toBeNull();
+        ->assertRedirect(route('admin.connections.edit', $connection))
+        ->assertSessionHasErrors(['configure_webhook']);
 });
 
 test('configure webhook surfaces upstream failure as a flash error', function (): void {
@@ -72,7 +71,6 @@ test('configure webhook surfaces upstream failure as a flash error', function ()
     $this->actingAs($admin)
         ->from(route('admin.connections.edit', $connection))
         ->post(route('admin.connections.configure-webhook', $connection))
-        ->assertRedirect(route('admin.connections.edit', $connection));
-
-    expect(session('errors'))->not->toBeNull();
+        ->assertRedirect(route('admin.connections.edit', $connection))
+        ->assertSessionHasErrors(['configure_webhook']);
 });

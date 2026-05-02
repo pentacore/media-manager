@@ -358,9 +358,7 @@ class ServiceConnectionController extends Controller
 
     public function configureWebhook(ServiceConnection $serviceConnection): RedirectResponse
     {
-        $supported = [ServiceType::Sonarr, ServiceType::Radarr, ServiceType::Prowlarr];
-
-        if (! in_array($serviceConnection->type, $supported, true)) {
+        if (! $serviceConnection->type->supportsWebhookConfiguration()) {
             Inertia::flash('toast', [
                 'type' => 'error',
                 'message' => __(':type does not support automatic webhook configuration.', [

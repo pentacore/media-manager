@@ -28,4 +28,12 @@ enum ServiceType: string
             self::SABnzbd => 'SABnzbd',
         };
     }
+
+    public function supportsWebhookConfiguration(): bool
+    {
+        return match ($this) {
+            self::Sonarr, self::Radarr, self::Prowlarr => true,
+            default => false,
+        };
+    }
 }
