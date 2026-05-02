@@ -7,6 +7,7 @@ use App\Jobs\PingServiceHealth;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Queue;
+use Pest\Browser\Playwright\Playwright;
 use Tests\TestCase;
 
 /*
@@ -49,7 +50,7 @@ pest()->extend(TestCase::class)
 
         // Inertia hydration on slow CI / parallel workers can outrun the
         // default 5s assertion wait. Bump to 15s for browser tests only.
-        Pest\Browser\Playwright\Playwright::setTimeout(15_000);
+        Playwright::setTimeout(15_000);
     })
     ->in('Browser');
 
