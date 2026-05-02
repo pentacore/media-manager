@@ -66,6 +66,7 @@ class ServiceConnectionController extends Controller
                 'api_key_set' => $serviceConnection->api_key !== '' && $serviceConnection->api_key !== null,
                 'webhook_token_set' => $serviceConnection->webhook_token !== '' && $serviceConnection->webhook_token !== null,
                 'webhook_url' => $this->webhookUrlFor($serviceConnection),
+                'supports_webhook_configuration' => $serviceConnection->type->supportsWebhookConfiguration(),
                 'is_active' => $serviceConnection->is_active,
                 'disk' => [
                     'mode' => $diskSettings['mode'] ?? 'all',

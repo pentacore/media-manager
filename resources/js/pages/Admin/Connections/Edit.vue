@@ -7,6 +7,7 @@ import {
     EyeOff,
     Plug,
     RefreshCw,
+    Wand2,
 } from 'lucide-vue-next';
 import { computed, reactive, ref } from 'vue';
 import ProwlarrTestIndexerController from '@/actions/App/Http/Controllers/Admin/ProwlarrTestIndexerController';
@@ -59,6 +60,7 @@ interface Connection {
     api_key_set: boolean;
     webhook_token_set: boolean;
     webhook_url: string;
+    supports_webhook_configuration: boolean;
     is_active: boolean;
     disk: {
         mode: 'all' | 'selected' | 'sum';
@@ -179,6 +181,23 @@ const diskDisplayEntries = computed<Array<[string, DiskMetric]>>(() => {
 
     return entries;
 });
+
+const configuringWebhook = ref(false);
+
+function configureWebhookOnService(): void {
+    configuringWebhook.value = true;
+
+    router.post(
+        ServiceConnectionController.configureWebhook(props.connection.id).url,
+        {},
+        {
+            preserveScroll: true,
+            onFinish: () => {
+                configuringWebhook.value = false;
+            },
+        },
+    );
+}
 
 interface TestConnectionResponse {
     success: boolean;
@@ -525,12 +544,34 @@ function testIndexer(indexerId: number): void {
                                             : 'Copy webhook URL'
                                     }}</TooltipContent>
                                 </Tooltip>
+                                <Tooltip
+                                    v-if="connection.supports_webhook_configuration"
+                                >
+                                    <TooltipTrigger as-child>
+                                        <Button
+                                            type="button"
+                                            variant="outline"
+                                            size="icon"
+                                            :disabled="configuringWebhook"
+                                            @click="configureWebhookOnService"
+                                        >
+                                            <Wand2 class="size-4" />
+                                        </Button>
+                                    </TooltipTrigger>
+                                    <TooltipContent>{{
+                                        configuringWebhook
+                                            ? 'Configuring…'
+                                            : 'Configure on service'
+                                    }}</TooltipContent>
+                                </Tooltip>
                             </TooltipProvider>
                         </div>
                         <p class="text-sm text-muted-foreground">
                             Paste this into the upstream service's webhook
-                            configuration. The token in the URL is in addition
-                            to the X-Webhook-Token header — either is accepted.
+                            configuration — or click the wand button to push it
+                            automatically (Sonarr/Radarr/Prowlarr only). The
+                            token in the URL is in addition to the
+                            X-Webhook-Token header — either is accepted.
                         </p>
                     </div>
 
