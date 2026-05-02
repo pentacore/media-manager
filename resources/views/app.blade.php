@@ -37,6 +37,19 @@
         <link rel="preconnect" href="https://fonts.bunny.net">
         <link href="https://fonts.bunny.net/css?family=inter:400,500,600,700|jetbrains-mono:400,500,600|instrument-serif:400,400i|instrument-sans:400,500,600&display=swap" rel="stylesheet" />
 
+        {{-- Reverb config injected at runtime so deployments can change keys/host
+             without rebuilding the Vite bundle. useWebSocket reads this. --}}
+        @php
+            $reverbApp = config('reverb.apps.apps.0', []);
+            $reverbOptions = $reverbApp['options'] ?? [];
+        @endphp
+        <meta name="reverb-config" content="{{ json_encode([
+            'key' => $reverbApp['key'] ?? null,
+            'host' => $reverbOptions['host'] ?? parse_url((string) config('app.url'), PHP_URL_HOST),
+            'port' => (int) ($reverbOptions['port'] ?? 443),
+            'scheme' => $reverbOptions['scheme'] ?? 'https',
+        ]) }}">
+
         @vite(['resources/css/app.css', 'resources/js/app.ts', "resources/js/pages/{$page['component']}.vue"])
         <x-inertia::head>
             <title>{{ config('app.name', 'Laravel') }}</title>
