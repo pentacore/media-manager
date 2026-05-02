@@ -250,8 +250,12 @@ abstract class ArrClient
     public function configureWebhook(string $callbackUrl, string $notificationName = 'MediaManager'): array
     {
         $existing = collect($this->getNotifications())
-            ->first(static fn (array $entry): bool => ($entry['name'] ?? null) === $notificationName);
+            ->first(static fn (array $entry): bool => ($entry['name'] ?? null) === $notificationName
+                && ($entry['implementation'] ?? null) === 'Webhook');
 
+        // Sonarr/Radarr/Prowlarr each accept a different subset of on* event
+        // flags; unknown keys are silently dropped upstream, so we send the
+        // union and let each service ignore what it doesn't recognise.
         $payload = [
             'name' => $notificationName,
             'implementation' => 'Webhook',

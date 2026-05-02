@@ -111,3 +111,30 @@ test('configureWebhook PUTs when notification with same name exists', function (
                 === 'https://app.local/api/webhooks/sonarr/1?token=t';
     });
 });
+
+test('configureWebhook ignores existing notification of a different implementation with the same name', function (): void {
+    Http::fake([
+        'sonarr.local/api/v3/notification' => Http::sequence()
+            ->push([
+                ['id' => 5, 'name' => 'MediaManager', 'implementation' => 'Discord'],
+            ], 200)
+            ->push(['id' => 100, 'name' => 'MediaManager', 'implementation' => 'Webhook'], 201),
+    ]);
+
+    $connection = ServiceConnection::factory()->sonarr()->make([
+        'url' => 'http://sonarr.local',
+        'api_key' => 'k',
+    ]);
+
+    $result = new SonarrClient($connection)->configureWebhook(
+        callbackUrl: 'https://app.local/api/webhooks/sonarr/1?token=t',
+        notificationName: 'MediaManager',
+    );
+
+    expect($result['id'])->toBe(100);
+
+    Http::assertSent(fn ($request) => $request->method() === 'POST'
+        && str_ends_with($request->url(), '/api/v3/notification'));
+
+    Http::assertNotSent(fn ($request) => $request->method() === 'PUT');
+});
