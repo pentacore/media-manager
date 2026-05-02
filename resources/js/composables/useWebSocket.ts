@@ -1,20 +1,41 @@
 import Echo from 'laravel-echo';
 import Pusher from 'pusher-js';
 
+interface ReverbConfig {
+    key: string;
+    host: string;
+    port: number;
+    scheme: 'http' | 'https';
+}
+
 let echoInstance: Echo<'reverb'> | null = null;
+
+function readReverbConfig(): ReverbConfig {
+    const meta = document.querySelector<HTMLMetaElement>(
+        'meta[name="reverb-config"]',
+    );
+
+    if (!meta?.content) {
+        throw new Error('Missing <meta name="reverb-config"> in page head');
+    }
+
+    return JSON.parse(meta.content) as ReverbConfig;
+}
 
 function getEcho(): Echo<'reverb'> {
     if (!echoInstance) {
         // Pusher must be available globally for Echo's Reverb driver
         window.Pusher = Pusher;
 
+        const config = readReverbConfig();
+
         echoInstance = new Echo({
             broadcaster: 'reverb',
-            key: import.meta.env.VITE_REVERB_APP_KEY,
-            wsHost: import.meta.env.VITE_REVERB_HOST,
-            wsPort: Number(import.meta.env.VITE_REVERB_PORT),
-            wssPort: Number(import.meta.env.VITE_REVERB_PORT),
-            forceTLS: import.meta.env.VITE_REVERB_SCHEME === 'https',
+            key: config.key,
+            wsHost: config.host,
+            wsPort: config.port,
+            wssPort: config.port,
+            forceTLS: config.scheme === 'https',
             enabledTransports: ['ws', 'wss'],
         });
     }

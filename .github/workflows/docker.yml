@@ -2,7 +2,6 @@ name: docker
 
 on:
   push:
-    branches: [main, master]
     tags: ['v*.*.*']
   workflow_dispatch:
 
@@ -69,13 +68,11 @@ jobs:
         uses: docker/metadata-action@v6
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
-          # `latest=auto` already excludes prerelease tags. The major/minor patterns
-          # below also gate on absence of a `-` so prereleases never claim them.
+          # `latest=auto` adds `:latest` to stable semver pushes only (excludes prereleases).
+          # major/minor patterns also gate on absence of `-` so prereleases never claim them.
           flavor: |
             latest=auto
           tags: |
-            type=ref,event=branch
-            type=ref,event=pr
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}},enable=${{ !contains(github.ref, '-') }}
             type=semver,pattern={{major}},enable=${{ !contains(github.ref, '-') }}

@@ -1,3 +1,10 @@
+## [1.0.1](https://github.com/pentacore/media-manager/compare/v1.0.0...v1.0.1) (2026-05-02)
+
+
+### Bug Fixes
+
+* **reverb:** inject config at runtime via meta tag ([2a80ead](https://github.com/pentacore/media-manager/commit/2a80ead70e747c177956c618342eb270a57fbbd1))
+
 # 1.0.0 (2026-05-01)
 
 
