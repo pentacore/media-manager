@@ -1,3 +1,15 @@
+# [1.2.0](https://github.com/pentacore/media-manager/compare/v1.1.1...v1.2.0) (2026-05-03)
+
+
+### Bug Fixes
+
+* **emby:** collapse playback events into one row per PlaySession ([17a8194](https://github.com/pentacore/media-manager/commit/17a8194fe56f5adef67fd10774b2e7fe6883080a))
+
+
+### Features
+
+* **emby:** backfill watch history from Emby REST API ([b8d9b89](https://github.com/pentacore/media-manager/commit/b8d9b89d44668c2f2182dce5f58dea612a67318f))
+
 ## [1.1.1](https://github.com/pentacore/media-manager/compare/v1.1.0...v1.1.1) (2026-05-02)
 
 
