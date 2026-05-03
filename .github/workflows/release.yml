@@ -89,18 +89,41 @@ jobs:
     if: ${{ github.event.workflow_run.head_branch == 'main' && needs.release.outputs.published == 'true' }}
     permissions:
       contents: write
+      pull-requests: write
 
     steps:
+      # `develop` is protected — direct pushes are rejected by repository
+      # rules, so we open a PR from a temporary sync branch and let GitHub
+      # auto-merge it once required checks pass.
       - uses: actions/checkout@v6
         with:
           fetch-depth: 0
           persist-credentials: true
           ref: develop
+          token: ${{ secrets.RELEASE_DISPATCH_PAT }}
 
-      - name: Merge main into develop
+      - name: Open sync PR and enable auto-merge
+        env:
+          GH_TOKEN: ${{ secrets.RELEASE_DISPATCH_PAT }}
+          RUN_ID: ${{ github.run_id }}
         run: |
+          set -euo pipefail
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git fetch origin main
+          git fetch origin main develop
+
+          # Fast-forward bail: nothing to sync.
+          if git merge-base --is-ancestor origin/main origin/develop; then
+            echo 'develop already contains main — nothing to sync.'
+            exit 0
+          fi
+
+          BRANCH="sync/main-into-develop-${RUN_ID}"
+          git checkout -B "$BRANCH" origin/develop
           git merge --no-ff origin/main -m 'chore: sync main into develop'
-          git push origin develop
+          git push origin "$BRANCH"
+
+          gh pr create --base develop --head "$BRANCH" \
+            --title 'chore: sync main into develop' \
+            --body 'Auto-generated after main release. Will auto-merge once required checks pass.'
+          gh pr merge "$BRANCH" --auto --merge --delete-branch
