@@ -110,18 +110,77 @@ test('item.markplayed produces a finished row', function (): void {
     $this->assertDatabaseHas('emby_activities', ['action' => 'finished']);
 });
 
-test('terminal events insert new rows (do not upsert)', function (): void {
+test('repeat events for the same play session collapse into one row', function (): void {
     $payload = [
         'Event' => 'playback.stop',
         'User' => ['Id' => 'emby-user-1'],
         'Item' => ['Id' => 'item-1', 'Type' => 'Movie', 'Name' => 'Movie 1'],
-        'PlaybackInfo' => ['PositionTicks' => 100, 'PlayedToCompletion' => false],
+        'PlaybackInfo' => ['PositionTicks' => 100, 'PlayedToCompletion' => false, 'PlaySessionId' => 'session-A'],
     ];
 
     resolve(EmbyWebhookHandler::class)->handle(makeWebhookEvent($this->connection, $payload));
     resolve(EmbyWebhookHandler::class)->handle(makeWebhookEvent($this->connection, $payload));
 
-    expect(EmbyActivity::where('emby_item_id', 'item-1')->where('action', 'stopped')->count())->toBe(2);
+    expect(EmbyActivity::where('emby_item_id', 'item-1')->count())->toBe(1);
+});
+
+test('full session walkthrough collapses into one row with last action and position', function (): void {
+    $base = [
+        'User' => ['Id' => 'emby-user-1'],
+        'Item' => ['Id' => 'item-1', 'Type' => 'Episode', 'Name' => 'Pilot', 'SeriesName' => 'My Show', 'RunTimeTicks' => 12000000000],
+    ];
+
+    $events = [
+        ['Event' => 'playback.start', 'PlaybackInfo' => ['PositionTicks' => 0, 'PlaySessionId' => 'session-A']],
+        ['Event' => 'playback.pause', 'PlaybackInfo' => ['PositionTicks' => 1000000000, 'PlaySessionId' => 'session-A']],
+        ['Event' => 'playback.unpause', 'PlaybackInfo' => ['PositionTicks' => 1000000000, 'PlaySessionId' => 'session-A']],
+        ['Event' => 'playback.stop', 'PlaybackInfo' => ['PositionTicks' => 1500000000, 'PlayedToCompletion' => false, 'PlaySessionId' => 'session-A']],
+    ];
+
+    foreach ($events as $event) {
+        resolve(EmbyWebhookHandler::class)->handle(makeWebhookEvent($this->connection, [...$base, ...$event]));
+    }
+
+    expect(EmbyActivity::where('emby_item_id', 'item-1')->count())->toBe(1);
+
+    $activity = EmbyActivity::where('emby_item_id', 'item-1')->first();
+    expect($activity->action)->toBe('stopped');
+    expect($activity->play_position)->toBe(1500000000);
+    expect($activity->play_session_id)->toBe('session-A');
+});
+
+test('different play sessions for the same item create separate rows', function (): void {
+    $base = [
+        'Event' => 'playback.start',
+        'User' => ['Id' => 'emby-user-1'],
+        'Item' => ['Id' => 'item-1', 'Type' => 'Movie', 'Name' => 'Movie 1'],
+    ];
+
+    resolve(EmbyWebhookHandler::class)->handle(makeWebhookEvent($this->connection, [
+        ...$base,
+        'PlaybackInfo' => ['PositionTicks' => 0, 'PlaySessionId' => 'session-A'],
+    ]));
+    resolve(EmbyWebhookHandler::class)->handle(makeWebhookEvent($this->connection, [
+        ...$base,
+        'PlaybackInfo' => ['PositionTicks' => 0, 'PlaySessionId' => 'session-B'],
+    ]));
+
+    expect(EmbyActivity::where('emby_item_id', 'item-1')->count())->toBe(2);
+});
+
+test('payload without PlaySessionId still produces a single legacy row', function (): void {
+    $payload = [
+        'Event' => 'playback.start',
+        'User' => ['Id' => 'emby-user-1'],
+        'Item' => ['Id' => 'item-1', 'Type' => 'Movie', 'Name' => 'Movie 1'],
+        'PlaybackInfo' => ['PositionTicks' => 0, 'PlayedToCompletion' => false],
+    ];
+
+    resolve(EmbyWebhookHandler::class)->handle(makeWebhookEvent($this->connection, $payload));
+    resolve(EmbyWebhookHandler::class)->handle(makeWebhookEvent($this->connection, $payload));
+
+    expect(EmbyActivity::where('emby_item_id', 'item-1')->count())->toBe(1);
+    expect(EmbyActivity::where('emby_item_id', 'item-1')->first()->play_session_id)->toBeNull();
 });
 
 test('handler skips when no EmbyUserLink exists for the Emby user', function (): void {

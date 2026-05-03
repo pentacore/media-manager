@@ -13,6 +13,7 @@
     },
     "PlaybackInfo": {
         "PositionTicks": 35800000000,
-        "PlayedToCompletion": true
+        "PlayedToCompletion": true,
+        "PlaySessionId": "play-session-001"
     }
 }

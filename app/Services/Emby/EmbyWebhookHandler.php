@@ -14,8 +14,6 @@ use Illuminate\Support\Facades\Log;
 
 class EmbyWebhookHandler extends AbstractWebhookHandler
 {
-    private const array TERMINAL_ACTIONS = ['stopped', 'finished'];
-
     public function __construct(private readonly ActionOrchestrator $actionOrchestrator) {}
 
     protected function serviceSlug(): string
@@ -94,6 +92,9 @@ class EmbyWebhookHandler extends AbstractWebhookHandler
             return;
         }
 
+        $playSessionId = $payload['PlaybackInfo']['PlaySessionId'] ?? null;
+        $playSessionId = is_string($playSessionId) && $playSessionId !== '' ? $playSessionId : null;
+
         $attributes = [
             'media_type' => $mediaType,
             'media_title' => $payload['Item']['Name'] ?? null,
@@ -103,22 +104,14 @@ class EmbyWebhookHandler extends AbstractWebhookHandler
             'play_position' => $payload['PlaybackInfo']['PositionTicks'] ?? null,
         ];
 
-        if (in_array($action, self::TERMINAL_ACTIONS, true)) {
-            $activity = EmbyActivity::create([
+        $activity = EmbyActivity::updateOrCreate(
+            [
                 'emby_user_link_id' => $userLink->id,
                 'emby_item_id' => $embyItemId,
-                ...$attributes,
-            ]);
-        } else {
-            $activity = EmbyActivity::updateOrCreate(
-                [
-                    'emby_user_link_id' => $userLink->id,
-                    'emby_item_id' => $embyItemId,
-                    'action' => 'played',
-                ],
-                $attributes,
-            );
-        }
+                'play_session_id' => $playSessionId,
+            ],
+            $attributes,
+        );
 
         $activity->setRelation('embyUserLink', $userLink);
         event(new EmbyPlaybackUpdated($activity));

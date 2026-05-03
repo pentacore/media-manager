@@ -183,15 +183,15 @@ const totals = computed(() => {
     const userTicks = new Map<string, number>();
 
     for (const a of items) {
-        const dur = a.duration_ticks ?? 0;
-        totalTicks += dur;
+        const watched = a.play_position ?? 0;
+        totalTicks += watched;
 
         if (completionPct(a) >= 90) {
             completed++;
         }
 
         const u = a.emby_username ?? 'unknown';
-        userTicks.set(u, (userTicks.get(u) ?? 0) + dur);
+        userTicks.set(u, (userTicks.get(u) ?? 0) + watched);
     }
 
     let topUser: { name: string; ticks: number; sessions: number } | null =

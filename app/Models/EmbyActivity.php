@@ -19,6 +19,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  * @property string $media_title
  * @property string|null $series_title
  * @property string $emby_item_id
+ * @property string|null $play_session_id
  * @property string $action
  * @property int|null $duration_ticks
  * @property int|null $play_position
@@ -39,12 +40,13 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  * @method static Builder<static>|EmbyActivity whereMediaTitle($value)
  * @method static Builder<static>|EmbyActivity whereMediaType($value)
  * @method static Builder<static>|EmbyActivity wherePlayPosition($value)
+ * @method static Builder<static>|EmbyActivity wherePlaySessionId($value)
  * @method static Builder<static>|EmbyActivity whereSeriesTitle($value)
  * @method static Builder<static>|EmbyActivity whereUpdatedAt($value)
  *
  * @mixin \Eloquent
  */
-#[Fillable(['emby_user_link_id', 'media_type', 'media_title', 'series_title', 'emby_item_id', 'action', 'duration_ticks', 'play_position'])]
+#[Fillable(['emby_user_link_id', 'media_type', 'media_title', 'series_title', 'emby_item_id', 'play_session_id', 'action', 'duration_ticks', 'play_position'])]
 class EmbyActivity extends Model
 {
     /** @use HasFactory<EmbyActivityFactory> */

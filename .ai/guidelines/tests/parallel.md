@@ -1,0 +1,1 @@
+When running the pest tests, make sure to use the `--parallel` flag to run tests in parallel. This can significantly reduce the time it takes to run all tests, especially if you have a large test suite.
