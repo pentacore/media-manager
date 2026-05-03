@@ -1,3 +1,10 @@
+## [1.1.1](https://github.com/pentacore/media-manager/compare/v1.1.0...v1.1.1) (2026-05-02)
+
+
+### Bug Fixes
+
+* fix trigger docker build on tag ([11ca4aa](https://github.com/pentacore/media-manager/commit/11ca4aad7da76c23495d367126fca25026a7b078))
+
 # [1.1.0](https://github.com/pentacore/media-manager/compare/v1.0.3...v1.1.0) (2026-05-02)
 
 
