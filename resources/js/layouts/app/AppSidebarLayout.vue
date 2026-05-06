@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { onMounted } from 'vue';
+import AiChatSheet from '@/components/AiChatSheet.vue';
 import AppContent from '@/components/AppContent.vue';
 import AppShell from '@/components/AppShell.vue';
 import AppSidebar from '@/components/AppSidebar.vue';
@@ -30,6 +31,7 @@ onMounted(subscribeNotifications);
             <slot />
         </AppContent>
         <CommandPalette />
+        <AiChatSheet />
         <Toaster />
     </AppShell>
 </template>

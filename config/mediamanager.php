@@ -30,6 +30,12 @@ return [
         // Default model for MediaAgent. Free-form string — must match a model
         // identifier supported by a configured laravel/ai provider.
         'model' => env('MEDIAMANAGER_AI_MODEL', 'gpt-5-mini'),
+
+        // Cheap model used to auto-summarize the first user message of a new
+        // conversation into a 4-6 word chat title. Runs in the background
+        // queue after the first agent response. Override per env or via the
+        // admin AI Settings page.
+        'title_model' => env('MEDIAMANAGER_AI_TITLE_MODEL', 'gpt-5.4-nano'),
     ],
 
     /*

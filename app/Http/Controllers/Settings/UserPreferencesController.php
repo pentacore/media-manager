@@ -29,11 +29,11 @@ class UserPreferencesController extends Controller
         ]);
     }
 
-    public function update(UpdateUserPreferencesRequest $request): RedirectResponse
+    public function update(UpdateUserPreferencesRequest $updateUserPreferencesRequest): RedirectResponse
     {
-        $user = $request->user();
+        $user = $updateUserPreferencesRequest->user();
 
-        $user->preferences = UserPreferences::withDefaults($request->validated());
+        $user->preferences = UserPreferences::withDefaults($updateUserPreferencesRequest->validated());
         $user->save();
 
         Inertia::flash('toast', ['type' => 'success', 'message' => __('Preferences saved.')]);

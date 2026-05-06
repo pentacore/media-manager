@@ -8,6 +8,7 @@ use App\Ai\Agents\MediaAgent;
 use App\Enums\AiMode;
 use App\Enums\AiProposedWorkflowStatus;
 use App\Http\Controllers\Controller;
+use App\Jobs\Ai\GenerateConversationTitle;
 use App\Models\AiProposedWorkflow;
 use App\Models\User;
 use App\Services\AiBudget\AiBudgetExceededException;
@@ -19,6 +20,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Str;
 use Inertia\Inertia;
 use Inertia\Response;
 use Throwable;
@@ -56,7 +58,7 @@ class ChatController extends Controller
             ], 402);
         }
 
-        if ($conversationId !== null && ! $this->conversationBelongsToUser($conversationId, $user)) {
+        if ($conversationId !== null && ! $this->conversationIsAvailable($conversationId, $user)) {
             return response()->json(['message' => 'Conversation not found.'], 404);
         }
 
@@ -65,6 +67,7 @@ class ChatController extends Controller
             return $continuation;
         }
 
+        $isNewConversation = $conversationId === null;
         $messageToSend = $continuation ?? $validated['message'];
         $turnStartedAt = CarbonImmutable::now();
 
@@ -101,11 +104,36 @@ class ChatController extends Controller
 
         $workflowPayload = $this->attachFreshlyProposedWorkflow($user, $turnStartedAt, $response->conversationId ?? null);
 
+        $newConversationId = $response->conversationId ?? null;
+
+        if ($isNewConversation && $newConversationId !== null) {
+            $this->seedConversationTitle($newConversationId, $validated['message']);
+            dispatch(new GenerateConversationTitle($newConversationId, $validated['message']));
+        }
+
         return response()->json([
             'text' => $response->text,
-            'conversation_id' => $response->conversationId ?? null,
+            'conversation_id' => $newConversationId,
             'workflow' => $workflowPayload,
         ]);
+    }
+
+    /**
+     * Write a readable fallback title onto a brand-new conversation row before
+     * the queued GenerateConversationTitle job runs. Keeps the picker readable
+     * even if the queue worker is offline.
+     */
+    private function seedConversationTitle(string $conversationId, string $firstUserMessage): void
+    {
+        $fallback = (string) Str::of($firstUserMessage)->trim()->limit(60);
+
+        if ($fallback === '') {
+            return;
+        }
+
+        DB::table('agent_conversations')
+            ->where('id', $conversationId)
+            ->update(['title' => $fallback]);
     }
 
     /**
@@ -197,7 +225,7 @@ class ChatController extends Controller
             );
     }
 
-    private function conversationBelongsToUser(string $conversationId, ?User $user): bool
+    private function conversationIsAvailable(string $conversationId, ?User $user): bool
     {
         if (! $user instanceof User) {
             return false;
@@ -206,6 +234,7 @@ class ChatController extends Controller
         return DB::table('agent_conversations')
             ->where('id', $conversationId)
             ->where('user_id', $user->id)
+            ->whereNull('archived_at')
             ->exists();
     }
 }

@@ -12,6 +12,8 @@ class AiSettings
 
     public const MODEL_KEY = 'ai.model';
 
+    public const TITLE_MODEL_KEY = 'ai.title_model';
+
     public const SOFT_BUDGET_KEY = 'ai.budget.soft_monthly_usd';
 
     public const HARD_BUDGET_KEY = 'ai.budget.hard_monthly_usd';
@@ -64,6 +66,21 @@ class AiSettings
     public function setModel(string $model): void
     {
         $this->appSettings->set(self::MODEL_KEY, $model);
+    }
+
+    public function titleModel(): string
+    {
+        $value = (string) $this->appSettings->get(
+            self::TITLE_MODEL_KEY,
+            config('mediamanager.ai.title_model', 'gpt-5.4-nano'),
+        );
+
+        return $value !== '' ? $value : 'gpt-5.4-nano';
+    }
+
+    public function setTitleModel(string $model): void
+    {
+        $this->appSettings->set(self::TITLE_MODEL_KEY, $model);
     }
 
     /**

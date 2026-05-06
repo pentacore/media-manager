@@ -9,6 +9,7 @@ import {
     Pill,
     StatCard,
     SvcChip,
+    TimeStamp,
 } from '@/components/mm';
 import { Button } from '@/components/ui/button';
 import {
@@ -18,7 +19,6 @@ import {
     SelectTrigger,
     SelectValue,
 } from '@/components/ui/select';
-import { useDateTime } from '@/composables/useDateTime';
 import { useRealtimeList } from '@/composables/useRealtimeList';
 import { cn } from '@/lib/utils';
 import { dashboard } from '@/routes';
@@ -116,8 +116,6 @@ const visibleActivities = computed(() =>
 function refresh(): void {
     router.reload({ only: ['activities'], onSuccess: () => resume() });
 }
-
-const { formatSmart: formatTime } = useDateTime();
 
 function ticksToHours(ticks: number | null): number {
     if (!ticks) {
@@ -432,7 +430,7 @@ function currentFilter(): string {
                         <td
                             class="font-mono-tabular px-3 py-2.5 text-[11.5px] whitespace-nowrap text-fg-subtle"
                         >
-                            {{ formatTime(activity.created_at) }}
+                            <TimeStamp :iso="activity.created_at" />
                         </td>
                         <td class="px-3 py-2.5">
                             <span class="flex items-center gap-2">

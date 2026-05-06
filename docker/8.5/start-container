@@ -15,12 +15,12 @@ fi
 
 chmod -R ugo+rw /.composer
 
-if [ $# -gt 0 ]; then
-    if [ "$SUPERVISOR_PHP_USER" = "root" ]; then
-        exec "$@"
-    else
-        exec gosu $WWWUSER "$@"
-    fi
+if [ $# -eq 0 ]; then
+    set -- php -d variables_order=EGPCS /var/www/html/artisan serve --host=0.0.0.0 --port=80
+fi
+
+if [ "$SUPERVISOR_PHP_USER" = "root" ]; then
+    exec "$@"
 else
-    exec /usr/bin/supervisord -c /etc/supervisor/conf.d/supervisord.conf
+    exec gosu "$WWWUSER" "$@"
 fi

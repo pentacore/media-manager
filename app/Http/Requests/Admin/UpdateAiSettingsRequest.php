@@ -19,6 +19,7 @@ class UpdateAiSettingsRequest extends FormRequest
         return [
             'mode' => ['required', 'string', AiMode::validationRule()],
             'model' => ['required', 'string', 'max:100'],
+            'title_model' => ['required', 'string', 'max:100'],
             'soft_budget_usd' => ['nullable', 'numeric', 'min:0', 'max:100000'],
             'hard_budget_usd' => ['nullable', 'numeric', 'min:0', 'max:100000', 'gte:soft_budget_usd'],
         ];

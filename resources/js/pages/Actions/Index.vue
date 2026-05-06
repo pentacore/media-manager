@@ -10,7 +10,13 @@ import {
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import ActionRequestController from '@/actions/App/Http/Controllers/Actions/ActionRequestController';
 import ActionTypeConfigController from '@/actions/App/Http/Controllers/Actions/ActionTypeConfigController';
-import { Field, InitialsAvatar, StatusPill, SvcChip } from '@/components/mm';
+import {
+    Field,
+    InitialsAvatar,
+    StatusPill,
+    SvcChip,
+    TimeStamp,
+} from '@/components/mm';
 import { Button } from '@/components/ui/button';
 import { useRealtimeList } from '@/composables/useRealtimeList';
 import { useWebSocket } from '@/composables/useWebSocket';
@@ -212,31 +218,6 @@ function refresh(): void {
             refreshing.value = false;
         },
     });
-}
-
-function formatRelative(iso: string | null): string {
-    if (!iso) {
-        return '—';
-    }
-
-    const ms = Date.now() - new Date(iso).getTime();
-    const m = Math.floor(ms / 60_000);
-
-    if (m < 1) {
-        return 'just now';
-    }
-
-    if (m < 60) {
-        return `${m}m ago`;
-    }
-
-    const h = Math.floor(m / 60);
-
-    if (h < 24) {
-        return `${h}h ago`;
-    }
-
-    return `${Math.floor(h / 24)}d ago`;
 }
 
 function isDestructive(type: string | null | undefined): boolean {
@@ -538,7 +519,7 @@ function pipelineState(
                             <td
                                 class="font-mono-tabular px-3 py-2.5 align-middle text-[11.5px] text-fg-subtle"
                             >
-                                {{ formatRelative(row.created_at) }}
+                                <TimeStamp :iso="row.created_at" />
                             </td>
                         </tr>
                         <tr v-if="visibleRequests.length === 0">
@@ -628,7 +609,7 @@ function pipelineState(
                             </div>
                         </Field>
                         <Field label="Created">
-                            {{ formatRelative(selected.created_at) }}
+                            <TimeStamp :iso="selected.created_at" />
                         </Field>
                         <Field v-if="payloadDetail(selected)" label="Detail">
                             <span class="text-[13px] text-muted-foreground">{{

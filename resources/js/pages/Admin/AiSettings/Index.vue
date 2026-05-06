@@ -26,6 +26,7 @@ interface ModeOption {
 interface AiSettingsState {
     mode: string;
     model: string;
+    title_model: string;
     soft_budget_usd: number | null;
     hard_budget_usd: number | null;
 }
@@ -55,6 +56,7 @@ defineOptions({
 
 const selectedMode = ref(props.settings.mode);
 const selectedModel = ref(props.settings.model);
+const titleModel = ref(props.settings.title_model);
 
 function formatUsd(value: number | null): string {
     if (value === null) {
@@ -190,6 +192,32 @@ const budgetState = computed<{
                             </SelectContent>
                         </Select>
                         <InputError :message="errors.model" class="mt-1" />
+                    </div>
+                </div>
+
+                <div
+                    class="grid items-start gap-6"
+                    style="grid-template-columns: 200px 1fr"
+                >
+                    <Field
+                        label="Title model"
+                        hint="Cheap model used to auto-summarize the first user message of a new conversation into a short chat title. Runs in the background queue."
+                    >
+                        <span />
+                    </Field>
+                    <div>
+                        <Input
+                            id="title_model"
+                            name="title_model"
+                            type="text"
+                            class="h-8 max-w-[320px] text-sm"
+                            v-model="titleModel"
+                            placeholder="gpt-5.4-nano"
+                        />
+                        <InputError
+                            :message="errors.title_model"
+                            class="mt-1"
+                        />
                     </div>
                 </div>
 

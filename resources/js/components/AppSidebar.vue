@@ -14,6 +14,7 @@ import {
     Inbox,
     LayoutGrid,
     Link as LinkIcon,
+    MessageSquare,
     Play,
     ScrollText,
     Search,
@@ -28,6 +29,7 @@ import { computed, onMounted, onUnmounted, ref, watchEffect } from 'vue';
 import ActionRequestController from '@/actions/App/Http/Controllers/Actions/ActionRequestController';
 import ActionTypeConfigController from '@/actions/App/Http/Controllers/Actions/ActionTypeConfigController';
 import ActivityLogController from '@/actions/App/Http/Controllers/ActivityLogController';
+import AiConversationController from '@/actions/App/Http/Controllers/Admin/AiConversationController';
 import AiModelPriceController from '@/actions/App/Http/Controllers/Admin/AiModelPriceController';
 import AiSettingsController from '@/actions/App/Http/Controllers/Admin/AiSettingsController';
 import AiUsageController from '@/actions/App/Http/Controllers/Admin/AiUsageController';
@@ -58,6 +60,7 @@ import {
     SidebarMenuButton,
     SidebarMenuItem,
 } from '@/components/ui/sidebar';
+import { useAiChat } from '@/composables/useAiChat';
 import { useWebSocket } from '@/composables/useWebSocket';
 import { dashboard } from '@/routes';
 import type { NavItem } from '@/types';
@@ -111,6 +114,7 @@ watchEffect(() => {
 });
 
 const { privateChannel, leaveChannel } = useWebSocket();
+const { openChat } = useAiChat();
 
 let activitySessionTimer: ReturnType<typeof setInterval> | null = null;
 const sessionExpiryMs = 10 * 60 * 1000;
@@ -345,6 +349,11 @@ const adminNavItems: NavItem[] = [
         icon: BarChart3,
     },
     {
+        title: 'AI Conversations',
+        href: AiConversationController.index.url(),
+        icon: MessageSquare,
+    },
+    {
         title: 'AI Prices',
         href: AiModelPriceController.index.url(),
         icon: DollarSign,
@@ -389,6 +398,24 @@ const adminNavItems: NavItem[] = [
         </SidebarContent>
 
         <SidebarFooter>
+            <SidebarMenu v-if="aiEnabled && isAdmin">
+                <SidebarMenuItem>
+                    <SidebarMenuButton
+                        as="button"
+                        type="button"
+                        title="Open AI assistant (⌘J)"
+                        @click="openChat()"
+                    >
+                        <Sparkles />
+                        <span>AI Assistant</span>
+                        <kbd
+                            class="font-mono-tabular ml-auto rounded border border-border bg-card px-1 text-[10px] text-muted-foreground"
+                        >
+                            ⌘J
+                        </kbd>
+                    </SidebarMenuButton>
+                </SidebarMenuItem>
+            </SidebarMenu>
             <NavUser />
         </SidebarFooter>
     </Sidebar>
