@@ -5,10 +5,12 @@ declare(strict_types=1);
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
+use App\Support\ServiceCheckBatch;
 use Carbon\CarbonImmutable;
 use Cron\CronExpression;
 use Illuminate\Console\Scheduling\Event;
 use Illuminate\Console\Scheduling\Schedule;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -21,6 +23,7 @@ class JobsController extends Controller
         return Inertia::render('Admin/Jobs/Index', [
             'queued' => $this->queuedJobs(),
             'failed' => $this->failedJobs(),
+            'batches' => $this->batches(),
             'scheduled' => $this->scheduledCommands(),
         ]);
     }
@@ -87,6 +90,53 @@ class JobsController extends Controller
                 'exception_class' => trim($exClass),
                 'message' => $firstLine !== false ? trim($firstLine) : '',
                 'failed_at' => $row->failed_at,
+            ];
+        })->all();
+    }
+
+    /**
+     * @return array<int, array<string, mixed>>
+     */
+    private function batches(): array
+    {
+        $currentHealth = Cache::get(ServiceCheckBatch::CACHE_KEY_HEALTH);
+        $currentVersions = Cache::get(ServiceCheckBatch::CACHE_KEY_VERSIONS);
+
+        $rows = DB::table('job_batches')
+            ->select(['id', 'name', 'total_jobs', 'pending_jobs', 'failed_jobs', 'created_at', 'finished_at', 'cancelled_at'])->latest()
+            ->limit(10)
+            ->get();
+
+        return $rows->map(static function (object $row) use ($currentHealth, $currentVersions): array {
+            $createdAt = $row->created_at !== null
+                ? CarbonImmutable::createFromTimestamp($row->created_at)->toIso8601String()
+                : null;
+            $finishedAt = $row->finished_at !== null
+                ? CarbonImmutable::createFromTimestamp($row->finished_at)->toIso8601String()
+                : null;
+            $cancelledAt = $row->cancelled_at !== null
+                ? CarbonImmutable::createFromTimestamp($row->cancelled_at)->toIso8601String()
+                : null;
+
+            $status = match (true) {
+                $cancelledAt !== null => 'cancelled',
+                (int) $row->failed_jobs > 0 && (int) $row->pending_jobs === 0 => 'failed',
+                (int) $row->pending_jobs === 0 => 'complete',
+                default => 'running',
+            };
+
+            return [
+                'id' => (string) $row->id,
+                'name' => (string) ($row->name ?? ''),
+                'total_jobs' => (int) $row->total_jobs,
+                'pending_jobs' => (int) $row->pending_jobs,
+                'failed_jobs' => (int) $row->failed_jobs,
+                'status' => $status,
+                'created_at' => $createdAt,
+                'finished_at' => $finishedAt,
+                'cancelled_at' => $cancelledAt,
+                'is_current_health' => $currentHealth !== null && (string) $row->id === (string) $currentHealth,
+                'is_current_versions' => $currentVersions !== null && (string) $row->id === (string) $currentVersions,
             ];
         })->all();
     }

@@ -4,8 +4,8 @@ declare(strict_types=1);
 
 namespace App\Console\Commands;
 
-use App\Jobs\PingServiceHealth;
 use App\Models\ServiceConnection;
+use App\Support\ServiceCheckBatch;
 use Illuminate\Console\Command;
 use Override;
 
@@ -21,11 +21,15 @@ class CheckServiceHealth extends Command
     {
         $connections = ServiceConnection::where('is_active', true)->get();
 
-        foreach ($connections as $connection) {
-            new PingServiceHealth($connection)->handle();
+        if ($connections->isEmpty()) {
+            $this->info('No active service connections to check.');
+
+            return self::SUCCESS;
         }
 
-        $this->info(sprintf('Checked %d service(s).', $connections->count()));
+        $batch = ServiceCheckBatch::dispatchHealth($connections);
+
+        $this->info(sprintf('Dispatched batch %s for %d service(s).', $batch->id, $connections->count()));
 
         return self::SUCCESS;
     }

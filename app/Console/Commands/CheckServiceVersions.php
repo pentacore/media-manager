@@ -6,6 +6,7 @@ namespace App\Console\Commands;
 
 use App\Jobs\FetchLatestServiceVersion;
 use App\Models\ServiceConnection;
+use App\Support\ServiceCheckBatch;
 use Illuminate\Console\Command;
 use Override;
 
@@ -19,19 +20,22 @@ class CheckServiceVersions extends Command
 
     public function handle(): int
     {
-        $connections = ServiceConnection::where('is_active', true)->get();
-        $checked = 0;
+        $connections = ServiceConnection::where('is_active', true)
+            ->get()
+            ->filter(static fn (ServiceConnection $serviceConnection): bool => array_key_exists(
+                (string) $serviceConnection->type->value,
+                FetchLatestServiceVersion::REPO_MAP,
+            ));
 
-        foreach ($connections as $connection) {
-            if (! array_key_exists((string) $connection->type->value, FetchLatestServiceVersion::REPO_MAP)) {
-                continue;
-            }
+        if ($connections->isEmpty()) {
+            $this->info('No active service connections with a known upstream repo.');
 
-            app()->call([new FetchLatestServiceVersion($connection), 'handle']);
-            $checked++;
+            return self::SUCCESS;
         }
 
-        $this->info(sprintf('Updated latest_version for %d service(s).', $checked));
+        $batch = ServiceCheckBatch::dispatchVersions($connections);
+
+        $this->info(sprintf('Dispatched batch %s for %d service(s).', $batch->id, $connections->count()));
 
         return self::SUCCESS;
     }

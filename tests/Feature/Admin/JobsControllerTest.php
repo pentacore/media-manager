@@ -3,6 +3,8 @@
 declare(strict_types=1);
 
 use App\Models\User;
+use App\Support\ServiceCheckBatch;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Date;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -57,7 +59,41 @@ test('admins see all three sections rendered with their counts', function (): vo
             ->has('failed', 1)
             ->where('failed.0.class', 'App\\Jobs\\BrokenJob')
             ->where('failed.0.exception_class', 'RuntimeException')
+            ->has('batches')
             ->has('scheduled')
+        );
+});
+
+test('batches panel surfaces job_batches rows and flags the cached current health batch', function (): void {
+    $admin = User::factory()->admin()->create();
+
+    $batchId = (string) Str::uuid();
+    DB::table('job_batches')->insert([
+        'id' => $batchId,
+        'name' => 'service-health',
+        'total_jobs' => 3,
+        'pending_jobs' => 1,
+        'failed_jobs' => 0,
+        'failed_job_ids' => '[]',
+        'options' => '',
+        'cancelled_at' => null,
+        'created_at' => Date::now()->getTimestamp(),
+        'finished_at' => null,
+    ]);
+    Cache::put(ServiceCheckBatch::CACHE_KEY_HEALTH, $batchId, now()->addDay());
+
+    $this->actingAs($admin)
+        ->get(route('admin.jobs.index'))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->has('batches', 1)
+            ->where('batches.0.id', $batchId)
+            ->where('batches.0.name', 'service-health')
+            ->where('batches.0.total_jobs', 3)
+            ->where('batches.0.pending_jobs', 1)
+            ->where('batches.0.status', 'running')
+            ->where('batches.0.is_current_health', true)
+            ->where('batches.0.is_current_versions', false)
         );
 });
 

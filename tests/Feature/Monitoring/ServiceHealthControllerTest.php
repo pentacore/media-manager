@@ -3,8 +3,13 @@
 declare(strict_types=1);
 
 use App\Enums\HealthStatus;
+use App\Jobs\PingServiceHealth;
 use App\Models\ServiceConnection;
 use App\Models\User;
+use App\Support\ServiceCheckBatch;
+use Illuminate\Bus\PendingBatch;
+use Illuminate\Support\Facades\Bus;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
 
 beforeEach(function (): void {
@@ -402,4 +407,36 @@ test('disk display sum=free attaches metric to the synthetic sum row', function 
                 ->where(sprintf('diskSpace.%d.0.free_space', $connection->id), 150)
             )
         );
+});
+
+test('runChecks dispatches a service-health batch for active connections', function (): void {
+    Bus::fake();
+
+    $user = User::factory()->create();
+    ServiceConnection::factory()->sonarr()->create();
+    ServiceConnection::factory()->radarr()->create();
+    ServiceConnection::factory()->emby()->inactive()->create();
+
+    $this->actingAs($user)
+        ->post(route('monitoring.service-health.run-checks'))
+        ->assertRedirect();
+
+    Bus::assertBatched(fn (PendingBatch $pendingBatch): bool => $pendingBatch->name === 'service-health'
+        && $pendingBatch->jobs->count() === 2
+        && $pendingBatch->jobs->every(fn (object $job): bool => $job instanceof PingServiceHealth));
+
+    expect(Cache::get(ServiceCheckBatch::CACHE_KEY_HEALTH))->not->toBeNull();
+});
+
+test('runChecks does nothing when there are no active connections', function (): void {
+    Bus::fake();
+
+    $user = User::factory()->create();
+    ServiceConnection::factory()->sonarr()->inactive()->create();
+
+    $this->actingAs($user)
+        ->post(route('monitoring.service-health.run-checks'))
+        ->assertRedirect();
+
+    Bus::assertNothingBatched();
 });
