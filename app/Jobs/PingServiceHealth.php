@@ -31,7 +31,7 @@ class PingServiceHealth implements ShouldQueue
 
     public int $tries = 1;
 
-    public int $timeout = 30;
+    public int $timeout = 15;
 
     public function __construct(public ServiceConnection $serviceConnection) {}
 
