@@ -902,7 +902,7 @@ function formatTimestamp(value: string): string {
                                         :name="row.user_name ?? 'system'"
                                         :size="20"
                                     />
-                                    <span>{{ row.user_name ?? '—' }}</span>
+                                    <span>{{ row.user_name ?? 'System' }}</span>
                                 </span>
                             </td>
                             <td class="font-mono-tabular px-3 py-2 text-[12px]">
