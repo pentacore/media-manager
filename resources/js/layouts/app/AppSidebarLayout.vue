@@ -8,6 +8,7 @@ import AppSidebarHeader from '@/components/AppSidebarHeader.vue';
 import CommandPalette from '@/components/CommandPalette.vue';
 import { Toaster } from '@/components/ui/sonner';
 import { useNotifications } from '@/composables/useNotifications';
+import { usePresenceHeartbeat } from '@/composables/usePresenceHeartbeat';
 import type { BreadcrumbItem } from '@/types';
 
 type Props = {
@@ -19,6 +20,8 @@ withDefaults(defineProps<Props>(), {
 });
 
 const { subscribe: subscribeNotifications } = useNotifications();
+
+usePresenceHeartbeat();
 
 onMounted(subscribeNotifications);
 </script>

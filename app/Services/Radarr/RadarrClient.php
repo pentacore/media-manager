@@ -6,6 +6,7 @@ namespace App\Services\Radarr;
 
 use App\Cache\Services\RadarrCache;
 use App\Services\Arr\ArrClient;
+use App\Support\Cache\Warmable;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\RequestException;
 use Override;
@@ -13,7 +14,7 @@ use Override;
 /**
  * @see https://raw.githubusercontent.com/Radarr/Radarr/develop/src/Radarr.Api.V3/openapi.json for up-to-date openApi Spec
  */
-class RadarrClient extends ArrClient
+class RadarrClient extends ArrClient implements Warmable
 {
     private ?RadarrCache $radarrCache = null;
 
@@ -26,7 +27,7 @@ class RadarrClient extends ArrClient
     {
         return $this->cache()->rememberList(
             'list',
-            fn (): array => $this->buildClient()->get(sprintf('/api/%s/movie', $this->apiVersion))->throw()->json() ?? [],
+            fn (): array => $this->fetchMovies(),
         );
     }
 
@@ -114,6 +115,24 @@ class RadarrClient extends ArrClient
             'root-folders',
             fn (): array => parent::getRootFolders(),
         );
+    }
+
+    public function warm(): void
+    {
+        $cache = $this->cache();
+        $cache->warmList('list', fn (): array => $this->fetchMovies());
+        $cache->warmMetadata('quality-profiles', fn (): array => parent::getQualityProfiles());
+        $cache->warmMetadata('root-folders', fn (): array => parent::getRootFolders());
+    }
+
+    /**
+     * @return array<int, array<string, mixed>>
+     *
+     * @throws RequestException|ConnectionException
+     */
+    private function fetchMovies(): array
+    {
+        return $this->buildClient()->get(sprintf('/api/%s/movie', $this->apiVersion))->throw()->json() ?? [];
     }
 
     private function cache(): RadarrCache

@@ -235,3 +235,93 @@ test('discoverTv GETs /discover/tv with query params', function (): void {
 
     expect($result['results'])->toHaveCount(1);
 });
+
+test('warm() populates the same cache keys that getRequests reads on second call', function (): void {
+    Http::fake([
+        'seerr.local:5055/api/v1/request*' => Http::response([
+            'pageInfo' => ['pages' => 1, 'results' => 0],
+            'results' => [],
+        ]),
+        'seerr.local:5055/api/v1/discover/movies*' => Http::response(['results' => []]),
+        'seerr.local:5055/api/v1/discover/tv*' => Http::response(['results' => []]),
+    ]);
+
+    $this->client->warm();
+
+    Http::clearResolvedInstances();
+    Http::fake([
+        '*' => Http::response(['CACHE-MISS-WAS-A-MISS' => true]),
+    ]);
+    Http::preventStrayRequests();
+
+    // Replay every status-tab call the Requests page makes — none should
+    // hit the network, all should come back from cache.
+    foreach ([null, 'pending', 'processing', 'available', 'completed'] as $filter) {
+        $params = ['take' => 50, 'skip' => 0, 'sort' => 'added'];
+        if ($filter !== null) {
+            $params['filter'] = $filter;
+        }
+
+        $result = $this->client->getRequests($params);
+        expect($result)->not->toHaveKey('CACHE-MISS-WAS-A-MISS');
+    }
+
+    // Approved / Declined local walk at take=100.
+    $walk = $this->client->getRequests(['take' => 100, 'skip' => 0, 'sort' => 'added']);
+    expect($walk)->not->toHaveKey('CACHE-MISS-WAS-A-MISS');
+
+    Http::assertNothingSent();
+});
+
+test('warm() pre-fetches every request-list filter the Requests page exposes', function (): void {
+    Http::fake([
+        'seerr.local:5055/api/v1/request*' => Http::response([
+            'pageInfo' => ['pages' => 1, 'results' => 0],
+            'results' => [],
+        ]),
+        'seerr.local:5055/api/v1/discover/movies*' => Http::response(['results' => []]),
+        'seerr.local:5055/api/v1/discover/tv*' => Http::response(['results' => []]),
+    ]);
+
+    $this->client->warm();
+
+    // Tab → upstream filter mapping. Approved/Declined fall through to the
+    // unfiltered take=100 walk asserted below.
+    foreach ([null, 'pending', 'processing', 'available', 'completed'] as $filter) {
+        Http::assertSent(function (Request $request) use ($filter): bool {
+            if ($request->method() !== 'GET') {
+                return false;
+            }
+
+            if (! str_contains($request->url(), '/api/v1/request')) {
+                return false;
+            }
+
+            if (str_contains($request->url(), '/api/v1/request/count')) {
+                return false;
+            }
+
+            if (! str_contains($request->url(), 'take=50')) {
+                return false;
+            }
+
+            if ($filter === null) {
+                return ! str_contains($request->url(), 'filter=');
+            }
+
+            return str_contains($request->url(), 'filter='.$filter);
+        });
+    }
+
+    // Approved + Declined walk at take=100 (LOCAL_FILTER_PAGE_SIZE).
+    Http::assertSent(fn (Request $request): bool => $request->method() === 'GET'
+        && str_contains($request->url(), '/api/v1/request')
+        && ! str_contains($request->url(), '/api/v1/request/count')
+        && str_contains($request->url(), 'take=100')
+        && ! str_contains($request->url(), 'filter='));
+
+    // Plus the request-count, discover/movies and discover/tv warmups.
+    Http::assertSent(fn (Request $request): bool => str_contains($request->url(), '/api/v1/request/count'));
+    Http::assertSent(fn (Request $request): bool => str_contains($request->url(), '/api/v1/discover/movies'));
+    Http::assertSent(fn (Request $request): bool => str_contains($request->url(), '/api/v1/discover/tv'));
+});

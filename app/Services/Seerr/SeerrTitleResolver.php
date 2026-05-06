@@ -5,15 +5,22 @@ declare(strict_types=1);
 namespace App\Services\Seerr;
 
 use App\Models\ServiceConnection;
-use Illuminate\Http\Client\ConnectionException;
-use Illuminate\Http\Client\RequestException;
 use Illuminate\Support\Facades\Cache;
 
 class SeerrTitleResolver
 {
     /**
+     * Titles are essentially immutable once a TMDB record exists, so the
+     * resolver caches them aggressively — refetching only after a full day
+     * even though Seerr's underlying detail entity cache is shorter.
+     */
+    private const int TITLE_CACHE_TTL_SECONDS = 86_400;
+
+    /**
      * Given a list of Seerr request rows (each with media.mediaType + media.tmdbId),
-     * resolve a {mediaType:tmdbId => title} map. Cached 5 minutes per connection.
+     * resolve a {mediaType:tmdbId => title} map. Issues a single concurrent
+     * batch via SeerrClient::getMediaDetailsBatch for any titles missing
+     * from the cache, then folds the results in.
      *
      * @param  array<int, array<string, mixed>>  $requests
      * @return array<string, string>
@@ -21,14 +28,39 @@ class SeerrTitleResolver
     public function resolve(ServiceConnection $serviceConnection, SeerrClient $seerrClient, array $requests): array
     {
         $pairs = $this->extractPairs($requests);
+
+        if ($pairs === []) {
+            return [];
+        }
+
         $titles = [];
+        $missing = [];
 
         foreach ($pairs as $key => [$mediaType, $tmdbId]) {
-            $titles[$key] = Cache::remember(
+            $cached = Cache::get($this->cacheKey($serviceConnection, $mediaType, $tmdbId));
+            if (is_string($cached)) {
+                $titles[$key] = $cached;
+
+                continue;
+            }
+
+            $missing[$key] = [$mediaType, $tmdbId];
+        }
+
+        if ($missing === []) {
+            return $titles;
+        }
+
+        $details = $seerrClient->getMediaDetailsBatch(array_values($missing));
+
+        foreach ($missing as $key => [$mediaType, $tmdbId]) {
+            $title = $this->extractTitle($details[$key] ?? [], $mediaType, $tmdbId);
+            Cache::put(
                 $this->cacheKey($serviceConnection, $mediaType, $tmdbId),
-                now()->addMinutes(5),
-                fn (): string => $this->fetchTitle($seerrClient, $mediaType, $tmdbId),
+                $title,
+                self::TITLE_CACHE_TTL_SECONDS,
             );
+            $titles[$key] = $title;
         }
 
         return $titles;
@@ -88,16 +120,11 @@ class SeerrTitleResolver
         return sprintf('seerr:title:%d:%s:%d', $serviceConnection->id, $mediaType, $tmdbId);
     }
 
-    private function fetchTitle(SeerrClient $seerrClient, string $mediaType, int $tmdbId): string
+    /**
+     * @param  array<string, mixed>  $detail
+     */
+    private function extractTitle(array $detail, string $mediaType, int $tmdbId): string
     {
-        try {
-            $detail = $mediaType === 'movie'
-                ? $seerrClient->getMovieDetails($tmdbId)
-                : $seerrClient->getTvDetails($tmdbId);
-        } catch (RequestException|ConnectionException) {
-            return sprintf('%s #%d', ucfirst($mediaType), $tmdbId);
-        }
-
         return (string) (
             $detail['title']
             ?? $detail['name']

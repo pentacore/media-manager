@@ -138,4 +138,26 @@ return [
         'max_results' => (int) env('MEDIAMANAGER_SEARCH_MAX_RESULTS', 20),
         'instant_max_results' => (int) env('MEDIAMANAGER_SEARCH_INSTANT_MAX_RESULTS', 8),
     ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Presence
+    |--------------------------------------------------------------------------
+    |
+    | Lightweight presence tracker fed by the browser heartbeat — used by
+    | the cache warmer (`services:warm-caches`) to skip background upstream
+    | calls when nobody is interacting with the app.
+    |
+    */
+
+    'presence' => [
+        // Redis sorted-set key holding active-user ids scored by expiry timestamp.
+        // Override per-environment if you run multiple installations against
+        // the same Redis instance.
+        'key' => env('MEDIAMANAGER_PRESENCE_KEY', 'presence:users'),
+        // Each heartbeat extends the user's membership by this many seconds.
+        // Browser sends a heartbeat every 30s while interacting, so 90s gives
+        // three missed beats of grace before they fall out of "active".
+        'heartbeat_ttl' => (int) env('MEDIAMANAGER_PRESENCE_HEARTBEAT_TTL', 90),
+    ],
 ];
