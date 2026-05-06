@@ -16,6 +16,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useAiChat } from '@/composables/useAiChat';
 import type { AgentStep, ConversationMessage } from '@/composables/useAiChat';
+import { useMarkdown } from '@/composables/useMarkdown';
 import { useWebSocket } from '@/composables/useWebSocket';
 import { cn } from '@/lib/utils';
 import ConversationPicker from './ConversationPicker.vue';
@@ -54,6 +55,8 @@ const {
 
 const page = usePage();
 const userId = computed(() => Number(page.props.auth.user?.id ?? 0));
+
+const { render: renderMarkdown } = useMarkdown();
 
 const { privateChannel, leaveChannel } = useWebSocket();
 
@@ -575,11 +578,11 @@ function onRenameKey(event: KeyboardEvent): void {
                             }}
                         </p>
                     </div>
+                    <!-- v-html is fed by useMarkdown which sanitizes via DOMPurify. -->
                     <div
-                        class="text-[14px] leading-relaxed whitespace-pre-wrap"
-                    >
-                        {{ m.text }}
-                    </div>
+                        class="mm-markdown text-[14px] leading-relaxed"
+                        v-html="renderMarkdown(m.text)"
+                    />
                 </div>
             </div>
 
