@@ -51,44 +51,44 @@ class GetSeriesTool extends BaseTool
 
         $serviceConnection = ServiceConnection::resolveActive(ServiceType::Sonarr);
 
-        $base = IndexedSeries::query()->where('service_connection_id', $serviceConnection->id);
+        $builder = IndexedSeries::query()->where('service_connection_id', $serviceConnection->id);
 
         $monitored = $args['monitored'] ?? null;
         if (is_bool($monitored)) {
-            $base->where('monitored', $monitored);
+            $builder->where('monitored', $monitored);
         }
 
         $status = $args['status'] ?? null;
         if (is_string($status) && $status !== '') {
-            $base->where('status', $status);
+            $builder->where('status', $status);
         }
 
         $query = $args['query'] ?? null;
         if (is_string($query) && trim($query) !== '') {
-            $base->whereRaw('LOWER(title) LIKE ?', ['%'.mb_strtolower(trim($query)).'%']);
+            $builder->whereRaw('LOWER(title) LIKE ?', ['%'.mb_strtolower(trim($query)).'%']);
         }
 
         if (($args['count_only'] ?? false) === true) {
-            return $this->aggregate($serviceConnection->id, $base);
+            return $this->aggregate($serviceConnection->id, $builder);
         }
 
         $limit = max(1, min(self::MAX_LIMIT, (int) ($args['limit'] ?? self::DEFAULT_LIMIT)));
-        $total = (clone $base)->count();
-        $rows = $base->orderBy('title')->limit($limit)->get();
+        $total = (clone $builder)->count();
+        $rows = $builder->orderBy('title')->limit($limit)->get();
 
         return [
             'total_matched' => $total,
             'returned' => $rows->count(),
             'truncated' => $total > $rows->count(),
-            'series' => $rows->map(static fn (IndexedSeries $row): array => [
-                'id' => $row->sonarr_id,
-                'tvdb_id' => $row->tvdb_id,
-                'title' => $row->title,
-                'year' => $row->year,
-                'status' => $row->status,
-                'monitored' => $row->monitored,
-                'network' => $row->network,
-                'genres' => $row->genres,
+            'series' => $rows->map(static fn (IndexedSeries $indexedSeries): array => [
+                'id' => $indexedSeries->sonarr_id,
+                'tvdb_id' => $indexedSeries->tvdb_id,
+                'title' => $indexedSeries->title,
+                'year' => $indexedSeries->year,
+                'status' => $indexedSeries->status,
+                'monitored' => $indexedSeries->monitored,
+                'network' => $indexedSeries->network,
+                'genres' => $indexedSeries->genres,
             ])->all(),
         ];
     }
@@ -96,9 +96,9 @@ class GetSeriesTool extends BaseTool
     /**
      * @return array<string, mixed>
      */
-    private function aggregate(int $connectionId, Builder $filtered): array
+    private function aggregate(int $connectionId, Builder $builder): array
     {
-        $matched = (clone $filtered)->count();
+        $matched = (clone $builder)->count();
         $library = IndexedSeries::query()->where('service_connection_id', $connectionId);
 
         return [

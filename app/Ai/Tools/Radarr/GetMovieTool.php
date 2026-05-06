@@ -51,49 +51,49 @@ class GetMovieTool extends BaseTool
 
         $serviceConnection = ServiceConnection::resolveActive(ServiceType::Radarr);
 
-        $base = IndexedMovie::query()->where('service_connection_id', $serviceConnection->id);
+        $builder = IndexedMovie::query()->where('service_connection_id', $serviceConnection->id);
 
         $monitored = $args['monitored'] ?? null;
         if (is_bool($monitored)) {
-            $base->where('monitored', $monitored);
+            $builder->where('monitored', $monitored);
         }
 
         $hasFile = $args['has_file'] ?? null;
         if (is_bool($hasFile)) {
-            $base->where('has_file', $hasFile);
+            $builder->where('has_file', $hasFile);
         }
 
         $status = $args['status'] ?? null;
         if (is_string($status) && $status !== '') {
-            $base->where('status', $status);
+            $builder->where('status', $status);
         }
 
         $query = $args['query'] ?? null;
         if (is_string($query) && trim($query) !== '') {
-            $base->whereRaw('LOWER(title) LIKE ?', ['%'.mb_strtolower(trim($query)).'%']);
+            $builder->whereRaw('LOWER(title) LIKE ?', ['%'.mb_strtolower(trim($query)).'%']);
         }
 
         if (($args['count_only'] ?? false) === true) {
-            return $this->aggregate($serviceConnection->id, $base);
+            return $this->aggregate($serviceConnection->id, $builder);
         }
 
         $limit = max(1, min(self::MAX_LIMIT, (int) ($args['limit'] ?? self::DEFAULT_LIMIT)));
-        $total = (clone $base)->count();
-        $rows = $base->orderBy('title')->limit($limit)->get();
+        $total = (clone $builder)->count();
+        $rows = $builder->orderBy('title')->limit($limit)->get();
 
         return [
             'total_matched' => $total,
             'returned' => $rows->count(),
             'truncated' => $total > $rows->count(),
-            'movies' => $rows->map(static fn (IndexedMovie $row): array => [
-                'id' => $row->radarr_id,
-                'tmdb_id' => $row->tmdb_id,
-                'title' => $row->title,
-                'year' => $row->year,
-                'status' => $row->status,
-                'monitored' => $row->monitored,
-                'has_file' => $row->has_file,
-                'genres' => $row->genres,
+            'movies' => $rows->map(static fn (IndexedMovie $indexedMovie): array => [
+                'id' => $indexedMovie->radarr_id,
+                'tmdb_id' => $indexedMovie->tmdb_id,
+                'title' => $indexedMovie->title,
+                'year' => $indexedMovie->year,
+                'status' => $indexedMovie->status,
+                'monitored' => $indexedMovie->monitored,
+                'has_file' => $indexedMovie->has_file,
+                'genres' => $indexedMovie->genres,
             ])->all(),
         ];
     }
@@ -101,9 +101,9 @@ class GetMovieTool extends BaseTool
     /**
      * @return array<string, mixed>
      */
-    private function aggregate(int $connectionId, Builder $filtered): array
+    private function aggregate(int $connectionId, Builder $builder): array
     {
-        $matched = (clone $filtered)->count();
+        $matched = (clone $builder)->count();
         $library = IndexedMovie::query()->where('service_connection_id', $connectionId);
 
         return [
