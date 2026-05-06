@@ -63,10 +63,12 @@ function rename(): void {
                 <Button
                     variant="ghost"
                     size="sm"
-                    class="h-7 max-w-[220px] gap-1 px-2 text-xs"
+                    class="h-7 max-w-[360px] gap-1 px-2 text-xs"
                 >
                     <MessageSquare class="size-3.5 shrink-0" />
-                    <span class="truncate">{{ activeTitle }}</span>
+                    <span :title="activeTitle" class="truncate">{{
+                        activeTitle
+                    }}</span>
                     <ChevronDown class="size-3.5 shrink-0 opacity-60" />
                 </Button>
             </DropdownMenuTrigger>
@@ -108,7 +110,10 @@ function rename(): void {
                         "
                         @select="pick(convo.id)"
                     >
-                        <span class="line-clamp-1 font-medium">
+                        <span
+                            :title="convo.title"
+                            class="line-clamp-1 font-medium"
+                        >
                             {{ convo.title }}
                         </span>
                         <TimeStamp

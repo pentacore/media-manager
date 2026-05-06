@@ -384,7 +384,8 @@ function onRenameKey(event: KeyboardEvent): void {
                 <Sparkles class="size-4 text-accent" />
                 <span
                     v-if="!renaming"
-                    class="max-w-[180px] truncate font-semibold"
+                    :title="activeTitle"
+                    class="max-w-[360px] truncate font-semibold"
                 >
                     {{ activeTitle }}
                 </span>
