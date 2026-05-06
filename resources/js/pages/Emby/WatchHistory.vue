@@ -39,6 +39,13 @@ interface PaginatorMeta {
     per_page: number;
 }
 
+interface Totals {
+    total_ticks: number;
+    sessions: number;
+    completed_sessions: number;
+    top_user: { name: string; ticks: number; sessions: number } | null;
+}
+
 const props = defineProps<{
     connection: { url: string } | null;
     activities: {
@@ -46,6 +53,7 @@ const props = defineProps<{
         links: PaginatorLink[];
         meta: PaginatorMeta;
     };
+    totals: Totals;
     filters: { media_type: string; since: number | 'today' };
     filterOptions: { rangeDays: number[]; todayValue: 'today' };
 }>();
@@ -152,45 +160,17 @@ function completionPct(activity: Activity): number {
     return Math.min(100, (pos / dur) * 100);
 }
 
-const totals = computed(() => {
-    const items = visibleActivities.value;
-    let totalTicks = 0;
-    let completed = 0;
-    const userTicks = new Map<string, number>();
-
-    for (const a of items) {
-        const watched = a.play_position ?? 0;
-        totalTicks += watched;
-
-        if (completionPct(a) >= 90) {
-            completed++;
-        }
-
-        const u = a.emby_username ?? 'unknown';
-        userTicks.set(u, (userTicks.get(u) ?? 0) + watched);
-    }
-
-    let topUser: { name: string; ticks: number; sessions: number } | null =
-        null;
-
-    for (const [name, ticks] of userTicks) {
-        if (!topUser || ticks > topUser.ticks) {
-            topUser = {
-                name,
-                ticks,
-                sessions: items.filter(
-                    (a) => (a.emby_username ?? 'unknown') === name,
-                ).length,
-            };
-        }
-    }
+const totalsView = computed(() => {
+    const t = props.totals;
 
     return {
-        hours: ticksToHours(totalTicks),
-        sessions: items.length,
+        hours: ticksToHours(t.total_ticks),
+        sessions: t.sessions,
         completionRate:
-            items.length > 0 ? Math.round((completed / items.length) * 100) : 0,
-        topUser,
+            t.sessions > 0
+                ? Math.round((t.completed_sessions / t.sessions) * 100)
+                : 0,
+        topUser: t.top_user,
     };
 });
 
@@ -349,17 +329,17 @@ function currentFilter(): string {
         <div class="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
             <StatCard
                 label="Total watch time"
-                :value="`${totals.hours.toFixed(1)}h`"
-                :hint="`across ${totals.sessions} sessions`"
+                :value="`${totalsView.hours.toFixed(1)}h`"
+                :hint="`across ${totalsView.sessions} sessions`"
             />
             <StatCard
                 label="Sessions"
-                :value="totals.sessions"
-                hint="visible in this view"
+                :value="totalsView.sessions"
+                hint="in this range"
             />
             <StatCard
                 label="Completion rate"
-                :value="`${totals.completionRate}%`"
+                :value="`${totalsView.completionRate}%`"
                 hint="≥90% counted as complete"
             />
             <div
@@ -369,17 +349,23 @@ function currentFilter(): string {
                     class="text-[11.5px] font-semibold tracking-[0.05em] text-muted-foreground uppercase"
                     >Top user</span
                 >
-                <div v-if="totals.topUser" class="flex items-center gap-2.5">
-                    <InitialsAvatar :name="totals.topUser.name" :size="32" />
+                <div
+                    v-if="totalsView.topUser"
+                    class="flex items-center gap-2.5"
+                >
+                    <InitialsAvatar
+                        :name="totalsView.topUser.name"
+                        :size="32"
+                    />
                     <div>
                         <div class="text-[15px] font-semibold">
-                            {{ totals.topUser.name }}
+                            {{ totalsView.topUser.name }}
                         </div>
                         <div
                             class="font-mono-tabular text-[11.5px] text-muted-foreground"
                         >
-                            {{ ticksToText(totals.topUser.ticks) }} ·
-                            {{ totals.topUser.sessions }} sessions
+                            {{ ticksToText(totalsView.topUser.ticks) }} ·
+                            {{ totalsView.topUser.sessions }} sessions
                         </div>
                     </div>
                 </div>
@@ -458,7 +444,7 @@ function currentFilter(): string {
                             <td
                                 class="font-mono-tabular px-3 py-2.5 text-[12px]"
                             >
-                                {{ ticksToText(activity.duration_ticks) }}
+                                {{ ticksToText(activity.play_position) }}
                             </td>
                             <td class="px-3 py-2.5">
                                 <div class="flex items-center gap-2">

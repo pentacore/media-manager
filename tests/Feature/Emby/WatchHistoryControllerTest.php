@@ -145,3 +145,89 @@ test('results are paginated at 25 per page', function (): void {
             ->where('activities.meta.last_page', 2)
         );
 });
+
+test('totals reflect full filtered range, not just paginated page', function (): void {
+    $admin = User::factory()->admin()->create();
+
+    $heavyLink = EmbyUserLink::factory()->create(['emby_username' => 'heavy']);
+    $lightLink = EmbyUserLink::factory()->create(['emby_username' => 'light']);
+
+    // 30 sessions for "heavy" — bigger total than 5 sessions for "light".
+    EmbyActivity::factory()->count(30)->create([
+        'emby_user_link_id' => $heavyLink->id,
+        'duration_ticks' => 100_000_000,
+        'play_position' => 90_000_000, // ≥90% — counts as completed
+    ]);
+
+    EmbyActivity::factory()->count(5)->create([
+        'emby_user_link_id' => $lightLink->id,
+        'duration_ticks' => 100_000_000,
+        'play_position' => 50_000_000, // <90%
+    ]);
+
+    $this->actingAs($admin)
+        ->get(route('monitoring.watch-history'))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->has('activities.data', 25) // paginated
+            ->where('totals.sessions', 35) // full range
+            ->where('totals.completed_sessions', 30)
+            ->where('totals.total_ticks', (30 * 90_000_000) + (5 * 50_000_000))
+            ->where('totals.top_user.name', 'heavy')
+            ->where('totals.top_user.ticks', 30 * 90_000_000)
+            ->where('totals.top_user.sessions', 30)
+        );
+});
+
+test('totals respect viewer scope', function (): void {
+    $viewer = User::factory()->create();
+    $myLink = EmbyUserLink::factory()->create(['user_id' => $viewer->id, 'emby_username' => 'me']);
+    $otherLink = EmbyUserLink::factory()->create(['emby_username' => 'them']);
+
+    EmbyActivity::factory()->count(2)->create([
+        'emby_user_link_id' => $myLink->id,
+        'duration_ticks' => 100,
+        'play_position' => 80,
+    ]);
+    EmbyActivity::factory()->count(10)->create([
+        'emby_user_link_id' => $otherLink->id,
+        'duration_ticks' => 100,
+        'play_position' => 95,
+    ]);
+
+    $this->actingAs($viewer)
+        ->get(route('monitoring.watch-history'))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->where('totals.sessions', 2)
+            ->where('totals.total_ticks', 160)
+            ->where('totals.top_user.name', 'me')
+        );
+});
+
+test('totals respect media_type filter', function (): void {
+    $admin = User::factory()->admin()->create();
+    $link = EmbyUserLink::factory()->create();
+
+    EmbyActivity::factory()->count(3)->create([
+        'emby_user_link_id' => $link->id,
+        'media_type' => 'movie',
+        'duration_ticks' => 100,
+        'play_position' => 100,
+    ]);
+    EmbyActivity::factory()->count(5)->create([
+        'emby_user_link_id' => $link->id,
+        'media_type' => 'episode',
+        'duration_ticks' => 100,
+        'play_position' => 50,
+    ]);
+
+    $this->actingAs($admin)
+        ->get(route('monitoring.watch-history', ['media_type' => 'movie']))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->where('totals.sessions', 3)
+            ->where('totals.completed_sessions', 3)
+            ->where('totals.total_ticks', 300)
+        );
+});
