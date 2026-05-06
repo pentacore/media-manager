@@ -8,13 +8,14 @@ import {
     History,
     Inbox,
     LayoutGrid,
+    Loader2,
     ScrollText,
     Search as SearchIcon,
     Tv,
     Zap,
 } from 'lucide-vue-next';
 import type { Component } from 'vue';
-import { computed, nextTick, onMounted, ref, useTemplateRef, watch } from 'vue';
+import { computed, nextTick, onMounted, useTemplateRef, watch } from 'vue';
 import ActionRequestController from '@/actions/App/Http/Controllers/Actions/ActionRequestController';
 import ActivityLogController from '@/actions/App/Http/Controllers/ActivityLogController';
 import NowPlayingController from '@/actions/App/Http/Controllers/Emby/NowPlayingController';
@@ -32,6 +33,7 @@ import {
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { useCommandPalette } from '@/composables/useCommandPalette';
+import { useInstantSearch } from '@/composables/useInstantSearch';
 import { dashboard } from '@/routes';
 
 interface QuickLink {
@@ -41,7 +43,12 @@ interface QuickLink {
 }
 
 const { open } = useCommandPalette();
-const query = ref('');
+const {
+    query,
+    series: instantSeries,
+    movies: instantMovies,
+    loading: instantLoading,
+} = useInstantSearch();
 const inputEl = useTemplateRef<HTMLInputElement>('inputEl');
 
 const quickLinks = computed<QuickLink[]>(() => [
@@ -87,6 +94,19 @@ const filteredLinks = computed(() => {
         link.title.toLowerCase().includes(q),
     );
 });
+
+const hasMediaResults = computed(
+    () => instantSeries.value.length > 0 || instantMovies.value.length > 0,
+);
+
+function navigateMedia(kind: 'series' | 'movie', id: number): void {
+    open.value = false;
+    router.visit(
+        kind === 'series'
+            ? SeriesController.show.url({ id })
+            : MovieController.show.url({ id }),
+    );
+}
 
 onMounted(() => {
     // Bind on document with capture so browser-level Cmd/Ctrl+K shortcuts
@@ -193,14 +213,94 @@ function onInputKey(event: KeyboardEvent): void {
                 </kbd>
             </form>
 
-            <div class="max-h-80 overflow-y-auto p-2">
+            <div class="max-h-96 overflow-y-auto p-2">
+                <div v-if="hasMediaResults" class="mb-2 border-b pb-2">
+                    <p
+                        class="px-3 pb-1 text-[11px] font-medium tracking-wider text-muted-foreground uppercase"
+                    >
+                        Library
+                    </p>
+                    <ul class="space-y-1">
+                        <li
+                            v-for="hit in instantSeries"
+                            :key="`series-${hit.id}`"
+                        >
+                            <button
+                                type="button"
+                                data-palette-link
+                                class="flex w-full items-center gap-2 rounded-sm px-3 py-2 text-left text-sm hover:bg-accent focus:bg-accent focus:outline-none"
+                                @click="navigateMedia('series', hit.id)"
+                            >
+                                <Tv
+                                    class="size-4 shrink-0 text-muted-foreground"
+                                />
+                                <span class="truncate">{{ hit.title }}</span>
+                                <span
+                                    v-if="hit.year"
+                                    class="text-xs text-muted-foreground"
+                                >
+                                    {{ hit.year }}
+                                </span>
+                                <span
+                                    class="ml-auto rounded bg-muted px-1.5 py-0.5 text-[10px] tracking-wider text-muted-foreground uppercase"
+                                >
+                                    Series
+                                </span>
+                            </button>
+                        </li>
+                        <li
+                            v-for="hit in instantMovies"
+                            :key="`movie-${hit.id}`"
+                        >
+                            <button
+                                type="button"
+                                data-palette-link
+                                class="flex w-full items-center gap-2 rounded-sm px-3 py-2 text-left text-sm hover:bg-accent focus:bg-accent focus:outline-none"
+                                @click="navigateMedia('movie', hit.id)"
+                            >
+                                <Film
+                                    class="size-4 shrink-0 text-muted-foreground"
+                                />
+                                <span class="truncate">{{ hit.title }}</span>
+                                <span
+                                    v-if="hit.year"
+                                    class="text-xs text-muted-foreground"
+                                >
+                                    {{ hit.year }}
+                                </span>
+                                <span
+                                    class="ml-auto rounded bg-muted px-1.5 py-0.5 text-[10px] tracking-wider text-muted-foreground uppercase"
+                                >
+                                    Movie
+                                </span>
+                            </button>
+                        </li>
+                    </ul>
+                </div>
                 <p
-                    v-if="filteredLinks.length === 0"
+                    v-if="instantLoading && !hasMediaResults"
+                    class="flex items-center justify-center gap-2 px-3 py-4 text-sm text-muted-foreground"
+                >
+                    <Loader2 class="size-4 animate-spin" />
+                    Searching library…
+                </p>
+                <p
+                    v-if="
+                        filteredLinks.length === 0 &&
+                        !hasMediaResults &&
+                        !instantLoading
+                    "
                     class="px-3 py-6 text-center text-sm text-muted-foreground"
                 >
                     No matching pages — press Enter to search your library.
                 </p>
-                <ul v-else class="space-y-1">
+                <ul v-if="filteredLinks.length > 0" class="space-y-1">
+                    <li
+                        v-if="hasMediaResults"
+                        class="px-3 pb-1 text-[11px] font-medium tracking-wider text-muted-foreground uppercase"
+                    >
+                        Pages
+                    </li>
                     <li v-for="link in filteredLinks" :key="link.href">
                         <button
                             type="button"

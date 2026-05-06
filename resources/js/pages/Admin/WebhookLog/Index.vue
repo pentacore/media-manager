@@ -253,91 +253,101 @@ function svcId(type: string | null): string {
         </div>
 
         <div class="overflow-hidden rounded-xl border border-border bg-card">
-            <table class="w-full border-collapse text-[13px]">
-                <thead>
-                    <tr>
-                        <th
-                            v-for="h in [
-                                'Received',
-                                'Service',
-                                'Event',
-                                'Processed',
-                                'Hash',
-                                '',
-                            ]"
-                            :key="h"
-                            class="border-b border-border bg-card px-3 py-2 text-left text-[11.5px] font-medium tracking-[0.05em] text-muted-foreground uppercase"
-                        >
-                            {{ h }}
-                        </th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <tr
-                        v-for="event in events.data"
-                        :key="event.id"
-                        class="border-b border-border last:border-b-0 hover:bg-bg-hover"
-                    >
-                        <td
-                            class="font-mono-tabular px-3 py-2.5 text-[11.5px] whitespace-nowrap text-fg-subtle"
-                        >
-                            {{ formatTime(event.created_at) }}
-                        </td>
-                        <td class="px-3 py-2.5">
-                            <span class="inline-flex items-center gap-2">
-                                <SvcChip
-                                    v-if="event.service_type"
-                                    :id="svcId(event.service_type)"
-                                />
-                                <span>{{ event.service_name ?? '—' }}</span>
-                            </span>
-                        </td>
-                        <td class="font-mono-tabular px-3 py-2.5 text-[12px]">
-                            {{ event.event_type ?? '—' }}
-                        </td>
-                        <td class="px-3 py-2.5">
-                            <Pill
-                                :variant="event.processed_at ? 'ok' : 'warn'"
-                                :dot="!!event.processed_at"
+            <div class="overflow-x-auto">
+                <table class="w-full border-collapse text-[13px]">
+                    <thead>
+                        <tr>
+                            <th
+                                v-for="h in [
+                                    'Received',
+                                    'Service',
+                                    'Event',
+                                    'Processed',
+                                    'Hash',
+                                    '',
+                                ]"
+                                :key="h"
+                                class="border-b border-border bg-card px-3 py-2 text-left text-[11.5px] font-medium tracking-[0.05em] text-muted-foreground uppercase"
                             >
-                                {{
-                                    event.processed_at ? 'processed' : 'pending'
-                                }}
-                            </Pill>
-                        </td>
-                        <td
-                            class="font-mono-tabular px-3 py-2.5 text-[10.5px] text-fg-subtle"
+                                {{ h }}
+                            </th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr
+                            v-for="event in events.data"
+                            :key="event.id"
+                            class="border-b border-border last:border-b-0 hover:bg-bg-hover"
                         >
-                            <span :title="event.payload_hash ?? ''">{{
-                                event.payload_hash
-                                    ? event.payload_hash.slice(0, 10)
-                                    : '—'
-                            }}</span>
-                        </td>
-                        <td class="px-3 py-2.5 text-right">
-                            <Link
-                                :href="WebhookLogController.show.url(event.id)"
+                            <td
+                                class="font-mono-tabular px-3 py-2.5 text-[11.5px] whitespace-nowrap text-fg-subtle"
                             >
-                                <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    class="h-7 px-2 text-xs"
+                                {{ formatTime(event.created_at) }}
+                            </td>
+                            <td class="px-3 py-2.5">
+                                <span class="inline-flex items-center gap-2">
+                                    <SvcChip
+                                        v-if="event.service_type"
+                                        :id="svcId(event.service_type)"
+                                    />
+                                    <span>{{ event.service_name ?? '—' }}</span>
+                                </span>
+                            </td>
+                            <td
+                                class="font-mono-tabular px-3 py-2.5 text-[12px]"
+                            >
+                                {{ event.event_type ?? '—' }}
+                            </td>
+                            <td class="px-3 py-2.5">
+                                <Pill
+                                    :variant="
+                                        event.processed_at ? 'ok' : 'warn'
+                                    "
+                                    :dot="!!event.processed_at"
                                 >
-                                    <Webhook class="size-3.5" />View
-                                </Button>
-                            </Link>
-                        </td>
-                    </tr>
-                    <tr v-if="events.data.length === 0">
-                        <td
-                            colspan="6"
-                            class="px-3 py-12 text-center text-sm text-fg-subtle"
-                        >
-                            No webhook events recorded yet.
-                        </td>
-                    </tr>
-                </tbody>
-            </table>
+                                    {{
+                                        event.processed_at
+                                            ? 'processed'
+                                            : 'pending'
+                                    }}
+                                </Pill>
+                            </td>
+                            <td
+                                class="font-mono-tabular px-3 py-2.5 text-[10.5px] text-fg-subtle"
+                            >
+                                <span :title="event.payload_hash ?? ''">{{
+                                    event.payload_hash
+                                        ? event.payload_hash.slice(0, 10)
+                                        : '—'
+                                }}</span>
+                            </td>
+                            <td class="px-3 py-2.5 text-right">
+                                <Link
+                                    :href="
+                                        WebhookLogController.show.url(event.id)
+                                    "
+                                >
+                                    <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        class="h-7 px-2 text-xs"
+                                    >
+                                        <Webhook class="size-3.5" />View
+                                    </Button>
+                                </Link>
+                            </td>
+                        </tr>
+                        <tr v-if="events.data.length === 0">
+                            <td
+                                colspan="6"
+                                class="px-3 py-12 text-center text-sm text-fg-subtle"
+                            >
+                                No webhook events recorded yet.
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
         </div>
 
         <div

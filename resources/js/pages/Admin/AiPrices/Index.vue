@@ -470,129 +470,139 @@ const priciest = ref(
                     </button>
                 </div>
             </div>
-            <table class="w-full border-collapse text-[13px]">
-                <thead>
-                    <tr>
-                        <th
-                            v-for="h in [
-                                'Model',
-                                'Provider',
-                                'Input',
-                                'Output',
-                                'Cache R',
-                                'Cache W',
-                                'Reasoning',
-                                '',
-                            ]"
-                            :key="h"
-                            class="border-b border-border bg-card px-3 py-2 text-left text-[11.5px] font-medium tracking-[0.05em] text-muted-foreground uppercase"
-                        >
-                            {{ h }}
-                        </th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <tr
-                        v-for="price in prices"
-                        :key="price.id"
-                        class="border-b border-border last:border-b-0 hover:bg-bg-hover"
-                        :class="
-                            showBatch && !hasBatch(price) ? 'opacity-50' : ''
-                        "
-                    >
-                        <td class="px-3 py-2.5">
-                            <div
-                                class="font-mono-tabular text-[12.5px] font-medium"
+            <div class="overflow-x-auto">
+                <table class="w-full border-collapse text-[13px]">
+                    <thead>
+                        <tr>
+                            <th
+                                v-for="h in [
+                                    'Model',
+                                    'Provider',
+                                    'Input',
+                                    'Output',
+                                    'Cache R',
+                                    'Cache W',
+                                    'Reasoning',
+                                    '',
+                                ]"
+                                :key="h"
+                                class="border-b border-border bg-card px-3 py-2 text-left text-[11.5px] font-medium tracking-[0.05em] text-muted-foreground uppercase"
                             >
-                                {{ price.model }}
-                            </div>
-                            <div
-                                v-if="showBatch && !hasBatch(price)"
-                                class="text-[11px] text-fg-subtle"
+                                {{ h }}
+                            </th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr
+                            v-for="price in prices"
+                            :key="price.id"
+                            class="border-b border-border last:border-b-0 hover:bg-bg-hover"
+                            :class="
+                                showBatch && !hasBatch(price)
+                                    ? 'opacity-50'
+                                    : ''
+                            "
+                        >
+                            <td class="px-3 py-2.5">
+                                <div
+                                    class="font-mono-tabular text-[12.5px] font-medium"
+                                >
+                                    {{ price.model }}
+                                </div>
+                                <div
+                                    v-if="showBatch && !hasBatch(price)"
+                                    class="text-[11px] text-fg-subtle"
+                                >
+                                    no batch — showing standard
+                                </div>
+                            </td>
+                            <td class="px-3 py-2.5">
+                                <Pill>{{ price.provider }}</Pill>
+                            </td>
+                            <td
+                                class="font-mono-tabular px-3 py-2.5 text-right"
                             >
-                                no batch — showing standard
-                            </div>
-                        </td>
-                        <td class="px-3 py-2.5">
-                            <Pill>{{ price.provider }}</Pill>
-                        </td>
-                        <td class="font-mono-tabular px-3 py-2.5 text-right">
-                            {{
-                                fmt(
-                                    rateFor(price, 'input_per_mtok') ??
-                                        price.input_per_mtok,
-                                )
-                            }}
-                        </td>
-                        <td class="font-mono-tabular px-3 py-2.5 text-right">
-                            {{
-                                fmt(
-                                    rateFor(price, 'output_per_mtok') ??
-                                        price.output_per_mtok,
-                                )
-                            }}
-                        </td>
-                        <td
-                            class="font-mono-tabular px-3 py-2.5 text-right text-fg-subtle"
-                        >
-                            {{
-                                fmt(
-                                    rateFor(price, 'cache_read_per_mtok') ??
-                                        price.cache_read_per_mtok,
-                                )
-                            }}
-                        </td>
-                        <td
-                            class="font-mono-tabular px-3 py-2.5 text-right text-fg-subtle"
-                        >
-                            {{
-                                fmt(
-                                    rateFor(price, 'cache_write_per_mtok') ??
-                                        price.cache_write_per_mtok,
-                                )
-                            }}
-                        </td>
-                        <td
-                            class="font-mono-tabular px-3 py-2.5 text-right text-fg-subtle"
-                        >
-                            {{
-                                fmt(
-                                    rateFor(price, 'reasoning_per_mtok') ??
-                                        price.reasoning_per_mtok,
-                                )
-                            }}
-                        </td>
-                        <td class="px-3 py-2.5 text-right">
-                            <div class="flex justify-end gap-1">
-                                <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    class="h-7 px-2 text-xs"
-                                    @click="startEdit(price)"
-                                >
-                                    Edit
-                                </Button>
-                                <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    class="size-7 p-0 text-destructive hover:text-destructive"
-                                    @click="destroy(price)"
-                                >
-                                    <Trash2 class="size-3.5" />
-                                </Button>
-                            </div>
-                        </td>
-                    </tr>
-                    <tr v-if="prices.length === 0">
-                        <td
-                            colspan="8"
-                            class="px-3 py-8 text-center text-sm text-fg-subtle"
-                        >
-                            No models priced yet. Click "Add model price".
-                        </td>
-                    </tr>
-                </tbody>
-            </table>
+                                {{
+                                    fmt(
+                                        rateFor(price, 'input_per_mtok') ??
+                                            price.input_per_mtok,
+                                    )
+                                }}
+                            </td>
+                            <td
+                                class="font-mono-tabular px-3 py-2.5 text-right"
+                            >
+                                {{
+                                    fmt(
+                                        rateFor(price, 'output_per_mtok') ??
+                                            price.output_per_mtok,
+                                    )
+                                }}
+                            </td>
+                            <td
+                                class="font-mono-tabular px-3 py-2.5 text-right text-fg-subtle"
+                            >
+                                {{
+                                    fmt(
+                                        rateFor(price, 'cache_read_per_mtok') ??
+                                            price.cache_read_per_mtok,
+                                    )
+                                }}
+                            </td>
+                            <td
+                                class="font-mono-tabular px-3 py-2.5 text-right text-fg-subtle"
+                            >
+                                {{
+                                    fmt(
+                                        rateFor(
+                                            price,
+                                            'cache_write_per_mtok',
+                                        ) ?? price.cache_write_per_mtok,
+                                    )
+                                }}
+                            </td>
+                            <td
+                                class="font-mono-tabular px-3 py-2.5 text-right text-fg-subtle"
+                            >
+                                {{
+                                    fmt(
+                                        rateFor(price, 'reasoning_per_mtok') ??
+                                            price.reasoning_per_mtok,
+                                    )
+                                }}
+                            </td>
+                            <td class="px-3 py-2.5 text-right">
+                                <div class="flex justify-end gap-1">
+                                    <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        class="h-7 px-2 text-xs"
+                                        @click="startEdit(price)"
+                                    >
+                                        Edit
+                                    </Button>
+                                    <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        class="size-7 p-0 text-destructive hover:text-destructive"
+                                        @click="destroy(price)"
+                                    >
+                                        <Trash2 class="size-3.5" />
+                                    </Button>
+                                </div>
+                            </td>
+                        </tr>
+                        <tr v-if="prices.length === 0">
+                            <td
+                                colspan="8"
+                                class="px-3 py-8 text-center text-sm text-fg-subtle"
+                            >
+                                No models priced yet. Click "Add model price".
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
         </div>
 
         <!-- Edit dialog -->

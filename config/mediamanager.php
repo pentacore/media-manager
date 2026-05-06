@@ -120,4 +120,22 @@ return [
     'webhooks' => [
         'capture_enabled' => (bool) env('MEDIAMANAGER_WEBHOOKS_CAPTURE_ENABLED', true),
     ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Search
+    |--------------------------------------------------------------------------
+    |
+    | Drives the unified-search and Cmd-K palette. 'typesense' queries the
+    | Scout-backed Series/Movie indexes; 'fallback' bypasses Typesense and
+    | hits Sonarr/Radarr APIs directly with a substring filter (the original
+    | pre-Typesense behavior, kept for emergency rollback).
+    |
+    */
+
+    'search' => [
+        'driver' => env('MEDIAMANAGER_SEARCH_DRIVER', 'typesense'),
+        'max_results' => (int) env('MEDIAMANAGER_SEARCH_MAX_RESULTS', 20),
+        'instant_max_results' => (int) env('MEDIAMANAGER_SEARCH_INSTANT_MAX_RESULTS', 8),
+    ],
 ];

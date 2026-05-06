@@ -402,101 +402,107 @@ function currentFilter(): string {
 
         <!-- Table -->
         <div class="overflow-hidden rounded-xl border border-border bg-card">
-            <table class="w-full border-collapse text-[13px]">
-                <thead>
-                    <tr>
-                        <th
-                            v-for="h in [
-                                'Started',
-                                'User',
-                                'Title',
-                                'Watched',
-                                'Completion',
-                                'Type',
-                            ]"
-                            :key="h"
-                            class="border-b border-border bg-card px-3 py-2 text-left text-[11.5px] font-medium tracking-[0.05em] text-muted-foreground uppercase"
-                        >
-                            {{ h }}
-                        </th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <tr
-                        v-for="activity in visibleActivities"
-                        :key="activity.id"
-                        class="border-b border-border last:border-b-0 hover:bg-bg-hover"
-                    >
-                        <td
-                            class="font-mono-tabular px-3 py-2.5 text-[11.5px] whitespace-nowrap text-fg-subtle"
-                        >
-                            <TimeStamp :iso="activity.created_at" />
-                        </td>
-                        <td class="px-3 py-2.5">
-                            <span class="flex items-center gap-2">
-                                <InitialsAvatar
-                                    :name="activity.emby_username ?? '?'"
-                                    :size="20"
-                                />
-                                <span>{{ activity.emby_username ?? '—' }}</span>
-                            </span>
-                        </td>
-                        <td class="px-3 py-2.5">
-                            <div class="font-medium">
-                                {{ activity.media_title ?? '—' }}
-                            </div>
-                            <div
-                                v-if="activity.series_title"
-                                class="text-[11.5px] text-muted-foreground"
+            <div class="overflow-x-auto">
+                <table class="w-full border-collapse text-[13px]">
+                    <thead>
+                        <tr>
+                            <th
+                                v-for="h in [
+                                    'Started',
+                                    'User',
+                                    'Title',
+                                    'Watched',
+                                    'Completion',
+                                    'Type',
+                                ]"
+                                :key="h"
+                                class="border-b border-border bg-card px-3 py-2 text-left text-[11.5px] font-medium tracking-[0.05em] text-muted-foreground uppercase"
                             >
-                                {{ activity.series_title }}
-                            </div>
-                        </td>
-                        <td class="font-mono-tabular px-3 py-2.5 text-[12px]">
-                            {{ ticksToText(activity.duration_ticks) }}
-                        </td>
-                        <td class="px-3 py-2.5">
-                            <div class="flex items-center gap-2">
-                                <div
-                                    class="h-1 w-20 overflow-hidden rounded-full bg-bg-elev"
-                                >
-                                    <div
-                                        class="h-full rounded-full"
-                                        :class="
-                                            completionPct(activity) < 50
-                                                ? 'bg-warning'
-                                                : 'bg-accent'
-                                        "
-                                        :style="{
-                                            width: `${completionPct(activity)}%`,
-                                        }"
-                                    />
-                                </div>
-                                <span
-                                    class="font-mono-tabular w-10 text-[11.5px]"
-                                    >{{
-                                        Math.round(completionPct(activity))
-                                    }}%</span
-                                >
-                            </div>
-                        </td>
-                        <td class="px-3 py-2.5">
-                            <Pill v-if="activity.media_type">{{
-                                activity.media_type
-                            }}</Pill>
-                            <span v-else class="text-fg-subtle">—</span>
-                        </td>
-                    </tr>
-                    <tr v-if="visibleActivities.length === 0">
-                        <td
-                            colspan="6"
-                            class="px-3 py-8 text-center text-sm text-fg-subtle"
+                                {{ h }}
+                            </th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr
+                            v-for="activity in visibleActivities"
+                            :key="activity.id"
+                            class="border-b border-border last:border-b-0 hover:bg-bg-hover"
                         >
-                            No activity yet.
-                        </td>
-                    </tr>
-                </tbody>
-            </table>
+                            <td
+                                class="font-mono-tabular px-3 py-2.5 text-[11.5px] whitespace-nowrap text-fg-subtle"
+                            >
+                                <TimeStamp :iso="activity.created_at" />
+                            </td>
+                            <td class="px-3 py-2.5">
+                                <span class="flex items-center gap-2">
+                                    <InitialsAvatar
+                                        :name="activity.emby_username ?? '?'"
+                                        :size="20"
+                                    />
+                                    <span>{{
+                                        activity.emby_username ?? '—'
+                                    }}</span>
+                                </span>
+                            </td>
+                            <td class="px-3 py-2.5">
+                                <div class="font-medium">
+                                    {{ activity.media_title ?? '—' }}
+                                </div>
+                                <div
+                                    v-if="activity.series_title"
+                                    class="text-[11.5px] text-muted-foreground"
+                                >
+                                    {{ activity.series_title }}
+                                </div>
+                            </td>
+                            <td
+                                class="font-mono-tabular px-3 py-2.5 text-[12px]"
+                            >
+                                {{ ticksToText(activity.duration_ticks) }}
+                            </td>
+                            <td class="px-3 py-2.5">
+                                <div class="flex items-center gap-2">
+                                    <div
+                                        class="h-1 w-20 overflow-hidden rounded-full bg-bg-elev"
+                                    >
+                                        <div
+                                            class="h-full rounded-full"
+                                            :class="
+                                                completionPct(activity) < 50
+                                                    ? 'bg-warning'
+                                                    : 'bg-accent'
+                                            "
+                                            :style="{
+                                                width: `${completionPct(activity)}%`,
+                                            }"
+                                        />
+                                    </div>
+                                    <span
+                                        class="font-mono-tabular w-10 text-[11.5px]"
+                                        >{{
+                                            Math.round(completionPct(activity))
+                                        }}%</span
+                                    >
+                                </div>
+                            </td>
+                            <td class="px-3 py-2.5">
+                                <Pill v-if="activity.media_type">{{
+                                    activity.media_type
+                                }}</Pill>
+                                <span v-else class="text-fg-subtle">—</span>
+                            </td>
+                        </tr>
+                        <tr v-if="visibleActivities.length === 0">
+                            <td
+                                colspan="6"
+                                class="px-3 py-8 text-center text-sm text-fg-subtle"
+                            >
+                                No activity yet.
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
         </div>
 
         <!-- Pagination -->

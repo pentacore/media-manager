@@ -6,6 +6,8 @@ namespace App\Http\Controllers\Media;
 
 use App\Enums\ServiceType;
 use App\Http\Controllers\Controller;
+use App\Models\IndexedMovie;
+use App\Models\IndexedSeries;
 use App\Models\ServiceConnection;
 use App\Services\Prowlarr\ProwlarrClient;
 use App\Services\Radarr\RadarrClient;
@@ -22,6 +24,18 @@ use Throwable;
 class SearchController extends Controller
 {
     private const int MAX_RESULTS = 20;
+
+    private function maxResults(): int
+    {
+        return (int) config('mediamanager.search.max_results', self::MAX_RESULTS);
+    }
+
+    private function driver(): string
+    {
+        $driver = config('mediamanager.search.driver', 'typesense');
+
+        return is_string($driver) ? $driver : 'typesense';
+    }
 
     public function index(Request $request): Response
     {
@@ -87,6 +101,109 @@ class SearchController extends Controller
      */
     private function searchSonarr(string $term): array
     {
+        return $this->driver() === 'fallback'
+            ? $this->searchSonarrFallback($term)
+            : $this->searchSonarrTypesense($term);
+    }
+
+    /**
+     * @return array{results: array<int, array<string, mixed>>, error: ?string}
+     */
+    private function searchRadarr(string $term): array
+    {
+        return $this->driver() === 'fallback'
+            ? $this->searchRadarrFallback($term)
+            : $this->searchRadarrTypesense($term);
+    }
+
+    /**
+     * @return array{results: array<int, array<string, mixed>>, error: ?string}
+     */
+    private function searchSonarrTypesense(string $term): array
+    {
+        try {
+            $connection = ServiceConnection::resolveActive(ServiceType::Sonarr);
+        } catch (ModelNotFoundException) {
+            return ['results' => [], 'error' => 'No active Sonarr connection configured.'];
+        }
+
+        $max = $this->maxResults();
+
+        try {
+            $hits = IndexedSeries::search($term)
+                ->options([
+                    'filter_by' => 'service_connection_id:='.$connection->id,
+                    'per_page' => $max,
+                ])
+                ->take($max)
+                ->get();
+        } catch (Throwable $throwable) {
+            return $this->serviceFailure('sonarr', $throwable);
+        }
+
+        return [
+            'results' => $hits->map(static fn (IndexedSeries $indexedSeries): array => [
+                'id' => $indexedSeries->sonarr_id,
+                'tvdb_id' => $indexedSeries->tvdb_id,
+                'title' => $indexedSeries->title,
+                'year' => $indexedSeries->year,
+                'overview' => $indexedSeries->overview,
+                'title_slug' => $indexedSeries->title_slug,
+                'status' => $indexedSeries->status,
+                'monitored' => $indexedSeries->monitored,
+                'remote_poster' => $indexedSeries->poster_url,
+            ])->all(),
+            'error' => null,
+        ];
+    }
+
+    /**
+     * @return array{results: array<int, array<string, mixed>>, error: ?string}
+     */
+    private function searchRadarrTypesense(string $term): array
+    {
+        try {
+            $connection = ServiceConnection::resolveActive(ServiceType::Radarr);
+        } catch (ModelNotFoundException) {
+            return ['results' => [], 'error' => 'No active Radarr connection configured.'];
+        }
+
+        $max = $this->maxResults();
+
+        try {
+            $hits = IndexedMovie::search($term)
+                ->options([
+                    'filter_by' => 'service_connection_id:='.$connection->id,
+                    'per_page' => $max,
+                ])
+                ->take($max)
+                ->get();
+        } catch (Throwable $throwable) {
+            return $this->serviceFailure('radarr', $throwable);
+        }
+
+        return [
+            'results' => $hits->map(static fn (IndexedMovie $indexedMovie): array => [
+                'id' => $indexedMovie->radarr_id,
+                'tmdb_id' => $indexedMovie->tmdb_id,
+                'title' => $indexedMovie->title,
+                'year' => $indexedMovie->year,
+                'overview' => $indexedMovie->overview,
+                'title_slug' => $indexedMovie->title_slug,
+                'status' => $indexedMovie->status,
+                'monitored' => $indexedMovie->monitored,
+                'has_file' => $indexedMovie->has_file,
+                'remote_poster' => $indexedMovie->poster_url,
+            ])->all(),
+            'error' => null,
+        ];
+    }
+
+    /**
+     * @return array{results: array<int, array<string, mixed>>, error: ?string}
+     */
+    private function searchSonarrFallback(string $term): array
+    {
         try {
             $sonarrClient = new SonarrClient(ServiceConnection::resolveActive(ServiceType::Sonarr));
             $items = $sonarrClient->getSeries();
@@ -117,7 +234,7 @@ class SearchController extends Controller
     /**
      * @return array{results: array<int, array<string, mixed>>, error: ?string}
      */
-    private function searchRadarr(string $term): array
+    private function searchRadarrFallback(string $term): array
     {
         try {
             $radarrClient = new RadarrClient(ServiceConnection::resolveActive(ServiceType::Radarr));

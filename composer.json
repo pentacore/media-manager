@@ -16,11 +16,13 @@
         "laravel/framework": "^13.0",
         "laravel/octane": "^2.17",
         "laravel/reverb": "^1.10",
+        "laravel/scout": "^11.1",
         "laravel/socialite": "^5.26",
         "laravel/tinker": "^3.0",
         "laravel/wayfinder": "^0.1.14",
         "pentacore/laravel-typefinder": "^4.2",
-        "socialiteproviders/authentik": "^5.3"
+        "socialiteproviders/authentik": "^5.3",
+        "typesense/typesense-php": "^6.0"
     },
     "require-dev": {
         "barryvdh/laravel-ide-helper": "^3.7",

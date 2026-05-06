@@ -433,108 +433,112 @@ function pipelineState(
             <div
                 class="overflow-hidden rounded-xl border border-border bg-card"
             >
-                <table class="w-full border-collapse text-[13px]">
-                    <thead>
-                        <tr>
-                            <th
-                                class="w-6 border-b border-border bg-card px-3 py-2"
-                            />
-                            <th
-                                class="border-b border-border bg-card px-3 py-2 text-left text-[11.5px] font-medium tracking-[0.05em] text-muted-foreground uppercase"
-                            >
-                                Action
-                            </th>
-                            <th
-                                class="border-b border-border bg-card px-3 py-2 text-left text-[11.5px] font-medium tracking-[0.05em] text-muted-foreground uppercase"
-                            >
-                                Service
-                            </th>
-                            <th
-                                class="border-b border-border bg-card px-3 py-2 text-left text-[11.5px] font-medium tracking-[0.05em] text-muted-foreground uppercase"
-                            >
-                                Trigger
-                            </th>
-                            <th
-                                class="border-b border-border bg-card px-3 py-2 text-left text-[11.5px] font-medium tracking-[0.05em] text-muted-foreground uppercase"
-                            >
-                                Status
-                            </th>
-                            <th
-                                class="border-b border-border bg-card px-3 py-2 text-left text-[11.5px] font-medium tracking-[0.05em] text-muted-foreground uppercase"
-                            >
-                                Age
-                            </th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <tr
-                            v-for="row in visibleRequests"
-                            :key="row.id"
-                            :class="
-                                cn(
-                                    'border-b border-border transition-colors hover:bg-bg-hover',
-                                    selectedId === row.id && 'bg-accent/8',
-                                )
-                            "
-                            @click="selectedId = row.id"
-                        >
-                            <td class="px-3 py-2.5 align-middle">
-                                <span
-                                    :class="
-                                        cn(
-                                            'inline-block h-5 w-1 rounded-sm',
-                                            isDestructive(row.type)
-                                                ? 'bg-destructive'
-                                                : 'bg-info',
-                                        )
-                                    "
+                <div class="overflow-x-auto">
+                    <table class="w-full border-collapse text-[13px]">
+                        <thead>
+                            <tr>
+                                <th
+                                    class="w-6 border-b border-border bg-card px-3 py-2"
                                 />
-                            </td>
-                            <td class="px-3 py-2.5 align-middle">
-                                <div class="font-medium">
-                                    {{ payloadTitle(row) }}
-                                </div>
-                                <div
-                                    class="font-mono-tabular text-[11px] text-fg-subtle"
+                                <th
+                                    class="border-b border-border bg-card px-3 py-2 text-left text-[11.5px] font-medium tracking-[0.05em] text-muted-foreground uppercase"
                                 >
-                                    act_{{ row.id }} · {{ row.type }}
-                                </div>
-                            </td>
-                            <td class="px-3 py-2.5 align-middle">
-                                <SvcChip
-                                    :id="svcId(row.target_service)"
-                                    :label="row.target_service"
-                                />
-                            </td>
-                            <td class="px-3 py-2.5 align-middle">
-                                <span
-                                    class="font-mono-tabular text-[11.5px] text-muted-foreground"
+                                    Action
+                                </th>
+                                <th
+                                    class="border-b border-border bg-card px-3 py-2 text-left text-[11.5px] font-medium tracking-[0.05em] text-muted-foreground uppercase"
                                 >
-                                    {{ row.webhook_source ?? 'manual' }}
-                                </span>
-                            </td>
-                            <td class="px-3 py-2.5 align-middle">
-                                <StatusPill :status="row.status" />
-                            </td>
-                            <td
-                                class="font-mono-tabular px-3 py-2.5 align-middle text-[11.5px] text-fg-subtle"
+                                    Service
+                                </th>
+                                <th
+                                    class="border-b border-border bg-card px-3 py-2 text-left text-[11.5px] font-medium tracking-[0.05em] text-muted-foreground uppercase"
+                                >
+                                    Trigger
+                                </th>
+                                <th
+                                    class="border-b border-border bg-card px-3 py-2 text-left text-[11.5px] font-medium tracking-[0.05em] text-muted-foreground uppercase"
+                                >
+                                    Status
+                                </th>
+                                <th
+                                    class="border-b border-border bg-card px-3 py-2 text-left text-[11.5px] font-medium tracking-[0.05em] text-muted-foreground uppercase"
+                                >
+                                    Age
+                                </th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr
+                                v-for="row in visibleRequests"
+                                :key="row.id"
+                                :class="
+                                    cn(
+                                        'border-b border-border transition-colors hover:bg-bg-hover',
+                                        selectedId === row.id && 'bg-accent/8',
+                                    )
+                                "
+                                @click="selectedId = row.id"
                             >
-                                <TimeStamp :iso="row.created_at" />
-                            </td>
-                        </tr>
-                        <tr v-if="visibleRequests.length === 0">
-                            <td
-                                colspan="6"
-                                class="px-3 py-12 text-center text-sm text-fg-subtle"
-                            >
-                                <div class="flex flex-col items-center gap-2">
-                                    <Inbox class="size-5" />
-                                    No action requests in this view.
-                                </div>
-                            </td>
-                        </tr>
-                    </tbody>
-                </table>
+                                <td class="px-3 py-2.5 align-middle">
+                                    <span
+                                        :class="
+                                            cn(
+                                                'inline-block h-5 w-1 rounded-sm',
+                                                isDestructive(row.type)
+                                                    ? 'bg-destructive'
+                                                    : 'bg-info',
+                                            )
+                                        "
+                                    />
+                                </td>
+                                <td class="px-3 py-2.5 align-middle">
+                                    <div class="font-medium">
+                                        {{ payloadTitle(row) }}
+                                    </div>
+                                    <div
+                                        class="font-mono-tabular text-[11px] text-fg-subtle"
+                                    >
+                                        act_{{ row.id }} · {{ row.type }}
+                                    </div>
+                                </td>
+                                <td class="px-3 py-2.5 align-middle">
+                                    <SvcChip
+                                        :id="svcId(row.target_service)"
+                                        :label="row.target_service"
+                                    />
+                                </td>
+                                <td class="px-3 py-2.5 align-middle">
+                                    <span
+                                        class="font-mono-tabular text-[11.5px] text-muted-foreground"
+                                    >
+                                        {{ row.webhook_source ?? 'manual' }}
+                                    </span>
+                                </td>
+                                <td class="px-3 py-2.5 align-middle">
+                                    <StatusPill :status="row.status" />
+                                </td>
+                                <td
+                                    class="font-mono-tabular px-3 py-2.5 align-middle text-[11.5px] text-fg-subtle"
+                                >
+                                    <TimeStamp :iso="row.created_at" />
+                                </td>
+                            </tr>
+                            <tr v-if="visibleRequests.length === 0">
+                                <td
+                                    colspan="6"
+                                    class="px-3 py-12 text-center text-sm text-fg-subtle"
+                                >
+                                    <div
+                                        class="flex flex-col items-center gap-2"
+                                    >
+                                        <Inbox class="size-5" />
+                                        No action requests in this view.
+                                    </div>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
             </div>
 
             <!-- Detail panel -->

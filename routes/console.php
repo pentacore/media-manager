@@ -10,6 +10,7 @@ use App\Console\Commands\PollSabnzbdHistory;
 use App\Console\Commands\PruneAiProposedWorkflows;
 use App\Console\Commands\RefreshInterventionCount;
 use App\Console\Commands\RefreshSabnzbdDownloadCounts;
+use App\Jobs\ReconcileSearchIndex;
 use Illuminate\Support\Facades\Schedule;
 
 Schedule::command(CheckServiceHealth::class)
@@ -42,4 +43,8 @@ Schedule::command(RefreshInterventionCount::class)
 
 Schedule::command(RefreshSabnzbdDownloadCounts::class)
     ->everyFiveMinutes()
+    ->withoutOverlapping();
+
+Schedule::job(new ReconcileSearchIndex)
+    ->dailyAt('03:30')
     ->withoutOverlapping();
