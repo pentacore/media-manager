@@ -12,4 +12,4 @@
 - [ ] The free usage tracking should be defined as pools, since multiple models can share the same pool
 - [ ] All AI related pages should be hidden if AI is disabled, not just the chat
 - [ ] Allow adding a link to the "Free usage pools", that sends the user to the page documenting the free usage (External page).
-- [ ] In addition to "Today", also add "This week", "This month" and "This year" filters to all tables with this kind of time-scale filtering (AI usage, watch history, etc)
+- [ ] In addition to "Today", also add "This week", "This month", "This year" and "All" filters to all tables with this kind of time-scale filtering (AI usage, watch history, etc)
