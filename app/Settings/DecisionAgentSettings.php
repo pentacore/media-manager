@@ -111,6 +111,52 @@ class DecisionAgentSettings
         return mb_strtolower($service).':'.$eventType;
     }
 
+    /**
+     * Catalog of inbound events the agent can be wired to react to, grouped by
+     * service. Drives both the settings UI (the checkboxes) and allowlist
+     * validation, so the two never drift.
+     *
+     * @return array<string, array<int, string>>
+     */
+    public static function eventCatalog(): array
+    {
+        return [
+            'sonarr' => [
+                'Grab', 'Download', 'Rename', 'SeriesAdd', 'SeriesDelete',
+                'EpisodeFileDelete', 'ManualInteractionRequired', 'Health',
+                'HealthRestored', 'ApplicationUpdate',
+            ],
+            'radarr' => [
+                'Grab', 'Download', 'Rename', 'MovieAdded', 'MovieDelete',
+                'MovieFileDelete', 'ManualInteractionRequired', 'Health',
+                'HealthRestored', 'ApplicationUpdate',
+            ],
+            'seerr' => [
+                'MEDIA_PENDING', 'MEDIA_APPROVED', 'MEDIA_AUTO_APPROVED',
+                'MEDIA_DECLINED', 'MEDIA_AVAILABLE', 'MEDIA_FAILED',
+                'ISSUE_CREATED', 'ISSUE_REOPENED',
+            ],
+        ];
+    }
+
+    /**
+     * Flattened "service:Event" keys from the catalog, used to validate the
+     * stored allowlist.
+     *
+     * @return array<int, string>
+     */
+    public static function availableEventKeys(): array
+    {
+        $keys = [];
+        foreach (self::eventCatalog() as $service => $events) {
+            foreach ($events as $event) {
+                $keys[] = self::eventKey($service, $event);
+            }
+        }
+
+        return $keys;
+    }
+
     public function allowManualImport(): bool
     {
         return (bool) $this->appSettings->get(
