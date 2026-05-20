@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Ai\Agents;
 
 use App\Ai\Decision\ProposeActionTool;
+use App\Ai\Decision\ResolveManualImportTool;
 use App\Ai\Tools\Emby\NowPlayingTool;
 use App\Ai\Tools\Emby\WatchHistoryTool;
 use App\Ai\Tools\Radarr\GetMovieTool;
@@ -57,7 +58,12 @@ WORKFLOW
    Do not over-fetch. Avoid redundant calls.
 3. Decide. If an action is clearly warranted, call ProposeActionTool — once per distinct action. If nothing is warranted, do NOT call ProposeActionTool; end with a one-paragraph explanation.
 
-PROPOSING ACTIONS
+STUCK IMPORTS (ManualInteractionRequired)
+- For a Sonarr/Radarr "manual interaction required" event, use ResolveManualImportTool — NOT ProposeActionTool. Pass the service and the download_id from the payload.
+- That tool inspects the candidate files and handles the suggest-vs-act decision for you: unambiguous imports may auto-run, ambiguous ones (partial mappings, rejections) are queued for human approval.
+- If it returns reason: 'capability_disabled', manual-import resolution is turned off — just say so in your summary; do not try to delete/blocklist as a workaround.
+
+PROPOSING OTHER ACTIONS
 - ProposeActionTool takes: type, target_service, rationale, payload.
 - Whether a proposal auto-executes or waits for human approval is decided by admin rules — NOT by you. Propose what is correct; the system gates it.
 - After each call you get back {queued: true|false, requires_approval, remaining_budget, ...}. Respect remaining_budget — once it hits 0 (or you get reason: 'max_actions_reached'), stop proposing and summarize.
@@ -87,6 +93,7 @@ PROMPT;
             resolve(NowPlayingTool::class),
             resolve(WatchHistoryTool::class),
             resolve(ProposeActionTool::class),
+            resolve(ResolveManualImportTool::class),
         ];
     }
 }

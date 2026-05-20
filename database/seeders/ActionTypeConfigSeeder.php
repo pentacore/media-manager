@@ -96,6 +96,13 @@ class ActionTypeConfigSeeder extends Seeder
                 'requires_approval' => false,
                 'is_enabled' => true,
             ],
+            [
+                'type' => 'resolve_manual_import',
+                'label' => 'Resolve stuck Sonarr/Radarr import',
+                'description' => 'Trigger a manual import for a download stuck on "manual interaction required" (DecisionAgent-initiated). Defaults to requiring approval; ambiguous imports always require approval regardless.',
+                'requires_approval' => true,
+                'is_enabled' => true,
+            ],
         ];
 
         foreach ($types as $type) {

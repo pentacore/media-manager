@@ -71,6 +71,34 @@ test('dispatchFromAgent ignores the chat advisory mode override', function (): v
     Queue::assertPushed(ExecuteActionRequest::class);
 });
 
+test('dispatchFromAgent forceRequiresApproval can only tighten the gate', function (): void {
+    ActionTypeConfig::factory()->create(['type' => 'resolve_manual_import', 'requires_approval' => false, 'is_enabled' => true]);
+
+    // Forcing approval on an auto-execute rule pushes it to Pending.
+    $forced = resolve(ActionOrchestrator::class)->dispatchFromAgent(
+        type: 'resolve_manual_import',
+        sourceService: 'sonarr',
+        targetService: 'sonarr',
+        payload: [],
+        rationale: 'ambiguous',
+        forceRequiresApproval: true,
+    );
+    expect($forced->status)->toBe(ActionRequestStatus::Pending);
+    Queue::assertNotPushed(ExecuteActionRequest::class);
+
+    // forceRequiresApproval=false must NOT relax an approval-required rule.
+    ActionTypeConfig::factory()->create(['type' => 'delete_series', 'requires_approval' => true, 'is_enabled' => true]);
+    $notRelaxed = resolve(ActionOrchestrator::class)->dispatchFromAgent(
+        type: 'delete_series',
+        sourceService: 'sonarr',
+        targetService: 'sonarr',
+        payload: [],
+        rationale: 'x',
+        forceRequiresApproval: false,
+    );
+    expect($notRelaxed->status)->toBe(ActionRequestStatus::Pending);
+});
+
 test('dispatchFromAgent returns null when config missing or disabled', function (): void {
     expect(resolve(ActionOrchestrator::class)->dispatchFromAgent(
         type: 'never_registered',

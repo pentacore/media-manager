@@ -22,6 +22,7 @@ test('tool list includes ProposeActionTool and read-only context tools', functio
         ->all();
 
     expect($shortNames)->toContain('ProposeActionTool');
+    expect($shortNames)->toContain('ResolveManualImportTool');
     expect($shortNames)->toContain('GetServiceStatusTool');
     expect($shortNames)->toContain('GetSeriesTool');
     expect($shortNames)->toContain('GetMovieTool');

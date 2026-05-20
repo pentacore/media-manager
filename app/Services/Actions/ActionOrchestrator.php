@@ -91,6 +91,10 @@ class ActionOrchestrator
      * flag. The request is tagged origin='agent' and the agent's rationale is
      * folded into the payload so it surfaces on the actions UI.
      *
+     * $forceRequiresApproval lets a caller add (never remove) an approval
+     * requirement for a single instance — e.g. an ambiguous manual import is
+     * forced to Pending even when its ActionTypeConfig auto-executes.
+     *
      * @param  array<string, mixed>  $payload
      */
     public function dispatchFromAgent(
@@ -100,6 +104,7 @@ class ActionOrchestrator
         array $payload,
         string $rationale,
         ?int $webhookEventId = null,
+        ?bool $forceRequiresApproval = null,
     ): ?ActionRequest {
         $config = ActionTypeConfig::where('type', $type)->first();
 
@@ -112,7 +117,8 @@ class ActionOrchestrator
             return null;
         }
 
-        $requiresApproval = $config->requires_approval;
+        // The override can only tighten the gate (force approval), never relax it.
+        $requiresApproval = $config->requires_approval || ($forceRequiresApproval ?? false);
 
         $actionRequest = ActionRequest::create([
             'webhook_event_id' => $webhookEventId,

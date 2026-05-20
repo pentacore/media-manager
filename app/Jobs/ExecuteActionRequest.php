@@ -8,6 +8,7 @@ use App\Enums\ActionRequestStatus;
 use App\Events\ActionRequestStatusChanged;
 use App\Models\ActionRequest;
 use App\Services\Actions\ActionExecutor;
+use App\Services\Arr\ManualImportActions;
 use App\Services\Emby\EmbyActions;
 use App\Services\Radarr\RadarrActions;
 use App\Services\Seerr\SeerrActions;
@@ -154,6 +155,7 @@ class ExecuteActionRequest implements ShouldBeUnique, ShouldQueue
             'delete_movie', 'add_movie', 'monitor_movie', 'set_movie_quality_profile' => RadarrActions::class,
             'cleanup_seerr_request', 'approve_seerr_request', 'decline_seerr_request' => SeerrActions::class,
             'emby_library_scan' => EmbyActions::class,
+            'resolve_manual_import' => ManualImportActions::class,
             default => null,
         };
 
