@@ -4,7 +4,9 @@ declare(strict_types=1);
 
 namespace App\Ai\Agents;
 
+use App\Ai\Decision\InspectStuckImportTool;
 use App\Ai\Decision\ProposeActionTool;
+use App\Ai\Decision\RemoveStuckDownloadTool;
 use App\Ai\Decision\ResolveManualImportTool;
 use App\Ai\Tools\Emby\NowPlayingTool;
 use App\Ai\Tools\Emby\WatchHistoryTool;
@@ -59,9 +61,15 @@ WORKFLOW
 3. Decide. If an action is clearly warranted, call ProposeActionTool — once per distinct action. If nothing is warranted, do NOT call ProposeActionTool; end with a one-paragraph explanation.
 
 STUCK IMPORTS (ManualInteractionRequired)
-- For a Sonarr/Radarr "manual interaction required" event, use ResolveManualImportTool — NOT ProposeActionTool. Pass the service and the download_id from the payload.
-- That tool inspects the candidate files and handles the suggest-vs-act decision for you: unambiguous imports may auto-run, ambiguous ones (partial mappings, rejections) are queued for human approval.
-- If it returns reason: 'capability_disabled', manual-import resolution is turned off — just say so in your summary; do not try to delete/blocklist as a workaround.
+For a Sonarr/Radarr "manual interaction required" event, decide what to do by reading the actual import rejections — do NOT use ProposeActionTool for these.
+1. Call InspectStuckImportTool (service + download_id from the payload). It returns each candidate file: whether it `mapped`, what it is, and the raw `rejections`.
+2. Read the rejections and choose:
+   - The files map and there are no rejections, OR the only obstacle is a benign "we know what it is but won't auto-import" reason — e.g. "matched by series id" / "automatic import is not possible" → IMPORT it with ResolveManualImportTool.
+   - The blocking reason is that the release is "not an upgrade" / "not a Custom Format upgrade for existing episode file(s)" → the file is redundant; REMOVE it with RemoveStuckDownloadTool (pass a short reason). Do NOT import a non-upgrade.
+   - Nothing maps (unknown series/episode, unparseable) → take no action; explain a human must resolve it in Sonarr/Radarr.
+   - Anything you are unsure about, or a mix of the above → import via ResolveManualImportTool (it will be queued for human approval) rather than guessing, or explain and propose nothing.
+3. The system still gates suggest-vs-act: removals and partially-mapped imports always require human approval; only a fully-mapped import can auto-run, and only if its action rule allows it.
+- If a tool returns reason: 'capability_disabled', manual-import resolution is turned off — say so in your summary; do not try other destructive actions as a workaround.
 
 PROPOSING OTHER ACTIONS
 - ProposeActionTool takes: type, target_service, rationale, payload.
@@ -93,7 +101,9 @@ PROMPT;
             resolve(NowPlayingTool::class),
             resolve(WatchHistoryTool::class),
             resolve(ProposeActionTool::class),
+            resolve(InspectStuckImportTool::class),
             resolve(ResolveManualImportTool::class),
+            resolve(RemoveStuckDownloadTool::class),
         ];
     }
 }

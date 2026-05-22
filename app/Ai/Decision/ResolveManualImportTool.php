@@ -24,10 +24,11 @@ use Throwable;
  * Resolves a Sonarr/Radarr "manual interaction required" stuck import.
  *
  * Gated behind DecisionAgentSettings::allowManualImport(). It enumerates the
- * download's candidate files, assesses whether the mapping is unambiguous, and
- * proposes a resolve_manual_import action. Ambiguous imports (partial mappings,
- * upstream rejections) are force-queued for human approval regardless of the
- * action rule's auto-execute setting; clean imports follow the rule.
+ * download's candidate files and proposes a resolve_manual_import action.
+ * Partially-mapped sets are force-queued for human approval regardless of the
+ * action rule's auto-execute setting; fully-mapped imports follow the rule.
+ * Interpreting rejection text (import vs remove) is the agent's job, not this
+ * tool's — see InspectStuckImportTool / RemoveStuckDownloadTool.
  *
  * Lives outside App\Ai\Tools (and so does not extend BaseTool) because it must
  * own its own dispatch path — BaseTool routes destructive work through the
@@ -38,7 +39,7 @@ class ResolveManualImportTool implements Tool
 {
     public function description(): Stringable|string
     {
-        return 'Resolve a stuck Sonarr/Radarr import (a "manual interaction required" event). Provide the download_id from the event payload and the service. The tool inspects the candidate files and proposes the import: unambiguous imports may auto-run, ambiguous ones are queued for human approval. Use this for ManualInteractionRequired events instead of ProposeActionTool.';
+        return 'Import a stuck Sonarr/Radarr download (after inspecting it with InspectStuckImportTool). Provide the service and download_id. Fully-mapped imports may auto-run per the action rule; partially-mapped sets are always queued for human approval. If a download should NOT be imported (e.g. "not an upgrade"), use RemoveStuckDownloadTool instead.';
     }
 
     public function handle(Request $request): Stringable|string
@@ -105,8 +106,10 @@ class ResolveManualImportTool implements Tool
             ]);
         }
 
-        $ambiguous = $assessment['ambiguous'];
-        $rationale = $this->buildRationale($service, $downloadId, $assessment, $ambiguous);
+        // Structural safety rail: a partial/unmapped set is never auto-imported,
+        // regardless of the action rule or the agent's judgement.
+        $partial = ! $assessment['fully_mapped'];
+        $rationale = $this->buildRationale($service, $downloadId, $assessment, $partial);
 
         try {
             $actionRequest = resolve(ActionOrchestrator::class)->dispatchFromAgent(
@@ -120,7 +123,7 @@ class ResolveManualImportTool implements Tool
                 ],
                 rationale: $rationale,
                 webhookEventId: $context->webhookEventId,
-                forceRequiresApproval: $ambiguous ? true : null,
+                forceRequiresApproval: $partial ? true : null,
             );
         } catch (Throwable $throwable) {
             Log::warning('ResolveManualImportTool: dispatch failed', [
@@ -147,14 +150,14 @@ class ResolveManualImportTool implements Tool
             'action_request_id' => $actionRequest->id,
             'status' => $actionRequest->status->value,
             'requires_approval' => $actionRequest->requires_approval,
-            'ambiguous' => $ambiguous,
+            'partial' => $partial,
             'assessment' => $assessment,
             'remaining_budget' => $context->remainingBudget(),
-            'message' => $ambiguous
-                ? 'Import is ambiguous — queued for human approval.'
+            'message' => $partial
+                ? 'Only some files mapped — queued for human approval.'
                 : ($actionRequest->requires_approval
-                    ? 'Clean import queued for human approval (per action rule).'
-                    : 'Clean import queued and will auto-run.'),
+                    ? 'Import queued for human approval (per action rule).'
+                    : 'Import queued and will auto-run.'),
         ]);
     }
 
@@ -174,20 +177,19 @@ class ResolveManualImportTool implements Tool
     }
 
     /**
-     * @param  array{total: int, importable: int, rejected: int, ambiguous: bool, reasons: array<int, string>}  $assessment
+     * @param  array{total: int, importable: int, fully_mapped: bool, reasons: array<int, string>}  $assessment
      */
-    private function buildRationale(string $service, string $downloadId, array $assessment, bool $ambiguous): string
+    private function buildRationale(string $service, string $downloadId, array $assessment, bool $partial): string
     {
-        $reasons = $assessment['reasons'] === [] ? 'clean mapping, no rejections' : implode(' ', $assessment['reasons']);
+        $reasons = $assessment['reasons'] === [] ? 'all files mapped' : implode(' ', $assessment['reasons']);
 
         return Str::limit(sprintf(
-            'Resolve stuck %s import (download %s): %d of %d files importable, %d rejected. %s %s',
+            'Resolve stuck %s import (download %s): %d of %d files mapped. %s %s',
             $service,
             $downloadId,
             $assessment['importable'],
             $assessment['total'],
-            $assessment['rejected'],
-            $ambiguous ? 'Ambiguous — recommend manual confirmation.' : 'Unambiguous.',
+            $partial ? 'Partial — recommend manual confirmation.' : 'Fully mapped.',
             $reasons,
         ), 1000, '');
     }

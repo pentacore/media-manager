@@ -52,16 +52,17 @@ test('refuses when the manual-import capability is disabled', function (): void 
     expect(ActionRequest::count())->toBe(0);
 });
 
-test('an ambiguous import is forced to require approval even when the rule auto-executes', function (): void {
+test('a partially-mapped import is forced to require approval even when the rule auto-executes', function (): void {
     ActionTypeConfig::factory()->create(['type' => 'resolve_manual_import', 'requires_approval' => false, 'is_enabled' => true]);
-    fakeCandidates([cleanCandidate(), array_replace(cleanCandidate(), ['rejections' => [['reason' => 'x']]])]);
+    // One mappable + one unmappable file = partial → structural rail forces approval.
+    fakeCandidates([cleanCandidate(), array_replace(cleanCandidate(), ['series' => [], 'episodes' => []])]);
 
     $result = json_decode((new ResolveManualImportTool)->handle(new Request([
         'service' => 'sonarr', 'download_id' => 'dl-1',
     ])), true);
 
     expect($result['queued'])->toBeTrue();
-    expect($result['ambiguous'])->toBeTrue();
+    expect($result['partial'])->toBeTrue();
     expect($result['requires_approval'])->toBeTrue();
 
     $request = ActionRequest::firstWhere('type', 'resolve_manual_import');
@@ -69,7 +70,7 @@ test('an ambiguous import is forced to require approval even when the rule auto-
     expect($request->requires_approval)->toBeTrue();
 });
 
-test('a clean import follows the auto-execute rule', function (): void {
+test('a fully-mapped import follows the auto-execute rule', function (): void {
     ActionTypeConfig::factory()->create(['type' => 'resolve_manual_import', 'requires_approval' => false, 'is_enabled' => true]);
     fakeCandidates([cleanCandidate()]);
 
@@ -78,7 +79,23 @@ test('a clean import follows the auto-execute rule', function (): void {
     ])), true);
 
     expect($result['queued'])->toBeTrue();
-    expect($result['ambiguous'])->toBeFalse();
+    expect($result['partial'])->toBeFalse();
+    expect($result['requires_approval'])->toBeFalse();
+});
+
+test('a mapped file with a rejection still auto-imports (rejection text is the agent\'s call, not the rail)', function (): void {
+    ActionTypeConfig::factory()->create(['type' => 'resolve_manual_import', 'requires_approval' => false, 'is_enabled' => true]);
+    // "matched by series id" — fully mapped, so the rail does not force approval.
+    fakeCandidates([array_replace(cleanCandidate(), [
+        'rejections' => [['reason' => 'Found matching series via grab history, but series was matched by series id. Automatic import is not possible.']],
+    ])]);
+
+    $result = json_decode((new ResolveManualImportTool)->handle(new Request([
+        'service' => 'sonarr', 'download_id' => 'dl-1',
+    ])), true);
+
+    expect($result['queued'])->toBeTrue();
+    expect($result['partial'])->toBeFalse();
     expect($result['requires_approval'])->toBeFalse();
 });
 
