@@ -34,6 +34,40 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Decision Agent
+    |--------------------------------------------------------------------------
+    |
+    | The autonomous agent that reasons over inbound webhook events and either
+    | suggests (queues a Pending ActionRequest) or acts (auto-executes) per the
+    | per-type ActionTypeConfig approval flags. Distinct from the interactive
+    | chat agent above. All values below are defaults — the app_settings table
+    | (managed from the admin Decision Agent settings page) overrides them at
+    | runtime. Ships fully off with an empty allowlist: opt-in only.
+    |
+    */
+
+    'decision_agent' => [
+        'enabled' => env('MEDIAMANAGER_DECISION_AGENT_ENABLED', false),
+
+        // Empty = falls back to the chat model at runtime.
+        'model' => env('MEDIAMANAGER_DECISION_AGENT_MODEL', ''),
+
+        // List of "service:EventType" keys the agent reacts to. Empty by
+        // default; managed from the settings page.
+        'event_allowlist' => [],
+
+        // Gates the manual-import resolution capability (Stage 2 tooling).
+        'allow_manual_import' => false,
+
+        'notify_on_suggest' => true,
+        'notify_on_act' => true,
+
+        // Caps how many ActionRequests one decision may spawn.
+        'max_actions_per_run' => 3,
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
     | External API Cache
     |--------------------------------------------------------------------------
     |

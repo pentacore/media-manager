@@ -20,6 +20,7 @@ use Override;
  * @property int $id
  * @property int|null $webhook_event_id
  * @property string $type
+ * @property string $origin
  * @property string $source_service
  * @property string $target_service
  * @property ActionRequestStatus $status
@@ -39,6 +40,7 @@ use Override;
  * @method static Builder<static>|ActionRequest whereApprovedBy($value)
  * @method static Builder<static>|ActionRequest whereCreatedAt($value)
  * @method static Builder<static>|ActionRequest whereId($value)
+ * @method static Builder<static>|ActionRequest whereOrigin($value)
  * @method static Builder<static>|ActionRequest wherePayload($value)
  * @method static Builder<static>|ActionRequest whereRequiresApproval($value)
  * @method static Builder<static>|ActionRequest whereResult($value)
@@ -52,7 +54,7 @@ use Override;
  * @mixin \Eloquent
  */
 #[ObservedBy(ActionRequestObserver::class)]
-#[Fillable(['webhook_event_id', 'type', 'source_service', 'target_service', 'status', 'requires_approval', 'approved_by', 'payload', 'result'])]
+#[Fillable(['webhook_event_id', 'type', 'origin', 'source_service', 'target_service', 'status', 'requires_approval', 'approved_by', 'payload', 'result'])]
 class ActionRequest extends Model
 {
     /** @use HasFactory<ActionRequestFactory> */

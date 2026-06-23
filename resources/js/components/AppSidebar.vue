@@ -3,6 +3,7 @@ import { Link, usePage } from '@inertiajs/vue3';
 import {
     Activity,
     BarChart3,
+    Bot,
     Brain,
     Clock,
     DollarSign,
@@ -30,6 +31,7 @@ import ActivityLogController from '@/actions/App/Http/Controllers/ActivityLogCon
 import AiModelPriceController from '@/actions/App/Http/Controllers/Admin/AiModelPriceController';
 import AiSettingsController from '@/actions/App/Http/Controllers/Admin/AiSettingsController';
 import AiUsageController from '@/actions/App/Http/Controllers/Admin/AiUsageController';
+import DecisionAgentSettingsController from '@/actions/App/Http/Controllers/Admin/DecisionAgentSettingsController';
 import JobsController from '@/actions/App/Http/Controllers/Admin/JobsController';
 import ServiceConnectionController from '@/actions/App/Http/Controllers/Admin/ServiceConnectionController';
 import UserController from '@/actions/App/Http/Controllers/Admin/UserController';
@@ -331,6 +333,11 @@ const adminNavItems: NavItem[] = [
         title: 'AI Settings',
         href: AiSettingsController.index.url(),
         icon: Brain,
+    },
+    {
+        title: 'Decision Agent',
+        href: DecisionAgentSettingsController.index.url(),
+        icon: Bot,
     },
     {
         title: 'AI Usage',

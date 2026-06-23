@@ -35,20 +35,31 @@ class FindOrCreateSsoUser
                 'avatar_url' => $avatarUrl ?? $user->avatar_url,
             ]);
 
+            // The SSO provider has authenticated the user, so treat their email
+            // as verified even if local verification never completed.
+            if (! $user->hasVerifiedEmail()) {
+                $user->markEmailAsVerified();
+            }
+
             return $user;
         }
 
         // Create new user — admin if first user, viewer otherwise
         $role = User::count() === 0 ? UserRole::Admin : UserRole::Viewer;
 
-        return User::create([
+        $user = User::create([
             'name' => $name,
             'email' => $email,
             'sso_provider' => $provider,
             'sso_id' => $ssoId,
             'avatar_url' => $avatarUrl,
             'role' => $role,
-            'email_verified_at' => now(),
         ]);
+
+        // email_verified_at is guarded against mass assignment, so set it
+        // explicitly — SSO sign-in implies the provider verified the email.
+        $user->markEmailAsVerified();
+
+        return $user;
     }
 }

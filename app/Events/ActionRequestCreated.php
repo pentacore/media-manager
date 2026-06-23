@@ -49,6 +49,7 @@ class ActionRequestCreated implements ShouldBroadcast
         return [
             'id' => $this->actionRequest->id,
             'type' => $this->actionRequest->type,
+            'origin' => $this->actionRequest->origin,
             'source_service' => $this->actionRequest->source_service,
             'target_service' => $this->actionRequest->target_service,
             'status' => $this->actionRequest->status->value,
