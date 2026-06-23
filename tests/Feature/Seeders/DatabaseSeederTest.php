@@ -12,5 +12,5 @@ test('non-local seeding does not create a fixed admin account', function (): voi
     $this->seed(DatabaseSeeder::class);
 
     expect(User::where('email', 'test@example.com')->exists())->toBeFalse();
-    expect(ActionTypeConfig::count())->toBe(12);
+    expect(ActionTypeConfig::count())->toBe(14);
 });

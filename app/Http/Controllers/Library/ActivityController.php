@@ -8,6 +8,7 @@ use App\Enums\ServiceType;
 use App\Http\Controllers\Controller;
 use App\Models\ServiceConnection;
 use App\Services\Arr\ArrClient;
+use App\Services\Arr\ManualImportResolver;
 use App\Services\Radarr\RadarrClient;
 use App\Services\Sonarr\SonarrClient;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
@@ -144,7 +145,7 @@ class ActivityController extends Controller
             return $this->flashAndBack('error', __('Could not enumerate import candidates: :msg', ['msg' => $throwable->getMessage()]));
         }
 
-        $files = $this->candidatesToImportPayload($candidates, $service, $downloadId);
+        $files = resolve(ManualImportResolver::class)->toImportPayload($candidates, $service, $downloadId);
         if ($files === []) {
             return $this->flashAndBack('error', __('Sonarr/Radarr returned no importable files for this download.'));
         }
@@ -159,74 +160,6 @@ class ActivityController extends Controller
         }
 
         return $this->flashAndBack('success', __('Manual import queued (:n file(s)).', ['n' => count($files)]));
-    }
-
-    /**
-     * Convert raw candidates into the file shape Sonarr/Radarr expect on
-     * the ManualImport command. Drops candidates that lack the required
-     * foreign key (Sonarr → seriesId+episodeIds, Radarr → movieId).
-     *
-     * @param  array<int, array<string, mixed>>  $candidates
-     * @return array<int, array<string, mixed>>
-     */
-    private function candidatesToImportPayload(array $candidates, string $service, string $downloadId): array
-    {
-        $files = [];
-
-        foreach ($candidates as $candidate) {
-            $base = [
-                'path' => $candidate['path'] ?? null,
-                'folderName' => $candidate['folderName'] ?? null,
-                'quality' => $candidate['quality'] ?? null,
-                'languages' => $candidate['languages'] ?? [],
-                'releaseGroup' => $candidate['releaseGroup'] ?? null,
-                'indexerFlags' => $candidate['indexerFlags'] ?? 0,
-                'downloadId' => $downloadId,
-            ];
-            if ($base['path'] === null) {
-                continue;
-            }
-
-            if ($base['quality'] === null) {
-                continue;
-            }
-
-            if ($service === 'sonarr') {
-                $seriesId = $candidate['series']['id'] ?? null;
-                $episodeIds = array_values(array_filter(array_map(
-                    static fn (array $episode): ?int => isset($episode['id']) ? (int) $episode['id'] : null,
-                    is_array($candidate['episodes'] ?? null) ? $candidate['episodes'] : [],
-                )));
-                if ($seriesId === null) {
-                    continue;
-                }
-
-                if ($episodeIds === []) {
-                    continue;
-                }
-
-                $files[] = [
-                    ...$base,
-                    'seriesId' => $seriesId,
-                    'episodeIds' => $episodeIds,
-                    'releaseType' => $candidate['releaseType'] ?? null,
-                ];
-
-                continue;
-            }
-
-            $movieId = $candidate['movie']['id'] ?? null;
-            if ($movieId === null) {
-                continue;
-            }
-
-            $files[] = [
-                ...$base,
-                'movieId' => $movieId,
-            ];
-        }
-
-        return $files;
     }
 
     /**

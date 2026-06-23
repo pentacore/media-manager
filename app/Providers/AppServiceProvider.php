@@ -7,10 +7,13 @@ namespace App\Providers;
 use App\Events\ActionRequestCreated;
 use App\Events\ActionRequestStatusChanged;
 use App\Events\ServiceHealthChanged;
+use App\Events\WebhookEventProcessed;
 use App\Events\WebhookReceived;
 use App\Listeners\RebroadcastDashboardStats;
+use App\Listeners\RunDecisionAgentForWebhook;
 use App\Settings\AiSettings;
 use App\Settings\AppSettings;
+use App\Settings\DecisionAgentSettings;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\Date;
 use Illuminate\Support\Facades\DB;
@@ -32,6 +35,7 @@ class AppServiceProvider extends ServiceProvider
     {
         $this->app->singleton(AppSettings::class);
         $this->app->singleton(AiSettings::class);
+        $this->app->singleton(DecisionAgentSettings::class);
 
         // Telescope is a require-dev package; the wrapper provider extends
         // Laravel\Telescope\TelescopeApplicationServiceProvider, so registering
@@ -60,6 +64,10 @@ class AppServiceProvider extends ServiceProvider
         ] as $event) {
             Event::listen($event, RebroadcastDashboardStats::class);
         }
+
+        // Hand processed webhooks to the autonomous DecisionAgent (gated by
+        // its own settings + event allowlist inside the listener).
+        Event::listen(WebhookEventProcessed::class, RunDecisionAgentForWebhook::class);
     }
 
     /**

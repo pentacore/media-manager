@@ -16,6 +16,7 @@ use Pentacore\Typefinder\Attributes\TypefinderResource;
 #[TypefinderResource(shape: [
     'id' => 'number',
     'type' => 'string',
+    'origin' => "'system' | 'chat' | 'agent'",
     'source_service' => 'string',
     'target_service' => 'string',
     'status' => "'pending' | 'approved' | 'executing' | 'completed' | 'failed' | 'rejected'",
@@ -40,6 +41,7 @@ class ActionRequestResource extends JsonResource
         return [
             'id' => $this->id,
             'type' => $this->type,
+            'origin' => $this->origin,
             'source_service' => $this->source_service,
             'target_service' => $this->target_service,
             'status' => $this->status->value,

@@ -5,6 +5,7 @@ declare(strict_types=1);
 use App\Http\Controllers\Admin\AiModelPriceController;
 use App\Http\Controllers\Admin\AiSettingsController;
 use App\Http\Controllers\Admin\AiUsageController;
+use App\Http\Controllers\Admin\DecisionAgentSettingsController;
 use App\Http\Controllers\Admin\EmbyLinkController;
 use App\Http\Controllers\Admin\JobsController;
 use App\Http\Controllers\Admin\ProwlarrTestIndexerController;
@@ -39,6 +40,9 @@ Route::middleware(['auth', 'verified', 'password.set', 'role:admin'])->prefix('a
 
     Route::get('ai-settings', [AiSettingsController::class, 'index'])->name('ai-settings.index');
     Route::put('ai-settings', [AiSettingsController::class, 'update'])->name('ai-settings.update');
+
+    Route::get('decision-agent', [DecisionAgentSettingsController::class, 'index'])->name('decision-agent.index');
+    Route::put('decision-agent', [DecisionAgentSettingsController::class, 'update'])->name('decision-agent.update');
 
     Route::get('ai-usage', [AiUsageController::class, 'index'])->name('ai-usage.index');
     Route::get('ai-usage/export', [AiUsageController::class, 'export'])->name('ai-usage.export');

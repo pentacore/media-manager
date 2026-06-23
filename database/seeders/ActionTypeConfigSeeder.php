@@ -96,6 +96,20 @@ class ActionTypeConfigSeeder extends Seeder
                 'requires_approval' => false,
                 'is_enabled' => true,
             ],
+            [
+                'type' => 'resolve_manual_import',
+                'label' => 'Resolve stuck Sonarr/Radarr import',
+                'description' => 'Trigger a manual import for a download stuck on "manual interaction required" (DecisionAgent-initiated). Defaults to requiring approval; partial/unmapped imports always require approval regardless.',
+                'requires_approval' => true,
+                'is_enabled' => true,
+            ],
+            [
+                'type' => 'remove_stuck_download',
+                'label' => 'Remove stuck Sonarr/Radarr download',
+                'description' => 'Remove a stuck download from the Sonarr/Radarr queue without blocklisting (DecisionAgent-initiated) — e.g. when a release is not an upgrade. Defaults to requiring approval; deletes the downloaded data.',
+                'requires_approval' => true,
+                'is_enabled' => true,
+            ],
         ];
 
         foreach ($types as $type) {
