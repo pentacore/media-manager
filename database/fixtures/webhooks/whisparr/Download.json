@@ -1,0 +1,6 @@
+{
+  "eventType": "Download",
+  "movie": { "id": 10, "title": "Sample Title", "tmdbId": 12345 },
+  "movieFile": { "path": "/data/sample.mkv" },
+  "isUpgrade": false
+}
