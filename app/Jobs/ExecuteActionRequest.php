@@ -14,6 +14,7 @@ use App\Services\Emby\EmbyActions;
 use App\Services\Radarr\RadarrActions;
 use App\Services\Seerr\SeerrActions;
 use App\Services\Sonarr\SonarrActions;
+use App\Services\Whisparr\WhisparrActions;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldBeUnique;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -154,6 +155,7 @@ class ExecuteActionRequest implements ShouldBeUnique, ShouldQueue
         $class = match ($type) {
             'delete_series', 'add_series', 'monitor_series', 'set_series_quality_profile' => SonarrActions::class,
             'delete_movie', 'add_movie', 'monitor_movie', 'set_movie_quality_profile' => RadarrActions::class,
+            'whisparr_add_item', 'whisparr_delete_item', 'whisparr_monitor_item', 'whisparr_set_quality_profile' => WhisparrActions::class,
             'cleanup_seerr_request', 'approve_seerr_request', 'decline_seerr_request' => SeerrActions::class,
             'emby_library_scan' => EmbyActions::class,
             'resolve_manual_import' => ManualImportActions::class,
