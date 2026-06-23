@@ -62,6 +62,23 @@ jobs:
             cp .releaserc.develop.json .releaserc.json
           fi
 
+      # semantic-release evaluates every branch in its config (main + develop)
+      # and runs `git tag --merged <branch>` for each. checkout only creates a
+      # local branch for the checked-out ref, so the other branch resolves only
+      # as origin/<branch> and `git tag --merged <branch>` fails with
+      # "malformed object name". Point local branches at their origin refs
+      # (fetch-depth: 0 already fetched them) so every configured branch resolves.
+      - name: Ensure configured release branches exist locally
+        env:
+          BRANCH: ${{ github.event.workflow_run.head_branch }}
+        run: |
+          set -euo pipefail
+          for b in main develop; do
+            if [ "$b" != "$BRANCH" ]; then
+              git branch --force "$b" "origin/$b"
+            fi
+          done
+
       - id: sr
         uses: cycjimmy/semantic-release-action@v6
         env:
