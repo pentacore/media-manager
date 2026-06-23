@@ -136,7 +136,15 @@ const servicePlaceholders = {
         url: 'http://seerr.local:5055',
         apiKey: 'Seerr API key (Settings → General)',
     },
+    whisparr: {
+        name: 'My Whisparr',
+        url: 'http://whisparr.local:6969',
+        apiKey: 'Whisparr API key (Settings → General)',
+    },
 } as Record<string, { name: string; url: string; apiKey: string }>;
+
+const whisparrVersion = ref('v3');
+const showWhisparrVersion = computed(() => selectedType.value === 'whisparr');
 
 const placeholders = computed(
     () =>
@@ -185,6 +193,28 @@ const placeholders = computed(
                             </SelectContent>
                         </Select>
                         <InputError :message="errors.type" />
+                    </div>
+
+                    <div v-if="showWhisparrVersion" class="space-y-2">
+                        <Label for="whisparr_version">Whisparr Version</Label>
+                        <Select
+                            name="whisparr_version"
+                            v-model="whisparrVersion"
+                        >
+                            <SelectTrigger>
+                                <SelectValue
+                                    placeholder="Select Whisparr version"
+                                />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="v3"
+                                    >v3 (movie-based)</SelectItem
+                                >
+                                <SelectItem value="v2"
+                                    >v2 (Eros / series-based)</SelectItem
+                                >
+                            </SelectContent>
+                        </Select>
                     </div>
 
                     <div class="space-y-2">

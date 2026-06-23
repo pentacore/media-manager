@@ -40,6 +40,8 @@ class ServiceConnectionUpdateRequest extends FormRequest
             // the matching connection types.
             'hidden_categories' => ['nullable', 'array'],
             'hidden_categories.*' => ['string', 'max:100'],
+            // Whisparr-only: which API generation this connection speaks.
+            'whisparr_version' => ['nullable', 'string', 'in:v2,v3'],
         ];
     }
 }
