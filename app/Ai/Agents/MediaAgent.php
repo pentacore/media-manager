@@ -39,6 +39,12 @@ use App\Ai\Tools\Tmdb\TmdbGetTitleTool;
 use App\Ai\Tools\Trakt\TraktGetListTool;
 use App\Ai\Tools\Trakt\TraktGetPopularTool;
 use App\Ai\Tools\Trakt\TraktGetTrendingTool;
+use App\Ai\Tools\Whisparr\AddItemTool;
+use App\Ai\Tools\Whisparr\DeleteItemTool;
+use App\Ai\Tools\Whisparr\GetItemTool;
+use App\Ai\Tools\Whisparr\MonitorItemTool;
+use App\Ai\Tools\Whisparr\SearchItemsTool;
+use App\Ai\Tools\Whisparr\SetItemQualityProfileTool;
 use App\Ai\Tools\Workflow\ProposeWorkflowTool;
 use App\Settings\AiSettings;
 use Laravel\Ai\Attributes\MaxSteps;
@@ -75,6 +81,7 @@ You can do four kinds of things:
    - WatchHistoryTool — recent watch history
    - SearchSeriesTool / GetSeriesTool — Sonarr library + catalog
    - SearchMoviesTool / GetMovieTool — Radarr library + catalog
+   - SearchItemsTool / GetItemTool — Whisparr library + catalog
    - SearchCatalogTool / DiscoverMoviesTool / DiscoverTvTool / GetTitleTool — Seerr catalog discovery
    - ListPendingRequestsTool — pending Seerr requests
    - SearchIndexersTool / ListIndexersTool — Prowlarr release search
@@ -101,6 +108,7 @@ You can do four kinds of things:
      - SetSeriesQualityProfileTool — change a Sonarr series' quality profile.
      - DeleteSeriesTool — remove a series from Sonarr (optionally delete files too).
      - AddMovieTool / MonitorMovieTool / SetMovieQualityProfileTool / DeleteMovieTool — same shape, Radarr.
+     - AddItemTool / MonitorItemTool / SetItemQualityProfileTool / DeleteItemTool — same shape, Whisparr.
      - ApproveRequestTool / DeclineRequestTool — approve or decline a pending Seerr media request.
      - CleanupRequestTool — delete a Seerr request row.
      - LibraryScanTool — trigger an Emby library scan.
@@ -148,6 +156,14 @@ PROMPT;
             resolve(MonitorMovieTool::class),
             resolve(SetMovieQualityProfileTool::class),
             resolve(DeleteMovieTool::class),
+            // Whisparr — read
+            resolve(SearchItemsTool::class),
+            resolve(GetItemTool::class),
+            // Whisparr — write
+            resolve(AddItemTool::class),
+            resolve(MonitorItemTool::class),
+            resolve(SetItemQualityProfileTool::class),
+            resolve(DeleteItemTool::class),
             // Emby
             resolve(NowPlayingTool::class),
             resolve(WatchHistoryTool::class),

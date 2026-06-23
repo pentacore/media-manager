@@ -17,6 +17,8 @@ use App\Ai\Tools\Sonarr\GetSeriesTool;
 use App\Ai\Tools\Sonarr\SearchSeriesTool;
 use App\Ai\Tools\System\GetServiceStatusTool;
 use App\Ai\Tools\System\QueryActivityTool;
+use App\Ai\Tools\Whisparr\GetItemTool;
+use App\Ai\Tools\Whisparr\SearchItemsTool;
 use App\Settings\DecisionAgentSettings;
 use Laravel\Ai\Attributes\MaxSteps;
 use Laravel\Ai\Contracts\Agent;
@@ -55,6 +57,7 @@ WORKFLOW
    - QueryActivityTool — recent system/webhook/playback activity.
    - SearchSeriesTool / GetSeriesTool — Sonarr library lookups.
    - SearchMoviesTool / GetMovieTool — Radarr library lookups.
+   - SearchItemsTool / GetItemTool — Whisparr library lookups.
    - ListPendingRequestsTool — pending Seerr requests.
    - NowPlayingTool / WatchHistoryTool — Emby state.
    Do not over-fetch. Avoid redundant calls.
@@ -97,6 +100,8 @@ PROMPT;
             resolve(GetSeriesTool::class),
             resolve(SearchMoviesTool::class),
             resolve(GetMovieTool::class),
+            resolve(SearchItemsTool::class),
+            resolve(GetItemTool::class),
             resolve(ListPendingRequestsTool::class),
             resolve(NowPlayingTool::class),
             resolve(WatchHistoryTool::class),

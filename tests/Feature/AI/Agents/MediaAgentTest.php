@@ -58,10 +58,23 @@ test('tool list includes the Phase-2 tool families', function (): void {
     expect($shortNames)->toContain('ProposeWorkflowTool');
 });
 
-test('tool list has all 36 expected tools', function (): void {
+test('tool list has all 42 expected tools', function (): void {
     $tools = collect(iterator_to_array((new MediaAgent)->tools(), false));
 
-    expect($tools->count())->toBe(36);
+    expect($tools->count())->toBe(42);
+});
+
+test('tool list includes the Whisparr tool families', function (): void {
+    $tools = collect(iterator_to_array((new MediaAgent)->tools(), false));
+
+    $shortNames = $tools->map(fn ($t): string => class_basename($t))->all();
+
+    expect($shortNames)->toContain('SearchItemsTool');
+    expect($shortNames)->toContain('GetItemTool');
+    expect($shortNames)->toContain('AddItemTool');
+    expect($shortNames)->toContain('MonitorItemTool');
+    expect($shortNames)->toContain('SetItemQualityProfileTool');
+    expect($shortNames)->toContain('DeleteItemTool');
 });
 
 test('tool list includes the Phase-3 metadata tool families', function (): void {
