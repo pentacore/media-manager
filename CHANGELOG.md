@@ -1,3 +1,15 @@
+# [1.3.0](https://github.com/pentacore/media-manager/compare/v1.2.0...v1.3.0) (2026-06-23)
+
+
+### Bug Fixes
+
+* **auth:** verify email for SSO and Emby logins ([03c65ee](https://github.com/pentacore/media-manager/commit/03c65ee1ddcd0875343743201dfa915c34ff1b99))
+
+
+### Features
+
+* **ai:** DecisionAgent — autonomous handling of inbound webhook events ([#41](https://github.com/pentacore/media-manager/issues/41)) ([b824fb5](https://github.com/pentacore/media-manager/commit/b824fb581cbdb358e775e6311ddd6c45f44d4978))
+
 # [1.2.0](https://github.com/pentacore/media-manager/compare/v1.1.1...v1.2.0) (2026-05-03)
 
 
