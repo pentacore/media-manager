@@ -131,6 +131,12 @@ class DecisionAgentSettings
                 'MovieFileDelete', 'ManualInteractionRequired', 'Health',
                 'HealthRestored', 'ApplicationUpdate',
             ],
+            'whisparr' => [
+                'Grab', 'Download', 'Rename',
+                'MovieAdded', 'MovieDelete', 'MovieFileDelete',
+                'SeriesAdd', 'SeriesDelete', 'EpisodeFileDelete',
+                'ManualInteractionRequired', 'Health', 'HealthRestored', 'ApplicationUpdate',
+            ],
             'seerr' => [
                 'MEDIA_PENDING', 'MEDIA_APPROVED', 'MEDIA_AUTO_APPROVED',
                 'MEDIA_DECLINED', 'MEDIA_AVAILABLE', 'MEDIA_FAILED',
