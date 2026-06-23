@@ -63,7 +63,9 @@ class WhisparrActions implements ActionExecutor
             'qualityProfileId' => (int) ($payload['quality_profile_id'] ?? 0),
             'rootFolderPath' => (string) ($payload['root_folder_path'] ?? ''),
             'monitored' => (bool) ($payload['monitored'] ?? true),
-            'addOptions' => ['searchForMovie' => true],
+            'addOptions' => [
+                ($serviceConnection->whisparrVersion()->resource() === 'series' ? 'searchForMissingEpisodes' : 'searchForMovie') => true,
+            ],
         ]));
 
         new WhisparrCache($serviceConnection)->bustAll();
