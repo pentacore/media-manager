@@ -34,6 +34,7 @@ class FetchLatestServiceVersion implements ShouldQueue
         'prowlarr' => 'Prowlarr/Prowlarr',
         'seerr' => 'seerr-team/seerr',
         'emby' => 'MediaBrowser/Emby.Releases', // Emby is closed-source, but this is the canonical repo and latest release should be correct
+        'whisparr' => 'Whisparr/Whisparr',
     ];
 
     public function __construct(public ServiceConnection $serviceConnection) {}
