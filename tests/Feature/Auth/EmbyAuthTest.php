@@ -39,6 +39,7 @@ test('emby login succeeds with valid credentials', function (): void {
     expect($user)->not->toBeNull();
     expect($user->name)->toBe('EmbyUser');
     expect($user->role)->toBe(UserRole::Admin); // first user
+    expect($user->email_verified_at)->not->toBeNull(); // Emby auth bypasses email verification
 
     expect(EmbyUserLink::where('user_id', $user->id)->where('emby_user_id', 'emby-user-123')->exists())->toBeTrue();
 });
