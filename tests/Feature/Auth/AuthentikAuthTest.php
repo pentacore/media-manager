@@ -38,6 +38,7 @@ test('authentik callback creates new user', function (): void {
     expect($user->sso_id)->toBe('auth-123');
     expect($user->name)->toBe('SSO User');
     expect($user->role)->toBe(UserRole::Admin); // first user
+    expect($user->email_verified_at)->not->toBeNull(); // SSO bypasses email verification
 });
 
 test('authentik callback assigns viewer to non-first user', function (): void {
@@ -63,6 +64,21 @@ test('authentik callback links existing user by email', function (): void {
     $existing->refresh();
     expect($existing->sso_provider)->toBe('authentik');
     expect($existing->sso_id)->toBe('auth-link');
+});
+
+test('authentik callback verifies email of linked unverified user', function (): void {
+    $existing = User::factory()->unverified()->create(['email' => 'unverified@example.com']);
+    expect($existing->email_verified_at)->toBeNull();
+
+    mockSocialiteUser(id: 'auth-unverified', email: 'unverified@example.com', name: 'Linked');
+
+    $this->get(route('auth.authentik.callback'));
+
+    $this->assertAuthenticated();
+
+    $existing->refresh();
+    expect($existing->sso_provider)->toBe('authentik');
+    expect($existing->email_verified_at)->not->toBeNull();
 });
 
 test('authentik callback logs in returning SSO user', function (): void {

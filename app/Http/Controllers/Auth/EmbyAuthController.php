@@ -87,8 +87,11 @@ class EmbyAuthController extends Controller
                     'name' => $embyUsername,
                     'email' => $email,
                     'role' => $role,
-                    'email_verified_at' => now(),
                 ]);
+
+                // email_verified_at is guarded against mass assignment, so set
+                // it explicitly — Emby authenticated the user for us.
+                $user->markEmailAsVerified();
 
                 EmbyUserLink::create([
                     'user_id' => $user->id,
