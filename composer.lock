@@ -4104,16 +4104,16 @@
         },
         {
             "name": "pentacore/laravel-typefinder",
-            "version": "4.2.1",
+            "version": "4.2.2",
             "source": {
                 "type": "git",
                 "url": "https://github.com/pentacore/Laravel-Typefinder.git",
-                "reference": "72c0a0df10b55c267b6855cdff06b867fcdb3eb7"
+                "reference": "300b3a89f138f85d0c636f98c164621332eb3cb6"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/pentacore/Laravel-Typefinder/zipball/72c0a0df10b55c267b6855cdff06b867fcdb3eb7",
-                "reference": "72c0a0df10b55c267b6855cdff06b867fcdb3eb7",
+                "url": "https://api.github.com/repos/pentacore/Laravel-Typefinder/zipball/300b3a89f138f85d0c636f98c164621332eb3cb6",
+                "reference": "300b3a89f138f85d0c636f98c164621332eb3cb6",
                 "shasum": ""
             },
             "require": {
@@ -4168,7 +4168,7 @@
                 "issues": "https://github.com/pentacore/laravel-typefinder/issues",
                 "source": "https://github.com/pentacore/laravel-typefinder"
             },
-            "time": "2026-04-22T09:01:30+00:00"
+            "time": "2026-05-07T08:46:40+00:00"
         },
         {
             "name": "phpdocumentor/reflection-common",
