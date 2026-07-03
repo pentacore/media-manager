@@ -52,10 +52,10 @@ class GetDownloadQueueTool extends BaseTool
             default => throw new InvalidArgumentException('service must be "sonarr" or "radarr".'),
         };
 
-        $connection = ServiceConnection::resolveActive($type);
+        $serviceConnection = ServiceConnection::resolveActive($type);
         $client = $type === ServiceType::Sonarr
-            ? new SonarrClient($connection)
-            : new RadarrClient($connection);
+            ? new SonarrClient($serviceConnection)
+            : new RadarrClient($serviceConnection);
 
         $params = [
             'page' => 1,

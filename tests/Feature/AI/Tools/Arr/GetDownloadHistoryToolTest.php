@@ -58,7 +58,7 @@ test('returns slim history projection and forwards downloadId filter', function 
         ->and($result['events'][0]['quality'])->toBe('WEBDL-1080p')
         ->and($result['events'][0]['episode'])->toBe('S01E01');
 
-    Http::assertSent(fn (ClientRequest $request): bool => str_contains($request->url(), 'downloadId=HASH-A'));
+    Http::assertSent(fn (ClientRequest $clientRequest): bool => str_contains($clientRequest->url(), 'downloadId=HASH-A'));
 });
 
 test('caps page_size at 100', function (): void {
@@ -78,5 +78,5 @@ test('caps page_size at 100', function (): void {
         'page_size' => 5000,
     ]));
 
-    Http::assertSent(fn (ClientRequest $request): bool => str_contains($request->url(), 'pageSize=100'));
+    Http::assertSent(fn (ClientRequest $clientRequest): bool => str_contains($clientRequest->url(), 'pageSize=100'));
 });

@@ -54,28 +54,20 @@ class ResolveManualImportChatTool extends BaseTool
             default => throw new InvalidArgumentException('service must be "sonarr" or "radarr".'),
         };
 
-        if ($downloadId === '') {
-            throw new InvalidArgumentException('download_id is required.');
-        }
+        throw_if($downloadId === '', InvalidArgumentException::class, 'download_id is required.');
 
-        if ($reason === '') {
-            throw new InvalidArgumentException('reason is required so the approver understands the decision.');
-        }
+        throw_if($reason === '', InvalidArgumentException::class, 'reason is required so the approver understands the decision.');
 
-        $connection = ServiceConnection::resolveActive($type);
+        $serviceConnection = ServiceConnection::resolveActive($type);
         $client = $type === ServiceType::Sonarr
-            ? new SonarrClient($connection)
-            : new RadarrClient($connection);
+            ? new SonarrClient($serviceConnection)
+            : new RadarrClient($serviceConnection);
 
         $candidates = $client->getManualImport(['downloadId' => $downloadId]);
         $assessment = resolve(ManualImportResolver::class)->assess($candidates, $service, $downloadId);
 
-        if ($assessment['importable'] === 0) {
-            throw new InvalidArgumentException(
-                'No candidate file can be mapped to a series/movie — nothing to import. '
-                .'Use RemoveStuckDownloadChatTool or leave it for a human.',
-            );
-        }
+        throw_if($assessment['importable'] === 0, InvalidArgumentException::class, 'No candidate file can be mapped to a series/movie — nothing to import. '
+        .'Use RemoveStuckDownloadChatTool or leave it for a human.');
 
         $partial = ! $assessment['fully_mapped'];
 

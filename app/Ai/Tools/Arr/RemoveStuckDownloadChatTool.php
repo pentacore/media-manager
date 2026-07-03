@@ -41,17 +41,11 @@ class RemoveStuckDownloadChatTool extends BaseTool
         $downloadId = (string) ($args['download_id'] ?? '');
         $reason = (string) ($args['reason'] ?? '');
 
-        if (! in_array($service, ['sonarr', 'radarr'], true)) {
-            throw new InvalidArgumentException('service must be "sonarr" or "radarr".');
-        }
+        throw_unless(in_array($service, ['sonarr', 'radarr'], true), InvalidArgumentException::class, 'service must be "sonarr" or "radarr".');
 
-        if ($downloadId === '') {
-            throw new InvalidArgumentException('download_id is required.');
-        }
+        throw_if($downloadId === '', InvalidArgumentException::class, 'download_id is required.');
 
-        if ($reason === '') {
-            throw new InvalidArgumentException('reason is required so the approver understands why removal beats importing.');
-        }
+        throw_if($reason === '', InvalidArgumentException::class, 'reason is required so the approver understands why removal beats importing.');
 
         return [
             'type' => 'remove_stuck_download',
