@@ -45,17 +45,10 @@ class ChatController extends Controller
         $conversationId = $validated['conversation_id'] ?? null;
         $user = $request->user();
 
-        if (isset($validated['mode'])) {
-            resolve(AiSettings::class)->withMode(AiMode::from($validated['mode']));
-        }
+        $this->applyRequestedMode($validated['mode'] ?? null);
 
-        try {
-            resolve(AiBudgetGuard::class)->enforce();
-        } catch (AiBudgetExceededException $aiBudgetExceededException) {
-            return response()->json([
-                'error' => 'budget_exceeded',
-                'message' => $aiBudgetExceededException->getMessage(),
-            ], 402);
+        if ($budgetResponse = $this->enforceBudget()) {
+            return $budgetResponse;
         }
 
         if ($conversationId !== null && ! $this->conversationIsAvailable($conversationId, $user)) {
@@ -77,29 +70,7 @@ class ChatController extends Controller
                 : (new MediaAgent)->forUser($user);
             $response = $agent->prompt($messageToSend);
         } catch (Throwable $throwable) {
-            // Laravel's HTTP-client RequestException truncates response bodies
-            // in getMessage(); pull the full body separately so OpenAI's
-            // verbose error JSON is visible for debugging.
-            $context = [
-                'user_id' => $user?->id,
-                'exception' => $throwable::class,
-                'message' => $throwable->getMessage(),
-            ];
-
-            if ($throwable instanceof RequestException) {
-                $context['response_body'] = $throwable->response->body();
-                $context['response_status'] = $throwable->response->status();
-            }
-
-            Log::error('AI request failed.', $context);
-
-            $payload = ['error' => 'AI request failed.'];
-
-            if (app()->isLocal()) {
-                $payload['message'] = $throwable->getMessage();
-            }
-
-            return response()->json($payload, 500);
+            return $this->handleAgentFailure($throwable, $user);
         }
 
         $workflowPayload = $this->attachFreshlyProposedWorkflow($user, $turnStartedAt, $response->conversationId ?? null);
@@ -116,6 +87,117 @@ class ChatController extends Controller
             'conversation_id' => $newConversationId,
             'workflow' => $workflowPayload,
         ]);
+    }
+
+    /**
+     * Stream a chat turn back to the client as Server-Sent Events.
+     *
+     * Mirrors send()'s pre-flight (mode, budget, ownership) but returns the
+     * SDK's StreamableAgentResponse (emits `data: <json>` lines + `data: [DONE]`)
+     * instead of a buffered JSON payload. Workflow continuations are intentionally
+     * NOT supported here — they stay on send().
+     */
+    public function stream(Request $request): mixed
+    {
+        $validated = $request->validate([
+            'message' => ['required', 'string', 'max:4000'],
+            'conversation_id' => ['nullable', 'string', 'uuid'],
+            'mode' => ['nullable', 'string', 'in:advisory,executive'],
+        ]);
+
+        $user = $request->user();
+
+        $this->applyRequestedMode($validated['mode'] ?? null);
+
+        if ($budgetResponse = $this->enforceBudget()) {
+            return $budgetResponse;
+        }
+
+        $conversationId = $validated['conversation_id'] ?? null;
+
+        if ($conversationId !== null && ! $this->conversationIsAvailable($conversationId, $user)) {
+            return response()->json(['message' => 'Conversation not found.'], 404);
+        }
+
+        $isNewConversation = $conversationId === null;
+        $message = $validated['message'];
+
+        try {
+            $agent = $conversationId
+                ? (new MediaAgent)->continue($conversationId, as: $user)
+                : (new MediaAgent)->forUser($user);
+            $stream = $agent->stream($message);
+        } catch (Throwable $throwable) {
+            return $this->handleAgentFailure($throwable, $user);
+        }
+
+        return $stream->then(function ($response) use ($isNewConversation, $message): void {
+            $newConversationId = $response->conversationId ?? null;
+
+            if ($isNewConversation && $newConversationId !== null) {
+                $this->seedConversationTitle($newConversationId, $message);
+                dispatch(new GenerateConversationTitle($newConversationId, $message));
+            }
+        });
+    }
+
+    /**
+     * Apply the requested advisory/executive mode to the shared AiSettings, if any.
+     */
+    private function applyRequestedMode(?string $mode): void
+    {
+        if ($mode !== null) {
+            resolve(AiSettings::class)->withMode(AiMode::from($mode));
+        }
+    }
+
+    /**
+     * Enforce the monthly AI budget. Returns a 402 JsonResponse when the hard
+     * cap has been exceeded, or null when the request may proceed.
+     */
+    private function enforceBudget(): ?JsonResponse
+    {
+        try {
+            resolve(AiBudgetGuard::class)->enforce();
+        } catch (AiBudgetExceededException $aiBudgetExceededException) {
+            return response()->json([
+                'error' => 'budget_exceeded',
+                'message' => $aiBudgetExceededException->getMessage(),
+            ], 402);
+        }
+
+        return null;
+    }
+
+    /**
+     * Log an agent invocation failure and build the client-facing 500 response.
+     * The full message is only surfaced in local for debugging.
+     */
+    private function handleAgentFailure(Throwable $throwable, ?User $user): JsonResponse
+    {
+        // Laravel's HTTP-client RequestException truncates response bodies
+        // in getMessage(); pull the full body separately so OpenAI's
+        // verbose error JSON is visible for debugging.
+        $context = [
+            'user_id' => $user?->id,
+            'exception' => $throwable::class,
+            'message' => $throwable->getMessage(),
+        ];
+
+        if ($throwable instanceof RequestException) {
+            $context['response_body'] = $throwable->response->body();
+            $context['response_status'] = $throwable->response->status();
+        }
+
+        Log::error('AI request failed.', $context);
+
+        $payload = ['error' => 'AI request failed.'];
+
+        if (app()->isLocal()) {
+            $payload['message'] = $throwable->getMessage();
+        }
+
+        return response()->json($payload, 500);
     }
 
     /**
