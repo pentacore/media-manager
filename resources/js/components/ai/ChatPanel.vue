@@ -301,19 +301,17 @@ async function sendStreamingTurn(bodyMessage: string): Promise<void> {
         },
     });
 
-    // The stream carries no conversation id. For an existing conversation we
-    // already know it; for a brand-new one the server seeded a row during the
-    // turn, so refresh the recent list and adopt the freshest conversation.
-    let conversationId = result.conversationId;
+    // The stream's terminal `conversation_id` event makes the id deterministic:
+    // for an existing conversation it echoes what we sent, for a brand-new one it
+    // carries the id the SDK minted during the turn. Adopt it directly — no
+    // recency guessing.
+    const conversationId = result.conversationId;
 
-    if (!conversationId) {
-        await refreshRecent(true);
-        conversationId = recent.value[0]?.id ?? null;
-
-        if (conversationId) {
+    if (conversationId) {
+        if (conversationId !== knownConversationId) {
             setActiveConversation(conversationId);
         }
-    } else {
+
         rememberConversation(conversationId);
     }
 

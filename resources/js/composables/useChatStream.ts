@@ -29,14 +29,15 @@ function csrfToken(): string {
  *
  * Event shapes are the Laravel AI SDK's default (non-Vercel) `toArray()` output,
  * emitted verbatim as `data: <json>` lines and terminated by `data: [DONE]`:
- *   - `text_delta` → `{ delta: string }`
- *   - `tool_call`  → `{ tool_name: string }`
- *   - `error`      → `{ message?: string }`
+ *   - `text_delta`      → `{ delta: string }`
+ *   - `tool_call`       → `{ tool_name: string }`
+ *   - `error`           → `{ message?: string }`
+ *   - `conversation_id` → `{ conversation_id: string }` (controller-appended)
  *
- * The stream carries NO conversation id (the SDK only exposes it server-side),
- * so `conversationId` in the result simply echoes the id passed in. Callers must
- * discover a brand-new conversation's id out of band (e.g. by refreshing the
- * recent-conversation list once the stream completes).
+ * The SDK's own events carry NO conversation id, so the controller appends a
+ * terminal `conversation_id` event before `[DONE]`. This makes a brand-new
+ * conversation's id deterministic instead of forcing callers to guess it from
+ * the recent-conversation list.
  */
 export async function streamChat(
     options: StreamChatOptions,
@@ -75,6 +76,7 @@ export async function streamChat(
     const decoder = new TextDecoder();
     let buffer = '';
     let text = '';
+    let conversationId = options.conversationId;
 
     for (;;) {
         const { done, value } = await reader.read();
@@ -99,7 +101,7 @@ export async function streamChat(
                 const payload = line.slice(5).trim();
 
                 if (payload === '[DONE]') {
-                    return { text, conversationId: options.conversationId };
+                    return { text, conversationId };
                 }
 
                 let event: Record<string, unknown>;
@@ -124,6 +126,12 @@ export async function streamChat(
                         }
 
                         break;
+                    case 'conversation_id':
+                        if (typeof event.conversation_id === 'string') {
+                            conversationId = event.conversation_id;
+                        }
+
+                        break;
                     case 'error':
                         throw new Error(
                             typeof event.message === 'string'
@@ -137,5 +145,5 @@ export async function streamChat(
         }
     }
 
-    return { text, conversationId: options.conversationId };
+    return { text, conversationId };
 }

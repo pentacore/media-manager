@@ -92,10 +92,14 @@ class ChatController extends Controller
     /**
      * Stream a chat turn back to the client as Server-Sent Events.
      *
-     * Mirrors send()'s pre-flight (mode, budget, ownership) but returns the
-     * SDK's StreamableAgentResponse (emits `data: <json>` lines + `data: [DONE]`)
-     * instead of a buffered JSON payload. Workflow continuations are intentionally
-     * NOT supported here — they stay on send().
+     * Mirrors send()'s pre-flight (mode, budget, ownership). We drive the SSE
+     * response ourselves (rather than returning the SDK's StreamableAgentResponse
+     * directly) so we can append a terminal `conversation_id` event: for a brand-new
+     * conversation the id is only minted by the SDK's RememberConversation middleware
+     * once the stream is consumed, and no SDK event carries it. Emitting it before
+     * `[DONE]` makes the client's active conversation deterministic instead of relying
+     * on a recency heuristic. Workflow continuations are intentionally NOT supported
+     * here — they stay on send().
      */
     public function stream(Request $request): mixed
     {
@@ -131,7 +135,7 @@ class ChatController extends Controller
             return $this->handleAgentFailure($throwable, $user);
         }
 
-        return $stream->then(function ($response) use ($isNewConversation, $message): void {
+        $stream->then(function ($response) use ($isNewConversation, $message): void {
             $newConversationId = $response->conversationId ?? null;
 
             if ($isNewConversation && $newConversationId !== null) {
@@ -139,6 +143,25 @@ class ChatController extends Controller
                 dispatch(new GenerateConversationTitle($newConversationId, $message));
             }
         });
+
+        return response()->stream(function () use ($stream): void {
+            foreach ($stream as $event) {
+                echo 'data: '.((string) $event)."\n\n";
+            }
+
+            // The conversation id is populated once the SDK events (and the
+            // then() callbacks) have run during iteration above.
+            $conversationId = $stream->conversationId ?? null;
+
+            if ($conversationId !== null) {
+                echo 'data: '.json_encode([
+                    'type' => 'conversation_id',
+                    'conversation_id' => $conversationId,
+                ])."\n\n";
+            }
+
+            echo "data: [DONE]\n\n";
+        }, headers: ['Content-Type' => 'text/event-stream']);
     }
 
     /**

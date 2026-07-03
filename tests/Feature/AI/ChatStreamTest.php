@@ -29,8 +29,66 @@ test('admin can stream a chat response as SSE', function (): void {
     expect($response->headers->get('content-type'))->toContain('text/event-stream');
 
     $body = $response->streamedContent();
+    // The fake gateway streams the response one space-delimited word per
+    // text_delta event, so assert on the first word to prove the faked text
+    // actually reached the SSE body rather than just the framing.
     expect($body)->toContain('data:')
+        ->and($body)->toContain('text_delta')
+        ->and($body)->toContain('Hello')
         ->and($body)->toContain('[DONE]');
+});
+
+test('streaming a first turn appends the minted conversation id before DONE', function (): void {
+    MediaAgent::fake(['Hello from the stream.']);
+    $admin = User::factory()->admin()->create();
+
+    $response = $this->actingAs($admin)
+        ->post(route('ai.chat.stream'), [
+            'message' => 'Say hello',
+        ], ['Accept' => 'text/event-stream']);
+
+    $response->assertOk();
+
+    $body = $response->streamedContent();
+
+    $conversationId = DB::table('agent_conversations')
+        ->where('user_id', $admin->id)
+        ->value('id');
+
+    expect($conversationId)->not->toBeNull()
+        ->and($body)->toContain('"type":"conversation_id"')
+        ->and($body)->toContain($conversationId);
+
+    // The id event must precede the terminal [DONE] marker.
+    expect(strpos($body, $conversationId))
+        ->toBeLessThan(strpos($body, '[DONE]'));
+});
+
+test('streaming an existing conversation echoes its id in the terminal event', function (): void {
+    MediaAgent::fake(['Continuing.']);
+    $admin = User::factory()->admin()->create();
+
+    $conversationId = (string) Str::uuid7();
+
+    DB::table('agent_conversations')->insert([
+        'id' => $conversationId,
+        'user_id' => $admin->id,
+        'title' => 'Existing conversation',
+        'created_at' => now(),
+        'updated_at' => now(),
+    ]);
+
+    $response = $this->actingAs($admin)
+        ->post(route('ai.chat.stream'), [
+            'message' => 'Continue this',
+            'conversation_id' => $conversationId,
+        ], ['Accept' => 'text/event-stream']);
+
+    $response->assertOk();
+
+    expect($response->streamedContent())
+        ->toContain('"type":"conversation_id"')
+        ->and($response->streamedContent())->toContain($conversationId);
 });
 
 test('streaming endpoint enforces budget guard', function (): void {
