@@ -47,7 +47,7 @@ class GenerateConversationTitle implements ShouldQueue
             return;
         }
 
-        $title = $this->normalize($response->text);
+        $title = $this->normalize((string) ($response['title'] ?? ''));
 
         if ($title === '') {
             return;
