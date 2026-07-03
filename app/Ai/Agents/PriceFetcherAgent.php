@@ -15,6 +15,7 @@ use Laravel\Ai\Contracts\HasMiddleware;
 use Laravel\Ai\Contracts\HasTools;
 use Laravel\Ai\Contracts\Tool;
 use Laravel\Ai\Promptable;
+use Laravel\Ai\Providers\Tools\WebFetch;
 use Stringable;
 
 #[MaxSteps(40)]
@@ -91,12 +92,22 @@ PROMPT;
     }
 
     /**
-     * @return iterable<int, Tool>
+     * When the price_fetcher_provider_webfetch flag is on, the agent uses the
+     * SDK's provider-native WebFetch instead of the custom host-allowlisted
+     * HTTP tool. Provider WebFetch requires a provider that supports it
+     * (OpenAI/Anthropic); unsupported providers throw a LogicException at
+     * prompt time — hence the flag defaults off.
+     *
+     * @return iterable<int, Tool|WebFetch>
      */
     public function tools(): iterable
     {
+        $webFetch = config('mediamanager.ai.price_fetcher_provider_webfetch', false)
+            ? (new WebFetch)->allow(WebFetchTool::ALLOWED_HOSTS)->max(20)
+            : resolve(WebFetchTool::class);
+
         return [
-            resolve(WebFetchTool::class),
+            $webFetch,
             resolve(UpsertModelPriceTool::class),
         ];
     }

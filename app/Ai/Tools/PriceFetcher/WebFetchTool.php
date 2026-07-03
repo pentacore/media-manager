@@ -24,7 +24,7 @@ class WebFetchTool extends BaseTool
     /**
      * Hosts the agent is allowed to fetch from. Pricing pages only.
      */
-    private const array ALLOWED_HOSTS = [
+    public const array ALLOWED_HOSTS = [
         'openai.com',
         'platform.openai.com',
         'developers.openai.com',

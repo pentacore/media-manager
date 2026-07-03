@@ -9,6 +9,7 @@ use App\Models\AiModelPrice;
 use App\Models\AiUsageRecord;
 use App\Models\User;
 use Laravel\Ai\Contracts\HasTools;
+use Laravel\Ai\Providers\Tools\WebFetch;
 
 test('agent declares both pricing tools', function (): void {
     $agent = new PriceFetcherAgent;
@@ -19,6 +20,21 @@ test('agent declares both pricing tools', function (): void {
     expect($names)
         ->toContain(WebFetchTool::class)
         ->toContain(UpsertModelPriceTool::class);
+});
+
+test('price fetcher uses provider webfetch when flag enabled', function (): void {
+    config()->set('mediamanager.ai.price_fetcher_provider_webfetch', true);
+
+    $tools = collect((new PriceFetcherAgent)->tools())->map(fn (object $tool): string => $tool::class);
+
+    expect($tools)->toContain(WebFetch::class)
+        ->not->toContain(WebFetchTool::class);
+});
+
+test('price fetcher defaults to the custom webfetch tool', function (): void {
+    $tools = collect((new PriceFetcherAgent)->tools())->map(fn (object $tool): string => $tool::class);
+
+    expect($tools)->toContain(WebFetchTool::class);
 });
 
 test('admin refresh endpoint queues the agent and toasts the queued state', function (): void {

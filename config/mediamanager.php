@@ -36,6 +36,12 @@ return [
         // queue after the first agent response. Override per env or via the
         // admin AI Settings page.
         'title_model' => env('MEDIAMANAGER_AI_TITLE_MODEL', 'gpt-5.4-nano'),
+
+        // Opt-in: swap the PriceFetcherAgent's custom host-allowlisted HTTP
+        // GET tool for the SDK's provider-native WebFetch. Only works on
+        // providers that support it (OpenAI/Anthropic); unsupported providers
+        // throw a LogicException at prompt time, so this defaults OFF.
+        'price_fetcher_provider_webfetch' => env('AI_PRICEFETCHER_PROVIDER_WEBFETCH', false),
     ],
 
     /*
