@@ -3,8 +3,8 @@
 declare(strict_types=1);
 
 use App\Ai\Agents\MediaAgent;
-use App\Ai\Tools\Sonarr\DeleteSeriesTool;
-use App\Ai\Tools\Sonarr\SearchSeriesTool;
+use App\Ai\Tools\Arr\DeleteMediaTool;
+use App\Ai\Tools\Arr\SearchMediaTool;
 use App\Listeners\Ai\RecordAgentUsage;
 use App\Models\AiToolInvocation;
 use App\Models\AiUsageRecord;
@@ -67,14 +67,14 @@ test('tool_calls_count reflects rows already written for the same invocation', f
     AiToolInvocation::create([
         'invocation_id' => 'inv-multi',
         'tool_invocation_id' => 't1',
-        'tool_class' => SearchSeriesTool::class,
+        'tool_class' => SearchMediaTool::class,
         'agent_class' => MediaAgent::class,
         'status' => 'success',
     ]);
     AiToolInvocation::create([
         'invocation_id' => 'inv-multi',
         'tool_invocation_id' => 't2',
-        'tool_class' => DeleteSeriesTool::class,
+        'tool_class' => DeleteMediaTool::class,
         'agent_class' => MediaAgent::class,
         'status' => 'success',
     ]);

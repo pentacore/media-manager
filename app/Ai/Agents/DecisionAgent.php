@@ -8,22 +8,20 @@ use App\Ai\Decision\InspectStuckImportTool;
 use App\Ai\Decision\ProposeActionTool;
 use App\Ai\Decision\RemoveStuckDownloadTool;
 use App\Ai\Decision\ResolveManualImportTool;
+use App\Ai\Tools\Arr\GetMediaTool;
+use App\Ai\Tools\Arr\SearchMediaTool;
 use App\Ai\Tools\Emby\NowPlayingTool;
 use App\Ai\Tools\Emby\WatchHistoryTool;
-use App\Ai\Tools\Radarr\GetMovieTool;
-use App\Ai\Tools\Radarr\SearchMoviesTool;
 use App\Ai\Tools\Seerr\ListPendingRequestsTool;
-use App\Ai\Tools\Sonarr\GetSeriesTool;
-use App\Ai\Tools\Sonarr\SearchSeriesTool;
 use App\Ai\Tools\System\GetServiceStatusTool;
 use App\Ai\Tools\System\QueryActivityTool;
-use App\Ai\Tools\Whisparr\GetItemTool;
-use App\Ai\Tools\Whisparr\SearchItemsTool;
 use App\Settings\DecisionAgentSettings;
 use Laravel\Ai\Attributes\MaxSteps;
 use Laravel\Ai\Contracts\Agent;
+use Laravel\Ai\Contracts\HasProviderOptions;
 use Laravel\Ai\Contracts\HasTools;
 use Laravel\Ai\Contracts\Tool;
+use Laravel\Ai\Enums\Lab;
 use Laravel\Ai\Promptable;
 use Stringable;
 
@@ -34,13 +32,23 @@ use Stringable;
  * context toolset plus the one proposal tool, and it never talks to a user.
  */
 #[MaxSteps(16)]
-class DecisionAgent implements Agent, HasTools
+class DecisionAgent implements Agent, HasProviderOptions, HasTools
 {
     use Promptable;
 
     public function model(): string
     {
         return resolve(DecisionAgentSettings::class)->model();
+    }
+
+    public function providerOptions(Lab|string $provider): array
+    {
+        return match ($provider) {
+            Lab::OpenAI => [
+                'reasoning' => ['effort' => resolve(DecisionAgentSettings::class)->reasoning()],
+            ],
+            default => [],
+        };
     }
 
     public function instructions(): Stringable|string
@@ -55,9 +63,7 @@ WORKFLOW
 2. Use read tools to gather only the context you genuinely need:
    - GetServiceStatusTool — health/version of each service.
    - QueryActivityTool — recent system/webhook/playback activity.
-   - SearchSeriesTool / GetSeriesTool — Sonarr library lookups.
-   - SearchMoviesTool / GetMovieTool — Radarr library lookups.
-   - SearchItemsTool / GetItemTool — Whisparr library lookups.
+   - SearchMediaTool / GetMediaTool — library lookups; the `service` param picks sonarr (TV series), radarr (movies), or whisparr.
    - ListPendingRequestsTool — pending Seerr requests.
    - NowPlayingTool / WatchHistoryTool — Emby state.
    Do not over-fetch. Avoid redundant calls.
@@ -96,12 +102,8 @@ PROMPT;
         return [
             resolve(GetServiceStatusTool::class),
             resolve(QueryActivityTool::class),
-            resolve(SearchSeriesTool::class),
-            resolve(GetSeriesTool::class),
-            resolve(SearchMoviesTool::class),
-            resolve(GetMovieTool::class),
-            resolve(SearchItemsTool::class),
-            resolve(GetItemTool::class),
+            resolve(SearchMediaTool::class),
+            resolve(GetMediaTool::class),
             resolve(ListPendingRequestsTool::class),
             resolve(NowPlayingTool::class),
             resolve(WatchHistoryTool::class),

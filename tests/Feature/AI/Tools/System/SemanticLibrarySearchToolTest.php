@@ -10,7 +10,7 @@ use Laravel\Ai\Tools\Request;
 function bindSemanticSearch(array $return, ?Closure $expectation = null): void
 {
     $mock = Mockery::mock(SemanticLibrarySearch::class);
-    $expectation
+    $expectation instanceof Closure
         ? $expectation($mock)
         : $mock->shouldReceive('search')->andReturn($return);
 
@@ -34,8 +34,8 @@ test('returns the scored results envelope from the service', function (): void {
             ->andReturn(['available' => true, 'results' => $results]);
     });
 
-    $tool = resolve(SemanticLibrarySearchTool::class);
-    $decoded = json_decode($tool->handle(new Request(['query' => 'moody sci-fi'])), true);
+    $semanticLibrarySearchTool = resolve(SemanticLibrarySearchTool::class);
+    $decoded = json_decode($semanticLibrarySearchTool->handle(new Request(['query' => 'moody sci-fi'])), true);
 
     expect($decoded['available'])->toBeTrue()
         ->and($decoded['results'])->toHaveCount(2)
@@ -50,8 +50,8 @@ test('clamps limit and passes a whitelisted kind through to the service', functi
             ->andReturn(['available' => true, 'results' => []]);
     });
 
-    $tool = resolve(SemanticLibrarySearchTool::class);
-    $tool->handle(new Request(['query' => 'cozy detective shows', 'limit' => 999, 'kind' => 'series']));
+    $semanticLibrarySearchTool = resolve(SemanticLibrarySearchTool::class);
+    $semanticLibrarySearchTool->handle(new Request(['query' => 'cozy detective shows', 'limit' => 999, 'kind' => 'series']));
 });
 
 test('ignores an invalid kind by passing null', function (): void {
@@ -62,17 +62,18 @@ test('ignores an invalid kind by passing null', function (): void {
             ->andReturn(['available' => true, 'results' => []]);
     });
 
-    $tool = resolve(SemanticLibrarySearchTool::class);
-    $tool->handle(new Request(['query' => 'anything', 'kind' => 'documentary']));
+    $semanticLibrarySearchTool = resolve(SemanticLibrarySearchTool::class);
+    $semanticLibrarySearchTool->handle(new Request(['query' => 'anything', 'kind' => 'documentary']));
 });
 
 test('returns an error envelope when the query is empty', function (): void {
     $mock = Mockery::mock(SemanticLibrarySearch::class);
     $mock->shouldNotReceive('search');
+
     app()->instance(SemanticLibrarySearch::class, $mock);
 
-    $tool = resolve(SemanticLibrarySearchTool::class);
-    $decoded = json_decode($tool->handle(new Request(['query' => '   '])), true);
+    $semanticLibrarySearchTool = resolve(SemanticLibrarySearchTool::class);
+    $decoded = json_decode($semanticLibrarySearchTool->handle(new Request(['query' => '   '])), true);
 
     expect($decoded['error'])->toBe('empty_query');
 });
@@ -80,8 +81,8 @@ test('returns an error envelope when the query is empty', function (): void {
 test('surfaces the unavailable envelope when the service is unavailable', function (): void {
     bindSemanticSearch(['available' => false, 'results' => []]);
 
-    $tool = resolve(SemanticLibrarySearchTool::class);
-    $decoded = json_decode($tool->handle(new Request(['query' => 'moody sci-fi'])), true);
+    $semanticLibrarySearchTool = resolve(SemanticLibrarySearchTool::class);
+    $decoded = json_decode($semanticLibrarySearchTool->handle(new Request(['query' => 'moody sci-fi'])), true);
 
     expect($decoded['available'])->toBeFalse()
         ->and($decoded['message'])->toContain('unavailable');
