@@ -39,6 +39,24 @@ test('does not expose direct destructive tools — all mutations go through Prop
     expect($shortNames)->not->toContain('DeleteMovieTool');
 });
 
+test('tool list includes Whisparr read tools', function (): void {
+    $shortNames = collect(iterator_to_array((new DecisionAgent)->tools(), false))
+        ->map(fn ($tool): string => class_basename($tool))
+        ->all();
+
+    expect($shortNames)->toContain('SearchItemsTool');
+    expect($shortNames)->toContain('GetItemTool');
+});
+
+test('does not expose Whisparr write tools', function (): void {
+    $shortNames = collect(iterator_to_array((new DecisionAgent)->tools(), false))
+        ->map(fn ($tool): string => class_basename($tool))
+        ->all();
+
+    expect($shortNames)->not->toContain('AddItemTool');
+    expect($shortNames)->not->toContain('DeleteItemTool');
+});
+
 test('model() reads from DecisionAgentSettings', function (): void {
     resolve(DecisionAgentSettings::class)->setModel('gpt-triage');
 

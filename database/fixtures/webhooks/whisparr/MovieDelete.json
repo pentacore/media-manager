@@ -1,0 +1,5 @@
+{
+  "eventType": "MovieDelete",
+  "movie": { "id": 10, "title": "Sample Title", "tmdbId": 12345 },
+  "deletedFiles": true
+}

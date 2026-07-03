@@ -57,3 +57,11 @@ test('toggles round-trip', function (): void {
     expect($settings->notifyOnSuggest())->toBeFalse();
     expect($settings->notifyOnAct())->toBeFalse();
 });
+
+test('eventCatalog includes Whisparr v2 and v3 events', function (): void {
+    $whisparr = DecisionAgentSettings::eventCatalog()['whisparr'] ?? [];
+
+    expect($whisparr)->toContain('MovieAdded', 'MovieDelete', 'MovieFileDelete');
+    expect($whisparr)->toContain('SeriesAdd', 'SeriesDelete', 'EpisodeFileDelete');
+    expect($whisparr)->toContain('Grab', 'Download', 'Rename', 'ManualInteractionRequired', 'Health', 'HealthRestored', 'ApplicationUpdate');
+});

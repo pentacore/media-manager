@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Database\Factories;
 
 use App\Enums\ServiceType;
+use App\Enums\WhisparrVersion;
 use App\Models\ServiceConnection;
 use Illuminate\Database\Eloquent\Factories\Factory;
 use Illuminate\Support\Str;
@@ -77,6 +78,24 @@ class ServiceConnectionFactory extends Factory
         return $this->state(fn (array $attributes): array => [
             'type' => ServiceType::SABnzbd,
             'name' => 'SABnzbd',
+        ]);
+    }
+
+    public function whisparr(): static
+    {
+        return $this->state(fn (array $attributes): array => [
+            'type' => ServiceType::Whisparr,
+            'name' => 'Whisparr',
+        ]);
+    }
+
+    public function whisparrVersion(WhisparrVersion $whisparrVersion): static
+    {
+        return $this->state(fn (array $attributes): array => [
+            'settings' => [
+                ...(is_array($attributes['settings'] ?? null) ? $attributes['settings'] : []),
+                'whisparr_version' => $whisparrVersion->value,
+            ],
         ]);
     }
 

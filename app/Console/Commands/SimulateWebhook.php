@@ -19,7 +19,7 @@ class SimulateWebhook extends Command
 {
     #[Override]
     protected $signature = 'webhook:simulate
-        {service? : Service type (emby, sonarr, radarr, seerr)}
+        {service? : Service type (emby, sonarr, radarr, seerr, whisparr)}
         {event? : Event name, e.g. playback.start}
         {--connection= : Service connection id (defaults to first active of that service type)}
         {--set=* : Override a payload key, e.g. --set User.Id=abc123}

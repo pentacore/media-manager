@@ -21,6 +21,8 @@ class ServiceConnectionStoreRequest extends FormRequest
             'url' => ['required', 'url', 'max:500'],
             'api_key' => ['required', 'string', 'max:500'],
             'webhook_token' => ['required', 'string', 'min:10', 'max:500'],
+            // Whisparr-only: which API generation this connection speaks.
+            'whisparr_version' => ['nullable', 'string', 'in:v2,v3'],
         ];
     }
 }

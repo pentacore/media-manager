@@ -6,6 +6,7 @@ namespace App\Models;
 
 use App\Enums\HealthStatus;
 use App\Enums\ServiceType;
+use App\Enums\WhisparrVersion;
 use App\Observers\ServiceConnectionObserver;
 use Carbon\CarbonImmutable;
 use Database\Factories\ServiceConnectionFactory;
@@ -106,5 +107,18 @@ class ServiceConnection extends Model
     public static function resolveActive(ServiceType $serviceType): self
     {
         return self::where('type', $serviceType)->where('is_active', true)->firstOrFail();
+    }
+
+    /**
+     * The configured Whisparr API generation for this connection. Defaults to
+     * v3 (movie-based) when unset or invalid.
+     */
+    public function whisparrVersion(): WhisparrVersion
+    {
+        $value = $this->settings['whisparr_version'] ?? null;
+
+        return is_string($value)
+            ? (WhisparrVersion::tryFrom($value) ?? WhisparrVersion::V3)
+            : WhisparrVersion::V3;
     }
 }
