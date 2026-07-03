@@ -1081,8 +1081,7 @@ function formatTimestamp(value: string): string {
                         </div>
                         <pre
                             class="max-h-72 overflow-y-auto px-3 py-2 text-[12px] leading-snug break-words whitespace-pre-wrap"
-                            >{{ detail.record.response_text }}</pre
-                        >
+                            >{{ detail.record.response_text }}</pre>
                     </div>
 
                     <!-- Pricing source banner -->

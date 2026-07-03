@@ -3,10 +3,7 @@ import type { Ref } from 'vue';
 import { useWebSocket } from '@/composables/useWebSocket';
 
 export type ConnectionState =
-    | 'connected'
-    | 'connecting'
-    | 'disconnected'
-    | 'unavailable';
+    'connected' | 'connecting' | 'disconnected' | 'unavailable';
 
 interface PusherConnection {
     state: string;

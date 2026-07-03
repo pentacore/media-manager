@@ -10,22 +10,19 @@ use App\Models\ActivityLog;
 use App\Models\ServiceConnection;
 use App\Services\Sabnzbd\SabnzbdClient;
 use App\Services\ServiceClientFactory;
+use Illuminate\Console\Attributes\Description;
+use Illuminate\Console\Attributes\Signature;
 use Illuminate\Console\Command;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\RequestException;
 use Illuminate\Support\Facades\Date;
 use Illuminate\Support\Facades\Log;
-use Override;
 use Throwable;
 
+#[Description('Poll SABnzbd history for completed/failed downloads and log them.')]
+#[Signature('sabnzbd:poll-history')]
 class PollSabnzbdHistory extends Command
 {
-    #[Override]
-    protected $signature = 'sabnzbd:poll-history';
-
-    #[Override]
-    protected $description = 'Poll SABnzbd history for completed/failed downloads and log them.';
-
     public function handle(ServiceClientFactory $serviceClientFactory): int
     {
         $connections = ServiceConnection::query()

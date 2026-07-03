@@ -254,6 +254,7 @@ class SeerrClient implements Warmable
             if (! $response instanceof Response) {
                 continue;
             }
+
             if (! $response->successful()) {
                 continue;
             }

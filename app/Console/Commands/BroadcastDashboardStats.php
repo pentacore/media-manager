@@ -5,17 +5,14 @@ declare(strict_types=1);
 namespace App\Console\Commands;
 
 use App\Services\Dashboard\DashboardStatsService;
+use Illuminate\Console\Attributes\Description;
+use Illuminate\Console\Attributes\Signature;
 use Illuminate\Console\Command;
-use Override;
 
+#[Description('Broadcast current dashboard statistics via WebSocket')]
+#[Signature('dashboard:broadcast-stats')]
 class BroadcastDashboardStats extends Command
 {
-    #[Override]
-    protected $signature = 'dashboard:broadcast-stats';
-
-    #[Override]
-    protected $description = 'Broadcast current dashboard statistics via WebSocket';
-
     public function handle(DashboardStatsService $dashboardStatsService): void
     {
         $dashboardStatsService->broadcast();

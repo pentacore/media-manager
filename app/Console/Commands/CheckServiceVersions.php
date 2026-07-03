@@ -7,17 +7,14 @@ namespace App\Console\Commands;
 use App\Jobs\FetchLatestServiceVersion;
 use App\Models\ServiceConnection;
 use App\Support\ServiceCheckBatch;
+use Illuminate\Console\Attributes\Description;
+use Illuminate\Console\Attributes\Signature;
 use Illuminate\Console\Command;
-use Override;
 
+#[Description('Check upstream GitHub releases for each service type and store latest_version.')]
+#[Signature('services:check-versions')]
 class CheckServiceVersions extends Command
 {
-    #[Override]
-    protected $signature = 'services:check-versions';
-
-    #[Override]
-    protected $description = 'Check upstream GitHub releases for each service type and store latest_version.';
-
     public function handle(): int
     {
         $connections = ServiceConnection::where('is_active', true)

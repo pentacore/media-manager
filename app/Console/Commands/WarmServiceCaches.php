@@ -9,9 +9,10 @@ use App\Models\ServiceConnection;
 use App\Services\ServiceClientFactory;
 use App\Support\Cache\Warmable;
 use App\Support\Presence\PresenceTracker;
+use Illuminate\Console\Attributes\Description;
+use Illuminate\Console\Attributes\Signature;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Log;
-use Override;
 use Throwable;
 
 /**
@@ -20,6 +21,8 @@ use Throwable;
  * actively interacting with the app — there is no point heating up
  * upstream APIs when nobody will benefit.
  */
+#[Description('Refresh near-expiry external API caches for active services. No-op when no users are present.')]
+#[Signature('services:warm-caches')]
 class WarmServiceCaches extends Command
 {
     /**
@@ -30,12 +33,6 @@ class WarmServiceCaches extends Command
         ServiceType::Radarr,
         ServiceType::Seerr,
     ];
-
-    #[Override]
-    protected $signature = 'services:warm-caches';
-
-    #[Override]
-    protected $description = 'Refresh near-expiry external API caches for active services. No-op when no users are present.';
 
     public function handle(
         PresenceTracker $presenceTracker,

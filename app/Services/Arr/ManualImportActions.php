@@ -22,7 +22,7 @@ use InvalidArgumentException;
  */
 class ManualImportActions implements ActionExecutor
 {
-    public function __construct(private readonly ManualImportResolver $resolver) {}
+    public function __construct(private readonly ManualImportResolver $manualImportResolver) {}
 
     /**
      * @return array<string, mixed>
@@ -47,13 +47,13 @@ class ManualImportActions implements ActionExecutor
             default => throw new InvalidArgumentException(sprintf('Unsupported manual-import service "%s"', $service)),
         };
 
-        $connection = ServiceConnection::resolveActive($type);
+        $serviceConnection = ServiceConnection::resolveActive($type);
         $client = $type === ServiceType::Sonarr
-            ? new SonarrClient($connection)
-            : new RadarrClient($connection);
+            ? new SonarrClient($serviceConnection)
+            : new RadarrClient($serviceConnection);
 
         $candidates = $client->getManualImport(['downloadId' => $downloadId]);
-        $files = $this->resolver->toImportPayload($candidates, $service, $downloadId);
+        $files = $this->manualImportResolver->toImportPayload($candidates, $service, $downloadId);
 
         throw_if($files === [], InvalidArgumentException::class, 'No importable files for this download.');
 
@@ -63,8 +63,8 @@ class ManualImportActions implements ActionExecutor
         ]);
 
         $type === ServiceType::Sonarr
-            ? new SonarrCache($connection)->bustAll()
-            : new RadarrCache($connection)->bustAll();
+            ? new SonarrCache($serviceConnection)->bustAll()
+            : new RadarrCache($serviceConnection)->bustAll();
 
         return [
             'service' => $service,

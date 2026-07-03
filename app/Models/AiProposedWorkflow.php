@@ -8,6 +8,7 @@ use App\Enums\AiProposedWorkflowStatus;
 use Carbon\CarbonImmutable;
 use Database\Factories\AiProposedWorkflowFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
+use Illuminate\Database\Eloquent\Attributes\WithoutIncrementing;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -27,6 +28,7 @@ use Override;
  * @method static AiProposedWorkflowFactory factory($count = null, $state = [])
  */
 #[Fillable(['id', 'user_id', 'conversation_id', 'rationale', 'steps', 'status'])]
+#[WithoutIncrementing]
 class AiProposedWorkflow extends Model
 {
     /** @use HasFactory<AiProposedWorkflowFactory> */
@@ -34,9 +36,6 @@ class AiProposedWorkflow extends Model
 
     #[Override]
     protected $keyType = 'string';
-
-    #[Override]
-    public $incrementing = false;
 
     /**
      * @return array<string, string>

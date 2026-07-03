@@ -240,8 +240,7 @@ function formatDate(iso: string | null): string {
                             class="font-mono-tabular text-[11px] whitespace-pre-wrap"
                             >{{
                                 JSON.stringify(message.tool_calls, null, 2)
-                            }}</pre
-                        >
+                            }}</pre>
                     </div>
                     <div
                         v-if="message.tool_results.length > 0"
@@ -256,8 +255,7 @@ function formatDate(iso: string | null): string {
                             class="font-mono-tabular text-[11px] whitespace-pre-wrap"
                             >{{
                                 JSON.stringify(message.tool_results, null, 2)
-                            }}</pre
-                        >
+                            }}</pre>
                     </div>
                 </div>
             </div>

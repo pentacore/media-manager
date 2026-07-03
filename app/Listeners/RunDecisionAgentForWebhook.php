@@ -18,15 +18,15 @@ use App\Settings\DecisionAgentSettings;
  */
 class RunDecisionAgentForWebhook
 {
-    public function __construct(private readonly DecisionAgentSettings $settings) {}
+    public function __construct(private readonly DecisionAgentSettings $decisionAgentSettings) {}
 
-    public function handle(WebhookEventProcessed $event): void
+    public function handle(WebhookEventProcessed $webhookEventProcessed): void
     {
-        if (! AIServiceProvider::enabled() || ! $this->settings->enabled()) {
+        if (! AIServiceProvider::enabled() || ! $this->decisionAgentSettings->enabled()) {
             return;
         }
 
-        $webhookEvent = $event->webhookEvent;
+        $webhookEvent = $webhookEventProcessed->webhookEvent;
         $webhookEvent->loadMissing('serviceConnection');
 
         $service = $webhookEvent->serviceConnection?->type->value;
@@ -36,7 +36,7 @@ class RunDecisionAgentForWebhook
 
         $eventType = $webhookEvent->event_type;
 
-        if (! $this->settings->isEventAllowed($service, $eventType)) {
+        if (! $this->decisionAgentSettings->isEventAllowed($service, $eventType)) {
             return;
         }
 

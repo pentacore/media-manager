@@ -828,8 +828,7 @@ function testIndexer(indexerId: number): void {
                         </div>
                         <pre
                             class="max-h-72 overflow-auto rounded-md border border-border bg-bg-elev p-3 text-[11.5px] leading-snug"
-                            >{{ connection.sabnzbd_webhook_script }}</pre
-                        >
+                            >{{ connection.sabnzbd_webhook_script }}</pre>
                     </div>
 
                     <div class="flex gap-2 pt-4">

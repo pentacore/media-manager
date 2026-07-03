@@ -133,8 +133,7 @@ function formatTime(iso: string | null): string {
             </div>
             <pre
                 class="max-h-[60vh] overflow-auto p-4 font-mono text-[12px] leading-relaxed text-foreground"
-                >{{ payloadJson }}</pre
-            >
+                >{{ payloadJson }}</pre>
         </div>
     </div>
 </template>

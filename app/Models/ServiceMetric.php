@@ -8,6 +8,7 @@ use App\Enums\HealthStatus;
 use Carbon\CarbonImmutable;
 use Database\Factories\ServiceMetricFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
+use Illuminate\Database\Eloquent\Attributes\WithoutTimestamps;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -27,13 +28,11 @@ use Override;
  * @method static ServiceMetricFactory factory($count = null, $state = [])
  */
 #[Fillable(['service_connection_id', 'status', 'latency_ms', 'message', 'recorded_at'])]
+#[WithoutTimestamps]
 class ServiceMetric extends Model
 {
     /** @use HasFactory<ServiceMetricFactory> */
     use HasFactory;
-
-    #[Override]
-    public $timestamps = false;
 
     /**
      * @return array<string, string>

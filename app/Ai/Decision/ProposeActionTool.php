@@ -53,7 +53,7 @@ class ProposeActionTool implements Tool
     public function handle(Request $request): string
     {
         $context = app()->bound(DecisionRunContext::class)
-            ? app(DecisionRunContext::class)
+            ? resolve(DecisionRunContext::class)
             : null;
 
         if (! $context instanceof DecisionRunContext) {

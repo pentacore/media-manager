@@ -49,10 +49,10 @@ class RemoveStuckDownloadActions implements ActionExecutor
             default => throw new InvalidArgumentException(sprintf('Unsupported service "%s"', $service)),
         };
 
-        $connection = ServiceConnection::resolveActive($type);
+        $serviceConnection = ServiceConnection::resolveActive($type);
         $client = $type === ServiceType::Sonarr
-            ? new SonarrClient($connection)
-            : new RadarrClient($connection);
+            ? new SonarrClient($serviceConnection)
+            : new RadarrClient($serviceConnection);
 
         $queueParams = $type === ServiceType::Sonarr
             ? ['page' => 1, 'pageSize' => 200, 'includeUnknownSeriesItems' => 'true']
@@ -77,8 +77,8 @@ class RemoveStuckDownloadActions implements ActionExecutor
         }
 
         $type === ServiceType::Sonarr
-            ? new SonarrCache($connection)->bustAll()
-            : new RadarrCache($connection)->bustAll();
+            ? new SonarrCache($serviceConnection)->bustAll()
+            : new RadarrCache($serviceConnection)->bustAll();
 
         return [
             'service' => $service,

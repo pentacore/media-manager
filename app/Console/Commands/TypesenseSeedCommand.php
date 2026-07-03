@@ -12,22 +12,19 @@ use App\Services\Radarr\RadarrClient;
 use App\Services\Search\MovieIndexer;
 use App\Services\Search\SeriesIndexer;
 use App\Services\Sonarr\SonarrClient;
+use Illuminate\Console\Attributes\Description;
+use Illuminate\Console\Attributes\Signature;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Artisan;
-use Override;
 use Throwable;
 
-class TypesenseSeedCommand extends Command
-{
-    #[Override]
-    protected $signature = 'typesense:seed
+#[Description('Seed the IndexedSeries / IndexedMovie tables from Sonarr / Radarr APIs and push the result to Typesense.')]
+#[Signature('typesense:seed
         {--service= : sonarr|radarr|all (default: all)}
         {--connection= : Limit to a single ServiceConnection id}
-        {--fresh : Truncate the indexed_* rows for the targeted connections first}';
-
-    #[Override]
-    protected $description = 'Seed the IndexedSeries / IndexedMovie tables from Sonarr / Radarr APIs and push the result to Typesense.';
-
+        {--fresh : Truncate the indexed_* rows for the targeted connections first}')]
+class TypesenseSeedCommand extends Command
+{
     public function handle(SeriesIndexer $seriesIndexer, MovieIndexer $movieIndexer): int
     {
         $service = $this->option('service') ?: 'all';

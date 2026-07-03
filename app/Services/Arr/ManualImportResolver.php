@@ -103,9 +103,11 @@ class ManualImportResolver
         if ($total === 0) {
             $reasons[] = 'Sonarr/Radarr returned no candidate files for this download.';
         }
+
         if ($importable === 0 && $total > 0) {
             $reasons[] = 'No candidate could be mapped to a series/movie automatically.';
         }
+
         if ($importable > 0 && $importable < $total) {
             $reasons[] = sprintf('Only %d of %d files could be mapped automatically.', $importable, $total);
         }

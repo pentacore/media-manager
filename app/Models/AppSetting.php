@@ -6,6 +6,7 @@ namespace App\Models;
 
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
+use Illuminate\Database\Eloquent\Attributes\WithoutIncrementing;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -24,15 +25,13 @@ use Override;
  * @mixin \Eloquent
  */
 #[Fillable(['key', 'value'])]
+#[WithoutIncrementing]
 class AppSetting extends Model
 {
     use HasFactory;
 
     #[Override]
     protected $primaryKey = 'key';
-
-    #[Override]
-    public $incrementing = false;
 
     #[Override]
     protected $keyType = 'string';

@@ -6,17 +6,14 @@ namespace App\Console\Commands;
 
 use App\Models\ServiceConnection;
 use App\Support\ServiceCheckBatch;
+use Illuminate\Console\Attributes\Description;
+use Illuminate\Console\Attributes\Signature;
 use Illuminate\Console\Command;
-use Override;
 
+#[Description('Ping every active service connection and update health_status.')]
+#[Signature('services:check-health')]
 class CheckServiceHealth extends Command
 {
-    #[Override]
-    protected $signature = 'services:check-health';
-
-    #[Override]
-    protected $description = 'Ping every active service connection and update health_status.';
-
     public function handle(): int
     {
         $connections = ServiceConnection::where('is_active', true)->get();

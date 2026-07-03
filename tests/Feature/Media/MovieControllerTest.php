@@ -5,7 +5,6 @@ declare(strict_types=1);
 use App\Models\ServiceConnection;
 use App\Models\User;
 use Illuminate\Support\Facades\Http;
-use Inertia\Inertia;
 
 beforeEach(function (): void {
     config()->set('inertia.ssr.enabled', false);

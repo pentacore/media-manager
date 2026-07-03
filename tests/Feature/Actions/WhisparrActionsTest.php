@@ -74,6 +74,7 @@ test('addItem sends searchForMissingEpisodes (not searchForMovie) for a v2/serie
         if ($r->method() !== 'POST' || ! str_contains((string) $r->url(), '/api/v3/series')) {
             return false;
         }
+
         $body = json_decode((string) $r->body(), true);
 
         return isset($body['addOptions']['searchForMissingEpisodes'])

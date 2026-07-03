@@ -361,8 +361,7 @@ function openEdit(req: SeerrRequest): void {
     })
         .then(async (response) => {
             const body = (await response.json()) as
-                | EditOptions
-                | { error: string };
+                EditOptions | { error: string };
 
             if (!response.ok) {
                 editError.value =

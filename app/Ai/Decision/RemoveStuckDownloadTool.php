@@ -33,7 +33,7 @@ class RemoveStuckDownloadTool implements Tool
 
     public function handle(Request $request): Stringable|string
     {
-        $context = app()->bound(DecisionRunContext::class) ? app(DecisionRunContext::class) : null;
+        $context = app()->bound(DecisionRunContext::class) ? resolve(DecisionRunContext::class) : null;
         if (! $context instanceof DecisionRunContext) {
             return $this->encode(['queued' => false, 'reason' => 'no_active_run']);
         }
