@@ -38,6 +38,7 @@ use App\Ai\Tools\Sonarr\SearchSeriesTool;
 use App\Ai\Tools\Sonarr\SetSeriesQualityProfileTool;
 use App\Ai\Tools\System\GetServiceStatusTool;
 use App\Ai\Tools\System\QueryActivityTool;
+use App\Ai\Tools\System\SemanticLibrarySearchTool;
 use App\Ai\Tools\Tmdb\TmdbGetCreditsTool;
 use App\Ai\Tools\Tmdb\TmdbGetSimilarTool;
 use App\Ai\Tools\Tmdb\TmdbGetTitleTool;
@@ -87,6 +88,7 @@ You can do four kinds of things:
    - SearchSeriesTool / GetSeriesTool — Sonarr library + catalog
    - SearchMoviesTool / GetMovieTool — Radarr library + catalog
    - SearchItemsTool / GetItemTool — Whisparr library + catalog
+   - SemanticLibrarySearchTool — meaning-based search over the indexed movie/series library. For similarity / vibe-based library questions ("something like Dark but lighter", "cozy detective shows"), prefer SemanticLibrarySearchTool over the keyword-based Search*Tool filters. It returns library items only; if it reports `available: false`, fall back to the keyword search tools.
    - SearchCatalogTool / DiscoverMoviesTool / DiscoverTvTool / GetTitleTool — Seerr catalog discovery
    - ListPendingRequestsTool — pending Seerr requests
    - SearchIndexersTool / ListIndexersTool — Prowlarr release search
@@ -152,6 +154,7 @@ PROMPT;
             // System
             resolve(GetServiceStatusTool::class),
             resolve(QueryActivityTool::class),
+            resolve(SemanticLibrarySearchTool::class),
             // Downloads (Sonarr/Radarr queue + history + stuck imports)
             resolve(GetDownloadQueueTool::class),
             resolve(GetDownloadHistoryTool::class),

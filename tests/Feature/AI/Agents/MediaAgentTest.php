@@ -70,10 +70,10 @@ test('tool list includes the Phase-2 tool families', function (): void {
     expect($shortNames)->toContain('ProposeWorkflowTool');
 });
 
-test('tool list has all 47 expected tools', function (): void {
+test('tool list has all 48 expected tools', function (): void {
     $tools = collect(iterator_to_array((new MediaAgent)->tools(), false));
 
-    expect($tools->count())->toBe(47);
+    expect($tools->count())->toBe(48);
 });
 
 test('tool list includes the download queue/history/stuck-import tools', function (): void {
