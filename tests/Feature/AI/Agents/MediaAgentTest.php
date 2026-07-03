@@ -3,6 +3,8 @@
 declare(strict_types=1);
 
 use App\Ai\Agents\MediaAgent;
+use App\Ai\Decision\InspectStuckImportTool;
+use App\Ai\Tools\BaseTool;
 use App\Settings\AiSettings;
 use Laravel\Ai\Contracts\Agent;
 use Laravel\Ai\Contracts\Conversational;
@@ -24,6 +26,14 @@ test('every tool returned by tools() is a usable SDK Tool', function (): void {
         // Most tools extend BaseTool; the context-free InspectStuckImportTool
         // implements the SDK Tool contract directly. Both are valid.
         expect($tool)->toBeInstanceOf(Tool::class);
+
+        // Advisory-mode enforcement lives in BaseTool::handle(). Any tool that
+        // bypasses BaseTool must be read-only by design and consciously
+        // whitelisted here — a Destructive tool outside BaseTool would skip
+        // the advisory gate entirely.
+        if (! $tool instanceof BaseTool) {
+            expect($tool::class)->toBe(InspectStuckImportTool::class);
+        }
     }
 });
 
