@@ -154,14 +154,19 @@ class ChatController extends Controller
             foreach ($stream as $event) {
                 echo 'data: '.($event)."\n\n";
 
-                // response()->stream() callbacks don't auto-flush per write
-                // (unlike the SDK's yield-based toResponse()) — without this
-                // the whole SSE body can buffer and arrive as one chunk.
-                if (ob_get_level() > 0) {
-                    @ob_flush();
-                }
+                // response()->stream() callbacks don't auto-flush per write —
+                // without this the whole SSE body buffers into one chunk. Only
+                // flush when output reaches the SAPI directly (level <= 1):
+                // deeper nesting means a capturing harness (browser tests)
+                // owns the buffer stack, and ob_flush there strands bytes in
+                // an intermediate buffer that never reaches the client.
+                if (ob_get_level() <= 1) {
+                    if (ob_get_level() === 1) {
+                        @ob_flush();
+                    }
 
-                flush();
+                    flush();
+                }
             }
 
             // The conversation id is populated once the SDK events (and the
