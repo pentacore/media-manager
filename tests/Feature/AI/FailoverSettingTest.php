@@ -16,44 +16,44 @@ test('providerChain is null without failover setting', function (): void {
 });
 
 test('providerChain returns primary then failover', function (): void {
-    $settings = resolve(AiSettings::class);
-    $settings->setFailoverProvider(Lab::Anthropic);
+    $aiSettings = resolve(AiSettings::class);
+    $aiSettings->setFailoverProvider(Lab::Anthropic);
 
     config()->set('ai.default', 'openai');
 
-    expect($settings->providerChain())->toBe([Lab::OpenAI, Lab::Anthropic]);
+    expect($aiSettings->providerChain())->toBe([Lab::OpenAI, Lab::Anthropic]);
 });
 
 test('failover equal to primary collapses to null', function (): void {
-    $settings = resolve(AiSettings::class);
-    $settings->setFailoverProvider(Lab::OpenAI);
+    $aiSettings = resolve(AiSettings::class);
+    $aiSettings->setFailoverProvider(Lab::OpenAI);
 
     config()->set('ai.default', 'openai');
 
-    expect($settings->providerChain())->toBeNull();
+    expect($aiSettings->providerChain())->toBeNull();
 });
 
 test('failover provider persists and reads back', function (): void {
-    $settings = resolve(AiSettings::class);
+    $aiSettings = resolve(AiSettings::class);
 
-    expect($settings->failoverProvider())->toBeNull();
+    expect($aiSettings->failoverProvider())->toBeNull();
 
-    $settings->setFailoverProvider(Lab::Anthropic);
-    expect($settings->failoverProvider())->toBe(Lab::Anthropic);
+    $aiSettings->setFailoverProvider(Lab::Anthropic);
+    expect($aiSettings->failoverProvider())->toBe(Lab::Anthropic);
 
-    $settings->setFailoverProvider(null);
-    expect($settings->failoverProvider())->toBeNull();
+    $aiSettings->setFailoverProvider(null);
+    expect($aiSettings->failoverProvider())->toBeNull();
 });
 
 test('providerChainWithModel keeps the configured model on the primary and defaults the failover', function (): void {
-    $settings = resolve(AiSettings::class);
-    $settings->setFailoverProvider(Lab::Anthropic);
+    $aiSettings = resolve(AiSettings::class);
+    $aiSettings->setFailoverProvider(Lab::Anthropic);
 
     config()->set('ai.default', 'openai');
 
     // Per-provider map: primary keeps its explicit model so the OpenAI model
     // never leaks to the Anthropic failover (which uses its own default: null).
-    expect($settings->providerChainWithModel('gpt-5-mini'))->toBe([
+    expect($aiSettings->providerChainWithModel('gpt-5-mini'))->toBe([
         Lab::OpenAI->value => 'gpt-5-mini',
         Lab::Anthropic->value => null,
     ]);
@@ -68,17 +68,18 @@ test('an agent on the failover path resolves without exception', function (): vo
     // when a per-provider failover map is passed, the agent-defined model()
     // (an OpenAI model) is scoped to the primary and does NOT leak to the
     // failover provider, so the prompt path never throws.
-    $settings = resolve(AiSettings::class);
-    $settings->setFailoverProvider(Lab::Anthropic);
+    $aiSettings = resolve(AiSettings::class);
+    $aiSettings->setFailoverProvider(Lab::Anthropic);
+
     config()->set('ai.default', 'openai');
 
     MediaAgent::fake(['ok']);
 
-    $chain = $settings->providerChainWithModel(resolve(AiSettings::class)->model());
+    $chain = $aiSettings->providerChainWithModel(resolve(AiSettings::class)->model());
 
-    $response = (new MediaAgent)->prompt('hello', provider: $chain);
+    $agentResponse = (new MediaAgent)->prompt('hello', provider: $chain);
 
-    expect($response->text)->toBe('ok');
+    expect($agentResponse->text)->toBe('ok');
 
     MediaAgent::assertPrompted('hello');
 });

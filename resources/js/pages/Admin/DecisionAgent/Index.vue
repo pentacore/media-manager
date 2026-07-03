@@ -16,7 +16,7 @@ import {
 } from '@/components/ui/select';
 import { Separator } from '@/components/ui/separator';
 import { dashboard } from '@/routes';
-import { AiReasoningLevel } from '@/typefinder';
+import type { AiReasoningLevel } from '@/typefinder';
 
 interface DecisionAgentState {
     enabled: boolean;

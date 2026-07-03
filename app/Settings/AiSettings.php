@@ -173,13 +173,13 @@ class AiSettings
             return null;
         }
 
-        $primary = $this->primaryProvider();
+        $lab = $this->primaryProvider();
 
-        if ($primary === $failover) {
+        if ($lab === $failover) {
             return null;
         }
 
-        return [$primary, $failover];
+        return [$lab, $failover];
     }
 
     /**

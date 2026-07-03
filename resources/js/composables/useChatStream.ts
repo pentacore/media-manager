@@ -42,7 +42,6 @@ function csrfToken(): string {
 export async function streamChat(
     options: StreamChatOptions,
 ): Promise<StreamChatResult> {
-
     const response = await fetch(AIChatController.stream.url(), {
         method: 'POST',
         credentials: 'same-origin',
@@ -79,14 +78,12 @@ export async function streamChat(
     let text = '';
     let conversationId = options.conversationId;
 
-
     for (;;) {
         const { done, value } = await reader.read();
 
         if (done) {
             break;
         }
-
 
         buffer += decoder.decode(value, { stream: true });
 

@@ -19,8 +19,8 @@ return new class extends Migration
      */
     public function up(): void
     {
-        Schema::table('ai_usage_records', function (Blueprint $table): void {
-            $table->boolean('is_batch')->default(false)->after('reasoning_per_mtok');
+        Schema::table('ai_usage_records', function (Blueprint $blueprint): void {
+            $blueprint->boolean('is_batch')->default(false)->after('reasoning_per_mtok');
         });
     }
 
@@ -29,8 +29,8 @@ return new class extends Migration
      */
     public function down(): void
     {
-        Schema::table('ai_usage_records', function (Blueprint $table): void {
-            $table->dropColumn('is_batch');
+        Schema::table('ai_usage_records', function (Blueprint $blueprint): void {
+            $blueprint->dropColumn('is_batch');
         });
     }
 };
