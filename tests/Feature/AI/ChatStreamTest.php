@@ -168,6 +168,9 @@ test('streaming a first turn seeds a fallback title and dispatches GenerateConve
         && $job->firstUserMessage === 'Tell me about my queue please');
 });
 
+// Streamed runs dispatch a real AgentPrompted event alongside AgentStreamed
+// (not via parent-class listener resolution) — RecordAgentUsage matches that.
+// This guards the budget guard's dependency on usage rows for streamed turns.
 test('streamed turn records ai usage', function (): void {
     MediaAgent::fake(['Streamed reply.']);
     $admin = User::factory()->admin()->create();
