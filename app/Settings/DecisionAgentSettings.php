@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Settings;
 
+use App\Enums\AiReasoningLevel;
+
 /**
  * Configuration for the autonomous DecisionAgent — the background agent
  * that reasons over inbound webhook events and either suggests or takes
@@ -28,6 +30,8 @@ class DecisionAgentSettings
     public const string NOTIFY_ON_ACT_KEY = 'decision_agent.notify_on_act';
 
     public const string MAX_ACTIONS_KEY = 'decision_agent.max_actions_per_run';
+
+    public const string REASONING_LEVEL_KEY = 'decision_agent.reasoning_level';
 
     public function __construct(
         private readonly AppSettings $appSettings,
@@ -219,5 +223,23 @@ class DecisionAgentSettings
     public function setMaxActionsPerRun(int $max): void
     {
         $this->appSettings->set(self::MAX_ACTIONS_KEY, max(1, $max));
+    }
+
+    public function setReasoning(AiReasoningLevel $aiReasoningLevel): void
+    {
+        $this->appSettings->set(self::REASONING_LEVEL_KEY, $aiReasoningLevel->value);
+    }
+
+    public function reasoning(): string
+    {
+        $value = (string) $this->appSettings->get(self::REASONING_LEVEL_KEY, '');
+
+        if ($value !== '') {
+            return $value;
+        }
+
+        $configured = (string) config('mediamanager.decision_agent.reasoning_level', '');
+
+        return $configured ?: AiReasoningLevel::None->value;
     }
 }

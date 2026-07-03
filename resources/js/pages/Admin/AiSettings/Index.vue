@@ -17,6 +17,8 @@ import {
 } from '@/components/ui/select';
 import { Separator } from '@/components/ui/separator';
 import { dashboard } from '@/routes';
+import type { AiReasoningLevel } from '@/typefinder';
+import type { SelectOptionGroup } from '@/types';
 
 interface ModeOption {
     value: string;
@@ -29,6 +31,7 @@ interface AiSettingsState {
     title_model: string;
     soft_budget_usd: number | null;
     hard_budget_usd: number | null;
+    advisor_reasoning_level: AiReasoningLevel;
 }
 
 interface BudgetSnapshot {
@@ -43,6 +46,7 @@ const props = defineProps<{
     budget: BudgetSnapshot;
     modes: ModeOption[];
     models: Record<string, string[]>;
+    reasoningLevels: SelectOptionGroup<AiReasoningLevel>;
 }>();
 
 defineOptions({
@@ -57,6 +61,7 @@ defineOptions({
 const selectedMode = ref(props.settings.mode);
 const selectedModel = ref(props.settings.model);
 const titleModel = ref(props.settings.title_model);
+const selectedReasoningLevel = ref(props.settings.advisor_reasoning_level);
 
 function formatUsd(value: number | null): string {
     if (value === null) {
@@ -192,6 +197,45 @@ const budgetState = computed<{
                             </SelectContent>
                         </Select>
                         <InputError :message="errors.model" class="mt-1" />
+                    </div>
+                </div>
+
+                <!-- Reasoning Level -->
+                <div
+                    class="grid items-start gap-6"
+                    style="grid-template-columns: 200px 1fr"
+                >
+                    <Field
+                        label="Reasoning Level"
+                        hint="Level of reasoning applied by the AI assistant. Higher levels may result in more accurate decisions but can be more resource-intensive."
+                    >
+                        <span />
+                    </Field>
+                    <div>
+                        <Select
+                            v-model="selectedReasoningLevel"
+                            name="advisor_reasoning_level"
+                            :default-value="settings.advisor_reasoning_level"
+                        >
+                            <SelectTrigger class="h-8 max-w-[320px] text-sm">
+                                <SelectValue
+                                    placeholder="Select a reasoning level"
+                                />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem
+                                    v-for="reasoningLevel in reasoningLevels"
+                                    :key="reasoningLevel.label"
+                                    :value="reasoningLevel.value"
+                                >
+                                    {{ reasoningLevel.label }}
+                                </SelectItem>
+                            </SelectContent>
+                        </Select>
+                        <InputError
+                            :message="errors.advisor_reasoning_level"
+                            class="mt-1"
+                        />
                     </div>
                 </div>
 

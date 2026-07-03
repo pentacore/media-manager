@@ -46,6 +46,7 @@ test('admin can update settings', function (): void {
             'mode' => 'advisory',
             'model' => 'gemini-3-flash-preview',
             'title_model' => 'gpt-5.4-nano',
+            'advisor_reasoning_level' => 'medium',
         ])
         ->assertRedirect(route('admin.ai-settings.index'));
 
@@ -53,6 +54,7 @@ test('admin can update settings', function (): void {
     expect($aiSettings->mode())->toBe(AiMode::Advisory);
     expect($aiSettings->model())->toBe('gemini-3-flash-preview');
     expect($aiSettings->titleModel())->toBe('gpt-5.4-nano');
+    expect($aiSettings->advisorReasoningLevel())->toBe('medium');
 });
 
 test('update validates mode is a known value', function (): void {
@@ -72,5 +74,5 @@ test('update requires mode, model, and title_model', function (): void {
 
     $this->actingAs($admin)
         ->put(route('admin.ai-settings.update'), [])
-        ->assertSessionHasErrors(['mode', 'model', 'title_model']);
+        ->assertSessionHasErrors(['mode', 'model', 'title_model', 'advisor_reasoning_level']);
 });

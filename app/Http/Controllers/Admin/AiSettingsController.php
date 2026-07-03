@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Http\Controllers\Admin;
 
 use App\Enums\AiMode;
+use App\Enums\AiReasoningLevel;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Admin\UpdateAiSettingsRequest;
 use App\Models\AiModelPrice;
@@ -25,6 +26,7 @@ class AiSettingsController extends Controller
                 'title_model' => $aiSettings->titleModel(),
                 'soft_budget_usd' => $aiSettings->softBudgetUsd(),
                 'hard_budget_usd' => $aiSettings->hardBudgetUsd(),
+                'advisor_reasoning_level' => $aiSettings->advisorReasoningLevel(),
             ],
             'budget' => [
                 'spend' => round($aiBudgetGuard->currentMonthSpend(), 4),
@@ -34,6 +36,7 @@ class AiSettingsController extends Controller
             ],
             'modes' => AiMode::mapForSelect(labelKey: 'label'),
             'models' => $this->modelsByConfiguredProvider(),
+            'reasoningLevels' => AiReasoningLevel::mapForSelect(labelKey: 'label'),
         ]);
     }
 
@@ -75,6 +78,7 @@ class AiSettingsController extends Controller
         $aiSettings->setHardBudgetUsd(
             isset($validated['hard_budget_usd']) ? (float) $validated['hard_budget_usd'] : null,
         );
+        $aiSettings->setAdvisorReasoningLevel(AiReasoningLevel::from($validated['advisor_reasoning_level']));
 
         Inertia::flash('toast', ['type' => 'success', 'message' => __('AI settings updated.')]);
 

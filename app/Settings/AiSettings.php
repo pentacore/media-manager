@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Settings;
 
 use App\Enums\AiMode;
+use App\Enums\AiReasoningLevel;
 
 class AiSettings
 {
@@ -19,6 +20,8 @@ class AiSettings
     public const HARD_BUDGET_KEY = 'ai.budget.hard_monthly_usd';
 
     public const SOFT_BUDGET_NOTIFIED_AT_KEY = 'ai.budget.soft_notified_at';
+
+    public const MEDIA_ADVISOR_REASONING_LEVEL_KEY = 'ai.advisor_reasoning_level';
 
     /**
      * Per-request override that takes precedence over the persisted mode.
@@ -76,6 +79,19 @@ class AiSettings
         );
 
         return $value !== '' ? $value : 'gpt-5.4-nano';
+    }
+
+    public function setAdvisorReasoningLevel(AiReasoningLevel $aiReasoningLevel): void
+    {
+        $this->appSettings->set(self::MEDIA_ADVISOR_REASONING_LEVEL_KEY, $aiReasoningLevel->value);
+    }
+
+    public function advisorReasoningLevel(): string
+    {
+        return (string) $this->appSettings->get(
+            self::MEDIA_ADVISOR_REASONING_LEVEL_KEY,
+            config('mediamanager.ai.advisor_reasoning_level', AiReasoningLevel::None->value),
+        );
     }
 
     public function setTitleModel(string $model): void

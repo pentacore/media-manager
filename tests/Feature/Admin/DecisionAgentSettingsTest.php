@@ -53,12 +53,14 @@ test('admin can update settings', function (): void {
             'notify_on_suggest' => false,
             'notify_on_act' => true,
             'max_actions_per_run' => 5,
+            'reasoning_level' => 'high',
         ])
         ->assertRedirect(route('admin.decision-agent.index'));
 
     $decisionAgentSettings = resolve(DecisionAgentSettings::class);
     expect($decisionAgentSettings->enabled())->toBeTrue();
     expect($decisionAgentSettings->model())->toBe('gpt-5-mini');
+    expect($decisionAgentSettings->reasoning())->toBe('high');
     expect($decisionAgentSettings->eventAllowlist())->toBe(['sonarr:ManualInteractionRequired', 'radarr:ManualInteractionRequired']);
     expect($decisionAgentSettings->allowManualImport())->toBeTrue();
     expect($decisionAgentSettings->notifyOnSuggest())->toBeFalse();
@@ -111,6 +113,7 @@ test('update allows an empty allowlist', function (): void {
             'notify_on_suggest' => true,
             'notify_on_act' => true,
             'max_actions_per_run' => 3,
+            'reasoning_level' => 'none',
         ])
         ->assertRedirect(route('admin.decision-agent.index'));
 
