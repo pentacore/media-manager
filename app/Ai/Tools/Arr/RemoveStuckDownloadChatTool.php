@@ -21,9 +21,11 @@ class RemoveStuckDownloadChatTool extends BaseTool
 {
     public function description(): Stringable|string
     {
-        return 'Remove a stuck Sonarr/Radarr download from the queue and delete its data (without '
-            .'blocklisting). Use when an inspected stuck import should NOT be imported, e.g. "not an upgrade '
-            .'for existing file(s)". ALWAYS inspect with InspectStuckImportTool first and give a reason.';
+        return 'Remove a stuck Sonarr/Radarr download from the queue and delete its data. Use when an '
+            .'inspected stuck import should NOT be imported, e.g. "not an upgrade for existing file(s)". '
+            .'Optionally pass blocklist=true to also blocklist the release so the arr never grabs it again '
+            .'(use only when the release itself is bad — corrupt/fake/wrong content). ALWAYS inspect with '
+            .'InspectStuckImportTool first and give a reason.';
     }
 
     public function risk(): Risk
@@ -55,6 +57,7 @@ class RemoveStuckDownloadChatTool extends BaseTool
                 'service' => $service,
                 'download_id' => $downloadId,
                 'agent_rationale' => mb_substr($reason, 0, 1000),
+                'blocklist' => ($args['blocklist'] ?? null) === true,
             ],
         ];
     }
@@ -74,6 +77,10 @@ class RemoveStuckDownloadChatTool extends BaseTool
             'reason' => $schema->string()
                 ->description('Short plain-English reason for removing rather than importing.')
                 ->required(),
+            'blocklist' => $schema->boolean()
+                ->description('Also blocklist the release so the arr never grabs it again. Use when the release itself is bad (corrupt, fake, wrong content) — not when it merely isn\'t an upgrade. Default false.')
+                ->required()
+                ->nullable(),
         ];
     }
 }

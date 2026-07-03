@@ -16,9 +16,10 @@ use Stringable;
 use Throwable;
 
 /**
- * Removes a stuck Sonarr/Radarr download from the queue WITHOUT blocklisting —
- * the resolution for a stuck import the agent decides shouldn't be imported
- * (e.g. "not an upgrade for existing episode file(s)").
+ * Removes a stuck Sonarr/Radarr download from the queue — the resolution for a
+ * stuck import the agent decides shouldn't be imported (e.g. "not an upgrade for
+ * existing episode file(s)"). Optionally blocklists the release (payload.blocklist)
+ * when the release itself is bad so the arr never grabs it again.
  *
  * Gated behind the same manual-import capability as importing. Suggest-vs-act
  * is governed by the remove_stuck_download action rule (approval-required by
@@ -28,7 +29,7 @@ class RemoveStuckDownloadTool implements Tool
 {
     public function description(): Stringable|string
     {
-        return 'Remove a stuck Sonarr/Radarr download from the queue (without blocklisting) — use when an inspected stuck import should NOT be imported, e.g. it is "not an upgrade for existing episode file(s)". Provide the service, the download_id, and a short reason. This deletes the downloaded data and defaults to requiring human approval.';
+        return 'Remove a stuck Sonarr/Radarr download from the queue — use when an inspected stuck import should NOT be imported, e.g. it is "not an upgrade for existing episode file(s)". Provide the service, the download_id, and a short reason. Optionally pass blocklist=true to also blocklist the release so the arr never grabs it again (only when the release itself is bad — corrupt/fake/wrong content). This deletes the downloaded data and defaults to requiring human approval.';
     }
 
     public function handle(Request $request): Stringable|string
@@ -54,6 +55,7 @@ class RemoveStuckDownloadTool implements Tool
         $service = mb_strtolower((string) ($args['service'] ?? ''));
         $downloadId = (string) ($args['download_id'] ?? '');
         $reason = (string) ($args['reason'] ?? '');
+        $blocklist = ($args['blocklist'] ?? null) === true;
 
         if (! in_array($service, ['sonarr', 'radarr'], true)) {
             return $this->encode(['queued' => false, 'reason' => 'invalid_service', 'message' => 'service must be "sonarr" or "radarr".']);
@@ -72,7 +74,7 @@ class RemoveStuckDownloadTool implements Tool
                 type: 'remove_stuck_download',
                 sourceService: $service,
                 targetService: $service,
-                payload: ['service' => $service, 'download_id' => $downloadId],
+                payload: ['service' => $service, 'download_id' => $downloadId, 'blocklist' => $blocklist],
                 rationale: Str::limit(sprintf('Remove stuck %s download %s: %s', $service, $downloadId, $reason), 1000, ''),
                 webhookEventId: $context->webhookEventId,
             );
@@ -123,6 +125,10 @@ class RemoveStuckDownloadTool implements Tool
             'reason' => $schema->string()
                 ->description('Short plain-English reason for removing rather than importing (e.g. "not an upgrade for existing file").')
                 ->required(),
+            'blocklist' => $schema->boolean()
+                ->description('Also blocklist the release so the arr never grabs it again. Use when the release itself is bad (corrupt, fake, wrong content) — not when it merely isn\'t an upgrade. Default false.')
+                ->required()
+                ->nullable(),
         ];
     }
 

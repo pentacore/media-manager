@@ -36,7 +36,7 @@ test('removes all queue rows matching the downloadId without blocklisting', func
 
     $result = resolve(RemoveStuckDownloadActions::class)->execute($request);
 
-    expect($result)->toMatchArray(['service' => 'sonarr', 'download_id' => 'dl-1', 'removed' => 2]);
+    expect($result)->toMatchArray(['service' => 'sonarr', 'download_id' => 'dl-1', 'removed' => 2, 'blocklist' => false]);
 
     Http::assertSent(fn ($r): bool => $r->method() === 'DELETE'
         && str_contains((string) $r->url(), '/api/v3/queue/55')
@@ -47,6 +47,27 @@ test('removes all queue rows matching the downloadId without blocklisting', func
     // The unrelated row is left alone.
     Http::assertNotSent(fn ($r): bool => $r->method() === 'DELETE'
         && str_contains((string) $r->url(), '/api/v3/queue/57'));
+});
+
+test('blocklists the release when the payload requests it', function (): void {
+    fakeQueue([
+        ['id' => 55, 'downloadId' => 'dl-1'],
+    ]);
+
+    $request = ActionRequest::factory()->create([
+        'type' => 'remove_stuck_download',
+        'target_service' => 'sonarr',
+        'payload' => ['service' => 'sonarr', 'download_id' => 'dl-1', 'blocklist' => true],
+    ]);
+
+    $result = resolve(RemoveStuckDownloadActions::class)->execute($request);
+
+    expect($result)->toMatchArray(['service' => 'sonarr', 'download_id' => 'dl-1', 'removed' => 1, 'blocklist' => true]);
+
+    Http::assertSent(fn ($r): bool => $r->method() === 'DELETE'
+        && str_contains((string) $r->url(), '/api/v3/queue/55')
+        && str_contains((string) $r->url(), 'blocklist=true')
+        && str_contains((string) $r->url(), 'removeFromClient=true'));
 });
 
 test('throws when no queue row matches the downloadId', function (): void {
