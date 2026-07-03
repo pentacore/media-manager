@@ -7,10 +7,12 @@ namespace App\Ai\Agents;
 use App\Settings\AiSettings;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
 use Illuminate\JsonSchema\Types\Type;
+use Laravel\Ai\Attributes\MaxTokens;
 use Laravel\Ai\Contracts\Agent;
 use Laravel\Ai\Contracts\HasStructuredOutput;
 use Laravel\Ai\Promptable;
 
+#[MaxTokens(4096)]
 class TitleAgent implements Agent, HasStructuredOutput
 {
     use Promptable;
