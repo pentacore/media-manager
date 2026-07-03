@@ -32,12 +32,12 @@ class GenerateConversationTitle implements ShouldQueue
     public function handle(AiSettings $aiSettings): void
     {
         $titleAgent = new TitleAgent;
+        $chain = $aiSettings->providerChainWithModel($aiSettings->titleModel());
 
         try {
-            $response = $titleAgent->prompt(
-                $this->firstUserMessage,
-                model: $aiSettings->titleModel(),
-            );
+            $response = $chain === null
+                ? $titleAgent->prompt($this->firstUserMessage, model: $aiSettings->titleModel())
+                : $titleAgent->prompt($this->firstUserMessage, provider: $chain);
         } catch (Throwable $throwable) {
             // Soft failure — the controller already wrote a fallback title
             // (truncated first message) before dispatching this job, so the

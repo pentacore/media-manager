@@ -15,6 +15,7 @@ use App\Notifications\DecisionAgentActed;
 use App\Providers\AIServiceProvider;
 use App\Services\AiBudget\AiBudgetExceededException;
 use App\Services\AiBudget\AiBudgetGuard;
+use App\Settings\AiSettings;
 use App\Settings\DecisionAgentSettings;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldBeUnique;
@@ -101,7 +102,11 @@ class RunDecisionAgent implements ShouldBeUnique, ShouldQueue
         app()->instance(DecisionRunContext::class, $decisionRunContext);
 
         try {
-            $response = (new DecisionAgent)->prompt($this->buildPrompt());
+            $decisionAgent = new DecisionAgent;
+            $chain = resolve(AiSettings::class)->providerChainWithModel($decisionAgentSettings->model());
+            $response = $chain === null
+                ? $decisionAgent->prompt($this->buildPrompt())
+                : $decisionAgent->prompt($this->buildPrompt(), provider: $chain);
             $summary = trim($response->text) !== '' ? trim($response->text) : 'No summary produced.';
         } catch (Throwable $throwable) {
             Log::warning('RunDecisionAgent: agent run failed', [

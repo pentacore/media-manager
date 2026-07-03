@@ -6,6 +6,7 @@ use App\Enums\AiMode;
 use App\Models\User;
 use App\Settings\AiSettings;
 use Illuminate\Support\Facades\Cache;
+use Laravel\Ai\Enums\Lab;
 
 beforeEach(function (): void {
     Cache::flush();
@@ -55,6 +56,48 @@ test('admin can update settings', function (): void {
     expect($aiSettings->model())->toBe('gemini-3-flash-preview');
     expect($aiSettings->titleModel())->toBe('gpt-5.4-nano');
     expect($aiSettings->advisorReasoningLevel())->toBe('medium');
+});
+
+test('admin can set and clear the failover provider', function (): void {
+    $admin = User::factory()->admin()->create();
+
+    $this->actingAs($admin)
+        ->put(route('admin.ai-settings.update'), [
+            'mode' => 'executive',
+            'model' => 'gpt-5-mini',
+            'title_model' => 'gpt-5.4-nano',
+            'advisor_reasoning_level' => 'none',
+            'failover_provider' => 'anthropic',
+        ])
+        ->assertRedirect(route('admin.ai-settings.index'));
+
+    expect(resolve(AiSettings::class)->failoverProvider())->toBe(Lab::Anthropic);
+
+    $this->actingAs($admin)
+        ->put(route('admin.ai-settings.update'), [
+            'mode' => 'executive',
+            'model' => 'gpt-5-mini',
+            'title_model' => 'gpt-5.4-nano',
+            'advisor_reasoning_level' => 'none',
+            'failover_provider' => 'none',
+        ])
+        ->assertRedirect(route('admin.ai-settings.index'));
+
+    expect(resolve(AiSettings::class)->failoverProvider())->toBeNull();
+});
+
+test('update rejects an unknown failover provider', function (): void {
+    $admin = User::factory()->admin()->create();
+
+    $this->actingAs($admin)
+        ->put(route('admin.ai-settings.update'), [
+            'mode' => 'executive',
+            'model' => 'gpt-5-mini',
+            'title_model' => 'gpt-5.4-nano',
+            'advisor_reasoning_level' => 'none',
+            'failover_provider' => 'cohere',
+        ])
+        ->assertSessionHasErrors('failover_provider');
 });
 
 test('update validates mode is a known value', function (): void {

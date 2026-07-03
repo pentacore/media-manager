@@ -68,7 +68,11 @@ class ChatController extends Controller
             $agent = $conversationId
                 ? (new MediaAgent)->continue($conversationId, as: $user)
                 : (new MediaAgent)->forUser($user);
-            $response = $agent->prompt($messageToSend);
+            $aiSettings = resolve(AiSettings::class);
+            $chain = $aiSettings->providerChainWithModel($aiSettings->model());
+            $response = $chain === null
+                ? $agent->prompt($messageToSend)
+                : $agent->prompt($messageToSend, provider: $chain);
         } catch (Throwable $throwable) {
             return $this->handleAgentFailure($throwable, $user);
         }
@@ -130,7 +134,11 @@ class ChatController extends Controller
             $agent = $conversationId
                 ? (new MediaAgent)->continue($conversationId, as: $user)
                 : (new MediaAgent)->forUser($user);
-            $stream = $agent->stream($message);
+            $aiSettings = resolve(AiSettings::class);
+            $chain = $aiSettings->providerChainWithModel($aiSettings->model());
+            $stream = $chain === null
+                ? $agent->stream($message)
+                : $agent->stream($message, provider: $chain);
         } catch (Throwable $throwable) {
             return $this->handleAgentFailure($throwable, $user);
         }

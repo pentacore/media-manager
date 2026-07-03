@@ -6,6 +6,7 @@ namespace App\Settings;
 
 use App\Enums\AiMode;
 use App\Enums\AiReasoningLevel;
+use Laravel\Ai\Enums\Lab;
 
 class AiSettings
 {
@@ -14,6 +15,8 @@ class AiSettings
     public const MODEL_KEY = 'ai.model';
 
     public const TITLE_MODEL_KEY = 'ai.title_model';
+
+    public const string FAILOVER_PROVIDER_KEY = 'ai.failover_provider';
 
     public const SOFT_BUDGET_KEY = 'ai.budget.soft_monthly_usd';
 
@@ -97,6 +100,82 @@ class AiSettings
     public function setTitleModel(string $model): void
     {
         $this->appSettings->set(self::TITLE_MODEL_KEY, $model);
+    }
+
+    /**
+     * The provider text requests fall back to when the primary provider
+     * raises a failoverable error. Null = no failover (SDK default only).
+     */
+    public function failoverProvider(): ?Lab
+    {
+        $value = (string) $this->appSettings->get(self::FAILOVER_PROVIDER_KEY, '');
+
+        return $value !== '' ? Lab::tryFrom($value) : null;
+    }
+
+    public function setFailoverProvider(?Lab $lab): void
+    {
+        $this->appSettings->set(self::FAILOVER_PROVIDER_KEY, $lab?->value ?? '');
+    }
+
+    /**
+     * Primary-then-failover provider chain for prompt()/stream() calls, or
+     * null when no failover is configured (callers omit the provider arg and
+     * fall back to the SDK default). The primary is the configured default
+     * text provider (`ai.default`); when it equals the failover the chain
+     * collapses to null since there is nothing to fail over to.
+     *
+     * @return array<int, Lab>|null
+     */
+    public function providerChain(): ?array
+    {
+        $failover = $this->failoverProvider();
+
+        if (! $failover instanceof Lab) {
+            return null;
+        }
+
+        $primary = $this->primaryProvider();
+
+        if ($primary === $failover) {
+            return null;
+        }
+
+        return [$primary, $failover];
+    }
+
+    /**
+     * The failover chain expressed as a per-provider model map for a caller
+     * that pins an explicit primary model.
+     *
+     * A plain list array (`[$primary, $failover]`) makes the SDK ignore the
+     * agent's own model() entirely and resolve each provider's default model
+     * — so the primary would lose its configured model. This map keeps the
+     * caller's model on the primary and lets the failover provider use its
+     * own default (null), which also guarantees the OpenAI-shaped model never
+     * leaks onto a non-OpenAI failover provider.
+     *
+     * @return array<string, string|null>|null
+     */
+    public function providerChainWithModel(string $primaryModel): ?array
+    {
+        $chain = $this->providerChain();
+
+        if ($chain === null) {
+            return null;
+        }
+
+        [$primary, $failover] = $chain;
+
+        return [
+            $primary->value => $primaryModel,
+            $failover->value => null,
+        ];
+    }
+
+    private function primaryProvider(): Lab
+    {
+        return Lab::tryFrom((string) config('ai.default', 'openai')) ?? Lab::OpenAI;
     }
 
     /**
