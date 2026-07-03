@@ -24,7 +24,7 @@ class AiSettingsController extends Controller
             'settings' => [
                 'mode' => $aiSettings->mode()->value,
                 'model' => $aiSettings->model(),
-                'title_model' => $aiSettings->titleModel(),
+                'title_model' => $aiSettings->rawTitleModel(),
                 'soft_budget_usd' => $aiSettings->softBudgetUsd(),
                 'hard_budget_usd' => $aiSettings->hardBudgetUsd(),
                 'advisor_reasoning_level' => $aiSettings->advisorReasoningLevel(),

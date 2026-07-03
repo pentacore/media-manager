@@ -39,6 +39,23 @@ test('admin sees current settings on index', function (): void {
         );
 });
 
+test('index shows the raw auto sentinel while the accessor resolves a concrete model', function (): void {
+    $admin = User::factory()->admin()->create();
+    resolve(AiSettings::class)->setTitleModel(AiSettings::AUTO_MODEL);
+
+    $this->actingAs($admin)
+        ->get(route('admin.ai-settings.index'))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->component('Admin/AiSettings/Index')
+            ->where('settings.title_model', AiSettings::AUTO_MODEL)
+        );
+
+    $aiSettings = resolve(AiSettings::class);
+    expect($aiSettings->rawTitleModel())->toBe(AiSettings::AUTO_MODEL);
+    expect($aiSettings->titleModel())->not->toBe(AiSettings::AUTO_MODEL);
+});
+
 test('admin can update settings', function (): void {
     $admin = User::factory()->admin()->create();
 

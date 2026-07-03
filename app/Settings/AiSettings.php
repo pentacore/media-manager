@@ -103,6 +103,25 @@ class AiSettings
         return $value !== '' ? $value : 'gpt-5.4-nano';
     }
 
+    /**
+     * The persisted title-model value as stored, without the `auto`
+     * translation applied by {@see titleModel()}.
+     *
+     * Runtime consumers want the resolved concrete model, but the admin
+     * form must show the raw value so the `auto` sentinel round-trips
+     * through the UI instead of being silently replaced by the cheapest
+     * concrete model on reload.
+     */
+    public function rawTitleModel(): string
+    {
+        $value = (string) $this->appSettings->get(
+            self::TITLE_MODEL_KEY,
+            config('mediamanager.ai.title_model', 'gpt-5.4-nano'),
+        );
+
+        return $value !== '' ? $value : 'gpt-5.4-nano';
+    }
+
     public function setAdvisorReasoningLevel(AiReasoningLevel $aiReasoningLevel): void
     {
         $this->appSettings->set(self::MEDIA_ADVISOR_REASONING_LEVEL_KEY, $aiReasoningLevel->value);
