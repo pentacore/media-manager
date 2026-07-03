@@ -90,6 +90,9 @@ class WebFetchTool extends BaseTool
             ];
         }
 
+        // Guards the final landing host only — intermediate redirect hops are
+        // still requested (blind-SSRF residual), acceptable against this fixed
+        // vendor allowlist. Switch to withoutRedirecting() to close fully.
         $finalHost = $response->effectiveUri()?->getHost();
         if (is_string($finalHost) && ! in_array(strtolower($finalHost), self::ALLOWED_HOSTS, true)) {
             return [

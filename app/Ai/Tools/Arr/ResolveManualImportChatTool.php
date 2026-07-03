@@ -46,7 +46,7 @@ class ResolveManualImportChatTool extends BaseTool
         $args = $request->toArray();
         $service = mb_strtolower((string) ($args['service'] ?? ''));
         $downloadId = (string) ($args['download_id'] ?? '');
-        $reason = (string) ($args['reason'] ?? '');
+        $reason = trim((string) ($args['reason'] ?? ''));
 
         $type = match ($service) {
             'sonarr' => ServiceType::Sonarr,

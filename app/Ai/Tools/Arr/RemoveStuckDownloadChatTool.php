@@ -39,7 +39,7 @@ class RemoveStuckDownloadChatTool extends BaseTool
         $args = $request->toArray();
         $service = mb_strtolower((string) ($args['service'] ?? ''));
         $downloadId = (string) ($args['download_id'] ?? '');
-        $reason = (string) ($args['reason'] ?? '');
+        $reason = trim((string) ($args['reason'] ?? ''));
 
         throw_unless(in_array($service, ['sonarr', 'radarr'], true), InvalidArgumentException::class, 'service must be "sonarr" or "radarr".');
 
