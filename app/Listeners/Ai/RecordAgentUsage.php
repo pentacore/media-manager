@@ -14,6 +14,13 @@ class RecordAgentUsage
 {
     public function handle(AgentPrompted $agentPrompted): void
     {
+        // Streamed runs are registered for both AgentStreamed (explicitly,
+        // AIServiceProvider) and — under the fake gateway — AgentPrompted.
+        // Dedupe on invocation_id so a double dispatch never double-bills.
+        if (AiUsageRecord::where('invocation_id', $agentPrompted->invocationId)->exists()) {
+            return;
+        }
+
         $response = $agentPrompted->response;
         $usage = $response->usage;
         $meta = $response->meta;

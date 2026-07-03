@@ -4,13 +4,16 @@ declare(strict_types=1);
 
 use App\Ai\Agents\MediaAgent;
 use App\Jobs\Ai\GenerateConversationTitle;
+use App\Listeners\Ai\RecordAgentUsage;
 use App\Models\AiModelPrice;
 use App\Models\AiUsageRecord;
 use App\Models\User;
 use App\Settings\AiSettings;
 use Illuminate\Support\Facades\Bus;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Str;
+use Laravel\Ai\Events\AgentStreamed;
 
 beforeEach(function (): void {
     config()->set('mediamanager.ai.enabled', true);
@@ -168,9 +171,20 @@ test('streaming a first turn seeds a fallback title and dispatches GenerateConve
         && $job->firstUserMessage === 'Tell me about my queue please');
 });
 
-// Streamed runs dispatch a real AgentPrompted event alongside AgentStreamed
-// (not via parent-class listener resolution) — RecordAgentUsage matches that.
+// The REAL streaming gateway dispatches only AgentStreamed (StreamsText.php),
+// never AgentPrompted — the fake dispatches both. RecordAgentUsage is therefore
+// explicitly registered for AgentStreamed (AIServiceProvider) and deduped by
+// invocation_id so the fake's double dispatch still yields exactly one row.
 // This guards the budget guard's dependency on usage rows for streamed turns.
+test('RecordAgentUsage listens to AgentStreamed (real streams never fire AgentPrompted)', function (): void {
+    Event::fake();
+
+    Event::assertListening(
+        AgentStreamed::class,
+        RecordAgentUsage::class,
+    );
+});
+
 test('streamed turn records ai usage', function (): void {
     MediaAgent::fake(['Streamed reply.']);
     $admin = User::factory()->admin()->create();
@@ -185,7 +199,12 @@ test('streamed turn records ai usage', function (): void {
     // Consume the stream so the SDK dispatches its terminal usage event.
     $response->streamedContent();
 
-    expect(AiUsageRecord::count())->toBe(1);
+    // Exactly one MediaAgent row for the streamed turn (deduped even though
+    // the fake gateway dispatches both AgentStreamed and AgentPrompted).
+    // The sync-queued title job records its own TitleAgent row — asserting
+    // on the bare table count would let a missing MediaAgent row hide
+    // behind it, which is precisely the bug this test exists to catch.
+    expect(AiUsageRecord::where('agent_class', MediaAgent::class)->count())->toBe(1);
 });
 
 test('admin cannot stream against another users conversation', function (): void {
