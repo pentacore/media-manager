@@ -13,9 +13,10 @@ use Laravel\Ai\Tools\Request;
 use Stringable;
 
 /**
- * Chat-surface removal of a stuck download from the Sonarr/Radarr queue
- * (no blocklist, no re-download). Queues a remove_stuck_download
- * ActionRequest executed by RemoveStuckDownloadActions.
+ * Chat-surface removal of a stuck download from the Sonarr/Radarr queue,
+ * optionally blocklisting the release so it is never grabbed again. Queues
+ * a remove_stuck_download ActionRequest executed by
+ * RemoveStuckDownloadActions.
  */
 class RemoveStuckDownloadChatTool extends BaseTool
 {

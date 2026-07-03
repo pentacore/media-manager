@@ -29,6 +29,7 @@ test('admin can stream a chat response as SSE', function (): void {
         ], ['Accept' => 'text/event-stream']);
 
     $response->assertOk();
+
     expect($response->headers->get('content-type'))->toContain('text/event-stream');
 
     $body = $response->streamedContent();
@@ -63,8 +64,8 @@ test('streaming a first turn appends the minted conversation id before DONE', fu
         ->and($body)->toContain($conversationId);
 
     // The id event must precede the terminal [DONE] marker.
-    expect(strpos($body, $conversationId))
-        ->toBeLessThan(strpos($body, '[DONE]'));
+    expect(strpos((string) $body, (string) $conversationId))
+        ->toBeLessThan(strpos((string) $body, '[DONE]'));
 });
 
 test('streaming an existing conversation echoes its id in the terminal event', function (): void {
@@ -167,8 +168,8 @@ test('streaming a first turn seeds a fallback title and dispatches GenerateConve
     expect(DB::table('agent_conversations')->where('id', $conversationId)->value('title'))
         ->toBe('Tell me about my queue please');
 
-    Bus::assertDispatched(fn (GenerateConversationTitle $job): bool => $job->conversationId === $conversationId
-        && $job->firstUserMessage === 'Tell me about my queue please');
+    Bus::assertDispatched(fn (GenerateConversationTitle $generateConversationTitle): bool => $generateConversationTitle->conversationId === $conversationId
+        && $generateConversationTitle->firstUserMessage === 'Tell me about my queue please');
 });
 
 // The REAL streaming gateway dispatches only AgentStreamed (StreamsText.php),

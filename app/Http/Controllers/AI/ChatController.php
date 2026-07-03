@@ -47,7 +47,7 @@ class ChatController extends Controller
 
         $this->applyRequestedMode($validated['mode'] ?? null);
 
-        if ($budgetResponse = $this->enforceBudget()) {
+        if (($budgetResponse = $this->enforceBudget()) instanceof JsonResponse) {
             return $budgetResponse;
         }
 
@@ -113,7 +113,7 @@ class ChatController extends Controller
 
         $this->applyRequestedMode($validated['mode'] ?? null);
 
-        if ($budgetResponse = $this->enforceBudget()) {
+        if (($budgetResponse = $this->enforceBudget()) instanceof JsonResponse) {
             return $budgetResponse;
         }
 
@@ -146,7 +146,7 @@ class ChatController extends Controller
 
         return response()->stream(function () use ($stream): void {
             foreach ($stream as $event) {
-                echo 'data: '.((string) $event)."\n\n";
+                echo 'data: '.($event)."\n\n";
             }
 
             // The conversation id is populated once the SDK events (and the

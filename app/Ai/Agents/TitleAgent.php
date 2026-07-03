@@ -4,12 +4,18 @@ declare(strict_types=1);
 
 namespace App\Ai\Agents;
 
+use App\Settings\AiSettings;
 use Laravel\Ai\Contracts\Agent;
 use Laravel\Ai\Promptable;
 
 class TitleAgent implements Agent
 {
     use Promptable;
+
+    public function model(): string
+    {
+        return resolve(AiSettings::class)->titleModel();
+    }
 
     public function instructions(): string
     {
