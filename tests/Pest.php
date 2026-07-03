@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use App\Jobs\Ai\GenerateConversationTitle;
 use App\Jobs\FetchLatestServiceVersion;
 use App\Jobs\PingServiceHealth;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -28,9 +29,14 @@ pest()->extend(TestCase::class)
         // FetchLatestServiceVersion on create / identity-update. In tests
         // (sync queue) those jobs would run real HTTP inside factory create,
         // which conflicts with Http::preventStrayRequests() in many suites.
-        // Fake only those two jobs by default — other jobs (webhook handlers,
+        // Fake only these jobs by default — other jobs (webhook handlers,
         // etc.) keep their normal sync dispatch behaviour.
-        Queue::fake([PingServiceHealth::class, FetchLatestServiceVersion::class]);
+        // GenerateConversationTitle is included because any first-turn chat
+        // test would otherwise run it synchronously and prompt the real,
+        // unfaked TitleAgent (a live provider HTTP call). Tests that assert
+        // on the job re-fake via Bus::fake; the job's own tests call
+        // handle() directly, so neither is affected.
+        Queue::fake([PingServiceHealth::class, FetchLatestServiceVersion::class, GenerateConversationTitle::class]);
 
         // External-API caches (app/Cache/Services) default to redis in production.
         // Force the array store in tests so per-test state is isolated and tagged
@@ -43,7 +49,7 @@ pest()->extend(TestCase::class)
 pest()->extend(TestCase::class)
     ->use(RefreshDatabase::class)
     ->beforeEach(function (): void {
-        Queue::fake([PingServiceHealth::class, FetchLatestServiceVersion::class]);
+        Queue::fake([PingServiceHealth::class, FetchLatestServiceVersion::class, GenerateConversationTitle::class]);
 
         config()->set('mediamanager.cache.store', 'array');
         Cache::store('array')->flush();
