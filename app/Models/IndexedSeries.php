@@ -31,6 +31,7 @@ use Override;
  * @property array<int, string>|null $genres
  * @property string|null $overview
  * @property string|null $poster_url
+ * @property array<int, float>|null $embedding
  * @property CarbonImmutable|null $arr_added_at
  * @property CarbonImmutable|null $created_at
  * @property CarbonImmutable|null $updated_at
@@ -58,6 +59,7 @@ use Override;
     'genres',
     'overview',
     'poster_url',
+    'embedding',
     'arr_added_at',
 ])]
 #[Table(name: 'indexed_series')]
@@ -77,6 +79,7 @@ class IndexedSeries extends Model
         return [
             'monitored' => 'boolean',
             'genres' => 'array',
+            'embedding' => 'array',
             'arr_added_at' => 'datetime',
         ];
     }
@@ -99,7 +102,7 @@ class IndexedSeries extends Model
      */
     public function toSearchableArray(): array
     {
-        return [
+        $searchable = [
             'id' => (string) $this->id,
             'service_connection_id' => (int) $this->service_connection_id,
             'sonarr_id' => (int) $this->sonarr_id,
@@ -116,6 +119,12 @@ class IndexedSeries extends Model
             'poster_url' => (string) ($this->poster_url ?? ''),
             'created_at' => (int) ($this->created_at?->timestamp ?? 0),
         ];
+
+        if (is_array($this->embedding) && $this->embedding !== []) {
+            $searchable['embedding'] = array_map(static fn ($v): float => (float) $v, $this->embedding);
+        }
+
+        return $searchable;
     }
 
     public function shouldBeSearchable(): bool
