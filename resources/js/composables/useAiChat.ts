@@ -36,7 +36,7 @@ function csrfToken(): string {
     );
 }
 
-async function jsonRequest<T>(
+export async function jsonRequest<T>(
     method: string,
     url: string,
     body?: unknown,
