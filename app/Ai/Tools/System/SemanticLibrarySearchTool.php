@@ -48,7 +48,7 @@ class SemanticLibrarySearchTool extends BaseTool
         if (! $result['available']) {
             return [
                 'available' => false,
-                'message' => 'Semantic search is unavailable (AI disabled or search index not ready). Fall back to GetSeriesTool/GetMovieTool keyword filters.',
+                'message' => 'Semantic search is unavailable (AI disabled or search index not ready). Fall back to GetMediaTool/SearchMediaTool keyword filters.',
             ];
         }
 
