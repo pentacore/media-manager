@@ -2,6 +2,8 @@
 
 declare(strict_types=1);
 
+use App\Models\IndexedMovie;
+use App\Models\IndexedSeries;
 use App\Models\ServiceConnection;
 use App\Models\User;
 use Illuminate\Support\Facades\Http;
@@ -10,6 +12,9 @@ use Illuminate\Support\Facades\Log;
 beforeEach(function (): void {
     config()->set('inertia.ssr.enabled', false);
     config()->set('inertia.testing.ensure_pages_exist', false);
+    // Existing Http::fake-based tests assert against the pre-Typesense path.
+    // The Typesense-driver path is exercised by its own dedicated tests below.
+    config()->set('mediamanager.search.driver', 'fallback');
     Http::preventStrayRequests();
 });
 
@@ -534,6 +539,96 @@ test('scope=indexers fans out to Prowlarr and returns release rows', function ()
                 ->where('indexerResults.results.0.tracker', 'ETTV')
                 ->where('indexerResults.results.0.size_bytes', 2_500_000_000)
                 ->where('indexerResults.results.0.seeders', 412)
+            )
+        );
+});
+
+test('typesense driver returns indexed series results scoped to active connection', function (): void {
+    config()->set('mediamanager.search.driver', 'typesense');
+    config()->set('scout.driver', 'database');
+
+    $sonarr = ServiceConnection::factory()->sonarr()->create();
+    IndexedSeries::factory()->for($sonarr, 'serviceConnection')->create([
+        'sonarr_id' => 77,
+        'tvdb_id' => 99,
+        'title' => 'Found Series',
+        'title_slug' => 'found-series',
+        'year' => 2024,
+        'status' => 'continuing',
+        'monitored' => true,
+        'overview' => 'A search target.',
+        'poster_url' => 'https://example.com/poster.jpg',
+    ]);
+
+    $member = User::factory()->member()->create();
+
+    $this->actingAs($member)
+        ->get(route('media.search.index', ['q' => 'Found']))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->loadDeferredProps(fn ($page) => $page
+                ->where('seriesResults.error', null)
+                ->has('seriesResults.results', 1)
+                ->where('seriesResults.results.0.id', 77)
+                ->where('seriesResults.results.0.tvdb_id', 99)
+                ->where('seriesResults.results.0.title', 'Found Series')
+                ->where('seriesResults.results.0.title_slug', 'found-series')
+                ->where('seriesResults.results.0.monitored', true)
+                ->where('seriesResults.results.0.remote_poster', 'https://example.com/poster.jpg')
+            )
+        );
+});
+
+test('typesense driver returns indexed movie results scoped to active connection', function (): void {
+    config()->set('mediamanager.search.driver', 'typesense');
+    config()->set('scout.driver', 'database');
+
+    $radarr = ServiceConnection::factory()->radarr()->create();
+    IndexedMovie::factory()->for($radarr, 'serviceConnection')->create([
+        'radarr_id' => 121,
+        'tmdb_id' => 909,
+        'title' => 'Found Movie',
+        'title_slug' => 'found-movie',
+        'year' => 2023,
+        'status' => 'released',
+        'monitored' => true,
+        'has_file' => true,
+        'overview' => 'A search target.',
+        'poster_url' => 'https://example.com/movie.jpg',
+    ]);
+
+    $member = User::factory()->member()->create();
+
+    $this->actingAs($member)
+        ->get(route('media.search.index', ['q' => 'Found']))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->loadDeferredProps(fn ($page) => $page
+                ->where('movieResults.error', null)
+                ->has('movieResults.results', 1)
+                ->where('movieResults.results.0.id', 121)
+                ->where('movieResults.results.0.tmdb_id', 909)
+                ->where('movieResults.results.0.title', 'Found Movie')
+                ->where('movieResults.results.0.title_slug', 'found-movie')
+                ->where('movieResults.results.0.has_file', true)
+                ->where('movieResults.results.0.remote_poster', 'https://example.com/movie.jpg')
+            )
+        );
+});
+
+test('typesense driver returns no-connection error when sonarr is not configured', function (): void {
+    config()->set('mediamanager.search.driver', 'typesense');
+    config()->set('scout.driver', 'database');
+
+    $member = User::factory()->member()->create();
+
+    $this->actingAs($member)
+        ->get(route('media.search.index', ['q' => 'anything']))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->loadDeferredProps(fn ($page) => $page
+                ->where('seriesResults.error', 'No active Sonarr connection configured.')
+                ->where('seriesResults.results', [])
             )
         );
 });

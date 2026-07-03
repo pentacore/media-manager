@@ -698,70 +698,78 @@ function formatTimestamp(value: string): string {
                 >
                     By model
                 </div>
-                <table class="w-full border-collapse text-[13px]">
-                    <thead>
-                        <tr>
-                            <th
-                                class="border-b border-border px-3 py-2 text-left text-[11.5px] font-medium tracking-[0.05em] text-muted-foreground uppercase"
+                <div class="overflow-x-auto">
+                    <table class="w-full border-collapse text-[13px]">
+                        <thead>
+                            <tr>
+                                <th
+                                    class="border-b border-border px-3 py-2 text-left text-[11.5px] font-medium tracking-[0.05em] text-muted-foreground uppercase"
+                                >
+                                    Model
+                                </th>
+                                <th
+                                    class="border-b border-border px-3 py-2 text-right text-[11.5px] font-medium tracking-[0.05em] text-muted-foreground uppercase"
+                                >
+                                    Calls
+                                </th>
+                                <th
+                                    class="border-b border-border px-3 py-2 text-right text-[11.5px] font-medium tracking-[0.05em] text-muted-foreground uppercase"
+                                >
+                                    Cost
+                                </th>
+                                <th
+                                    v-if="scenarioActive"
+                                    class="border-b border-border px-3 py-2 text-right text-[11.5px] font-medium tracking-[0.05em] text-muted-foreground uppercase"
+                                >
+                                    Projected
+                                </th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr
+                                v-for="row in by_model"
+                                :key="row.key ?? 'null'"
+                                class="border-b border-border last:border-b-0 hover:bg-bg-hover"
                             >
-                                Model
-                            </th>
-                            <th
-                                class="border-b border-border px-3 py-2 text-right text-[11.5px] font-medium tracking-[0.05em] text-muted-foreground uppercase"
-                            >
-                                Calls
-                            </th>
-                            <th
-                                class="border-b border-border px-3 py-2 text-right text-[11.5px] font-medium tracking-[0.05em] text-muted-foreground uppercase"
-                            >
-                                Cost
-                            </th>
-                            <th
-                                v-if="scenarioActive"
-                                class="border-b border-border px-3 py-2 text-right text-[11.5px] font-medium tracking-[0.05em] text-muted-foreground uppercase"
-                            >
-                                Projected
-                            </th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <tr
-                            v-for="row in by_model"
-                            :key="row.key ?? 'null'"
-                            class="border-b border-border last:border-b-0 hover:bg-bg-hover"
-                        >
-                            <td class="font-mono-tabular px-3 py-2 text-[12px]">
-                                {{ row.key ?? '—' }}
-                            </td>
-                            <td class="font-mono-tabular px-3 py-2 text-right">
-                                {{ formatNumber(row.invocations) }}
-                            </td>
-                            <td class="font-mono-tabular px-3 py-2 text-right">
-                                {{ formatCost(row.total_cost) }}
-                            </td>
-                            <td
-                                v-if="scenarioActive"
-                                class="font-mono-tabular px-3 py-2 text-right text-accent"
-                            >
-                                {{
-                                    formatCost(
-                                        aggregatedScenarioByModel[
-                                            row.key ?? '__null__'
-                                        ] ?? '0',
-                                    )
-                                }}
-                            </td>
-                        </tr>
-                        <tr v-if="by_model.length === 0">
-                            <td
-                                :colspan="scenarioActive ? 4 : 3"
-                                class="px-3 py-6 text-center text-sm text-fg-subtle"
-                            >
-                                No data in this window.
-                            </td>
-                        </tr>
-                    </tbody>
-                </table>
+                                <td
+                                    class="font-mono-tabular px-3 py-2 text-[12px]"
+                                >
+                                    {{ row.key ?? '—' }}
+                                </td>
+                                <td
+                                    class="font-mono-tabular px-3 py-2 text-right"
+                                >
+                                    {{ formatNumber(row.invocations) }}
+                                </td>
+                                <td
+                                    class="font-mono-tabular px-3 py-2 text-right"
+                                >
+                                    {{ formatCost(row.total_cost) }}
+                                </td>
+                                <td
+                                    v-if="scenarioActive"
+                                    class="font-mono-tabular px-3 py-2 text-right text-accent"
+                                >
+                                    {{
+                                        formatCost(
+                                            aggregatedScenarioByModel[
+                                                row.key ?? '__null__'
+                                            ] ?? '0',
+                                        )
+                                    }}
+                                </td>
+                            </tr>
+                            <tr v-if="by_model.length === 0">
+                                <td
+                                    :colspan="scenarioActive ? 4 : 3"
+                                    class="px-3 py-6 text-center text-sm text-fg-subtle"
+                                >
+                                    No data in this window.
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
             </div>
 
             <div
@@ -772,70 +780,78 @@ function formatTimestamp(value: string): string {
                 >
                     By provider
                 </div>
-                <table class="w-full border-collapse text-[13px]">
-                    <thead>
-                        <tr>
-                            <th
-                                class="border-b border-border px-3 py-2 text-left text-[11.5px] font-medium tracking-[0.05em] text-muted-foreground uppercase"
+                <div class="overflow-x-auto">
+                    <table class="w-full border-collapse text-[13px]">
+                        <thead>
+                            <tr>
+                                <th
+                                    class="border-b border-border px-3 py-2 text-left text-[11.5px] font-medium tracking-[0.05em] text-muted-foreground uppercase"
+                                >
+                                    Provider
+                                </th>
+                                <th
+                                    class="border-b border-border px-3 py-2 text-right text-[11.5px] font-medium tracking-[0.05em] text-muted-foreground uppercase"
+                                >
+                                    Calls
+                                </th>
+                                <th
+                                    class="border-b border-border px-3 py-2 text-right text-[11.5px] font-medium tracking-[0.05em] text-muted-foreground uppercase"
+                                >
+                                    Cost
+                                </th>
+                                <th
+                                    v-if="scenarioActive"
+                                    class="border-b border-border px-3 py-2 text-right text-[11.5px] font-medium tracking-[0.05em] text-muted-foreground uppercase"
+                                >
+                                    Projected
+                                </th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr
+                                v-for="row in by_provider"
+                                :key="row.key ?? 'null'"
+                                class="border-b border-border last:border-b-0 hover:bg-bg-hover"
                             >
-                                Provider
-                            </th>
-                            <th
-                                class="border-b border-border px-3 py-2 text-right text-[11.5px] font-medium tracking-[0.05em] text-muted-foreground uppercase"
-                            >
-                                Calls
-                            </th>
-                            <th
-                                class="border-b border-border px-3 py-2 text-right text-[11.5px] font-medium tracking-[0.05em] text-muted-foreground uppercase"
-                            >
-                                Cost
-                            </th>
-                            <th
-                                v-if="scenarioActive"
-                                class="border-b border-border px-3 py-2 text-right text-[11.5px] font-medium tracking-[0.05em] text-muted-foreground uppercase"
-                            >
-                                Projected
-                            </th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <tr
-                            v-for="row in by_provider"
-                            :key="row.key ?? 'null'"
-                            class="border-b border-border last:border-b-0 hover:bg-bg-hover"
-                        >
-                            <td class="font-mono-tabular px-3 py-2 text-[12px]">
-                                {{ row.key ?? '—' }}
-                            </td>
-                            <td class="font-mono-tabular px-3 py-2 text-right">
-                                {{ formatNumber(row.invocations) }}
-                            </td>
-                            <td class="font-mono-tabular px-3 py-2 text-right">
-                                {{ formatCost(row.total_cost) }}
-                            </td>
-                            <td
-                                v-if="scenarioActive"
-                                class="font-mono-tabular px-3 py-2 text-right text-accent"
-                            >
-                                {{
-                                    formatCost(
-                                        aggregatedScenarioByProvider[
-                                            row.key ?? '__null__'
-                                        ] ?? '0',
-                                    )
-                                }}
-                            </td>
-                        </tr>
-                        <tr v-if="by_provider.length === 0">
-                            <td
-                                :colspan="scenarioActive ? 4 : 3"
-                                class="px-3 py-6 text-center text-sm text-fg-subtle"
-                            >
-                                No data in this window.
-                            </td>
-                        </tr>
-                    </tbody>
-                </table>
+                                <td
+                                    class="font-mono-tabular px-3 py-2 text-[12px]"
+                                >
+                                    {{ row.key ?? '—' }}
+                                </td>
+                                <td
+                                    class="font-mono-tabular px-3 py-2 text-right"
+                                >
+                                    {{ formatNumber(row.invocations) }}
+                                </td>
+                                <td
+                                    class="font-mono-tabular px-3 py-2 text-right"
+                                >
+                                    {{ formatCost(row.total_cost) }}
+                                </td>
+                                <td
+                                    v-if="scenarioActive"
+                                    class="font-mono-tabular px-3 py-2 text-right text-accent"
+                                >
+                                    {{
+                                        formatCost(
+                                            aggregatedScenarioByProvider[
+                                                row.key ?? '__null__'
+                                            ] ?? '0',
+                                        )
+                                    }}
+                                </td>
+                            </tr>
+                            <tr v-if="by_provider.length === 0">
+                                <td
+                                    :colspan="scenarioActive ? 4 : 3"
+                                    class="px-3 py-6 text-center text-sm text-fg-subtle"
+                                >
+                                    No data in this window.
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
             </div>
         </div>
 
@@ -846,89 +862,95 @@ function formatTimestamp(value: string): string {
             >
                 Recent invocations
             </div>
-            <table class="w-full border-collapse text-[13px]">
-                <thead>
-                    <tr>
-                        <th
-                            v-for="h in [
-                                'When',
-                                'User',
-                                'Model',
-                                'Tokens',
-                                'Tools',
-                                'Cost',
-                                ...(scenarioActive ? ['Projected'] : []),
-                                'Status',
-                            ]"
-                            :key="h"
-                            class="border-b border-border px-3 py-2 text-left text-[11.5px] font-medium tracking-[0.05em] text-muted-foreground uppercase"
-                        >
-                            {{ h }}
-                        </th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <tr
-                        v-for="row in recent"
-                        :key="row.id"
-                        class="cursor-pointer border-b border-border last:border-b-0 hover:bg-bg-hover"
-                        @click="openDetail(row)"
-                    >
-                        <td
-                            class="font-mono-tabular px-3 py-2 text-[11.5px] whitespace-nowrap text-fg-subtle"
-                        >
-                            {{ formatTimestamp(row.created_at) }}
-                        </td>
-                        <td class="px-3 py-2">
-                            <span class="flex items-center gap-2">
-                                <InitialsAvatar
-                                    :name="row.user_name ?? 'system'"
-                                    :size="20"
-                                />
-                                <span>{{ row.user_name ?? '—' }}</span>
-                            </span>
-                        </td>
-                        <td class="font-mono-tabular px-3 py-2 text-[12px]">
-                            {{ row.model ?? '—' }}
-                        </td>
-                        <td class="font-mono-tabular px-3 py-2 text-right">
-                            {{ formatNumber(row.total_tokens) }}
-                        </td>
-                        <td class="font-mono-tabular px-3 py-2 text-right">
-                            {{ row.tool_calls_count }}
-                        </td>
-                        <td class="font-mono-tabular px-3 py-2 text-right">
-                            {{ formatCost(row.cost) }}
-                        </td>
-                        <td
-                            v-if="scenarioActive"
-                            class="font-mono-tabular px-3 py-2 text-right text-accent"
-                        >
-                            {{
-                                formatCost(indexedScenarioRecent[row.id] ?? '0')
-                            }}
-                        </td>
-                        <td class="px-3 py-2">
-                            <Pill
-                                :variant="
-                                    row.status === 'success' ? 'ok' : 'danger'
-                                "
-                                dot
+            <div class="overflow-x-auto">
+                <table class="w-full border-collapse text-[13px]">
+                    <thead>
+                        <tr>
+                            <th
+                                v-for="h in [
+                                    'When',
+                                    'User',
+                                    'Model',
+                                    'Tokens',
+                                    'Tools',
+                                    'Cost',
+                                    ...(scenarioActive ? ['Projected'] : []),
+                                    'Status',
+                                ]"
+                                :key="h"
+                                class="border-b border-border px-3 py-2 text-left text-[11.5px] font-medium tracking-[0.05em] text-muted-foreground uppercase"
                             >
-                                {{ row.status }}
-                            </Pill>
-                        </td>
-                    </tr>
-                    <tr v-if="recent.length === 0">
-                        <td
-                            :colspan="scenarioActive ? 8 : 7"
-                            class="px-3 py-6 text-center text-sm text-fg-subtle"
+                                {{ h }}
+                            </th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr
+                            v-for="row in recent"
+                            :key="row.id"
+                            class="cursor-pointer border-b border-border last:border-b-0 hover:bg-bg-hover"
+                            @click="openDetail(row)"
                         >
-                            No invocations in this window.
-                        </td>
-                    </tr>
-                </tbody>
-            </table>
+                            <td
+                                class="font-mono-tabular px-3 py-2 text-[11.5px] whitespace-nowrap text-fg-subtle"
+                            >
+                                {{ formatTimestamp(row.created_at) }}
+                            </td>
+                            <td class="px-3 py-2">
+                                <span class="flex items-center gap-2">
+                                    <InitialsAvatar
+                                        :name="row.user_name ?? 'system'"
+                                        :size="20"
+                                    />
+                                    <span>{{ row.user_name ?? 'System' }}</span>
+                                </span>
+                            </td>
+                            <td class="font-mono-tabular px-3 py-2 text-[12px]">
+                                {{ row.model ?? '—' }}
+                            </td>
+                            <td class="font-mono-tabular px-3 py-2 text-right">
+                                {{ formatNumber(row.total_tokens) }}
+                            </td>
+                            <td class="font-mono-tabular px-3 py-2 text-right">
+                                {{ row.tool_calls_count }}
+                            </td>
+                            <td class="font-mono-tabular px-3 py-2 text-right">
+                                {{ formatCost(row.cost) }}
+                            </td>
+                            <td
+                                v-if="scenarioActive"
+                                class="font-mono-tabular px-3 py-2 text-right text-accent"
+                            >
+                                {{
+                                    formatCost(
+                                        indexedScenarioRecent[row.id] ?? '0',
+                                    )
+                                }}
+                            </td>
+                            <td class="px-3 py-2">
+                                <Pill
+                                    :variant="
+                                        row.status === 'success'
+                                            ? 'ok'
+                                            : 'danger'
+                                    "
+                                    dot
+                                >
+                                    {{ row.status }}
+                                </Pill>
+                            </td>
+                        </tr>
+                        <tr v-if="recent.length === 0">
+                            <td
+                                :colspan="scenarioActive ? 8 : 7"
+                                class="px-3 py-6 text-center text-sm text-fg-subtle"
+                            >
+                                No invocations in this window.
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
         </div>
 
         <!-- Detail modal -->
@@ -1095,95 +1117,103 @@ function formatTimestamp(value: string): string {
                     <div
                         class="overflow-hidden rounded-md border border-border"
                     >
-                        <table class="w-full border-collapse text-[12px]">
-                            <thead>
-                                <tr class="bg-bg-elev">
-                                    <th
-                                        class="px-3 py-2 text-left font-medium text-muted-foreground"
+                        <div class="overflow-x-auto">
+                            <table class="w-full border-collapse text-[12px]">
+                                <thead>
+                                    <tr class="bg-bg-elev">
+                                        <th
+                                            class="px-3 py-2 text-left font-medium text-muted-foreground"
+                                        >
+                                            Component
+                                        </th>
+                                        <th
+                                            class="px-3 py-2 text-right font-medium text-muted-foreground"
+                                        >
+                                            Tokens
+                                        </th>
+                                        <th
+                                            class="px-3 py-2 text-right font-medium text-muted-foreground"
+                                        >
+                                            Rate / 1M
+                                        </th>
+                                        <th
+                                            class="px-3 py-2 text-right font-medium text-muted-foreground"
+                                        >
+                                            Cost
+                                        </th>
+                                        <th
+                                            v-if="detail.scenario_breakdown"
+                                            class="px-3 py-2 text-right font-medium text-muted-foreground"
+                                        >
+                                            Scenario
+                                        </th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr
+                                        v-for="(line, idx) in detail.breakdown"
+                                        :key="line.label"
+                                        class="border-t border-border"
                                     >
-                                        Component
-                                    </th>
-                                    <th
-                                        class="px-3 py-2 text-right font-medium text-muted-foreground"
+                                        <td class="px-3 py-2">
+                                            {{ line.label }}
+                                        </td>
+                                        <td
+                                            class="font-mono-tabular px-3 py-2 text-right"
+                                        >
+                                            {{ formatNumber(line.tokens) }}
+                                        </td>
+                                        <td
+                                            class="font-mono-tabular px-3 py-2 text-right"
+                                        >
+                                            {{ formatRate(line.rate) }}
+                                        </td>
+                                        <td
+                                            class="font-mono-tabular px-3 py-2 text-right"
+                                        >
+                                            {{ formatCost(line.cost) }}
+                                        </td>
+                                        <td
+                                            v-if="detail.scenario_breakdown"
+                                            class="font-mono-tabular px-3 py-2 text-right text-accent"
+                                        >
+                                            {{
+                                                formatCost(
+                                                    detail.scenario_breakdown[
+                                                        idx
+                                                    ].cost,
+                                                )
+                                            }}
+                                        </td>
+                                    </tr>
+                                    <tr
+                                        class="border-t-2 border-border bg-bg-elev font-semibold"
                                     >
-                                        Tokens
-                                    </th>
-                                    <th
-                                        class="px-3 py-2 text-right font-medium text-muted-foreground"
-                                    >
-                                        Rate / 1M
-                                    </th>
-                                    <th
-                                        class="px-3 py-2 text-right font-medium text-muted-foreground"
-                                    >
-                                        Cost
-                                    </th>
-                                    <th
-                                        v-if="detail.scenario_breakdown"
-                                        class="px-3 py-2 text-right font-medium text-muted-foreground"
-                                    >
-                                        Scenario
-                                    </th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                <tr
-                                    v-for="(line, idx) in detail.breakdown"
-                                    :key="line.label"
-                                    class="border-t border-border"
-                                >
-                                    <td class="px-3 py-2">{{ line.label }}</td>
-                                    <td
-                                        class="font-mono-tabular px-3 py-2 text-right"
-                                    >
-                                        {{ formatNumber(line.tokens) }}
-                                    </td>
-                                    <td
-                                        class="font-mono-tabular px-3 py-2 text-right"
-                                    >
-                                        {{ formatRate(line.rate) }}
-                                    </td>
-                                    <td
-                                        class="font-mono-tabular px-3 py-2 text-right"
-                                    >
-                                        {{ formatCost(line.cost) }}
-                                    </td>
-                                    <td
-                                        v-if="detail.scenario_breakdown"
-                                        class="font-mono-tabular px-3 py-2 text-right text-accent"
-                                    >
-                                        {{
-                                            formatCost(
-                                                detail.scenario_breakdown[idx]
-                                                    .cost,
-                                            )
-                                        }}
-                                    </td>
-                                </tr>
-                                <tr
-                                    class="border-t-2 border-border bg-bg-elev font-semibold"
-                                >
-                                    <td class="px-3 py-2" colspan="3">Total</td>
-                                    <td
-                                        class="font-mono-tabular px-3 py-2 text-right"
-                                    >
-                                        {{ formatCost(detail.total_cost) }}
-                                    </td>
-                                    <td
-                                        v-if="
-                                            detail.scenario_total_cost !== null
-                                        "
-                                        class="font-mono-tabular px-3 py-2 text-right text-accent"
-                                    >
-                                        {{
-                                            formatCost(
-                                                detail.scenario_total_cost,
-                                            )
-                                        }}
-                                    </td>
-                                </tr>
-                            </tbody>
-                        </table>
+                                        <td class="px-3 py-2" colspan="3">
+                                            Total
+                                        </td>
+                                        <td
+                                            class="font-mono-tabular px-3 py-2 text-right"
+                                        >
+                                            {{ formatCost(detail.total_cost) }}
+                                        </td>
+                                        <td
+                                            v-if="
+                                                detail.scenario_total_cost !==
+                                                null
+                                            "
+                                            class="font-mono-tabular px-3 py-2 text-right text-accent"
+                                        >
+                                            {{
+                                                formatCost(
+                                                    detail.scenario_total_cost,
+                                                )
+                                            }}
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
                     </div>
 
                     <!-- Tools -->

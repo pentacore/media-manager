@@ -22,6 +22,7 @@ class AiSettingsController extends Controller
             'settings' => [
                 'mode' => $aiSettings->mode()->value,
                 'model' => $aiSettings->model(),
+                'title_model' => $aiSettings->titleModel(),
                 'soft_budget_usd' => $aiSettings->softBudgetUsd(),
                 'hard_budget_usd' => $aiSettings->hardBudgetUsd(),
             ],
@@ -67,6 +68,7 @@ class AiSettingsController extends Controller
 
         $aiSettings->setMode(AiMode::from($validated['mode']));
         $aiSettings->setModel($validated['model']);
+        $aiSettings->setTitleModel($validated['title_model']);
         $aiSettings->setSoftBudgetUsd(
             isset($validated['soft_budget_usd']) ? (float) $validated['soft_budget_usd'] : null,
         );

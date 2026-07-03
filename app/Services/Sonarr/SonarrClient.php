@@ -6,6 +6,7 @@ namespace App\Services\Sonarr;
 
 use App\Cache\Services\SonarrCache;
 use App\Services\Arr\ArrClient;
+use App\Support\Cache\Warmable;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\RequestException;
 use Override;
@@ -14,7 +15,7 @@ use Override;
  * @see https://sonarr.tv/docs/api/#v3 for API Spec
  * @see {@link open-api.2026-04-16.yaml} for up-to-date openApi Spec
  */
-class SonarrClient extends ArrClient
+class SonarrClient extends ArrClient implements Warmable
 {
     private ?SonarrCache $sonarrCache = null;
 
@@ -27,7 +28,7 @@ class SonarrClient extends ArrClient
     {
         return $this->cache()->rememberList(
             'list',
-            fn (): array => $this->buildClient()->get(sprintf('/api/%s/series', $this->apiVersion))->throw()->json() ?? [],
+            fn (): array => $this->fetchSeries(),
         );
     }
 
@@ -131,6 +132,24 @@ class SonarrClient extends ArrClient
             'root-folders',
             fn (): array => parent::getRootFolders(),
         );
+    }
+
+    public function warm(): void
+    {
+        $cache = $this->cache();
+        $cache->warmList('list', fn (): array => $this->fetchSeries());
+        $cache->warmMetadata('quality-profiles', fn (): array => parent::getQualityProfiles());
+        $cache->warmMetadata('root-folders', fn (): array => parent::getRootFolders());
+    }
+
+    /**
+     * @return array<int, array<string, mixed>>
+     *
+     * @throws RequestException|ConnectionException
+     */
+    private function fetchSeries(): array
+    {
+        return $this->buildClient()->get(sprintf('/api/%s/series', $this->apiVersion))->throw()->json() ?? [];
     }
 
     private function cache(): SonarrCache

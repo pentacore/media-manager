@@ -290,4 +290,130 @@
         background: currentColor;
         animation: mm-ping 1.8s cubic-bezier(0, 0, 0.2, 1) infinite;
     }
+
+    /* AI chat markdown rendering — scoped utility class applied to the
+       sanitized HTML output of useMarkdown(). Tailwind v4 has no
+       typography plugin in this project, so headings/lists/code/etc.
+       are styled here against the project's design tokens. */
+    .mm-markdown {
+        word-break: break-word;
+    }
+    .mm-markdown > :first-child {
+        margin-top: 0;
+    }
+    .mm-markdown > :last-child {
+        margin-bottom: 0;
+    }
+    .mm-markdown p {
+        margin: 0.5em 0;
+    }
+    .mm-markdown h1,
+    .mm-markdown h2,
+    .mm-markdown h3,
+    .mm-markdown h4,
+    .mm-markdown h5,
+    .mm-markdown h6 {
+        font-weight: 600;
+        line-height: 1.25;
+        margin: 0.9em 0 0.4em;
+    }
+    .mm-markdown h1 {
+        font-size: 1.25em;
+    }
+    .mm-markdown h2 {
+        font-size: 1.15em;
+    }
+    .mm-markdown h3 {
+        font-size: 1.05em;
+    }
+    .mm-markdown h4,
+    .mm-markdown h5,
+    .mm-markdown h6 {
+        font-size: 1em;
+    }
+    .mm-markdown ul,
+    .mm-markdown ol {
+        margin: 0.5em 0;
+        padding-left: 1.4em;
+    }
+    .mm-markdown ul {
+        list-style: disc;
+    }
+    .mm-markdown ol {
+        list-style: decimal;
+    }
+    .mm-markdown li {
+        margin: 0.2em 0;
+    }
+    .mm-markdown li > p {
+        margin: 0.2em 0;
+    }
+    .mm-markdown a {
+        color: var(--accent);
+        text-decoration: underline;
+        text-underline-offset: 2px;
+    }
+    .mm-markdown a:hover {
+        opacity: 0.85;
+    }
+    .mm-markdown strong {
+        font-weight: 600;
+    }
+    .mm-markdown em {
+        font-style: italic;
+    }
+    .mm-markdown blockquote {
+        margin: 0.7em 0;
+        padding: 0.1em 0.9em;
+        border-left: 3px solid var(--border);
+        color: var(--muted-foreground);
+    }
+    .mm-markdown code {
+        font-family: var(--font-mono, ui-monospace, SFMono-Regular, monospace);
+        font-size: 0.88em;
+        background: var(
+            --bg-elev,
+            oklch(from var(--background) calc(l + 0.04) c h)
+        );
+        padding: 0.1em 0.35em;
+        border-radius: 0.3em;
+    }
+    .mm-markdown pre {
+        margin: 0.7em 0;
+        padding: 0.7em 0.85em;
+        border: 1px solid var(--border);
+        border-radius: 0.5em;
+        background: var(
+            --bg-elev,
+            oklch(from var(--background) calc(l + 0.04) c h)
+        );
+        overflow-x: auto;
+        line-height: 1.5;
+    }
+    .mm-markdown pre code {
+        background: transparent;
+        padding: 0;
+        font-size: 0.88em;
+    }
+    .mm-markdown hr {
+        border: none;
+        border-top: 1px solid var(--border);
+        margin: 1em 0;
+    }
+    .mm-markdown table {
+        width: 100%;
+        border-collapse: collapse;
+        margin: 0.7em 0;
+        font-size: 0.92em;
+    }
+    .mm-markdown th,
+    .mm-markdown td {
+        border: 1px solid var(--border);
+        padding: 0.4em 0.6em;
+        text-align: left;
+    }
+    .mm-markdown th {
+        background: var(--bg-elev, transparent);
+        font-weight: 600;
+    }
 }

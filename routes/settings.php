@@ -3,6 +3,7 @@
 use App\Http\Controllers\Settings\NotificationPreferencesController;
 use App\Http\Controllers\Settings\ProfileController;
 use App\Http\Controllers\Settings\SecurityController;
+use App\Http\Controllers\Settings\UserPreferencesController;
 use Illuminate\Support\Facades\Route;
 
 Route::middleware(['auth'])->group(function (): void {
@@ -27,4 +28,9 @@ Route::middleware(['auth', 'verified'])->group(function (): void {
         ->name('settings.notifications.edit');
     Route::put('settings/notifications', [NotificationPreferencesController::class, 'update'])
         ->name('settings.notifications.update');
+
+    Route::get('settings/preferences', [UserPreferencesController::class, 'edit'])
+        ->name('settings.preferences.edit');
+    Route::put('settings/preferences', [UserPreferencesController::class, 'update'])
+        ->name('settings.preferences.update');
 });

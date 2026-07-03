@@ -654,86 +654,92 @@ const seerrStatusKey = (status: number | null): string => {
             >
                 No indexer hits.
             </div>
-            <table v-else class="w-full border-collapse text-[13px]">
-                <thead>
-                    <tr>
-                        <th
-                            v-for="h in [
-                                'Release',
-                                'Tracker',
-                                'Cat',
-                                'Size',
-                                'S / L',
-                                'Age',
-                                '',
-                            ]"
-                            :key="h"
-                            class="border-b border-border bg-card px-3 py-2 text-left text-[11.5px] font-medium tracking-[0.05em] text-muted-foreground uppercase"
+            <div v-else class="overflow-x-auto">
+                <table class="w-full border-collapse text-[13px]">
+                    <thead>
+                        <tr>
+                            <th
+                                v-for="h in [
+                                    'Release',
+                                    'Tracker',
+                                    'Cat',
+                                    'Size',
+                                    'S / L',
+                                    'Age',
+                                    '',
+                                ]"
+                                :key="h"
+                                class="border-b border-border bg-card px-3 py-2 text-left text-[11.5px] font-medium tracking-[0.05em] text-muted-foreground uppercase"
+                            >
+                                {{ h }}
+                            </th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr
+                            v-for="(hit, i) in indexerResults.results"
+                            :key="hit.guid ?? i"
+                            class="border-b border-border last:border-b-0 hover:bg-bg-hover"
                         >
-                            {{ h }}
-                        </th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <tr
-                        v-for="(hit, i) in indexerResults.results"
-                        :key="hit.guid ?? i"
-                        class="border-b border-border last:border-b-0 hover:bg-bg-hover"
-                    >
-                        <td class="px-3 py-2.5">
-                            <a
-                                v-if="hit.info_url"
-                                :href="hit.info_url"
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                class="font-mono-tabular block max-w-[520px] truncate text-[12px] font-medium hover:text-accent"
+                            <td class="px-3 py-2.5">
+                                <a
+                                    v-if="hit.info_url"
+                                    :href="hit.info_url"
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    class="font-mono-tabular block max-w-[520px] truncate text-[12px] font-medium hover:text-accent"
+                                >
+                                    {{ hit.title }}
+                                </a>
+                                <span
+                                    v-else
+                                    class="font-mono-tabular block max-w-[520px] truncate text-[12px] font-medium"
+                                    >{{ hit.title }}</span
+                                >
+                            </td>
+                            <td class="px-3 py-2.5">
+                                <Pill>{{ hit.tracker ?? '—' }}</Pill>
+                            </td>
+                            <td
+                                class="font-mono-tabular px-3 py-2.5 text-[11.5px] text-muted-foreground"
                             >
-                                {{ hit.title }}
-                            </a>
-                            <span
-                                v-else
-                                class="font-mono-tabular block max-w-[520px] truncate text-[12px] font-medium"
-                                >{{ hit.title }}</span
+                                {{ hit.category ?? '—' }}
+                            </td>
+                            <td
+                                class="font-mono-tabular px-3 py-2.5 text-[12px]"
                             >
-                        </td>
-                        <td class="px-3 py-2.5">
-                            <Pill>{{ hit.tracker ?? '—' }}</Pill>
-                        </td>
-                        <td
-                            class="font-mono-tabular px-3 py-2.5 text-[11.5px] text-muted-foreground"
-                        >
-                            {{ hit.category ?? '—' }}
-                        </td>
-                        <td class="font-mono-tabular px-3 py-2.5 text-[12px]">
-                            {{ formatSize(hit.size_bytes) }}
-                        </td>
-                        <td class="font-mono-tabular px-3 py-2.5 text-[12px]">
-                            <span class="text-success">{{
-                                hit.seeders ?? '—'
-                            }}</span>
-                            <span class="text-fg-subtle"
-                                >/ {{ hit.leechers ?? '—' }}</span
+                                {{ formatSize(hit.size_bytes) }}
+                            </td>
+                            <td
+                                class="font-mono-tabular px-3 py-2.5 text-[12px]"
                             >
-                        </td>
-                        <td
-                            class="font-mono-tabular px-3 py-2.5 text-[11.5px] text-fg-subtle"
-                        >
-                            {{ hit.age ?? '—' }}
-                        </td>
-                        <td class="px-3 py-2.5 text-right">
-                            <a
-                                v-if="hit.download_url"
-                                :href="hit.download_url"
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                class="inline-flex h-6 items-center gap-1 rounded-md border border-border px-2 text-[11.5px] hover:bg-bg-hover"
+                                <span class="text-success">{{
+                                    hit.seeders ?? '—'
+                                }}</span>
+                                <span class="text-fg-subtle"
+                                    >/ {{ hit.leechers ?? '—' }}</span
+                                >
+                            </td>
+                            <td
+                                class="font-mono-tabular px-3 py-2.5 text-[11.5px] text-fg-subtle"
                             >
-                                Grab
-                            </a>
-                        </td>
-                    </tr>
-                </tbody>
-            </table>
+                                {{ hit.age ?? '—' }}
+                            </td>
+                            <td class="px-3 py-2.5 text-right">
+                                <a
+                                    v-if="hit.download_url"
+                                    :href="hit.download_url"
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    class="inline-flex h-6 items-center gap-1 rounded-md border border-border px-2 text-[11.5px] hover:bg-bg-hover"
+                                >
+                                    Grab
+                                </a>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
         </section>
     </div>
 </template>

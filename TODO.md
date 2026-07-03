@@ -1,79 +1,15 @@
-- [x] Restructure the sidebar to match the order of the new design
-- [x] Move emby link into the user management page, like the new design does
-- [x] I dont think the sparklines work on the dashboard
-- [x] Seed the activity log with some data as well as action requests and watch history
-- [x] Implement any missing functionality, i see a lot of buttons that doesnt really do anything (Mainly refresh buttons), and not everything is as the design shows
-    - [x] Dashboard refresh
-    - [x] Activity log "Last 45h" & Export NDJSON (wtf is ndjson?)
-    - [x] The saerch "Recent" doesnt seem to actually be recent searches, its static
-    - [x] The Suggested in the search page shows nothing
-    - [x] The "Profile" filter in the series page does nothing, whats the sync button supposed to do?
-    - [x] Neither of the filter buttons in Movies does anything, when adding a movie or series, the services cache should be refreshed, whats the sync button supposed to do?
-    - [x] In the requests page, the "filter" doesnt work properly with the pagination, whats the sync button supposed to do? User filter doesnt do anything
-    - [x] now playing force refresh should just be a refresh button, and it doesnt do anything right now
-    - [x] Watch history "Last 7 days" doesnt work properly as well as export csv
-    - [x] Service health "Last 24h" and run check now does nothing
-    - [x] Action requests approval rules and refresh buttons does nothing
-    - [x] What does the "mode" button in AI Assistant do? does it actually do anything?
-    - [x] AI usage export doesnt work
-- [x] The Seer search doesnt seem to be working, it says "3 results" but nothing is showing up
-- [x] Change the "All" button in search to "Library + Requests"
-- [x] Add an agent that refreshes the configured AI prices, and a button to refresh the prices in the AI Prices page
-- [x] Notifications button doesnt do anything, add a page for notifications and seed it with some data
-- [x] The AI Assistant button in the top bar does nothing, does this button possibly bring anything useful to the table?
-- [x] Add link emby account function into the user settings page, allow admins to manually link emby accounts by username
-- [x] Import from emby button doesnt do anything in the "Users" page
-- [x] the K hotkey doesnt work
-- [x] How is the WAtch history actually supposed to work? it says "Synced from emby" but i cant see anything actually being synced anywhere
-- [x] In the activity log i cant click back to "all" filter
-- [x] Hide the approval rules button in Action Queue for non-admins
-- [x] The time scale buttons in the actibity log doesnt work unless you do a manual refresh, this seems true for a lot of the pages
-- [x] The "now available" button in the requests page doesnt work
-- [x] The realtime updates seems flaky in a lot of pages, like the service health page for example, it should update the status of the services without needing to refresh the page, but it doesnt always do that, check all pages for similar issues
-- [x] Id like to log all incoming webhooks (Toggleable in the admin settings), and then be able to see the payloads in an admin-only page, this would be really useful for debugging and also just to have a record of all incoming webhooks, especially if you have a lot of them coming in
-- [x] The VerifyWebhookToken needs to also check query params for a token, since not all services can set a header for this. And we should also expose the webhook URL for a service in the connections edit page (Maybe with a copy button on the connections list)
-- [x] Add a "Soft AI budget limit" setting and a "Hard AI budget limit" setting, trigger a notification on the soft limit and stop the AI from running if the hard limit is reached.
-- [x] The webhook URL doesnt show in its input field in the connection edit page
-- [x] Add a Toggle to the webhook log that changes if webhooks should be captured and stored or not
-- [x] The Seer search still seems flaky, when i search for FBI (Which there should be requests for), no results show up
-- [x] Allow clicking an AI usage entry to see details about the request (Tools used, input tokens, output tokens, full pricing breakdown), also save the price that was used for the request, if no price was available at the time, allow setting it from the model pricing page by selecting a model (Remember to support the what-if scenario)
-- [x] Currently, after triggering an AI Price Refresh, the usage gets stored as system user, it should be stored as the user that triggered the refresh, and the price that was used should be the new price, not the old price, since the refresh is what triggers the new price to be fetched and stored, this is really important for being able to track how much each user is spending on AI requests, especially if you have the soft/hard budget limits implemented like i mentioned in the previous point.
+# OLD/BLOCKED
 - [ ] The AI Price Refresh should queue up a job to run in the background
     - [x] To begin with, we can just queue up a job and have it run in the background (Somehow we need the frontend to know if the job is done or not, so we cant queue up multiple jobs if one is already running, and we can show a loading state on the refresh button while the job is running)
     - [ ] (Awaiting support in the prisma-php/prisma package for batching) maybe make use of batching if the model supports it (Then we will also need a job that regularly checks the job status, and calls any tools it requests and then posts the updated data), also allow setting a specific model to use for this functionality.
-- [x] Add a button to open the service
-    - [x] Emby in Now Playing, Watch history
-    - [x] Seer in requests
-    - [x] Sonarr in TV Series
-    - [x] Radarr in Movies
-    - [x] Sabnzbd in Downloads
-- [ ] Id like to be able to see and manage the Activites from both Sonarr and Radarr (For example if a movie/episode cant be imported for any reason or if its pending), maybe even a page to see their history and blocklists
-    - [x] Add a button to open the activity log in Sonarr and Radarr
-    - [x] Add a page to see the history of activities from both Sonarr and Radarr, with filters for things like "Import failed", "Pending", "Completed", etc, and also show any relevant information about the activity (For example if an import failed, show the error message that was returned)
-    - [x] Allow managing the activites from both Sonarr and Radarr, for example if an episode is pending for a long time, allow the user to either retry the import or block the episode from being imported (This is especially useful for things that are pending because they cant be imported for some reason, for example if the file is in a format that cant be imported, or if the file is missing, etc)
-    - [x] Allow blocking activities from both Sonarr and Radarr
-    - [x] Support the "On manual interaction required" webhook event, and allow the user to manually trigger the activity from the activity log page
-    - [x] Regular check for activites and show a badge with the amount of activites that needs manual intervention in the sidebar
-    - [x] Action to trigger download of delayed downloads
-- Allow clearing, editing or otherwise manage seerr requests
-    - [x] Add a button to clear seerr requests, maybe with options to clear all, clear only completed, clear only cancelled, etc
-    - [x] Allow editing seerr requests, for example if a request is pending for a long time, allow the user to edit the request and change the quality or something like that to see if it helps with getting the request fulfilled
-- [x] So me providers have a free-tier or a minimum amount before they start charging, id like to support that, for example if a provider has a free-tier of 1000 tokens, we shouldnt start counting the usage for that provider until the user has used more than 1000 tokens, and we should also show how many free tokens they have left in the AI usage page, this is really important for users to be able to manage their costs and not get surprised by a big bill at the end of the month, especially if they are using a provider that has a free-tier or a minimum amount before they start charging. I guess we'll need to set this per model or maybe per provider
-- [x] Add a Today filter to all time scale filters
-- [x] The MediaAgent should respect the model configured in AISettings
-- [x] The ai usage details window needs to be scrollable and have a max height. Maybe also store the result message from the AI agent
-- [x] Improve seerr caching between tabs, for example when switching between completed and pending requests, the data gets refetched, we should cache the data for at least a few minutes to avoid unnecessary requests and also to make the UI more responsive when switching between tabs.
-- [x] Cache busting on relevant webhooks, and then we can increase the TTL on the cache for the Arr suite and seerr, since their api is so slow
-- [x] Allow filtering certain sabnzbd categories from showing, i have some less... savoury downloads that shouldnt be shown anywhere in the app
-- [x] Re-label all the activities inb the activity log, for example "sabnzbd.download.completed" should be "Download completed" or something like that
-- [x] Narrow window hides some actions without adding a horizontal scrollbar, thats not great. Library activity is one example.
-- [x] i dont see any badge on the library activity sidebar entry, even though there are at least 1 that needs manual intervention.
-- [x] Add a badge to the downloads entry in the sidebar, showing how many queued and completed downloads there are.
-- [ ] Sabnzbd webhook support, Sabnzbd has support for a notification script, this can be used to send webhooks to the app. https://sabnzbd.org/wiki/configuration/4.5/scripts/notification-scripts
-    - [x] Create a webhook script that can be copied from the edit connection page
-    - [x] Add a webhook type for sabnzbd
-    - [x] Reload the sabnzbd downloads count on relevant webhooks
-    - [x] Cache busting on relevant webhooks
-    - [x] Warning notifications on space running out
-- [x] Notification support for incoming warning/error webhooks
-- [x] In the admin area, add a job tracking page, to track the status of all jobs that are queued up or recurring.
+# NEW
+- [x] The "Top users" section in the watch history shows the wrong user (Looks like its always the first user in the list)
+- [x] The "Watched" column in the watch history shows the wrong data, always shows the full length
+- [x] Total watchtime doesnt seem to show the correct data either
+- [ ] Make use of inertia pre-fetching to speed up page loading times (This will require some changes to the way we load data for the pages, but it should be worth it in the end)
+- [x] In the AI assistant page, make the display of the chat title longer, i can only see 2 words as it currently is, and show the entire title on hover
+- [x] For system entries in the AI usage page, it currently displays as "(S) --", so an avatar ball with an S, and ten just a long dash. say system instead oif the dash
+- [ ] The free usage tracking should be defined as pools, since multiple models can share the same pool
+- [ ] All AI related pages should be hidden if AI is disabled, not just the chat
+- [ ] Allow adding a link to the "Free usage pools", that sends the user to the page documenting the free usage (External page).
+- [ ] In addition to "Today", also add "This week", "This month", "This year" and "All" filters to all tables with this kind of time-scale filtering (AI usage, watch history, etc)

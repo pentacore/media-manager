@@ -7,7 +7,6 @@ namespace App\Http\Controllers\Monitoring;
 use App\Enums\ServiceType;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\ServiceConnectionResource;
-use App\Jobs\PingServiceHealth;
 use App\Models\ServiceConnection;
 use App\Services\Prowlarr\ProwlarrClient;
 use App\Services\Radarr\RadarrClient;
@@ -15,6 +14,7 @@ use App\Services\Sabnzbd\SabnzbdClient;
 use App\Services\ServiceClientFactory;
 use App\Services\ServiceMetrics\ServiceMetricsRepository;
 use App\Services\Sonarr\SonarrClient;
+use App\Support\ServiceCheckBatch;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\RequestException;
@@ -26,18 +26,12 @@ use Throwable;
 
 class ServiceHealthController extends Controller
 {
-    /**
-     * Synchronously dispatch a PingServiceHealth job for every active
-     * connection so the user gets a fresh metric strip on next refresh.
-     * Bounded by the number of configured services (small N), so we run
-     * it inline instead of behind the queue.
-     */
     public function runChecks(): RedirectResponse
     {
         $connections = ServiceConnection::query()->where('is_active', true)->get();
 
-        foreach ($connections as $connection) {
-            dispatch_sync(new PingServiceHealth($connection));
+        if ($connections->isNotEmpty()) {
+            ServiceCheckBatch::dispatchHealth($connections);
         }
 
         Inertia::flash('toast', [

@@ -11,13 +11,17 @@ use App\Models\WebhookEvent;
 use App\Notifications\ServiceWarning;
 use App\Services\Actions\ActionOrchestrator;
 use App\Services\Library\InterventionCounter;
+use App\Services\Search\SeriesIndexer;
 use App\Services\Webhook\AbstractWebhookHandler;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Notification;
 
 class SonarrWebhookHandler extends AbstractWebhookHandler
 {
-    public function __construct(private readonly ActionOrchestrator $actionOrchestrator) {}
+    public function __construct(
+        private readonly ActionOrchestrator $actionOrchestrator,
+        private readonly SeriesIndexer $seriesIndexer,
+    ) {}
 
     protected function serviceSlug(): string
     {
@@ -166,6 +170,12 @@ class SonarrWebhookHandler extends AbstractWebhookHandler
             ],
             subjectId: $payload['series']['id'] ?? null,
         );
+
+        $series = $payload['series'] ?? null;
+
+        if (is_array($series) && $webhookEvent->serviceConnection !== null) {
+            $this->seriesIndexer->upsert($series, $webhookEvent->serviceConnection);
+        }
     }
 
     /**
@@ -186,6 +196,12 @@ class SonarrWebhookHandler extends AbstractWebhookHandler
             ],
             subjectId: $payload['series']['id'] ?? null,
         );
+
+        $sonarrId = (int) ($payload['series']['id'] ?? 0);
+
+        if ($sonarrId > 0 && $webhookEvent->serviceConnection !== null) {
+            $this->seriesIndexer->forget($sonarrId, $webhookEvent->serviceConnection);
+        }
 
         $this->actionOrchestrator->dispatch(
             type: 'emby_library_scan',

@@ -10,6 +10,7 @@ use App\Events\ServiceHealthChanged;
 use App\Models\ServiceConnection;
 use App\Models\ServiceMetric;
 use App\Services\ServiceClientFactory;
+use Illuminate\Bus\Batchable;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
@@ -22,6 +23,7 @@ use Throwable;
 
 class PingServiceHealth implements ShouldQueue
 {
+    use Batchable;
     use Dispatchable;
     use InteractsWithQueue;
     use Queueable;
@@ -29,7 +31,7 @@ class PingServiceHealth implements ShouldQueue
 
     public int $tries = 1;
 
-    public int $timeout = 30;
+    public int $timeout = 15;
 
     public function __construct(public ServiceConnection $serviceConnection) {}
 

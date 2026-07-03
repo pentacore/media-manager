@@ -84,63 +84,71 @@ function setApproval(rule: RuleRow, value: boolean) {
             v-else
             class="overflow-hidden rounded-xl border border-border bg-card"
         >
-            <table class="w-full border-collapse text-[13px]">
-                <thead>
-                    <tr>
-                        <th
-                            v-for="h in [
-                                'Action type',
-                                'Description',
-                                'Enabled',
-                                'Requires approval',
-                            ]"
-                            :key="h"
-                            class="border-b border-border bg-card px-3 py-2 text-left text-[11.5px] font-medium tracking-[0.05em] text-muted-foreground uppercase"
-                        >
-                            {{ h }}
-                        </th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <tr
-                        v-for="rule in localRules"
-                        :key="rule.id"
-                        class="border-b border-border last:border-b-0 hover:bg-bg-hover"
-                    >
-                        <td class="px-3 py-3">
-                            <div
-                                class="font-mono-tabular text-[12.5px] font-medium"
+            <div class="overflow-x-auto">
+                <table class="w-full border-collapse text-[13px]">
+                    <thead>
+                        <tr>
+                            <th
+                                v-for="h in [
+                                    'Action type',
+                                    'Description',
+                                    'Enabled',
+                                    'Requires approval',
+                                ]"
+                                :key="h"
+                                class="border-b border-border bg-card px-3 py-2 text-left text-[11.5px] font-medium tracking-[0.05em] text-muted-foreground uppercase"
                             >
-                                {{ rule.type }}
-                            </div>
-                            <div class="mt-0.5 text-[11.5px] text-fg-subtle">
-                                {{ rule.label }}
-                            </div>
-                        </td>
-                        <td class="px-3 py-3 text-muted-foreground">
-                            {{ rule.description ?? '—' }}
-                        </td>
-                        <td class="px-3 py-3">
-                            <Toggle
-                                :model-value="rule.is_enabled"
-                                :label="rule.is_enabled ? 'on' : 'off'"
-                                @update:model-value="(v) => setEnabled(rule, v)"
-                            />
-                        </td>
-                        <td class="px-3 py-3">
-                            <Toggle
-                                :model-value="rule.requires_approval"
-                                :label="
-                                    rule.requires_approval ? 'required' : 'auto'
-                                "
-                                @update:model-value="
-                                    (v) => setApproval(rule, v)
-                                "
-                            />
-                        </td>
-                    </tr>
-                </tbody>
-            </table>
+                                {{ h }}
+                            </th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr
+                            v-for="rule in localRules"
+                            :key="rule.id"
+                            class="border-b border-border last:border-b-0 hover:bg-bg-hover"
+                        >
+                            <td class="px-3 py-3">
+                                <div
+                                    class="font-mono-tabular text-[12.5px] font-medium"
+                                >
+                                    {{ rule.type }}
+                                </div>
+                                <div
+                                    class="mt-0.5 text-[11.5px] text-fg-subtle"
+                                >
+                                    {{ rule.label }}
+                                </div>
+                            </td>
+                            <td class="px-3 py-3 text-muted-foreground">
+                                {{ rule.description ?? '—' }}
+                            </td>
+                            <td class="px-3 py-3">
+                                <Toggle
+                                    :model-value="rule.is_enabled"
+                                    :label="rule.is_enabled ? 'on' : 'off'"
+                                    @update:model-value="
+                                        (v) => setEnabled(rule, v)
+                                    "
+                                />
+                            </td>
+                            <td class="px-3 py-3">
+                                <Toggle
+                                    :model-value="rule.requires_approval"
+                                    :label="
+                                        rule.requires_approval
+                                            ? 'required'
+                                            : 'auto'
+                                    "
+                                    @update:model-value="
+                                        (v) => setApproval(rule, v)
+                                    "
+                                />
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
         </div>
     </div>
 </template>

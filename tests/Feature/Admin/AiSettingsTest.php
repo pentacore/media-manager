@@ -45,12 +45,14 @@ test('admin can update settings', function (): void {
         ->put(route('admin.ai-settings.update'), [
             'mode' => 'advisory',
             'model' => 'gemini-3-flash-preview',
+            'title_model' => 'gpt-5.4-nano',
         ])
         ->assertRedirect(route('admin.ai-settings.index'));
 
     $aiSettings = resolve(AiSettings::class);
     expect($aiSettings->mode())->toBe(AiMode::Advisory);
     expect($aiSettings->model())->toBe('gemini-3-flash-preview');
+    expect($aiSettings->titleModel())->toBe('gpt-5.4-nano');
 });
 
 test('update validates mode is a known value', function (): void {
@@ -60,14 +62,15 @@ test('update validates mode is a known value', function (): void {
         ->put(route('admin.ai-settings.update'), [
             'mode' => 'enthusiastic',
             'model' => 'gpt-5-mini',
+            'title_model' => 'gpt-5.4-nano',
         ])
         ->assertSessionHasErrors('mode');
 });
 
-test('update requires both fields', function (): void {
+test('update requires mode, model, and title_model', function (): void {
     $admin = User::factory()->admin()->create();
 
     $this->actingAs($admin)
         ->put(route('admin.ai-settings.update'), [])
-        ->assertSessionHasErrors(['mode', 'model']);
+        ->assertSessionHasErrors(['mode', 'model', 'title_model']);
 });
