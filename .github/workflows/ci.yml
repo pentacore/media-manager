@@ -31,7 +31,7 @@ jobs:
           coverage: none
 
       - name: Cache composer
-        uses: actions/cache@v5
+        uses: actions/cache@v6
         with:
           path: ~/.cache/composer
           key: composer-${{ runner.os }}-${{ env.PHP_VERSION }}-${{ hashFiles('**/composer.lock') }}
@@ -64,7 +64,7 @@ jobs:
           cache: npm
 
       - name: Cache composer
-        uses: actions/cache@v5
+        uses: actions/cache@v6
         with:
           path: ~/.cache/composer
           key: composer-${{ runner.os }}-${{ env.PHP_VERSION }}-${{ hashFiles('**/composer.lock') }}
@@ -187,7 +187,7 @@ jobs:
           cache: npm
 
       - name: Cache composer
-        uses: actions/cache@v5
+        uses: actions/cache@v6
         with:
           path: ~/.cache/composer
           key: composer-${{ runner.os }}-${{ env.PHP_VERSION }}-${{ hashFiles('**/composer.lock') }}
