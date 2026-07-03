@@ -6,6 +6,7 @@ use App\Ai\Agents\MediaAgent;
 use App\Ai\Tools\Arr\DeleteMediaTool;
 use App\Ai\Tools\Arr\SearchMediaTool;
 use App\Listeners\Ai\RecordAgentUsage;
+use App\Models\AiModelPrice;
 use App\Models\AiToolInvocation;
 use App\Models\AiUsageRecord;
 use App\Models\User;
@@ -33,6 +34,10 @@ function makeAgentPrompted(
 
     return new AgentPrompted($invocationId, $agentPrompt, $response);
 }
+
+afterEach(function (): void {
+    RecordAgentUsage::$batchMode = false;
+});
 
 test('writes one usage row with token counts and meta', function (): void {
     $user = User::factory()->create();
@@ -137,4 +142,86 @@ test('truncates response text past 64 KB with an ellipsis suffix', function (): 
 
     expect(strlen((string) $stored))->toBeLessThanOrEqual(65_536);
     expect($stored)->toEndWith('…');
+});
+
+test('batch usage is priced with batch rates when available', function (): void {
+    AiModelPrice::factory()->create([
+        'provider' => 'openai',
+        'model' => 'gpt-5-mini',
+        'input_per_mtok' => 1.00,
+        'output_per_mtok' => 4.00,
+        'batch_input_per_mtok' => 0.50,
+        'batch_output_per_mtok' => 2.00,
+    ]);
+
+    RecordAgentUsage::$batchMode = true;
+
+    $agentPrompted = makeAgentPrompted(
+        invocationId: 'inv-batch',
+        agent: new MediaAgent,
+        usage: new Usage(promptTokens: 100, completionTokens: 50),
+        meta: new Meta(provider: 'openai', model: 'gpt-5-mini'),
+    );
+
+    (new RecordAgentUsage)->handle($agentPrompted);
+
+    $record = AiUsageRecord::where('invocation_id', 'inv-batch')->sole();
+
+    expect($record->is_batch)->toBeTrue()
+        ->and((float) $record->input_per_mtok)->toBe(0.50)
+        ->and((float) $record->output_per_mtok)->toBe(2.00);
+});
+
+test('batch flag falls back to standard rates when batch columns are zero', function (): void {
+    AiModelPrice::factory()->create([
+        'provider' => 'openai',
+        'model' => 'gpt-5-mini',
+        'input_per_mtok' => 1.00,
+        'output_per_mtok' => 4.00,
+        'batch_input_per_mtok' => 0,
+        'batch_output_per_mtok' => 0,
+    ]);
+
+    RecordAgentUsage::$batchMode = true;
+
+    $agentPrompted = makeAgentPrompted(
+        invocationId: 'inv-batch-zero',
+        agent: new MediaAgent,
+        usage: new Usage(promptTokens: 100, completionTokens: 50),
+        meta: new Meta(provider: 'openai', model: 'gpt-5-mini'),
+    );
+
+    (new RecordAgentUsage)->handle($agentPrompted);
+
+    $record = AiUsageRecord::where('invocation_id', 'inv-batch-zero')->sole();
+
+    expect($record->is_batch)->toBeTrue()
+        ->and((float) $record->input_per_mtok)->toBe(1.00)
+        ->and((float) $record->output_per_mtok)->toBe(4.00);
+});
+
+test('non-batch usage is priced with standard rates', function (): void {
+    AiModelPrice::factory()->create([
+        'provider' => 'openai',
+        'model' => 'gpt-5-mini',
+        'input_per_mtok' => 1.00,
+        'output_per_mtok' => 4.00,
+        'batch_input_per_mtok' => 0.50,
+        'batch_output_per_mtok' => 2.00,
+    ]);
+
+    $agentPrompted = makeAgentPrompted(
+        invocationId: 'inv-standard',
+        agent: new MediaAgent,
+        usage: new Usage(promptTokens: 100, completionTokens: 50),
+        meta: new Meta(provider: 'openai', model: 'gpt-5-mini'),
+    );
+
+    (new RecordAgentUsage)->handle($agentPrompted);
+
+    $record = AiUsageRecord::where('invocation_id', 'inv-standard')->sole();
+
+    expect($record->is_batch)->toBeFalse()
+        ->and((float) $record->input_per_mtok)->toBe(1.00)
+        ->and((float) $record->output_per_mtok)->toBe(4.00);
 });
