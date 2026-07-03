@@ -51,7 +51,7 @@
         "pusher-js": "^8.5.0",
         "reka-ui": "^2.9.7",
         "tailwind-merge": "^3.6.0",
-        "tailwindcss": "^4.1.1",
+        "tailwindcss": "^4.3.2",
         "tw-animate-css": "^1.2.5",
         "vue": "^3.5.13",
         "vue-input-otp": "^0.3.2",
