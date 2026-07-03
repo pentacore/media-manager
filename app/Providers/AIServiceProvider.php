@@ -6,6 +6,7 @@ namespace App\Providers;
 
 use App\Ai\Storage\HealingConversationStore;
 use App\Listeners\Ai\RecordAgentUsage;
+use App\Services\AiUsage\BatchPricingContext;
 use Illuminate\Contracts\Foundation\Application;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\ServiceProvider;
@@ -19,6 +20,8 @@ class AIServiceProvider extends ServiceProvider
     public function register(): void
     {
         $this->app->singleton('mediamanager.ai.enabled', fn (Application $application): bool => (bool) $application->make('config')->get('mediamanager.ai.enabled', false));
+
+        $this->app->scoped(BatchPricingContext::class);
 
         $this->app->extend(
             ConversationStore::class,

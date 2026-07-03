@@ -7,21 +7,12 @@ namespace App\Listeners\Ai;
 use App\Models\AiModelPrice;
 use App\Models\AiToolInvocation;
 use App\Models\AiUsageRecord;
+use App\Services\AiUsage\BatchPricingContext;
 use Illuminate\Support\Facades\Auth;
 use Laravel\Ai\Events\AgentPrompted;
 
 class RecordAgentUsage
 {
-    /**
-     * Whether the current run should be priced against the provider's batch
-     * tier. The AI SDK has no batch API yet, so nothing flips this on in
-     * production — it exists so a future batch pipeline (e.g. embedding
-     * backfills routed through a provider batch endpoint) can set it around
-     * its dispatch and have usage snapshot the `batch_*` rates. Kept as a
-     * simple static toggle rather than speculative dispatch infrastructure.
-     */
-    public static bool $batchMode = false;
-
     public function handle(AgentPrompted $agentPrompted): void
     {
         // Streamed runs are registered for both AgentStreamed (explicitly,
@@ -35,7 +26,7 @@ class RecordAgentUsage
         $usage = $response->usage;
         $meta = $response->meta;
 
-        $isBatch = self::$batchMode;
+        $isBatch = resolve(BatchPricingContext::class)->enabled;
         $snapshot = $this->priceSnapshotFor($meta->provider, $meta->model, $isBatch);
 
         AiUsageRecord::create([

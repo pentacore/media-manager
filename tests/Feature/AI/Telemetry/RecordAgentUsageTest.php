@@ -10,6 +10,7 @@ use App\Models\AiModelPrice;
 use App\Models\AiToolInvocation;
 use App\Models\AiUsageRecord;
 use App\Models\User;
+use App\Services\AiUsage\BatchPricingContext;
 use Laravel\Ai\Events\AgentPrompted;
 use Laravel\Ai\Prompts\AgentPrompt;
 use Laravel\Ai\Responses\AgentResponse;
@@ -34,10 +35,6 @@ function makeAgentPrompted(
 
     return new AgentPrompted($invocationId, $agentPrompt, $response);
 }
-
-afterEach(function (): void {
-    RecordAgentUsage::$batchMode = false;
-});
 
 test('writes one usage row with token counts and meta', function (): void {
     $user = User::factory()->create();
@@ -154,7 +151,7 @@ test('batch usage is priced with batch rates when available', function (): void 
         'batch_output_per_mtok' => 2.00,
     ]);
 
-    RecordAgentUsage::$batchMode = true;
+    resolve(BatchPricingContext::class)->enabled = true;
 
     $agentPrompted = makeAgentPrompted(
         invocationId: 'inv-batch',
@@ -182,7 +179,7 @@ test('batch flag falls back to standard rates when batch columns are zero', func
         'batch_output_per_mtok' => 0,
     ]);
 
-    RecordAgentUsage::$batchMode = true;
+    resolve(BatchPricingContext::class)->enabled = true;
 
     $agentPrompted = makeAgentPrompted(
         invocationId: 'inv-batch-zero',
