@@ -47,7 +47,7 @@ class MovieIndexer
         );
 
         if ($indexedMovie->wasRecentlyCreated || $indexedMovie->wasChanged(['title', 'overview', 'genres', 'year'])) {
-            EmbedLibraryItem::dispatch($indexedMovie::class, $indexedMovie->id);
+            dispatch(new EmbedLibraryItem($indexedMovie::class, $indexedMovie->id));
         }
 
         return $indexedMovie;

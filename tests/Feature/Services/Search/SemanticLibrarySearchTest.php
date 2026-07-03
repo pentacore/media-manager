@@ -48,7 +48,7 @@ test('vector search returns scored library hits merged and ordered by score', fu
     config()->set('ai.default_for_reranking', '');
     Embeddings::fake();
 
-    $service = makeSearchWithHits([
+    $semanticLibrarySearch = makeSearchWithHits([
         'movies' => [
             hit(['radarr_id' => 11, 'title' => 'Blade Runner', 'year' => 1982, 'overview' => 'Neo-noir sci-fi.'], 0.1),
             hit(['radarr_id' => 12, 'title' => 'Arrival', 'year' => 2016, 'overview' => 'Linguist meets aliens.'], 0.4),
@@ -58,7 +58,7 @@ test('vector search returns scored library hits merged and ordered by score', fu
         ],
     ]);
 
-    $result = $service->search('moody sci-fi', 10);
+    $result = $semanticLibrarySearch->search('moody sci-fi', 10);
 
     expect($result['available'])->toBeTrue()
         ->and($result['results'])->toHaveCount(3);
@@ -88,12 +88,12 @@ test('kind filter restricts the collections that are queried', function (): void
     config()->set('ai.default_for_reranking', '');
     Embeddings::fake();
 
-    $service = makeSearchWithHits([
+    $semanticLibrarySearch = makeSearchWithHits([
         'movies' => [hit(['radarr_id' => 11, 'title' => 'Blade Runner', 'year' => 1982, 'overview' => 'x'], 0.1)],
         'series' => [hit(['sonarr_id' => 21, 'title' => 'Dark', 'year' => 2017, 'overview' => 'x'], 0.05)],
     ]);
 
-    $result = $service->search('moody sci-fi', 10, 'movie');
+    $result = $semanticLibrarySearch->search('moody sci-fi', 10, 'movie');
 
     expect($result['available'])->toBeTrue()
         ->and(array_column($result['results'], 'kind'))->toBe(['movie']);
@@ -105,7 +105,7 @@ test('limit truncates the merged result set', function (): void {
     config()->set('ai.default_for_reranking', '');
     Embeddings::fake();
 
-    $service = makeSearchWithHits([
+    $semanticLibrarySearch = makeSearchWithHits([
         'movies' => [
             hit(['radarr_id' => 1, 'title' => 'A', 'year' => 2000, 'overview' => 'x'], 0.1),
             hit(['radarr_id' => 2, 'title' => 'B', 'year' => 2000, 'overview' => 'x'], 0.2),
@@ -115,7 +115,7 @@ test('limit truncates the merged result set', function (): void {
         ],
     ]);
 
-    $result = $service->search('x', 2);
+    $result = $semanticLibrarySearch->search('x', 2);
 
     expect($result['results'])->toHaveCount(2)
         ->and(array_column($result['results'], 'title'))->toBe(['C', 'A']);
@@ -129,12 +129,12 @@ test('reranking reorders and rescores hits when a provider is configured', funct
     Embeddings::fake();
 
     // Rerank flips the vector order: put index 1 (Arrival) first with a fresh score.
-    Reranking::fake(fn (RerankingPrompt $prompt): RerankingResponse => new RerankingResponse([
-        new RankedDocument(index: 1, document: $prompt->documents[1], score: 0.99),
-        new RankedDocument(index: 0, document: $prompt->documents[0], score: 0.42),
+    Reranking::fake(fn (RerankingPrompt $rerankingPrompt): RerankingResponse => new RerankingResponse([
+        new RankedDocument(index: 1, document: $rerankingPrompt->documents[1], score: 0.99),
+        new RankedDocument(index: 0, document: $rerankingPrompt->documents[0], score: 0.42),
     ], new Meta('cohere', 'rerank-english-v3.0')));
 
-    $service = makeSearchWithHits([
+    $semanticLibrarySearch = makeSearchWithHits([
         'movies' => [
             hit(['radarr_id' => 11, 'title' => 'Blade Runner', 'year' => 1982, 'overview' => 'a'], 0.05),
             hit(['radarr_id' => 12, 'title' => 'Arrival', 'year' => 2016, 'overview' => 'b'], 0.10),
@@ -142,7 +142,7 @@ test('reranking reorders and rescores hits when a provider is configured', funct
         'series' => [],
     ]);
 
-    $result = $service->search('moody sci-fi', 10);
+    $result = $semanticLibrarySearch->search('moody sci-fi', 10);
 
     expect(array_column($result['results'], 'title'))->toBe(['Arrival', 'Blade Runner']);
     expect($result['results'][0]['score'])->toBe(0.99)
@@ -158,7 +158,7 @@ test('reranking failure falls back to vector ordering', function (): void {
 
     Reranking::fake(fn () => throw new RuntimeException('rerank provider down'));
 
-    $service = makeSearchWithHits([
+    $semanticLibrarySearch = makeSearchWithHits([
         'movies' => [
             hit(['radarr_id' => 11, 'title' => 'Blade Runner', 'year' => 1982, 'overview' => 'a'], 0.05),
             hit(['radarr_id' => 12, 'title' => 'Arrival', 'year' => 2016, 'overview' => 'b'], 0.10),
@@ -166,7 +166,7 @@ test('reranking failure falls back to vector ordering', function (): void {
         'series' => [],
     ]);
 
-    $result = $service->search('moody sci-fi', 10);
+    $result = $semanticLibrarySearch->search('moody sci-fi', 10);
 
     // Vector order preserved: Blade Runner (0.95) before Arrival (0.9).
     expect(array_column($result['results'], 'title'))->toBe(['Blade Runner', 'Arrival']);

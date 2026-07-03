@@ -19,7 +19,7 @@ test('job embeds the item and persists the vector', function (): void {
 
     $movie = IndexedMovie::factory()->create(['embedding' => null]);
 
-    (new EmbedLibraryItem(IndexedMovie::class, $movie->id))->handle(resolve(LibraryEmbedder::class));
+    new EmbedLibraryItem(IndexedMovie::class, $movie->id)->handle(resolve(LibraryEmbedder::class));
 
     expect($movie->refresh()->embedding)->toBeArray()->not->toBeEmpty();
 });
@@ -30,7 +30,7 @@ test('job no-ops when ai disabled', function (): void {
 
     $movie = IndexedMovie::factory()->create(['embedding' => null]);
 
-    (new EmbedLibraryItem(IndexedMovie::class, $movie->id))->handle(resolve(LibraryEmbedder::class));
+    new EmbedLibraryItem(IndexedMovie::class, $movie->id)->handle(resolve(LibraryEmbedder::class));
 
     expect($movie->refresh()->embedding)->toBeNull();
     Embeddings::assertNothingGenerated();
@@ -40,7 +40,7 @@ test('job no-ops for an unknown model class', function (): void {
     config()->set('mediamanager.ai.enabled', true);
     Embeddings::fake();
 
-    (new EmbedLibraryItem(User::class, 1))->handle(resolve(LibraryEmbedder::class));
+    new EmbedLibraryItem(User::class, 1)->handle(resolve(LibraryEmbedder::class));
 
     Embeddings::assertNothingGenerated();
 });
@@ -49,7 +49,7 @@ test('job no-ops when the row is missing', function (): void {
     config()->set('mediamanager.ai.enabled', true);
     Embeddings::fake();
 
-    (new EmbedLibraryItem(IndexedMovie::class, 999_999))->handle(resolve(LibraryEmbedder::class));
+    new EmbedLibraryItem(IndexedMovie::class, 999_999)->handle(resolve(LibraryEmbedder::class));
 
     Embeddings::assertNothingGenerated();
 });
@@ -57,15 +57,15 @@ test('job no-ops when the row is missing', function (): void {
 test('MovieIndexer dispatches EmbedLibraryItem when a movie is created', function (): void {
     $connection = ServiceConnection::factory()->radarr()->create();
 
-    $movie = resolve(MovieIndexer::class)->upsert(['id' => 4242, 'title' => 'Fresh'], $connection);
+    $indexedMovie = resolve(MovieIndexer::class)->upsert(['id' => 4242, 'title' => 'Fresh'], $connection);
 
-    Queue::assertPushed(EmbedLibraryItem::class, fn (EmbedLibraryItem $job): bool => $job->modelClass === IndexedMovie::class && $job->modelId === $movie->id);
+    Queue::assertPushed(EmbedLibraryItem::class, fn (EmbedLibraryItem $embedLibraryItem): bool => $embedLibraryItem->modelClass === IndexedMovie::class && $embedLibraryItem->modelId === $indexedMovie->id);
 });
 
 test('SeriesIndexer dispatches EmbedLibraryItem when a series is created', function (): void {
     $connection = ServiceConnection::factory()->sonarr()->create();
 
-    $series = resolve(SeriesIndexer::class)->upsert(['id' => 5353, 'title' => 'Fresh Show'], $connection);
+    $indexedSeries = resolve(SeriesIndexer::class)->upsert(['id' => 5353, 'title' => 'Fresh Show'], $connection);
 
-    Queue::assertPushed(EmbedLibraryItem::class, fn (EmbedLibraryItem $job): bool => $job->modelClass === IndexedSeries::class && $job->modelId === $series->id);
+    Queue::assertPushed(EmbedLibraryItem::class, fn (EmbedLibraryItem $embedLibraryItem): bool => $embedLibraryItem->modelClass === IndexedSeries::class && $embedLibraryItem->modelId === $indexedSeries->id);
 });

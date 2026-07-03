@@ -46,7 +46,7 @@ class SeriesIndexer
         );
 
         if ($indexedSeries->wasRecentlyCreated || $indexedSeries->wasChanged(['title', 'overview', 'genres', 'year'])) {
-            EmbedLibraryItem::dispatch($indexedSeries::class, $indexedSeries->id);
+            dispatch(new EmbedLibraryItem($indexedSeries::class, $indexedSeries->id));
         }
 
         return $indexedSeries;

@@ -10,23 +10,23 @@ return new class extends Migration
 {
     public function up(): void
     {
-        Schema::table('indexed_movies', function (Blueprint $table): void {
-            $table->json('embedding')->nullable();
+        Schema::table('indexed_movies', function (Blueprint $blueprint): void {
+            $blueprint->json('embedding')->nullable();
         });
 
-        Schema::table('indexed_series', function (Blueprint $table): void {
-            $table->json('embedding')->nullable();
+        Schema::table('indexed_series', function (Blueprint $blueprint): void {
+            $blueprint->json('embedding')->nullable();
         });
     }
 
     public function down(): void
     {
-        Schema::table('indexed_movies', function (Blueprint $table): void {
-            $table->dropColumn('embedding');
+        Schema::table('indexed_movies', function (Blueprint $blueprint): void {
+            $blueprint->dropColumn('embedding');
         });
 
-        Schema::table('indexed_series', function (Blueprint $table): void {
-            $table->dropColumn('embedding');
+        Schema::table('indexed_series', function (Blueprint $blueprint): void {
+            $blueprint->dropColumn('embedding');
         });
     }
 };
