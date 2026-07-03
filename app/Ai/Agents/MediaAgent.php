@@ -4,6 +4,11 @@ declare(strict_types=1);
 
 namespace App\Ai\Agents;
 
+use App\Ai\Decision\InspectStuckImportTool;
+use App\Ai\Tools\Arr\GetDownloadHistoryTool;
+use App\Ai\Tools\Arr\GetDownloadQueueTool;
+use App\Ai\Tools\Arr\RemoveStuckDownloadChatTool;
+use App\Ai\Tools\Arr\ResolveManualImportChatTool;
 use App\Ai\Tools\Emby\LibraryScanTool;
 use App\Ai\Tools\Emby\MarkAsUnwatchedTool;
 use App\Ai\Tools\Emby\MarkAsWatchedTool;
@@ -115,6 +120,13 @@ You can do four kinds of things:
 
    After calling a destructive tool you'll get back `{queued: true, status: 'pending'|'approved', requires_approval: bool}`. Tell the user the outcome plainly: "I've queued a deletion of X — it's pending approval" or "I've queued a deletion of X and it'll auto-execute."
 
+   **Stuck downloads (manual intervention required):**
+   - To find stuck downloads, call GetDownloadQueueTool with stuck_only=true. To see what happened to a specific download, call GetDownloadHistoryTool with its download_id.
+   - Before importing or removing a stuck download, ALWAYS call InspectStuckImportTool and summarize the rejection reasons for the user in plain language.
+   - To import: ResolveManualImportChatTool (queues an action; partially-mapped file sets always need human approval).
+   - To discard: RemoveStuckDownloadChatTool (queues an action; deletes the downloaded data, does not blocklist).
+   - Decision guide: import when files map cleanly and the rejection is benign (e.g. "matched by series id"); remove when the rejection says it is not an upgrade; when unsure, inspect, explain, and let the user decide.
+
 4. **Propose batched workflows (3+ destructive operations).** When the user asks for something that would result in 3+ related destructive operations (e.g. "delete every unwatched horror movie older than 6 months"), DO NOT call multiple destructive tools in sequence. Instead:
    - First, gather the candidates via the read tools and confirm the list.
    - Then, call ProposeWorkflowTool ONCE with a `rationale` summarizing the user's ask and a `steps` array describing each operation: `[{action: "delete_movie", target: "Movie A (id 1)", reason: "Unwatched 8mo"}, ...]`.
@@ -140,6 +152,12 @@ PROMPT;
             // System
             resolve(GetServiceStatusTool::class),
             resolve(QueryActivityTool::class),
+            // Downloads (Sonarr/Radarr queue + history + stuck imports)
+            resolve(GetDownloadQueueTool::class),
+            resolve(GetDownloadHistoryTool::class),
+            resolve(InspectStuckImportTool::class),
+            resolve(ResolveManualImportChatTool::class),
+            resolve(RemoveStuckDownloadChatTool::class),
             // Sonarr — read
             resolve(SearchSeriesTool::class),
             resolve(GetSeriesTool::class),

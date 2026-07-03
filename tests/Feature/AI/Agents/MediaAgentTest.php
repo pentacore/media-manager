@@ -3,11 +3,11 @@
 declare(strict_types=1);
 
 use App\Ai\Agents\MediaAgent;
-use App\Ai\Tools\BaseTool;
 use App\Settings\AiSettings;
 use Laravel\Ai\Contracts\Agent;
 use Laravel\Ai\Contracts\Conversational;
 use Laravel\Ai\Contracts\HasTools;
+use Laravel\Ai\Contracts\Tool;
 
 test('MediaAgent is an Agent + Conversational + HasTools', function (): void {
     $agent = new MediaAgent;
@@ -17,11 +17,13 @@ test('MediaAgent is an Agent + Conversational + HasTools', function (): void {
     expect($agent)->toBeInstanceOf(HasTools::class);
 });
 
-test('every tool returned by tools() extends BaseTool', function (): void {
+test('every tool returned by tools() is a usable SDK Tool', function (): void {
     $tools = iterator_to_array((new MediaAgent)->tools(), false);
 
     foreach ($tools as $tool) {
-        expect($tool)->toBeInstanceOf(BaseTool::class);
+        // Most tools extend BaseTool; the context-free InspectStuckImportTool
+        // implements the SDK Tool contract directly. Both are valid.
+        expect($tool)->toBeInstanceOf(Tool::class);
     }
 });
 
@@ -58,10 +60,22 @@ test('tool list includes the Phase-2 tool families', function (): void {
     expect($shortNames)->toContain('ProposeWorkflowTool');
 });
 
-test('tool list has all 42 expected tools', function (): void {
+test('tool list has all 47 expected tools', function (): void {
     $tools = collect(iterator_to_array((new MediaAgent)->tools(), false));
 
-    expect($tools->count())->toBe(42);
+    expect($tools->count())->toBe(47);
+});
+
+test('tool list includes the download queue/history/stuck-import tools', function (): void {
+    $tools = collect(iterator_to_array((new MediaAgent)->tools(), false));
+
+    $shortNames = $tools->map(fn ($t): string => class_basename($t))->all();
+
+    expect($shortNames)->toContain('GetDownloadQueueTool');
+    expect($shortNames)->toContain('GetDownloadHistoryTool');
+    expect($shortNames)->toContain('InspectStuckImportTool');
+    expect($shortNames)->toContain('ResolveManualImportChatTool');
+    expect($shortNames)->toContain('RemoveStuckDownloadChatTool');
 });
 
 test('tool list includes the Whisparr tool families', function (): void {
