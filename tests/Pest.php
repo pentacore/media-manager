@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use App\Jobs\Ai\GenerateConversationTitle;
+use App\Jobs\EmbedLibraryItem;
 use App\Jobs\FetchLatestServiceVersion;
 use App\Jobs\PingServiceHealth;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -36,7 +37,10 @@ pest()->extend(TestCase::class)
         // unfaked TitleAgent (a live provider HTTP call). Tests that assert
         // on the job re-fake via Bus::fake; the job's own tests call
         // handle() directly, so neither is affected.
-        Queue::fake([PingServiceHealth::class, FetchLatestServiceVersion::class, GenerateConversationTitle::class]);
+        // EmbedLibraryItem is faked for the same reason: the MovieIndexer /
+        // SeriesIndexer dispatch it on create, and its handle() calls the
+        // Embeddings SDK (unfaked, dummy keys → 401) synchronously otherwise.
+        Queue::fake([PingServiceHealth::class, FetchLatestServiceVersion::class, GenerateConversationTitle::class, EmbedLibraryItem::class]);
 
         // External-API caches (app/Cache/Services) default to redis in production.
         // Force the array store in tests so per-test state is isolated and tagged
@@ -49,7 +53,7 @@ pest()->extend(TestCase::class)
 pest()->extend(TestCase::class)
     ->use(RefreshDatabase::class)
     ->beforeEach(function (): void {
-        Queue::fake([PingServiceHealth::class, FetchLatestServiceVersion::class, GenerateConversationTitle::class]);
+        Queue::fake([PingServiceHealth::class, FetchLatestServiceVersion::class, GenerateConversationTitle::class, EmbedLibraryItem::class]);
 
         config()->set('mediamanager.cache.store', 'array');
         Cache::store('array')->flush();
