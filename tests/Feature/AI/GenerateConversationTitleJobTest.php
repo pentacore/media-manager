@@ -70,6 +70,17 @@ test('uses the configured title model', function (): void {
     TitleAgent::assertPrompted(fn ($prompt): bool => $prompt->model === 'gpt-5.4-nano-custom');
 });
 
+test('auto title model resolves the provider cheapest model', function (): void {
+    TitleAgent::fake([['title' => 'Library Audit']]);
+    resolve(AiSettings::class)->setTitleModel('auto');
+    $id = seedTitleConvo();
+
+    new GenerateConversationTitle($id, 'audit my library')
+        ->handle(resolve(AiSettings::class));
+
+    TitleAgent::assertPrompted(fn ($prompt): bool => $prompt->model === 'gpt-5.4-nano');
+});
+
 test('AI failure leaves the fallback title intact', function (): void {
     TitleAgent::fake(fn (): never => throw new RuntimeException('provider exploded'));
     $id = seedTitleConvo('Truncated fallback');

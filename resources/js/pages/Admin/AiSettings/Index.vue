@@ -305,6 +305,9 @@ const budgetState = computed<{
                             v-model="titleModel"
                             placeholder="gpt-5.4-nano"
                         />
+                        <p class="mt-1 text-xs text-muted-foreground">
+                            auto = provider's cheapest model
+                        </p>
                         <InputError
                             :message="errors.title_model"
                             class="mt-1"

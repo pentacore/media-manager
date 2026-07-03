@@ -6,6 +6,7 @@ namespace App\Settings;
 
 use App\Enums\AiMode;
 use App\Enums\AiReasoningLevel;
+use Laravel\Ai\Ai;
 use Laravel\Ai\Enums\Lab;
 
 class AiSettings
@@ -15,6 +16,12 @@ class AiSettings
     public const MODEL_KEY = 'ai.model';
 
     public const TITLE_MODEL_KEY = 'ai.title_model';
+
+    /**
+     * Sentinel that resolves to the default provider's cheapest text model
+     * at call time rather than pinning a specific model name.
+     */
+    public const AUTO_MODEL = 'auto';
 
     public const string FAILOVER_PROVIDER_KEY = 'ai.failover_provider';
 
@@ -74,12 +81,24 @@ class AiSettings
         $this->appSettings->set(self::MODEL_KEY, $model);
     }
 
+    /**
+     * The model used to generate conversation titles.
+     *
+     * The persisted `auto` sentinel is translated to the default provider's
+     * cheapest text model here, so every caller — including the queued job
+     * that passes this value as an explicit `model:` argument — sends a
+     * concrete model name rather than the literal `auto` string.
+     */
     public function titleModel(): string
     {
         $value = (string) $this->appSettings->get(
             self::TITLE_MODEL_KEY,
             config('mediamanager.ai.title_model', 'gpt-5.4-nano'),
         );
+
+        if ($value === self::AUTO_MODEL) {
+            return Ai::textProvider()->cheapestTextModel();
+        }
 
         return $value !== '' ? $value : 'gpt-5.4-nano';
     }
