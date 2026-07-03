@@ -168,6 +168,23 @@ test('streaming a first turn seeds a fallback title and dispatches GenerateConve
         && $job->firstUserMessage === 'Tell me about my queue please');
 });
 
+test('streamed turn records ai usage', function (): void {
+    MediaAgent::fake(['Streamed reply.']);
+    $admin = User::factory()->admin()->create();
+
+    $response = $this->actingAs($admin)
+        ->post(route('ai.chat.stream'), [
+            'message' => 'Track my usage',
+        ], ['Accept' => 'text/event-stream']);
+
+    $response->assertOk();
+
+    // Consume the stream so the SDK dispatches its terminal usage event.
+    $response->streamedContent();
+
+    expect(AiUsageRecord::count())->toBe(1);
+});
+
 test('admin cannot stream against another users conversation', function (): void {
     MediaAgent::fake(['nope']);
     $owner = User::factory()->admin()->create();
