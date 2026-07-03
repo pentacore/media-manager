@@ -13,6 +13,7 @@ Route::middleware(['auth', 'verified', 'password.set', 'role:admin', 'ai.enabled
         Route::get('chat', [ChatController::class, 'index'])->name('chat');
         Route::post('chat', [ChatController::class, 'send'])->name('chat.send');
         Route::post('chat/stream', [ChatController::class, 'stream'])->name('chat.stream');
+        Route::get('chat/pending-workflow', [ChatController::class, 'pendingWorkflow'])->name('chat.pending-workflow');
 
         Route::get('conversations', [ConversationController::class, 'index'])
             ->name('conversations.index');

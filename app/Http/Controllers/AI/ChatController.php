@@ -142,6 +142,28 @@ class ChatController extends Controller
     }
 
     /**
+     * Return the workflow proposed during a just-completed streamed turn.
+     *
+     * The SSE stream can't carry the workflow JSON that send() attaches, so the
+     * frontend polls this once after the stream finishes. Reuses the same query
+     * as send()'s attach step, claiming the proposal for the given conversation.
+     */
+    public function pendingWorkflow(Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'conversation_id' => ['required', 'string', 'uuid'],
+        ]);
+
+        $workflow = $this->attachFreshlyProposedWorkflow(
+            $request->user(),
+            CarbonImmutable::now()->subMinutes(10),
+            $validated['conversation_id'],
+        );
+
+        return response()->json(['workflow' => $workflow]);
+    }
+
+    /**
      * Apply the requested advisory/executive mode to the shared AiSettings, if any.
      */
     private function applyRequestedMode(?string $mode): void
