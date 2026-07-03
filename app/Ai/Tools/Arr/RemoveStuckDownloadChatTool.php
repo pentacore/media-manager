@@ -14,9 +14,9 @@ use Stringable;
 
 /**
  * Chat-surface removal of a stuck download from the Sonarr/Radarr queue,
- * optionally blocklisting the release so it is never grabbed again. Queues
- * a remove_stuck_download ActionRequest executed by
- * RemoveStuckDownloadActions.
+ * optionally blocklisting the release so it is never grabbed again and/or
+ * searching for a replacement release afterwards. Queues a
+ * remove_stuck_download ActionRequest executed by RemoveStuckDownloadActions.
  */
 class RemoveStuckDownloadChatTool extends BaseTool
 {
@@ -25,7 +25,9 @@ class RemoveStuckDownloadChatTool extends BaseTool
         return 'Remove a stuck Sonarr/Radarr download from the queue and delete its data. Use when an '
             .'inspected stuck import should NOT be imported, e.g. "not an upgrade for existing file(s)". '
             .'Optionally pass blocklist=true to also blocklist the release so the arr never grabs it again '
-            .'(use only when the release itself is bad — corrupt/fake/wrong content). ALWAYS inspect with '
+            .'(use only when the release itself is bad — corrupt/fake/wrong content). Pass '
+            .'search_replacement=true to have the arr immediately search for a replacement release after '
+            .'removal (combine with blocklist=true to retry with a different release). ALWAYS inspect with '
             .'InspectStuckImportTool first and give a reason.';
     }
 
@@ -59,6 +61,7 @@ class RemoveStuckDownloadChatTool extends BaseTool
                 'download_id' => $downloadId,
                 'agent_rationale' => mb_substr($reason, 0, 1000),
                 'blocklist' => ($args['blocklist'] ?? null) === true,
+                'search_replacement' => ($args['search_replacement'] ?? null) === true,
             ],
         ];
     }
@@ -80,6 +83,10 @@ class RemoveStuckDownloadChatTool extends BaseTool
                 ->required(),
             'blocklist' => $schema->boolean()
                 ->description('Also blocklist the release so the arr never grabs it again. Use when the release itself is bad (corrupt, fake, wrong content) — not when it merely isn\'t an upgrade. Default false.')
+                ->required()
+                ->nullable(),
+            'search_replacement' => $schema->boolean()
+                ->description('After removing, have the arr immediately search for a replacement release. Combine with blocklist=true to retry with a different release; leave false when the content should not be re-grabbed at all. Default false.')
                 ->required()
                 ->nullable(),
         ];

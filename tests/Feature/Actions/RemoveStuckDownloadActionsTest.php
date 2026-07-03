@@ -41,12 +41,76 @@ test('removes all queue rows matching the downloadId without blocklisting', func
     Http::assertSent(fn ($r): bool => $r->method() === 'DELETE'
         && str_contains((string) $r->url(), '/api/v3/queue/55')
         && str_contains((string) $r->url(), 'blocklist=false')
+        && str_contains((string) $r->url(), 'skipRedownload=true')
         && str_contains((string) $r->url(), 'removeFromClient=true'));
     Http::assertSent(fn ($r): bool => $r->method() === 'DELETE'
         && str_contains((string) $r->url(), '/api/v3/queue/56'));
     // The unrelated row is left alone.
     Http::assertNotSent(fn ($r): bool => $r->method() === 'DELETE'
         && str_contains((string) $r->url(), '/api/v3/queue/57'));
+});
+
+test('searches for a replacement when the payload requests it', function (): void {
+    fakeQueue([
+        ['id' => 55, 'downloadId' => 'dl-1'],
+    ]);
+
+    $request = ActionRequest::factory()->create([
+        'type' => 'remove_stuck_download',
+        'target_service' => 'sonarr',
+        'payload' => ['service' => 'sonarr', 'download_id' => 'dl-1', 'search_replacement' => true],
+    ]);
+
+    $result = resolve(RemoveStuckDownloadActions::class)->execute($request);
+
+    expect($result)->toMatchArray(['service' => 'sonarr', 'download_id' => 'dl-1', 'removed' => 1, 'search_replacement' => true]);
+
+    Http::assertSent(fn ($r): bool => $r->method() === 'DELETE'
+        && str_contains((string) $r->url(), '/api/v3/queue/55')
+        && str_contains((string) $r->url(), 'skipRedownload=false')
+        && str_contains((string) $r->url(), 'removeFromClient=true'));
+});
+
+test('skips the re-search by default when search_replacement is omitted', function (): void {
+    fakeQueue([
+        ['id' => 55, 'downloadId' => 'dl-1'],
+    ]);
+
+    $request = ActionRequest::factory()->create([
+        'type' => 'remove_stuck_download',
+        'target_service' => 'sonarr',
+        'payload' => ['service' => 'sonarr', 'download_id' => 'dl-1'],
+    ]);
+
+    $result = resolve(RemoveStuckDownloadActions::class)->execute($request);
+
+    expect($result)->toMatchArray(['service' => 'sonarr', 'download_id' => 'dl-1', 'removed' => 1, 'search_replacement' => false]);
+
+    Http::assertSent(fn ($r): bool => $r->method() === 'DELETE'
+        && str_contains((string) $r->url(), '/api/v3/queue/55')
+        && str_contains((string) $r->url(), 'skipRedownload=true'));
+});
+
+test('blocklists and searches for a replacement together (Blocklist and Search)', function (): void {
+    fakeQueue([
+        ['id' => 55, 'downloadId' => 'dl-1'],
+    ]);
+
+    $request = ActionRequest::factory()->create([
+        'type' => 'remove_stuck_download',
+        'target_service' => 'sonarr',
+        'payload' => ['service' => 'sonarr', 'download_id' => 'dl-1', 'blocklist' => true, 'search_replacement' => true],
+    ]);
+
+    $result = resolve(RemoveStuckDownloadActions::class)->execute($request);
+
+    expect($result)->toMatchArray(['service' => 'sonarr', 'download_id' => 'dl-1', 'removed' => 1, 'blocklist' => true, 'search_replacement' => true]);
+
+    Http::assertSent(fn ($r): bool => $r->method() === 'DELETE'
+        && str_contains((string) $r->url(), '/api/v3/queue/55')
+        && str_contains((string) $r->url(), 'blocklist=true')
+        && str_contains((string) $r->url(), 'skipRedownload=false')
+        && str_contains((string) $r->url(), 'removeFromClient=true'));
 });
 
 test('blocklists the release when the payload requests it', function (): void {
