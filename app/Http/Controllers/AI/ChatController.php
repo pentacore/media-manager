@@ -145,8 +145,22 @@ class ChatController extends Controller
         });
 
         return response()->stream(function () use ($stream): void {
+            // Keep draining the SDK stream even if the browser disconnects:
+            // AgentStreamed (and therefore usage recording / budget guard)
+            // only fires once iteration completes, so aborting here would
+            // consume provider tokens without billing them.
+            ignore_user_abort(true);
+
             foreach ($stream as $event) {
                 echo 'data: '.($event)."\n\n";
+
+                // response()->stream() callbacks don't auto-flush per write
+                // (unlike the SDK's yield-based toResponse()) — without this
+                // the whole SSE body can buffer and arrive as one chunk.
+                if (ob_get_level() > 0) {
+                    @ob_flush();
+                }
+                flush();
             }
 
             // The conversation id is populated once the SDK events (and the
