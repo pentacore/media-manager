@@ -1,9 +1,9 @@
 <script setup lang="ts">
 import { Head, router, usePage } from '@inertiajs/vue3';
-import { Bell, BellOff, CheckCheck, Trash2 } from 'lucide-vue-next';
+import { Bell, BellOff, CheckCheck, Trash2 } from '@lucide/vue';
 import { onMounted } from 'vue';
 import NotificationController from '@/actions/App/Http/Controllers/NotificationController';
-import { Pill, SvcChip } from '@/components/mm';
+import { Pill, SvcChip, TimeStamp } from '@/components/mm';
 import { Button } from '@/components/ui/button';
 import { useRealtimeReload } from '@/composables/useRealtimeReload';
 
@@ -80,31 +80,6 @@ function markAllRead() {
     );
 }
 
-function formatTime(iso: string | null): string {
-    if (!iso) {
-        return '—';
-    }
-
-    const ms = Date.now() - new Date(iso).getTime();
-    const m = Math.floor(ms / 60_000);
-
-    if (m < 1) {
-        return 'just now';
-    }
-
-    if (m < 60) {
-        return `${m}m ago`;
-    }
-
-    const h = Math.floor(m / 60);
-
-    if (h < 24) {
-        return `${h}h ago`;
-    }
-
-    return `${Math.floor(h / 24)}d ago`;
-}
-
 function shortType(type: string): string {
     const last = type.split('\\').pop() ?? type;
 
@@ -178,7 +153,7 @@ function shortType(type: string): string {
                     <div
                         class="font-mono-tabular mt-1 flex items-center gap-3 text-[11px] text-fg-subtle"
                     >
-                        <span>{{ formatTime(n.created_at) }}</span>
+                        <TimeStamp :iso="n.created_at" />
                         <span>{{ shortType(n.type) }}</span>
                     </div>
                 </div>

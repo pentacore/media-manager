@@ -11,13 +11,17 @@ use App\Models\WebhookEvent;
 use App\Notifications\ServiceWarning;
 use App\Services\Actions\ActionOrchestrator;
 use App\Services\Library\InterventionCounter;
+use App\Services\Search\MovieIndexer;
 use App\Services\Webhook\AbstractWebhookHandler;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Notification;
 
 class RadarrWebhookHandler extends AbstractWebhookHandler
 {
-    public function __construct(private readonly ActionOrchestrator $actionOrchestrator) {}
+    public function __construct(
+        private readonly ActionOrchestrator $actionOrchestrator,
+        private readonly MovieIndexer $movieIndexer,
+    ) {}
 
     protected function serviceSlug(): string
     {
@@ -160,6 +164,12 @@ class RadarrWebhookHandler extends AbstractWebhookHandler
             ],
             subjectId: $payload['movie']['id'] ?? null,
         );
+
+        $movie = $payload['movie'] ?? null;
+
+        if (is_array($movie) && $webhookEvent->serviceConnection !== null) {
+            $this->movieIndexer->upsert($movie, $webhookEvent->serviceConnection);
+        }
     }
 
     /**
@@ -180,6 +190,12 @@ class RadarrWebhookHandler extends AbstractWebhookHandler
             ],
             subjectId: $payload['movie']['id'] ?? null,
         );
+
+        $radarrId = (int) ($payload['movie']['id'] ?? 0);
+
+        if ($radarrId > 0 && $webhookEvent->serviceConnection !== null) {
+            $this->movieIndexer->forget($radarrId, $webhookEvent->serviceConnection);
+        }
 
         $this->actionOrchestrator->dispatch(
             type: 'emby_library_scan',

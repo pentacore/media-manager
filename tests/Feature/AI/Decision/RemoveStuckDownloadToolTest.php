@@ -49,6 +49,58 @@ test('queues a remove_stuck_download tagged as agent with the reason', function 
     expect($request->payload['agent_rationale'])->toContain('Not an upgrade');
 });
 
+test('passes blocklist true through to the payload', function (): void {
+    ActionTypeConfig::factory()->create(['type' => 'remove_stuck_download', 'requires_approval' => true, 'is_enabled' => true]);
+
+    $result = json_decode((new RemoveStuckDownloadTool)->handle(new Request([
+        'service' => 'sonarr', 'download_id' => 'dl-1', 'reason' => 'Fake release', 'blocklist' => true,
+    ])), true);
+
+    expect($result['queued'])->toBeTrue();
+
+    $request = ActionRequest::firstWhere('type', 'remove_stuck_download');
+    expect($request->payload['blocklist'])->toBeTrue();
+});
+
+test('blocklist defaults to false when omitted', function (): void {
+    ActionTypeConfig::factory()->create(['type' => 'remove_stuck_download', 'requires_approval' => true, 'is_enabled' => true]);
+
+    $result = json_decode((new RemoveStuckDownloadTool)->handle(new Request([
+        'service' => 'sonarr', 'download_id' => 'dl-1', 'reason' => 'Not an upgrade',
+    ])), true);
+
+    expect($result['queued'])->toBeTrue();
+
+    $request = ActionRequest::firstWhere('type', 'remove_stuck_download');
+    expect($request->payload['blocklist'])->toBeFalse();
+});
+
+test('passes search_replacement true through to the payload', function (): void {
+    ActionTypeConfig::factory()->create(['type' => 'remove_stuck_download', 'requires_approval' => true, 'is_enabled' => true]);
+
+    $result = json_decode((new RemoveStuckDownloadTool)->handle(new Request([
+        'service' => 'sonarr', 'download_id' => 'dl-1', 'reason' => 'Blocklisted, retry with another release', 'search_replacement' => true,
+    ])), true);
+
+    expect($result['queued'])->toBeTrue();
+
+    $request = ActionRequest::firstWhere('type', 'remove_stuck_download');
+    expect($request->payload['search_replacement'])->toBeTrue();
+});
+
+test('search_replacement defaults to false when omitted', function (): void {
+    ActionTypeConfig::factory()->create(['type' => 'remove_stuck_download', 'requires_approval' => true, 'is_enabled' => true]);
+
+    $result = json_decode((new RemoveStuckDownloadTool)->handle(new Request([
+        'service' => 'sonarr', 'download_id' => 'dl-1', 'reason' => 'Not an upgrade',
+    ])), true);
+
+    expect($result['queued'])->toBeTrue();
+
+    $request = ActionRequest::firstWhere('type', 'remove_stuck_download');
+    expect($request->payload['search_replacement'])->toBeFalse();
+});
+
 test('requires a reason', function (): void {
     ActionTypeConfig::factory()->create(['type' => 'remove_stuck_download', 'requires_approval' => true, 'is_enabled' => true]);
 

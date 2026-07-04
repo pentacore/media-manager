@@ -3,8 +3,8 @@
 declare(strict_types=1);
 
 use App\Ai\Agents\MediaAgent;
-use App\Ai\Tools\Sonarr\DeleteSeriesTool;
-use App\Ai\Tools\Sonarr\SearchSeriesTool;
+use App\Ai\Tools\Arr\DeleteMediaTool;
+use App\Ai\Tools\Arr\SearchMediaTool;
 use App\Listeners\Ai\RecordAgentUsage;
 use App\Listeners\Ai\RecordToolInvocation;
 use App\Models\AiToolInvocation;
@@ -21,7 +21,7 @@ test('writes one row per ToolInvoked event', function (): void {
         invocationId: 'inv-1',
         toolInvocationId: 'tool-call-xyz',
         agent: new MediaAgent,
-        tool: resolve(SearchSeriesTool::class),
+        tool: resolve(SearchMediaTool::class),
         arguments: ['q' => 'breaking bad'],
         result: ['hits' => []],
     );
@@ -30,7 +30,7 @@ test('writes one row per ToolInvoked event', function (): void {
 
     $row = AiToolInvocation::where('invocation_id', 'inv-1')->firstOrFail();
     expect($row->tool_invocation_id)->toBe('tool-call-xyz');
-    expect($row->tool_class)->toBe(SearchSeriesTool::class);
+    expect($row->tool_class)->toBe(SearchMediaTool::class);
     expect($row->agent_class)->toBe(MediaAgent::class);
     expect($row->status)->toBe('success');
 });
@@ -42,7 +42,7 @@ test('end-to-end: tool events fire before AgentPrompted, count rolls up to the p
         invocationId: $invocationId,
         toolInvocationId: 'a',
         agent: new MediaAgent,
-        tool: resolve(SearchSeriesTool::class),
+        tool: resolve(SearchMediaTool::class),
         arguments: [],
         result: null,
     ));
@@ -50,7 +50,7 @@ test('end-to-end: tool events fire before AgentPrompted, count rolls up to the p
         invocationId: $invocationId,
         toolInvocationId: 'b',
         agent: new MediaAgent,
-        tool: resolve(DeleteSeriesTool::class),
+        tool: resolve(DeleteMediaTool::class),
         arguments: [],
         result: null,
     ));

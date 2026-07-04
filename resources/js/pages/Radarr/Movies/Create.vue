@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { Head, router, useForm } from '@inertiajs/vue3';
-import { Film, Search } from 'lucide-vue-next';
+import { Film, Search } from '@lucide/vue';
 import { ref } from 'vue';
 import MovieController from '@/actions/App/Http/Controllers/Media/MovieController';
 import { Button } from '@/components/ui/button';

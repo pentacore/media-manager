@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { onMounted } from 'vue';
+import AiChatSheet from '@/components/AiChatSheet.vue';
 import AppContent from '@/components/AppContent.vue';
 import AppShell from '@/components/AppShell.vue';
 import AppSidebar from '@/components/AppSidebar.vue';
@@ -7,6 +8,7 @@ import AppSidebarHeader from '@/components/AppSidebarHeader.vue';
 import CommandPalette from '@/components/CommandPalette.vue';
 import { Toaster } from '@/components/ui/sonner';
 import { useNotifications } from '@/composables/useNotifications';
+import { usePresenceHeartbeat } from '@/composables/usePresenceHeartbeat';
 import type { BreadcrumbItem } from '@/types';
 
 type Props = {
@@ -19,6 +21,8 @@ withDefaults(defineProps<Props>(), {
 
 const { subscribe: subscribeNotifications } = useNotifications();
 
+usePresenceHeartbeat();
+
 onMounted(subscribeNotifications);
 </script>
 
@@ -30,6 +34,7 @@ onMounted(subscribeNotifications);
             <slot />
         </AppContent>
         <CommandPalette />
+        <AiChatSheet />
         <Toaster />
     </AppShell>
 </template>

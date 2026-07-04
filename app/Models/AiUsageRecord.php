@@ -30,6 +30,7 @@ use Override;
  * @property string|null $cache_read_per_mtok
  * @property string|null $cache_write_per_mtok
  * @property string|null $reasoning_per_mtok
+ * @property bool $is_batch
  * @property string|null $price_source
  * @property int|null $user_id
  * @property string|null $conversation_id
@@ -60,6 +61,7 @@ use Override;
     'cache_read_per_mtok',
     'cache_write_per_mtok',
     'reasoning_per_mtok',
+    'is_batch',
     'price_source',
     'user_id',
     'conversation_id',
@@ -81,6 +83,7 @@ class AiUsageRecord extends Model
             'cache_read_per_mtok' => 'decimal:4',
             'cache_write_per_mtok' => 'decimal:4',
             'reasoning_per_mtok' => 'decimal:4',
+            'is_batch' => 'boolean',
         ];
     }
 

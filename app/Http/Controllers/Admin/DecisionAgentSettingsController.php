@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers\Admin;
 
+use App\Enums\AiReasoningLevel;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Admin\UpdateDecisionAgentSettingsRequest;
 use App\Models\AiModelPrice;
@@ -14,34 +15,37 @@ use Inertia\Response;
 
 class DecisionAgentSettingsController extends Controller
 {
-    public function index(DecisionAgentSettings $settings): Response
+    public function index(DecisionAgentSettings $decisionAgentSettings): Response
     {
         return Inertia::render('Admin/DecisionAgent/Index', [
             'settings' => [
-                'enabled' => $settings->enabled(),
-                'model' => $settings->model(),
-                'event_allowlist' => $settings->eventAllowlist(),
-                'allow_manual_import' => $settings->allowManualImport(),
-                'notify_on_suggest' => $settings->notifyOnSuggest(),
-                'notify_on_act' => $settings->notifyOnAct(),
-                'max_actions_per_run' => $settings->maxActionsPerRun(),
+                'enabled' => $decisionAgentSettings->enabled(),
+                'model' => $decisionAgentSettings->model(),
+                'event_allowlist' => $decisionAgentSettings->eventAllowlist(),
+                'allow_manual_import' => $decisionAgentSettings->allowManualImport(),
+                'notify_on_suggest' => $decisionAgentSettings->notifyOnSuggest(),
+                'notify_on_act' => $decisionAgentSettings->notifyOnAct(),
+                'max_actions_per_run' => $decisionAgentSettings->maxActionsPerRun(),
+                'reasoning_level' => $decisionAgentSettings->reasoning(),
             ],
             'models' => $this->modelsByConfiguredProvider(),
             'eventCatalog' => DecisionAgentSettings::eventCatalog(),
+            'reasoningLevels' => AiReasoningLevel::mapForSelect(labelKey: 'label'),
         ]);
     }
 
-    public function update(UpdateDecisionAgentSettingsRequest $request, DecisionAgentSettings $settings): RedirectResponse
+    public function update(UpdateDecisionAgentSettingsRequest $updateDecisionAgentSettingsRequest, DecisionAgentSettings $decisionAgentSettings): RedirectResponse
     {
-        $validated = $request->validated();
+        $validated = $updateDecisionAgentSettingsRequest->validated();
 
-        $settings->setEnabled((bool) $validated['enabled']);
-        $settings->setModel($validated['model']);
-        $settings->setEventAllowlist($validated['event_allowlist'] ?? []);
-        $settings->setAllowManualImport((bool) $validated['allow_manual_import']);
-        $settings->setNotifyOnSuggest((bool) $validated['notify_on_suggest']);
-        $settings->setNotifyOnAct((bool) $validated['notify_on_act']);
-        $settings->setMaxActionsPerRun((int) $validated['max_actions_per_run']);
+        $decisionAgentSettings->setEnabled((bool) $validated['enabled']);
+        $decisionAgentSettings->setModel($validated['model']);
+        $decisionAgentSettings->setEventAllowlist($validated['event_allowlist'] ?? []);
+        $decisionAgentSettings->setAllowManualImport((bool) $validated['allow_manual_import']);
+        $decisionAgentSettings->setNotifyOnSuggest((bool) $validated['notify_on_suggest']);
+        $decisionAgentSettings->setNotifyOnAct((bool) $validated['notify_on_act']);
+        $decisionAgentSettings->setMaxActionsPerRun((int) $validated['max_actions_per_run']);
+        $decisionAgentSettings->setReasoning(AiReasoningLevel::from($validated['reasoning_level']));
 
         Inertia::flash('toast', ['type' => 'success', 'message' => __('Decision agent settings updated.')]);
 

@@ -8,6 +8,7 @@ use App\Ai\Agents\MediaAgent;
 use App\Enums\AiMode;
 use App\Enums\AiProposedWorkflowStatus;
 use App\Http\Controllers\Controller;
+use App\Jobs\Ai\GenerateConversationTitle;
 use App\Models\AiProposedWorkflow;
 use App\Models\User;
 use App\Services\AiBudget\AiBudgetExceededException;
@@ -19,6 +20,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Str;
 use Inertia\Inertia;
 use Inertia\Response;
 use Throwable;
@@ -43,10 +45,191 @@ class ChatController extends Controller
         $conversationId = $validated['conversation_id'] ?? null;
         $user = $request->user();
 
-        if (isset($validated['mode'])) {
-            resolve(AiSettings::class)->withMode(AiMode::from($validated['mode']));
+        $this->applyRequestedMode($validated['mode'] ?? null);
+
+        if (($budgetResponse = $this->enforceBudget()) instanceof JsonResponse) {
+            return $budgetResponse;
         }
 
+        if ($conversationId !== null && ! $this->conversationIsAvailable($conversationId, $user)) {
+            return response()->json(['message' => 'Conversation not found.'], 404);
+        }
+
+        $continuation = $this->resolveWorkflowContinuation($validated, $user);
+        if ($continuation instanceof JsonResponse) {
+            return $continuation;
+        }
+
+        $isNewConversation = $conversationId === null;
+        $messageToSend = $continuation ?? $validated['message'];
+        $turnStartedAt = CarbonImmutable::now();
+
+        try {
+            $agent = $conversationId
+                ? (new MediaAgent)->continue($conversationId, as: $user)
+                : (new MediaAgent)->forUser($user);
+            $aiSettings = resolve(AiSettings::class);
+            $chain = $aiSettings->providerChainWithModel($aiSettings->model());
+            $response = $chain === null
+                ? $agent->prompt($messageToSend)
+                : $agent->prompt($messageToSend, provider: $chain);
+        } catch (Throwable $throwable) {
+            return $this->handleAgentFailure($throwable, $user);
+        }
+
+        $workflowPayload = $this->attachFreshlyProposedWorkflow($user, $turnStartedAt, $response->conversationId ?? null);
+
+        $newConversationId = $response->conversationId ?? null;
+
+        if ($isNewConversation && $newConversationId !== null) {
+            $this->seedConversationTitle($newConversationId, $validated['message']);
+            dispatch(new GenerateConversationTitle($newConversationId, $validated['message']));
+        }
+
+        return response()->json([
+            'text' => $response->text,
+            'conversation_id' => $newConversationId,
+            'workflow' => $workflowPayload,
+        ]);
+    }
+
+    /**
+     * Stream a chat turn back to the client as Server-Sent Events.
+     *
+     * Mirrors send()'s pre-flight (mode, budget, ownership). We drive the SSE
+     * response ourselves (rather than returning the SDK's StreamableAgentResponse
+     * directly) so we can append a terminal `conversation_id` event: for a brand-new
+     * conversation the id is only minted by the SDK's RememberConversation middleware
+     * once the stream is consumed, and no SDK event carries it. Emitting it before
+     * `[DONE]` makes the client's active conversation deterministic instead of relying
+     * on a recency heuristic. Workflow continuations are intentionally NOT supported
+     * here — they stay on send().
+     */
+    public function stream(Request $request): mixed
+    {
+        $validated = $request->validate([
+            'message' => ['required', 'string', 'max:4000'],
+            'conversation_id' => ['nullable', 'string', 'uuid'],
+            'mode' => ['nullable', 'string', 'in:advisory,executive'],
+        ]);
+
+        $user = $request->user();
+
+        $this->applyRequestedMode($validated['mode'] ?? null);
+
+        if (($budgetResponse = $this->enforceBudget()) instanceof JsonResponse) {
+            return $budgetResponse;
+        }
+
+        $conversationId = $validated['conversation_id'] ?? null;
+
+        if ($conversationId !== null && ! $this->conversationIsAvailable($conversationId, $user)) {
+            return response()->json(['message' => 'Conversation not found.'], 404);
+        }
+
+        $isNewConversation = $conversationId === null;
+        $message = $validated['message'];
+
+        try {
+            $agent = $conversationId
+                ? (new MediaAgent)->continue($conversationId, as: $user)
+                : (new MediaAgent)->forUser($user);
+            $aiSettings = resolve(AiSettings::class);
+            $chain = $aiSettings->providerChainWithModel($aiSettings->model());
+            $stream = $chain === null
+                ? $agent->stream($message)
+                : $agent->stream($message, provider: $chain);
+        } catch (Throwable $throwable) {
+            return $this->handleAgentFailure($throwable, $user);
+        }
+
+        $stream->then(function ($response) use ($isNewConversation, $message): void {
+            $newConversationId = $response->conversationId ?? null;
+
+            if ($isNewConversation && $newConversationId !== null) {
+                $this->seedConversationTitle($newConversationId, $message);
+                dispatch(new GenerateConversationTitle($newConversationId, $message));
+            }
+        });
+
+        return response()->stream(function () use ($stream): void {
+            // Keep draining the SDK stream even if the browser disconnects:
+            // AgentStreamed (and therefore usage recording / budget guard)
+            // only fires once iteration completes, so aborting here would
+            // consume provider tokens without billing them.
+            ignore_user_abort(true);
+
+            foreach ($stream as $event) {
+                echo 'data: '.($event)."\n\n";
+
+                // response()->stream() callbacks don't auto-flush per write —
+                // without this the whole SSE body buffers into one chunk. Only
+                // flush when output reaches the SAPI directly (level <= 1):
+                // deeper nesting means a capturing harness (browser tests)
+                // owns the buffer stack, and ob_flush there strands bytes in
+                // an intermediate buffer that never reaches the client.
+                if (ob_get_level() <= 1) {
+                    if (ob_get_level() === 1) {
+                        @ob_flush();
+                    }
+
+                    flush();
+                }
+            }
+
+            // The conversation id is populated once the SDK events (and the
+            // then() callbacks) have run during iteration above.
+            $conversationId = $stream->conversationId ?? null;
+
+            if ($conversationId !== null) {
+                echo 'data: '.json_encode([
+                    'type' => 'conversation_id',
+                    'conversation_id' => $conversationId,
+                ])."\n\n";
+            }
+
+            echo "data: [DONE]\n\n";
+        }, headers: ['Content-Type' => 'text/event-stream']);
+    }
+
+    /**
+     * Return the workflow proposed during a just-completed streamed turn.
+     *
+     * The SSE stream can't carry the workflow JSON that send() attaches, so the
+     * frontend polls this once after the stream finishes. Reuses the same query
+     * as send()'s attach step, claiming the proposal for the given conversation.
+     */
+    public function pendingWorkflow(Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'conversation_id' => ['required', 'string', 'uuid'],
+        ]);
+
+        $workflow = $this->attachFreshlyProposedWorkflow(
+            $request->user(),
+            CarbonImmutable::now()->subMinutes(10),
+            $validated['conversation_id'],
+        );
+
+        return response()->json(['workflow' => $workflow]);
+    }
+
+    /**
+     * Apply the requested advisory/executive mode to the shared AiSettings, if any.
+     */
+    private function applyRequestedMode(?string $mode): void
+    {
+        if ($mode !== null) {
+            resolve(AiSettings::class)->withMode(AiMode::from($mode));
+        }
+    }
+
+    /**
+     * Enforce the monthly AI budget. Returns a 402 JsonResponse when the hard
+     * cap has been exceeded, or null when the request may proceed.
+     */
+    private function enforceBudget(): ?JsonResponse
+    {
         try {
             resolve(AiBudgetGuard::class)->enforce();
         } catch (AiBudgetExceededException $aiBudgetExceededException) {
@@ -56,56 +239,56 @@ class ChatController extends Controller
             ], 402);
         }
 
-        if ($conversationId !== null && ! $this->conversationBelongsToUser($conversationId, $user)) {
-            return response()->json(['message' => 'Conversation not found.'], 404);
+        return null;
+    }
+
+    /**
+     * Log an agent invocation failure and build the client-facing 500 response.
+     * The full message is only surfaced in local for debugging.
+     */
+    private function handleAgentFailure(Throwable $throwable, ?User $user): JsonResponse
+    {
+        // Laravel's HTTP-client RequestException truncates response bodies
+        // in getMessage(); pull the full body separately so OpenAI's
+        // verbose error JSON is visible for debugging.
+        $context = [
+            'user_id' => $user?->id,
+            'exception' => $throwable::class,
+            'message' => $throwable->getMessage(),
+        ];
+
+        if ($throwable instanceof RequestException) {
+            $context['response_body'] = $throwable->response->body();
+            $context['response_status'] = $throwable->response->status();
         }
 
-        $continuation = $this->resolveWorkflowContinuation($validated, $user);
-        if ($continuation instanceof JsonResponse) {
-            return $continuation;
+        Log::error('AI request failed.', $context);
+
+        $payload = ['error' => 'AI request failed.'];
+
+        if (app()->isLocal()) {
+            $payload['message'] = $throwable->getMessage();
         }
 
-        $messageToSend = $continuation ?? $validated['message'];
-        $turnStartedAt = CarbonImmutable::now();
+        return response()->json($payload, 500);
+    }
 
-        try {
-            $agent = $conversationId
-                ? (new MediaAgent)->continue($conversationId, as: $user)
-                : (new MediaAgent)->forUser($user);
-            $response = $agent->prompt($messageToSend);
-        } catch (Throwable $throwable) {
-            // Laravel's HTTP-client RequestException truncates response bodies
-            // in getMessage(); pull the full body separately so OpenAI's
-            // verbose error JSON is visible for debugging.
-            $context = [
-                'user_id' => $user?->id,
-                'exception' => $throwable::class,
-                'message' => $throwable->getMessage(),
-            ];
+    /**
+     * Write a readable fallback title onto a brand-new conversation row before
+     * the queued GenerateConversationTitle job runs. Keeps the picker readable
+     * even if the queue worker is offline.
+     */
+    private function seedConversationTitle(string $conversationId, string $firstUserMessage): void
+    {
+        $fallback = (string) Str::of($firstUserMessage)->trim()->limit(60);
 
-            if ($throwable instanceof RequestException) {
-                $context['response_body'] = $throwable->response->body();
-                $context['response_status'] = $throwable->response->status();
-            }
-
-            Log::error('AI request failed.', $context);
-
-            $payload = ['error' => 'AI request failed.'];
-
-            if (app()->isLocal()) {
-                $payload['message'] = $throwable->getMessage();
-            }
-
-            return response()->json($payload, 500);
+        if ($fallback === '') {
+            return;
         }
 
-        $workflowPayload = $this->attachFreshlyProposedWorkflow($user, $turnStartedAt, $response->conversationId ?? null);
-
-        return response()->json([
-            'text' => $response->text,
-            'conversation_id' => $response->conversationId ?? null,
-            'workflow' => $workflowPayload,
-        ]);
+        DB::table('agent_conversations')
+            ->where('id', $conversationId)
+            ->update(['title' => $fallback]);
     }
 
     /**
@@ -197,7 +380,7 @@ class ChatController extends Controller
             );
     }
 
-    private function conversationBelongsToUser(string $conversationId, ?User $user): bool
+    private function conversationIsAvailable(string $conversationId, ?User $user): bool
     {
         if (! $user instanceof User) {
             return false;
@@ -206,6 +389,7 @@ class ChatController extends Controller
         return DB::table('agent_conversations')
             ->where('id', $conversationId)
             ->where('user_id', $user->id)
+            ->whereNull('archived_at')
             ->exists();
     }
 }

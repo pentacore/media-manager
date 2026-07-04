@@ -8,6 +8,7 @@ use App\Ai\Agents\PriceFetcherAgent;
 use App\Events\AiPriceRefreshStateChanged;
 use App\Models\AiModelPrice;
 use App\Models\User;
+use App\Settings\AiSettings;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
@@ -52,12 +53,15 @@ class RefreshAiPricesJob implements ShouldQueue
 
         $before = AiModelPrice::query()->count();
 
+        $prompt = 'Refresh the catalog now. Visit the canonical pricing page for OpenAI, Anthropic, Google Gemini, DeepSeek, xAI, and Mistral. Upsert one row per generally-available text/chat model with up-to-date input, output, cache, and reasoning rates. Skip image / audio / embedding products.';
+
         try {
-            $response = (new PriceFetcherAgent)
-                ->forUser($this->triggeredBy)
-                ->prompt(
-                    'Refresh the catalog now. Visit the canonical pricing page for OpenAI, Anthropic, Google Gemini, DeepSeek, xAI, and Mistral. Upsert one row per generally-available text/chat model with up-to-date input, output, cache, and reasoning rates. Skip image / audio / embedding products.'
-                );
+            $aiSettings = resolve(AiSettings::class);
+            $chain = $aiSettings->providerChainWithModel($aiSettings->model());
+            $agent = (new PriceFetcherAgent)->forUser($this->triggeredBy);
+            $response = $chain === null
+                ? $agent->prompt($prompt)
+                : $agent->prompt($prompt, provider: $chain);
 
             $after = AiModelPrice::query()->count();
 

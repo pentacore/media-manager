@@ -38,16 +38,19 @@
         <link href="https://fonts.bunny.net/css?family=inter:400,500,600,700|jetbrains-mono:400,500,600|instrument-serif:400,400i|instrument-sans:400,500,600&display=swap" rel="stylesheet" />
 
         {{-- Reverb config injected at runtime so deployments can change keys/host
-             without rebuilding the Vite bundle. useWebSocket reads this. --}}
+             without rebuilding the Vite bundle. useWebSocket reads this.
+             Public host/port/scheme are browser-facing and may differ from the
+             server-side options.host (e.g. Docker DNS name vs public hostname). --}}
         @php
             $reverbApp = config('reverb.apps.apps.0', []);
             $reverbOptions = $reverbApp['options'] ?? [];
+            $appUrlHost = parse_url((string) config('app.url'), PHP_URL_HOST);
         @endphp
         <meta name="reverb-config" content="{{ json_encode([
             'key' => $reverbApp['key'] ?? null,
-            'host' => $reverbOptions['host'] ?? parse_url((string) config('app.url'), PHP_URL_HOST),
-            'port' => (int) ($reverbOptions['port'] ?? 443),
-            'scheme' => $reverbOptions['scheme'] ?? 'https',
+            'host' => env('REVERB_PUBLIC_HOST', $appUrlHost ?: ($reverbOptions['host'] ?? null)),
+            'port' => (int) env('REVERB_PUBLIC_PORT', $reverbOptions['port'] ?? 443),
+            'scheme' => env('REVERB_PUBLIC_SCHEME', $reverbOptions['scheme'] ?? 'https'),
         ]) }}">
 
         @vite(['resources/css/app.css', 'resources/js/app.ts', "resources/js/pages/{$page['component']}.vue"])

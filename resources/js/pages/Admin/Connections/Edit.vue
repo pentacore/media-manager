@@ -8,7 +8,7 @@ import {
     Plug,
     RefreshCw,
     Wand2,
-} from 'lucide-vue-next';
+} from '@lucide/vue';
 import { computed, reactive, ref } from 'vue';
 import ProwlarrTestIndexerController from '@/actions/App/Http/Controllers/Admin/ProwlarrTestIndexerController';
 import ServiceConnectionController from '@/actions/App/Http/Controllers/Admin/ServiceConnectionController';
@@ -69,6 +69,7 @@ interface Connection {
     };
     hidden_categories?: string[];
     sabnzbd_webhook_script?: string | null;
+    whisparr_version?: string;
 }
 
 interface Indexer {
@@ -127,6 +128,9 @@ const selectedDiskPaths = ref<string[]>([
 const diskDisplay = reactive<Record<string, DiskMetric>>({
     ...(props.connection.disk?.display ?? {}),
 });
+
+const whisparrVersion = ref(props.connection.whisparr_version ?? 'v3');
+const showWhisparrVersion = computed(() => typeValue === 'whisparr');
 
 const supportsDiskPicker = computed(
     () => typeValue === 'sonarr' || typeValue === 'radarr',
@@ -345,6 +349,29 @@ function testIndexer(indexerId: number): void {
                             </SelectContent>
                         </Select>
                         <InputError :message="errors.type" />
+                    </div>
+
+                    <div v-if="showWhisparrVersion" class="space-y-2">
+                        <Label for="whisparr_version">Whisparr Version</Label>
+                        <Select
+                            name="whisparr_version"
+                            v-model="whisparrVersion"
+                            :default-value="whisparrVersion"
+                        >
+                            <SelectTrigger>
+                                <SelectValue
+                                    placeholder="Select Whisparr version"
+                                />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="v3"
+                                    >v3 (movie-based)</SelectItem
+                                >
+                                <SelectItem value="v2"
+                                    >v2 (Eros / series-based)</SelectItem
+                                >
+                            </SelectContent>
+                        </Select>
                     </div>
 
                     <div class="space-y-2">
@@ -801,8 +828,7 @@ function testIndexer(indexerId: number): void {
                         </div>
                         <pre
                             class="max-h-72 overflow-auto rounded-md border border-border bg-bg-elev p-3 text-[11.5px] leading-snug"
-                            >{{ connection.sabnzbd_webhook_script }}</pre
-                        >
+                            >{{ connection.sabnzbd_webhook_script }}</pre>
                     </div>
 
                     <div class="flex gap-2 pt-4">

@@ -168,6 +168,22 @@ Conversation history is healed automatically before each request — orphaned to
 
 Admin-only access is enforced by the `ai.enabled` + `role:admin` middleware combo on `routes/ai.php`.
 
+#### Semantic library search
+
+When AI is enabled, library items are embedded (256-dim vectors, `text-embedding-3-small`) and stored in Typesense for meaning-based search via the chat assistant. New/changed items embed automatically through a queued job; backfill an existing library with:
+
+```bash
+php artisan ai:embed-library --missing-only
+```
+
+> **Upgrading an existing install:** the `embedding` field is a Typesense schema change, and Scout only applies collection schemas when creating a *missing* collection. After upgrading, recreate both collections or vector search silently returns no hits:
+>
+> ```bash
+> php artisan scout:delete-index movies && php artisan scout:delete-index series
+> php artisan scout:import 'App\Models\IndexedMovie' && php artisan scout:import 'App\Models\IndexedSeries'
+> php artisan ai:embed-library --missing-only
+> ```
+
 ## External-API caching
 
 Slow Sonarr / Radarr / Seerr / Prowlarr / TMDB / Trakt reads pass through `app/Cache/Services/{Service}Cache.php`, backed by Valkey (Redis-compatible) with tagged invalidation. TTLs are configurable via `MEDIAMANAGER_CACHE_TTL_{LIST,ENTITY,METADATA}` (defaults: 60s / 300s / 600s). Webhook handlers (`{Service}WebhookHandler::handle()`) and local action executors (`{Service}Actions`, `RequestController` write paths) call `bustAll()` to evict per-connection tags so writes feel immediate; TTL alone covers third-party providers (TMDB/Trakt) which we cannot invalidate on demand. Cache driver is set explicitly via `MEDIAMANAGER_CACHE_STORE` (default `redis`) — independent of Laravel's global `CACHE_STORE`. Tests use the `array` driver via `tests/Pest.php`.

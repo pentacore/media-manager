@@ -1,9 +1,9 @@
 <script setup lang="ts">
 import { Head, router } from '@inertiajs/vue3';
-import { Calendar, Cpu, Download, Sparkles } from 'lucide-vue-next';
+import { Calendar, Cpu, Download, Sparkles } from '@lucide/vue';
 import { computed, onMounted, ref, watch } from 'vue';
 import ActivityLogController from '@/actions/App/Http/Controllers/ActivityLogController';
-import { InitialsAvatar, Pill, SvcChip } from '@/components/mm';
+import { InitialsAvatar, Pill, SvcChip, TimeStamp } from '@/components/mm';
 import { Button } from '@/components/ui/button';
 import { useRealtimeList } from '@/composables/useRealtimeList';
 import { cn } from '@/lib/utils';
@@ -97,21 +97,6 @@ const visibleLogs = computed(() =>
 
 function refresh(): void {
     router.reload({ only: ['logs'], onSuccess: resume });
-}
-
-function formatTime(iso: string | null): string {
-    if (!iso) {
-        return '—';
-    }
-
-    const date = new Date(iso);
-
-    return date.toLocaleTimeString([], {
-        hour: '2-digit',
-        minute: '2-digit',
-        second: '2-digit',
-        hour12: false,
-    });
 }
 
 function applyFilters(next: {
@@ -495,11 +480,11 @@ function exportUrl(): string {
                     i < filteredLogs.length - 1 && 'border-b border-border',
                 ]"
             >
-                <span
-                    class="font-mono-tabular w-20 shrink-0 text-[11.5px] text-fg-subtle"
-                >
-                    {{ formatTime(log.created_at) }}
-                </span>
+                <TimeStamp
+                    :iso="log.created_at"
+                    mode="datetime"
+                    class="font-mono-tabular w-36 shrink-0 text-[11.5px] text-fg-subtle"
+                />
                 <span
                     v-if="!log.user_name"
                     class="inline-flex h-5 items-center gap-1 rounded-full border border-border bg-bg-elev px-2 text-[11px] text-muted-foreground"

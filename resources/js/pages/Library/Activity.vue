@@ -6,7 +6,7 @@ import {
     Loader2,
     MoreVertical,
     RefreshCcw,
-} from 'lucide-vue-next';
+} from '@lucide/vue';
 import { computed, ref } from 'vue';
 import LibraryActivityController from '@/actions/App/Http/Controllers/Library/ActivityController';
 import { Pill, SvcChip } from '@/components/mm';
@@ -625,165 +625,178 @@ const filteredRows = computed<QueueRow[]>(() => {
                 v-else
                 class="overflow-hidden rounded-xl border border-border bg-card"
             >
-                <table class="w-full border-collapse text-[13px]">
-                    <thead>
-                        <tr>
-                            <th
-                                v-for="header in [
-                                    'Service',
-                                    'Title',
-                                    'Quality',
-                                    'State',
-                                    'Size',
-                                    'Time left',
-                                    '',
-                                ]"
-                                :key="header"
-                                class="border-b border-border bg-card px-3 py-2 text-left text-[11.5px] font-medium tracking-[0.05em] text-muted-foreground uppercase"
+                <div class="overflow-x-auto">
+                    <table class="w-full border-collapse text-[13px]">
+                        <thead>
+                            <tr>
+                                <th
+                                    v-for="header in [
+                                        'Service',
+                                        'Title',
+                                        'Quality',
+                                        'State',
+                                        'Size',
+                                        'Time left',
+                                        '',
+                                    ]"
+                                    :key="header"
+                                    class="border-b border-border bg-card px-3 py-2 text-left text-[11.5px] font-medium tracking-[0.05em] text-muted-foreground uppercase"
+                                >
+                                    {{ header }}
+                                </th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr
+                                v-for="row in filteredRows"
+                                :key="`${row.service}-${row.id}`"
+                                class="border-b border-border last:border-b-0 hover:bg-bg-hover"
                             >
-                                {{ header }}
-                            </th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <tr
-                            v-for="row in filteredRows"
-                            :key="`${row.service}-${row.id}`"
-                            class="border-b border-border last:border-b-0 hover:bg-bg-hover"
-                        >
-                            <td class="px-3 py-2.5">
-                                <SvcChip :id="row.service" />
-                            </td>
-                            <td class="px-3 py-2.5">
-                                <div class="font-medium">
-                                    {{ row.title ?? '—' }}
-                                </div>
-                                <div
-                                    v-if="row.subtitle"
-                                    class="text-[11.5px] text-muted-foreground"
-                                >
-                                    {{ row.subtitle }}
-                                </div>
-                                <div
-                                    v-if="row.error_message"
-                                    class="mt-1 text-[11.5px] text-destructive"
-                                >
-                                    {{ row.error_message }}
-                                </div>
-                                <div
-                                    v-for="(message, mi) in row.status_messages"
-                                    :key="mi"
-                                    class="text-warn mt-1 text-[11.5px]"
-                                >
-                                    <span class="font-medium"
-                                        >{{ message.title }}:</span
+                                <td class="px-3 py-2.5">
+                                    <SvcChip :id="row.service" />
+                                </td>
+                                <td class="px-3 py-2.5">
+                                    <div class="font-medium">
+                                        {{ row.title ?? '—' }}
+                                    </div>
+                                    <div
+                                        v-if="row.subtitle"
+                                        class="text-[11.5px] text-muted-foreground"
                                     >
-                                    {{ message.messages.join('; ') }}
-                                </div>
-                            </td>
-                            <td class="px-3 py-2.5 text-[12px]">
-                                {{ row.quality ?? '—' }}
-                            </td>
-                            <td class="px-3 py-2.5">
-                                <Pill :variant="trackedVariant(row)">
-                                    {{ statusLabel(row) }}
-                                </Pill>
-                            </td>
-                            <td
-                                class="font-mono-tabular px-3 py-2.5 text-right text-[12px]"
-                            >
-                                <div>{{ formatBytes(row.size) }}</div>
-                                <div class="text-[11px] text-muted-foreground">
-                                    {{ progress(row) }}%
-                                </div>
-                            </td>
-                            <td
-                                class="font-mono-tabular px-3 py-2.5 text-right text-[12px]"
-                            >
-                                {{ timeleftLabel(row) }}
-                            </td>
-                            <td class="px-3 py-2.5 text-right">
-                                <div
-                                    class="flex items-center justify-end gap-1"
-                                >
-                                    <a
-                                        :href="`${row.service_url}/activity/queue`"
-                                        target="_blank"
-                                        rel="noopener noreferrer"
-                                        class="inline-flex items-center gap-1 text-[12px] text-muted-foreground hover:text-foreground"
+                                        {{ row.subtitle }}
+                                    </div>
+                                    <div
+                                        v-if="row.error_message"
+                                        class="mt-1 text-[11.5px] text-destructive"
                                     >
-                                        <ExternalLink class="size-3.5" />Open
-                                    </a>
-                                    <DropdownMenu v-if="isAdmin">
-                                        <DropdownMenuTrigger as-child>
-                                            <Button
-                                                variant="ghost"
-                                                size="sm"
-                                                class="size-7 p-0"
-                                                :disabled="
-                                                    acting ===
-                                                        actionKey(
+                                        {{ row.error_message }}
+                                    </div>
+                                    <div
+                                        v-for="(
+                                            message, mi
+                                        ) in row.status_messages"
+                                        :key="mi"
+                                        class="text-warn mt-1 text-[11.5px]"
+                                    >
+                                        <span class="font-medium"
+                                            >{{ message.title }}:</span
+                                        >
+                                        {{ message.messages.join('; ') }}
+                                    </div>
+                                </td>
+                                <td class="px-3 py-2.5 text-[12px]">
+                                    {{ row.quality ?? '—' }}
+                                </td>
+                                <td class="px-3 py-2.5">
+                                    <Pill :variant="trackedVariant(row)">
+                                        {{ statusLabel(row) }}
+                                    </Pill>
+                                </td>
+                                <td
+                                    class="font-mono-tabular px-3 py-2.5 text-right text-[12px]"
+                                >
+                                    <div>{{ formatBytes(row.size) }}</div>
+                                    <div
+                                        class="text-[11px] text-muted-foreground"
+                                    >
+                                        {{ progress(row) }}%
+                                    </div>
+                                </td>
+                                <td
+                                    class="font-mono-tabular px-3 py-2.5 text-right text-[12px]"
+                                >
+                                    {{ timeleftLabel(row) }}
+                                </td>
+                                <td class="px-3 py-2.5 text-right">
+                                    <div
+                                        class="flex items-center justify-end gap-1"
+                                    >
+                                        <a
+                                            :href="`${row.service_url}/activity/queue`"
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            class="inline-flex items-center gap-1 text-[12px] text-muted-foreground hover:text-foreground"
+                                        >
+                                            <ExternalLink
+                                                class="size-3.5"
+                                            />Open
+                                        </a>
+                                        <DropdownMenu v-if="isAdmin">
+                                            <DropdownMenuTrigger as-child>
+                                                <Button
+                                                    variant="ghost"
+                                                    size="sm"
+                                                    class="size-7 p-0"
+                                                    :disabled="
+                                                        acting ===
+                                                            actionKey(
+                                                                row,
+                                                                'remove',
+                                                            ) ||
+                                                        acting ===
+                                                            actionKey(
+                                                                row,
+                                                                'block',
+                                                            )
+                                                    "
+                                                    :aria-label="`Manage ${row.title ?? 'queue item'}`"
+                                                >
+                                                    <MoreVertical
+                                                        class="size-3.5"
+                                                    />
+                                                </Button>
+                                            </DropdownMenuTrigger>
+                                            <DropdownMenuContent
+                                                align="end"
+                                                class="w-52"
+                                            >
+                                                <DropdownMenuLabel
+                                                    >Manage queue
+                                                    item</DropdownMenuLabel
+                                                >
+                                                <DropdownMenuSeparator />
+                                                <DropdownMenuItem
+                                                    @select="forceGrab(row)"
+                                                >
+                                                    Force grab now
+                                                </DropdownMenuItem>
+                                                <DropdownMenuItem
+                                                    :disabled="!row.download_id"
+                                                    @select="
+                                                        openManualImport(row)
+                                                    "
+                                                >
+                                                    Manual import…
+                                                </DropdownMenuItem>
+                                                <DropdownMenuItem
+                                                    @select="
+                                                        removeQueueItem(
                                                             row,
                                                             'remove',
-                                                        ) ||
-                                                    acting ===
-                                                        actionKey(row, 'block')
-                                                "
-                                                :aria-label="`Manage ${row.title ?? 'queue item'}`"
-                                            >
-                                                <MoreVertical
-                                                    class="size-3.5"
-                                                />
-                                            </Button>
-                                        </DropdownMenuTrigger>
-                                        <DropdownMenuContent
-                                            align="end"
-                                            class="w-52"
-                                        >
-                                            <DropdownMenuLabel
-                                                >Manage queue
-                                                item</DropdownMenuLabel
-                                            >
-                                            <DropdownMenuSeparator />
-                                            <DropdownMenuItem
-                                                @select="forceGrab(row)"
-                                            >
-                                                Force grab now
-                                            </DropdownMenuItem>
-                                            <DropdownMenuItem
-                                                :disabled="!row.download_id"
-                                                @select="openManualImport(row)"
-                                            >
-                                                Manual import…
-                                            </DropdownMenuItem>
-                                            <DropdownMenuItem
-                                                @select="
-                                                    removeQueueItem(
-                                                        row,
-                                                        'remove',
-                                                    )
-                                                "
-                                            >
-                                                Remove from queue
-                                            </DropdownMenuItem>
-                                            <DropdownMenuItem
-                                                class="text-destructive focus:text-destructive"
-                                                @select="
-                                                    removeQueueItem(
-                                                        row,
-                                                        'block',
-                                                    )
-                                                "
-                                            >
-                                                Blocklist & retry
-                                            </DropdownMenuItem>
-                                        </DropdownMenuContent>
-                                    </DropdownMenu>
-                                </div>
-                            </td>
-                        </tr>
-                    </tbody>
-                </table>
+                                                        )
+                                                    "
+                                                >
+                                                    Remove from queue
+                                                </DropdownMenuItem>
+                                                <DropdownMenuItem
+                                                    class="text-destructive focus:text-destructive"
+                                                    @select="
+                                                        removeQueueItem(
+                                                            row,
+                                                            'block',
+                                                        )
+                                                    "
+                                                >
+                                                    Blocklist & retry
+                                                </DropdownMenuItem>
+                                            </DropdownMenuContent>
+                                        </DropdownMenu>
+                                    </div>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
             </div>
         </template>
 
@@ -818,66 +831,70 @@ const filteredRows = computed<QueueRow[]>(() => {
                 v-else
                 class="overflow-x-auto rounded-xl border border-border bg-card"
             >
-                <table class="w-full border-collapse text-[13px]">
-                    <thead>
-                        <tr>
-                            <th
-                                v-for="header in [
-                                    'Service',
-                                    'Event',
-                                    'Title',
-                                    'Quality',
-                                    'When',
-                                ]"
-                                :key="header"
-                                class="border-b border-border bg-card px-3 py-2 text-left text-[11.5px] font-medium tracking-[0.05em] text-muted-foreground uppercase"
-                            >
-                                {{ header }}
-                            </th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <tr
-                            v-for="row in filteredHistoryRows"
-                            :key="`${row.service}-${row.id}`"
-                            class="border-b border-border last:border-b-0 hover:bg-bg-hover"
-                        >
-                            <td class="px-3 py-2.5">
-                                <SvcChip :id="row.service" />
-                            </td>
-                            <td class="px-3 py-2.5">
-                                <Pill :variant="eventVariant(row.event_type)">
-                                    {{ eventLabel(row.event_type) }}
-                                </Pill>
-                            </td>
-                            <td class="px-3 py-2.5">
-                                <div class="font-medium">
-                                    {{ row.title ?? '—' }}
-                                </div>
-                                <div
-                                    v-if="row.subtitle"
-                                    class="text-[11.5px] text-muted-foreground"
+                <div class="overflow-x-auto">
+                    <table class="w-full border-collapse text-[13px]">
+                        <thead>
+                            <tr>
+                                <th
+                                    v-for="header in [
+                                        'Service',
+                                        'Event',
+                                        'Title',
+                                        'Quality',
+                                        'When',
+                                    ]"
+                                    :key="header"
+                                    class="border-b border-border bg-card px-3 py-2 text-left text-[11.5px] font-medium tracking-[0.05em] text-muted-foreground uppercase"
                                 >
-                                    {{ row.subtitle }}
-                                </div>
-                                <div
-                                    v-if="row.source_title"
-                                    class="font-mono-tabular mt-1 text-[11px] break-all text-fg-subtle"
-                                >
-                                    {{ row.source_title }}
-                                </div>
-                            </td>
-                            <td class="px-3 py-2.5 text-[12px]">
-                                {{ row.quality ?? '—' }}
-                            </td>
-                            <td
-                                class="font-mono-tabular px-3 py-2.5 text-[12px] text-muted-foreground"
+                                    {{ header }}
+                                </th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr
+                                v-for="row in filteredHistoryRows"
+                                :key="`${row.service}-${row.id}`"
+                                class="border-b border-border last:border-b-0 hover:bg-bg-hover"
                             >
-                                {{ formatDate(row.date) }}
-                            </td>
-                        </tr>
-                    </tbody>
-                </table>
+                                <td class="px-3 py-2.5">
+                                    <SvcChip :id="row.service" />
+                                </td>
+                                <td class="px-3 py-2.5">
+                                    <Pill
+                                        :variant="eventVariant(row.event_type)"
+                                    >
+                                        {{ eventLabel(row.event_type) }}
+                                    </Pill>
+                                </td>
+                                <td class="px-3 py-2.5">
+                                    <div class="font-medium">
+                                        {{ row.title ?? '—' }}
+                                    </div>
+                                    <div
+                                        v-if="row.subtitle"
+                                        class="text-[11.5px] text-muted-foreground"
+                                    >
+                                        {{ row.subtitle }}
+                                    </div>
+                                    <div
+                                        v-if="row.source_title"
+                                        class="font-mono-tabular mt-1 text-[11px] break-all text-fg-subtle"
+                                    >
+                                        {{ row.source_title }}
+                                    </div>
+                                </td>
+                                <td class="px-3 py-2.5 text-[12px]">
+                                    {{ row.quality ?? '—' }}
+                                </td>
+                                <td
+                                    class="font-mono-tabular px-3 py-2.5 text-[12px] text-muted-foreground"
+                                >
+                                    {{ formatDate(row.date) }}
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
             </div>
         </template>
 

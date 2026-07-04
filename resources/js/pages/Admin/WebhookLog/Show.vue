@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { Head, Link } from '@inertiajs/vue3';
-import { ArrowLeft } from 'lucide-vue-next';
+import { ArrowLeft } from '@lucide/vue';
 import { computed } from 'vue';
 import WebhookLogController from '@/actions/App/Http/Controllers/Admin/WebhookLogController';
 import { Pill, SvcChip } from '@/components/mm';
@@ -133,8 +133,7 @@ function formatTime(iso: string | null): string {
             </div>
             <pre
                 class="max-h-[60vh] overflow-auto p-4 font-mono text-[12px] leading-relaxed text-foreground"
-                >{{ payloadJson }}</pre
-            >
+                >{{ payloadJson }}</pre>
         </div>
     </div>
 </template>

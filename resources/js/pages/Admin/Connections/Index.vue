@@ -9,7 +9,7 @@ import {
     Power,
     RefreshCw,
     Trash2,
-} from 'lucide-vue-next';
+} from '@lucide/vue';
 import { computed, onMounted } from 'vue';
 import ServiceConnectionController from '@/actions/App/Http/Controllers/Admin/ServiceConnectionController';
 import { Pill, StatusPill, SvcChip } from '@/components/mm';
@@ -195,167 +195,183 @@ function checkVersion(connection: Connection) {
 
         <!-- Connections table -->
         <div class="overflow-hidden rounded-xl border border-border bg-card">
-            <table class="w-full border-collapse text-[13px]">
-                <thead>
-                    <tr>
-                        <th
-                            v-for="h in [
-                                'Service',
-                                'URL',
-                                'Health',
-                                'Last seen',
-                                'API key',
-                                '',
-                            ]"
-                            :key="h"
-                            class="border-b border-border bg-card px-3 py-2 text-left text-[11.5px] font-medium tracking-[0.05em] text-muted-foreground uppercase"
+            <div class="overflow-x-auto">
+                <table class="w-full border-collapse text-[13px]">
+                    <thead>
+                        <tr>
+                            <th
+                                v-for="h in [
+                                    'Service',
+                                    'URL',
+                                    'Health',
+                                    'Last seen',
+                                    'API key',
+                                    '',
+                                ]"
+                                :key="h"
+                                class="border-b border-border bg-card px-3 py-2 text-left text-[11.5px] font-medium tracking-[0.05em] text-muted-foreground uppercase"
+                            >
+                                {{ h }}
+                            </th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr
+                            v-for="connection in liveConnections"
+                            :key="connection.id"
+                            class="border-b border-border last:border-b-0 hover:bg-bg-hover"
                         >
-                            {{ h }}
-                        </th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <tr
-                        v-for="connection in liveConnections"
-                        :key="connection.id"
-                        class="border-b border-border last:border-b-0 hover:bg-bg-hover"
-                    >
-                        <td class="px-3 py-2.5">
-                            <span class="flex items-center gap-2.5">
-                                <SvcChip
-                                    :id="svcId(connection.type)"
-                                    :label="connection.name"
-                                />
-                                <span
-                                    class="font-mono-tabular text-[11px] text-fg-subtle"
-                                    >v{{ connection.version ?? '—' }}</span
-                                >
+                            <td class="px-3 py-2.5">
+                                <span class="flex items-center gap-2.5">
+                                    <SvcChip
+                                        :id="svcId(connection.type)"
+                                        :label="connection.name"
+                                    />
+                                    <span
+                                        class="font-mono-tabular text-[11px] text-fg-subtle"
+                                        >v{{ connection.version ?? '—' }}</span
+                                    >
+                                    <Pill
+                                        v-if="connection.update_available"
+                                        variant="warn"
+                                        class="text-[10px]"
+                                    >
+                                        <ArrowUp class="size-2.5" />{{
+                                            connection.latest_version ??
+                                            'update'
+                                        }}
+                                    </Pill>
+                                </span>
+                            </td>
+                            <td
+                                class="font-mono-tabular px-3 py-2.5 text-[12px] text-muted-foreground"
+                            >
+                                {{ connection.url }}
+                            </td>
+                            <td class="px-3 py-2.5">
+                                <StatusPill :status="statusKey(connection)" />
+                            </td>
+                            <td
+                                class="font-mono-tabular px-3 py-2.5 text-[11.5px] text-fg-subtle"
+                            >
+                                {{ connection.last_seen_human ?? 'never' }}
+                            </td>
+                            <td class="px-3 py-2.5">
                                 <Pill
-                                    v-if="connection.update_available"
-                                    variant="warn"
-                                    class="text-[10px]"
+                                    :variant="
+                                        connection.api_key_set ? 'ok' : 'warn'
+                                    "
+                                    :dot="connection.api_key_set"
                                 >
-                                    <ArrowUp class="size-2.5" />{{
-                                        connection.latest_version ?? 'update'
+                                    {{
+                                        connection.api_key_set
+                                            ? 'Set'
+                                            : 'Missing'
                                     }}
                                 </Pill>
-                            </span>
-                        </td>
-                        <td
-                            class="font-mono-tabular px-3 py-2.5 text-[12px] text-muted-foreground"
-                        >
-                            {{ connection.url }}
-                        </td>
-                        <td class="px-3 py-2.5">
-                            <StatusPill :status="statusKey(connection)" />
-                        </td>
-                        <td
-                            class="font-mono-tabular px-3 py-2.5 text-[11.5px] text-fg-subtle"
-                        >
-                            {{ connection.last_seen_human ?? 'never' }}
-                        </td>
-                        <td class="px-3 py-2.5">
-                            <Pill
-                                :variant="
-                                    connection.api_key_set ? 'ok' : 'warn'
-                                "
-                                :dot="connection.api_key_set"
-                            >
-                                {{ connection.api_key_set ? 'Set' : 'Missing' }}
-                            </Pill>
-                        </td>
-                        <td class="px-3 py-2.5 text-right">
-                            <div class="inline-flex items-center gap-1">
-                                <Link
-                                    :href="
-                                        ServiceConnectionController.edit.url(
-                                            connection.id,
-                                        )
-                                    "
-                                >
+                            </td>
+                            <td class="px-3 py-2.5 text-right">
+                                <div class="inline-flex items-center gap-1">
+                                    <Link
+                                        :href="
+                                            ServiceConnectionController.edit.url(
+                                                connection.id,
+                                            )
+                                        "
+                                    >
+                                        <Button
+                                            variant="ghost"
+                                            size="sm"
+                                            class="h-7 px-2 text-xs"
+                                        >
+                                            <Pencil class="size-3.5" />Edit
+                                        </Button>
+                                    </Link>
                                     <Button
                                         variant="ghost"
                                         size="sm"
                                         class="h-7 px-2 text-xs"
+                                        @click="checkHealth(connection)"
                                     >
-                                        <Pencil class="size-3.5" />Edit
+                                        Test
                                     </Button>
-                                </Link>
-                                <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    class="h-7 px-2 text-xs"
-                                    @click="checkHealth(connection)"
-                                >
-                                    Test
-                                </Button>
-                                <DropdownMenu>
-                                    <DropdownMenuTrigger as-child>
-                                        <Button
-                                            variant="ghost"
-                                            size="sm"
-                                            class="size-7 p-0"
+                                    <DropdownMenu>
+                                        <DropdownMenuTrigger as-child>
+                                            <Button
+                                                variant="ghost"
+                                                size="sm"
+                                                class="size-7 p-0"
+                                            >
+                                                <MoreHorizontal
+                                                    class="size-3.5"
+                                                />
+                                            </Button>
+                                        </DropdownMenuTrigger>
+                                        <DropdownMenuContent
+                                            align="end"
+                                            class="w-48"
                                         >
-                                            <MoreHorizontal class="size-3.5" />
-                                        </Button>
-                                    </DropdownMenuTrigger>
-                                    <DropdownMenuContent
-                                        align="end"
-                                        class="w-48"
-                                    >
-                                        <DropdownMenuLabel
-                                            >Jobs</DropdownMenuLabel
-                                        >
-                                        <DropdownMenuSeparator />
-                                        <DropdownMenuItem
-                                            @click="checkHealth(connection)"
-                                        >
-                                            <HeartPulse class="mr-2 size-4" />
-                                            Check health
-                                        </DropdownMenuItem>
-                                        <DropdownMenuItem
-                                            @click="checkVersion(connection)"
-                                        >
-                                            <RefreshCw class="mr-2 size-4" />
-                                            Check version
-                                        </DropdownMenuItem>
-                                        <DropdownMenuSeparator />
-                                        <DropdownMenuItem
-                                            @click="
-                                                toggleConnection(connection)
-                                            "
-                                        >
-                                            <Power class="mr-2 size-4" />
-                                            {{
-                                                connection.is_active
-                                                    ? 'Disable'
-                                                    : 'Enable'
-                                            }}
-                                        </DropdownMenuItem>
-                                        <DropdownMenuItem
-                                            class="text-destructive focus:text-destructive"
-                                            @click="
-                                                deleteConnection(connection)
-                                            "
-                                        >
-                                            <Trash2 class="mr-2 size-4" />
-                                            Delete
-                                        </DropdownMenuItem>
-                                    </DropdownMenuContent>
-                                </DropdownMenu>
-                            </div>
-                        </td>
-                    </tr>
-                    <tr v-if="liveConnections.length === 0">
-                        <td
-                            colspan="6"
-                            class="px-3 py-8 text-center text-sm text-fg-subtle"
-                        >
-                            No connections configured. Add one to get started.
-                        </td>
-                    </tr>
-                </tbody>
-            </table>
+                                            <DropdownMenuLabel
+                                                >Jobs</DropdownMenuLabel
+                                            >
+                                            <DropdownMenuSeparator />
+                                            <DropdownMenuItem
+                                                @click="checkHealth(connection)"
+                                            >
+                                                <HeartPulse
+                                                    class="mr-2 size-4"
+                                                />
+                                                Check health
+                                            </DropdownMenuItem>
+                                            <DropdownMenuItem
+                                                @click="
+                                                    checkVersion(connection)
+                                                "
+                                            >
+                                                <RefreshCw
+                                                    class="mr-2 size-4"
+                                                />
+                                                Check version
+                                            </DropdownMenuItem>
+                                            <DropdownMenuSeparator />
+                                            <DropdownMenuItem
+                                                @click="
+                                                    toggleConnection(connection)
+                                                "
+                                            >
+                                                <Power class="mr-2 size-4" />
+                                                {{
+                                                    connection.is_active
+                                                        ? 'Disable'
+                                                        : 'Enable'
+                                                }}
+                                            </DropdownMenuItem>
+                                            <DropdownMenuItem
+                                                class="text-destructive focus:text-destructive"
+                                                @click="
+                                                    deleteConnection(connection)
+                                                "
+                                            >
+                                                <Trash2 class="mr-2 size-4" />
+                                                Delete
+                                            </DropdownMenuItem>
+                                        </DropdownMenuContent>
+                                    </DropdownMenu>
+                                </div>
+                            </td>
+                        </tr>
+                        <tr v-if="liveConnections.length === 0">
+                            <td
+                                colspan="6"
+                                class="px-3 py-8 text-center text-sm text-fg-subtle"
+                            >
+                                No connections configured. Add one to get
+                                started.
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
         </div>
     </div>
 </template>

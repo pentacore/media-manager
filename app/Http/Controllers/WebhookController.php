@@ -64,6 +64,7 @@ class WebhookController extends Controller
             ServiceType::Sonarr,
             ServiceType::Radarr,
             ServiceType::Prowlarr,
+            ServiceType::Whisparr,
             ServiceType::SABnzbd => 'eventType',
         };
 

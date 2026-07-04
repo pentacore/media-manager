@@ -8,10 +8,16 @@ import {
     RefreshCcw,
     Server,
     X,
-} from 'lucide-vue-next';
-import { computed, onMounted, onUnmounted, ref } from 'vue';
+} from '@lucide/vue';
+import { computed, onMounted, ref } from 'vue';
 import ServiceHealthController from '@/actions/App/Http/Controllers/Monitoring/ServiceHealthController';
-import { Pill, StatCard, StatusPill, SvcChip } from '@/components/mm';
+import {
+    Pill,
+    StatCard,
+    StatusPill,
+    SvcChip,
+    TimeStamp,
+} from '@/components/mm';
 import { Button } from '@/components/ui/button';
 import { useServiceHealth } from '@/composables/useServiceHealth';
 import { dashboard } from '@/routes';
@@ -181,54 +187,6 @@ function formatSize(bytes: number | null): string {
     const value = bytes / Math.pow(1024, i);
 
     return `${value.toFixed(1)} ${units[i]}`;
-}
-
-// Reactive "now" so relative time labels tick without waiting for a
-// websocket event. The 30s cadence matches the granularity of the
-// labels we render (just now / Nm ago / Nh ago) so we never refresh
-// for nothing.
-const nowTick = ref(Date.now());
-let nowTickTimer: ReturnType<typeof setInterval> | null = null;
-
-onMounted(() => {
-    nowTickTimer = setInterval(() => {
-        nowTick.value = Date.now();
-    }, 30_000);
-});
-
-onUnmounted(() => {
-    if (nowTickTimer !== null) {
-        clearInterval(nowTickTimer);
-        nowTickTimer = null;
-    }
-});
-
-function formatTime(iso: string | null): string {
-    if (!iso) {
-        return 'never';
-    }
-
-    // Read nowTick so Vue invalidates this expression when the timer
-    // fires. The actual value comes from Date.now() — the tick is just
-    // there to mark the dependency.
-    const ms = nowTick.value - new Date(iso).getTime();
-    const m = Math.floor(ms / 60_000);
-
-    if (m < 1) {
-        return 'just now';
-    }
-
-    if (m < 60) {
-        return `${m}m ago`;
-    }
-
-    const h = Math.floor(m / 60);
-
-    if (h < 24) {
-        return `${h}h ago`;
-    }
-
-    return `${Math.floor(h / 24)}d ago`;
 }
 
 function svcId(type: string): string {
@@ -470,7 +428,11 @@ function barHeight(bucket: MetricBucket): number {
                             <div
                                 class="font-mono-tabular text-[10.5px] text-fg-subtle"
                             >
-                                seen {{ formatTime(connection.last_seen_at) }}
+                                seen
+                                <TimeStamp
+                                    :iso="connection.last_seen_at"
+                                    live
+                                />
                             </div>
                         </div>
 

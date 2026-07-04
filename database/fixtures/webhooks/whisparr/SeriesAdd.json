@@ -1,0 +1,4 @@
+{
+  "eventType": "SeriesAdd",
+  "series": { "id": 5, "title": "Sample Series", "tvdbId": 6789, "path": "/data/series" }
+}

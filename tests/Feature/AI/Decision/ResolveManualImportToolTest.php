@@ -24,6 +24,9 @@ afterEach(function (): void {
     app()->forgetInstance(DecisionRunContext::class);
 });
 
+/**
+ * @return array<string, mixed>
+ */
 function cleanCandidate(): array
 {
     return [
@@ -83,7 +86,7 @@ test('a fully-mapped import follows the auto-execute rule', function (): void {
     expect($result['requires_approval'])->toBeFalse();
 });
 
-test('a mapped file with a rejection still auto-imports (rejection text is the agent\'s call, not the rail)', function (): void {
+test("a mapped file with a rejection still auto-imports (rejection text is the agent's call, not the rail)", function (): void {
     ActionTypeConfig::factory()->create(['type' => 'resolve_manual_import', 'requires_approval' => false, 'is_enabled' => true]);
     // "matched by series id" — fully mapped, so the rail does not force approval.
     fakeCandidates([array_replace(cleanCandidate(), [

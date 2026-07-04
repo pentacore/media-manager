@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { Form, Head, router, usePage } from '@inertiajs/vue3';
-import { Plus, Upload } from 'lucide-vue-next';
+import { Plus, Upload } from '@lucide/vue';
 import { computed, ref } from 'vue';
 import EmbyLinkController from '@/actions/App/Http/Controllers/Admin/EmbyLinkController';
 import UserController from '@/actions/App/Http/Controllers/Admin/UserController';
@@ -347,136 +347,145 @@ function importFromEmby() {
 
         <!-- Users table -->
         <div class="overflow-hidden rounded-xl border border-border bg-card">
-            <table class="w-full border-collapse text-[13px]">
-                <thead>
-                    <tr>
-                        <th
-                            v-for="h in [
-                                'User',
-                                'Role',
-                                'Auth',
-                                'Emby link',
-                                'Joined',
-                                '',
-                            ]"
-                            :key="h"
-                            class="border-b border-border bg-card px-3 py-2 text-left text-[11.5px] font-medium tracking-[0.05em] text-muted-foreground uppercase"
+            <div class="overflow-x-auto">
+                <table class="w-full border-collapse text-[13px]">
+                    <thead>
+                        <tr>
+                            <th
+                                v-for="h in [
+                                    'User',
+                                    'Role',
+                                    'Auth',
+                                    'Emby link',
+                                    'Joined',
+                                    '',
+                                ]"
+                                :key="h"
+                                class="border-b border-border bg-card px-3 py-2 text-left text-[11.5px] font-medium tracking-[0.05em] text-muted-foreground uppercase"
+                            >
+                                {{ h }}
+                            </th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr
+                            v-for="user in users"
+                            :key="user.id"
+                            class="border-b border-border last:border-b-0 hover:bg-bg-hover"
                         >
-                            {{ h }}
-                        </th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <tr
-                        v-for="user in users"
-                        :key="user.id"
-                        class="border-b border-border last:border-b-0 hover:bg-bg-hover"
-                    >
-                        <td class="px-3 py-2.5">
-                            <span class="flex items-center gap-2.5">
-                                <InitialsAvatar :name="user.name" :size="24" />
-                                <span>
-                                    <div class="font-medium">
-                                        {{ user.name }}
-                                    </div>
-                                    <div
-                                        class="text-[11.5px] text-muted-foreground"
-                                    >
-                                        {{ user.email }}
-                                    </div>
+                            <td class="px-3 py-2.5">
+                                <span class="flex items-center gap-2.5">
+                                    <InitialsAvatar
+                                        :name="user.name"
+                                        :size="24"
+                                    />
+                                    <span>
+                                        <div class="font-medium">
+                                            {{ user.name }}
+                                        </div>
+                                        <div
+                                            class="text-[11.5px] text-muted-foreground"
+                                        >
+                                            {{ user.email }}
+                                        </div>
+                                    </span>
                                 </span>
-                            </span>
-                        </td>
-                        <td class="px-3 py-2.5">
-                            <Select
-                                v-if="user.id !== currentUserId"
-                                :default-value="roleValue(user.role)"
-                                @update:model-value="
-                                    (val) =>
-                                        typeof val === 'string' &&
-                                        updateRole(user, val)
-                                "
+                            </td>
+                            <td class="px-3 py-2.5">
+                                <Select
+                                    v-if="user.id !== currentUserId"
+                                    :default-value="roleValue(user.role)"
+                                    @update:model-value="
+                                        (val) =>
+                                            typeof val === 'string' &&
+                                            updateRole(user, val)
+                                    "
+                                >
+                                    <SelectTrigger class="h-7 w-28 text-xs">
+                                        <SelectValue />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem
+                                            v-for="role in roles"
+                                            :key="role.value"
+                                            :value="role.value"
+                                        >
+                                            {{ role.label }}
+                                        </SelectItem>
+                                    </SelectContent>
+                                </Select>
+                                <Pill
+                                    v-else
+                                    :variant="rolePillVariant(user.role)"
+                                    >{{ roleLabel(user.role) }}</Pill
+                                >
+                            </td>
+                            <td
+                                class="font-mono-tabular px-3 py-2.5 text-[11.5px] text-muted-foreground"
                             >
-                                <SelectTrigger class="h-7 w-28 text-xs">
-                                    <SelectValue />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    <SelectItem
-                                        v-for="role in roles"
-                                        :key="role.value"
-                                        :value="role.value"
+                                {{ authMethod(user.sso_provider) }}
+                            </td>
+                            <td class="px-3 py-2.5">
+                                <span
+                                    v-if="user.emby_username"
+                                    class="inline-flex items-center gap-1.5"
+                                >
+                                    <SvcChip id="emby" />
+                                    <span
+                                        class="font-mono-tabular text-[11.5px]"
                                     >
-                                        {{ role.label }}
-                                    </SelectItem>
-                                </SelectContent>
-                            </Select>
-                            <Pill
-                                v-else
-                                :variant="rolePillVariant(user.role)"
-                                >{{ roleLabel(user.role) }}</Pill
-                            >
-                        </td>
-                        <td
-                            class="font-mono-tabular px-3 py-2.5 text-[11.5px] text-muted-foreground"
-                        >
-                            {{ authMethod(user.sso_provider) }}
-                        </td>
-                        <td class="px-3 py-2.5">
-                            <span
-                                v-if="user.emby_username"
-                                class="inline-flex items-center gap-1.5"
-                            >
-                                <SvcChip id="emby" />
-                                <span class="font-mono-tabular text-[11.5px]">
-                                    {{ user.emby_username }}
+                                        {{ user.emby_username }}
+                                    </span>
+                                    <button
+                                        type="button"
+                                        class="text-[11px] text-muted-foreground underline-offset-2 hover:text-destructive hover:underline"
+                                        @click="unlinkEmby(user)"
+                                    >
+                                        unlink
+                                    </button>
                                 </span>
                                 <button
+                                    v-else
                                     type="button"
-                                    class="text-[11px] text-muted-foreground underline-offset-2 hover:text-destructive hover:underline"
-                                    @click="unlinkEmby(user)"
+                                    class="text-[11.5px] text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
+                                    @click="openLinkDialog(user)"
                                 >
-                                    unlink
+                                    Link Emby
                                 </button>
-                            </span>
-                            <button
-                                v-else
-                                type="button"
-                                class="text-[11.5px] text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
-                                @click="openLinkDialog(user)"
+                            </td>
+                            <td
+                                class="font-mono-tabular px-3 py-2.5 text-[11.5px] text-fg-subtle"
                             >
-                                Link Emby
-                            </button>
-                        </td>
-                        <td
-                            class="font-mono-tabular px-3 py-2.5 text-[11.5px] text-fg-subtle"
-                        >
-                            {{ user.created_at }}
-                        </td>
-                        <td class="px-3 py-2.5 text-right">
-                            <Button
-                                v-if="user.id !== currentUserId"
-                                variant="ghost"
-                                size="sm"
-                                class="h-7 px-2 text-xs text-destructive hover:text-destructive"
-                                @click="deleteUser(user)"
+                                {{ user.created_at }}
+                            </td>
+                            <td class="px-3 py-2.5 text-right">
+                                <Button
+                                    v-if="user.id !== currentUserId"
+                                    variant="ghost"
+                                    size="sm"
+                                    class="h-7 px-2 text-xs text-destructive hover:text-destructive"
+                                    @click="deleteUser(user)"
+                                >
+                                    Delete
+                                </Button>
+                                <span
+                                    v-else
+                                    class="text-[11.5px] text-fg-subtle"
+                                    >You</span
+                                >
+                            </td>
+                        </tr>
+                        <tr v-if="users.length === 0">
+                            <td
+                                colspan="6"
+                                class="px-3 py-8 text-center text-sm text-fg-subtle"
                             >
-                                Delete
-                            </Button>
-                            <span v-else class="text-[11.5px] text-fg-subtle"
-                                >You</span
-                            >
-                        </td>
-                    </tr>
-                    <tr v-if="users.length === 0">
-                        <td
-                            colspan="6"
-                            class="px-3 py-8 text-center text-sm text-fg-subtle"
-                        >
-                            No users yet.
-                        </td>
-                    </tr>
-                </tbody>
-            </table>
+                                No users yet.
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
         </div>
 
         <Dialog

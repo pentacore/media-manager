@@ -14,7 +14,7 @@ import {
     Trash2,
     Tv,
     X,
-} from 'lucide-vue-next';
+} from '@lucide/vue';
 import { computed, onMounted, ref } from 'vue';
 import RequestController from '@/actions/App/Http/Controllers/Media/RequestController';
 import {
@@ -23,6 +23,7 @@ import {
     Poster,
     StatusPill,
     SvcChip,
+    TimeStamp,
 } from '@/components/mm';
 import { Button } from '@/components/ui/button';
 import {
@@ -262,31 +263,6 @@ function mediaTypeLabel(type: string | null): string {
     return type ?? 'Unknown';
 }
 
-function formatTime(iso: string | null): string {
-    if (!iso) {
-        return '—';
-    }
-
-    const ms = Date.now() - new Date(iso).getTime();
-    const m = Math.floor(ms / 60_000);
-
-    if (m < 1) {
-        return 'just now';
-    }
-
-    if (m < 60) {
-        return `${m}m ago`;
-    }
-
-    const h = Math.floor(m / 60);
-
-    if (h < 24) {
-        return `${h}h ago`;
-    }
-
-    return `${Math.floor(h / 24)}d ago`;
-}
-
 function seerrUrl(req: SeerrRequest): string | null {
     if (req.tmdb_id === null) {
         return null;
@@ -385,8 +361,7 @@ function openEdit(req: SeerrRequest): void {
     })
         .then(async (response) => {
             const body = (await response.json()) as
-                | EditOptions
-                | { error: string };
+                EditOptions | { error: string };
 
             if (!response.ok) {
                 editError.value =
@@ -682,9 +657,10 @@ const rangeText = computed(() => {
                         <InitialsAvatar :name="req.requester" :size="20" />
                         <span class="text-[12px]">{{ req.requester }}</span>
                         <span class="text-[12px] text-fg-subtle">·</span>
-                        <span class="text-[12px] text-fg-subtle">{{
-                            formatTime(req.created_at)
-                        }}</span>
+                        <TimeStamp
+                            :iso="req.created_at"
+                            class="text-[12px] text-fg-subtle"
+                        />
                     </div>
 
                     <div class="mt-auto flex items-center gap-2 pt-1.5">

@@ -16,6 +16,7 @@ enum ServiceType: string
     case Seerr = 'seerr';
     case Prowlarr = 'prowlarr';
     case SABnzbd = 'sabnzbd';
+    case Whisparr = 'whisparr';
 
     public function label(): string
     {
@@ -26,13 +27,14 @@ enum ServiceType: string
             self::Seerr => 'Seerr',
             self::Prowlarr => 'Prowlarr',
             self::SABnzbd => 'SABnzbd',
+            self::Whisparr => 'Whisparr',
         };
     }
 
     public function supportsWebhookConfiguration(): bool
     {
         return match ($this) {
-            self::Sonarr, self::Radarr, self::Prowlarr => true,
+            self::Sonarr, self::Radarr, self::Prowlarr, self::Whisparr => true,
             default => false,
         };
     }

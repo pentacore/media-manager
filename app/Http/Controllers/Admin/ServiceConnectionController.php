@@ -44,7 +44,10 @@ class ServiceConnectionController extends Controller
 
     public function store(ServiceConnectionStoreRequest $serviceConnectionStoreRequest): RedirectResponse
     {
-        ServiceConnection::create($serviceConnectionStoreRequest->validated());
+        $validated = $serviceConnectionStoreRequest->validated();
+        $validated = $this->mergeWhisparrVersion($validated);
+
+        ServiceConnection::create($validated);
 
         Inertia::flash('toast', ['type' => 'success', 'message' => __('Connection created.')]);
 
@@ -81,6 +84,7 @@ class ServiceConnectionController extends Controller
                 'sabnzbd_webhook_script' => $serviceConnection->type === ServiceType::SABnzbd
                     ? $this->sabnzbdNotificationScriptFor($serviceConnection)
                     : null,
+                'whisparr_version' => $serviceConnection->whisparrVersion()->value,
             ],
             'serviceTypes' => ServiceType::mapForSelect(labelKey: 'label'),
             'indexers' => $serviceConnection->type === ServiceType::Prowlarr
@@ -90,6 +94,29 @@ class ServiceConnectionController extends Controller
                 ? Inertia::defer(fn (): array => $this->loadAvailableDiskPaths($serviceConnection))
                 : [],
         ]);
+    }
+
+    /**
+     * Fold the flat `whisparr_version` field into the settings JSON. Leaves
+     * non-Whisparr payloads untouched.
+     *
+     * @param  array<string, mixed>  $validated
+     * @return array<string, mixed>
+     */
+    private function mergeWhisparrVersion(array $validated, ?ServiceConnection $serviceConnection = null): array
+    {
+        $version = $validated['whisparr_version'] ?? null;
+        unset($validated['whisparr_version']);
+
+        if (! is_string($version) || $version === '') {
+            return $validated;
+        }
+
+        $existingSettings = $validated['settings'] ?? $serviceConnection?->settings ?? [];
+        $existingSettings['whisparr_version'] = $version;
+        $validated['settings'] = $existingSettings;
+
+        return $validated;
     }
 
     /**
@@ -267,6 +294,8 @@ class ServiceConnectionController extends Controller
             ));
             $validated['settings'] = $existingSettings;
         }
+
+        $validated = $this->mergeWhisparrVersion($validated, $serviceConnection);
 
         $serviceConnection->update($validated);
 

@@ -26,8 +26,8 @@ test('tool list includes ProposeActionTool and read-only context tools', functio
     expect($shortNames)->toContain('ResolveManualImportTool');
     expect($shortNames)->toContain('RemoveStuckDownloadTool');
     expect($shortNames)->toContain('GetServiceStatusTool');
-    expect($shortNames)->toContain('GetSeriesTool');
-    expect($shortNames)->toContain('GetMovieTool');
+    expect($shortNames)->toContain('SearchMediaTool');
+    expect($shortNames)->toContain('GetMediaTool');
 });
 
 test('does not expose direct destructive tools — all mutations go through ProposeActionTool', function (): void {
@@ -35,8 +35,10 @@ test('does not expose direct destructive tools — all mutations go through Prop
         ->map(fn ($tool): string => class_basename($tool))
         ->all();
 
-    expect($shortNames)->not->toContain('DeleteSeriesTool');
-    expect($shortNames)->not->toContain('DeleteMovieTool');
+    expect($shortNames)->not->toContain('AddMediaTool');
+    expect($shortNames)->not->toContain('DeleteMediaTool');
+    expect($shortNames)->not->toContain('MonitorMediaTool');
+    expect($shortNames)->not->toContain('SetMediaQualityProfileTool');
 });
 
 test('model() reads from DecisionAgentSettings', function (): void {

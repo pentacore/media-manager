@@ -9,26 +9,23 @@ use App\Models\ActionRequest;
 use App\Models\ServiceConnection;
 use App\Models\WebhookEvent;
 use Carbon\CarbonInterface;
+use Illuminate\Console\Attributes\Description;
+use Illuminate\Console\Attributes\Signature;
 use Illuminate\Console\Command;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\Date;
 use Illuminate\Support\Facades\Http;
-use Override;
 
-class SimulateWebhook extends Command
-{
-    #[Override]
-    protected $signature = 'webhook:simulate
-        {service? : Service type (emby, sonarr, radarr, seerr)}
+#[Description('Fire a realistic webhook fixture at our own webhook endpoint for local testing.')]
+#[Signature('webhook:simulate
+        {service? : Service type (emby, sonarr, radarr, seerr, whisparr)}
         {event? : Event name, e.g. playback.start}
         {--connection= : Service connection id (defaults to first active of that service type)}
         {--set=* : Override a payload key, e.g. --set User.Id=abc123}
         {--dry-run : Print the payload without firing}
-        {--list : List available fixtures}';
-
-    #[Override]
-    protected $description = 'Fire a realistic webhook fixture at our own webhook endpoint for local testing.';
-
+        {--list : List available fixtures}')]
+class SimulateWebhook extends Command
+{
     public function handle(): int
     {
         if ($this->option('list')) {

@@ -2,21 +2,23 @@
 
 declare(strict_types=1);
 
+use App\Console\Commands\Ai\RefreshAiPrices;
 use App\Console\Commands\BroadcastDashboardStats;
-use Illuminate\Foundation\Inspiring;
-use Illuminate\Support\Facades\Artisan;
+use App\Console\Commands\CheckServiceHealth;
+use App\Console\Commands\CheckServiceVersions;
+use App\Console\Commands\PollSabnzbdHistory;
+use App\Console\Commands\PruneAiProposedWorkflows;
+use App\Console\Commands\RefreshInterventionCount;
+use App\Console\Commands\RefreshSabnzbdDownloadCounts;
+use App\Console\Commands\WarmServiceCaches;
+use App\Jobs\ReconcileSearchIndex;
 use Illuminate\Support\Facades\Schedule;
 
-Artisan::command('inspire', function (): void {
-    $this->comment(Inspiring::quote());
-})->purpose('Display an inspiring quote');
-
-Schedule::command('services:check-health')
+Schedule::command(CheckServiceHealth::class)
     ->everyFiveMinutes()
-    ->withoutOverlapping()
-    ->runInBackground();
+    ->withoutOverlapping();
 
-Schedule::command('services:check-versions')
+Schedule::command(CheckServiceVersions::class)
     ->daily()
     ->withoutOverlapping();
 
@@ -24,25 +26,31 @@ Schedule::command(BroadcastDashboardStats::class)
     ->everyFiveMinutes()
     ->withoutOverlapping();
 
-Schedule::command('ai:prune-proposed-workflows')
+Schedule::command(PruneAiProposedWorkflows::class)
     ->daily()
     ->withoutOverlapping();
 
-Schedule::command('ai:refresh-prices')
+Schedule::command(RefreshAiPrices::class)
     ->weekly()
     ->withoutOverlapping();
 
-Schedule::command('sabnzbd:poll-history')
+Schedule::command(PollSabnzbdHistory::class)
     ->everyFiveMinutes()
+    ->withoutOverlapping();
+
+Schedule::command(RefreshInterventionCount::class)
+    ->everyFiveMinutes()
+    ->withoutOverlapping();
+
+Schedule::command(RefreshSabnzbdDownloadCounts::class)
+    ->everyFiveMinutes()
+    ->withoutOverlapping();
+
+Schedule::command(WarmServiceCaches::class)
+    ->everyMinute()
     ->withoutOverlapping()
     ->runInBackground();
 
-Schedule::command('library:refresh-intervention-count')
-    ->everyFiveMinutes()
-    ->withoutOverlapping()
-    ->runInBackground();
-
-Schedule::command('sabnzbd:refresh-download-counts')
-    ->everyFiveMinutes()
-    ->withoutOverlapping()
-    ->runInBackground();
+Schedule::job(new ReconcileSearchIndex)
+    ->dailyAt('03:30')
+    ->withoutOverlapping();

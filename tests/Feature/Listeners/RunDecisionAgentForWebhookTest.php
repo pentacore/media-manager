@@ -26,24 +26,22 @@ function sonarrWebhookEvent(string $eventType): WebhookEvent
     ]);
 }
 
-function handleProcessed(WebhookEvent $event): void
+function handleProcessed(WebhookEvent $webhookEvent): void
 {
-    resolve(RunDecisionAgentForWebhook::class)->handle(new WebhookEventProcessed($event));
+    resolve(RunDecisionAgentForWebhook::class)->handle(new WebhookEventProcessed($webhookEvent));
 }
 
 test('dispatches RunDecisionAgent for an enabled, allowlisted event', function (): void {
-    $settings = resolve(DecisionAgentSettings::class);
-    $settings->setEnabled(true);
-    $settings->setEventAllowlist(['sonarr:ManualInteractionRequired']);
+    $decisionAgentSettings = resolve(DecisionAgentSettings::class);
+    $decisionAgentSettings->setEnabled(true);
+    $decisionAgentSettings->setEventAllowlist(['sonarr:ManualInteractionRequired']);
 
-    $event = sonarrWebhookEvent('ManualInteractionRequired');
-    handleProcessed($event);
+    $webhookEvent = sonarrWebhookEvent('ManualInteractionRequired');
+    handleProcessed($webhookEvent);
 
-    Queue::assertPushed(RunDecisionAgent::class, function (RunDecisionAgent $job) use ($event): bool {
-        return $job->webhookEventId === $event->id
-            && $job->service === 'sonarr'
-            && $job->eventType === 'ManualInteractionRequired';
-    });
+    Queue::assertPushed(RunDecisionAgent::class, fn (RunDecisionAgent $runDecisionAgent): bool => $runDecisionAgent->webhookEventId === $webhookEvent->id
+        && $runDecisionAgent->service === 'sonarr'
+        && $runDecisionAgent->eventType === 'ManualInteractionRequired');
 });
 
 test('does nothing when the agent is disabled', function (): void {
@@ -55,9 +53,9 @@ test('does nothing when the agent is disabled', function (): void {
 });
 
 test('does nothing for an event not on the allowlist', function (): void {
-    $settings = resolve(DecisionAgentSettings::class);
-    $settings->setEnabled(true);
-    $settings->setEventAllowlist(['sonarr:ManualInteractionRequired']);
+    $decisionAgentSettings = resolve(DecisionAgentSettings::class);
+    $decisionAgentSettings->setEnabled(true);
+    $decisionAgentSettings->setEventAllowlist(['sonarr:ManualInteractionRequired']);
 
     handleProcessed(sonarrWebhookEvent('Download'));
 
@@ -66,9 +64,9 @@ test('does nothing for an event not on the allowlist', function (): void {
 
 test('does nothing when the AI feature is disabled', function (): void {
     config(['mediamanager.ai.enabled' => false]);
-    $settings = resolve(DecisionAgentSettings::class);
-    $settings->setEnabled(true);
-    $settings->setEventAllowlist(['sonarr:ManualInteractionRequired']);
+    $decisionAgentSettings = resolve(DecisionAgentSettings::class);
+    $decisionAgentSettings->setEnabled(true);
+    $decisionAgentSettings->setEventAllowlist(['sonarr:ManualInteractionRequired']);
 
     handleProcessed(sonarrWebhookEvent('ManualInteractionRequired'));
 

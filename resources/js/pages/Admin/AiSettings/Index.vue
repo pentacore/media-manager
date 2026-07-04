@@ -17,8 +17,15 @@ import {
 } from '@/components/ui/select';
 import { Separator } from '@/components/ui/separator';
 import { dashboard } from '@/routes';
+import type { AiReasoningLevel } from '@/typefinder';
+import type { SelectOptionGroup } from '@/types';
 
 interface ModeOption {
+    value: string;
+    label: string;
+}
+
+interface FailoverProviderOption {
     value: string;
     label: string;
 }
@@ -26,8 +33,11 @@ interface ModeOption {
 interface AiSettingsState {
     mode: string;
     model: string;
+    title_model: string;
     soft_budget_usd: number | null;
     hard_budget_usd: number | null;
+    advisor_reasoning_level: AiReasoningLevel;
+    failover_provider: string;
 }
 
 interface BudgetSnapshot {
@@ -42,6 +52,8 @@ const props = defineProps<{
     budget: BudgetSnapshot;
     modes: ModeOption[];
     models: Record<string, string[]>;
+    reasoningLevels: SelectOptionGroup<AiReasoningLevel>;
+    failoverProviders: FailoverProviderOption[];
 }>();
 
 defineOptions({
@@ -55,6 +67,9 @@ defineOptions({
 
 const selectedMode = ref(props.settings.mode);
 const selectedModel = ref(props.settings.model);
+const titleModel = ref(props.settings.title_model);
+const selectedReasoningLevel = ref(props.settings.advisor_reasoning_level);
+const selectedFailoverProvider = ref(props.settings.failover_provider);
 
 function formatUsd(value: number | null): string {
     if (value === null) {
@@ -190,6 +205,113 @@ const budgetState = computed<{
                             </SelectContent>
                         </Select>
                         <InputError :message="errors.model" class="mt-1" />
+                    </div>
+                </div>
+
+                <!-- Reasoning Level -->
+                <div
+                    class="grid items-start gap-6"
+                    style="grid-template-columns: 200px 1fr"
+                >
+                    <Field
+                        label="Reasoning Level"
+                        hint="Level of reasoning applied by the AI assistant. Higher levels may result in more accurate decisions but can be more resource-intensive."
+                    >
+                        <span />
+                    </Field>
+                    <div>
+                        <Select
+                            v-model="selectedReasoningLevel"
+                            name="advisor_reasoning_level"
+                            :default-value="settings.advisor_reasoning_level"
+                        >
+                            <SelectTrigger class="h-8 max-w-[320px] text-sm">
+                                <SelectValue
+                                    placeholder="Select a reasoning level"
+                                />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem
+                                    v-for="reasoningLevel in reasoningLevels"
+                                    :key="reasoningLevel.label"
+                                    :value="reasoningLevel.value"
+                                >
+                                    {{ reasoningLevel.label }}
+                                </SelectItem>
+                            </SelectContent>
+                        </Select>
+                        <InputError
+                            :message="errors.advisor_reasoning_level"
+                            class="mt-1"
+                        />
+                    </div>
+                </div>
+
+                <!-- Failover provider -->
+                <div
+                    class="grid items-start gap-6"
+                    style="grid-template-columns: 200px 1fr"
+                >
+                    <Field
+                        label="Failover provider"
+                        hint="If the primary provider errors, the request retries on this provider using its default model. Leave as None to disable failover."
+                    >
+                        <span />
+                    </Field>
+                    <div>
+                        <Select
+                            v-model="selectedFailoverProvider"
+                            name="failover_provider"
+                            :default-value="settings.failover_provider"
+                        >
+                            <SelectTrigger class="h-8 max-w-[320px] text-sm">
+                                <SelectValue
+                                    placeholder="Select a failover provider"
+                                />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem
+                                    v-for="provider in failoverProviders"
+                                    :key="provider.value"
+                                    :value="provider.value"
+                                >
+                                    {{ provider.label }}
+                                </SelectItem>
+                            </SelectContent>
+                        </Select>
+                        <InputError
+                            :message="errors.failover_provider"
+                            class="mt-1"
+                        />
+                    </div>
+                </div>
+
+                <div
+                    class="grid items-start gap-6"
+                    style="grid-template-columns: 200px 1fr"
+                >
+                    <Field
+                        label="Title model"
+                        hint="Cheap model used to auto-summarize the first user message of a new conversation into a short chat title. Runs in the background queue."
+                    >
+                        <span />
+                    </Field>
+                    <div>
+                        <Input
+                            id="title_model"
+                            name="title_model"
+                            type="text"
+                            class="h-8 max-w-[320px] text-sm"
+                            v-model="titleModel"
+                            placeholder="gpt-5.4-nano"
+                        />
+                        <p class="mt-1 text-xs text-muted-foreground">
+                            auto = provider's cheapest model
+                        </p>
+                        <InputError
+                            :message="errors.title_model"
+                            class="mt-1"
+                        />
                     </div>
                 </div>
 

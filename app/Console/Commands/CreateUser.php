@@ -8,28 +8,25 @@ use App\Concerns\PasswordValidationRules;
 use App\Concerns\ProfileValidationRules;
 use App\Enums\UserRole;
 use App\Models\User;
+use Illuminate\Console\Attributes\Description;
+use Illuminate\Console\Attributes\Signature;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Validator;
-use Override;
 
 use function Laravel\Prompts\password;
 use function Laravel\Prompts\select;
 use function Laravel\Prompts\text;
 
+#[Description('Create a new user with a chosen role. Bypasses the invite flow.')]
+#[Signature('users:create
+                            {--name= : The user\'s display name}
+                            {--email= : The user\'s email address}
+                            {--password= : The user\'s password (will prompt securely if omitted)}
+                            {--role= : User role (admin, member, viewer)}')]
 class CreateUser extends Command
 {
     use PasswordValidationRules;
     use ProfileValidationRules;
-
-    #[Override]
-    protected $signature = 'users:create
-                            {--name= : The user\'s display name}
-                            {--email= : The user\'s email address}
-                            {--password= : The user\'s password (will prompt securely if omitted)}
-                            {--role= : User role (admin, member, viewer)}';
-
-    #[Override]
-    protected $description = 'Create a new user with a chosen role. Bypasses the invite flow.';
 
     public function handle(): int
     {

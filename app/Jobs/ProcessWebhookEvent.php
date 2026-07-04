@@ -13,6 +13,7 @@ use App\Services\Sabnzbd\SabnzbdWebhookHandler;
 use App\Services\Seerr\SeerrWebhookHandler;
 use App\Services\Sonarr\SonarrWebhookHandler;
 use App\Services\Webhook\WebhookHandler;
+use App\Services\Whisparr\WhisparrWebhookHandler;
 use App\Settings\WebhookSettings;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -99,6 +100,7 @@ class ProcessWebhookEvent implements ShouldQueue
             ServiceType::Seerr => SeerrWebhookHandler::class,
             ServiceType::Prowlarr => ProwlarrWebhookHandler::class,
             ServiceType::SABnzbd => SabnzbdWebhookHandler::class,
+            ServiceType::Whisparr => WhisparrWebhookHandler::class,
         };
 
         if (! class_exists($class)) {

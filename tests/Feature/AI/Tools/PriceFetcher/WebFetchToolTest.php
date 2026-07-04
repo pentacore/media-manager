@@ -40,6 +40,25 @@ test('fetches an allowlisted URL and returns plain-text content', function (): v
         ->and($result['content'])->not->toContain('<style>');
 });
 
+test('allows the post-migration provider hosts', function (string $url): void {
+    Http::fake([
+        '*' => Http::response('<html><body>pricing table</body></html>', 200),
+    ]);
+
+    $result = json_decode(
+        (new WebFetchTool)->handle(new Request(['url' => $url])),
+        true,
+    );
+
+    expect($result)->not->toHaveKey('error')
+        ->and($result['status'])->toBe(200);
+})->with([
+    'https://developers.openai.com/api/docs/pricing',
+    'https://claude.com/pricing',
+    'https://platform.claude.com/docs/en/about-claude/pricing',
+    'https://openrouter.ai/api/v1/models',
+]);
+
 test('reports upstream non-2xx as a structured error', function (): void {
     Http::fake([
         'openai.com/*' => Http::response('forbidden', 403),

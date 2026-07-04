@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Http\Controllers\Admin;
 
 use App\Enums\AiMode;
+use App\Enums\AiReasoningLevel;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Admin\UpdateAiSettingsRequest;
 use App\Models\AiModelPrice;
@@ -13,6 +14,7 @@ use App\Settings\AiSettings;
 use Illuminate\Http\RedirectResponse;
 use Inertia\Inertia;
 use Inertia\Response;
+use Laravel\Ai\Enums\Lab;
 
 class AiSettingsController extends Controller
 {
@@ -22,8 +24,11 @@ class AiSettingsController extends Controller
             'settings' => [
                 'mode' => $aiSettings->mode()->value,
                 'model' => $aiSettings->model(),
+                'title_model' => $aiSettings->rawTitleModel(),
                 'soft_budget_usd' => $aiSettings->softBudgetUsd(),
                 'hard_budget_usd' => $aiSettings->hardBudgetUsd(),
+                'advisor_reasoning_level' => $aiSettings->advisorReasoningLevel(),
+                'failover_provider' => $aiSettings->failoverProvider()?->value ?? 'none',
             ],
             'budget' => [
                 'spend' => round($aiBudgetGuard->currentMonthSpend(), 4),
@@ -33,6 +38,15 @@ class AiSettingsController extends Controller
             ],
             'modes' => AiMode::mapForSelect(labelKey: 'label'),
             'models' => $this->modelsByConfiguredProvider(),
+            'reasoningLevels' => AiReasoningLevel::mapForSelect(labelKey: 'label'),
+            'failoverProviders' => [
+                ['value' => 'none', 'label' => 'None'],
+                ['value' => Lab::Anthropic->value, 'label' => 'Anthropic'],
+                ['value' => Lab::OpenAI->value, 'label' => 'OpenAI'],
+                ['value' => Lab::Gemini->value, 'label' => 'Gemini'],
+                ['value' => Lab::Groq->value, 'label' => 'Groq'],
+                ['value' => Lab::Mistral->value, 'label' => 'Mistral'],
+            ],
         ]);
     }
 
@@ -67,11 +81,16 @@ class AiSettingsController extends Controller
 
         $aiSettings->setMode(AiMode::from($validated['mode']));
         $aiSettings->setModel($validated['model']);
+        $aiSettings->setTitleModel($validated['title_model']);
         $aiSettings->setSoftBudgetUsd(
             isset($validated['soft_budget_usd']) ? (float) $validated['soft_budget_usd'] : null,
         );
         $aiSettings->setHardBudgetUsd(
             isset($validated['hard_budget_usd']) ? (float) $validated['hard_budget_usd'] : null,
+        );
+        $aiSettings->setAdvisorReasoningLevel(AiReasoningLevel::from($validated['advisor_reasoning_level']));
+        $aiSettings->setFailoverProvider(
+            empty($validated['failover_provider']) ? null : Lab::tryFrom($validated['failover_provider']),
         );
 
         Inertia::flash('toast', ['type' => 'success', 'message' => __('AI settings updated.')]);

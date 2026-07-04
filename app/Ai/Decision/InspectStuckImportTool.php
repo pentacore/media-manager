@@ -69,8 +69,8 @@ class InspectStuckImportTool implements Tool
             return $this->encode(['ok' => false, 'reason' => 'lookup_failed', 'message' => 'Could not enumerate import candidates.']);
         }
 
-        $resolver = resolve(ManualImportResolver::class);
-        $assessment = $resolver->assess($candidates, $service, $downloadId);
+        $manualImportResolver = resolve(ManualImportResolver::class);
+        $assessment = $manualImportResolver->assess($candidates, $service, $downloadId);
 
         return $this->encode([
             'ok' => true,
@@ -79,7 +79,7 @@ class InspectStuckImportTool implements Tool
             'total' => $assessment['total'],
             'importable' => $assessment['importable'],
             'fully_mapped' => $assessment['fully_mapped'],
-            'files' => $resolver->describe($candidates, $service),
+            'files' => $manualImportResolver->describe($candidates, $service),
         ]);
     }
 

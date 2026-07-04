@@ -7,11 +7,13 @@ import { edit as editAppearance } from '@/routes/appearance';
 import { edit as editProfile } from '@/routes/profile';
 import { edit as editSecurity } from '@/routes/security';
 import { edit as editNotifications } from '@/routes/settings/notifications';
+import { edit as editPreferences } from '@/routes/settings/preferences';
 import type { NavItem } from '@/types';
 
 const sidebarNavItems: NavItem[] = [
     { title: 'Profile', href: editProfile() },
     { title: 'Security', href: editSecurity() },
+    { title: 'Preferences', href: editPreferences() },
     { title: 'Notifications', href: editNotifications() },
     { title: 'Appearance', href: editAppearance() },
 ];

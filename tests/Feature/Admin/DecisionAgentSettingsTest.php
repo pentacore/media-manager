@@ -25,9 +25,9 @@ test('non-admin cannot access decision agent settings', function (): void {
 
 test('admin sees current settings on index', function (): void {
     $admin = User::factory()->admin()->create();
-    $settings = resolve(DecisionAgentSettings::class);
-    $settings->setEnabled(true);
-    $settings->setEventAllowlist(['sonarr:ManualInteractionRequired']);
+    $decisionAgentSettings = resolve(DecisionAgentSettings::class);
+    $decisionAgentSettings->setEnabled(true);
+    $decisionAgentSettings->setEventAllowlist(['sonarr:ManualInteractionRequired']);
 
     $this->actingAs($admin)
         ->get(route('admin.decision-agent.index'))
@@ -53,17 +53,19 @@ test('admin can update settings', function (): void {
             'notify_on_suggest' => false,
             'notify_on_act' => true,
             'max_actions_per_run' => 5,
+            'reasoning_level' => 'high',
         ])
         ->assertRedirect(route('admin.decision-agent.index'));
 
-    $settings = resolve(DecisionAgentSettings::class);
-    expect($settings->enabled())->toBeTrue();
-    expect($settings->model())->toBe('gpt-5-mini');
-    expect($settings->eventAllowlist())->toBe(['sonarr:ManualInteractionRequired', 'radarr:ManualInteractionRequired']);
-    expect($settings->allowManualImport())->toBeTrue();
-    expect($settings->notifyOnSuggest())->toBeFalse();
-    expect($settings->notifyOnAct())->toBeTrue();
-    expect($settings->maxActionsPerRun())->toBe(5);
+    $decisionAgentSettings = resolve(DecisionAgentSettings::class);
+    expect($decisionAgentSettings->enabled())->toBeTrue();
+    expect($decisionAgentSettings->model())->toBe('gpt-5-mini');
+    expect($decisionAgentSettings->reasoning())->toBe('high');
+    expect($decisionAgentSettings->eventAllowlist())->toBe(['sonarr:ManualInteractionRequired', 'radarr:ManualInteractionRequired']);
+    expect($decisionAgentSettings->allowManualImport())->toBeTrue();
+    expect($decisionAgentSettings->notifyOnSuggest())->toBeFalse();
+    expect($decisionAgentSettings->notifyOnAct())->toBeTrue();
+    expect($decisionAgentSettings->maxActionsPerRun())->toBe(5);
 });
 
 test('update rejects an event key outside the catalog', function (): void {
@@ -111,6 +113,7 @@ test('update allows an empty allowlist', function (): void {
             'notify_on_suggest' => true,
             'notify_on_act' => true,
             'max_actions_per_run' => 3,
+            'reasoning_level' => 'none',
         ])
         ->assertRedirect(route('admin.decision-agent.index'));
 

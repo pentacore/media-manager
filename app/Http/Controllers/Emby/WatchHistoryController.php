@@ -9,11 +9,13 @@ use App\Enums\UserRole;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\EmbyActivityResource;
 use App\Models\EmbyActivity;
+use App\Models\EmbyUserLink;
 use App\Models\ServiceConnection;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Inertia\Inertia;
 use Inertia\Response;
 use Symfony\Component\HttpFoundation\StreamedResponse;
@@ -47,6 +49,7 @@ class WatchHistoryController extends Controller
                     'per_page' => $lengthAwarePaginator->perPage(),
                 ],
             ],
+            'totals' => $this->totalsFor($request, $since),
             'filters' => [
                 'media_type' => $request->string('media_type')->toString(),
                 'since' => $since,
@@ -125,9 +128,16 @@ class WatchHistoryController extends Controller
      */
     private function buildBuilder(Request $request, int|string $since): Builder
     {
-        $user = $request->user();
+        return $this->applyFilters(EmbyActivity::query(), $request, $since)->latest();
+    }
 
-        $builder = EmbyActivity::query()->latest();
+    /**
+     * @param  Builder<EmbyActivity>  $builder
+     * @return Builder<EmbyActivity>
+     */
+    private function applyFilters(Builder $builder, Request $request, int|string $since): Builder
+    {
+        $user = $request->user();
 
         if ($user !== null && $user->role === UserRole::Viewer) {
             $linkIds = $user->embyUserLinks()->pluck('id');
@@ -141,6 +151,51 @@ class WatchHistoryController extends Controller
         $builder->where('created_at', '>=', $this->cutoffFor($since));
 
         return $builder;
+    }
+
+    /**
+     * @return array{
+     *     total_ticks: int,
+     *     sessions: int,
+     *     completed_sessions: int,
+     *     top_user: array{name: string, ticks: int, sessions: int}|null,
+     * }
+     */
+    private function totalsFor(Request $request, int|string $since): array
+    {
+        $aggregate = $this->applyFilters(EmbyActivity::query(), $request, $since)
+            ->selectRaw('COALESCE(SUM(play_position), 0) AS total_ticks')
+            ->selectRaw('COUNT(*) AS sessions')
+            ->selectRaw('SUM(CASE WHEN duration_ticks > 0 AND play_position * 10 >= duration_ticks * 9 THEN 1 ELSE 0 END) AS completed_sessions')
+            ->first();
+
+        $topGroup = $this->applyFilters(EmbyActivity::query(), $request, $since)
+            ->select('emby_user_link_id', DB::raw('SUM(play_position) AS ticks'), DB::raw('COUNT(*) AS sessions'))
+            ->whereNotNull('emby_user_link_id')
+            ->groupBy('emby_user_link_id')
+            ->orderByDesc('ticks')
+            ->first();
+
+        $topUser = null;
+
+        if ($topGroup !== null) {
+            $link = EmbyUserLink::query()->find($topGroup->emby_user_link_id);
+
+            if ($link !== null) {
+                $topUser = [
+                    'name' => $link->emby_username,
+                    'ticks' => (int) $topGroup->ticks,
+                    'sessions' => (int) $topGroup->sessions,
+                ];
+            }
+        }
+
+        return [
+            'total_ticks' => (int) ($aggregate?->total_ticks ?? 0),
+            'sessions' => (int) ($aggregate?->sessions ?? 0),
+            'completed_sessions' => (int) ($aggregate?->completed_sessions ?? 0),
+            'top_user' => $topUser,
+        ];
     }
 
     private function resolveSince(Request $request): int|string

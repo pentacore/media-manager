@@ -28,12 +28,12 @@ test('toImportPayload maps a clean sonarr candidate', function (): void {
 });
 
 test('toImportPayload drops sonarr candidates without a series or episodes', function (): void {
-    $resolver = resolve(ManualImportResolver::class);
+    $manualImportResolver = resolve(ManualImportResolver::class);
 
-    expect($resolver->toImportPayload([sonarrCandidate(['series' => []])], 'sonarr', 'd'))->toBe([]);
-    expect($resolver->toImportPayload([sonarrCandidate(['episodes' => []])], 'sonarr', 'd'))->toBe([]);
-    expect($resolver->toImportPayload([sonarrCandidate(['path' => null])], 'sonarr', 'd'))->toBe([]);
-    expect($resolver->toImportPayload([sonarrCandidate(['quality' => null])], 'sonarr', 'd'))->toBe([]);
+    expect($manualImportResolver->toImportPayload([sonarrCandidate(['series' => []])], 'sonarr', 'd'))->toBe([]);
+    expect($manualImportResolver->toImportPayload([sonarrCandidate(['episodes' => []])], 'sonarr', 'd'))->toBe([]);
+    expect($manualImportResolver->toImportPayload([sonarrCandidate(['path' => null])], 'sonarr', 'd'))->toBe([]);
+    expect($manualImportResolver->toImportPayload([sonarrCandidate(['quality' => null])], 'sonarr', 'd'))->toBe([]);
 });
 
 test('toImportPayload maps a radarr candidate by movieId', function (): void {

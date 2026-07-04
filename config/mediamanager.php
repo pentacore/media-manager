@@ -30,6 +30,18 @@ return [
         // Default model for MediaAgent. Free-form string — must match a model
         // identifier supported by a configured laravel/ai provider.
         'model' => env('MEDIAMANAGER_AI_MODEL', 'gpt-5-mini'),
+
+        // Cheap model used to auto-summarize the first user message of a new
+        // conversation into a 4-6 word chat title. Runs in the background
+        // queue after the first agent response. Override per env or via the
+        // admin AI Settings page.
+        'title_model' => env('MEDIAMANAGER_AI_TITLE_MODEL', 'gpt-5.4-nano'),
+
+        // Opt-in: swap the PriceFetcherAgent's custom host-allowlisted HTTP
+        // GET tool for the SDK's provider-native WebFetch. Only works on
+        // providers that support it (OpenAI/Anthropic); unsupported providers
+        // throw a LogicException at prompt time, so this defaults OFF.
+        'price_fetcher_provider_webfetch' => env('AI_PRICEFETCHER_PROVIDER_WEBFETCH', false),
     ],
 
     /*
@@ -113,5 +125,45 @@ return [
 
     'webhooks' => [
         'capture_enabled' => (bool) env('MEDIAMANAGER_WEBHOOKS_CAPTURE_ENABLED', true),
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Search
+    |--------------------------------------------------------------------------
+    |
+    | Drives the unified-search and Cmd-K palette. 'typesense' queries the
+    | Scout-backed Series/Movie indexes; 'fallback' bypasses Typesense and
+    | hits Sonarr/Radarr APIs directly with a substring filter (the original
+    | pre-Typesense behavior, kept for emergency rollback).
+    |
+    */
+
+    'search' => [
+        'driver' => env('MEDIAMANAGER_SEARCH_DRIVER', 'typesense'),
+        'max_results' => (int) env('MEDIAMANAGER_SEARCH_MAX_RESULTS', 20),
+        'instant_max_results' => (int) env('MEDIAMANAGER_SEARCH_INSTANT_MAX_RESULTS', 8),
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Presence
+    |--------------------------------------------------------------------------
+    |
+    | Lightweight presence tracker fed by the browser heartbeat — used by
+    | the cache warmer (`services:warm-caches`) to skip background upstream
+    | calls when nobody is interacting with the app.
+    |
+    */
+
+    'presence' => [
+        // Redis sorted-set key holding active-user ids scored by expiry timestamp.
+        // Override per-environment if you run multiple installations against
+        // the same Redis instance.
+        'key' => env('MEDIAMANAGER_PRESENCE_KEY', 'presence:users'),
+        // Each heartbeat extends the user's membership by this many seconds.
+        // Browser sends a heartbeat every 30s while interacting, so 90s gives
+        // three missed beats of grace before they fall out of "active".
+        'heartbeat_ttl' => (int) env('MEDIAMANAGER_PRESENCE_HEARTBEAT_TTL', 90),
     ],
 ];

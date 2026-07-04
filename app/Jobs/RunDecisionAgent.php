@@ -15,6 +15,7 @@ use App\Notifications\DecisionAgentActed;
 use App\Providers\AIServiceProvider;
 use App\Services\AiBudget\AiBudgetExceededException;
 use App\Services\AiBudget\AiBudgetGuard;
+use App\Settings\AiSettings;
 use App\Settings\DecisionAgentSettings;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldBeUnique;
@@ -64,10 +65,10 @@ class RunDecisionAgent implements ShouldBeUnique, ShouldQueue
     }
 
     public function handle(
-        DecisionAgentSettings $settings,
+        DecisionAgentSettings $decisionAgentSettings,
         AiBudgetGuard $aiBudgetGuard,
     ): void {
-        if (! AIServiceProvider::enabled() || ! $settings->enabled()) {
+        if (! AIServiceProvider::enabled() || ! $decisionAgentSettings->enabled()) {
             return;
         }
 
@@ -87,21 +88,25 @@ class RunDecisionAgent implements ShouldBeUnique, ShouldQueue
 
         try {
             $aiBudgetGuard->enforce();
-        } catch (AiBudgetExceededException $budgetException) {
-            $this->record($webhookEventId, AgentDecisionStatus::Failed, 'Skipped: AI budget hard cap reached. '.$budgetException->getMessage(), null);
+        } catch (AiBudgetExceededException $aiBudgetExceededException) {
+            $this->record($webhookEventId, AgentDecisionStatus::Failed, 'Skipped: AI budget hard cap reached. '.$aiBudgetExceededException->getMessage(), null);
 
             return;
         }
 
-        $context = new DecisionRunContext(
+        $decisionRunContext = new DecisionRunContext(
             webhookEventId: $webhookEventId,
-            maxActions: $settings->maxActionsPerRun(),
+            maxActions: $decisionAgentSettings->maxActionsPerRun(),
             sourceService: $this->service,
         );
-        app()->instance(DecisionRunContext::class, $context);
+        app()->instance(DecisionRunContext::class, $decisionRunContext);
 
         try {
-            $response = (new DecisionAgent)->prompt($this->buildPrompt());
+            $decisionAgent = new DecisionAgent;
+            $chain = resolve(AiSettings::class)->providerChainWithModel($decisionAgentSettings->model());
+            $response = $chain === null
+                ? $decisionAgent->prompt($this->buildPrompt())
+                : $decisionAgent->prompt($this->buildPrompt(), provider: $chain);
             $summary = trim($response->text) !== '' ? trim($response->text) : 'No summary produced.';
         } catch (Throwable $throwable) {
             Log::warning('RunDecisionAgent: agent run failed', [
@@ -111,16 +116,16 @@ class RunDecisionAgent implements ShouldBeUnique, ShouldQueue
                 'exception' => $throwable::class,
                 'message' => $throwable->getMessage(),
             ]);
-            $this->record($webhookEventId, AgentDecisionStatus::Failed, 'Agent run failed: '.$throwable->getMessage(), $context);
+            $this->record($webhookEventId, AgentDecisionStatus::Failed, 'Agent run failed: '.$throwable->getMessage(), $decisionRunContext);
 
             return;
         } finally {
             app()->forgetInstance(DecisionRunContext::class);
         }
 
-        $status = $context->count() > 0 ? AgentDecisionStatus::Completed : AgentDecisionStatus::NoAction;
-        $this->record($webhookEventId, $status, $summary, $context);
-        $this->notify($context, $summary, $settings);
+        $status = $decisionRunContext->count() > 0 ? AgentDecisionStatus::Completed : AgentDecisionStatus::NoAction;
+        $this->record($webhookEventId, $status, $summary, $decisionRunContext);
+        $this->notify($decisionRunContext, $summary, $decisionAgentSettings);
     }
 
     private function buildPrompt(): string
@@ -141,15 +146,15 @@ Decide whether any action is warranted. Gather context with the read tools if ne
 PROMPT;
     }
 
-    private function record(?int $webhookEventId, AgentDecisionStatus $status, string $summary, ?DecisionRunContext $context): void
+    private function record(?int $webhookEventId, AgentDecisionStatus $agentDecisionStatus, string $summary, ?DecisionRunContext $decisionRunContext): void
     {
         $attributes = [
             'service' => $this->service,
             'event_type' => $this->eventType,
-            'status' => $status,
+            'status' => $agentDecisionStatus,
             'summary' => Str::limit($summary, 4000, ''),
-            'actions_count' => $context?->count() ?? 0,
-            'action_request_ids' => $context?->actionRequestIds() ?? [],
+            'actions_count' => $decisionRunContext?->count() ?? 0,
+            'action_request_ids' => $decisionRunContext?->actionRequestIds() ?? [],
         ];
 
         if ($webhookEventId !== null) {
@@ -164,13 +169,13 @@ PROMPT;
         AgentDecision::query()->create($attributes);
     }
 
-    private function notify(DecisionRunContext $context, string $summary, DecisionAgentSettings $settings): void
+    private function notify(DecisionRunContext $decisionRunContext, string $summary, DecisionAgentSettings $decisionAgentSettings): void
     {
-        $suggested = $context->suggestedCount();
-        $acted = $context->actedCount();
+        $suggested = $decisionRunContext->suggestedCount();
+        $acted = $decisionRunContext->actedCount();
 
-        $wantSuggest = $suggested > 0 && $settings->notifyOnSuggest();
-        $wantAct = $acted > 0 && $settings->notifyOnAct();
+        $wantSuggest = $suggested > 0 && $decisionAgentSettings->notifyOnSuggest();
+        $wantAct = $acted > 0 && $decisionAgentSettings->notifyOnAct();
 
         if (! $wantSuggest && ! $wantAct) {
             return;
@@ -189,7 +194,7 @@ PROMPT;
 
         Notification::send($admins, new DecisionAgentActed(
             disposition: $disposition,
-            actionCount: $context->count(),
+            actionCount: $decisionRunContext->count(),
             summary: Str::limit($summary, 500, '…'),
             eventLabel: $this->service.' '.$this->eventType,
         ));

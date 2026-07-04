@@ -7,7 +7,7 @@ import {
     Plus,
     RefreshCcw,
     Search,
-} from 'lucide-vue-next';
+} from '@lucide/vue';
 import { computed, onMounted, ref } from 'vue';
 import SeriesController from '@/actions/App/Http/Controllers/Media/SeriesController';
 import { OpenInServiceButton, Pill, Poster, SvcChip } from '@/components/mm';
@@ -408,91 +408,99 @@ function sonarrSeriesUrl(slug: string | null): string | null {
             v-else-if="view === 'table' && series"
             class="overflow-hidden rounded-xl border border-border bg-card"
         >
-            <table class="w-full border-collapse text-[13px]">
-                <thead>
-                    <tr>
-                        <th
-                            v-for="h in [
-                                'Series',
-                                'Year',
-                                'Status',
-                                'Quality',
-                                'Episodes',
-                                'Size',
-                                '',
-                            ]"
-                            :key="h"
-                            class="border-b border-border bg-card px-3 py-2 text-left text-[11.5px] font-medium tracking-[0.05em] text-muted-foreground uppercase"
-                        >
-                            {{ h }}
-                        </th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <tr
-                        v-for="item in visible"
-                        :key="item.id"
-                        class="border-b border-border last:border-b-0 hover:bg-bg-hover"
-                    >
-                        <td class="px-3 py-2.5">
-                            <span class="flex items-center gap-2.5">
-                                <Poster
-                                    :hint="item.title.toLowerCase().slice(0, 8)"
-                                    size="sm"
-                                />
-                                <Link
-                                    :href="SeriesController.show.url(item.id)"
-                                    class="font-medium hover:text-accent"
-                                    >{{ item.title }}</Link
-                                >
-                                <Pill
-                                    v-if="!item.monitored"
-                                    class="text-[10.5px]"
-                                    >unmon</Pill
-                                >
-                            </span>
-                        </td>
-                        <td class="font-mono-tabular px-3 py-2.5">
-                            {{ item.year ?? '—' }}
-                        </td>
-                        <td class="px-3 py-2.5 text-muted-foreground">
-                            {{ item.status ?? '—' }}
-                        </td>
-                        <td class="font-mono-tabular px-3 py-2.5 text-[11.5px]">
-                            {{ qualityName(item.quality_profile_id) }}
-                        </td>
-                        <td class="font-mono-tabular px-3 py-2.5">
-                            {{ item.episode_file_count }} /
-                            {{ item.episode_count }}
-                        </td>
-                        <td class="font-mono-tabular px-3 py-2.5">
-                            {{ formatSize(item.size_on_disk) }}
-                        </td>
-                        <td class="px-3 py-2.5 text-right">
-                            <a
-                                v-if="sonarrSeriesUrl(item.title_slug)"
-                                :href="
-                                    sonarrSeriesUrl(item.title_slug) ??
-                                    undefined
-                                "
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                class="inline-flex size-7 items-center justify-center rounded text-muted-foreground hover:bg-bg-hover hover:text-foreground"
+            <div class="overflow-x-auto">
+                <table class="w-full border-collapse text-[13px]">
+                    <thead>
+                        <tr>
+                            <th
+                                v-for="h in [
+                                    'Series',
+                                    'Year',
+                                    'Status',
+                                    'Quality',
+                                    'Episodes',
+                                    'Size',
+                                    '',
+                                ]"
+                                :key="h"
+                                class="border-b border-border bg-card px-3 py-2 text-left text-[11.5px] font-medium tracking-[0.05em] text-muted-foreground uppercase"
                             >
-                                <ExternalLink class="size-3.5" />
-                            </a>
-                        </td>
-                    </tr>
-                    <tr v-if="visible.length === 0">
-                        <td
-                            colspan="7"
-                            class="px-3 py-8 text-center text-sm text-fg-subtle"
+                                {{ h }}
+                            </th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr
+                            v-for="item in visible"
+                            :key="item.id"
+                            class="border-b border-border last:border-b-0 hover:bg-bg-hover"
                         >
-                            No series match these filters.
-                        </td>
-                    </tr>
-                </tbody>
-            </table>
+                            <td class="px-3 py-2.5">
+                                <span class="flex items-center gap-2.5">
+                                    <Poster
+                                        :hint="
+                                            item.title.toLowerCase().slice(0, 8)
+                                        "
+                                        size="sm"
+                                    />
+                                    <Link
+                                        :href="
+                                            SeriesController.show.url(item.id)
+                                        "
+                                        class="font-medium hover:text-accent"
+                                        >{{ item.title }}</Link
+                                    >
+                                    <Pill
+                                        v-if="!item.monitored"
+                                        class="text-[10.5px]"
+                                        >unmon</Pill
+                                    >
+                                </span>
+                            </td>
+                            <td class="font-mono-tabular px-3 py-2.5">
+                                {{ item.year ?? '—' }}
+                            </td>
+                            <td class="px-3 py-2.5 text-muted-foreground">
+                                {{ item.status ?? '—' }}
+                            </td>
+                            <td
+                                class="font-mono-tabular px-3 py-2.5 text-[11.5px]"
+                            >
+                                {{ qualityName(item.quality_profile_id) }}
+                            </td>
+                            <td class="font-mono-tabular px-3 py-2.5">
+                                {{ item.episode_file_count }} /
+                                {{ item.episode_count }}
+                            </td>
+                            <td class="font-mono-tabular px-3 py-2.5">
+                                {{ formatSize(item.size_on_disk) }}
+                            </td>
+                            <td class="px-3 py-2.5 text-right">
+                                <a
+                                    v-if="sonarrSeriesUrl(item.title_slug)"
+                                    :href="
+                                        sonarrSeriesUrl(item.title_slug) ??
+                                        undefined
+                                    "
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    class="inline-flex size-7 items-center justify-center rounded text-muted-foreground hover:bg-bg-hover hover:text-foreground"
+                                >
+                                    <ExternalLink class="size-3.5" />
+                                </a>
+                            </td>
+                        </tr>
+                        <tr v-if="visible.length === 0">
+                            <td
+                                colspan="7"
+                                class="px-3 py-8 text-center text-sm text-fg-subtle"
+                            >
+                                No series match these filters.
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
         </div>
 
         <!-- Skeleton loading -->

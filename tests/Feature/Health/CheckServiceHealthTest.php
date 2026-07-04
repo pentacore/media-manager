@@ -2,121 +2,42 @@
 
 declare(strict_types=1);
 
-use App\Enums\HealthStatus;
-use App\Events\ServiceHealthChanged;
+use App\Jobs\PingServiceHealth;
 use App\Models\ServiceConnection;
-use Illuminate\Support\Facades\Event;
-use Illuminate\Support\Facades\Http;
+use App\Support\ServiceCheckBatch;
+use Illuminate\Bus\PendingBatch;
+use Illuminate\Support\Facades\Bus;
+use Illuminate\Support\Facades\Cache;
 
 beforeEach(function (): void {
-    Http::preventStrayRequests();
-    Event::fake([ServiceHealthChanged::class]);
+    Bus::fake();
 });
 
-test('marks sonarr connection Healthy and updates version on success', function (): void {
-    $connection = ServiceConnection::factory()->sonarr()->create([
-        'url' => 'http://sonarr.local:8989',
-        'health_status' => null,
-    ]);
-
-    Http::fake([
-        'sonarr.local:8989/api/v3/system/status' => Http::response(['version' => '4.0.0']),
-    ]);
+test('dispatches a service-health batch with one job per active connection', function (): void {
+    ServiceConnection::factory()->sonarr()->create();
+    ServiceConnection::factory()->radarr()->create();
+    ServiceConnection::factory()->emby()->inactive()->create();
 
     $this->artisan('services:check-health')->assertSuccessful();
 
-    $fresh = $connection->fresh();
-    expect($fresh->health_status)->toBe(HealthStatus::Healthy);
-    expect($fresh->version)->toBe('4.0.0');
-    expect($fresh->last_seen_at)->not->toBeNull();
-
-    Event::assertDispatched(ServiceHealthChanged::class);
+    Bus::assertBatched(fn (PendingBatch $pendingBatch): bool => $pendingBatch->name === 'service-health'
+        && $pendingBatch->jobs->count() === 2
+        && $pendingBatch->jobs->every(fn (object $job): bool => $job instanceof PingServiceHealth));
 });
 
-test('marks emby connection Healthy using System/Info Version field', function (): void {
-    $connection = ServiceConnection::factory()->emby()->create([
-        'url' => 'http://emby.local:8096',
-        'health_status' => null,
-    ]);
-
-    Http::fake([
-        'emby.local:8096/System/Info' => Http::response(['Version' => '4.8.0.15']),
-    ]);
+test('caches the dispatched batch id under the health key', function (): void {
+    ServiceConnection::factory()->sonarr()->create();
 
     $this->artisan('services:check-health')->assertSuccessful();
 
-    expect($connection->fresh()->health_status)->toBe(HealthStatus::Healthy);
-    expect($connection->fresh()->version)->toBe('4.8.0.15');
+    expect(Cache::get(ServiceCheckBatch::CACHE_KEY_HEALTH))->not->toBeNull();
 });
 
-test('marks connection Unhealthy when request fails', function (): void {
-    $connection = ServiceConnection::factory()->sonarr()->create([
-        'url' => 'http://sonarr.local:8989',
-        'health_status' => HealthStatus::Healthy,
-    ]);
-
-    Http::fake(['sonarr.local:8989/*' => Http::response('boom', 500)]);
+test('does nothing when there are no active connections', function (): void {
+    ServiceConnection::factory()->sonarr()->inactive()->create();
 
     $this->artisan('services:check-health')->assertSuccessful();
 
-    expect($connection->fresh()->health_status)->toBe(HealthStatus::Unhealthy);
-
-    Event::assertDispatched(ServiceHealthChanged::class);
-});
-
-test('broadcasts every successful ping so last_seen_at heartbeat propagates', function (): void {
-    // The job now broadcasts on any UI-relevant change; last_seen_at always
-    // refreshes on success, so the broadcast fires on every healthy ping.
-    $connection = ServiceConnection::factory()->sonarr()->create([
-        'url' => 'http://sonarr.local:8989',
-        'health_status' => HealthStatus::Healthy,
-        'last_seen_at' => now()->subHour(),
-        'version' => '4.0.0',
-    ]);
-
-    Http::fake(['sonarr.local:8989/api/v3/system/status' => Http::response(['version' => '4.0.0'])]);
-
-    $this->artisan('services:check-health')->assertSuccessful();
-
-    expect($connection->fresh()->health_status)->toBe(HealthStatus::Healthy);
-    Event::assertDispatched(ServiceHealthChanged::class);
-});
-
-test('broadcasts on transition Healthy -> Unhealthy', function (): void {
-    $connection = ServiceConnection::factory()->sonarr()->create([
-        'url' => 'http://sonarr.local:8989',
-        'health_status' => HealthStatus::Healthy,
-    ]);
-
-    Http::fake(['sonarr.local:8989/*' => Http::response('boom', 500)]);
-
-    $this->artisan('services:check-health')->assertSuccessful();
-
-    Event::assertDispatched(fn (ServiceHealthChanged $serviceHealthChanged): bool => $serviceHealthChanged->status === 'unhealthy');
-});
-
-test('skips inactive connections', function (): void {
-    $connection = ServiceConnection::factory()->sonarr()->inactive()->create([
-        'url' => 'http://sonarr.local:8989',
-    ]);
-
-    // No Http::fake = would blow up if it tried to connect (preventStrayRequests)
-    $this->artisan('services:check-health')->assertSuccessful();
-
-    expect($connection->fresh()->health_status)->toBeNull();
-});
-
-test('iterates multiple connections', function (): void {
-    ServiceConnection::factory()->sonarr()->create(['url' => 'http://sonarr.local:8989']);
-    ServiceConnection::factory()->radarr()->create(['url' => 'http://radarr.local:7878']);
-
-    Http::fake([
-        'sonarr.local:8989/*' => Http::response(['version' => '4.0.0']),
-        'radarr.local:7878/*' => Http::response(['version' => '5.0.0']),
-    ]);
-
-    $this->artisan('services:check-health')->assertSuccessful();
-
-    expect(ServiceConnection::pluck('health_status')->all())
-        ->each->toBe(HealthStatus::Healthy);
+    Bus::assertNothingBatched();
+    expect(Cache::get(ServiceCheckBatch::CACHE_KEY_HEALTH))->toBeNull();
 });

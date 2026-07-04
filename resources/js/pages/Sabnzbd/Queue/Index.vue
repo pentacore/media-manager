@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { Head, router } from '@inertiajs/vue3';
-import { Pause, Play, RefreshCw, Trash2 } from 'lucide-vue-next';
+import { Pause, Play, RefreshCw, Trash2 } from '@lucide/vue';
 import { onMounted, onUnmounted } from 'vue';
 import QueueController from '@/actions/App/Http/Controllers/Sabnzbd/QueueController';
 import { OpenInServiceButton, Pill, StatCard } from '@/components/mm';
@@ -251,124 +251,126 @@ function statusVariant(status: string): 'ok' | 'danger' | 'default' {
                 >
                     Active queue
                 </div>
-                <table class="w-full border-collapse text-[13px]">
-                    <thead>
-                        <tr>
-                            <th
-                                v-for="h in [
-                                    'Name',
-                                    'Category',
-                                    'Size',
-                                    'Progress',
-                                    'ETA',
-                                    'Priority',
-                                    '',
-                                ]"
-                                :key="h"
-                                class="border-b border-border bg-card px-3 py-2 text-left text-[11.5px] font-medium tracking-[0.05em] text-muted-foreground uppercase"
+                <div class="overflow-x-auto">
+                    <table class="w-full border-collapse text-[13px]">
+                        <thead>
+                            <tr>
+                                <th
+                                    v-for="h in [
+                                        'Name',
+                                        'Category',
+                                        'Size',
+                                        'Progress',
+                                        'ETA',
+                                        'Priority',
+                                        '',
+                                    ]"
+                                    :key="h"
+                                    class="border-b border-border bg-card px-3 py-2 text-left text-[11.5px] font-medium tracking-[0.05em] text-muted-foreground uppercase"
+                                >
+                                    {{ h }}
+                                </th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr
+                                v-for="slot in queue.slots ?? []"
+                                :key="slot.nzo_id"
+                                class="border-b border-border last:border-b-0 hover:bg-bg-hover"
                             >
-                                {{ h }}
-                            </th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <tr
-                            v-for="slot in queue.slots ?? []"
-                            :key="slot.nzo_id"
-                            class="border-b border-border last:border-b-0 hover:bg-bg-hover"
-                        >
-                            <td class="px-3 py-2.5">
-                                <div
-                                    class="font-mono-tabular text-[12.5px] font-medium"
-                                >
-                                    {{ slot.filename }}
-                                </div>
-                            </td>
-                            <td class="px-3 py-2.5">
-                                <Pill v-if="slot.cat">{{ slot.cat }}</Pill>
-                            </td>
-                            <td class="font-mono-tabular px-3 py-2.5">
-                                {{ slot.size }}
-                            </td>
-                            <td class="font-mono-tabular px-3 py-2.5">
-                                {{ slot.percentage }}%
-                            </td>
-                            <td class="font-mono-tabular px-3 py-2.5">
-                                {{ slot.timeleft }}
-                            </td>
-                            <td class="px-3 py-2.5">
-                                <Select
-                                    :model-value="String(slot.priority)"
-                                    @update:model-value="
-                                        (v) =>
-                                            changePriority(
-                                                slot.nzo_id,
-                                                String(v),
-                                            )
-                                    "
-                                >
-                                    <SelectTrigger class="h-7 w-24 text-xs">
-                                        <SelectValue />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        <SelectItem
-                                            v-for="(
-                                                label, value
-                                            ) in PRIORITY_LABELS"
-                                            :key="value"
-                                            :value="value"
-                                        >
-                                            {{ label }}
-                                        </SelectItem>
-                                    </SelectContent>
-                                </Select>
-                            </td>
-                            <td class="px-3 py-2.5 text-right">
-                                <div class="flex justify-end gap-1">
-                                    <Button
-                                        v-if="slot.status === 'Paused'"
-                                        variant="ghost"
-                                        size="sm"
-                                        class="h-7 px-2 text-xs"
-                                        @click="resumeSlot(slot.nzo_id)"
+                                <td class="px-3 py-2.5">
+                                    <div
+                                        class="font-mono-tabular text-[12.5px] font-medium"
                                     >
-                                        <Play class="size-3.5" />
-                                    </Button>
-                                    <Button
-                                        v-else
-                                        variant="ghost"
-                                        size="sm"
-                                        class="h-7 px-2 text-xs"
-                                        @click="pauseSlot(slot.nzo_id)"
-                                    >
-                                        <Pause class="size-3.5" />
-                                    </Button>
-                                    <Button
-                                        variant="ghost"
-                                        size="sm"
-                                        class="size-7 p-0 text-destructive hover:text-destructive"
-                                        @click="
-                                            deleteSlot(
-                                                slot.nzo_id,
-                                                slot.filename,
-                                            )
+                                        {{ slot.filename }}
+                                    </div>
+                                </td>
+                                <td class="px-3 py-2.5">
+                                    <Pill v-if="slot.cat">{{ slot.cat }}</Pill>
+                                </td>
+                                <td class="font-mono-tabular px-3 py-2.5">
+                                    {{ slot.size }}
+                                </td>
+                                <td class="font-mono-tabular px-3 py-2.5">
+                                    {{ slot.percentage }}%
+                                </td>
+                                <td class="font-mono-tabular px-3 py-2.5">
+                                    {{ slot.timeleft }}
+                                </td>
+                                <td class="px-3 py-2.5">
+                                    <Select
+                                        :model-value="String(slot.priority)"
+                                        @update:model-value="
+                                            (v) =>
+                                                changePriority(
+                                                    slot.nzo_id,
+                                                    String(v),
+                                                )
                                         "
                                     >
-                                        <Trash2 class="size-3.5" />
-                                    </Button>
-                                </div>
-                            </td>
-                        </tr>
-                        <tr v-if="(queue.slots ?? []).length === 0">
-                            <td
-                                colspan="7"
-                                class="px-3 py-8 text-center text-sm text-fg-subtle"
-                            >
-                                Queue is empty.
-                            </td>
-                        </tr>
-                    </tbody>
-                </table>
+                                        <SelectTrigger class="h-7 w-24 text-xs">
+                                            <SelectValue />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem
+                                                v-for="(
+                                                    label, value
+                                                ) in PRIORITY_LABELS"
+                                                :key="value"
+                                                :value="value"
+                                            >
+                                                {{ label }}
+                                            </SelectItem>
+                                        </SelectContent>
+                                    </Select>
+                                </td>
+                                <td class="px-3 py-2.5 text-right">
+                                    <div class="flex justify-end gap-1">
+                                        <Button
+                                            v-if="slot.status === 'Paused'"
+                                            variant="ghost"
+                                            size="sm"
+                                            class="h-7 px-2 text-xs"
+                                            @click="resumeSlot(slot.nzo_id)"
+                                        >
+                                            <Play class="size-3.5" />
+                                        </Button>
+                                        <Button
+                                            v-else
+                                            variant="ghost"
+                                            size="sm"
+                                            class="h-7 px-2 text-xs"
+                                            @click="pauseSlot(slot.nzo_id)"
+                                        >
+                                            <Pause class="size-3.5" />
+                                        </Button>
+                                        <Button
+                                            variant="ghost"
+                                            size="sm"
+                                            class="size-7 p-0 text-destructive hover:text-destructive"
+                                            @click="
+                                                deleteSlot(
+                                                    slot.nzo_id,
+                                                    slot.filename,
+                                                )
+                                            "
+                                        >
+                                            <Trash2 class="size-3.5" />
+                                        </Button>
+                                    </div>
+                                </td>
+                            </tr>
+                            <tr v-if="(queue.slots ?? []).length === 0">
+                                <td
+                                    colspan="7"
+                                    class="px-3 py-8 text-center text-sm text-fg-subtle"
+                                >
+                                    Queue is empty.
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
             </div>
 
             <!-- History table -->
@@ -380,60 +382,62 @@ function statusVariant(status: string): 'ok' | 'danger' | 'default' {
                 >
                     Recent history
                 </div>
-                <table class="w-full border-collapse text-[13px]">
-                    <thead>
-                        <tr>
-                            <th
-                                v-for="h in [
-                                    'Name',
-                                    'Category',
-                                    'Status',
-                                    'Note',
-                                ]"
-                                :key="h"
-                                class="border-b border-border bg-card px-3 py-2 text-left text-[11.5px] font-medium tracking-[0.05em] text-muted-foreground uppercase"
-                            >
-                                {{ h }}
-                            </th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <tr
-                            v-for="slot in history.slots ?? []"
-                            :key="slot.nzo_id"
-                            class="border-b border-border last:border-b-0 hover:bg-bg-hover"
-                        >
-                            <td class="px-3 py-2.5">
-                                <div
-                                    class="font-mono-tabular text-[12.5px] font-medium"
+                <div class="overflow-x-auto">
+                    <table class="w-full border-collapse text-[13px]">
+                        <thead>
+                            <tr>
+                                <th
+                                    v-for="h in [
+                                        'Name',
+                                        'Category',
+                                        'Status',
+                                        'Note',
+                                    ]"
+                                    :key="h"
+                                    class="border-b border-border bg-card px-3 py-2 text-left text-[11.5px] font-medium tracking-[0.05em] text-muted-foreground uppercase"
                                 >
-                                    {{ slot.name }}
-                                </div>
-                            </td>
-                            <td class="px-3 py-2.5">
-                                <Pill v-if="slot.category">{{
-                                    slot.category
-                                }}</Pill>
-                            </td>
-                            <td class="px-3 py-2.5">
-                                <Pill :variant="statusVariant(slot.status)">
-                                    {{ slot.status }}
-                                </Pill>
-                            </td>
-                            <td class="px-3 py-2.5 text-xs text-fg-subtle">
-                                {{ slot.fail_message || '—' }}
-                            </td>
-                        </tr>
-                        <tr v-if="(history.slots ?? []).length === 0">
-                            <td
-                                colspan="4"
-                                class="px-3 py-8 text-center text-sm text-fg-subtle"
+                                    {{ h }}
+                                </th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr
+                                v-for="slot in history.slots ?? []"
+                                :key="slot.nzo_id"
+                                class="border-b border-border last:border-b-0 hover:bg-bg-hover"
                             >
-                                No recent downloads.
-                            </td>
-                        </tr>
-                    </tbody>
-                </table>
+                                <td class="px-3 py-2.5">
+                                    <div
+                                        class="font-mono-tabular text-[12.5px] font-medium"
+                                    >
+                                        {{ slot.name }}
+                                    </div>
+                                </td>
+                                <td class="px-3 py-2.5">
+                                    <Pill v-if="slot.category">{{
+                                        slot.category
+                                    }}</Pill>
+                                </td>
+                                <td class="px-3 py-2.5">
+                                    <Pill :variant="statusVariant(slot.status)">
+                                        {{ slot.status }}
+                                    </Pill>
+                                </td>
+                                <td class="px-3 py-2.5 text-xs text-fg-subtle">
+                                    {{ slot.fail_message || '—' }}
+                                </td>
+                            </tr>
+                            <tr v-if="(history.slots ?? []).length === 0">
+                                <td
+                                    colspan="4"
+                                    class="px-3 py-8 text-center text-sm text-fg-subtle"
+                                >
+                                    No recent downloads.
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
             </div>
         </template>
     </div>

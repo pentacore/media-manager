@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { Head, router } from '@inertiajs/vue3';
-import { MoreHorizontal, Pause, RefreshCcw, X } from 'lucide-vue-next';
+import { MoreHorizontal, Pause, RefreshCcw, X } from '@lucide/vue';
 import { onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import NowPlayingController from '@/actions/App/Http/Controllers/Emby/NowPlayingController';
 import {

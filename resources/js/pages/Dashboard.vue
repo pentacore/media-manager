@@ -7,7 +7,7 @@ import {
     Inbox,
     RefreshCcw,
     X,
-} from 'lucide-vue-next';
+} from '@lucide/vue';
 import { computed, onMounted, ref } from 'vue';
 import ActionRequestController from '@/actions/App/Http/Controllers/Actions/ActionRequestController';
 import ActivityLogController from '@/actions/App/Http/Controllers/ActivityLogController';
@@ -18,6 +18,7 @@ import {
     Poster,
     StatCard,
     SvcChip,
+    TimeStamp,
 } from '@/components/mm';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useDashboardStats } from '@/composables/useDashboardStats';
@@ -179,31 +180,6 @@ function refresh() {
 // Per-service services-online sparkline isn't tracked yet; reuse the
 // actions stream as a coarse "activity" line for that card.
 const servicesSpark = computed<number[]>(() => props.sparklines.actions);
-
-function formatRelative(iso: string | null): string {
-    if (!iso) {
-        return '—';
-    }
-
-    const ms = Date.now() - new Date(iso).getTime();
-    const m = Math.floor(ms / 60_000);
-
-    if (m < 1) {
-        return 'just now';
-    }
-
-    if (m < 60) {
-        return `${m}m ago`;
-    }
-
-    const h = Math.floor(m / 60);
-
-    if (h < 24) {
-        return `${h}h ago`;
-    }
-
-    return `${Math.floor(h / 24)}d ago`;
-}
 
 function formatTicks(ticks: number | null): string {
     if (!ticks) {
@@ -403,11 +379,10 @@ onMounted(() => {
                         :key="row.id"
                         class="flex items-center gap-3 border-b border-border px-4 py-2.5 last:border-b-0"
                     >
-                        <span
+                        <TimeStamp
+                            :iso="row.created_at"
                             class="font-mono-tabular w-12 shrink-0 text-[11.5px] text-fg-subtle"
-                        >
-                            {{ formatRelative(row.created_at) }}
-                        </span>
+                        />
                         <span
                             class="size-1.5 shrink-0 rounded-full bg-info"
                             aria-hidden="true"
@@ -578,12 +553,11 @@ onMounted(() => {
                         >
                             {{ service.avg_latency_ms }}ms
                         </span>
-                        <span
+                        <TimeStamp
                             v-else
+                            :iso="service.last_seen_at"
                             class="font-mono-tabular ml-auto text-[11px] text-fg-subtle"
-                        >
-                            {{ formatRelative(service.last_seen_at) }}
-                        </span>
+                        />
                         <Pill
                             v-if="
                                 service.latest_version &&
@@ -628,7 +602,7 @@ onMounted(() => {
                             class="font-mono-tabular flex items-center justify-between text-[11px] text-fg-subtle"
                         >
                             <span>act_{{ action.id }}</span>
-                            <span>{{ formatRelative(action.created_at) }}</span>
+                            <TimeStamp :iso="action.created_at" />
                         </div>
                         <div class="mt-1 text-sm font-medium">
                             <span

@@ -27,7 +27,7 @@ afterEach(function (): void {
 
 test('queues an ActionRequest tagged as agent with the rationale', function (): void {
     ActionTypeConfig::factory()->create(['type' => 'delete_series', 'requires_approval' => true, 'is_enabled' => true]);
-    $context = bindDecisionContext(webhookEventId: null);
+    $decisionRunContext = bindDecisionContext();
 
     $result = json_decode((new ProposeActionTool)->handle(new Request([
         'type' => 'delete_series',
@@ -44,7 +44,7 @@ test('queues an ActionRequest tagged as agent with the rationale', function (): 
     expect($request->source_service)->toBe('sonarr');
     expect($request->payload['series_id'])->toBe(7);
     expect($request->payload['agent_rationale'])->toBe('Unmonitored and unwatched.');
-    expect($context->count())->toBe(1);
+    expect($decisionRunContext->count())->toBe(1);
 });
 
 test('rejects action types outside the allowlist', function (): void {

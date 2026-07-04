@@ -3,10 +3,13 @@
 declare(strict_types=1);
 
 use App\Ai\Agents\MediaAgent;
+use App\Jobs\Ai\GenerateConversationTitle;
 use App\Models\User;
 use Illuminate\Foundation\Http\Middleware\PreventRequestForgery;
+use Illuminate\Support\Facades\Bus;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Str;
 
 beforeEach(function (): void {
     config()->set('inertia.ssr.enabled', false);
@@ -111,6 +114,52 @@ test('exception messages are not leaked to the client outside local env', functi
             && ($context['user_id'] ?? null) === $admin->id
             && str_contains((string) ($context['message'] ?? ''), 'LEAKED-PROVIDER-SECRET')
     );
+});
+
+test('first turn dispatches GenerateConversationTitle and seeds fallback title', function (): void {
+    Bus::fake([GenerateConversationTitle::class]);
+    MediaAgent::fake(['ok']);
+
+    $admin = User::factory()->admin()->create();
+
+    $response = $this->actingAs($admin)
+        ->postJson(route('ai.chat.send'), [
+            'message' => 'Tell me about my queue please',
+        ])
+        ->assertOk();
+
+    $conversationId = $response->json('conversation_id');
+    expect($conversationId)->toBeString();
+
+    Bus::assertDispatched(fn (GenerateConversationTitle $generateConversationTitle): bool => $generateConversationTitle->conversationId === $conversationId
+        && $generateConversationTitle->firstUserMessage === 'Tell me about my queue please');
+
+    expect(DB::table('agent_conversations')->where('id', $conversationId)->value('title'))
+        ->toBe('Tell me about my queue please');
+});
+
+test('subsequent turns do not dispatch GenerateConversationTitle', function (): void {
+    Bus::fake([GenerateConversationTitle::class]);
+    MediaAgent::fake(['ok']);
+    $admin = User::factory()->admin()->create();
+    $existing = (string) Str::uuid();
+
+    DB::table('agent_conversations')->insert([
+        'id' => $existing,
+        'user_id' => $admin->id,
+        'title' => 'Existing convo',
+        'created_at' => now()->subHour(),
+        'updated_at' => now()->subHour(),
+    ]);
+
+    $this->actingAs($admin)
+        ->postJson(route('ai.chat.send'), [
+            'message' => 'follow-up',
+            'conversation_id' => $existing,
+        ])
+        ->assertOk();
+
+    Bus::assertNotDispatched(GenerateConversationTitle::class);
 });
 
 test('exception messages are surfaced to the client in local env', function (): void {
