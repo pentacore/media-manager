@@ -3,11 +3,19 @@
 declare(strict_types=1);
 
 use App\Ai\Agents\MediaAgent;
+use App\Ai\Decision\InspectStuckImportTool;
 use App\Ai\Tools\BaseTool;
+use App\Models\ServiceConnection;
 use App\Settings\AiSettings;
 use Laravel\Ai\Contracts\Agent;
 use Laravel\Ai\Contracts\Conversational;
 use Laravel\Ai\Contracts\HasTools;
+use Laravel\Ai\Contracts\Tool;
+
+beforeEach(function (): void {
+    config()->set('services.tmdb.api_key');
+    config()->set('services.trakt.client_id');
+});
 
 test('MediaAgent is an Agent + Conversational + HasTools', function (): void {
     $agent = new MediaAgent;
@@ -17,77 +25,105 @@ test('MediaAgent is an Agent + Conversational + HasTools', function (): void {
     expect($agent)->toBeInstanceOf(HasTools::class);
 });
 
-test('every tool returned by tools() extends BaseTool', function (): void {
+test('every tool returned by tools() is a usable SDK Tool', function (): void {
     $tools = iterator_to_array((new MediaAgent)->tools(), false);
 
     foreach ($tools as $tool) {
-        expect($tool)->toBeInstanceOf(BaseTool::class);
+        // Most tools extend BaseTool; the context-free InspectStuckImportTool
+        // implements the SDK Tool contract directly. Both are valid.
+        expect($tool)->toBeInstanceOf(Tool::class);
+
+        // Advisory-mode enforcement lives in BaseTool::handle(). Any tool that
+        // bypasses BaseTool must be read-only by design and consciously
+        // whitelisted here — a Destructive tool outside BaseTool would skip
+        // the advisory gate entirely.
+        if (! $tool instanceof BaseTool) {
+            expect($tool::class)->toBe(InspectStuckImportTool::class);
+        }
     }
 });
 
-test('tool list includes the Phase-1 tool families', function (): void {
+test('tool list includes the core tool families', function (): void {
     $tools = collect(iterator_to_array((new MediaAgent)->tools(), false));
 
     $shortNames = $tools->map(fn ($t): string => class_basename($t))->all();
 
     expect($shortNames)->toContain('GetServiceStatusTool');
     expect($shortNames)->toContain('QueryActivityTool');
-    expect($shortNames)->toContain('SearchSeriesTool');
-    expect($shortNames)->toContain('DeleteSeriesTool');
-    expect($shortNames)->toContain('SearchMoviesTool');
+    expect($shortNames)->toContain('SemanticLibrarySearchTool');
+    expect($shortNames)->toContain('SearchMediaTool');
+    expect($shortNames)->toContain('GetMediaTool');
+    expect($shortNames)->toContain('AddMediaTool');
+    expect($shortNames)->toContain('MonitorMediaTool');
+    expect($shortNames)->toContain('SetMediaQualityProfileTool');
+    expect($shortNames)->toContain('DeleteMediaTool');
     expect($shortNames)->toContain('NowPlayingTool');
-    expect($shortNames)->toContain('SearchCatalogTool');
-    expect($shortNames)->toContain('SearchIndexersTool');
-});
-
-test('tool list includes the Phase-2 tool families', function (): void {
-    $tools = collect(iterator_to_array((new MediaAgent)->tools(), false));
-
-    $shortNames = $tools->map(fn ($t): string => class_basename($t))->all();
-
-    expect($shortNames)->toContain('AddSeriesTool');
-    expect($shortNames)->toContain('MonitorSeriesTool');
-    expect($shortNames)->toContain('SetSeriesQualityProfileTool');
-    expect($shortNames)->toContain('AddMovieTool');
-    expect($shortNames)->toContain('MonitorMovieTool');
-    expect($shortNames)->toContain('SetMovieQualityProfileTool');
     expect($shortNames)->toContain('MarkAsWatchedTool');
     expect($shortNames)->toContain('MarkAsUnwatchedTool');
+    expect($shortNames)->toContain('SearchCatalogTool');
     expect($shortNames)->toContain('ApproveRequestTool');
     expect($shortNames)->toContain('DeclineRequestTool');
     expect($shortNames)->toContain('ProposeWorkflowTool');
 });
 
-test('tool list has all 42 expected tools', function (): void {
-    $tools = collect(iterator_to_array((new MediaAgent)->tools(), false));
-
-    expect($tools->count())->toBe(42);
-});
-
-test('tool list includes the Whisparr tool families', function (): void {
+test('tool list includes the download queue/history/stuck-import tools', function (): void {
     $tools = collect(iterator_to_array((new MediaAgent)->tools(), false));
 
     $shortNames = $tools->map(fn ($t): string => class_basename($t))->all();
 
-    expect($shortNames)->toContain('SearchItemsTool');
-    expect($shortNames)->toContain('GetItemTool');
-    expect($shortNames)->toContain('AddItemTool');
-    expect($shortNames)->toContain('MonitorItemTool');
-    expect($shortNames)->toContain('SetItemQualityProfileTool');
-    expect($shortNames)->toContain('DeleteItemTool');
+    expect($shortNames)->toContain('GetDownloadQueueTool');
+    expect($shortNames)->toContain('GetDownloadHistoryTool');
+    expect($shortNames)->toContain('InspectStuckImportTool');
+    expect($shortNames)->toContain('ResolveManualImportChatTool');
+    expect($shortNames)->toContain('RemoveStuckDownloadChatTool');
 });
 
-test('tool list includes the Phase-3 metadata tool families', function (): void {
+test('tool list has the 28 core tools when no optional integration is configured', function (): void {
     $tools = collect(iterator_to_array((new MediaAgent)->tools(), false));
 
-    $shortNames = $tools->map(fn ($t): string => class_basename($t))->all();
+    expect($tools->count())->toBe(28);
+});
 
-    expect($shortNames)->toContain('TmdbGetTitleTool');
-    expect($shortNames)->toContain('TmdbGetSimilarTool');
-    expect($shortNames)->toContain('TmdbGetCreditsTool');
-    expect($shortNames)->toContain('TraktGetTrendingTool');
-    expect($shortNames)->toContain('TraktGetPopularTool');
-    expect($shortNames)->toContain('TraktGetListTool');
+test('Prowlarr tools appear only with an active Prowlarr connection', function (): void {
+    $shortNames = fn (): array => collect(iterator_to_array((new MediaAgent)->tools(), false))
+        ->map(fn ($t): string => class_basename($t))->all();
+
+    expect($shortNames())->not->toContain('SearchIndexersTool');
+
+    $connection = ServiceConnection::factory()->prowlarr()->create(['is_active' => true]);
+
+    expect($shortNames())->toContain('SearchIndexersTool')
+        ->toContain('ListIndexersTool');
+
+    $connection->update(['is_active' => false]);
+
+    expect($shortNames())->not->toContain('SearchIndexersTool');
+});
+
+test('TMDB tools appear only when an API key is configured', function (): void {
+    $shortNames = fn (): array => collect(iterator_to_array((new MediaAgent)->tools(), false))
+        ->map(fn ($t): string => class_basename($t))->all();
+
+    expect($shortNames())->not->toContain('TmdbGetTitleTool');
+
+    config()->set('services.tmdb.api_key', 'key');
+
+    expect($shortNames())->toContain('TmdbGetTitleTool')
+        ->toContain('TmdbGetSimilarTool')
+        ->toContain('TmdbGetCreditsTool');
+});
+
+test('Trakt tools appear only when a client id is configured', function (): void {
+    $shortNames = fn (): array => collect(iterator_to_array((new MediaAgent)->tools(), false))
+        ->map(fn ($t): string => class_basename($t))->all();
+
+    expect($shortNames())->not->toContain('TraktGetTrendingTool');
+
+    config()->set('services.trakt.client_id', 'id');
+
+    expect($shortNames())->toContain('TraktGetTrendingTool')
+        ->toContain('TraktGetPopularTool')
+        ->toContain('TraktGetListTool');
 });
 
 test('model() reads from AiSettings', function (): void {
@@ -96,12 +132,21 @@ test('model() reads from AiSettings', function (): void {
     expect((new MediaAgent)->model())->toBe('gpt-4o-mini');
 });
 
-test('instructions mention every registered tool name', function (): void {
-    $agent = new MediaAgent;
-    $instructions = (string) $agent->instructions();
-    $tools = collect(iterator_to_array($agent->tools(), false));
+test('instructions cover the behavioral guidance the schemas cannot express', function (): void {
+    $instructions = (string) (new MediaAgent)->instructions();
 
-    foreach ($tools as $tool) {
-        expect($instructions)->toContain(class_basename($tool));
-    }
+    // Tool routing that lives in the prompt (not in any schema)
+    expect($instructions)->toContain('SemanticLibrarySearchTool')
+        ->toContain('ProposeWorkflowTool')
+        ->toContain('InspectStuckImportTool')
+        ->toContain('ResolveManualImportChatTool')
+        ->toContain('RemoveStuckDownloadChatTool')
+        ->toContain('SearchMediaTool')
+        ->toContain('GetMediaTool');
+
+    // Behavioral rules
+    expect($instructions)->toContain('NEVER guess IDs')
+        ->toContain('advisory_mode_blocks_destructive')
+        ->toContain('no_action_type_config')
+        ->toContain('awaiting_confirmation');
 });

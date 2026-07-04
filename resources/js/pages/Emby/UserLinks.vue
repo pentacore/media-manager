@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { Form, Head, router, usePage } from '@inertiajs/vue3';
-import { Link2, Trash2 } from 'lucide-vue-next';
+import { Link2, Trash2 } from '@lucide/vue';
 import { computed } from 'vue';
 import UserLinkController from '@/actions/App/Http/Controllers/Emby/UserLinkController';
 import InputError from '@/components/InputError.vue';

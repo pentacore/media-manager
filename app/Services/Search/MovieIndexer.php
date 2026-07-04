@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Services\Search;
 
+use App\Jobs\EmbedLibraryItem;
 use App\Models\IndexedMovie;
 use App\Models\ServiceConnection;
 use Carbon\CarbonImmutable;
@@ -22,7 +23,7 @@ class MovieIndexer
 
         throw_if($radarrId === 0, InvalidArgumentException::class, 'Radarr movie payload missing id.');
 
-        return IndexedMovie::query()->updateOrCreate(
+        $indexedMovie = IndexedMovie::query()->updateOrCreate(
             [
                 'service_connection_id' => $serviceConnection->id,
                 'radarr_id' => $radarrId,
@@ -44,6 +45,12 @@ class MovieIndexer
                 'arr_added_at' => $this->parseDate($movie['added'] ?? null),
             ],
         );
+
+        if ($indexedMovie->wasRecentlyCreated || $indexedMovie->wasChanged(['title', 'overview', 'genres', 'year'])) {
+            dispatch(new EmbedLibraryItem($indexedMovie::class, $indexedMovie->id));
+        }
+
+        return $indexedMovie;
     }
 
     public function forget(int $radarrId, ServiceConnection $serviceConnection): void

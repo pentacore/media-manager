@@ -67,11 +67,14 @@ abstract class BaseTool implements Tool
     {
         $actionOrchestrator = resolve(ActionOrchestrator::class);
 
+        $forceRequiresApproval = ($candidate['force_requires_approval'] ?? null) === true ? true : null;
+
         $actionRequest = $actionOrchestrator->dispatch(
             type: (string) ($candidate['type'] ?? ''),
             sourceService: (string) ($candidate['source_service'] ?? 'ai'),
             targetService: (string) ($candidate['target_service'] ?? ''),
             payload: is_array($candidate['payload'] ?? null) ? $candidate['payload'] : [],
+            forceRequiresApproval: $forceRequiresApproval,
         );
 
         if ($actionRequest === null) {

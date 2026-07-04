@@ -14,7 +14,7 @@ import {
     Trash2,
     Tv,
     X,
-} from 'lucide-vue-next';
+} from '@lucide/vue';
 import { computed, onMounted, ref } from 'vue';
 import RequestController from '@/actions/App/Http/Controllers/Media/RequestController';
 import {

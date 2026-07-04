@@ -16,6 +16,7 @@ import {
 } from '@/components/ui/select';
 import { Separator } from '@/components/ui/separator';
 import { dashboard } from '@/routes';
+import type { AiReasoningLevel } from '@/typefinder';
 
 interface DecisionAgentState {
     enabled: boolean;
@@ -25,12 +26,14 @@ interface DecisionAgentState {
     notify_on_suggest: boolean;
     notify_on_act: boolean;
     max_actions_per_run: number;
+    reasoning_level: AiReasoningLevel;
 }
 
 const props = defineProps<{
     settings: DecisionAgentState;
     models: Record<string, string[]>;
     eventCatalog: Record<string, string[]>;
+    reasoningLevels: Record<string, { label: string; value: AiReasoningLevel }>;
 }>();
 
 defineOptions({
@@ -53,6 +56,7 @@ const form = useForm<DecisionAgentState>({
     notify_on_suggest: props.settings.notify_on_suggest,
     notify_on_act: props.settings.notify_on_act,
     max_actions_per_run: props.settings.max_actions_per_run,
+    reasoning_level: props.settings.reasoning_level,
 });
 
 function eventKey(service: string, event: string): string {
@@ -165,6 +169,38 @@ function submit(): void {
                                         {{ modelId }}
                                     </SelectItem>
                                 </SelectGroup>
+                            </SelectContent>
+                        </Select>
+                        <InputError :message="form.errors.model" class="mt-1" />
+                    </div>
+                </div>
+
+                <!-- Reasoning Level -->
+                <div
+                    class="grid items-start gap-6"
+                    style="grid-template-columns: 200px 1fr"
+                >
+                    <Field
+                        label="Reasoning Level"
+                        hint="Level of reasoning applied by the decision agent. Higher levels may result in more accurate decisions but can be more resource-intensive."
+                    >
+                        <span />
+                    </Field>
+                    <div>
+                        <Select v-model="form.reasoning_level">
+                            <SelectTrigger class="h-8 max-w-[320px] text-sm">
+                                <SelectValue
+                                    placeholder="Select a reasoning level"
+                                />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem
+                                    v-for="reasoningLevel in reasoningLevels"
+                                    :key="reasoningLevel.label"
+                                    :value="reasoningLevel.value"
+                                >
+                                    {{ reasoningLevel.label }}
+                                </SelectItem>
                             </SelectContent>
                         </Select>
                         <InputError :message="form.errors.model" class="mt-1" />

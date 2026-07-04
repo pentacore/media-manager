@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { router } from '@inertiajs/vue3';
-import { useEventListener } from '@vueuse/core';
 import {
     Activity as ActivityIcon,
     Film,
@@ -13,7 +12,8 @@ import {
     Search as SearchIcon,
     Tv,
     Zap,
-} from 'lucide-vue-next';
+} from '@lucide/vue';
+import { useEventListener } from '@vueuse/core';
 import type { Component } from 'vue';
 import { computed, nextTick, onMounted, useTemplateRef, watch } from 'vue';
 import ActionRequestController from '@/actions/App/Http/Controllers/Actions/ActionRequestController';

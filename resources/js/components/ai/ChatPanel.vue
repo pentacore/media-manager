@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { usePage } from '@inertiajs/vue3';
-import { ArrowRight, Check, Cpu, Pencil, Sparkles, X } from 'lucide-vue-next';
+import { ArrowRight, Check, Cpu, Pencil, Sparkles, X } from '@lucide/vue';
 import {
     computed,
     nextTick,
@@ -14,8 +14,9 @@ import AIChatController from '@/actions/App/Http/Controllers/AI/ChatController';
 import { InitialsAvatar, Pill } from '@/components/mm';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { useAiChat } from '@/composables/useAiChat';
+import { jsonRequest, useAiChat } from '@/composables/useAiChat';
 import type { AgentStep, ConversationMessage } from '@/composables/useAiChat';
+import { streamChat } from '@/composables/useChatStream';
 import { useMarkdown } from '@/composables/useMarkdown';
 import { useWebSocket } from '@/composables/useWebSocket';
 import { cn } from '@/lib/utils';
@@ -178,74 +179,10 @@ async function sendMessage(continuationPayload?: {
     await scrollToBottom();
 
     try {
-        const response = await fetch(AIChatController.send.url(), {
-            method: 'POST',
-            credentials: 'same-origin',
-            headers: {
-                'Content-Type': 'application/json',
-                Accept: 'application/json',
-                'X-Requested-With': 'XMLHttpRequest',
-                'X-CSRF-TOKEN':
-                    (
-                        document.querySelector(
-                            'meta[name="csrf-token"]',
-                        ) as HTMLMetaElement | null
-                    )?.content ?? '',
-            },
-            body: JSON.stringify({
-                message: bodyMessage,
-                conversation_id: activeConversationId.value,
-                mode: mode.value,
-                ...extraBody,
-            }),
-        });
-
-        if (!response.ok) {
-            const data = await response
-                .json()
-                .catch(() => ({}) as Record<string, unknown>);
-            const errMsg =
-                typeof data.error === 'string'
-                    ? data.error
-                    : typeof data.message === 'string'
-                      ? data.message
-                      : `Request failed (${response.status})`;
-
-            throw new Error(errMsg);
-        }
-
-        const data = (await response.json()) as {
-            text: string;
-            conversation_id: string | null;
-            workflow: WorkflowProposal | null;
-        };
-
-        if (
-            data.conversation_id &&
-            data.conversation_id !== activeConversationId.value
-        ) {
-            setActiveConversation(data.conversation_id);
-        }
-
-        messages.value.push({
-            role: 'assistant',
-            text: data.text,
-            ts: Date.now(),
-            workflow: data.workflow,
-            workflowResolved: null,
-        });
-
-        if (data.conversation_id) {
-            upsertConversation({
-                id: data.conversation_id,
-                title:
-                    messages.value
-                        .find((m) => m.role === 'user')
-                        ?.text.slice(0, 60) ?? 'New chat',
-                updated_at: new Date().toISOString(),
-            });
-            // Pull the freshly-generated auto-title (queued) when it lands.
-            void refreshRecent(true);
+        if (continuationPayload) {
+            await sendBlockingTurn(bodyMessage, extraBody);
+        } else {
+            await sendStreamingTurn(bodyMessage);
         }
     } catch (e) {
         error.value = e instanceof Error ? e.message : 'Unknown error';
@@ -254,6 +191,157 @@ async function sendMessage(continuationPayload?: {
         setPendingStep(null);
         await scrollToBottom();
     }
+}
+
+/**
+ * The blocking JSON path used for workflow approve/decline continuations. The
+ * SSE stream deliberately doesn't support continuations, so these keep posting
+ * to send() and rendering the buffered response in one shot.
+ */
+async function sendBlockingTurn(
+    bodyMessage: string,
+    extraBody: Record<string, unknown>,
+): Promise<void> {
+    const response = await fetch(AIChatController.send.url(), {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: {
+            'Content-Type': 'application/json',
+            Accept: 'application/json',
+            'X-Requested-With': 'XMLHttpRequest',
+            'X-CSRF-TOKEN':
+                (
+                    document.querySelector(
+                        'meta[name="csrf-token"]',
+                    ) as HTMLMetaElement | null
+                )?.content ?? '',
+        },
+        body: JSON.stringify({
+            message: bodyMessage,
+            conversation_id: activeConversationId.value,
+            mode: mode.value,
+            ...extraBody,
+        }),
+    });
+
+    if (!response.ok) {
+        const data = await response
+            .json()
+            .catch(() => ({}) as Record<string, unknown>);
+        const errMsg =
+            typeof data.error === 'string'
+                ? data.error
+                : typeof data.message === 'string'
+                  ? data.message
+                  : `Request failed (${response.status})`;
+
+        throw new Error(errMsg);
+    }
+
+    const data = (await response.json()) as {
+        text: string;
+        conversation_id: string | null;
+        workflow: WorkflowProposal | null;
+    };
+
+    if (
+        data.conversation_id &&
+        data.conversation_id !== activeConversationId.value
+    ) {
+        setActiveConversation(data.conversation_id);
+    }
+
+    messages.value.push({
+        role: 'assistant',
+        text: data.text,
+        ts: Date.now(),
+        workflow: data.workflow,
+        workflowResolved: null,
+    });
+
+    if (data.conversation_id) {
+        rememberConversation(data.conversation_id);
+    }
+}
+
+/**
+ * Stream a normal chat turn: push an empty assistant bubble, grow it from the
+ * SSE text deltas, mark tool starts as pending steps, then (once the stream
+ * ends) resolve the conversation id and poll for any proposed workflow.
+ */
+async function sendStreamingTurn(bodyMessage: string): Promise<void> {
+    // Read the element back out of the reactive array so mutations to `.text`
+    // during streaming go through Vue's proxy and re-render the bubble.
+    const index =
+        messages.value.push({
+            role: 'assistant',
+            text: '',
+            ts: Date.now(),
+            workflow: null,
+            workflowResolved: null,
+        }) - 1;
+    const assistantMessage = messages.value[index];
+
+    const knownConversationId = activeConversationId.value;
+
+    const result = await streamChat({
+        message: bodyMessage,
+        conversationId: knownConversationId,
+        mode: mode.value,
+        onDelta: (accumulated) => {
+            assistantMessage.text = accumulated;
+        },
+        onToolCall: (toolName) => {
+            setPendingStep({
+                conversationId: activeConversationId.value ?? '',
+                toolName,
+                status: 'started',
+                occurredAt: new Date().toISOString(),
+            });
+        },
+    });
+
+    // The stream's terminal `conversation_id` event makes the id deterministic:
+    // for an existing conversation it echoes what we sent, for a brand-new one it
+    // carries the id the SDK minted during the turn. Adopt it directly — no
+    // recency guessing.
+    const conversationId = result.conversationId;
+
+    if (conversationId) {
+        if (conversationId !== knownConversationId) {
+            setActiveConversation(conversationId);
+        }
+
+        rememberConversation(conversationId);
+    }
+
+    if (conversationId) {
+        const pending = await jsonRequest<{
+            workflow: WorkflowProposal | null;
+        }>(
+            'GET',
+            AIChatController.pendingWorkflow.url({
+                query: { conversation_id: conversationId },
+            }),
+        );
+        assistantMessage.workflow = pending.workflow;
+    }
+}
+
+/**
+ * Keep the recent-conversation picker in sync after a completed turn and pull
+ * the queued auto-generated title once it lands.
+ */
+function rememberConversation(conversationId: string): void {
+    upsertConversation({
+        id: conversationId,
+        title:
+            messages.value.find((m) => m.role === 'user')?.text.slice(0, 60) ??
+            'New chat',
+        updated_at: new Date().toISOString(),
+    });
+    // Pull the freshly-generated auto-title (queued) when it lands.
+    void refreshRecent(true);
 }
 
 function approveWorkflow(message: ChatMessage): void {

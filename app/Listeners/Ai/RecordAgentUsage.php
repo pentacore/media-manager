@@ -7,6 +7,7 @@ namespace App\Listeners\Ai;
 use App\Models\AiModelPrice;
 use App\Models\AiToolInvocation;
 use App\Models\AiUsageRecord;
+use App\Services\AiUsage\BatchPricingContext;
 use Illuminate\Support\Facades\Auth;
 use Laravel\Ai\Events\AgentPrompted;
 
@@ -14,11 +15,19 @@ class RecordAgentUsage
 {
     public function handle(AgentPrompted $agentPrompted): void
     {
+        // Streamed runs are registered for both AgentStreamed (explicitly,
+        // AIServiceProvider) and — under the fake gateway — AgentPrompted.
+        // Dedupe on invocation_id so a double dispatch never double-bills.
+        if (AiUsageRecord::where('invocation_id', $agentPrompted->invocationId)->exists()) {
+            return;
+        }
+
         $response = $agentPrompted->response;
         $usage = $response->usage;
         $meta = $response->meta;
 
-        $snapshot = $this->priceSnapshotFor($meta->provider, $meta->model);
+        $isBatch = resolve(BatchPricingContext::class)->enabled;
+        $snapshot = $this->priceSnapshotFor($meta->provider, $meta->model, $isBatch);
 
         AiUsageRecord::create([
             'invocation_id' => $agentPrompted->invocationId,
@@ -39,6 +48,7 @@ class RecordAgentUsage
             'cache_read_per_mtok' => $snapshot['cache_read_per_mtok'] ?? null,
             'cache_write_per_mtok' => $snapshot['cache_write_per_mtok'] ?? null,
             'reasoning_per_mtok' => $snapshot['reasoning_per_mtok'] ?? null,
+            'is_batch' => $isBatch,
             'price_source' => $snapshot === null ? null : 'live',
             // Conversational agents (chat) carry a participant on the response.
             // Non-conversational agents (e.g. PriceFetcherAgent) don't, so we
@@ -66,9 +76,15 @@ class RecordAgentUsage
     }
 
     /**
+     * Snapshot the catalog rates onto the usage row. When the run is
+     * batch-flagged, each token tier prefers its `batch_*_per_mtok` rate,
+     * falling back to the standard rate when the batch column is unset or
+     * zero. Snapshotting the batch rates into the standard snapshot keys
+     * keeps downstream reporting unchanged.
+     *
      * @return array<string, string>|null
      */
-    private function priceSnapshotFor(?string $provider, ?string $model): ?array
+    private function priceSnapshotFor(?string $provider, ?string $model, bool $isBatch): ?array
     {
         if ($provider === null || $provider === '' || $model === null || $model === '') {
             return null;
@@ -89,11 +105,24 @@ class RecordAgentUsage
         }
 
         return [
-            'input_per_mtok' => $price->input_per_mtok,
-            'output_per_mtok' => $price->output_per_mtok,
-            'cache_read_per_mtok' => $price->cache_read_per_mtok,
-            'cache_write_per_mtok' => $price->cache_write_per_mtok,
-            'reasoning_per_mtok' => $price->reasoning_per_mtok,
+            'input_per_mtok' => $this->rateFor($price->input_per_mtok, $price->batch_input_per_mtok, $isBatch),
+            'output_per_mtok' => $this->rateFor($price->output_per_mtok, $price->batch_output_per_mtok, $isBatch),
+            'cache_read_per_mtok' => $this->rateFor($price->cache_read_per_mtok, $price->batch_cache_read_per_mtok, $isBatch),
+            'cache_write_per_mtok' => $this->rateFor($price->cache_write_per_mtok, $price->batch_cache_write_per_mtok, $isBatch),
+            'reasoning_per_mtok' => $this->rateFor($price->reasoning_per_mtok, $price->batch_reasoning_per_mtok, $isBatch),
         ];
+    }
+
+    /**
+     * Pick the batch rate for a token tier when the run is batch-flagged and
+     * the batch rate is set and positive; otherwise use the standard rate.
+     */
+    private function rateFor(string $standard, ?string $batch, bool $isBatch): string
+    {
+        if ($isBatch && $batch !== null && (float) $batch > 0.0) {
+            return $batch;
+        }
+
+        return $standard;
     }
 }

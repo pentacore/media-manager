@@ -29,6 +29,10 @@ class ActionOrchestrator
      * is forced to Pending regardless of ActionTypeConfig.requires_approval, and
      * ExecuteActionRequest is never dispatched.
      *
+     * $forceRequiresApproval lets a caller add (never remove) an approval
+     * requirement for a single instance — e.g. a partially-mapped manual import
+     * is forced to Pending even when its ActionTypeConfig auto-executes.
+     *
      * @param  array<string, mixed>  $payload
      */
     public function dispatch(
@@ -37,6 +41,7 @@ class ActionOrchestrator
         string $targetService,
         array $payload,
         ?WebhookEvent $webhookEvent = null,
+        ?bool $forceRequiresApproval = null,
     ): ?ActionRequest {
         $config = ActionTypeConfig::where('type', $type)->first();
 
@@ -59,7 +64,8 @@ class ActionOrchestrator
         }
 
         $advisoryMode = $this->aiSettings->mode() === AiMode::Advisory;
-        $requiresApproval = $advisoryMode || $config->requires_approval;
+        // The override can only tighten the gate (force approval), never relax it.
+        $requiresApproval = $advisoryMode || $config->requires_approval || ($forceRequiresApproval ?? false);
 
         $actionRequest = ActionRequest::create([
             'webhook_event_id' => $webhookEvent?->id,

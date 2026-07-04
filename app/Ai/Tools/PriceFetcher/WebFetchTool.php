@@ -24,12 +24,17 @@ class WebFetchTool extends BaseTool
     /**
      * Hosts the agent is allowed to fetch from. Pricing pages only.
      */
-    private const array ALLOWED_HOSTS = [
+    public const array ALLOWED_HOSTS = [
         'openai.com',
         'platform.openai.com',
+        'developers.openai.com',
         'docs.anthropic.com',
         'anthropic.com',
         'www.anthropic.com',
+        'claude.com',
+        'www.claude.com',
+        'platform.claude.com',
+        'docs.claude.com',
         'ai.google.dev',
         'cloud.google.com',
         'api-docs.deepseek.com',
@@ -42,6 +47,7 @@ class WebFetchTool extends BaseTool
         'console.groq.com',
         'cohere.com',
         'docs.cohere.com',
+        'openrouter.ai',
     ];
 
     public function description(): Stringable|string
@@ -84,6 +90,17 @@ class WebFetchTool extends BaseTool
             ];
         }
 
+        // Guards the final landing host only — intermediate redirect hops are
+        // still requested (blind-SSRF residual), acceptable against this fixed
+        // vendor allowlist. Switch to withoutRedirecting() to close fully.
+        $finalHost = $response->effectiveUri()?->getHost();
+        if (is_string($finalHost) && ! in_array(strtolower($finalHost), self::ALLOWED_HOSTS, true)) {
+            return [
+                'error' => 'redirected_off_allowlist',
+                'message' => 'Request redirected to '.$finalHost.', which is not on the pricing-pages allowlist.',
+            ];
+        }
+
         return [
             'url' => $url,
             'status' => $response->status(),
@@ -112,7 +129,7 @@ class WebFetchTool extends BaseTool
     {
         return [
             'url' => $schema->string()
-                ->description('Absolute URL of a provider pricing page. Must be on the allowlist (openai.com, anthropic.com, ai.google.dev, deepseek.com, x.ai, mistral.ai, groq.com, cohere.com or their docs subdomains).')
+                ->description('Absolute URL of a provider pricing page. Must be on the allowlist (developers.openai.com, claude.com, platform.claude.com, ai.google.dev, deepseek.com, x.ai, mistral.ai, groq.com, cohere.com, openrouter.ai or their docs subdomains).')
                 ->required(),
         ];
     }

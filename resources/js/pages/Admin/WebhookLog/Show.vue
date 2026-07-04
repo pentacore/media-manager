@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { Head, Link } from '@inertiajs/vue3';
-import { ArrowLeft } from 'lucide-vue-next';
+import { ArrowLeft } from '@lucide/vue';
 import { computed } from 'vue';
 import WebhookLogController from '@/actions/App/Http/Controllers/Admin/WebhookLogController';
 import { Pill, SvcChip } from '@/components/mm';

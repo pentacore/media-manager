@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Services\Search;
 
+use App\Jobs\EmbedLibraryItem;
 use App\Models\IndexedSeries;
 use App\Models\ServiceConnection;
 use Carbon\CarbonImmutable;
@@ -22,7 +23,7 @@ class SeriesIndexer
 
         throw_if($sonarrId === 0, InvalidArgumentException::class, 'Sonarr series payload missing id.');
 
-        return IndexedSeries::query()->updateOrCreate(
+        $indexedSeries = IndexedSeries::query()->updateOrCreate(
             [
                 'service_connection_id' => $serviceConnection->id,
                 'sonarr_id' => $sonarrId,
@@ -43,6 +44,12 @@ class SeriesIndexer
                 'arr_added_at' => $this->parseDate($series['added'] ?? null),
             ],
         );
+
+        if ($indexedSeries->wasRecentlyCreated || $indexedSeries->wasChanged(['title', 'overview', 'genres', 'year'])) {
+            dispatch(new EmbedLibraryItem($indexedSeries::class, $indexedSeries->id));
+        }
+
+        return $indexedSeries;
     }
 
     public function forget(int $sonarrId, ServiceConnection $serviceConnection): void

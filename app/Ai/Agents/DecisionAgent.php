@@ -8,22 +8,20 @@ use App\Ai\Decision\InspectStuckImportTool;
 use App\Ai\Decision\ProposeActionTool;
 use App\Ai\Decision\RemoveStuckDownloadTool;
 use App\Ai\Decision\ResolveManualImportTool;
+use App\Ai\Tools\Arr\GetMediaTool;
+use App\Ai\Tools\Arr\SearchMediaTool;
 use App\Ai\Tools\Emby\NowPlayingTool;
 use App\Ai\Tools\Emby\WatchHistoryTool;
-use App\Ai\Tools\Radarr\GetMovieTool;
-use App\Ai\Tools\Radarr\SearchMoviesTool;
 use App\Ai\Tools\Seerr\ListPendingRequestsTool;
-use App\Ai\Tools\Sonarr\GetSeriesTool;
-use App\Ai\Tools\Sonarr\SearchSeriesTool;
 use App\Ai\Tools\System\GetServiceStatusTool;
 use App\Ai\Tools\System\QueryActivityTool;
-use App\Ai\Tools\Whisparr\GetItemTool;
-use App\Ai\Tools\Whisparr\SearchItemsTool;
 use App\Settings\DecisionAgentSettings;
 use Laravel\Ai\Attributes\MaxSteps;
 use Laravel\Ai\Contracts\Agent;
+use Laravel\Ai\Contracts\HasProviderOptions;
 use Laravel\Ai\Contracts\HasTools;
 use Laravel\Ai\Contracts\Tool;
+use Laravel\Ai\Enums\Lab;
 use Laravel\Ai\Promptable;
 use Stringable;
 
@@ -34,13 +32,23 @@ use Stringable;
  * context toolset plus the one proposal tool, and it never talks to a user.
  */
 #[MaxSteps(16)]
-class DecisionAgent implements Agent, HasTools
+class DecisionAgent implements Agent, HasProviderOptions, HasTools
 {
     use Promptable;
 
     public function model(): string
     {
         return resolve(DecisionAgentSettings::class)->model();
+    }
+
+    public function providerOptions(Lab|string $provider): array
+    {
+        return match ($provider) {
+            Lab::OpenAI => [
+                'reasoning' => ['effort' => resolve(DecisionAgentSettings::class)->reasoning()],
+            ],
+            default => [],
+        };
     }
 
     public function instructions(): Stringable|string
@@ -55,9 +63,7 @@ WORKFLOW
 2. Use read tools to gather only the context you genuinely need:
    - GetServiceStatusTool — health/version of each service.
    - QueryActivityTool — recent system/webhook/playback activity.
-   - SearchSeriesTool / GetSeriesTool — Sonarr library lookups.
-   - SearchMoviesTool / GetMovieTool — Radarr library lookups.
-   - SearchItemsTool / GetItemTool — Whisparr library lookups.
+   - SearchMediaTool / GetMediaTool — library lookups; the `service` param picks sonarr (TV series), radarr (movies), or whisparr.
    - ListPendingRequestsTool — pending Seerr requests.
    - NowPlayingTool / WatchHistoryTool — Emby state.
    Do not over-fetch. Avoid redundant calls.
@@ -68,7 +74,7 @@ For a Sonarr/Radarr "manual interaction required" event, decide what to do by re
 1. Call InspectStuckImportTool (service + download_id from the payload). It returns each candidate file: whether it `mapped`, what it is, and the raw `rejections`.
 2. Read the rejections and choose:
    - The files map and there are no rejections, OR the only obstacle is a benign "we know what it is but won't auto-import" reason — e.g. "matched by series id" / "automatic import is not possible" → IMPORT it with ResolveManualImportTool.
-   - The blocking reason is that the release is "not an upgrade" / "not a Custom Format upgrade for existing episode file(s)" → the file is redundant; REMOVE it with RemoveStuckDownloadTool (pass a short reason). Do NOT import a non-upgrade.
+   - The blocking reason is that the release is "not an upgrade" / "not a Custom Format upgrade for existing episode file(s)" → the file is redundant; REMOVE it with RemoveStuckDownloadTool (pass a short reason). Do NOT import a non-upgrade. Pass blocklist=true only when the release itself is bad (corrupt/fake/wrong content) so it is never grabbed again; leave it off for a plain non-upgrade. Pass search_replacement=true when a replacement should be grabbed (e.g. blocklisted a bad release but the content is still wanted); leave it false when the content shouldn't be retried.
    - Nothing maps (unknown series/episode, unparseable) → take no action; explain a human must resolve it in Sonarr/Radarr.
    - Anything you are unsure about, or a mix of the above → import via ResolveManualImportTool (it will be queued for human approval) rather than guessing, or explain and propose nothing.
 3. The system still gates suggest-vs-act: removals and partially-mapped imports always require human approval; only a fully-mapped import can auto-run, and only if its action rule allows it.
@@ -96,12 +102,8 @@ PROMPT;
         return [
             resolve(GetServiceStatusTool::class),
             resolve(QueryActivityTool::class),
-            resolve(SearchSeriesTool::class),
-            resolve(GetSeriesTool::class),
-            resolve(SearchMoviesTool::class),
-            resolve(GetMovieTool::class),
-            resolve(SearchItemsTool::class),
-            resolve(GetItemTool::class),
+            resolve(SearchMediaTool::class),
+            resolve(GetMediaTool::class),
             resolve(ListPendingRequestsTool::class),
             resolve(NowPlayingTool::class),
             resolve(WatchHistoryTool::class),

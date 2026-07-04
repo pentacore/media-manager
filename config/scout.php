@@ -203,6 +203,8 @@ return [
                         ['name' => 'genres', 'type' => 'string[]', 'facet' => true, 'optional' => true],
                         ['name' => 'overview', 'type' => 'string', 'optional' => true],
                         ['name' => 'poster_url', 'type' => 'string', 'index' => false, 'optional' => true],
+                        // num_dim must match App\Services\Search\LibraryEmbedder::DIMENSIONS (256).
+                        ['name' => 'embedding', 'type' => 'float[]', 'num_dim' => 256, 'optional' => true],
                         ['name' => 'created_at', 'type' => 'int64'],
                     ],
                     'default_sorting_field' => 'created_at',
@@ -234,6 +236,8 @@ return [
                         ['name' => 'genres', 'type' => 'string[]', 'facet' => true, 'optional' => true],
                         ['name' => 'overview', 'type' => 'string', 'optional' => true],
                         ['name' => 'poster_url', 'type' => 'string', 'index' => false, 'optional' => true],
+                        // num_dim must match App\Services\Search\LibraryEmbedder::DIMENSIONS (256).
+                        ['name' => 'embedding', 'type' => 'float[]', 'num_dim' => 256, 'optional' => true],
                         ['name' => 'created_at', 'type' => 'int64'],
                     ],
                     'default_sorting_field' => 'created_at',

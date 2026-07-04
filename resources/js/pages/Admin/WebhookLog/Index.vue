@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { Head, Link, router } from '@inertiajs/vue3';
-import { Webhook } from 'lucide-vue-next';
+import { Webhook } from '@lucide/vue';
 import { ref, watch } from 'vue';
 import WebhookLogController from '@/actions/App/Http/Controllers/Admin/WebhookLogController';
 import { Pill, SvcChip, Toggle } from '@/components/mm';

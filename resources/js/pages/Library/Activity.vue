@@ -6,7 +6,7 @@ import {
     Loader2,
     MoreVertical,
     RefreshCcw,
-} from 'lucide-vue-next';
+} from '@lucide/vue';
 import { computed, ref } from 'vue';
 import LibraryActivityController from '@/actions/App/Http/Controllers/Library/ActivityController';
 import { Pill, SvcChip } from '@/components/mm';

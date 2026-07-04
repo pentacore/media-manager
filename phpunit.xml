@@ -37,6 +37,10 @@
         <env name="TELESCOPE_ENABLED" value="false"/>
         <env name="NIGHTWATCH_ENABLED" value="false"/>
         <env name="MEDIAMANAGER_AI_ENABLED" value="true"/>
+        <!-- Dummy provider keys: a test that prompts an unfaked agent must
+             fail loudly (401) instead of silently billing the real account. -->
+        <env name="OPENAI_API_KEY" value="sk-test-do-not-call-real-api"/>
+        <env name="ANTHROPIC_API_KEY" value="sk-ant-test-do-not-call-real-api"/>
         <env name="SCOUT_DRIVER" value="null"/>
         <env name="SCOUT_QUEUE" value="false"/>
     </php>

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { Head, router } from '@inertiajs/vue3';
-import { ChevronDown, ChevronRight, Download, Sparkles } from 'lucide-vue-next';
+import { ChevronDown, ChevronRight, Download, Sparkles } from '@lucide/vue';
 import { computed, ref } from 'vue';
 import AiModelPriceController from '@/actions/App/Http/Controllers/Admin/AiModelPriceController';
 import AiUsageController from '@/actions/App/Http/Controllers/Admin/AiUsageController';

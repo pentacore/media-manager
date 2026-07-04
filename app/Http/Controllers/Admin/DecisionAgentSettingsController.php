@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers\Admin;
 
+use App\Enums\AiReasoningLevel;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Admin\UpdateDecisionAgentSettingsRequest;
 use App\Models\AiModelPrice;
@@ -25,9 +26,11 @@ class DecisionAgentSettingsController extends Controller
                 'notify_on_suggest' => $decisionAgentSettings->notifyOnSuggest(),
                 'notify_on_act' => $decisionAgentSettings->notifyOnAct(),
                 'max_actions_per_run' => $decisionAgentSettings->maxActionsPerRun(),
+                'reasoning_level' => $decisionAgentSettings->reasoning(),
             ],
             'models' => $this->modelsByConfiguredProvider(),
             'eventCatalog' => DecisionAgentSettings::eventCatalog(),
+            'reasoningLevels' => AiReasoningLevel::mapForSelect(labelKey: 'label'),
         ]);
     }
 
@@ -42,6 +45,7 @@ class DecisionAgentSettingsController extends Controller
         $decisionAgentSettings->setNotifyOnSuggest((bool) $validated['notify_on_suggest']);
         $decisionAgentSettings->setNotifyOnAct((bool) $validated['notify_on_act']);
         $decisionAgentSettings->setMaxActionsPerRun((int) $validated['max_actions_per_run']);
+        $decisionAgentSettings->setReasoning(AiReasoningLevel::from($validated['reasoning_level']));
 
         Inertia::flash('toast', ['type' => 'success', 'message' => __('Decision agent settings updated.')]);
 
