@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { Form, Head, router, usePage } from '@inertiajs/vue3';
-import { Plus, Upload } from 'lucide-vue-next';
+import { Plus, Upload } from '@lucide/vue';
 import { computed, ref } from 'vue';
 import EmbyLinkController from '@/actions/App/Http/Controllers/Admin/EmbyLinkController';
 import UserController from '@/actions/App/Http/Controllers/Admin/UserController';

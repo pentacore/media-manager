@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { Head, router } from '@inertiajs/vue3';
-import { Calendar, Cpu, Download, Sparkles } from 'lucide-vue-next';
+import { Calendar, Cpu, Download, Sparkles } from '@lucide/vue';
 import { computed, onMounted, ref, watch } from 'vue';
 import ActivityLogController from '@/actions/App/Http/Controllers/ActivityLogController';
 import { InitialsAvatar, Pill, SvcChip, TimeStamp } from '@/components/mm';

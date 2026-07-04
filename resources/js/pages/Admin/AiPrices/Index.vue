@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { Form, Head, router } from '@inertiajs/vue3';
-import { Plus, RefreshCcw, Trash2 } from 'lucide-vue-next';
+import { Plus, RefreshCcw, Trash2 } from '@lucide/vue';
 import { onMounted, onUnmounted, ref } from 'vue';
 import { toast } from 'vue-sonner';
 import AiModelPriceController from '@/actions/App/Http/Controllers/Admin/AiModelPriceController';

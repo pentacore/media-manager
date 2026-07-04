@@ -7,7 +7,7 @@ import {
     ExternalLink,
     Search as SearchIcon,
     X,
-} from 'lucide-vue-next';
+} from '@lucide/vue';
 import { computed, onMounted, ref, useTemplateRef } from 'vue';
 import SearchController from '@/actions/App/Http/Controllers/Media/SearchController';
 import { Pill, Poster, StatusPill, SvcChip } from '@/components/mm';

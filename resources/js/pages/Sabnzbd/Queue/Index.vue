@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { Head, router } from '@inertiajs/vue3';
-import { Pause, Play, RefreshCw, Trash2 } from 'lucide-vue-next';
+import { Pause, Play, RefreshCw, Trash2 } from '@lucide/vue';
 import { onMounted, onUnmounted } from 'vue';
 import QueueController from '@/actions/App/Http/Controllers/Sabnzbd/QueueController';
 import { OpenInServiceButton, Pill, StatCard } from '@/components/mm';

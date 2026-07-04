@@ -8,7 +8,7 @@ import {
     Plug,
     RefreshCw,
     Wand2,
-} from 'lucide-vue-next';
+} from '@lucide/vue';
 import { computed, reactive, ref } from 'vue';
 import ProwlarrTestIndexerController from '@/actions/App/Http/Controllers/Admin/ProwlarrTestIndexerController';
 import ServiceConnectionController from '@/actions/App/Http/Controllers/Admin/ServiceConnectionController';

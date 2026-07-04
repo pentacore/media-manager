@@ -7,7 +7,7 @@ import {
     Plus,
     RefreshCcw,
     Search,
-} from 'lucide-vue-next';
+} from '@lucide/vue';
 import { computed, onMounted, ref } from 'vue';
 import SeriesController from '@/actions/App/Http/Controllers/Media/SeriesController';
 import { OpenInServiceButton, Pill, Poster, SvcChip } from '@/components/mm';

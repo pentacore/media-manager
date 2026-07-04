@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { usePage } from '@inertiajs/vue3';
-import { ArrowRight, Check, Cpu, Pencil, Sparkles, X } from 'lucide-vue-next';
+import { ArrowRight, Check, Cpu, Pencil, Sparkles, X } from '@lucide/vue';
 import {
     computed,
     nextTick,

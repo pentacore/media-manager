@@ -9,7 +9,7 @@ import {
     Power,
     RefreshCw,
     Trash2,
-} from 'lucide-vue-next';
+} from '@lucide/vue';
 import { computed, onMounted } from 'vue';
 import ServiceConnectionController from '@/actions/App/Http/Controllers/Admin/ServiceConnectionController';
 import { Pill, StatusPill, SvcChip } from '@/components/mm';

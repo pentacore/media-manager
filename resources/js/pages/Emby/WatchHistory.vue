@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { Head, router, usePage } from '@inertiajs/vue3';
-import { Calendar, Download, Sparkles } from 'lucide-vue-next';
+import { Calendar, Download, Sparkles } from '@lucide/vue';
 import { computed, onMounted, watch } from 'vue';
 import WatchHistoryController from '@/actions/App/Http/Controllers/Emby/WatchHistoryController';
 import {

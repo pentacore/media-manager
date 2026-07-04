@@ -6,7 +6,7 @@ import {
     ExternalLink,
     HardDrive,
     Trash2,
-} from 'lucide-vue-next';
+} from '@lucide/vue';
 import { ref } from 'vue';
 import MovieController from '@/actions/App/Http/Controllers/Media/MovieController';
 import { Pill, Poster, StatusPill } from '@/components/mm';

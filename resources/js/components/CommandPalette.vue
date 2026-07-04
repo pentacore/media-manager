@@ -13,7 +13,7 @@ import {
     Search as SearchIcon,
     Tv,
     Zap,
-} from 'lucide-vue-next';
+} from '@lucide/vue';
 import type { Component } from 'vue';
 import { computed, nextTick, onMounted, useTemplateRef, watch } from 'vue';
 import ActionRequestController from '@/actions/App/Http/Controllers/Actions/ActionRequestController';

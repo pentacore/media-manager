@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { Head, Link, router, useForm } from '@inertiajs/vue3';
-import { Search, Plus, ArrowLeft } from 'lucide-vue-next';
+import { Search, Plus, ArrowLeft } from '@lucide/vue';
 import { computed, ref } from 'vue';
 import SeriesController from '@/actions/App/Http/Controllers/Media/SeriesController';
 import InputError from '@/components/InputError.vue';

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Cog } from 'lucide-vue-next';
+import { Cog } from '@lucide/vue';
 import { computed } from 'vue';
 import type { AgentStep } from '@/composables/useAiChat';
 

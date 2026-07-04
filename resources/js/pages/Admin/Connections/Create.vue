@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { Form, Head, Link, useHttp } from '@inertiajs/vue3';
-import { ClipboardCopy, Eye, EyeOff, Plug, RefreshCw } from 'lucide-vue-next';
+import { ClipboardCopy, Eye, EyeOff, Plug, RefreshCw } from '@lucide/vue';
 import { computed, ref } from 'vue';
 import ServiceConnectionController from '@/actions/App/Http/Controllers/Admin/ServiceConnectionController';
 import InputError from '@/components/InputError.vue';

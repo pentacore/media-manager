@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { Head, router } from '@inertiajs/vue3';
-import { Archive, ArchiveRestore, Eye, Search } from 'lucide-vue-next';
+import { Archive, ArchiveRestore, Eye, Search } from '@lucide/vue';
 import { ref } from 'vue';
 import AiConversationController from '@/actions/App/Http/Controllers/Admin/AiConversationController';
 import { Pill } from '@/components/mm';

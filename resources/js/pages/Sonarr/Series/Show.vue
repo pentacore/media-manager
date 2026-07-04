@@ -8,7 +8,7 @@ import {
     ExternalLink,
     HardDrive,
     Trash2,
-} from 'lucide-vue-next';
+} from '@lucide/vue';
 import { ref } from 'vue';
 import SeriesController from '@/actions/App/Http/Controllers/Media/SeriesController';
 import { Pill, Poster, StatusPill } from '@/components/mm';
