@@ -1,12 +1,6 @@
 <script setup lang="ts">
 import { Head, Link, router } from '@inertiajs/vue3';
-import {
-    ArrowLeft,
-    Clock,
-    ExternalLink,
-    HardDrive,
-    Trash2,
-} from '@lucide/vue';
+import { ArrowLeft, Clock, ExternalLink, HardDrive, Trash2 } from '@lucide/vue';
 import { ref } from 'vue';
 import MovieController from '@/actions/App/Http/Controllers/Media/MovieController';
 import { Pill, Poster, StatusPill } from '@/components/mm';
