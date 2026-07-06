@@ -116,7 +116,6 @@ test('since=today only returns activities from the local current day', function 
         ->assertInertia(fn ($page) => $page
             ->where('filters.since', 'today')
             ->has('activities.data', 1)
-            ->where('filterOptions.todayValue', 'today')
         );
 
     CarbonImmutable::setTestNow();
@@ -128,7 +127,38 @@ test('unknown since value falls back to default 7d', function (): void {
     $this->actingAs($admin)
         ->get(route('monitoring.watch-history', ['since' => 'forever']))
         ->assertOk()
-        ->assertInertia(fn ($page) => $page->where('filters.since', 7));
+        ->assertInertia(fn ($page) => $page->where('filters.since', '7d'));
+});
+
+test('legacy numeric since values map onto the new windows', function (): void {
+    $this->actingAs(User::factory()->admin()->create())
+        ->get(route('monitoring.watch-history', ['since' => '30']))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page->where('filters.since', '30d'));
+});
+
+test('since=all returns activity older than any rolling window', function (): void {
+    $activity = EmbyActivity::factory()->create();
+    $activity->forceFill(['created_at' => now()->subDays(400)])->save();
+
+    $this->actingAs(User::factory()->admin()->create())
+        ->get(route('monitoring.watch-history', ['since' => 'all']))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->where('filters.since', 'all')
+            ->where('activities.meta.total', 1)
+        );
+});
+
+test('filter options expose the shared window list', function (): void {
+    $this->actingAs(User::factory()->admin()->create())
+        ->get(route('monitoring.watch-history'))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->where('filterOptions.windows.0.value', 'today')
+            ->where('filterOptions.windows.8.value', 'all')
+            ->missing('filterOptions.rangeDays')
+        );
 });
 
 test('results are paginated at 25 per page', function (): void {
