@@ -12,6 +12,7 @@ use App\Http\Resources\EmbyActivityResource;
 use App\Models\EmbyActivity;
 use App\Models\EmbyUserLink;
 use App\Models\ServiceConnection;
+use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Http\Request;
@@ -142,7 +143,7 @@ class WatchHistoryController extends Controller
 
         $cutoff = $timeWindow->cutoff();
 
-        if ($cutoff !== null) {
+        if ($cutoff instanceof CarbonImmutable) {
             $builder->where('created_at', '>=', $cutoff);
         }
 

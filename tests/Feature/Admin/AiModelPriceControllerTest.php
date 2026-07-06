@@ -206,11 +206,11 @@ test('store persists nested rate limits', function (): void {
         ])
         ->assertRedirect(route('admin.ai-prices.index'));
 
-    $price = AiModelPrice::query()->where('model', 'gpt-99-test')->firstOrFail();
+    $aiModelPrice = AiModelPrice::query()->where('model', 'gpt-99-test')->firstOrFail();
 
-    expect($price->rateLimits()->count())->toBe(2);
+    expect($aiModelPrice->rateLimits()->count())->toBe(2);
     $this->assertDatabaseHas('ai_model_rate_limits', [
-        'ai_model_price_id' => $price->id,
+        'ai_model_price_id' => $aiModelPrice->id,
         'metric' => 'requests',
         'period' => 'minute',
         'limit_value' => 500,

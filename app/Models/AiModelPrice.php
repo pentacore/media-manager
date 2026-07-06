@@ -7,6 +7,7 @@ namespace App\Models;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -29,7 +30,7 @@ use Override;
  * @property string|null $batch_reasoning_per_mtok
  * @property int|null $free_usage_pool_id
  * @property-read AiFreeUsagePool|null $freeUsagePool
- * @property-read \Illuminate\Database\Eloquent\Collection<int, AiModelRateLimit> $rateLimits
+ * @property-read Collection<int, AiModelRateLimit> $rateLimits
  * @property CarbonImmutable|null $created_at
  * @property CarbonImmutable|null $updated_at
  *

@@ -16,6 +16,7 @@ use Override;
  */
 class AiModelRateLimitFactory extends Factory
 {
+    #[Override]
     protected $model = AiModelRateLimit::class;
 
     /**

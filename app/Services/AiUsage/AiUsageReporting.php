@@ -216,9 +216,9 @@ class AiUsageReporting
             $buckets = $this->poolUsageRows($pool, $since, bucketed: true)
                 ->groupBy('bucket');
 
-            foreach ($buckets as $rows) {
-                $bucketInput = (int) $rows->sum('used_input');
-                $bucketOutput = (int) $rows->sum('used_output');
+            foreach ($buckets as $bucket) {
+                $bucketInput = (int) $bucket->sum('used_input');
+                $bucketOutput = (int) $bucket->sum('used_output');
 
                 if ($pool->unified) {
                     $bucketTotal = $bucketInput + $bucketOutput;
@@ -226,7 +226,7 @@ class AiUsageReporting
                         ? min($bucketTotal, (int) ($pool->free_total_tokens ?? 0)) / $bucketTotal
                         : 0.0;
 
-                    foreach ($rows as $row) {
+                    foreach ($bucket as $row) {
                         $rate = $rates[$row->provider.'|'.$row->base_model];
                         $discount += ((int) $row->used_input * $rate['input'] + (int) $row->used_output * $rate['output'])
                             * $forgivenRatio / 1_000_000.0;
@@ -242,7 +242,7 @@ class AiUsageReporting
                     ? min($bucketOutput, (int) ($pool->free_output_tokens ?? 0)) / $bucketOutput
                     : 0.0;
 
-                foreach ($rows as $row) {
+                foreach ($bucket as $row) {
                     $rate = $rates[$row->provider.'|'.$row->base_model];
                     $discount += (int) $row->used_input * $rate['input'] * $inputRatio / 1_000_000.0;
                     $discount += (int) $row->used_output * $rate['output'] * $outputRatio / 1_000_000.0;
@@ -268,7 +268,7 @@ class AiUsageReporting
             ->all();
 
         if ($memberKeys === []) {
-            return new Collection();
+            return new Collection;
         }
 
         $bucketSelect = $bucketed

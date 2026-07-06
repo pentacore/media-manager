@@ -241,7 +241,7 @@ test('totals fall back to live catalog when snapshot is null', function (): void
     expect((float) $totals['total_cost'])->toBe(0.40);
 });
 
-function seedPooledPrice(AiFreeUsagePool $pool, string $provider, string $model, float $input, float $output): AiModelPrice
+function seedPooledPrice(AiFreeUsagePool $aiFreeUsagePool, string $provider, string $model, float $input, float $output): AiModelPrice
 {
     return AiModelPrice::create([
         'provider' => $provider,
@@ -251,7 +251,7 @@ function seedPooledPrice(AiFreeUsagePool $pool, string $provider, string $model,
         'cache_read_per_mtok' => 0,
         'cache_write_per_mtok' => 0,
         'reasoning_per_mtok' => 0,
-        'free_usage_pool_id' => $pool->id,
+        'free_usage_pool_id' => $aiFreeUsagePool->id,
     ]);
 }
 

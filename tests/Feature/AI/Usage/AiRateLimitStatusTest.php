@@ -54,7 +54,7 @@ test('rateLimitStatus counts requests and tokens inside each rolling window only
     seedLimitedUsage('openai', 'gpt-5-mini', 2_000, 1_000, $now->subMinutes(5)); // outside minute, inside day
     seedLimitedUsage('openai', 'gpt-5-mini', 4_000, 2_000, $now->subDays(2));    // outside both
 
-    $rows = app(AiUsageReporting::class)->rateLimitStatus();
+    $rows = resolve(AiUsageReporting::class)->rateLimitStatus();
 
     expect($rows)->toHaveCount(1)
         ->and($rows[0]['provider'])->toBe('openai')
@@ -73,7 +73,7 @@ test('rateLimitStatus matches dated model suffixes and skips models without limi
 
     seedLimitedUsage('anthropic', 'claude-x-2026-01-01', 100, 100, CarbonImmutable::now('UTC')->subMinutes(10));
 
-    $rows = app(AiUsageReporting::class)->rateLimitStatus();
+    $rows = resolve(AiUsageReporting::class)->rateLimitStatus();
 
     expect($rows)->toHaveCount(1)
         ->and($rows[0]['model'])->toBe('claude-x')
@@ -83,5 +83,5 @@ test('rateLimitStatus matches dated model suffixes and skips models without limi
 test('rateLimitStatus returns empty array when no limits are configured', function (): void {
     AiModelPrice::factory()->create();
 
-    expect(app(AiUsageReporting::class)->rateLimitStatus())->toBe([]);
+    expect(resolve(AiUsageReporting::class)->rateLimitStatus())->toBe([]);
 });

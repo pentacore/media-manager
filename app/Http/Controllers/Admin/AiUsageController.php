@@ -22,14 +22,14 @@ class AiUsageController extends Controller
 {
     public function index(Request $request, AiUsageReporting $aiUsageReporting): Response
     {
-        $window = TimeWindow::fromRequest($request->string('window')->value() ?: null);
+        $timeWindow = TimeWindow::fromRequest($request->string('window')->value() ?: null);
         // All → epoch lower bound: keeps AiUsageReporting's non-nullable
         // $since signature intact while matching "no filter" semantics.
-        $since = $window->cutoff() ?? CarbonImmutable::createFromTimestampUTC(0);
+        $since = $timeWindow->cutoff() ?? CarbonImmutable::createFromTimestampUTC(0);
         $scenario = Scenario::fromArray((array) $request->input('scenario', []));
 
         $page = [
-            'window' => $window->value,
+            'window' => $timeWindow->value,
             'totals' => $aiUsageReporting->totals($since),
             'by_model' => $aiUsageReporting->aggregateBy('model', $since),
             'by_provider' => $aiUsageReporting->aggregateBy('provider', $since),
@@ -116,15 +116,15 @@ class AiUsageController extends Controller
      */
     public function export(Request $request, AiUsageReporting $aiUsageReporting): StreamedResponse
     {
-        $window = TimeWindow::fromRequest($request->string('window')->value() ?: null);
+        $timeWindow = TimeWindow::fromRequest($request->string('window')->value() ?: null);
         // All → epoch lower bound: keeps AiUsageReporting's non-nullable
         // $since signature intact while matching "no filter" semantics.
-        $since = $window->cutoff() ?? CarbonImmutable::createFromTimestampUTC(0);
+        $since = $timeWindow->cutoff() ?? CarbonImmutable::createFromTimestampUTC(0);
         $scenario = Scenario::fromArray((array) $request->input('scenario', []));
 
         $rows = $aiUsageReporting->recentInvocations($since, $scenario, 10_000);
 
-        $filename = sprintf('ai-usage-%s-%s.csv', $window->value, now()->format('Ymd-His'));
+        $filename = sprintf('ai-usage-%s-%s.csv', $timeWindow->value, now()->format('Ymd-His'));
 
         return new StreamedResponse(function () use ($rows): void {
             $handle = fopen('php://output', 'wb');

@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use App\Enums\RateLimitMetric;
 use App\Enums\RateLimitPeriod;
 use Carbon\CarbonImmutable;
 
@@ -26,6 +27,6 @@ test('windowStart crosses day boundaries correctly', function (): void {
 test('enums expose backed values and labels', function (): void {
     expect(RateLimitPeriod::values())->toBe(['minute', 'hour', 'day'])
         ->and(RateLimitPeriod::Minute->label())->toBe('Per minute')
-        ->and(\App\Enums\RateLimitMetric::values())->toBe(['requests', 'tokens'])
-        ->and(\App\Enums\RateLimitMetric::Requests->label())->toBe('Requests');
+        ->and(RateLimitMetric::values())->toBe(['requests', 'tokens'])
+        ->and(RateLimitMetric::Requests->label())->toBe('Requests');
 });

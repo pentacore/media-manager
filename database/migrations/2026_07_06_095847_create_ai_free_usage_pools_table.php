@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use Illuminate\Contracts\Database\Query\Builder;
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\DB;
@@ -36,8 +37,8 @@ return new class extends Migration
         // Convert each existing per-row free tier into its own
         // single-member monthly pool so no configured quota is lost.
         $rows = DB::table('ai_model_prices')
-            ->where(function ($query): void {
-                $query->whereNotNull('free_input_tokens_per_month')
+            ->where(function (Builder $builder): void {
+                $builder->whereNotNull('free_input_tokens_per_month')
                     ->orWhereNotNull('free_output_tokens_per_month');
             })
             ->get(['id', 'provider', 'model', 'free_input_tokens_per_month', 'free_output_tokens_per_month']);
@@ -78,8 +79,10 @@ return new class extends Migration
 
         foreach ($prices as $price) {
             $pool = DB::table('ai_free_usage_pools')->find($price->free_usage_pool_id);
-
-            if ($pool === null || (bool) $pool->unified) {
+            if ($pool === null) {
+                continue;
+            }
+            if ((bool) $pool->unified) {
                 continue;
             }
 

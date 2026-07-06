@@ -143,13 +143,13 @@ test('window=all includes records older than any rolling window', function (): v
 
 test('window=week excludes records from before monday', function (): void {
     // Freeze to a Wednesday so "this week" has a meaningful boundary.
-    Carbon\CarbonImmutable::setTestNow(Carbon\CarbonImmutable::parse('2026-07-15 12:00:00'));
+    CarbonImmutable::setTestNow(CarbonImmutable::parse('2026-07-15 12:00:00'));
 
     $inside = AiUsageRecord::factory()->create();
-    $inside->forceFill(['created_at' => Carbon\CarbonImmutable::parse('2026-07-13 08:00:00')])->save();
+    $inside->forceFill(['created_at' => CarbonImmutable::parse('2026-07-13 08:00:00')])->save();
 
     $outside = AiUsageRecord::factory()->create();
-    $outside->forceFill(['created_at' => Carbon\CarbonImmutable::parse('2026-07-12 20:00:00')])->save();
+    $outside->forceFill(['created_at' => CarbonImmutable::parse('2026-07-12 20:00:00')])->save();
 
     $this->actingAs(User::factory()->admin()->create())
         ->get(route('admin.ai-usage.index', ['window' => 'week']))
@@ -159,7 +159,7 @@ test('window=week excludes records from before monday', function (): void {
             ->where('totals.total_invocations', 1)
         );
 
-    Carbon\CarbonImmutable::setTestNow();
+    CarbonImmutable::setTestNow();
 });
 
 test('window=today narrows recent invocations to the current local day', function (): void {
