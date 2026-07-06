@@ -10,6 +10,7 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Override;
 
 /**
@@ -28,6 +29,7 @@ use Override;
  * @property string|null $batch_reasoning_per_mtok
  * @property int|null $free_usage_pool_id
  * @property-read AiFreeUsagePool|null $freeUsagePool
+ * @property-read \Illuminate\Database\Eloquent\Collection<int, AiModelRateLimit> $rateLimits
  * @property CarbonImmutable|null $created_at
  * @property CarbonImmutable|null $updated_at
  *
@@ -83,5 +85,13 @@ class AiModelPrice extends Model
     public function freeUsagePool(): BelongsTo
     {
         return $this->belongsTo(AiFreeUsagePool::class);
+    }
+
+    /**
+     * @return HasMany<AiModelRateLimit, $this>
+     */
+    public function rateLimits(): HasMany
+    {
+        return $this->hasMany(AiModelRateLimit::class);
     }
 }
