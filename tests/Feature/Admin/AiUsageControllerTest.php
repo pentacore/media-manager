@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use App\Ai\Agents\MediaAgent;
+use App\Models\AiFreeUsagePool;
 use App\Models\AiModelPrice;
 use App\Models\AiUsageRecord;
 use App\Models\User;
@@ -468,6 +469,22 @@ test('non-admin cannot drill into invocation detail or assign price', function (
             'model' => 'gpt-5-mini',
         ])
         ->assertForbidden();
+});
+
+test('index exposes free usage pools instead of the legacy free tier prop', function (): void {
+    $admin = User::factory()->admin()->create();
+
+    AiFreeUsagePool::factory()->create(['name' => 'Gemini pool', 'free_input_tokens' => 1_000_000]);
+
+    $this->actingAs($admin)
+        ->get(route('admin.ai-usage.index'))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->component('Admin/AiUsage/Index')
+            ->has('free_pools', 1)
+            ->where('free_pools.0.name', 'Gemini pool')
+            ->missing('free_tier')
+        );
 });
 
 test('priced_models is included in page props', function (): void {
