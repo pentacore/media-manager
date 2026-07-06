@@ -6,7 +6,7 @@ import {
     ArrowLeft,
     Sparkles,
     Trash2,
-} from 'lucide-vue-next';
+} from '@lucide/vue';
 import { computed, ref } from 'vue';
 import AiConversationController from '@/actions/App/Http/Controllers/Admin/AiConversationController';
 import { InitialsAvatar, Pill } from '@/components/mm';

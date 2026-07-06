@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ChevronDown, MessageSquare, Pencil, Plus } from 'lucide-vue-next';
+import { ChevronDown, MessageSquare, Pencil, Plus } from '@lucide/vue';
 import { computed, ref, watch } from 'vue';
 import { TimeStamp } from '@/components/mm';
 import { Button } from '@/components/ui/button';

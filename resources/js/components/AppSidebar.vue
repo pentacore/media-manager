@@ -24,7 +24,7 @@ import {
     Users,
     ListTodo,
     Webhook as WebhookIcon,
-} from 'lucide-vue-next';
+} from '@lucide/vue';
 import { computed, onMounted, onUnmounted, ref, watchEffect } from 'vue';
 import ActionRequestController from '@/actions/App/Http/Controllers/Actions/ActionRequestController';
 import ActionTypeConfigController from '@/actions/App/Http/Controllers/Actions/ActionTypeConfigController';

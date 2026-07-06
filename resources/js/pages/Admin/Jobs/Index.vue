@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { Head, router } from '@inertiajs/vue3';
-import { RefreshCcw } from 'lucide-vue-next';
+import { RefreshCcw } from '@lucide/vue';
 import { ref } from 'vue';
 import JobsController from '@/actions/App/Http/Controllers/Admin/JobsController';
 import { Pill } from '@/components/mm';

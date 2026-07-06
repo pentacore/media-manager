@@ -7,7 +7,7 @@ import {
     Inbox,
     RefreshCcw,
     X,
-} from 'lucide-vue-next';
+} from '@lucide/vue';
 import { computed, onMounted, ref } from 'vue';
 import ActionRequestController from '@/actions/App/Http/Controllers/Actions/ActionRequestController';
 import ActivityLogController from '@/actions/App/Http/Controllers/ActivityLogController';
