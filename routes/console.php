@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use App\Console\Commands\AggregateStatistics;
 use App\Console\Commands\Ai\RefreshAiPrices;
 use App\Console\Commands\BroadcastDashboardStats;
 use App\Console\Commands\CheckServiceHealth;
@@ -53,4 +54,8 @@ Schedule::command(WarmServiceCaches::class)
 
 Schedule::job(new ReconcileSearchIndex)
     ->dailyAt('03:30')
+    ->withoutOverlapping();
+
+Schedule::command(AggregateStatistics::class)
+    ->hourlyAt(5)
     ->withoutOverlapping();
