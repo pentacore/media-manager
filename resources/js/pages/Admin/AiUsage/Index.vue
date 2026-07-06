@@ -4,7 +4,12 @@ import { ChevronDown, ChevronRight, Download, Sparkles } from '@lucide/vue';
 import { computed, ref } from 'vue';
 import AiModelPriceController from '@/actions/App/Http/Controllers/Admin/AiModelPriceController';
 import AiUsageController from '@/actions/App/Http/Controllers/Admin/AiUsageController';
-import { InitialsAvatar, Pill, StatCard } from '@/components/mm';
+import {
+    InitialsAvatar,
+    Pill,
+    StatCard,
+    TimeWindowFilter,
+} from '@/components/mm';
 import { Button } from '@/components/ui/button';
 import {
     Dialog,
@@ -22,7 +27,6 @@ import {
     SelectTrigger,
     SelectValue,
 } from '@/components/ui/select';
-import { cn } from '@/lib/utils';
 import { dashboard } from '@/routes';
 import type { QueryParams } from '@/wayfinder';
 
@@ -121,7 +125,13 @@ interface InvocationDetail {
     scenario_total_cost: number | null;
 }
 
-type WindowKey = 'today' | '24h' | '7d' | '30d';
+type WindowKey =
+    'today' | '24h' | '7d' | '30d' | '90d' | 'week' | 'month' | 'year' | 'all';
+
+interface WindowOption {
+    value: WindowKey;
+    label: string;
+}
 
 interface FreePoolRow {
     id: number;
@@ -156,7 +166,7 @@ interface RateLimitStatusRow {
 
 const props = defineProps<{
     window: WindowKey;
-    windows: WindowKey[];
+    windows: WindowOption[];
     totals: Totals;
     by_model: AggregateRow[];
     by_provider: AggregateRow[];
@@ -492,26 +502,11 @@ function formatTimestamp(value: string): string {
                 </p>
             </div>
             <div class="flex items-center gap-2">
-                <div
-                    class="flex items-center gap-0.5 rounded-md border border-border bg-bg-elev p-0.5"
-                >
-                    <button
-                        v-for="opt in props.windows"
-                        :key="opt"
-                        type="button"
-                        :class="
-                            cn(
-                                'inline-flex h-6 items-center rounded px-2 text-xs font-medium transition-colors',
-                                props.window === opt
-                                    ? 'bg-accent text-accent-foreground'
-                                    : 'text-muted-foreground hover:bg-bg-hover hover:text-foreground',
-                            )
-                        "
-                        @click="setWindow(opt)"
-                    >
-                        {{ opt === 'today' ? 'Today' : opt }}
-                    </button>
-                </div>
+                <TimeWindowFilter
+                    :options="props.windows"
+                    :model-value="props.window"
+                    @update:model-value="setWindow"
+                />
                 <a
                     :href="exportUrl"
                     class="inline-flex h-7 items-center gap-1.5 rounded-md border border-border bg-card px-2 text-xs font-medium text-foreground transition-colors hover:bg-bg-hover"

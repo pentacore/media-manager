@@ -10,3 +10,4 @@ export { default as Field } from './Field.vue';
 export { default as Toggle } from './Toggle.vue';
 export { default as OpenInServiceButton } from './OpenInServiceButton.vue';
 export { default as TimeStamp } from './TimeStamp.vue';
+export { default as TimeWindowFilter } from './TimeWindowFilter.vue';
