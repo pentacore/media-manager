@@ -7,6 +7,7 @@ use App\Console\Commands\Ai\RefreshAiPrices;
 use App\Console\Commands\BroadcastDashboardStats;
 use App\Console\Commands\CheckServiceHealth;
 use App\Console\Commands\CheckServiceVersions;
+use App\Console\Commands\CollectServiceGauges;
 use App\Console\Commands\PollSabnzbdHistory;
 use App\Console\Commands\PruneAiProposedWorkflows;
 use App\Console\Commands\RefreshInterventionCount;
@@ -58,4 +59,15 @@ Schedule::job(new ReconcileSearchIndex)
 
 Schedule::command(AggregateStatistics::class)
     ->hourlyAt(5)
+    ->withoutOverlapping();
+
+// The two invocations carry distinct arguments, so Laravel derives distinct
+// scheduling mutex names for them — the five-minute gauge sweep and the daily
+// library/indexer snapshot never share a lock.
+Schedule::command(CollectServiceGauges::class)
+    ->everyFiveMinutes()
+    ->withoutOverlapping();
+
+Schedule::command(CollectServiceGauges::class, ['--library'])
+    ->dailyAt('04:00')
     ->withoutOverlapping();
