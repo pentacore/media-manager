@@ -3,6 +3,7 @@ import { Form, Head, router } from '@inertiajs/vue3';
 import { Plus, RefreshCcw, Trash2 } from '@lucide/vue';
 import { onMounted, onUnmounted, ref } from 'vue';
 import { toast } from 'vue-sonner';
+import AiFreeUsagePoolController from '@/actions/App/Http/Controllers/Admin/AiFreeUsagePoolController';
 import AiModelPriceController from '@/actions/App/Http/Controllers/Admin/AiModelPriceController';
 import InputError from '@/components/InputError.vue';
 import { Pill, StatCard } from '@/components/mm';
@@ -34,8 +35,19 @@ interface PriceRow {
     batch_cache_read_per_mtok: string | null;
     batch_cache_write_per_mtok: string | null;
     batch_reasoning_per_mtok: string | null;
-    free_input_tokens_per_month: number | null;
-    free_output_tokens_per_month: number | null;
+    free_usage_pool_id: number | null;
+}
+
+interface PoolRow {
+    id: number;
+    name: string;
+    period: 'daily' | 'weekly' | 'monthly';
+    unified: boolean;
+    free_input_tokens: number | null;
+    free_output_tokens: number | null;
+    free_total_tokens: number | null;
+    documentation_url: string | null;
+    prices_count: number;
 }
 
 type RateField =
@@ -55,6 +67,7 @@ const BATCH_FIELD: Record<RateField, keyof PriceRow> = {
 
 const props = defineProps<{
     prices: PriceRow[];
+    pools: PoolRow[];
     refresh_running: boolean;
 }>();
 
@@ -70,6 +83,39 @@ defineOptions({
 const showCreateDialog = ref(false);
 const editing = ref<PriceRow | null>(null);
 const refreshing = ref(props.refresh_running);
+
+const showPoolCreateDialog = ref(false);
+const editingPool = ref<PoolRow | null>(null);
+const poolCreateUnified = ref(false);
+const poolEditUnified = ref(false);
+
+function startPoolEdit(pool: PoolRow) {
+    editingPool.value = { ...pool };
+    poolEditUnified.value = pool.unified;
+}
+
+function cancelPoolEdit() {
+    editingPool.value = null;
+}
+
+function destroyPool(pool: PoolRow) {
+    if (
+        !confirm(
+            `Remove pool "${pool.name}"? Member models keep their pricing but lose the free tier.`,
+        )
+    ) {
+        return;
+    }
+
+    router.visit(AiFreeUsagePoolController.destroy.url(pool.id), {
+        method: 'delete',
+        preserveScroll: true,
+    });
+}
+
+function formatTokens(value: number | null): string {
+    return value === null ? '—' : new Intl.NumberFormat().format(value);
+}
 
 const PRICE_REFRESH_CHANNEL = 'admin.ai-prices';
 
@@ -334,38 +380,26 @@ const priciest = ref(
                                         :message="errors.reasoning_per_mtok"
                                     />
                                 </div>
-                                <div class="space-y-2">
-                                    <Label for="free_input_tokens_per_month"
-                                        >Free input / month</Label
+                                <div class="col-span-2 space-y-2">
+                                    <Label for="free_usage_pool_id"
+                                        >Free usage pool</Label
                                     >
-                                    <Input
-                                        id="free_input_tokens_per_month"
-                                        name="free_input_tokens_per_month"
-                                        type="number"
-                                        min="0"
-                                        placeholder="leave blank if none"
-                                    />
-                                    <InputError
-                                        :message="
-                                            errors.free_input_tokens_per_month
-                                        "
-                                    />
-                                </div>
-                                <div class="space-y-2">
-                                    <Label for="free_output_tokens_per_month"
-                                        >Free output / month</Label
+                                    <select
+                                        id="free_usage_pool_id"
+                                        name="free_usage_pool_id"
+                                        class="h-9 w-full rounded-md border border-border bg-card px-2 text-sm"
                                     >
-                                    <Input
-                                        id="free_output_tokens_per_month"
-                                        name="free_output_tokens_per_month"
-                                        type="number"
-                                        min="0"
-                                        placeholder="leave blank if none"
-                                    />
+                                        <option value="">No pool</option>
+                                        <option
+                                            v-for="pool in pools"
+                                            :key="pool.id"
+                                            :value="pool.id"
+                                        >
+                                            {{ pool.name }}
+                                        </option>
+                                    </select>
                                     <InputError
-                                        :message="
-                                            errors.free_output_tokens_per_month
-                                        "
+                                        :message="errors.free_usage_pool_id"
                                     />
                                 </div>
                             </div>
@@ -424,6 +458,381 @@ const priciest = ref(
                 <div v-else class="text-sm text-fg-subtle">No data</div>
             </div>
         </div>
+
+        <!-- Free usage pools -->
+        <div class="overflow-hidden rounded-xl border border-border bg-card">
+            <div
+                class="flex items-center justify-between gap-3 border-b border-border px-4 py-3"
+            >
+                <span
+                    class="text-[12px] font-semibold tracking-[0.06em] text-muted-foreground uppercase"
+                >
+                    Free usage pools
+                </span>
+                <Dialog v-model:open="showPoolCreateDialog">
+                    <DialogTrigger as-child>
+                        <Button
+                            variant="outline"
+                            size="sm"
+                            class="h-7 gap-1.5 text-xs"
+                        >
+                            <Plus class="size-3.5" />Add pool
+                        </Button>
+                    </DialogTrigger>
+                    <DialogContent>
+                        <DialogHeader>
+                            <DialogTitle>Add free usage pool</DialogTitle>
+                        </DialogHeader>
+                        <Form
+                            v-bind="AiFreeUsagePoolController.store.post()"
+                            class="space-y-4"
+                            v-slot="{ errors, processing }"
+                            @success="showPoolCreateDialog = false"
+                        >
+                            <div class="space-y-2">
+                                <Label for="pool_name">Name</Label>
+                                <Input
+                                    id="pool_name"
+                                    name="name"
+                                    placeholder="Gemini free tier"
+                                />
+                                <InputError :message="errors.name" />
+                            </div>
+                            <div class="grid grid-cols-2 gap-4">
+                                <div class="space-y-2">
+                                    <Label for="pool_period"
+                                        >Reset period</Label
+                                    >
+                                    <select
+                                        id="pool_period"
+                                        name="period"
+                                        class="h-9 w-full rounded-md border border-border bg-card px-2 text-sm"
+                                    >
+                                        <option value="daily">Daily</option>
+                                        <option value="weekly">Weekly</option>
+                                        <option value="monthly" selected>
+                                            Monthly
+                                        </option>
+                                    </select>
+                                    <InputError :message="errors.period" />
+                                </div>
+                                <div class="space-y-2">
+                                    <Label for="pool_unified"
+                                        >Unified budget</Label
+                                    >
+                                    <label
+                                        class="flex h-9 items-center gap-2 text-sm"
+                                    >
+                                        <input
+                                            type="hidden"
+                                            name="unified"
+                                            value="0"
+                                        />
+                                        <input
+                                            id="pool_unified"
+                                            v-model="poolCreateUnified"
+                                            type="checkbox"
+                                            name="unified"
+                                            value="1"
+                                            class="size-4"
+                                        />
+                                        input + output share one budget
+                                    </label>
+                                    <InputError :message="errors.unified" />
+                                </div>
+                            </div>
+                            <div v-if="poolCreateUnified" class="space-y-2">
+                                <Label for="pool_free_total"
+                                    >Free tokens / period</Label
+                                >
+                                <Input
+                                    id="pool_free_total"
+                                    name="free_total_tokens"
+                                    type="number"
+                                    min="0"
+                                />
+                                <InputError
+                                    :message="errors.free_total_tokens"
+                                />
+                            </div>
+                            <div v-else class="grid grid-cols-2 gap-4">
+                                <div class="space-y-2">
+                                    <Label for="pool_free_input"
+                                        >Free input / period</Label
+                                    >
+                                    <Input
+                                        id="pool_free_input"
+                                        name="free_input_tokens"
+                                        type="number"
+                                        min="0"
+                                        placeholder="leave blank if none"
+                                    />
+                                    <InputError
+                                        :message="errors.free_input_tokens"
+                                    />
+                                </div>
+                                <div class="space-y-2">
+                                    <Label for="pool_free_output"
+                                        >Free output / period</Label
+                                    >
+                                    <Input
+                                        id="pool_free_output"
+                                        name="free_output_tokens"
+                                        type="number"
+                                        min="0"
+                                        placeholder="leave blank if none"
+                                    />
+                                    <InputError
+                                        :message="errors.free_output_tokens"
+                                    />
+                                </div>
+                            </div>
+                            <div class="space-y-2">
+                                <Label for="pool_doc_url"
+                                    >Documentation URL</Label
+                                >
+                                <Input
+                                    id="pool_doc_url"
+                                    name="documentation_url"
+                                    type="url"
+                                    placeholder="https://…"
+                                />
+                                <InputError
+                                    :message="errors.documentation_url"
+                                />
+                            </div>
+                            <DialogFooter>
+                                <Button type="submit" :disabled="processing"
+                                    >Save</Button
+                                >
+                            </DialogFooter>
+                        </Form>
+                    </DialogContent>
+                </Dialog>
+            </div>
+            <div class="overflow-x-auto">
+                <table class="w-full border-collapse text-[13px]">
+                    <thead>
+                        <tr>
+                            <th
+                                v-for="h in [
+                                    'Pool',
+                                    'Period',
+                                    'Budget',
+                                    'Models',
+                                    'Docs',
+                                    '',
+                                ]"
+                                :key="h"
+                                class="border-b border-border bg-card px-3 py-2 text-left text-[11.5px] font-medium tracking-[0.05em] text-muted-foreground uppercase"
+                            >
+                                {{ h }}
+                            </th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr
+                            v-for="pool in pools"
+                            :key="pool.id"
+                            class="border-b border-border last:border-b-0 hover:bg-bg-hover"
+                        >
+                            <td class="px-3 py-2.5 font-medium">
+                                {{ pool.name }}
+                            </td>
+                            <td class="px-3 py-2.5">
+                                <Pill>{{ pool.period }}</Pill>
+                            </td>
+                            <td class="font-mono-tabular px-3 py-2.5">
+                                <template v-if="pool.unified">
+                                    {{ formatTokens(pool.free_total_tokens) }}
+                                    total
+                                </template>
+                                <template v-else>
+                                    {{ formatTokens(pool.free_input_tokens) }}
+                                    in /
+                                    {{ formatTokens(pool.free_output_tokens) }}
+                                    out
+                                </template>
+                            </td>
+                            <td class="px-3 py-2.5">
+                                {{ pool.prices_count }}
+                            </td>
+                            <td class="px-3 py-2.5">
+                                <a
+                                    v-if="pool.documentation_url"
+                                    :href="pool.documentation_url"
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    class="underline hover:text-foreground"
+                                    >docs</a
+                                >
+                                <span v-else class="text-fg-subtle">—</span>
+                            </td>
+                            <td class="px-3 py-2.5 text-right">
+                                <div class="flex justify-end gap-1">
+                                    <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        class="h-7 px-2 text-xs"
+                                        @click="startPoolEdit(pool)"
+                                    >
+                                        Edit
+                                    </Button>
+                                    <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        class="size-7 p-0 text-destructive hover:text-destructive"
+                                        @click="destroyPool(pool)"
+                                    >
+                                        <Trash2 class="size-3.5" />
+                                    </Button>
+                                </div>
+                            </td>
+                        </tr>
+                        <tr v-if="pools.length === 0">
+                            <td
+                                colspan="6"
+                                class="px-3 py-6 text-center text-sm text-fg-subtle"
+                            >
+                                No pools yet. Pools let several models share one
+                                free-usage budget.
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Edit pool dialog -->
+        <Dialog
+            :open="editingPool !== null"
+            @update:open="(v) => !v && cancelPoolEdit()"
+        >
+            <DialogContent v-if="editingPool">
+                <DialogHeader>
+                    <DialogTitle>Edit {{ editingPool.name }}</DialogTitle>
+                </DialogHeader>
+                <Form
+                    v-bind="
+                        AiFreeUsagePoolController.update.form(editingPool.id)
+                    "
+                    class="space-y-4"
+                    v-slot="{ errors, processing }"
+                    @success="cancelPoolEdit"
+                >
+                    <div class="space-y-2">
+                        <Label for="edit_pool_name">Name</Label>
+                        <Input
+                            id="edit_pool_name"
+                            name="name"
+                            :default-value="editingPool.name"
+                        />
+                        <InputError :message="errors.name" />
+                    </div>
+                    <div class="grid grid-cols-2 gap-4">
+                        <div class="space-y-2">
+                            <Label for="edit_pool_period">Reset period</Label>
+                            <select
+                                id="edit_pool_period"
+                                name="period"
+                                class="h-9 w-full rounded-md border border-border bg-card px-2 text-sm"
+                            >
+                                <option
+                                    v-for="p in ['daily', 'weekly', 'monthly']"
+                                    :key="p"
+                                    :value="p"
+                                    :selected="editingPool.period === p"
+                                >
+                                    {{ p.charAt(0).toUpperCase() + p.slice(1) }}
+                                </option>
+                            </select>
+                            <InputError :message="errors.period" />
+                        </div>
+                        <div class="space-y-2">
+                            <Label for="edit_pool_unified"
+                                >Unified budget</Label
+                            >
+                            <label class="flex h-9 items-center gap-2 text-sm">
+                                <input type="hidden" name="unified" value="0" />
+                                <input
+                                    id="edit_pool_unified"
+                                    v-model="poolEditUnified"
+                                    type="checkbox"
+                                    name="unified"
+                                    value="1"
+                                    class="size-4"
+                                />
+                                input + output share one budget
+                            </label>
+                            <InputError :message="errors.unified" />
+                        </div>
+                    </div>
+                    <div v-if="poolEditUnified" class="space-y-2">
+                        <Label for="edit_pool_free_total"
+                            >Free tokens / period</Label
+                        >
+                        <Input
+                            id="edit_pool_free_total"
+                            name="free_total_tokens"
+                            type="number"
+                            min="0"
+                            :default-value="editingPool.free_total_tokens ?? ''"
+                        />
+                        <InputError :message="errors.free_total_tokens" />
+                    </div>
+                    <div v-else class="grid grid-cols-2 gap-4">
+                        <div class="space-y-2">
+                            <Label for="edit_pool_free_input"
+                                >Free input / period</Label
+                            >
+                            <Input
+                                id="edit_pool_free_input"
+                                name="free_input_tokens"
+                                type="number"
+                                min="0"
+                                placeholder="leave blank if none"
+                                :default-value="
+                                    editingPool.free_input_tokens ?? ''
+                                "
+                            />
+                            <InputError :message="errors.free_input_tokens" />
+                        </div>
+                        <div class="space-y-2">
+                            <Label for="edit_pool_free_output"
+                                >Free output / period</Label
+                            >
+                            <Input
+                                id="edit_pool_free_output"
+                                name="free_output_tokens"
+                                type="number"
+                                min="0"
+                                placeholder="leave blank if none"
+                                :default-value="
+                                    editingPool.free_output_tokens ?? ''
+                                "
+                            />
+                            <InputError :message="errors.free_output_tokens" />
+                        </div>
+                    </div>
+                    <div class="space-y-2">
+                        <Label for="edit_pool_doc_url">Documentation URL</Label>
+                        <Input
+                            id="edit_pool_doc_url"
+                            name="documentation_url"
+                            type="url"
+                            placeholder="https://…"
+                            :default-value="editingPool.documentation_url ?? ''"
+                        />
+                        <InputError :message="errors.documentation_url" />
+                    </div>
+                    <DialogFooter>
+                        <Button type="submit" :disabled="processing">
+                            Save
+                        </Button>
+                    </DialogFooter>
+                </Form>
+            </DialogContent>
+        </Dialog>
 
         <!-- Models table -->
         <div class="overflow-hidden rounded-xl border border-border bg-card">
@@ -686,41 +1095,35 @@ const priciest = ref(
                             />
                             <InputError :message="errors.reasoning_per_mtok" />
                         </div>
-                        <div class="space-y-2">
-                            <Label for="edit_free_input"
-                                >Free input / month</Label
+                        <div class="col-span-2 space-y-2">
+                            <Label for="edit_free_usage_pool_id"
+                                >Free usage pool</Label
                             >
-                            <Input
-                                id="edit_free_input"
-                                name="free_input_tokens_per_month"
-                                type="number"
-                                min="0"
-                                placeholder="leave blank if none"
-                                :default-value="
-                                    editing.free_input_tokens_per_month ?? ''
-                                "
-                            />
-                            <InputError
-                                :message="errors.free_input_tokens_per_month"
-                            />
-                        </div>
-                        <div class="space-y-2">
-                            <Label for="edit_free_output"
-                                >Free output / month</Label
+                            <select
+                                id="edit_free_usage_pool_id"
+                                name="free_usage_pool_id"
+                                class="h-9 w-full rounded-md border border-border bg-card px-2 text-sm"
                             >
-                            <Input
-                                id="edit_free_output"
-                                name="free_output_tokens_per_month"
-                                type="number"
-                                min="0"
-                                placeholder="leave blank if none"
-                                :default-value="
-                                    editing.free_output_tokens_per_month ?? ''
-                                "
-                            />
-                            <InputError
-                                :message="errors.free_output_tokens_per_month"
-                            />
+                                <option
+                                    value=""
+                                    :selected="
+                                        editing.free_usage_pool_id === null
+                                    "
+                                >
+                                    No pool
+                                </option>
+                                <option
+                                    v-for="pool in pools"
+                                    :key="pool.id"
+                                    :value="pool.id"
+                                    :selected="
+                                        editing.free_usage_pool_id === pool.id
+                                    "
+                                >
+                                    {{ pool.name }}
+                                </option>
+                            </select>
+                            <InputError :message="errors.free_usage_pool_id" />
                         </div>
                     </div>
                     <DialogFooter>
