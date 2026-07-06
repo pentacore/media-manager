@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use App\Enums\HealthStatus;
+use App\Models\AiUsageRecord;
 use App\Models\EmbyActivity;
 use App\Models\ServiceMetric;
 use App\Models\StatRollup;
@@ -46,6 +47,34 @@ it('advances the watermark only on success and resumes from it', function (): vo
 
     expect(resolve(AppSettings::class)->get('statistics.aggregate_watermark'))
         ->toBe(CarbonImmutable::parse('2026-07-06 16:00:00', 'UTC')->toIso8601String());
+});
+
+it('sums all five token columns for the ai.tokens rollup', function (): void {
+    AiUsageRecord::query()->insert([
+        'invocation_id' => 'inv-tokens',
+        'provider' => 'openai',
+        'model' => 'gpt-5-mini',
+        'prompt_tokens' => 100,
+        'completion_tokens' => 50,
+        'cache_read_input_tokens' => 20,
+        'cache_write_input_tokens' => 10,
+        'reasoning_tokens' => 5,
+        'tool_calls_count' => 0,
+        'status' => 'success',
+        'created_at' => '2026-07-06 14:15:00',
+        'updated_at' => '2026-07-06 14:15:00',
+    ]);
+
+    resolve(StatisticsAggregator::class)->aggregate(
+        CarbonImmutable::parse('2026-07-06 14:00:00', 'UTC'),
+        CarbonImmutable::parse('2026-07-06 15:00:00', 'UTC'),
+    );
+
+    $tokens = StatRollup::query()
+        ->where(['metric' => 'ai.tokens', 'period' => 'hour'])
+        ->sole();
+
+    expect($tokens->sum)->toBe(100.0 + 50.0 + 20.0 + 10.0 + 5.0);
 });
 
 it('computes uptime and latency stats from service metrics', function (): void {

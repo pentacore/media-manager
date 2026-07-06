@@ -31,6 +31,20 @@ class StatisticsAggregator
     private const string BASE_MODEL_EXPR = "regexp_replace(ai_usage_records.model, '-[0-9]{4}-[0-9]{2}-[0-9]{2}$', '')";
 
     /**
+     * Per-row token total mirroring AiUsageReporting::TOKEN_SUM_EXPR (private
+     * there): all five token columns, including cache read/write, so the
+     * ai.tokens rollup matches the AI dashboard total. Columns are unqualified
+     * because the tokens query has no join.
+     */
+    private const string TOKEN_SUM_EXPR = '
+        prompt_tokens
+        + completion_tokens
+        + cache_read_input_tokens
+        + cache_write_input_tokens
+        + reasoning_tokens
+    ';
+
+    /**
      * Per-row cost expression reused from AiUsageReporting::costExpression()
      * (no scenario): snapshot rates preferred, catalog rates as fallback.
      */
@@ -234,6 +248,7 @@ class StatisticsAggregator
     {
         $baseModel = self::BASE_MODEL_EXPR;
         $cost = self::COST_EXPR;
+        $tokenSum = self::TOKEN_SUM_EXPR;
 
         foreach (['hour', 'day'] as $period) {
             [$lo, $hi] = $this->periodSpan($from, $to, $period);
@@ -279,7 +294,7 @@ class StatisticsAggregator
                     provider,
                     regexp_replace(model, '-[0-9]{4}-[0-9]{2}-[0-9]{2}$', '') AS base_model,
                     COUNT(*) AS count,
-                    COALESCE(SUM(prompt_tokens + completion_tokens + reasoning_tokens), 0) AS sum
+                    COALESCE(SUM({$tokenSum}), 0) AS sum
                 ", [$period])
                 ->groupByRaw('bucket, provider, base_model')
                 ->get();
