@@ -67,6 +67,12 @@ class AppServiceProvider extends ServiceProvider
 
         // Hand processed webhooks to the autonomous DecisionAgent (gated by
         // its own settings + event allowlist inside the listener).
+        //
+        // RecordWebhookStatistics also listens to WebhookEventProcessed but is
+        // NOT registered here: event auto-discovery (withEvents() in
+        // bootstrap/app.php) already binds it, and a second manual binding would
+        // double-count. RunDecisionAgentForWebhook tolerates its own double
+        // binding only because its handler is idempotent.
         Event::listen(WebhookEventProcessed::class, RunDecisionAgentForWebhook::class);
     }
 
