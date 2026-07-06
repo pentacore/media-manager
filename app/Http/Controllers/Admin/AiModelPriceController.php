@@ -9,6 +9,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\Admin\StoreAiModelPriceRequest;
 use App\Http\Requests\Admin\UpdateAiModelPriceRequest;
 use App\Jobs\RefreshAiPricesJob;
+use App\Models\AiFreeUsagePool;
 use App\Models\AiModelPrice;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Support\Facades\Auth;
@@ -23,6 +24,10 @@ class AiModelPriceController extends Controller
             'prices' => AiModelPrice::query()
                 ->orderBy('provider')
                 ->orderBy('model')
+                ->get(),
+            'pools' => AiFreeUsagePool::query()
+                ->withCount('prices')
+                ->orderBy('name')
                 ->get(),
             'refresh_running' => RefreshAiPricesJob::isRunning(),
         ]);

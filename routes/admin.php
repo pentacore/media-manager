@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use App\Http\Controllers\Admin\AiConversationController;
+use App\Http\Controllers\Admin\AiFreeUsagePoolController;
 use App\Http\Controllers\Admin\AiModelPriceController;
 use App\Http\Controllers\Admin\AiSettingsController;
 use App\Http\Controllers\Admin\AiUsageController;
@@ -72,6 +73,10 @@ Route::middleware(['auth', 'verified', 'password.set', 'role:admin'])->prefix('a
         Route::post('ai-prices/refresh', [AiModelPriceController::class, 'refresh'])->name('ai-prices.refresh');
         Route::put('ai-prices/{aiModelPrice}', [AiModelPriceController::class, 'update'])->name('ai-prices.update');
         Route::delete('ai-prices/{aiModelPrice}', [AiModelPriceController::class, 'destroy'])->name('ai-prices.destroy');
+
+        Route::post('ai-free-usage-pools', [AiFreeUsagePoolController::class, 'store'])->name('ai-free-usage-pools.store');
+        Route::put('ai-free-usage-pools/{aiFreeUsagePool}', [AiFreeUsagePoolController::class, 'update'])->name('ai-free-usage-pools.update');
+        Route::delete('ai-free-usage-pools/{aiFreeUsagePool}', [AiFreeUsagePoolController::class, 'destroy'])->name('ai-free-usage-pools.destroy');
     });
 
     Route::get('webhook-log', [WebhookLogController::class, 'index'])->name('webhook-log.index');
