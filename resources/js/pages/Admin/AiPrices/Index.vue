@@ -36,6 +36,12 @@ interface PriceRow {
     batch_cache_write_per_mtok: string | null;
     batch_reasoning_per_mtok: string | null;
     free_usage_pool_id: number | null;
+    rate_limits: {
+        id: number;
+        metric: 'requests' | 'tokens';
+        period: 'minute' | 'hour' | 'day';
+        limit_value: number;
+    }[];
 }
 
 interface PoolRow {
@@ -88,6 +94,34 @@ const showPoolCreateDialog = ref(false);
 const editingPool = ref<PoolRow | null>(null);
 const poolCreateUnified = ref(false);
 const poolEditUnified = ref(false);
+
+interface RateLimitDraft {
+    metric: 'requests' | 'tokens';
+    period: 'minute' | 'hour' | 'day';
+    limit_value: number | null;
+}
+
+const RATE_LIMIT_METRICS: Array<[RateLimitDraft['metric'], string]> = [
+    ['requests', 'Requests'],
+    ['tokens', 'Tokens'],
+];
+
+const RATE_LIMIT_PERIODS: Array<[RateLimitDraft['period'], string]> = [
+    ['minute', 'Per minute'],
+    ['hour', 'Per hour'],
+    ['day', 'Per day'],
+];
+
+const createRateLimits = ref<RateLimitDraft[]>([]);
+const editRateLimits = ref<RateLimitDraft[]>([]);
+
+function addRateLimit(list: RateLimitDraft[]) {
+    list.push({ metric: 'requests', period: 'minute', limit_value: null });
+}
+
+function removeRateLimit(list: RateLimitDraft[], index: number) {
+    list.splice(index, 1);
+}
 
 function startPoolEdit(pool: PoolRow) {
     editingPool.value = { ...pool };
@@ -189,6 +223,16 @@ onUnmounted(() => {
 
 function startEdit(price: PriceRow) {
     editing.value = { ...price };
+    editRateLimits.value = price.rate_limits.map((limit) => ({
+        metric: limit.metric,
+        period: limit.period,
+        limit_value: limit.limit_value,
+    }));
+}
+
+function onCreateSuccess() {
+    showCreateDialog.value = false;
+    createRateLimits.value = [];
 }
 
 function cancelEdit() {
@@ -306,7 +350,7 @@ const priciest = ref(
                             v-bind="AiModelPriceController.store.post()"
                             class="space-y-4"
                             v-slot="{ errors, processing }"
-                            @success="showCreateDialog = false"
+                            @success="onCreateSuccess"
                         >
                             <div class="space-y-2">
                                 <Label for="provider">Provider</Label>
@@ -400,6 +444,95 @@ const priciest = ref(
                                     </select>
                                     <InputError
                                         :message="errors.free_usage_pool_id"
+                                    />
+                                </div>
+                                <div class="col-span-2 space-y-2">
+                                    <div
+                                        class="flex items-center justify-between"
+                                    >
+                                        <Label>Rate limits</Label>
+                                        <Button
+                                            type="button"
+                                            variant="outline"
+                                            size="sm"
+                                            @click="
+                                                addRateLimit(createRateLimits)
+                                            "
+                                        >
+                                            <Plus class="h-3.5 w-3.5" /> Add
+                                            limit
+                                        </Button>
+                                    </div>
+                                    <div
+                                        v-for="(limit, i) in createRateLimits"
+                                        :key="i"
+                                        class="flex items-center gap-2"
+                                    >
+                                        <select
+                                            v-model="limit.metric"
+                                            :name="`rate_limits[${i}][metric]`"
+                                            class="h-9 w-32 rounded-md border border-border bg-card px-2 text-sm"
+                                        >
+                                            <option
+                                                v-for="[
+                                                    value,
+                                                    label,
+                                                ] in RATE_LIMIT_METRICS"
+                                                :key="value"
+                                                :value="value"
+                                            >
+                                                {{ label }}
+                                            </option>
+                                        </select>
+                                        <select
+                                            v-model="limit.period"
+                                            :name="`rate_limits[${i}][period]`"
+                                            class="h-9 w-32 rounded-md border border-border bg-card px-2 text-sm"
+                                        >
+                                            <option
+                                                v-for="[
+                                                    value,
+                                                    label,
+                                                ] in RATE_LIMIT_PERIODS"
+                                                :key="value"
+                                                :value="value"
+                                            >
+                                                {{ label }}
+                                            </option>
+                                        </select>
+                                        <Input
+                                            v-model.number="limit.limit_value"
+                                            :name="`rate_limits[${i}][limit_value]`"
+                                            type="number"
+                                            min="1"
+                                            placeholder="Limit"
+                                            class="flex-1"
+                                        />
+                                        <Button
+                                            type="button"
+                                            variant="ghost"
+                                            size="icon"
+                                            @click="
+                                                removeRateLimit(
+                                                    createRateLimits,
+                                                    i,
+                                                )
+                                            "
+                                        >
+                                            <Trash2 class="h-3.5 w-3.5" />
+                                        </Button>
+                                    </div>
+                                    <InputError
+                                        :message="
+                                            Object.entries(errors)
+                                                .filter(([key]) =>
+                                                    key.startsWith(
+                                                        'rate_limits',
+                                                    ),
+                                                )
+                                                .map(([, message]) => message)
+                                                .join(' ')
+                                        "
                                     />
                                 </div>
                             </div>
@@ -1124,6 +1257,83 @@ const priciest = ref(
                                 </option>
                             </select>
                             <InputError :message="errors.free_usage_pool_id" />
+                        </div>
+                        <div class="col-span-2 space-y-2">
+                            <div class="flex items-center justify-between">
+                                <Label>Rate limits</Label>
+                                <Button
+                                    type="button"
+                                    variant="outline"
+                                    size="sm"
+                                    @click="addRateLimit(editRateLimits)"
+                                >
+                                    <Plus class="h-3.5 w-3.5" /> Add limit
+                                </Button>
+                            </div>
+                            <div
+                                v-for="(limit, i) in editRateLimits"
+                                :key="i"
+                                class="flex items-center gap-2"
+                            >
+                                <select
+                                    v-model="limit.metric"
+                                    :name="`rate_limits[${i}][metric]`"
+                                    class="h-9 w-32 rounded-md border border-border bg-card px-2 text-sm"
+                                >
+                                    <option
+                                        v-for="[
+                                            value,
+                                            label,
+                                        ] in RATE_LIMIT_METRICS"
+                                        :key="value"
+                                        :value="value"
+                                    >
+                                        {{ label }}
+                                    </option>
+                                </select>
+                                <select
+                                    v-model="limit.period"
+                                    :name="`rate_limits[${i}][period]`"
+                                    class="h-9 w-32 rounded-md border border-border bg-card px-2 text-sm"
+                                >
+                                    <option
+                                        v-for="[
+                                            value,
+                                            label,
+                                        ] in RATE_LIMIT_PERIODS"
+                                        :key="value"
+                                        :value="value"
+                                    >
+                                        {{ label }}
+                                    </option>
+                                </select>
+                                <Input
+                                    v-model.number="limit.limit_value"
+                                    :name="`rate_limits[${i}][limit_value]`"
+                                    type="number"
+                                    min="1"
+                                    placeholder="Limit"
+                                    class="flex-1"
+                                />
+                                <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="icon"
+                                    @click="removeRateLimit(editRateLimits, i)"
+                                >
+                                    <Trash2 class="h-3.5 w-3.5" />
+                                </Button>
+                            </div>
+                            <InputError
+                                :message="
+                                    Object.entries(errors)
+                                        .filter(([key]) =>
+                                            key.startsWith('rate_limits'),
+                                        )
+                                        .map(([, message]) => message)
+                                        .join(' ')
+                                "
+                            />
                         </div>
                     </div>
                     <DialogFooter>

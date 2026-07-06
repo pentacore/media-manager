@@ -143,6 +143,17 @@ interface FreePoolRow {
     }>;
 }
 
+interface RateLimitStatusRow {
+    provider: string;
+    model: string;
+    limits: Array<{
+        metric: 'requests' | 'tokens';
+        period: 'minute' | 'hour' | 'day';
+        limit_value: number;
+        used: number;
+    }>;
+}
+
 const props = defineProps<{
     window: WindowKey;
     windows: WindowKey[];
@@ -157,6 +168,7 @@ const props = defineProps<{
     scenario_by_provider?: AggregateRow[];
     scenario_recent?: RecentRow[];
     free_pools: FreePoolRow[];
+    rate_limits: RateLimitStatusRow[];
 }>();
 
 defineOptions({
@@ -420,6 +432,12 @@ function poolBars(pool: FreePoolRow): Array<{
     ];
 }
 
+function rateLimitLabel(limit: RateLimitStatusRow['limits'][number]): string {
+    const metric = limit.metric === 'requests' ? 'req' : 'tok';
+
+    return `${metric}/${limit.period}`;
+}
+
 function formatTimestamp(value: string): string {
     // The ledger SELECTs created_at as a raw timestamp without timezone
     // info, so JS would otherwise interpret it as local time. Append 'Z'
@@ -616,6 +634,75 @@ function formatTimestamp(value: string): string {
                                     "
                                     :style="`width: ${Math.min(100, (bar.used / bar.cap) * 100)}%`"
                                 />
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Rate limits -->
+        <div
+            v-if="props.rate_limits.length > 0"
+            class="overflow-hidden rounded-xl border border-border bg-card"
+        >
+            <div
+                class="flex items-center justify-between border-b border-border px-4 py-3"
+            >
+                <span
+                    class="text-[12px] font-semibold tracking-[0.06em] text-muted-foreground uppercase"
+                >
+                    Rate limits
+                </span>
+                <span class="text-[11.5px] text-muted-foreground">
+                    Rolling windows ending now. Informational only.
+                </span>
+            </div>
+            <div class="divide-y divide-border">
+                <div
+                    v-for="row in props.rate_limits"
+                    :key="`${row.provider}|${row.model}`"
+                    class="grid items-center gap-3 px-4 py-2.5 md:grid-cols-[220px,1fr]"
+                >
+                    <div>
+                        <div class="text-[12.5px] font-medium">
+                            {{ row.model }}
+                        </div>
+                        <div class="text-[11px] text-muted-foreground">
+                            {{ row.provider }}
+                        </div>
+                    </div>
+                    <div class="grid gap-3 md:grid-cols-2">
+                        <div
+                            v-for="limit in row.limits"
+                            :key="`${limit.metric}|${limit.period}`"
+                            class="space-y-1"
+                        >
+                            <div
+                                class="flex items-center justify-between text-[11px]"
+                            >
+                                <span class="text-muted-foreground">{{
+                                    rateLimitLabel(limit)
+                                }}</span>
+                                <span class="font-mono-tabular">
+                                    {{ formatNumber(limit.used) }} /
+                                    {{ formatNumber(limit.limit_value) }}
+                                </span>
+                            </div>
+                            <div
+                                class="h-1.5 overflow-hidden rounded-full bg-muted"
+                            >
+                                <div
+                                    class="h-full rounded-full"
+                                    :class="
+                                        limit.used >= limit.limit_value
+                                            ? 'bg-destructive'
+                                            : 'bg-primary'
+                                    "
+                                    :style="{
+                                        width: `${Math.min(100, (limit.used / limit.limit_value) * 100)}%`,
+                                    }"
+                                ></div>
                             </div>
                         </div>
                     </div>
