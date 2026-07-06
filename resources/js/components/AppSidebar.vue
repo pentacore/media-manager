@@ -317,22 +317,7 @@ const aiNavItems: NavItem[] = [
     },
 ];
 
-const adminNavItems: NavItem[] = [
-    {
-        title: 'Connections',
-        href: ServiceConnectionController.index.url(),
-        icon: LinkIcon,
-    },
-    {
-        title: 'Users',
-        href: UserController.index.url(),
-        icon: Users,
-    },
-    {
-        title: 'Approval Rules',
-        href: ActionTypeConfigController.index.url(),
-        icon: Shield,
-    },
+const aiAdminNavItems: NavItem[] = [
     {
         title: 'AI Settings',
         href: AiSettingsController.index.url(),
@@ -358,6 +343,25 @@ const adminNavItems: NavItem[] = [
         href: AiModelPriceController.index.url(),
         icon: DollarSign,
     },
+];
+
+const adminNavItems = computed<NavItem[]>(() => [
+    {
+        title: 'Connections',
+        href: ServiceConnectionController.index.url(),
+        icon: LinkIcon,
+    },
+    {
+        title: 'Users',
+        href: UserController.index.url(),
+        icon: Users,
+    },
+    {
+        title: 'Approval Rules',
+        href: ActionTypeConfigController.index.url(),
+        icon: Shield,
+    },
+    ...(aiEnabled.value ? aiAdminNavItems : []),
     {
         title: 'Webhook Log',
         href: WebhookLogController.index.url(),
@@ -368,7 +372,7 @@ const adminNavItems: NavItem[] = [
         href: JobsController.index.url(),
         icon: ListTodo,
     },
-];
+]);
 </script>
 
 <template>
