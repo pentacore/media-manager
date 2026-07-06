@@ -505,3 +505,17 @@ test('priced_models is included in page props', function (): void {
         ->assertOk()
         ->assertInertia(fn ($page) => $page->has('priced_models', fn ($models) => $models->etc()));
 });
+
+test('index exposes rate limit status', function (): void {
+    $admin = User::factory()->admin()->create();
+    $price = AiModelPrice::factory()->create(['provider' => 'openai', 'model' => 'gpt-5-mini']);
+    $price->rateLimits()->create(['metric' => 'requests', 'period' => 'minute', 'limit_value' => 500]);
+
+    $this->actingAs($admin)
+        ->get(route('admin.ai-usage.index'))
+        ->assertInertia(fn ($page) => $page
+            ->component('Admin/AiUsage/Index')
+            ->has('rate_limits', 1)
+            ->where('rate_limits.0.model', 'gpt-5-mini')
+            ->where('rate_limits.0.limits.0.limit_value', 500));
+});

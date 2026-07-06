@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Services\AiUsage;
 
+use App\Enums\RateLimitMetric;
 use App\Models\AiFreeUsagePool;
 use App\Models\AiModelPrice;
 use App\Models\AiToolInvocation;
@@ -104,6 +105,79 @@ class AiUsageReporting
                 'used_output' => $usedOutput,
                 'used_total' => $usedInput + $usedOutput,
                 'models' => $models,
+            ];
+        }
+
+        return $rows;
+    }
+
+    /**
+     * Per-model consumption against configured provider rate limits, each
+     * limit measured over its rolling window (the last minute/hour/day —
+     * rolling, unlike the free pools' calendar resets). Token limits count
+     * prompt + completion tokens, matching pool accounting. Display only.
+     *
+     * @return array<int, array{provider: string, model: string, limits: array<int, array{metric: string, period: string, limit_value: int, used: int}>}>
+     */
+    public function rateLimitStatus(): array
+    {
+        $prices = AiModelPrice::query()
+            ->with('rateLimits')
+            ->whereHas('rateLimits')
+            ->orderBy('provider')
+            ->orderBy('model')
+            ->get();
+
+        if ($prices->isEmpty()) {
+            return [];
+        }
+
+        $periods = $prices
+            ->flatMap(fn (AiModelPrice $aiModelPrice) => $aiModelPrice->rateLimits->pluck('period'))
+            ->unique();
+
+        // One aggregate query per distinct window length, keyed by
+        // provider|base_model (dated suffixes stripped like poolUsageRows).
+        $usageByPeriod = [];
+
+        foreach ($periods as $period) {
+            $usageByPeriod[$period->value] = DB::table('ai_usage_records')
+                ->where('created_at', '>=', $period->windowStart())
+                ->whereNotNull('provider')
+                ->whereNotNull('model')
+                ->selectRaw("
+                    provider,
+                    regexp_replace(model, '-[0-9]{4}-[0-9]{2}-[0-9]{2}\$', '') AS base_model,
+                    COUNT(*) AS requests,
+                    COALESCE(SUM(prompt_tokens + completion_tokens), 0) AS tokens
+                ")
+                ->groupByRaw('provider, base_model')
+                ->get()
+                ->keyBy(fn (object $row): string => $row->provider.'|'.$row->base_model);
+        }
+
+        $rows = [];
+
+        foreach ($prices as $price) {
+            $limits = [];
+
+            foreach ($price->rateLimits as $rateLimit) {
+                $usage = $usageByPeriod[$rateLimit->period->value][$price->provider.'|'.$price->model] ?? null;
+
+                $limits[] = [
+                    'metric' => $rateLimit->metric->value,
+                    'period' => $rateLimit->period->value,
+                    'limit_value' => $rateLimit->limit_value,
+                    'used' => (int) ($rateLimit->metric === RateLimitMetric::Requests
+                        ? ($usage->requests ?? 0)
+                        : ($usage->tokens ?? 0)),
+                ];
+            }
+
+            $rows[] = [
+                'provider' => $price->provider,
+                'model' => $price->model,
+                'limits' => $limits,
             ];
         }
 

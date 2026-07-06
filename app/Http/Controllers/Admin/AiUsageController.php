@@ -50,6 +50,9 @@ class AiUsageController extends Controller
             // cards. Each pool sizes its own window from its reset period,
             // so no window argument is passed.
             'free_pools' => $aiUsageReporting->freePoolStatus(),
+            // Usage vs configured provider rate limits over rolling
+            // windows; display only.
+            'rate_limits' => $aiUsageReporting->rateLimitStatus(),
         ];
 
         if ($scenario instanceof Scenario) {
