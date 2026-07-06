@@ -9,6 +9,7 @@ use App\Http\Controllers\Auth\InviteController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\HeartbeatController;
 use App\Http\Controllers\NotificationController;
+use App\Http\Controllers\StatisticsController;
 use Illuminate\Support\Facades\Route;
 use Laravel\Fortify\Features;
 
@@ -20,6 +21,8 @@ Route::middleware(['auth', 'verified', 'password.set'])->group(function (): void
     Route::get('dashboard', DashboardController::class)->name('dashboard');
     Route::get('activity-log', [ActivityLogController::class, 'index'])->name('activity-log');
     Route::get('activity-log/export', [ActivityLogController::class, 'export'])->name('activity-log.export');
+
+    Route::get('statistics', StatisticsController::class)->name('statistics.index');
 
     Route::get('notifications', [NotificationController::class, 'index'])->name('notifications.index');
     Route::patch('notifications/read-all', [NotificationController::class, 'markAllRead'])->name('notifications.read-all');
