@@ -1,13 +1,15 @@
 <script setup lang="ts">
-import { computed } from 'vue';
+import { computed, ref, watch } from 'vue';
 
 const props = withDefaults(
     defineProps<{
         hint: string;
         size?: 'sm' | 'md' | 'lg' | 'xl' | 'full';
+        src?: string | null;
     }>(),
     {
         size: 'md',
+        src: null,
     },
 );
 
@@ -27,6 +29,18 @@ const widthClass = computed(() => {
             return 'w-14';
     }
 });
+
+const failed = ref(false);
+
+// A new URL deserves a fresh attempt even if the previous one 404'd.
+watch(
+    () => props.src,
+    () => {
+        failed.value = false;
+    },
+);
+
+const showImage = computed(() => Boolean(props.src) && !failed.value);
 
 const hue = computed(
     () =>
@@ -48,11 +62,21 @@ const styleVars = computed(() => ({
         ]"
         :style="styleVars"
     >
-        <span class="absolute top-2 right-2 left-2 truncate opacity-60">{{
-            hint
-        }}</span>
-        <span class="font-serif text-[14px] text-foreground italic"
-            >poster</span
-        >
+        <img
+            v-if="showImage"
+            :src="src!"
+            :alt="hint"
+            loading="lazy"
+            class="absolute inset-0 size-full object-cover"
+            @error="failed = true"
+        />
+        <template v-else>
+            <span class="absolute top-2 right-2 left-2 truncate opacity-60">{{
+                hint
+            }}</span>
+            <span class="font-serif text-[14px] text-foreground italic"
+                >poster</span
+            >
+        </template>
     </div>
 </template>
