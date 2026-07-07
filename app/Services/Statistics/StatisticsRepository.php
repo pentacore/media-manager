@@ -262,7 +262,10 @@ class StatisticsRepository
             return 'day';
         }
 
-        return $cutoff >= CarbonImmutable::now()->subDays(7) ? 'hour' : 'day';
+        // Minute buffer: cutoff() and this comparison read the clock at
+        // slightly different instants, so an exact 7-day window (Last7d)
+        // would otherwise flip between hour and day rows nondeterministically.
+        return $cutoff >= CarbonImmutable::now()->subDays(7)->subMinute() ? 'hour' : 'day';
     }
 
     /**
