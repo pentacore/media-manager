@@ -44,13 +44,13 @@ defineOptions({
     layout: {
         breadcrumbs: [
             { title: 'Overview', href: dashboard().url },
-            { title: 'Statistics', href: StatisticsController.index.url() },
+            { title: 'Statistics', href: StatisticsController.url() },
         ],
     },
 });
 
 function setWindow(value: string): void {
-    router.visit(StatisticsController.index.url({ query: { window: value } }), {
+    router.visit(StatisticsController.url({ query: { window: value } }), {
         preserveScroll: true,
         preserveState: true,
     });

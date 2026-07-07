@@ -98,7 +98,7 @@ const poolEditUnified = ref(false);
 interface RateLimitDraft {
     metric: 'requests' | 'tokens';
     period: 'minute' | 'hour' | 'day';
-    limit_value: number | null;
+    limit_value: number | undefined;
 }
 
 const RATE_LIMIT_METRICS: Array<[RateLimitDraft['metric'], string]> = [
@@ -116,7 +116,7 @@ const createRateLimits = ref<RateLimitDraft[]>([]);
 const editRateLimits = ref<RateLimitDraft[]>([]);
 
 function addRateLimit(list: RateLimitDraft[]) {
-    list.push({ metric: 'requests', period: 'minute', limit_value: null });
+    list.push({ metric: 'requests', period: 'minute', limit_value: undefined });
 }
 
 function removeRateLimit(list: RateLimitDraft[], index: number) {

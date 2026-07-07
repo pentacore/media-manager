@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "f8674f09eef8c0e1adfcee8ce2b9c4b8",
+    "content-hash": "92f55f659e92f1fd12927a63ac5b888c",
     "packages": [
         {
             "name": "aws/aws-crt-php",
@@ -4243,30 +4243,30 @@
         },
         {
             "name": "pentacore/laravel-typefinder",
-            "version": "4.2.3",
+            "version": "5.0.0",
             "source": {
                 "type": "git",
                 "url": "https://github.com/pentacore/Laravel-Typefinder.git",
-                "reference": "9cdb70e27daa0c3bbd8c8b9a0981f61496996303"
+                "reference": "5eaeb1f03fa389d080c8874822185a99a8821ffd"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/pentacore/Laravel-Typefinder/zipball/9cdb70e27daa0c3bbd8c8b9a0981f61496996303",
-                "reference": "9cdb70e27daa0c3bbd8c8b9a0981f61496996303",
+                "url": "https://api.github.com/repos/pentacore/Laravel-Typefinder/zipball/5eaeb1f03fa389d080c8874822185a99a8821ffd",
+                "reference": "5eaeb1f03fa389d080c8874822185a99a8821ffd",
                 "shasum": ""
             },
             "require": {
-                "illuminate/console": "^11.0|^12.0|^13.0",
-                "illuminate/database": "^11.0|^12.0|^13.0",
-                "illuminate/filesystem": "^11.0|^12.0|^13.0",
-                "illuminate/support": "^11.0|^12.0|^13.0",
-                "illuminate/validation": "^11.0|^12.0|^13.0",
-                "php": "^8.3"
+                "illuminate/console": "^12.0|^13.0",
+                "illuminate/database": "^12.0|^13.0",
+                "illuminate/filesystem": "^12.0|^13.0",
+                "illuminate/support": "^12.0|^13.0",
+                "illuminate/validation": "^12.0|^13.0",
+                "php": "^8.4"
             },
             "require-dev": {
                 "laravel/boost": "^2.4",
                 "laravel/pint": "^1.21",
-                "orchestra/testbench": "^10.1|^9.0|^11.0",
+                "orchestra/testbench": "^10.1|^11.0",
                 "phpunit/phpunit": "^11.0|^10.5",
                 "rector/rector": "^2.0"
             },
@@ -4307,7 +4307,7 @@
                 "issues": "https://github.com/pentacore/laravel-typefinder/issues",
                 "source": "https://github.com/pentacore/laravel-typefinder"
             },
-            "time": "2026-05-08T10:40:42+00:00"
+            "time": "2026-07-07T09:20:21+00:00"
         },
         {
             "name": "php-http/client-common",
