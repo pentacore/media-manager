@@ -181,4 +181,22 @@ return [
     'metrics' => [
         'token' => env('METRICS_TOKEN'),
     ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Statistics
+    |--------------------------------------------------------------------------
+    |
+    | Retention for the analytics pipeline. Hour-granularity rollups and raw
+    | service_metrics rows are pruned daily by `statistics:prune`; day-level
+    | rollups are kept indefinitely. Disable `prune_service_metrics` to retain
+    | the raw health/latency samples that back the coarser day rollups.
+    |
+    */
+
+    'statistics' => [
+        'hour_retention_days' => (int) env('MEDIAMANAGER_STATISTICS_HOUR_RETENTION_DAYS', 90),
+        'service_metrics_retention_days' => (int) env('MEDIAMANAGER_STATISTICS_SERVICE_METRICS_RETENTION_DAYS', 90),
+        'prune_service_metrics' => (bool) env('MEDIAMANAGER_STATISTICS_PRUNE_SERVICE_METRICS', true),
+    ],
 ];

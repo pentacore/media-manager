@@ -10,6 +10,7 @@ use App\Console\Commands\CheckServiceVersions;
 use App\Console\Commands\CollectServiceGauges;
 use App\Console\Commands\PollSabnzbdHistory;
 use App\Console\Commands\PruneAiProposedWorkflows;
+use App\Console\Commands\PruneStatistics;
 use App\Console\Commands\RefreshInterventionCount;
 use App\Console\Commands\RefreshSabnzbdDownloadCounts;
 use App\Console\Commands\WarmServiceCaches;
@@ -59,6 +60,10 @@ Schedule::job(new ReconcileSearchIndex)
 
 Schedule::command(AggregateStatistics::class)
     ->hourlyAt(5)
+    ->withoutOverlapping();
+
+Schedule::command(PruneStatistics::class)
+    ->dailyAt('04:30')
     ->withoutOverlapping();
 
 // The two invocations carry distinct arguments, so Laravel derives distinct
