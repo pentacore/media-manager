@@ -166,4 +166,19 @@ return [
         // three missed beats of grace before they fall out of "active".
         'heartbeat_ttl' => (int) env('MEDIAMANAGER_PRESENCE_HEARTBEAT_TTL', 90),
     ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Metrics
+    |--------------------------------------------------------------------------
+    |
+    | Bearer token that gates the Prometheus scrape endpoint (GET /metrics).
+    | Left empty by default, which denies all access — set METRICS_TOKEN to a
+    | long random secret to expose the endpoint to your Prometheus scraper.
+    |
+    */
+
+    'metrics' => [
+        'token' => env('METRICS_TOKEN'),
+    ],
 ];
