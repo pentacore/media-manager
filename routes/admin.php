@@ -12,6 +12,7 @@ use App\Http\Controllers\Admin\EmbyLinkController;
 use App\Http\Controllers\Admin\JobsController;
 use App\Http\Controllers\Admin\ProwlarrTestIndexerController;
 use App\Http\Controllers\Admin\ServiceConnectionController;
+use App\Http\Controllers\Admin\StatisticsController;
 use App\Http\Controllers\Admin\UserController;
 use App\Http\Controllers\Admin\WebhookLogController;
 use Illuminate\Support\Facades\Route;
@@ -84,4 +85,6 @@ Route::middleware(['auth', 'verified', 'password.set', 'role:admin'])->prefix('a
     Route::get('webhook-log/{webhookEvent}', [WebhookLogController::class, 'show'])->name('webhook-log.show');
 
     Route::get('jobs', [JobsController::class, 'index'])->name('jobs.index');
+
+    Route::get('statistics', StatisticsController::class)->name('statistics.index');
 });
