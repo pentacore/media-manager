@@ -22,6 +22,7 @@
         "laravel/wayfinder": "^0.1.14",
         "pentacore/laravel-typefinder": "^5.0",
         "socialiteproviders/authentik": "^5.3",
+        "spatie/laravel-prometheus": "^1.6",
         "typesense/typesense-php": "^6.0"
     },
     "require-dev": {
