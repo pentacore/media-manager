@@ -82,6 +82,7 @@ return new class extends Migration
             if ($pool === null) {
                 continue;
             }
+
             if ((bool) $pool->unified) {
                 continue;
             }
