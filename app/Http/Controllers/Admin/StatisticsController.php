@@ -57,10 +57,13 @@ class StatisticsController extends Controller
     }
 
     /**
-     * Share of decided actions (approved, executing, or completed) out of all
-     * actions that were either approved or rejected, as a whole-number percent.
-     * Rejected actions are the only "declined" outcome; pending actions have no
-     * decision yet and are excluded from the denominator.
+     * Share of approved actions out of all decided actions, as a whole-number
+     * percent. The numerator counts the three statuses that represent an
+     * approval — approved, executing, and completed — while the denominator
+     * adds rejected (the only "declined" outcome). Because status is a single
+     * current-state column, an action that was approved and later failed
+     * reports as `failed` and so is counted in neither the numerator nor the
+     * denominator. Pending actions have no decision yet and are also excluded.
      *
      * @param  list<array{key: string, count: int, sum: float}>  $actionsByStatus
      */

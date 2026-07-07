@@ -30,10 +30,11 @@ class AIServiceProvider extends ServiceProvider
     }
 
     // Note: RecordAgentUsage / RecordToolInvocation / RecordAgentFailover are
-    // wired to their events via Laravel's automatic listener discovery
-    // (enabled by default in bootstrap/app.php's withEvents() call).
-    // Explicit Event::listen registrations here used to double-bind every
-    // listener and produce duplicate ai_usage_records rows per call.
+    // wired to their events via Laravel's default event discovery, which scans
+    // app/Listeners for type-hinted handlers (on by default; no withEvents()
+    // call in bootstrap/app.php is needed). Explicit Event::listen
+    // registrations here used to double-bind every listener and produce
+    // duplicate ai_usage_records rows per call.
     //
     // Exception: streamed runs. The real streaming gateway dispatches only
     // AgentStreamed (never AgentPrompted), and discovery binds listeners to

@@ -62,9 +62,9 @@ function showColLabel(index: number): boolean {
                     <div
                         v-for="(value, colIndex) in row"
                         :key="`cell-${rowIndex}-${colIndex}`"
-                        class="aspect-square min-h-[10px] rounded bg-accent"
+                        class="aspect-square min-h-[10px] rounded"
                         :style="{ opacity: opacityFor(value) || undefined }"
-                        :class="value <= 0 ? 'bg-muted' : ''"
+                        :class="value > 0 ? 'bg-accent' : 'bg-muted'"
                         :title="`${rowLabels[rowIndex]} ${colLabels[colIndex]}: ${value}`"
                     />
                 </template>

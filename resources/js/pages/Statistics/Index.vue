@@ -152,7 +152,9 @@ function formatHours(seconds: number): string {
                 <BarChart :data="watchBars" :height="160" />
             </div>
             <div class="rounded-xl border border-border bg-card p-5">
-                <h2 class="mb-4 text-sm font-semibold">Movies added</h2>
+                <h2 class="mb-4 text-sm font-semibold">
+                    Library size (movies)
+                </h2>
                 <BarChart :data="libraryBars" :height="160" />
             </div>
         </div>
