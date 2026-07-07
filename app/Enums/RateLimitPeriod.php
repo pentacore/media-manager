@@ -39,4 +39,17 @@ enum RateLimitPeriod: string
             self::Day => $now->subDay(),
         };
     }
+
+    /**
+     * Value/label option pairs for select components.
+     *
+     * @return list<array{value: string, label: string}>
+     */
+    public static function options(): array
+    {
+        return array_map(
+            fn (self $period): array => ['value' => $period->value, 'label' => $period->label()],
+            self::cases(),
+        );
+    }
 }

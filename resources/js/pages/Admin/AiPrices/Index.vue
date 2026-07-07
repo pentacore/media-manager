@@ -6,7 +6,12 @@ import { toast } from 'vue-sonner';
 import AiFreeUsagePoolController from '@/actions/App/Http/Controllers/Admin/AiFreeUsagePoolController';
 import AiModelPriceController from '@/actions/App/Http/Controllers/Admin/AiModelPriceController';
 import InputError from '@/components/InputError.vue';
-import { Pill, StatCard } from '@/components/mm';
+import {
+    Pill,
+    PoolFormFields,
+    RateLimitEditor,
+    StatCard,
+} from '@/components/mm';
 import { Button } from '@/components/ui/button';
 import {
     Dialog,
@@ -18,6 +23,13 @@ import {
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from '@/components/ui/select';
 import { useWebSocket } from '@/composables/useWebSocket';
 import { dashboard } from '@/routes';
 
@@ -75,6 +87,8 @@ const props = defineProps<{
     prices: PriceRow[];
     pools: PoolRow[];
     refresh_running: boolean;
+    rate_limit_metrics: Array<{ value: string; label: string }>;
+    rate_limit_periods: Array<{ value: string; label: string }>;
 }>();
 
 defineOptions({
@@ -92,8 +106,6 @@ const refreshing = ref(props.refresh_running);
 
 const showPoolCreateDialog = ref(false);
 const editingPool = ref<PoolRow | null>(null);
-const poolCreateUnified = ref(false);
-const poolEditUnified = ref(false);
 
 interface RateLimitDraft {
     metric: 'requests' | 'tokens';
@@ -101,31 +113,14 @@ interface RateLimitDraft {
     limit_value: number | undefined;
 }
 
-const RATE_LIMIT_METRICS: Array<[RateLimitDraft['metric'], string]> = [
-    ['requests', 'Requests'],
-    ['tokens', 'Tokens'],
-];
-
-const RATE_LIMIT_PERIODS: Array<[RateLimitDraft['period'], string]> = [
-    ['minute', 'Per minute'],
-    ['hour', 'Per hour'],
-    ['day', 'Per day'],
-];
-
 const createRateLimits = ref<RateLimitDraft[]>([]);
 const editRateLimits = ref<RateLimitDraft[]>([]);
 
-function addRateLimit(list: RateLimitDraft[]) {
-    list.push({ metric: 'requests', period: 'minute', limit_value: undefined });
-}
-
-function removeRateLimit(list: RateLimitDraft[], index: number) {
-    list.splice(index, 1);
-}
+const createPoolId = ref('none');
+const editPoolId = ref('none');
 
 function startPoolEdit(pool: PoolRow) {
     editingPool.value = { ...pool };
-    poolEditUnified.value = pool.unified;
 }
 
 function cancelPoolEdit() {
@@ -223,6 +218,10 @@ onUnmounted(() => {
 
 function startEdit(price: PriceRow) {
     editing.value = { ...price };
+    editPoolId.value =
+        price.free_usage_pool_id === null
+            ? 'none'
+            : String(price.free_usage_pool_id);
     editRateLimits.value = price.rate_limits.map((limit) => ({
         metric: limit.metric,
         period: limit.period,
@@ -233,6 +232,7 @@ function startEdit(price: PriceRow) {
 function onCreateSuccess() {
     showCreateDialog.value = false;
     createRateLimits.value = [];
+    createPoolId.value = 'none';
 }
 
 function cancelEdit() {
@@ -428,113 +428,49 @@ const priciest = ref(
                                     <Label for="free_usage_pool_id"
                                         >Free usage pool</Label
                                     >
-                                    <select
-                                        id="free_usage_pool_id"
+                                    <input
+                                        type="hidden"
                                         name="free_usage_pool_id"
-                                        class="h-9 w-full rounded-md border border-border bg-card px-2 text-sm"
+                                        :value="
+                                            createPoolId === 'none'
+                                                ? ''
+                                                : createPoolId
+                                        "
+                                    />
+                                    <Select
+                                        id="free_usage_pool_id"
+                                        v-model="createPoolId"
                                     >
-                                        <option value="">No pool</option>
-                                        <option
-                                            v-for="pool in pools"
-                                            :key="pool.id"
-                                            :value="pool.id"
+                                        <SelectTrigger
+                                            class="h-9 w-full text-sm"
                                         >
-                                            {{ pool.name }}
-                                        </option>
-                                    </select>
+                                            <SelectValue
+                                                placeholder="No pool"
+                                            />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem value="none">
+                                                No pool
+                                            </SelectItem>
+                                            <SelectItem
+                                                v-for="pool in pools"
+                                                :key="pool.id"
+                                                :value="String(pool.id)"
+                                            >
+                                                {{ pool.name }}
+                                            </SelectItem>
+                                        </SelectContent>
+                                    </Select>
                                     <InputError
                                         :message="errors.free_usage_pool_id"
                                     />
                                 </div>
-                                <div class="col-span-2 space-y-2">
-                                    <div
-                                        class="flex items-center justify-between"
-                                    >
-                                        <Label>Rate limits</Label>
-                                        <Button
-                                            type="button"
-                                            variant="outline"
-                                            size="sm"
-                                            @click="
-                                                addRateLimit(createRateLimits)
-                                            "
-                                        >
-                                            <Plus class="h-3.5 w-3.5" /> Add
-                                            limit
-                                        </Button>
-                                    </div>
-                                    <div
-                                        v-for="(limit, i) in createRateLimits"
-                                        :key="i"
-                                        class="flex items-center gap-2"
-                                    >
-                                        <select
-                                            v-model="limit.metric"
-                                            :name="`rate_limits[${i}][metric]`"
-                                            class="h-9 w-32 rounded-md border border-border bg-card px-2 text-sm"
-                                        >
-                                            <option
-                                                v-for="[
-                                                    value,
-                                                    label,
-                                                ] in RATE_LIMIT_METRICS"
-                                                :key="value"
-                                                :value="value"
-                                            >
-                                                {{ label }}
-                                            </option>
-                                        </select>
-                                        <select
-                                            v-model="limit.period"
-                                            :name="`rate_limits[${i}][period]`"
-                                            class="h-9 w-32 rounded-md border border-border bg-card px-2 text-sm"
-                                        >
-                                            <option
-                                                v-for="[
-                                                    value,
-                                                    label,
-                                                ] in RATE_LIMIT_PERIODS"
-                                                :key="value"
-                                                :value="value"
-                                            >
-                                                {{ label }}
-                                            </option>
-                                        </select>
-                                        <Input
-                                            v-model.number="limit.limit_value"
-                                            :name="`rate_limits[${i}][limit_value]`"
-                                            type="number"
-                                            min="1"
-                                            placeholder="Limit"
-                                            class="flex-1"
-                                        />
-                                        <Button
-                                            type="button"
-                                            variant="ghost"
-                                            size="icon"
-                                            @click="
-                                                removeRateLimit(
-                                                    createRateLimits,
-                                                    i,
-                                                )
-                                            "
-                                        >
-                                            <Trash2 class="h-3.5 w-3.5" />
-                                        </Button>
-                                    </div>
-                                    <InputError
-                                        :message="
-                                            Object.entries(errors)
-                                                .filter(([key]) =>
-                                                    key.startsWith(
-                                                        'rate_limits',
-                                                    ),
-                                                )
-                                                .map(([, message]) => message)
-                                                .join(' ')
-                                        "
-                                    />
-                                </div>
+                                <RateLimitEditor
+                                    v-model="createRateLimits"
+                                    :metrics="rate_limit_metrics"
+                                    :periods="rate_limit_periods"
+                                    :errors="errors"
+                                />
                             </div>
                             <DialogFooter>
                                 <Button type="submit" :disabled="processing"
@@ -622,118 +558,7 @@ const priciest = ref(
                             v-slot="{ errors, processing }"
                             @success="showPoolCreateDialog = false"
                         >
-                            <div class="space-y-2">
-                                <Label for="pool_name">Name</Label>
-                                <Input
-                                    id="pool_name"
-                                    name="name"
-                                    placeholder="Gemini free tier"
-                                />
-                                <InputError :message="errors.name" />
-                            </div>
-                            <div class="grid grid-cols-2 gap-4">
-                                <div class="space-y-2">
-                                    <Label for="pool_period"
-                                        >Reset period</Label
-                                    >
-                                    <select
-                                        id="pool_period"
-                                        name="period"
-                                        class="h-9 w-full rounded-md border border-border bg-card px-2 text-sm"
-                                    >
-                                        <option value="daily">Daily</option>
-                                        <option value="weekly">Weekly</option>
-                                        <option value="monthly" selected>
-                                            Monthly
-                                        </option>
-                                    </select>
-                                    <InputError :message="errors.period" />
-                                </div>
-                                <div class="space-y-2">
-                                    <Label for="pool_unified"
-                                        >Unified budget</Label
-                                    >
-                                    <label
-                                        class="flex h-9 items-center gap-2 text-sm"
-                                    >
-                                        <input
-                                            type="hidden"
-                                            name="unified"
-                                            value="0"
-                                        />
-                                        <input
-                                            id="pool_unified"
-                                            v-model="poolCreateUnified"
-                                            type="checkbox"
-                                            name="unified"
-                                            value="1"
-                                            class="size-4"
-                                        />
-                                        input + output share one budget
-                                    </label>
-                                    <InputError :message="errors.unified" />
-                                </div>
-                            </div>
-                            <div v-if="poolCreateUnified" class="space-y-2">
-                                <Label for="pool_free_total"
-                                    >Free tokens / period</Label
-                                >
-                                <Input
-                                    id="pool_free_total"
-                                    name="free_total_tokens"
-                                    type="number"
-                                    min="0"
-                                />
-                                <InputError
-                                    :message="errors.free_total_tokens"
-                                />
-                            </div>
-                            <div v-else class="grid grid-cols-2 gap-4">
-                                <div class="space-y-2">
-                                    <Label for="pool_free_input"
-                                        >Free input / period</Label
-                                    >
-                                    <Input
-                                        id="pool_free_input"
-                                        name="free_input_tokens"
-                                        type="number"
-                                        min="0"
-                                        placeholder="leave blank if none"
-                                    />
-                                    <InputError
-                                        :message="errors.free_input_tokens"
-                                    />
-                                </div>
-                                <div class="space-y-2">
-                                    <Label for="pool_free_output"
-                                        >Free output / period</Label
-                                    >
-                                    <Input
-                                        id="pool_free_output"
-                                        name="free_output_tokens"
-                                        type="number"
-                                        min="0"
-                                        placeholder="leave blank if none"
-                                    />
-                                    <InputError
-                                        :message="errors.free_output_tokens"
-                                    />
-                                </div>
-                            </div>
-                            <div class="space-y-2">
-                                <Label for="pool_doc_url"
-                                    >Documentation URL</Label
-                                >
-                                <Input
-                                    id="pool_doc_url"
-                                    name="documentation_url"
-                                    type="url"
-                                    placeholder="https://…"
-                                />
-                                <InputError
-                                    :message="errors.documentation_url"
-                                />
-                            </div>
+                            <PoolFormFields id-prefix="pool" :errors="errors" />
                             <DialogFooter>
                                 <Button type="submit" :disabled="processing"
                                     >Save</Button
@@ -853,111 +678,12 @@ const priciest = ref(
                     v-slot="{ errors, processing }"
                     @success="cancelPoolEdit"
                 >
-                    <div class="space-y-2">
-                        <Label for="edit_pool_name">Name</Label>
-                        <Input
-                            id="edit_pool_name"
-                            name="name"
-                            :default-value="editingPool.name"
-                        />
-                        <InputError :message="errors.name" />
-                    </div>
-                    <div class="grid grid-cols-2 gap-4">
-                        <div class="space-y-2">
-                            <Label for="edit_pool_period">Reset period</Label>
-                            <select
-                                id="edit_pool_period"
-                                name="period"
-                                class="h-9 w-full rounded-md border border-border bg-card px-2 text-sm"
-                            >
-                                <option
-                                    v-for="p in ['daily', 'weekly', 'monthly']"
-                                    :key="p"
-                                    :value="p"
-                                    :selected="editingPool.period === p"
-                                >
-                                    {{ p.charAt(0).toUpperCase() + p.slice(1) }}
-                                </option>
-                            </select>
-                            <InputError :message="errors.period" />
-                        </div>
-                        <div class="space-y-2">
-                            <Label for="edit_pool_unified"
-                                >Unified budget</Label
-                            >
-                            <label class="flex h-9 items-center gap-2 text-sm">
-                                <input type="hidden" name="unified" value="0" />
-                                <input
-                                    id="edit_pool_unified"
-                                    v-model="poolEditUnified"
-                                    type="checkbox"
-                                    name="unified"
-                                    value="1"
-                                    class="size-4"
-                                />
-                                input + output share one budget
-                            </label>
-                            <InputError :message="errors.unified" />
-                        </div>
-                    </div>
-                    <div v-if="poolEditUnified" class="space-y-2">
-                        <Label for="edit_pool_free_total"
-                            >Free tokens / period</Label
-                        >
-                        <Input
-                            id="edit_pool_free_total"
-                            name="free_total_tokens"
-                            type="number"
-                            min="0"
-                            :default-value="editingPool.free_total_tokens ?? ''"
-                        />
-                        <InputError :message="errors.free_total_tokens" />
-                    </div>
-                    <div v-else class="grid grid-cols-2 gap-4">
-                        <div class="space-y-2">
-                            <Label for="edit_pool_free_input"
-                                >Free input / period</Label
-                            >
-                            <Input
-                                id="edit_pool_free_input"
-                                name="free_input_tokens"
-                                type="number"
-                                min="0"
-                                placeholder="leave blank if none"
-                                :default-value="
-                                    editingPool.free_input_tokens ?? ''
-                                "
-                            />
-                            <InputError :message="errors.free_input_tokens" />
-                        </div>
-                        <div class="space-y-2">
-                            <Label for="edit_pool_free_output"
-                                >Free output / period</Label
-                            >
-                            <Input
-                                id="edit_pool_free_output"
-                                name="free_output_tokens"
-                                type="number"
-                                min="0"
-                                placeholder="leave blank if none"
-                                :default-value="
-                                    editingPool.free_output_tokens ?? ''
-                                "
-                            />
-                            <InputError :message="errors.free_output_tokens" />
-                        </div>
-                    </div>
-                    <div class="space-y-2">
-                        <Label for="edit_pool_doc_url">Documentation URL</Label>
-                        <Input
-                            id="edit_pool_doc_url"
-                            name="documentation_url"
-                            type="url"
-                            placeholder="https://…"
-                            :default-value="editingPool.documentation_url ?? ''"
-                        />
-                        <InputError :message="errors.documentation_url" />
-                    </div>
+                    <PoolFormFields
+                        :key="editingPool.id"
+                        id-prefix="edit_pool"
+                        :pool="editingPool"
+                        :errors="errors"
+                    />
                     <DialogFooter>
                         <Button type="submit" :disabled="processing">
                             Save
@@ -1232,109 +958,39 @@ const priciest = ref(
                             <Label for="edit_free_usage_pool_id"
                                 >Free usage pool</Label
                             >
-                            <select
-                                id="edit_free_usage_pool_id"
+                            <input
+                                type="hidden"
                                 name="free_usage_pool_id"
-                                class="h-9 w-full rounded-md border border-border bg-card px-2 text-sm"
+                                :value="editPoolId === 'none' ? '' : editPoolId"
+                            />
+                            <Select
+                                id="edit_free_usage_pool_id"
+                                v-model="editPoolId"
                             >
-                                <option
-                                    value=""
-                                    :selected="
-                                        editing.free_usage_pool_id === null
-                                    "
-                                >
-                                    No pool
-                                </option>
-                                <option
-                                    v-for="pool in pools"
-                                    :key="pool.id"
-                                    :value="pool.id"
-                                    :selected="
-                                        editing.free_usage_pool_id === pool.id
-                                    "
-                                >
-                                    {{ pool.name }}
-                                </option>
-                            </select>
+                                <SelectTrigger class="h-9 w-full text-sm">
+                                    <SelectValue placeholder="No pool" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="none">
+                                        No pool
+                                    </SelectItem>
+                                    <SelectItem
+                                        v-for="pool in pools"
+                                        :key="pool.id"
+                                        :value="String(pool.id)"
+                                    >
+                                        {{ pool.name }}
+                                    </SelectItem>
+                                </SelectContent>
+                            </Select>
                             <InputError :message="errors.free_usage_pool_id" />
                         </div>
-                        <div class="col-span-2 space-y-2">
-                            <div class="flex items-center justify-between">
-                                <Label>Rate limits</Label>
-                                <Button
-                                    type="button"
-                                    variant="outline"
-                                    size="sm"
-                                    @click="addRateLimit(editRateLimits)"
-                                >
-                                    <Plus class="h-3.5 w-3.5" /> Add limit
-                                </Button>
-                            </div>
-                            <div
-                                v-for="(limit, i) in editRateLimits"
-                                :key="i"
-                                class="flex items-center gap-2"
-                            >
-                                <select
-                                    v-model="limit.metric"
-                                    :name="`rate_limits[${i}][metric]`"
-                                    class="h-9 w-32 rounded-md border border-border bg-card px-2 text-sm"
-                                >
-                                    <option
-                                        v-for="[
-                                            value,
-                                            label,
-                                        ] in RATE_LIMIT_METRICS"
-                                        :key="value"
-                                        :value="value"
-                                    >
-                                        {{ label }}
-                                    </option>
-                                </select>
-                                <select
-                                    v-model="limit.period"
-                                    :name="`rate_limits[${i}][period]`"
-                                    class="h-9 w-32 rounded-md border border-border bg-card px-2 text-sm"
-                                >
-                                    <option
-                                        v-for="[
-                                            value,
-                                            label,
-                                        ] in RATE_LIMIT_PERIODS"
-                                        :key="value"
-                                        :value="value"
-                                    >
-                                        {{ label }}
-                                    </option>
-                                </select>
-                                <Input
-                                    v-model.number="limit.limit_value"
-                                    :name="`rate_limits[${i}][limit_value]`"
-                                    type="number"
-                                    min="1"
-                                    placeholder="Limit"
-                                    class="flex-1"
-                                />
-                                <Button
-                                    type="button"
-                                    variant="ghost"
-                                    size="icon"
-                                    @click="removeRateLimit(editRateLimits, i)"
-                                >
-                                    <Trash2 class="h-3.5 w-3.5" />
-                                </Button>
-                            </div>
-                            <InputError
-                                :message="
-                                    Object.entries(errors)
-                                        .filter(([key]) =>
-                                            key.startsWith('rate_limits'),
-                                        )
-                                        .map(([, message]) => message)
-                                        .join(' ')
-                                "
-                            />
-                        </div>
+                        <RateLimitEditor
+                            v-model="editRateLimits"
+                            :metrics="rate_limit_metrics"
+                            :periods="rate_limit_periods"
+                            :errors="errors"
+                        />
                     </div>
                     <DialogFooter>
                         <Button type="submit" :disabled="processing">

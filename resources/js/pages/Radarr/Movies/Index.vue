@@ -14,6 +14,7 @@ import {
 } from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useRealtimeReload } from '@/composables/useRealtimeReload';
+import { arrPosterUrl } from '@/lib/arr';
 import { dashboard } from '@/routes';
 
 interface QualityProfile {
@@ -189,12 +190,6 @@ function qualityName(id: number | null): string {
     return props.qualityProfiles?.find((p) => p.id === id)?.name ?? '—';
 }
 
-function posterUrl(movie: Movie): string | null {
-    const poster = movie.images.find((image) => image.coverType === 'poster');
-
-    return poster?.remoteUrl ?? poster?.url ?? null;
-}
-
 function is4k(movie: Movie): boolean {
     const profile = qualityName(movie.quality_profile_id).toLowerCase();
 
@@ -333,7 +328,7 @@ function is4k(movie: Movie): boolean {
                 <div class="relative">
                     <Poster
                         :hint="movie.title.toLowerCase().slice(0, 12)"
-                        :src="posterUrl(movie)"
+                        :src="arrPosterUrl(movie.images)"
                         size="full"
                     />
                     <Pill

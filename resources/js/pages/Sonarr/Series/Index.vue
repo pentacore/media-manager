@@ -21,6 +21,7 @@ import {
 } from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useRealtimeReload } from '@/composables/useRealtimeReload';
+import { arrPosterUrl } from '@/lib/arr';
 import { cn } from '@/lib/utils';
 import { dashboard } from '@/routes';
 
@@ -182,12 +183,6 @@ function progressPct(item: Series): number {
     }
 
     return Math.min(100, (item.episode_file_count / item.episode_count) * 100);
-}
-
-function posterUrl(item: Series): string | null {
-    const poster = item.images.find((image) => image.coverType === 'poster');
-
-    return poster?.remoteUrl ?? poster?.url ?? null;
 }
 
 function sonarrSeriesUrl(slug: string | null): string | null {
@@ -367,7 +362,7 @@ function sonarrSeriesUrl(slug: string | null): string | null {
                 <div class="relative">
                     <Poster
                         :hint="item.title.toLowerCase().slice(0, 12)"
-                        :src="posterUrl(item)"
+                        :src="arrPosterUrl(item.images)"
                         size="full"
                     />
                     <Pill
@@ -448,7 +443,7 @@ function sonarrSeriesUrl(slug: string | null): string | null {
                                         :hint="
                                             item.title.toLowerCase().slice(0, 8)
                                         "
-                                        :src="posterUrl(item)"
+                                        :src="arrPosterUrl(item.images)"
                                         size="sm"
                                     />
                                     <Link

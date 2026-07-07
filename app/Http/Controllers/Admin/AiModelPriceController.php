@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers\Admin;
 
+use App\Enums\RateLimitMetric;
+use App\Enums\RateLimitPeriod;
 use App\Events\AiPriceRefreshStateChanged;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Admin\StoreAiModelPriceRequest;
@@ -32,6 +34,8 @@ class AiModelPriceController extends Controller
                 ->orderBy('name')
                 ->get(),
             'refresh_running' => RefreshAiPricesJob::isRunning(),
+            'rate_limit_metrics' => RateLimitMetric::options(),
+            'rate_limit_periods' => RateLimitPeriod::options(),
         ]);
     }
 
