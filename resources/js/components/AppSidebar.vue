@@ -5,6 +5,7 @@ import {
     BarChart3,
     Bot,
     Brain,
+    ChartLine,
     Clock,
     DollarSign,
     Download,
@@ -36,6 +37,7 @@ import AiUsageController from '@/actions/App/Http/Controllers/Admin/AiUsageContr
 import DecisionAgentSettingsController from '@/actions/App/Http/Controllers/Admin/DecisionAgentSettingsController';
 import JobsController from '@/actions/App/Http/Controllers/Admin/JobsController';
 import ServiceConnectionController from '@/actions/App/Http/Controllers/Admin/ServiceConnectionController';
+import AdminStatisticsController from '@/actions/App/Http/Controllers/Admin/StatisticsController';
 import UserController from '@/actions/App/Http/Controllers/Admin/UserController';
 import WebhookLogController from '@/actions/App/Http/Controllers/Admin/WebhookLogController';
 import AIChatController from '@/actions/App/Http/Controllers/AI/ChatController';
@@ -48,6 +50,7 @@ import SearchController from '@/actions/App/Http/Controllers/Media/SearchControl
 import SeriesController from '@/actions/App/Http/Controllers/Media/SeriesController';
 import ServiceHealthController from '@/actions/App/Http/Controllers/Monitoring/ServiceHealthController';
 import SabnzbdQueueController from '@/actions/App/Http/Controllers/Sabnzbd/QueueController';
+import StatisticsController from '@/actions/App/Http/Controllers/StatisticsController';
 import AppLogo from '@/components/AppLogo.vue';
 import NavMain from '@/components/NavMain.vue';
 import NavUser from '@/components/NavUser.vue';
@@ -245,6 +248,11 @@ const overviewNavItems = computed<NavItem[]>(() => [
         icon: Inbox,
         badge: () => pendingActions.value,
     },
+    {
+        title: 'Statistics',
+        href: StatisticsController().url,
+        icon: ChartLine,
+    },
 ]);
 
 const mediaNavItems = computed<NavItem[]>(() => [
@@ -360,6 +368,11 @@ const adminNavItems = computed<NavItem[]>(() => [
         title: 'Approval Rules',
         href: ActionTypeConfigController.index.url(),
         icon: Shield,
+    },
+    {
+        title: 'Statistics',
+        href: AdminStatisticsController().url,
+        icon: ChartLine,
     },
     ...(aiEnabled.value ? aiAdminNavItems : []),
     {

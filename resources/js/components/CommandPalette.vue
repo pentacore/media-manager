@@ -2,6 +2,7 @@
 import { router } from '@inertiajs/vue3';
 import {
     Activity as ActivityIcon,
+    ChartLine,
     Film,
     HeartPulse,
     History,
@@ -25,6 +26,7 @@ import RequestController from '@/actions/App/Http/Controllers/Media/RequestContr
 import SearchController from '@/actions/App/Http/Controllers/Media/SearchController';
 import SeriesController from '@/actions/App/Http/Controllers/Media/SeriesController';
 import ServiceHealthController from '@/actions/App/Http/Controllers/Monitoring/ServiceHealthController';
+import StatisticsController from '@/actions/App/Http/Controllers/StatisticsController';
 import {
     Dialog,
     DialogContent,
@@ -80,6 +82,11 @@ const quickLinks = computed<QuickLink[]>(() => [
         title: 'Action Requests',
         href: ActionRequestController.index.url(),
         icon: Zap,
+    },
+    {
+        title: 'Statistics',
+        href: StatisticsController().url,
+        icon: ChartLine,
     },
 ]);
 
