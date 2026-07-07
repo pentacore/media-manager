@@ -20,6 +20,14 @@ class AiUsageReporting
 {
     private const array AGGREGATABLE_COLUMNS = ['model', 'provider'];
 
+    /**
+     * Postgres regex stripping a trailing date-version suffix (e.g.
+     * "-2025-09-23") off a recorded model id, so dated variants match
+     * their catalog row. Keep in sync with the PHP-side preg_replace in
+     * invocationDetail().
+     */
+    private const string BASE_MODEL_REGEX = '-[0-9]{4}-[0-9]{2}-[0-9]{2}$';
+
     private const string TOKEN_SUM_EXPR = '
         ai_usage_records.prompt_tokens
         + ai_usage_records.completion_tokens
@@ -29,9 +37,11 @@ class AiUsageReporting
     ';
 
     /**
+     * A null $since means no lower bound (the "All" window).
+     *
      * @return array{total_invocations: int, total_tool_calls: int, total_tokens: int, total_cost: string}
      */
-    public function totals(CarbonImmutable $since, ?Scenario $scenario = null): array
+    public function totals(?CarbonImmutable $since, ?Scenario $scenario = null): array
     {
         [$costSql, $costBindings] = $this->costExpression($scenario);
 
@@ -147,7 +157,7 @@ class AiUsageReporting
                 ->whereNotNull('model')
                 ->selectRaw("
                     provider,
-                    regexp_replace(model, '-[0-9]{4}-[0-9]{2}-[0-9]{2}\$', '') AS base_model,
+                    regexp_replace(model, '".self::BASE_MODEL_REGEX."', '') AS base_model,
                     COUNT(*) AS requests,
                     COALESCE(SUM(prompt_tokens + completion_tokens), 0) AS tokens
                 ")
@@ -188,12 +198,15 @@ class AiUsageReporting
      * USD value of tokens forgiven by free-usage pools inside the window.
      * A window can span several pool resets (a 30d view over a daily pool
      * crosses ~30 boundaries), so forgiveness is capped per (pool, period
-     * bucket): min(bucket usage, pool cap). The forgiven amount converts
-     * to USD proportionally across member models by their share of the
-     * bucket's usage — pools group same-family models, so exact
-     * chronological allocation isn't worth the extra SQL.
+     * bucket): min(bucket usage, pool cap). The forgiven ratio is computed
+     * from the bucket's FULL period usage — including usage before $since —
+     * so a window that opens mid-period doesn't re-grant a cap the period
+     * already spent. The forgiven amount converts to USD proportionally
+     * across member models by their share of the bucket's usage — pools
+     * group same-family models, so exact chronological allocation isn't
+     * worth the extra SQL.
      */
-    private function freePoolDiscount(CarbonImmutable $since): float
+    private function freePoolDiscount(?CarbonImmutable $since): float
     {
         $pools = AiFreeUsagePool::query()->with('prices')->get();
 
@@ -220,6 +233,8 @@ class AiUsageReporting
                 $bucketInput = (int) $bucket->sum('used_input');
                 $bucketOutput = (int) $bucket->sum('used_output');
 
+                // Ratios come from the bucket's full period usage; the USD
+                // conversion below only counts the window's share of it.
                 if ($pool->unified) {
                     $bucketTotal = $bucketInput + $bucketOutput;
                     $forgivenRatio = $bucketTotal > 0
@@ -228,7 +243,7 @@ class AiUsageReporting
 
                     foreach ($bucket as $row) {
                         $rate = $rates[$row->provider.'|'.$row->base_model];
-                        $discount += ((int) $row->used_input * $rate['input'] + (int) $row->used_output * $rate['output'])
+                        $discount += ((int) $row->window_input * $rate['input'] + (int) $row->window_output * $rate['output'])
                             * $forgivenRatio / 1_000_000.0;
                     }
 
@@ -244,8 +259,8 @@ class AiUsageReporting
 
                 foreach ($bucket as $row) {
                     $rate = $rates[$row->provider.'|'.$row->base_model];
-                    $discount += (int) $row->used_input * $rate['input'] * $inputRatio / 1_000_000.0;
-                    $discount += (int) $row->used_output * $rate['output'] * $outputRatio / 1_000_000.0;
+                    $discount += (int) $row->window_input * $rate['input'] * $inputRatio / 1_000_000.0;
+                    $discount += (int) $row->window_output * $rate['output'] * $outputRatio / 1_000_000.0;
                 }
             }
         }
@@ -254,15 +269,25 @@ class AiUsageReporting
     }
 
     /**
-     * Input/output token sums for a pool's member models since $since,
-     * grouped by (provider, base model[, period bucket]). Base model =
-     * recorded model id with any trailing -YYYY-MM-DD suffix stripped, so
-     * dated variants match their catalog row.
+     * Input/output token sums for a pool's member models since $since (null
+     * = no lower bound), grouped by (provider, base model[, period bucket]).
+     * Base model = recorded model id with any trailing -YYYY-MM-DD suffix
+     * stripped, so dated variants match their catalog row.
      *
-     * @return Collection<int, object{provider: string, base_model: string, bucket?: string, used_input: int|string, used_output: int|string}>
+     * Bucketed rows fetch from the START of the period containing $since —
+     * not $since itself — so per-bucket caps are measured against the full
+     * period's usage. used_* covers the whole bucket; window_* only the
+     * rows at or after $since.
+     *
+     * @return Collection<int, object{provider: string, base_model: string, bucket?: string, used_input: int|string, used_output: int|string, window_input?: int|string, window_output?: int|string}>
      */
-    private function poolUsageRows(AiFreeUsagePool $aiFreeUsagePool, CarbonImmutable $since, bool $bucketed = false): Collection
+    private function poolUsageRows(AiFreeUsagePool $aiFreeUsagePool, ?CarbonImmutable $since, bool $bucketed = false): Collection
     {
+        $memberProviders = $aiFreeUsagePool->prices
+            ->map(fn (AiModelPrice $aiModelPrice): string => $aiModelPrice->provider)
+            ->unique()
+            ->all();
+
         $memberKeys = $aiFreeUsagePool->prices
             ->map(fn (AiModelPrice $aiModelPrice): string => $aiModelPrice->provider.'|'.$aiModelPrice->model)
             ->all();
@@ -271,27 +296,43 @@ class AiUsageReporting
             return new Collection;
         }
 
-        $bucketSelect = $bucketed
-            ? sprintf(", date_trunc('%s', ai_usage_records.created_at) AS bucket", $aiFreeUsagePool->period->sqlDateTrunc())
-            : '';
+        $selects = ["
+            ai_usage_records.provider,
+            regexp_replace(ai_usage_records.model, '".self::BASE_MODEL_REGEX."', '') AS base_model,
+            COALESCE(SUM(ai_usage_records.prompt_tokens), 0) AS used_input,
+            COALESCE(SUM(ai_usage_records.completion_tokens), 0) AS used_output
+        "];
+        $bindings = [];
 
         $groupBy = ['provider', 'base_model'];
 
         if ($bucketed) {
+            $selects[] = sprintf("date_trunc('%s', ai_usage_records.created_at) AS bucket", $aiFreeUsagePool->period->sqlDateTrunc());
             $groupBy[] = 'bucket';
+
+            if ($since instanceof CarbonImmutable) {
+                $selects[] = '
+                    COALESCE(SUM(ai_usage_records.prompt_tokens) FILTER (WHERE ai_usage_records.created_at >= ?), 0) AS window_input,
+                    COALESCE(SUM(ai_usage_records.completion_tokens) FILTER (WHERE ai_usage_records.created_at >= ?), 0) AS window_output
+                ';
+                $bindings = [$since, $since];
+            } else {
+                $selects[] = '
+                    COALESCE(SUM(ai_usage_records.prompt_tokens), 0) AS window_input,
+                    COALESCE(SUM(ai_usage_records.completion_tokens), 0) AS window_output
+                ';
+            }
         }
 
+        $fetchStart = $bucketed && $since instanceof CarbonImmutable
+            ? $aiFreeUsagePool->period->periodStartAt($since)
+            : $since;
+
         return DB::table('ai_usage_records')
-            ->where('ai_usage_records.created_at', '>=', $since)
-            ->whereNotNull('ai_usage_records.provider')
+            ->when($fetchStart instanceof CarbonImmutable, fn (Builder $builder) => $builder->where('ai_usage_records.created_at', '>=', $fetchStart))
+            ->whereIn('ai_usage_records.provider', $memberProviders)
             ->whereNotNull('ai_usage_records.model')
-            ->selectRaw("
-                ai_usage_records.provider,
-                regexp_replace(ai_usage_records.model, '-[0-9]{4}-[0-9]{2}-[0-9]{2}\$', '') AS base_model,
-                COALESCE(SUM(ai_usage_records.prompt_tokens), 0) AS used_input,
-                COALESCE(SUM(ai_usage_records.completion_tokens), 0) AS used_output
-                {$bucketSelect}
-            ")
+            ->selectRaw(implode(', ', $selects), $bindings)
             ->groupByRaw(implode(', ', $groupBy))
             ->get()
             ->filter(fn (object $row): bool => in_array($row->provider.'|'.$row->base_model, $memberKeys, true))
@@ -301,7 +342,7 @@ class AiUsageReporting
     /**
      * @return Collection<int, object{key: string|null, invocations: int, total_tokens: int, total_cost: string}>
      */
-    public function aggregateBy(string $column, CarbonImmutable $since, ?Scenario $scenario = null): Collection
+    public function aggregateBy(string $column, ?CarbonImmutable $since, ?Scenario $scenario = null): Collection
     {
         throw_unless(in_array($column, self::AGGREGATABLE_COLUMNS, true), InvalidArgumentException::class, sprintf("Cannot aggregate by '%s'.", $column));
 
@@ -322,7 +363,7 @@ class AiUsageReporting
     /**
      * @return Collection<int, object>
      */
-    public function recentInvocations(CarbonImmutable $since, ?Scenario $scenario = null, int $limit = 50): Collection
+    public function recentInvocations(?CarbonImmutable $since, ?Scenario $scenario = null, int $limit = 50): Collection
     {
         [$costSql, $costBindings] = $this->costExpression($scenario);
 
@@ -587,7 +628,7 @@ class AiUsageReporting
         ];
     }
 
-    private function query(CarbonImmutable $since, ?Scenario $scenario = null): Builder
+    private function query(?CarbonImmutable $since, ?Scenario $scenario = null): Builder
     {
         $builder = DB::table('ai_usage_records');
 
@@ -605,11 +646,11 @@ class AiUsageReporting
             $builder->leftJoin('ai_model_prices', function ($join): void {
                 $join->on('ai_usage_records.provider', '=', 'ai_model_prices.provider')
                     ->whereRaw(
-                        "regexp_replace(ai_usage_records.model, '-[0-9]{4}-[0-9]{2}-[0-9]{2}$', '') = ai_model_prices.model"
+                        "regexp_replace(ai_usage_records.model, '".self::BASE_MODEL_REGEX."', '') = ai_model_prices.model"
                     );
             });
         }
 
-        return $builder->where('ai_usage_records.created_at', '>=', $since);
+        return $builder->when($since instanceof CarbonImmutable, fn (Builder $builder) => $builder->where('ai_usage_records.created_at', '>=', $since));
     }
 }

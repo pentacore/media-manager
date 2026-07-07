@@ -10,7 +10,6 @@ use App\Models\AiModelPrice;
 use App\Models\AiUsageRecord;
 use App\Services\AiUsage\AiUsageReporting;
 use App\Services\AiUsage\Scenario;
-use Carbon\CarbonImmutable;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -23,9 +22,7 @@ class AiUsageController extends Controller
     public function index(Request $request, AiUsageReporting $aiUsageReporting): Response
     {
         $timeWindow = TimeWindow::fromRequest($request->string('window')->value() ?: null);
-        // All → epoch lower bound: keeps AiUsageReporting's non-nullable
-        // $since signature intact while matching "no filter" semantics.
-        $since = $timeWindow->cutoff() ?? CarbonImmutable::createFromTimestampUTC(0);
+        $since = $timeWindow->cutoff();
         $scenario = Scenario::fromArray((array) $request->input('scenario', []));
 
         $page = [
@@ -117,9 +114,7 @@ class AiUsageController extends Controller
     public function export(Request $request, AiUsageReporting $aiUsageReporting): StreamedResponse
     {
         $timeWindow = TimeWindow::fromRequest($request->string('window')->value() ?: null);
-        // All → epoch lower bound: keeps AiUsageReporting's non-nullable
-        // $since signature intact while matching "no filter" semantics.
-        $since = $timeWindow->cutoff() ?? CarbonImmutable::createFromTimestampUTC(0);
+        $since = $timeWindow->cutoff();
         $scenario = Scenario::fromArray((array) $request->input('scenario', []));
 
         $rows = $aiUsageReporting->recentInvocations($since, $scenario, 10_000);

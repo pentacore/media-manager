@@ -337,6 +337,58 @@ test('daily pools cap forgiveness per UTC day bucket', function (): void {
     CarbonImmutable::setTestNow();
 });
 
+test('pool cap already spent earlier in the period is not re-granted to a narrower window', function (): void {
+    CarbonImmutable::setTestNow(CarbonImmutable::parse('2026-07-08 12:00:00', 'UTC'));
+
+    $pool = AiFreeUsagePool::factory()
+        ->period(FreeUsagePeriod::Monthly)
+        ->create(['free_input_tokens' => 500_000, 'free_output_tokens' => null]);
+    seedPooledPrice($pool, 'openai', 'gpt-5-mini', input: 1.00, output: 0);
+
+    // 900k earlier in the month + 100k inside the "today" window: the month
+    // bucket totals 1M against a 500k cap, so only half of any usage in it
+    // is free — including today's slice, even though today alone is under
+    // the cap.
+    seedUsage(['prompt_tokens' => 900_000, 'created_at' => CarbonImmutable::parse('2026-07-02 10:00:00', 'UTC')]);
+    seedUsage(['prompt_tokens' => 100_000, 'created_at' => CarbonImmutable::parse('2026-07-08 10:00:00', 'UTC')]);
+
+    $totals = resolve(AiUsageReporting::class)->totals(CarbonImmutable::now('UTC')->startOfDay());
+
+    // Window gross: 100k * $1 = 0.10. Month-bucket forgiven ratio =
+    // min(1M, 500k) / 1M = 0.5 → discount 0.05, not the full 0.10.
+    expect((float) $totals['total_cost'])->toBe(0.05);
+
+    CarbonImmutable::setTestNow();
+});
+
+test('totals with a null window includes all records', function (): void {
+    seedPrice('openai', 'gpt-5-mini', input: 1.00, output: 0);
+
+    seedUsage(['prompt_tokens' => 1_000_000, 'created_at' => CarbonImmutable::now()->subDays(400)]);
+    seedUsage(['prompt_tokens' => 500_000]);
+
+    $totals = resolve(AiUsageReporting::class)->totals(null);
+
+    expect($totals['total_invocations'])->toBe(2);
+    expect((float) $totals['total_cost'])->toBe(1.50);
+});
+
+test('pool discount with a null window forgives per period across all history', function (): void {
+    $pool = AiFreeUsagePool::factory()
+        ->period(FreeUsagePeriod::Monthly)
+        ->create(['free_input_tokens' => 100_000, 'free_output_tokens' => null]);
+    seedPooledPrice($pool, 'openai', 'gpt-5-mini', input: 1.00, output: 0);
+
+    // Two separate months, each over the monthly 100k cap.
+    seedUsage(['prompt_tokens' => 150_000, 'created_at' => CarbonImmutable::parse('2026-05-10 10:00:00', 'UTC')]);
+    seedUsage(['prompt_tokens' => 150_000, 'created_at' => CarbonImmutable::parse('2026-06-10 10:00:00', 'UTC')]);
+
+    $totals = resolve(AiUsageReporting::class)->totals(null);
+
+    // Gross 0.30; 100k forgiven per month bucket → discount 0.20.
+    expect((float) $totals['total_cost'])->toBe(0.10);
+});
+
 test('freePoolStatus reports pool usage for the current period only', function (): void {
     // Wednesday 2026-07-08; weekly period started Monday 2026-07-06 UTC.
     CarbonImmutable::setTestNow(CarbonImmutable::parse('2026-07-08 12:00:00', 'UTC'));

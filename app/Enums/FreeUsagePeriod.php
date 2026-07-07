@@ -32,12 +32,20 @@ enum FreeUsagePeriod: string
      */
     public function currentPeriodStart(): CarbonImmutable
     {
-        $now = CarbonImmutable::now('UTC');
+        return $this->periodStartAt(CarbonImmutable::now('UTC'));
+    }
+
+    /**
+     * Start of the period containing $moment, on the UTC calendar.
+     */
+    public function periodStartAt(CarbonImmutable $moment): CarbonImmutable
+    {
+        $moment = $moment->utc();
 
         return match ($this) {
-            self::Daily => $now->startOfDay(),
-            self::Weekly => $now->startOfWeek(CarbonInterface::MONDAY),
-            self::Monthly => $now->startOfMonth(),
+            self::Daily => $moment->startOfDay(),
+            self::Weekly => $moment->startOfWeek(CarbonInterface::MONDAY),
+            self::Monthly => $moment->startOfMonth(),
         };
     }
 
