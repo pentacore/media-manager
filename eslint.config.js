@@ -77,6 +77,7 @@ export default defineConfigWithVueTs(
     },
     {
         ignores: [
+            '.claude',
             'vendor',
             'node_modules',
             'public',
