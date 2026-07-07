@@ -21,12 +21,12 @@ it('rolls up watch plays per hour and day', function (): void {
         CarbonImmutable::parse('2026-07-06 15:00:00', 'UTC'),
     );
 
-    $movieHour = StatRollup::query()
+    $statRollup = StatRollup::query()
         ->where(['metric' => 'watch.plays', 'period' => 'hour'])
         ->where('dimensions->media_type', 'Movie')
         ->sole();
 
-    expect($movieHour->count)->toBe(3)
+    expect($statRollup->count)->toBe(3)
         ->and(StatRollup::query()->where(['metric' => 'watch.plays', 'period' => 'day'])->count())->toBe(2);
 });
 
@@ -70,11 +70,11 @@ it('sums all five token columns for the ai.tokens rollup', function (): void {
         CarbonImmutable::parse('2026-07-06 15:00:00', 'UTC'),
     );
 
-    $tokens = StatRollup::query()
+    $statRollup = StatRollup::query()
         ->where(['metric' => 'ai.tokens', 'period' => 'hour'])
         ->sole();
 
-    expect($tokens->sum)->toBe(100.0 + 50.0 + 20.0 + 10.0 + 5.0);
+    expect($statRollup->sum)->toBe(100.0 + 50.0 + 20.0 + 10.0 + 5.0);
 });
 
 it('computes uptime and latency stats from service metrics', function (): void {
@@ -89,9 +89,9 @@ it('computes uptime and latency stats from service metrics', function (): void {
         CarbonImmutable::parse('2026-07-06 15:00:00', 'UTC'),
     );
 
-    $uptime = StatRollup::query()->where(['metric' => 'service.uptime_pct', 'period' => 'hour'])->sole();
+    $statRollup = StatRollup::query()->where(['metric' => 'service.uptime_pct', 'period' => 'hour'])->sole();
     $latency = StatRollup::query()->where(['metric' => 'service.latency_ms', 'period' => 'hour'])->sole();
 
-    expect($uptime->count)->toBe(2)->and($uptime->sum)->toBe(1.0)
+    expect($statRollup->count)->toBe(2)->and($statRollup->sum)->toBe(1.0)
         ->and($latency->min)->toBe(100.0)->and($latency->max)->toBe(300.0);
 });

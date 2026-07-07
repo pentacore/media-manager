@@ -44,10 +44,10 @@ it('collect survives a failing connection and still samples the healthy one', fu
 
     resolve(ServiceGaugeCollector::class)->collect();
 
-    $row = StatRollup::query()->where('metric', 'sessions.active')->where('period', 'hour')->sole();
+    $statRollup = StatRollup::query()->where('metric', 'sessions.active')->where('period', 'hour')->sole();
 
-    expect($row->dimensions)->toBe(['connection' => (string) $up->id])
-        ->and($row->sum)->toBe(1.0);
+    expect($statRollup->dimensions)->toBe(['connection' => (string) $up->id])
+        ->and($statRollup->sum)->toBe(1.0);
 });
 
 it('samples disk space and queue depth for an Arr connection', function (): void {
@@ -62,12 +62,12 @@ it('samples disk space and queue depth for an Arr connection', function (): void
 
     resolve(ServiceGaugeCollector::class)->collect();
 
-    $free = StatRollup::query()->where('metric', 'service.disk_free_bytes')->where('period', 'hour')->sole();
+    $statRollup = StatRollup::query()->where('metric', 'service.disk_free_bytes')->where('period', 'hour')->sole();
     $total = StatRollup::query()->where('metric', 'service.disk_total_bytes')->where('period', 'hour')->sole();
     $queue = StatRollup::query()->where('metric', 'queue.depth')->where('period', 'hour')->sole();
 
-    expect($free->sum)->toBe(100.0)
-        ->and($free->dimensions)->toEqualCanonicalizing(['connection' => (string) $sonarr->id, 'path' => '/data'])
+    expect($statRollup->sum)->toBe(100.0)
+        ->and($statRollup->dimensions)->toEqualCanonicalizing(['connection' => (string) $sonarr->id, 'path' => '/data'])
         ->and($total->sum)->toBe(500.0)
         ->and($queue->sum)->toBe(7.0)
         ->and($queue->dimensions)->toEqualCanonicalizing(['connection' => (string) $sonarr->id, 'service' => 'sonarr']);
@@ -82,10 +82,10 @@ it('samples pending requests for a Seerr connection', function (): void {
 
     resolve(ServiceGaugeCollector::class)->collect();
 
-    $row = StatRollup::query()->where('metric', 'requests.pending_gauge')->where('period', 'hour')->sole();
+    $statRollup = StatRollup::query()->where('metric', 'requests.pending_gauge')->where('period', 'hour')->sole();
 
-    expect($row->sum)->toBe(4.0)
-        ->and($row->dimensions)->toBe(['connection' => (string) $seerr->id]);
+    expect($statRollup->sum)->toBe(4.0)
+        ->and($statRollup->dimensions)->toBe(['connection' => (string) $seerr->id]);
 });
 
 it('samples disk space and queue depth for a SABnzbd connection', function (): void {
@@ -104,11 +104,11 @@ it('samples disk space and queue depth for a SABnzbd connection', function (): v
 
     resolve(ServiceGaugeCollector::class)->collect();
 
-    $free = StatRollup::query()->where('metric', 'service.disk_free_bytes')->where('period', 'hour')->sole();
+    $statRollup = StatRollup::query()->where('metric', 'service.disk_free_bytes')->where('period', 'hour')->sole();
     $queue = StatRollup::query()->where('metric', 'queue.depth')->where('period', 'hour')->sole();
 
-    expect((int) $free->sum)->toBe((int) round(10 * 1024 ** 3))
-        ->and($free->dimensions)->toEqualCanonicalizing(['connection' => (string) $sab->id, 'path' => '/incomplete'])
+    expect((int) $statRollup->sum)->toBe((int) round(10 * 1024 ** 3))
+        ->and($statRollup->dimensions)->toEqualCanonicalizing(['connection' => (string) $sab->id, 'path' => '/incomplete'])
         ->and($queue->sum)->toBe(3.0)
         ->and($queue->dimensions)->toEqualCanonicalizing(['connection' => (string) $sab->id, 'service' => 'sabnzbd']);
 });
@@ -126,11 +126,11 @@ it('writes prowlarr indexer stats into the day bucket during the library pass', 
 
     resolve(ServiceGaugeCollector::class)->snapshotLibrary();
 
-    $grabs = StatRollup::query()->where('metric', 'indexer.grabs')->where('period', 'day')->sole();
+    $statRollup = StatRollup::query()->where('metric', 'indexer.grabs')->where('period', 'day')->sole();
     $queries = StatRollup::query()->where('metric', 'indexer.queries')->where('period', 'day')->sole();
 
-    expect($grabs->count)->toBe(12)
-        ->and($grabs->dimensions)->toBe(['indexer' => 'NZBgeek'])
+    expect($statRollup->count)->toBe(12)
+        ->and($statRollup->dimensions)->toBe(['indexer' => 'NZBgeek'])
         ->and($queries->count)->toBe(34)
         ->and($queries->dimensions)->toBe(['indexer' => 'NZBgeek']);
 });

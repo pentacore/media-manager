@@ -42,15 +42,15 @@ class RecordWebhookStatistics
         $this->recordRequests($service, $eventType, $at);
     }
 
-    private function recordDownloads(ServiceType $service, string $eventType, CarbonImmutable $at): void
+    private function recordDownloads(ServiceType $serviceType, string $eventType, CarbonImmutable $at): void
     {
         $metric = match (true) {
-            in_array($service, [ServiceType::Sonarr, ServiceType::Radarr, ServiceType::Whisparr], true) => match ($eventType) {
+            in_array($serviceType, [ServiceType::Sonarr, ServiceType::Radarr, ServiceType::Whisparr], true) => match ($eventType) {
                 'Grab' => 'downloads.grabbed',
                 'Download' => 'downloads.completed',
                 default => null,
             },
-            $service === ServiceType::SABnzbd => match ($eventType) {
+            $serviceType === ServiceType::SABnzbd => match ($eventType) {
                 'complete' => 'downloads.completed',
                 'failed' => 'downloads.failed',
                 default => null,
@@ -59,13 +59,13 @@ class RecordWebhookStatistics
         };
 
         if ($metric !== null) {
-            $this->statsRecorder->increment($metric, ['service' => $service->value], $at);
+            $this->statsRecorder->increment($metric, ['service' => $serviceType->value], $at);
         }
     }
 
-    private function recordRequests(ServiceType $service, string $eventType, CarbonImmutable $at): void
+    private function recordRequests(ServiceType $serviceType, string $eventType, CarbonImmutable $at): void
     {
-        if ($service !== ServiceType::Seerr) {
+        if ($serviceType !== ServiceType::Seerr) {
             return;
         }
 

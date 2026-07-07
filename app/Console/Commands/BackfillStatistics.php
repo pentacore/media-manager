@@ -6,15 +6,15 @@ namespace App\Console\Commands;
 
 use App\Services\Statistics\StatisticsAggregator;
 use Carbon\CarbonImmutable;
+use Illuminate\Console\Attributes\Description;
+use Illuminate\Console\Attributes\Signature;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\DB;
 
+#[Description('Replay historical events from durable tables into stat_rollups')]
+#[Signature('statistics:backfill {--from=} {--to=}')]
 class BackfillStatistics extends Command
 {
-    protected $signature = 'statistics:backfill {--from=} {--to=}';
-
-    protected $description = 'Replay historical events from durable tables into stat_rollups';
-
     public function handle(StatisticsAggregator $statisticsAggregator): int
     {
         $from = $this->option('from') !== null

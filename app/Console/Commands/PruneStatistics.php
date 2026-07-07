@@ -6,14 +6,14 @@ namespace App\Console\Commands;
 
 use App\Models\ServiceMetric;
 use App\Models\StatRollup;
+use Illuminate\Console\Attributes\Description;
+use Illuminate\Console\Attributes\Signature;
 use Illuminate\Console\Command;
 
+#[Description('Prune hour-granularity rollups and raw service metrics past retention')]
+#[Signature('statistics:prune')]
 class PruneStatistics extends Command
 {
-    protected $signature = 'statistics:prune';
-
-    protected $description = 'Prune hour-granularity rollups and raw service metrics past retention';
-
     public function handle(): int
     {
         $hourCutoff = now()->subDays((int) config('mediamanager.statistics.hour_retention_days', 90));
@@ -23,13 +23,13 @@ class PruneStatistics extends Command
             ->where('bucket', '<', $hourCutoff)
             ->delete();
 
-        $this->info("Pruned {$pruned} hour rollups.");
+        $this->info(sprintf('Pruned %s hour rollups.', $pruned));
 
         if (config('mediamanager.statistics.prune_service_metrics', true)) {
             $metricCutoff = now()->subDays((int) config('mediamanager.statistics.service_metrics_retention_days', 90));
 
             $prunedMetrics = ServiceMetric::query()->where('recorded_at', '<', $metricCutoff)->delete();
-            $this->info("Pruned {$prunedMetrics} raw service metrics.");
+            $this->info(sprintf('Pruned %s raw service metrics.', $prunedMetrics));
         }
 
         return self::SUCCESS;

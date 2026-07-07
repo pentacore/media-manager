@@ -182,7 +182,7 @@ class StatisticsRepository
             ->with('user')
             ->whereIn('id', $linkIds->map(fn (string $id): int => (int) $id)->all())
             ->get()
-            ->keyBy(fn (EmbyUserLink $link): string => (string) $link->id);
+            ->keyBy(fn (EmbyUserLink $embyUserLink): string => (string) $embyUserLink->id);
 
         return $linkIds
             ->map(function (string $id) use ($plays, $seconds, $links): array {
@@ -229,7 +229,7 @@ class StatisticsRepository
             ->where('action', 'played')
             ->where('created_at', '>=', $since)
             ->selectRaw(
-                "EXTRACT(isodow FROM {$localTimestamp})::int AS weekday, EXTRACT(hour FROM {$localTimestamp})::int AS hour, COUNT(*) AS plays",
+                sprintf('EXTRACT(isodow FROM %s)::int AS weekday, EXTRACT(hour FROM %s)::int AS hour, COUNT(*) AS plays', $localTimestamp, $localTimestamp),
                 [$appTimezone, $appTimezone],
             )
             ->groupByRaw('1, 2')
@@ -274,12 +274,12 @@ class StatisticsRepository
      *
      * @param  array<string, scalar>  $dimensionFilter
      */
-    private function applyDimensionFilter(QueryBuilder $query, array $dimensionFilter): QueryBuilder
+    private function applyDimensionFilter(QueryBuilder $queryBuilder, array $dimensionFilter): QueryBuilder
     {
         foreach ($dimensionFilter as $key => $value) {
-            $query->whereRaw('dimensions->>? = ?', [$key, (string) $value]);
+            $queryBuilder->whereRaw('dimensions->>? = ?', [$key, (string) $value]);
         }
 
-        return $query;
+        return $queryBuilder;
     }
 }

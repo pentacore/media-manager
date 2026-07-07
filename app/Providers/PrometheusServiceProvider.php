@@ -12,6 +12,7 @@ use App\Models\ServiceConnection;
 use App\Models\StatRollup;
 use App\Services\Statistics\StatisticsRepository;
 use Illuminate\Support\ServiceProvider;
+use Override;
 use Spatie\Prometheus\Facades\Prometheus;
 
 /**
@@ -24,6 +25,7 @@ use Spatie\Prometheus\Facades\Prometheus;
  */
 class PrometheusServiceProvider extends ServiceProvider
 {
+    #[Override]
     public function register(): void
     {
         $this->registerServiceGauges();
@@ -42,9 +44,9 @@ class PrometheusServiceProvider extends ServiceProvider
             ->value(fn (): array => ServiceConnection::query()
                 ->where('is_active', true)
                 ->get()
-                ->map(fn (ServiceConnection $connection): array => [
-                    $connection->health_status === HealthStatus::Healthy ? 1 : 0,
-                    [$connection->name],
+                ->map(fn (ServiceConnection $serviceConnection): array => [
+                    $serviceConnection->health_status === HealthStatus::Healthy ? 1 : 0,
+                    [$serviceConnection->name],
                 ])
                 ->all());
     }
@@ -122,12 +124,12 @@ class PrometheusServiceProvider extends ServiceProvider
             ->where('period', 'hour')
             ->orderByDesc('bucket')
             ->get()
-            ->groupBy(fn (StatRollup $rollup): string => (string) json_encode($rollup->dimensions))
+            ->groupBy(fn (StatRollup $statRollup): string => (string) json_encode($statRollup->dimensions))
             ->map(fn ($group): StatRollup => $group->first())
-            ->map(fn (StatRollup $rollup): array => [
-                $rollup->count > 0 ? (float) ($rollup->sum ?? 0) / $rollup->count : 0.0,
+            ->map(fn (StatRollup $statRollup): array => [
+                $statRollup->count > 0 ? (float) ($statRollup->sum ?? 0) / $statRollup->count : 0.0,
                 array_map(
-                    fn (string $key): string => (string) ($rollup->dimensions[$key] ?? ''),
+                    fn (string $key): string => (string) ($statRollup->dimensions[$key] ?? ''),
                     $labelKeys,
                 ),
             ])

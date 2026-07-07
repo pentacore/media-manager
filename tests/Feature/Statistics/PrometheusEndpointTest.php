@@ -22,7 +22,7 @@ it('rejects requests with an incorrect token', function (): void {
 });
 
 it('denies all access when no token is configured', function (): void {
-    config()->set('mediamanager.metrics.token', null);
+    config()->set('mediamanager.metrics.token');
 
     $this->withHeader('Authorization', 'Bearer test-token')
         ->get('/metrics')

@@ -8,9 +8,9 @@ use App\Models\ServiceConnection;
 use App\Models\StatRollup;
 use App\Models\WebhookEvent;
 
-function makeProcessedEvent(ServiceType $type, string $eventType, array $payload = []): WebhookEvent
+function makeProcessedEvent(ServiceType $serviceType, string $eventType, array $payload = []): WebhookEvent
 {
-    $connection = ServiceConnection::factory()->create(['type' => $type]);
+    $connection = ServiceConnection::factory()->create(['type' => $serviceType]);
 
     return WebhookEvent::factory()->create([
         'service_connection_id' => $connection->id,
@@ -22,10 +22,10 @@ function makeProcessedEvent(ServiceType $type, string $eventType, array $payload
 it('records webhook received counts with service and event dimensions', function (): void {
     event(new WebhookEventProcessed(makeProcessedEvent(ServiceType::Sonarr, 'Download')));
 
-    $row = StatRollup::query()->where(['metric' => 'webhooks.received', 'period' => 'day'])->sole();
+    $statRollup = StatRollup::query()->where(['metric' => 'webhooks.received', 'period' => 'day'])->sole();
 
-    expect($row->count)->toBe(1)
-        ->and($row->dimensions)->toEqualCanonicalizing(['event_type' => 'Download', 'service' => 'sonarr']);
+    expect($statRollup->count)->toBe(1)
+        ->and($statRollup->dimensions)->toEqualCanonicalizing(['event_type' => 'Download', 'service' => 'sonarr']);
 });
 
 it('records download lifecycle metrics from arr and sabnzbd events', function (): void {

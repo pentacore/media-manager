@@ -66,7 +66,7 @@ class StatisticsAggregator
     public function aggregate(?CarbonImmutable $from = null, ?CarbonImmutable $to = null): void
     {
         $to = ($to ?? CarbonImmutable::now('UTC'))->utc()->startOfHour();
-        $usingWatermark = $from === null;
+        $usingWatermark = ! $from instanceof CarbonImmutable;
         $from = ($from ?? $this->watermark())->utc()->startOfHour();
 
         if ($from->greaterThanOrEqualTo($to)) {
@@ -159,13 +159,13 @@ class StatisticsAggregator
                 ->groupBy('bucket', 'emby_user_link_id')
                 ->get();
 
-            foreach ($userPlays as $row) {
+            foreach ($userPlays as $userPlay) {
                 $this->statsRecorder->put(
                     'watch.user_plays',
                     $period,
-                    $this->bucket($row->bucket),
-                    ['emby_user_link_id' => (int) $row->emby_user_link_id],
-                    (int) $row->count,
+                    $this->bucket($userPlay->bucket),
+                    ['emby_user_link_id' => (int) $userPlay->emby_user_link_id],
+                    (int) $userPlay->count,
                 );
             }
         }
@@ -299,14 +299,14 @@ class StatisticsAggregator
                 ->groupByRaw('bucket, provider, base_model')
                 ->get();
 
-            foreach ($tokens as $row) {
+            foreach ($tokens as $token) {
                 $this->statsRecorder->put(
                     'ai.tokens',
                     $period,
-                    $this->bucket($row->bucket),
-                    ['provider' => (string) $row->provider, 'model' => (string) $row->base_model],
-                    (int) $row->count,
-                    (float) $row->sum,
+                    $this->bucket($token->bucket),
+                    ['provider' => (string) $token->provider, 'model' => (string) $token->base_model],
+                    (int) $token->count,
+                    (float) $token->sum,
                 );
             }
         }

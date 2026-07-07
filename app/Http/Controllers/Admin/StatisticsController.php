@@ -148,7 +148,7 @@ class StatisticsController extends Controller
                 $latencyCount = $latency['count'] ?? 0;
 
                 return [
-                    'connection' => (string) ($names->get($id) ?? "#{$id}"),
+                    'connection' => (string) ($names->get($id) ?? '#'.$id),
                     'uptime' => $count > 0 ? round(($row['sum'] / $count) * 100, 1) : 0.0,
                     'latency' => $latencyCount > 0 ? round($latency['sum'] / $latencyCount, 1) : null,
                 ];

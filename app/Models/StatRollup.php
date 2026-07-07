@@ -36,6 +36,7 @@ class StatRollup extends Model
     /** @use HasFactory<StatRollupFactory> */
     use HasFactory;
 
+    #[Override]
     protected $guarded = [];
 
     /**
