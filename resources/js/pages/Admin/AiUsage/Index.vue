@@ -4,7 +4,12 @@ import { ChevronDown, ChevronRight, Download, Sparkles } from '@lucide/vue';
 import { computed, ref } from 'vue';
 import AiModelPriceController from '@/actions/App/Http/Controllers/Admin/AiModelPriceController';
 import AiUsageController from '@/actions/App/Http/Controllers/Admin/AiUsageController';
-import { InitialsAvatar, Pill, StatCard } from '@/components/mm';
+import {
+    InitialsAvatar,
+    Pill,
+    StatCard,
+    TimeWindowFilter,
+} from '@/components/mm';
 import { Button } from '@/components/ui/button';
 import {
     Dialog,
@@ -22,7 +27,6 @@ import {
     SelectTrigger,
     SelectValue,
 } from '@/components/ui/select';
-import { cn } from '@/lib/utils';
 import { dashboard } from '@/routes';
 import type { QueryParams } from '@/wayfinder';
 
@@ -121,20 +125,48 @@ interface InvocationDetail {
     scenario_total_cost: number | null;
 }
 
-type WindowKey = 'today' | '24h' | '7d' | '30d';
+type WindowKey =
+    'today' | '24h' | '7d' | '30d' | '90d' | 'week' | 'month' | 'year' | 'all';
 
-interface FreeTierRow {
-    provider: string;
-    model: string;
+interface WindowOption {
+    value: WindowKey;
+    label: string;
+}
+
+interface FreePoolRow {
+    id: number;
+    name: string;
+    period: 'daily' | 'weekly' | 'monthly';
+    unified: boolean;
+    documentation_url: string | null;
+    free_input: number | null;
+    free_output: number | null;
+    free_total: number | null;
     used_input: number;
     used_output: number;
-    free_input: number;
-    free_output: number;
+    used_total: number;
+    models: Array<{
+        provider: string;
+        model: string;
+        used_input: number;
+        used_output: number;
+    }>;
+}
+
+interface RateLimitStatusRow {
+    provider: string;
+    model: string;
+    limits: Array<{
+        metric: 'requests' | 'tokens';
+        period: 'minute' | 'hour' | 'day';
+        limit_value: number;
+        used: number;
+    }>;
 }
 
 const props = defineProps<{
     window: WindowKey;
-    windows: WindowKey[];
+    windows: WindowOption[];
     totals: Totals;
     by_model: AggregateRow[];
     by_provider: AggregateRow[];
@@ -145,7 +177,8 @@ const props = defineProps<{
     scenario_by_model?: AggregateRow[];
     scenario_by_provider?: AggregateRow[];
     scenario_recent?: RecentRow[];
-    free_tier: FreeTierRow[];
+    free_pools: FreePoolRow[];
+    rate_limits: RateLimitStatusRow[];
 }>();
 
 defineOptions({
@@ -384,6 +417,37 @@ function formatNumber(value: number | string): string {
     return n.toLocaleString('en-US');
 }
 
+function poolBars(pool: FreePoolRow): Array<{
+    label: string;
+    used: number;
+    cap: number;
+}> {
+    if (pool.unified) {
+        return [
+            {
+                label: 'Tokens',
+                used: pool.used_total,
+                cap: pool.free_total ?? 0,
+            },
+        ];
+    }
+
+    return [
+        { label: 'Input', used: pool.used_input, cap: pool.free_input ?? 0 },
+        {
+            label: 'Output',
+            used: pool.used_output,
+            cap: pool.free_output ?? 0,
+        },
+    ];
+}
+
+function rateLimitLabel(limit: RateLimitStatusRow['limits'][number]): string {
+    const metric = limit.metric === 'requests' ? 'req' : 'tok';
+
+    return `${metric}/${limit.period}`;
+}
+
 function formatTimestamp(value: string): string {
     // The ledger SELECTs created_at as a raw timestamp without timezone
     // info, so JS would otherwise interpret it as local time. Append 'Z'
@@ -438,26 +502,11 @@ function formatTimestamp(value: string): string {
                 </p>
             </div>
             <div class="flex items-center gap-2">
-                <div
-                    class="flex items-center gap-0.5 rounded-md border border-border bg-bg-elev p-0.5"
-                >
-                    <button
-                        v-for="opt in props.windows"
-                        :key="opt"
-                        type="button"
-                        :class="
-                            cn(
-                                'inline-flex h-6 items-center rounded px-2 text-xs font-medium transition-colors',
-                                props.window === opt
-                                    ? 'bg-accent text-accent-foreground'
-                                    : 'text-muted-foreground hover:bg-bg-hover hover:text-foreground',
-                            )
-                        "
-                        @click="setWindow(opt)"
-                    >
-                        {{ opt === 'today' ? 'Today' : opt }}
-                    </button>
-                </div>
+                <TimeWindowFilter
+                    :options="props.windows"
+                    :model-value="props.window"
+                    @update:model-value="setWindow"
+                />
                 <a
                     :href="exportUrl"
                     class="inline-flex h-7 items-center gap-1.5 rounded-md border border-border bg-card px-2 text-xs font-medium text-foreground transition-colors hover:bg-bg-hover"
@@ -495,9 +544,9 @@ function formatTimestamp(value: string): string {
             />
         </div>
 
-        <!-- Free tier this month -->
+        <!-- Free usage pools -->
         <div
-            v-if="props.free_tier.length > 0"
+            v-if="props.free_pools.length > 0"
             class="overflow-hidden rounded-xl border border-border bg-card"
         >
             <div
@@ -506,7 +555,7 @@ function formatTimestamp(value: string): string {
                 <span
                     class="text-[12px] font-semibold tracking-[0.06em] text-muted-foreground uppercase"
                 >
-                    Free tier · this month
+                    Free usage pools
                 </span>
                 <span class="text-[11.5px] text-muted-foreground">
                     Spend above subtracts what's still under quota.
@@ -514,66 +563,142 @@ function formatTimestamp(value: string): string {
             </div>
             <div class="divide-y divide-border">
                 <div
-                    v-for="row in props.free_tier"
-                    :key="`${row.provider}/${row.model}`"
-                    class="grid items-center gap-3 px-4 py-2.5 md:grid-cols-[200px,1fr,1fr]"
+                    v-for="pool in props.free_pools"
+                    :key="pool.id"
+                    class="grid items-center gap-3 px-4 py-2.5 md:grid-cols-[220px,1fr]"
                 >
                     <div>
+                        <div class="text-[12.5px] font-medium">
+                            {{ pool.name }}
+                            <a
+                                v-if="pool.documentation_url"
+                                :href="pool.documentation_url"
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                class="ml-1 text-[11px] text-muted-foreground underline hover:text-foreground"
+                                >docs</a
+                            >
+                        </div>
+                        <div class="text-[11px] text-muted-foreground">
+                            resets {{ pool.period }} ·
+                            {{
+                                pool.models.length > 0
+                                    ? pool.models.map((m) => m.model).join(', ')
+                                    : 'no usage yet'
+                            }}
+                        </div>
+                    </div>
+                    <div
+                        class="grid gap-3"
+                        :class="
+                            pool.unified ? 'md:grid-cols-1' : 'md:grid-cols-2'
+                        "
+                    >
                         <div
-                            class="font-mono-tabular text-[12.5px] font-medium"
+                            v-for="bar in poolBars(pool)"
+                            :key="bar.label"
+                            class="space-y-1"
                         >
+                            <div
+                                class="flex items-center justify-between text-[11px]"
+                            >
+                                <span class="text-muted-foreground">{{
+                                    bar.label
+                                }}</span>
+                                <span class="font-mono-tabular">
+                                    {{ formatNumber(bar.used) }} /
+                                    {{
+                                        bar.cap > 0
+                                            ? formatNumber(bar.cap)
+                                            : '— no cap'
+                                    }}
+                                </span>
+                            </div>
+                            <div
+                                class="h-1.5 overflow-hidden rounded-full bg-bg-elev"
+                            >
+                                <div
+                                    v-if="bar.cap > 0"
+                                    class="h-full transition-all"
+                                    :class="
+                                        bar.used >= bar.cap
+                                            ? 'bg-destructive'
+                                            : bar.used / bar.cap > 0.8
+                                              ? 'bg-warning'
+                                              : 'bg-success'
+                                    "
+                                    :style="`width: ${Math.min(100, (bar.used / bar.cap) * 100)}%`"
+                                />
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Rate limits -->
+        <div
+            v-if="props.rate_limits.length > 0"
+            class="overflow-hidden rounded-xl border border-border bg-card"
+        >
+            <div
+                class="flex items-center justify-between border-b border-border px-4 py-3"
+            >
+                <span
+                    class="text-[12px] font-semibold tracking-[0.06em] text-muted-foreground uppercase"
+                >
+                    Rate limits
+                </span>
+                <span class="text-[11.5px] text-muted-foreground">
+                    Rolling windows ending now. Informational only.
+                </span>
+            </div>
+            <div class="divide-y divide-border">
+                <div
+                    v-for="row in props.rate_limits"
+                    :key="`${row.provider}|${row.model}`"
+                    class="grid items-center gap-3 px-4 py-2.5 md:grid-cols-[220px,1fr]"
+                >
+                    <div>
+                        <div class="text-[12.5px] font-medium">
                             {{ row.model }}
                         </div>
                         <div class="text-[11px] text-muted-foreground">
                             {{ row.provider }}
                         </div>
                     </div>
-                    <div
-                        v-for="bar in [
-                            {
-                                label: 'Input',
-                                used: row.used_input,
-                                cap: row.free_input,
-                            },
-                            {
-                                label: 'Output',
-                                used: row.used_output,
-                                cap: row.free_output,
-                            },
-                        ]"
-                        :key="bar.label"
-                        class="space-y-1"
-                    >
+                    <div class="grid gap-3 md:grid-cols-2">
                         <div
-                            class="flex items-center justify-between text-[11px]"
-                        >
-                            <span class="text-muted-foreground">{{
-                                bar.label
-                            }}</span>
-                            <span class="font-mono-tabular">
-                                {{ formatNumber(bar.used) }} /
-                                {{
-                                    bar.cap > 0
-                                        ? formatNumber(bar.cap)
-                                        : '— no cap'
-                                }}
-                            </span>
-                        </div>
-                        <div
-                            class="h-1.5 overflow-hidden rounded-full bg-bg-elev"
+                            v-for="limit in row.limits"
+                            :key="`${limit.metric}|${limit.period}`"
+                            class="space-y-1"
                         >
                             <div
-                                v-if="bar.cap > 0"
-                                class="h-full transition-all"
-                                :class="
-                                    bar.used >= bar.cap
-                                        ? 'bg-destructive'
-                                        : bar.used / bar.cap > 0.8
-                                          ? 'bg-warning'
-                                          : 'bg-success'
-                                "
-                                :style="`width: ${Math.min(100, (bar.used / bar.cap) * 100)}%`"
-                            />
+                                class="flex items-center justify-between text-[11px]"
+                            >
+                                <span class="text-muted-foreground">{{
+                                    rateLimitLabel(limit)
+                                }}</span>
+                                <span class="font-mono-tabular">
+                                    {{ formatNumber(limit.used) }} /
+                                    {{ formatNumber(limit.limit_value) }}
+                                </span>
+                            </div>
+                            <div
+                                class="h-1.5 overflow-hidden rounded-full bg-muted"
+                            >
+                                <div
+                                    class="h-full rounded-full"
+                                    :class="
+                                        limit.used >= limit.limit_value
+                                            ? 'bg-destructive'
+                                            : 'bg-primary'
+                                    "
+                                    :style="{
+                                        width: `${Math.min(100, (limit.used / limit.limit_value) * 100)}%`,
+                                    }"
+                                ></div>
+                            </div>
                         </div>
                     </div>
                 </div>

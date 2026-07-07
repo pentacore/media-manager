@@ -447,10 +447,10 @@ class RequestController extends Controller
         $results = is_array($response['results'] ?? null) ? $response['results'] : [];
         $pageInfo = is_array($response['pageInfo'] ?? null) ? $response['pageInfo'] : [];
 
-        $titles = $this->seerrTitleResolver->resolve($serviceConnection, $seerrClient, $results);
+        $media = $this->seerrTitleResolver->resolve($serviceConnection, $seerrClient, $results);
 
         return [
-            'data' => array_map(fn (array $req): array => $this->mapRequest($req, $titles), $results),
+            'data' => array_map(fn (array $req): array => $this->mapRequest($req, $media), $results),
             'meta' => [
                 'current_page' => (int) ($pageInfo['page'] ?? $page),
                 'last_page' => (int) ($pageInfo['pages'] ?? 1),
@@ -510,7 +510,7 @@ class RequestController extends Controller
         }
 
         $window = array_slice($matched, ($page - 1) * $perPage, $perPage);
-        $titles = $this->seerrTitleResolver->resolve($serviceConnection, $seerrClient, $window);
+        $media = $this->seerrTitleResolver->resolve($serviceConnection, $seerrClient, $window);
 
         try {
             $counts = $seerrClient->getRequestCount();
@@ -522,7 +522,7 @@ class RequestController extends Controller
         $lastPage = max(1, (int) ceil($total / $perPage));
 
         return [
-            'data' => array_map(fn (array $req): array => $this->mapRequest($req, $titles), $window),
+            'data' => array_map(fn (array $req): array => $this->mapRequest($req, $media), $window),
             'meta' => [
                 'current_page' => $page,
                 'last_page' => $lastPage,
@@ -582,10 +582,10 @@ class RequestController extends Controller
 
     /**
      * @param  array<string, mixed>  $req
-     * @param  array<string, string>  $titles
+     * @param  array<string, array{title: string, poster_path: ?string}>  $media
      * @return array<string, mixed>
      */
-    private function mapRequest(array $req, array $titles): array
+    private function mapRequest(array $req, array $media): array
     {
         $mediaType = $req['type'] ?? ($req['media']['mediaType'] ?? null);
         $tmdbId = $req['media']['tmdbId'] ?? null;
@@ -602,7 +602,8 @@ class RequestController extends Controller
             'id' => $req['id'] ?? null,
             'status' => $status,
             'media_type' => $mediaType,
-            'media_title' => $this->seerrTitleResolver->titleFor($req, $titles),
+            'media_title' => $this->seerrTitleResolver->titleFor($req, $media),
+            'poster_path' => $this->seerrTitleResolver->posterPathFor($req, $media),
             'tmdb_id' => $tmdbId,
             'tvdb_id' => $req['media']['tvdbId'] ?? null,
             'requester' => $req['requestedBy']['displayName'] ?? ($req['requestedBy']['username'] ?? null),

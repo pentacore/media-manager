@@ -40,6 +40,7 @@ test('members can list requests with title enrichment and summary', function ():
         'seerr.local:5055/api/v1/movie/603' => Http::response([
             'id' => 603,
             'title' => 'The Matrix',
+            'posterPath' => '/matrix.jpg',
         ]),
         'seerr.local:5055/api/v1/request*' => Http::response([
             'pageInfo' => ['page' => 1, 'pages' => 2, 'pageSize' => 50, 'results' => 75],
@@ -67,6 +68,7 @@ test('members can list requests with title enrichment and summary', function ():
                 $page
                     ->has('requests.data', 1)
                     ->where('requests.data.0.media_title', 'The Matrix')
+                    ->where('requests.data.0.poster_path', '/matrix.jpg')
                     ->where('requests.data.0.requester', 'Alice')
                     ->where('requests.meta.total', 75)
                     ->where('requests.meta.current_page', 1)
@@ -75,6 +77,43 @@ test('members can list requests with title enrichment and summary', function ():
                     ->where('summary.pending', 5)
                     ->where('summary.approved', 60)
                     ->where('summary.declined', 10);
+            })
+        );
+});
+
+test('requests without a poster in the detail payload get poster_path null', function (): void {
+    $member = User::factory()->member()->create();
+
+    Http::fake([
+        'seerr.local:5055/api/v1/request/count' => Http::response(['total' => 1, 'pending' => 1]),
+        'seerr.local:5055/api/v1/tv/1396' => Http::response([
+            'id' => 1396,
+            'name' => 'Found Show',
+        ]),
+        'seerr.local:5055/api/v1/request*' => Http::response([
+            'pageInfo' => ['page' => 1, 'pages' => 1, 'pageSize' => 50, 'results' => 1],
+            'results' => [
+                [
+                    'id' => 7,
+                    'status' => 1,
+                    'type' => 'tv',
+                    'media' => ['mediaType' => 'tv', 'tmdbId' => 1396],
+                    'requestedBy' => ['displayName' => 'Bob'],
+                    'createdAt' => '2026-04-01T00:00:00Z',
+                ],
+            ],
+        ]),
+    ]);
+
+    $this->actingAs($member)
+        ->get(route('media.requests.index'))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->component('Seerr/Requests')
+            ->loadDeferredProps('default', function ($page): void {
+                $page
+                    ->where('requests.data.0.media_title', 'Found Show')
+                    ->where('requests.data.0.poster_path', null);
             })
         );
 });

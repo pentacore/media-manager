@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Services\AiUsage;
 
+use App\Enums\RateLimitMetric;
+use App\Models\AiFreeUsagePool;
 use App\Models\AiModelPrice;
 use App\Models\AiToolInvocation;
 use App\Models\AiUsageRecord;
@@ -18,6 +20,14 @@ class AiUsageReporting
 {
     private const array AGGREGATABLE_COLUMNS = ['model', 'provider'];
 
+    /**
+     * Postgres regex stripping a trailing date-version suffix (e.g.
+     * "-2025-09-23") off a recorded model id, so dated variants match
+     * their catalog row. Keep in sync with the PHP-side preg_replace in
+     * invocationDetail().
+     */
+    private const string BASE_MODEL_REGEX = '-[0-9]{4}-[0-9]{2}-[0-9]{2}$';
+
     private const string TOKEN_SUM_EXPR = '
         ai_usage_records.prompt_tokens
         + ai_usage_records.completion_tokens
@@ -27,9 +37,11 @@ class AiUsageReporting
     ';
 
     /**
+     * A null $since means no lower bound (the "All" window).
+     *
      * @return array{total_invocations: int, total_tool_calls: int, total_tokens: int, total_cost: string}
      */
-    public function totals(CarbonImmutable $since, ?Scenario $scenario = null): array
+    public function totals(?CarbonImmutable $since, ?Scenario $scenario = null): array
     {
         [$costSql, $costBindings] = $this->costExpression($scenario);
 
@@ -48,7 +60,7 @@ class AiUsageReporting
         // (the user is asking "what if rates were X?", not "what would I
         // bill?"), so only net out the included tokens for the live view.
         if (! $scenario instanceof Scenario) {
-            $totalCost = max(0.0, $totalCost - $this->freeTierDiscount($since));
+            $totalCost = max(0.0, $totalCost - $this->freePoolDiscount($since));
         }
 
         return [
@@ -60,51 +72,49 @@ class AiUsageReporting
     }
 
     /**
-     * Per-(provider, model) breakdown of how much of each model's
-     * configured free monthly quota has been consumed in the window.
-     * Drives the "Free tier" panel + the net total cost computation.
+     * Per-pool consumption of the configured free quota, each pool sized
+     * to its own currently running UTC calendar period. Drives the
+     * "Free usage pools" panel.
      *
-     * @return array<int, array{provider: string, model: string, used_input: int, used_output: int, free_input: int, free_output: int}>
+     * @return array<int, array{id: int, name: string, period: string, unified: bool, documentation_url: string|null, free_input: int|null, free_output: int|null, free_total: int|null, used_input: int, used_output: int, used_total: int, models: array<int, array{provider: string, model: string, used_input: int, used_output: int}>}>
      */
-    public function freeTierStatus(CarbonImmutable $since): array
+    public function freePoolStatus(): array
     {
-        $usage = DB::table('ai_usage_records')
-            ->where('ai_usage_records.created_at', '>=', $since)
-            ->whereNotNull('ai_usage_records.provider')
-            ->whereNotNull('ai_usage_records.model')
-            ->selectRaw('
-                ai_usage_records.provider,
-                ai_usage_records.model,
-                COALESCE(SUM(ai_usage_records.prompt_tokens), 0) AS used_input,
-                COALESCE(SUM(ai_usage_records.completion_tokens), 0) AS used_output
-            ')
-            ->groupBy('ai_usage_records.provider', 'ai_usage_records.model')
-            ->get();
+        $pools = AiFreeUsagePool::query()->with('prices')->orderBy('name')->get();
 
         $rows = [];
 
-        foreach ($usage as $row) {
-            $price = AiModelPrice::query()
-                ->where('provider', $row->provider)
-                ->where('model', preg_replace('/-\d{4}-\d{2}-\d{2}$/', '', (string) $row->model))
-                ->first();
+        foreach ($pools as $pool) {
+            $usage = $this->poolUsageRows($pool, $pool->period->currentPeriodStart());
 
-            $freeInput = $price?->free_input_tokens_per_month;
-            $freeOutput = $price?->free_output_tokens_per_month;
+            $models = [];
+            $usedInput = 0;
+            $usedOutput = 0;
 
-            // Skip rows with no configured quota — there's nothing useful
-            // to report and the panel would just be noise.
-            if ($freeInput === null && $freeOutput === null) {
-                continue;
+            foreach ($usage as $row) {
+                $models[] = [
+                    'provider' => (string) $row->provider,
+                    'model' => (string) $row->base_model,
+                    'used_input' => (int) $row->used_input,
+                    'used_output' => (int) $row->used_output,
+                ];
+                $usedInput += (int) $row->used_input;
+                $usedOutput += (int) $row->used_output;
             }
 
             $rows[] = [
-                'provider' => (string) $row->provider,
-                'model' => (string) $row->model,
-                'used_input' => (int) $row->used_input,
-                'used_output' => (int) $row->used_output,
-                'free_input' => (int) ($freeInput ?? 0),
-                'free_output' => (int) ($freeOutput ?? 0),
+                'id' => $pool->id,
+                'name' => $pool->name,
+                'period' => $pool->period->value,
+                'unified' => $pool->unified,
+                'documentation_url' => $pool->documentation_url,
+                'free_input' => $pool->free_input_tokens,
+                'free_output' => $pool->free_output_tokens,
+                'free_total' => $pool->free_total_tokens,
+                'used_input' => $usedInput,
+                'used_output' => $usedOutput,
+                'used_total' => $usedInput + $usedOutput,
+                'models' => $models,
             ];
         }
 
@@ -112,55 +122,227 @@ class AiUsageReporting
     }
 
     /**
-     * Sum of "tokens that fell under the free quota × catalog rate" for
-     * every priced model in the window. Subtracted from the gross cost
-     * so the displayed Spend reflects what the provider would actually
-     * bill.
+     * Per-model consumption against configured provider rate limits, each
+     * limit measured over its rolling window (the last minute/hour/day —
+     * rolling, unlike the free pools' calendar resets). Token limits count
+     * prompt + completion tokens, matching pool accounting. Display only.
+     *
+     * @return array<int, array{provider: string, model: string, limits: array<int, array{metric: string, period: string, limit_value: int, used: int}>}>
      */
-    private function freeTierDiscount(CarbonImmutable $since): float
+    public function rateLimitStatus(): array
     {
-        $usage = DB::table('ai_usage_records')
-            ->where('ai_usage_records.created_at', '>=', $since)
-            ->whereNotNull('ai_usage_records.provider')
-            ->whereNotNull('ai_usage_records.model')
-            ->selectRaw('
-                ai_usage_records.provider,
-                ai_usage_records.model,
-                COALESCE(SUM(ai_usage_records.prompt_tokens), 0) AS used_input,
-                COALESCE(SUM(ai_usage_records.completion_tokens), 0) AS used_output
-            ')
-            ->groupBy('ai_usage_records.provider', 'ai_usage_records.model')
+        $prices = AiModelPrice::query()
+            ->with('rateLimits')
+            ->whereHas('rateLimits')
+            ->orderBy('provider')
+            ->orderBy('model')
             ->get();
+
+        if ($prices->isEmpty()) {
+            return [];
+        }
+
+        $periods = $prices
+            ->flatMap(fn (AiModelPrice $aiModelPrice) => $aiModelPrice->rateLimits->pluck('period'))
+            ->unique();
+
+        // One aggregate query per distinct window length, keyed by
+        // provider|base_model (dated suffixes stripped like poolUsageRows).
+        $usageByPeriod = [];
+
+        foreach ($periods as $period) {
+            $usageByPeriod[$period->value] = DB::table('ai_usage_records')
+                ->where('created_at', '>=', $period->windowStart())
+                ->whereNotNull('provider')
+                ->whereNotNull('model')
+                ->selectRaw("
+                    provider,
+                    regexp_replace(model, '".self::BASE_MODEL_REGEX."', '') AS base_model,
+                    COUNT(*) AS requests,
+                    COALESCE(SUM(prompt_tokens + completion_tokens), 0) AS tokens
+                ")
+                ->groupByRaw('provider, base_model')
+                ->get()
+                ->keyBy(fn (object $row): string => $row->provider.'|'.$row->base_model);
+        }
+
+        $rows = [];
+
+        foreach ($prices as $price) {
+            $limits = [];
+
+            foreach ($price->rateLimits as $rateLimit) {
+                $usage = $usageByPeriod[$rateLimit->period->value][$price->provider.'|'.$price->model] ?? null;
+
+                $limits[] = [
+                    'metric' => $rateLimit->metric->value,
+                    'period' => $rateLimit->period->value,
+                    'limit_value' => $rateLimit->limit_value,
+                    'used' => (int) ($rateLimit->metric === RateLimitMetric::Requests
+                        ? ($usage->requests ?? 0)
+                        : ($usage->tokens ?? 0)),
+                ];
+            }
+
+            $rows[] = [
+                'provider' => $price->provider,
+                'model' => $price->model,
+                'limits' => $limits,
+            ];
+        }
+
+        return $rows;
+    }
+
+    /**
+     * USD value of tokens forgiven by free-usage pools inside the window.
+     * A window can span several pool resets (a 30d view over a daily pool
+     * crosses ~30 boundaries), so forgiveness is capped per (pool, period
+     * bucket): min(bucket usage, pool cap). The forgiven ratio is computed
+     * from the bucket's FULL period usage — including usage before $since —
+     * so a window that opens mid-period doesn't re-grant a cap the period
+     * already spent. The forgiven amount converts to USD proportionally
+     * across member models by their share of the bucket's usage — pools
+     * group same-family models, so exact chronological allocation isn't
+     * worth the extra SQL.
+     */
+    private function freePoolDiscount(?CarbonImmutable $since): float
+    {
+        $pools = AiFreeUsagePool::query()->with('prices')->get();
 
         $discount = 0.0;
 
-        foreach ($usage as $row) {
-            $price = AiModelPrice::query()
-                ->where('provider', $row->provider)
-                ->where('model', preg_replace('/-\d{4}-\d{2}-\d{2}$/', '', (string) $row->model))
-                ->first();
+        foreach ($pools as $pool) {
+            $rates = [];
 
-            if (! $price instanceof AiModelPrice) {
+            foreach ($pool->prices as $price) {
+                $rates[$price->provider.'|'.$price->model] = [
+                    'input' => (float) $price->input_per_mtok,
+                    'output' => (float) $price->output_per_mtok,
+                ];
+            }
+
+            if ($rates === []) {
                 continue;
             }
 
-            $freeInput = (int) ($price->free_input_tokens_per_month ?? 0);
-            $freeOutput = (int) ($price->free_output_tokens_per_month ?? 0);
+            $buckets = $this->poolUsageRows($pool, $since, bucketed: true)
+                ->groupBy('bucket');
 
-            $forgivenInput = min((int) $row->used_input, $freeInput);
-            $forgivenOutput = min((int) $row->used_output, $freeOutput);
+            foreach ($buckets as $bucket) {
+                $bucketInput = (int) $bucket->sum('used_input');
+                $bucketOutput = (int) $bucket->sum('used_output');
 
-            $discount += $forgivenInput * (float) $price->input_per_mtok / 1_000_000.0;
-            $discount += $forgivenOutput * (float) $price->output_per_mtok / 1_000_000.0;
+                // Ratios come from the bucket's full period usage; the USD
+                // conversion below only counts the window's share of it.
+                if ($pool->unified) {
+                    $bucketTotal = $bucketInput + $bucketOutput;
+                    $forgivenRatio = $bucketTotal > 0
+                        ? min($bucketTotal, (int) ($pool->free_total_tokens ?? 0)) / $bucketTotal
+                        : 0.0;
+
+                    foreach ($bucket as $row) {
+                        $rate = $rates[$row->provider.'|'.$row->base_model];
+                        $discount += ((int) $row->window_input * $rate['input'] + (int) $row->window_output * $rate['output'])
+                            * $forgivenRatio / 1_000_000.0;
+                    }
+
+                    continue;
+                }
+
+                $inputRatio = $bucketInput > 0
+                    ? min($bucketInput, (int) ($pool->free_input_tokens ?? 0)) / $bucketInput
+                    : 0.0;
+                $outputRatio = $bucketOutput > 0
+                    ? min($bucketOutput, (int) ($pool->free_output_tokens ?? 0)) / $bucketOutput
+                    : 0.0;
+
+                foreach ($bucket as $row) {
+                    $rate = $rates[$row->provider.'|'.$row->base_model];
+                    $discount += (int) $row->window_input * $rate['input'] * $inputRatio / 1_000_000.0;
+                    $discount += (int) $row->window_output * $rate['output'] * $outputRatio / 1_000_000.0;
+                }
+            }
         }
 
         return $discount;
     }
 
     /**
+     * Input/output token sums for a pool's member models since $since (null
+     * = no lower bound), grouped by (provider, base model[, period bucket]).
+     * Base model = recorded model id with any trailing -YYYY-MM-DD suffix
+     * stripped, so dated variants match their catalog row.
+     *
+     * Bucketed rows fetch from the START of the period containing $since —
+     * not $since itself — so per-bucket caps are measured against the full
+     * period's usage. used_* covers the whole bucket; window_* only the
+     * rows at or after $since.
+     *
+     * @return Collection<int, object{provider: string, base_model: string, bucket?: string, used_input: int|string, used_output: int|string, window_input?: int|string, window_output?: int|string}>
+     */
+    private function poolUsageRows(AiFreeUsagePool $aiFreeUsagePool, ?CarbonImmutable $since, bool $bucketed = false): Collection
+    {
+        $memberProviders = $aiFreeUsagePool->prices
+            ->map(fn (AiModelPrice $aiModelPrice): string => $aiModelPrice->provider)
+            ->unique()
+            ->all();
+
+        $memberKeys = $aiFreeUsagePool->prices
+            ->map(fn (AiModelPrice $aiModelPrice): string => $aiModelPrice->provider.'|'.$aiModelPrice->model)
+            ->all();
+
+        if ($memberKeys === []) {
+            return new Collection;
+        }
+
+        $selects = ["
+            ai_usage_records.provider,
+            regexp_replace(ai_usage_records.model, '".self::BASE_MODEL_REGEX."', '') AS base_model,
+            COALESCE(SUM(ai_usage_records.prompt_tokens), 0) AS used_input,
+            COALESCE(SUM(ai_usage_records.completion_tokens), 0) AS used_output
+        "];
+        $bindings = [];
+
+        $groupBy = ['provider', 'base_model'];
+
+        if ($bucketed) {
+            $selects[] = sprintf("date_trunc('%s', ai_usage_records.created_at) AS bucket", $aiFreeUsagePool->period->sqlDateTrunc());
+            $groupBy[] = 'bucket';
+
+            if ($since instanceof CarbonImmutable) {
+                $selects[] = '
+                    COALESCE(SUM(ai_usage_records.prompt_tokens) FILTER (WHERE ai_usage_records.created_at >= ?), 0) AS window_input,
+                    COALESCE(SUM(ai_usage_records.completion_tokens) FILTER (WHERE ai_usage_records.created_at >= ?), 0) AS window_output
+                ';
+                $bindings = [$since, $since];
+            } else {
+                $selects[] = '
+                    COALESCE(SUM(ai_usage_records.prompt_tokens), 0) AS window_input,
+                    COALESCE(SUM(ai_usage_records.completion_tokens), 0) AS window_output
+                ';
+            }
+        }
+
+        $fetchStart = $bucketed && $since instanceof CarbonImmutable
+            ? $aiFreeUsagePool->period->periodStartAt($since)
+            : $since;
+
+        return DB::table('ai_usage_records')
+            ->when($fetchStart instanceof CarbonImmutable, fn (Builder $builder) => $builder->where('ai_usage_records.created_at', '>=', $fetchStart))
+            ->whereIn('ai_usage_records.provider', $memberProviders)
+            ->whereNotNull('ai_usage_records.model')
+            ->selectRaw(implode(', ', $selects), $bindings)
+            ->groupByRaw(implode(', ', $groupBy))
+            ->get()
+            ->filter(fn (object $row): bool => in_array($row->provider.'|'.$row->base_model, $memberKeys, true))
+            ->values();
+    }
+
+    /**
      * @return Collection<int, object{key: string|null, invocations: int, total_tokens: int, total_cost: string}>
      */
-    public function aggregateBy(string $column, CarbonImmutable $since, ?Scenario $scenario = null): Collection
+    public function aggregateBy(string $column, ?CarbonImmutable $since, ?Scenario $scenario = null): Collection
     {
         throw_unless(in_array($column, self::AGGREGATABLE_COLUMNS, true), InvalidArgumentException::class, sprintf("Cannot aggregate by '%s'.", $column));
 
@@ -181,7 +363,7 @@ class AiUsageReporting
     /**
      * @return Collection<int, object>
      */
-    public function recentInvocations(CarbonImmutable $since, ?Scenario $scenario = null, int $limit = 50): Collection
+    public function recentInvocations(?CarbonImmutable $since, ?Scenario $scenario = null, int $limit = 50): Collection
     {
         [$costSql, $costBindings] = $this->costExpression($scenario);
 
@@ -446,7 +628,7 @@ class AiUsageReporting
         ];
     }
 
-    private function query(CarbonImmutable $since, ?Scenario $scenario = null): Builder
+    private function query(?CarbonImmutable $since, ?Scenario $scenario = null): Builder
     {
         $builder = DB::table('ai_usage_records');
 
@@ -464,11 +646,11 @@ class AiUsageReporting
             $builder->leftJoin('ai_model_prices', function ($join): void {
                 $join->on('ai_usage_records.provider', '=', 'ai_model_prices.provider')
                     ->whereRaw(
-                        "regexp_replace(ai_usage_records.model, '-[0-9]{4}-[0-9]{2}-[0-9]{2}$', '') = ai_model_prices.model"
+                        "regexp_replace(ai_usage_records.model, '".self::BASE_MODEL_REGEX."', '') = ai_model_prices.model"
                     );
             });
         }
 
-        return $builder->where('ai_usage_records.created_at', '>=', $since);
+        return $builder->when($since instanceof CarbonImmutable, fn (Builder $builder) => $builder->where('ai_usage_records.created_at', '>=', $since));
     }
 }

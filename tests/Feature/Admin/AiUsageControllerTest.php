@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use App\Ai\Agents\MediaAgent;
+use App\Models\AiFreeUsagePool;
 use App\Models\AiModelPrice;
 use App\Models\AiUsageRecord;
 use App\Models\User;
@@ -108,6 +109,59 @@ test('invalid window falls back to 7d', function (): void {
         ->assertInertia(fn ($page) => $page->where('window', '7d'));
 });
 
+test('windows prop lists all nine options in display order', function (): void {
+    $this->actingAs(User::factory()->admin()->create())
+        ->get(route('admin.ai-usage.index'))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->where('windows', collect([
+                ['value' => 'today', 'label' => 'Today'],
+                ['value' => '24h', 'label' => '24h'],
+                ['value' => '7d', 'label' => '7d'],
+                ['value' => '30d', 'label' => '30d'],
+                ['value' => '90d', 'label' => '90d'],
+                ['value' => 'week', 'label' => 'This week'],
+                ['value' => 'month', 'label' => 'This month'],
+                ['value' => 'year', 'label' => 'This year'],
+                ['value' => 'all', 'label' => 'All'],
+            ]))
+        );
+});
+
+test('window=all includes records older than any rolling window', function (): void {
+    $record = AiUsageRecord::factory()->create();
+    $record->forceFill(['created_at' => now()->subDays(400)])->save();
+
+    $this->actingAs(User::factory()->admin()->create())
+        ->get(route('admin.ai-usage.index', ['window' => 'all']))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->where('window', 'all')
+            ->where('totals.total_invocations', 1)
+        );
+});
+
+test('window=week excludes records from before monday', function (): void {
+    // Freeze to a Wednesday so "this week" has a meaningful boundary.
+    CarbonImmutable::setTestNow(CarbonImmutable::parse('2026-07-15 12:00:00'));
+
+    $inside = AiUsageRecord::factory()->create();
+    $inside->forceFill(['created_at' => CarbonImmutable::parse('2026-07-13 08:00:00')])->save();
+
+    $outside = AiUsageRecord::factory()->create();
+    $outside->forceFill(['created_at' => CarbonImmutable::parse('2026-07-12 20:00:00')])->save();
+
+    $this->actingAs(User::factory()->admin()->create())
+        ->get(route('admin.ai-usage.index', ['window' => 'week']))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->where('window', 'week')
+            ->where('totals.total_invocations', 1)
+        );
+
+    CarbonImmutable::setTestNow();
+});
+
 test('window=today narrows recent invocations to the current local day', function (): void {
     $admin = User::factory()->admin()->create();
 
@@ -153,7 +207,7 @@ test('window=today narrows recent invocations to the current local day', functio
         ->assertOk()
         ->assertInertia(fn ($page) => $page
             ->where('window', 'today')
-            ->where('windows.0', 'today')
+            ->where('windows.0.value', 'today')
             ->where('totals.total_invocations', 1)
         );
 
@@ -470,6 +524,22 @@ test('non-admin cannot drill into invocation detail or assign price', function (
         ->assertForbidden();
 });
 
+test('index exposes free usage pools instead of the legacy free tier prop', function (): void {
+    $admin = User::factory()->admin()->create();
+
+    AiFreeUsagePool::factory()->create(['name' => 'Gemini pool', 'free_input_tokens' => 1_000_000]);
+
+    $this->actingAs($admin)
+        ->get(route('admin.ai-usage.index'))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->component('Admin/AiUsage/Index')
+            ->has('free_pools', 1)
+            ->where('free_pools.0.name', 'Gemini pool')
+            ->missing('free_tier')
+        );
+});
+
 test('priced_models is included in page props', function (): void {
     $admin = User::factory()->admin()->create();
 
@@ -487,4 +557,18 @@ test('priced_models is included in page props', function (): void {
         ->get(route('admin.ai-usage.index'))
         ->assertOk()
         ->assertInertia(fn ($page) => $page->has('priced_models', fn ($models) => $models->etc()));
+});
+
+test('index exposes rate limit status', function (): void {
+    $admin = User::factory()->admin()->create();
+    $price = AiModelPrice::factory()->create(['provider' => 'openai', 'model' => 'gpt-5-mini']);
+    $price->rateLimits()->create(['metric' => 'requests', 'period' => 'minute', 'limit_value' => 500]);
+
+    $this->actingAs($admin)
+        ->get(route('admin.ai-usage.index'))
+        ->assertInertia(fn ($page) => $page
+            ->component('Admin/AiUsage/Index')
+            ->has('rate_limits', 1)
+            ->where('rate_limits.0.model', 'gpt-5-mini')
+            ->where('rate_limits.0.limits.0.limit_value', 500));
 });

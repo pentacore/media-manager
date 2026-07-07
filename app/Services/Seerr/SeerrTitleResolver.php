@@ -10,20 +10,21 @@ use Illuminate\Support\Facades\Cache;
 class SeerrTitleResolver
 {
     /**
-     * Titles are essentially immutable once a TMDB record exists, so the
-     * resolver caches them aggressively — refetching only after a full day
-     * even though Seerr's underlying detail entity cache is shorter.
+     * Titles and poster paths are essentially immutable once a TMDB record
+     * exists, so the resolver caches them aggressively — refetching only
+     * after a full day even though Seerr's underlying detail entity cache
+     * is shorter.
      */
     private const int TITLE_CACHE_TTL_SECONDS = 86_400;
 
     /**
      * Given a list of Seerr request rows (each with media.mediaType + media.tmdbId),
-     * resolve a {mediaType:tmdbId => title} map. Issues a single concurrent
-     * batch via SeerrClient::getMediaDetailsBatch for any titles missing
-     * from the cache, then folds the results in.
+     * resolve a {mediaType:tmdbId => {title, poster_path}} map. Issues a single
+     * concurrent batch via SeerrClient::getMediaDetailsBatch for any entries
+     * missing from the cache, then folds the results in.
      *
      * @param  array<int, array<string, mixed>>  $requests
-     * @return array<string, string>
+     * @return array<string, array{title: string, poster_path: ?string}>
      */
     public function resolve(ServiceConnection $serviceConnection, SeerrClient $seerrClient, array $requests): array
     {
@@ -33,13 +34,13 @@ class SeerrTitleResolver
             return [];
         }
 
-        $titles = [];
+        $media = [];
         $missing = [];
 
         foreach ($pairs as $key => [$mediaType, $tmdbId]) {
             $cached = Cache::get($this->cacheKey($serviceConnection, $mediaType, $tmdbId));
-            if (is_string($cached)) {
-                $titles[$key] = $cached;
+            if (is_array($cached) && isset($cached['title'])) {
+                $media[$key] = $cached;
 
                 continue;
             }
@@ -48,32 +49,58 @@ class SeerrTitleResolver
         }
 
         if ($missing === []) {
-            return $titles;
+            return $media;
         }
 
         $details = $seerrClient->getMediaDetailsBatch(array_values($missing));
 
         foreach ($missing as $key => [$mediaType, $tmdbId]) {
-            $title = $this->extractTitle($details[$key] ?? [], $mediaType, $tmdbId);
+            $detail = $details[$key] ?? [];
+            $entry = [
+                'title' => $this->extractTitle($detail, $mediaType, $tmdbId),
+                'poster_path' => $this->extractPosterPath($detail),
+            ];
             Cache::put(
                 $this->cacheKey($serviceConnection, $mediaType, $tmdbId),
-                $title,
+                $entry,
                 self::TITLE_CACHE_TTL_SECONDS,
             );
-            $titles[$key] = $title;
+            $media[$key] = $entry;
         }
 
-        return $titles;
+        return $media;
     }
 
     /**
-     * Compose the title for a single request row from a pre-resolved title map.
+     * Compose the title for a single request row from a pre-resolved media map.
      * Returns null when the row didn't have id/type to lookup with.
      *
      * @param  array<string, mixed>  $request
-     * @param  array<string, string>  $titles
+     * @param  array<string, array{title: string, poster_path: ?string}>  $media
      */
-    public function titleFor(array $request, array $titles): ?string
+    public function titleFor(array $request, array $media): ?string
+    {
+        return $this->entryFor($request, $media)['title'] ?? null;
+    }
+
+    /**
+     * TMDB-relative poster path (e.g. "/abc.jpg") for a single request row,
+     * or null when unknown.
+     *
+     * @param  array<string, mixed>  $request
+     * @param  array<string, array{title: string, poster_path: ?string}>  $media
+     */
+    public function posterPathFor(array $request, array $media): ?string
+    {
+        return $this->entryFor($request, $media)['poster_path'] ?? null;
+    }
+
+    /**
+     * @param  array<string, mixed>  $request
+     * @param  array<string, array{title: string, poster_path: ?string}>  $media
+     * @return array{title: string, poster_path: ?string}|null
+     */
+    private function entryFor(array $request, array $media): ?array
     {
         $mediaType = $request['type'] ?? ($request['media']['mediaType'] ?? null);
         $tmdbId = $request['media']['tmdbId'] ?? null;
@@ -82,9 +109,7 @@ class SeerrTitleResolver
             return null;
         }
 
-        $key = sprintf('%s:%d', (string) $mediaType, (int) $tmdbId);
-
-        return $titles[$key] ?? null;
+        return $media[sprintf('%s:%d', (string) $mediaType, (int) $tmdbId)] ?? null;
     }
 
     /**
@@ -117,7 +142,9 @@ class SeerrTitleResolver
 
     private function cacheKey(ServiceConnection $serviceConnection, string $mediaType, int $tmdbId): string
     {
-        return sprintf('seerr:title:%d:%s:%d', $serviceConnection->id, $mediaType, $tmdbId);
+        // "media" (not "title") prefix: the cached value became an array when
+        // poster paths were added, so stale string entries must miss.
+        return sprintf('seerr:media:%d:%s:%d', $serviceConnection->id, $mediaType, $tmdbId);
     }
 
     /**
@@ -132,5 +159,15 @@ class SeerrTitleResolver
             ?? $detail['originalName']
             ?? sprintf('%s #%d', ucfirst($mediaType), $tmdbId)
         );
+    }
+
+    /**
+     * @param  array<string, mixed>  $detail
+     */
+    private function extractPosterPath(array $detail): ?string
+    {
+        $posterPath = $detail['posterPath'] ?? null;
+
+        return is_string($posterPath) && $posterPath !== '' ? $posterPath : null;
     }
 }

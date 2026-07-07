@@ -21,6 +21,7 @@ import {
 } from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useRealtimeReload } from '@/composables/useRealtimeReload';
+import { arrPosterUrl } from '@/lib/arr';
 import { cn } from '@/lib/utils';
 import { dashboard } from '@/routes';
 
@@ -361,6 +362,7 @@ function sonarrSeriesUrl(slug: string | null): string | null {
                 <div class="relative">
                     <Poster
                         :hint="item.title.toLowerCase().slice(0, 12)"
+                        :src="arrPosterUrl(item.images)"
                         size="full"
                     />
                     <Pill
@@ -441,6 +443,7 @@ function sonarrSeriesUrl(slug: string | null): string | null {
                                         :hint="
                                             item.title.toLowerCase().slice(0, 8)
                                         "
+                                        :src="arrPosterUrl(item.images)"
                                         size="sm"
                                     />
                                     <Link

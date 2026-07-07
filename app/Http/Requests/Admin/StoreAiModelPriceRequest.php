@@ -4,12 +4,15 @@ declare(strict_types=1);
 
 namespace App\Http\Requests\Admin;
 
+use App\Concerns\RateLimitValidationRules;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
 class StoreAiModelPriceRequest extends FormRequest
 {
+    use RateLimitValidationRules;
+
     /**
      * @return array<string, ValidationRule|array<mixed>|string>
      */
@@ -33,8 +36,8 @@ class StoreAiModelPriceRequest extends FormRequest
             'batch_cache_read_per_mtok' => ['nullable', 'numeric', 'min:0', 'max:9999.9999'],
             'batch_cache_write_per_mtok' => ['nullable', 'numeric', 'min:0', 'max:9999.9999'],
             'batch_reasoning_per_mtok' => ['nullable', 'numeric', 'min:0', 'max:9999.9999'],
-            'free_input_tokens_per_month' => ['nullable', 'integer', 'min:0'],
-            'free_output_tokens_per_month' => ['nullable', 'integer', 'min:0'],
+            'free_usage_pool_id' => ['nullable', 'integer', 'exists:ai_free_usage_pools,id'],
+            ...$this->rateLimitRules(),
         ];
     }
 }

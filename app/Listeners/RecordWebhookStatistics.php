@@ -1,0 +1,91 @@
+<?php
+
+declare(strict_types=1);
+
+namespace App\Listeners;
+
+use App\Enums\ServiceType;
+use App\Events\WebhookEventProcessed;
+use App\Services\Statistics\StatsRecorder;
+use Carbon\CarbonImmutable;
+
+/**
+ * Counts trim-safe streams at ingest time: webhook rows may be deleted
+ * immediately after processing (capture off), SABnzbd/Seerr activity has
+ * no durable table — so these metrics can only be recorded here, while
+ * the event is in hand. Aggregator must NOT also compute them.
+ */
+class RecordWebhookStatistics
+{
+    public function __construct(private readonly StatsRecorder $statsRecorder) {}
+
+    public function handle(WebhookEventProcessed $webhookEventProcessed): void
+    {
+        $webhookEvent = $webhookEventProcessed->webhookEvent;
+        $webhookEvent->loadMissing('serviceConnection');
+
+        $service = $webhookEvent->serviceConnection?->type;
+
+        if (! $service instanceof ServiceType) {
+            return;
+        }
+
+        $at = CarbonImmutable::now('UTC');
+        $eventType = (string) $webhookEvent->event_type;
+
+        $this->statsRecorder->increment('webhooks.received', [
+            'service' => $service->value,
+            'event_type' => $eventType,
+        ], $at);
+
+        $this->recordDownloads($service, $eventType, $at);
+        $this->recordRequests($service, $eventType, $at);
+    }
+
+    private function recordDownloads(ServiceType $serviceType, string $eventType, CarbonImmutable $at): void
+    {
+        // SABnzbd 'complete' and the arr 'Download' import fire for the same
+        // physical download when both webhooks are wired, and everything
+        // user-facing sums downloads.completed across the service dimension —
+        // so the client-side completion gets its own metric instead of
+        // double-counting. downloads.completed = imports (fires for any
+        // download client), downloads.fetched = SABnzbd finished fetching.
+        $metric = match (true) {
+            in_array($serviceType, [ServiceType::Sonarr, ServiceType::Radarr, ServiceType::Whisparr], true) => match ($eventType) {
+                'Grab' => 'downloads.grabbed',
+                'Download' => 'downloads.completed',
+                default => null,
+            },
+            $serviceType === ServiceType::SABnzbd => match ($eventType) {
+                'complete' => 'downloads.fetched',
+                'failed' => 'downloads.failed',
+                default => null,
+            },
+            default => null,
+        };
+
+        if ($metric !== null) {
+            $this->statsRecorder->increment($metric, ['service' => $serviceType->value], $at);
+        }
+    }
+
+    private function recordRequests(ServiceType $serviceType, string $eventType, CarbonImmutable $at): void
+    {
+        if ($serviceType !== ServiceType::Seerr) {
+            return;
+        }
+
+        $metric = match ($eventType) {
+            'MEDIA_PENDING' => 'requests.created',
+            'MEDIA_APPROVED', 'MEDIA_AUTO_APPROVED' => 'requests.approved',
+            'MEDIA_DECLINED' => 'requests.declined',
+            'MEDIA_AVAILABLE' => 'requests.available',
+            'MEDIA_FAILED' => 'requests.failed',
+            default => null,
+        };
+
+        if ($metric !== null) {
+            $this->statsRecorder->increment($metric, [], $at);
+        }
+    }
+}

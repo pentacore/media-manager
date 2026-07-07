@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { Head, router, usePage } from '@inertiajs/vue3';
-import { Calendar, Download, Sparkles } from '@lucide/vue';
+import { Download, Sparkles } from '@lucide/vue';
 import { computed, onMounted, watch } from 'vue';
 import WatchHistoryController from '@/actions/App/Http/Controllers/Emby/WatchHistoryController';
 import {
@@ -10,6 +10,7 @@ import {
     StatCard,
     SvcChip,
     TimeStamp,
+    TimeWindowFilter,
 } from '@/components/mm';
 import { Button } from '@/components/ui/button';
 import {
@@ -20,7 +21,6 @@ import {
     SelectValue,
 } from '@/components/ui/select';
 import { useRealtimeList } from '@/composables/useRealtimeList';
-import { cn } from '@/lib/utils';
 import { dashboard } from '@/routes';
 import type { EmbyActivityResource } from '@/typefinder/resources/EmbyActivityResource';
 
@@ -54,8 +54,8 @@ const props = defineProps<{
         meta: PaginatorMeta;
     };
     totals: Totals;
-    filters: { media_type: string; since: number | 'today' };
-    filterOptions: { rangeDays: number[]; todayValue: 'today' };
+    filters: { media_type: string; since: string };
+    filterOptions: { windows: Array<{ value: string; label: string }> };
 }>();
 
 defineOptions({
@@ -174,13 +174,13 @@ const totalsView = computed(() => {
     };
 });
 
-function applyFilters(next: { media_type?: string; since?: number | 'today' }) {
+function applyFilters(next: { media_type?: string; since?: string }) {
     const merged = {
         media_type:
             'media_type' in next
                 ? (next.media_type ?? '')
                 : props.filters.media_type,
-        since: 'since' in next ? (next.since ?? 7) : props.filters.since,
+        since: 'since' in next ? (next.since ?? '7d') : props.filters.since,
     };
 
     const query: Record<string, string | number> = {};
@@ -189,7 +189,7 @@ function applyFilters(next: { media_type?: string; since?: number | 'today' }) {
         query.media_type = merged.media_type;
     }
 
-    if (merged.since && merged.since !== 7) {
+    if (merged.since && merged.since !== '7d') {
         query.since = merged.since;
     }
 
@@ -204,20 +204,8 @@ function onMediaTypeChange(value: unknown) {
     applyFilters({ media_type: v === 'all' ? '' : v });
 }
 
-function setRange(value: number | 'today') {
+function setRange(value: string) {
     applyFilters({ since: value });
-}
-
-function rangeLabel(value: number | 'today'): string {
-    if (value === 'today') {
-        return 'Today';
-    }
-
-    if (value === 1) {
-        return '24h';
-    }
-
-    return `${value}d`;
 }
 
 const exportUrl = computed(() => {
@@ -227,7 +215,7 @@ const exportUrl = computed(() => {
         params.set('media_type', props.filters.media_type);
     }
 
-    if (props.filters.since !== 7) {
+    if (props.filters.since !== '7d') {
         params.set('since', String(props.filters.since));
     }
 
@@ -288,30 +276,11 @@ function currentFilter(): string {
                         <SelectItem value="episode">Episode</SelectItem>
                     </SelectContent>
                 </Select>
-                <div
-                    class="inline-flex h-7 items-center rounded-md border border-border bg-card p-0.5"
-                >
-                    <Calendar class="ml-1.5 size-3.5 text-muted-foreground" />
-                    <button
-                        v-for="value in [
-                            filterOptions.todayValue,
-                            ...filterOptions.rangeDays,
-                        ]"
-                        :key="value"
-                        type="button"
-                        :class="
-                            cn(
-                                'inline-flex h-6 items-center rounded-[4px] px-2 text-[11.5px] font-medium transition-colors',
-                                filters.since === value
-                                    ? 'bg-accent text-accent-foreground'
-                                    : 'text-muted-foreground hover:bg-bg-hover hover:text-foreground',
-                            )
-                        "
-                        @click="setRange(value)"
-                    >
-                        {{ rangeLabel(value) }}
-                    </button>
-                </div>
+                <TimeWindowFilter
+                    :options="filterOptions.windows"
+                    :model-value="filters.since"
+                    @update:model-value="setRange"
+                />
                 <a
                     :href="exportUrl"
                     class="inline-flex h-7 items-center gap-1.5 rounded-md border border-border bg-card px-2 text-xs font-medium text-foreground transition-colors hover:bg-bg-hover"

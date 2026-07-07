@@ -51,6 +51,7 @@ import {
 } from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useRealtimeReload } from '@/composables/useRealtimeReload';
+import { tmdbPosterUrl } from '@/lib/tmdb';
 import { cn } from '@/lib/utils';
 import { dashboard } from '@/routes';
 
@@ -59,6 +60,7 @@ interface SeerrRequest {
     status: number | null;
     media_type: string | null;
     media_title: string | null;
+    poster_path: string | null;
     tmdb_id: number | null;
     tvdb_id: number | null;
     requester: string | null;
@@ -635,6 +637,7 @@ const rangeText = computed(() => {
                     :hint="
                         (req.media_title ?? 'media').toLowerCase().slice(0, 12)
                     "
+                    :src="tmdbPosterUrl(req.poster_path)"
                     size="lg"
                 />
                 <div class="flex min-w-0 flex-1 flex-col gap-1.5">

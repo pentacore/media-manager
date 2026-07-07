@@ -4,13 +4,17 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers\Admin;
 
+use App\Enums\RateLimitMetric;
+use App\Enums\RateLimitPeriod;
 use App\Events\AiPriceRefreshStateChanged;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Admin\StoreAiModelPriceRequest;
 use App\Http\Requests\Admin\UpdateAiModelPriceRequest;
 use App\Jobs\RefreshAiPricesJob;
+use App\Models\AiFreeUsagePool;
 use App\Models\AiModelPrice;
 use Illuminate\Http\RedirectResponse;
+use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\Auth;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -21,16 +25,27 @@ class AiModelPriceController extends Controller
     {
         return Inertia::render('Admin/AiPrices/Index', [
             'prices' => AiModelPrice::query()
+                ->with('rateLimits')
                 ->orderBy('provider')
                 ->orderBy('model')
                 ->get(),
+            'pools' => AiFreeUsagePool::query()
+                ->withCount('prices')
+                ->orderBy('name')
+                ->get(),
             'refresh_running' => RefreshAiPricesJob::isRunning(),
+            'rate_limit_metrics' => RateLimitMetric::options(),
+            'rate_limit_periods' => RateLimitPeriod::options(),
         ]);
     }
 
     public function store(StoreAiModelPriceRequest $storeAiModelPriceRequest): RedirectResponse
     {
-        AiModelPrice::create($storeAiModelPriceRequest->validated());
+        $validated = $storeAiModelPriceRequest->validated();
+        $rateLimits = Arr::pull($validated, 'rate_limits') ?? [];
+
+        $aiModelPrice = AiModelPrice::create($validated);
+        $aiModelPrice->rateLimits()->createMany($rateLimits);
 
         Inertia::flash('toast', ['type' => 'success', 'message' => __('Model price added.')]);
 
@@ -39,7 +54,12 @@ class AiModelPriceController extends Controller
 
     public function update(UpdateAiModelPriceRequest $updateAiModelPriceRequest, AiModelPrice $aiModelPrice): RedirectResponse
     {
-        $aiModelPrice->update($updateAiModelPriceRequest->validated());
+        $validated = $updateAiModelPriceRequest->validated();
+        $rateLimits = Arr::pull($validated, 'rate_limits') ?? [];
+
+        $aiModelPrice->update($validated);
+        $aiModelPrice->rateLimits()->delete();
+        $aiModelPrice->rateLimits()->createMany($rateLimits);
 
         Inertia::flash('toast', ['type' => 'success', 'message' => __('Model price updated.')]);
 

@@ -4,12 +4,12 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers\Admin;
 
+use App\Enums\TimeWindow;
 use App\Http\Controllers\Controller;
 use App\Models\AiModelPrice;
 use App\Models\AiUsageRecord;
 use App\Services\AiUsage\AiUsageReporting;
 use App\Services\AiUsage\Scenario;
-use Carbon\CarbonImmutable;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -19,23 +19,14 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class AiUsageController extends Controller
 {
-    /**
-     * Allowed ?window= values, in display order. Numeric entries map to a
-     * `subDays(N)` cutoff; the special `today` key snaps to the local
-     * midnight instead.
-     */
-    private const array WINDOWS = ['today', '24h', '7d', '30d'];
-
-    private const string DEFAULT_WINDOW = '7d';
-
     public function index(Request $request, AiUsageReporting $aiUsageReporting): Response
     {
-        $window = $this->resolveWindow($request);
-        $since = $this->cutoffFor($window);
+        $timeWindow = TimeWindow::fromRequest($request->string('window')->value() ?: null);
+        $since = $timeWindow->cutoff();
         $scenario = Scenario::fromArray((array) $request->input('scenario', []));
 
         $page = [
-            'window' => $window,
+            'window' => $timeWindow->value,
             'totals' => $aiUsageReporting->totals($since),
             'by_model' => $aiUsageReporting->aggregateBy('model', $since),
             'by_provider' => $aiUsageReporting->aggregateBy('provider', $since),
@@ -45,11 +36,14 @@ class AiUsageController extends Controller
                 ->orderBy('model')
                 ->get(['provider', 'model', 'input_per_mtok', 'output_per_mtok', 'cache_read_per_mtok', 'cache_write_per_mtok', 'reasoning_per_mtok']),
             'scenario' => $scenario?->toArray(),
-            'windows' => self::WINDOWS,
-            // Per-(provider, model) free quota usage for the panel below
-            // the stat cards. Sized by month rather than by the active
-            // window because the cap itself resets monthly.
-            'free_tier' => $aiUsageReporting->freeTierStatus(CarbonImmutable::now()->startOfMonth()),
+            'windows' => TimeWindow::options(),
+            // Per-pool free quota usage for the panel below the stat
+            // cards. Each pool sizes its own window from its reset period,
+            // so no window argument is passed.
+            'free_pools' => $aiUsageReporting->freePoolStatus(),
+            // Usage vs configured provider rate limits over rolling
+            // windows; display only.
+            'rate_limits' => $aiUsageReporting->rateLimitStatus(),
         ];
 
         if ($scenario instanceof Scenario) {
@@ -119,13 +113,13 @@ class AiUsageController extends Controller
      */
     public function export(Request $request, AiUsageReporting $aiUsageReporting): StreamedResponse
     {
-        $window = $this->resolveWindow($request);
-        $since = $this->cutoffFor($window);
+        $timeWindow = TimeWindow::fromRequest($request->string('window')->value() ?: null);
+        $since = $timeWindow->cutoff();
         $scenario = Scenario::fromArray((array) $request->input('scenario', []));
 
         $rows = $aiUsageReporting->recentInvocations($since, $scenario, 10_000);
 
-        $filename = sprintf('ai-usage-%s-%s.csv', $window, now()->format('Ymd-His'));
+        $filename = sprintf('ai-usage-%s-%s.csv', $timeWindow->value, now()->format('Ymd-His'));
 
         return new StreamedResponse(function () use ($rows): void {
             $handle = fopen('php://output', 'wb');
@@ -160,23 +154,5 @@ class AiUsageController extends Controller
             'Content-Disposition' => sprintf('attachment; filename="%s"', $filename),
             'Cache-Control' => 'no-store',
         ]);
-    }
-
-    private function resolveWindow(Request $request): string
-    {
-        $window = $request->string('window', self::DEFAULT_WINDOW)->value();
-
-        return in_array($window, self::WINDOWS, true) ? $window : self::DEFAULT_WINDOW;
-    }
-
-    private function cutoffFor(string $window): CarbonImmutable
-    {
-        return match ($window) {
-            'today' => CarbonImmutable::today(),
-            '24h' => CarbonImmutable::now()->subDay(),
-            '7d' => CarbonImmutable::now()->subDays(7),
-            '30d' => CarbonImmutable::now()->subDays(30),
-            default => CarbonImmutable::now()->subDays(7),
-        };
     }
 }

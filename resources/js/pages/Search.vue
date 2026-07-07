@@ -13,6 +13,7 @@ import SearchController from '@/actions/App/Http/Controllers/Media/SearchControl
 import { Pill, Poster, StatusPill, SvcChip } from '@/components/mm';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Skeleton } from '@/components/ui/skeleton';
+import { tmdbPosterUrl } from '@/lib/tmdb';
 import { cn } from '@/lib/utils';
 import { dashboard } from '@/routes';
 
@@ -468,6 +469,7 @@ const seerrStatusKey = (status: number | null): string => {
                                     .toLowerCase()
                                     .slice(0, 12)
                             "
+                            :src="series.remote_poster"
                             size="full"
                         />
                         <Pill
@@ -509,6 +511,7 @@ const seerrStatusKey = (status: number | null): string => {
                                     .toLowerCase()
                                     .slice(0, 12)
                             "
+                            :src="movie.remote_poster"
                             size="full"
                         />
                         <Pill
@@ -596,6 +599,7 @@ const seerrStatusKey = (status: number | null): string => {
                                 .toLowerCase()
                                 .slice(0, 12)
                         "
+                        :src="tmdbPosterUrl(request.poster_path)"
                         size="sm"
                     />
                     <div class="min-w-0 flex-1">

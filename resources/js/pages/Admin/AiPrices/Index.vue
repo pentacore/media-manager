@@ -3,9 +3,15 @@ import { Form, Head, router } from '@inertiajs/vue3';
 import { Plus, RefreshCcw, Trash2 } from '@lucide/vue';
 import { onMounted, onUnmounted, ref } from 'vue';
 import { toast } from 'vue-sonner';
+import AiFreeUsagePoolController from '@/actions/App/Http/Controllers/Admin/AiFreeUsagePoolController';
 import AiModelPriceController from '@/actions/App/Http/Controllers/Admin/AiModelPriceController';
 import InputError from '@/components/InputError.vue';
-import { Pill, StatCard } from '@/components/mm';
+import {
+    Pill,
+    PoolFormFields,
+    RateLimitEditor,
+    StatCard,
+} from '@/components/mm';
 import { Button } from '@/components/ui/button';
 import {
     Dialog,
@@ -17,6 +23,13 @@ import {
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from '@/components/ui/select';
 import { useWebSocket } from '@/composables/useWebSocket';
 import { dashboard } from '@/routes';
 
@@ -34,8 +47,25 @@ interface PriceRow {
     batch_cache_read_per_mtok: string | null;
     batch_cache_write_per_mtok: string | null;
     batch_reasoning_per_mtok: string | null;
-    free_input_tokens_per_month: number | null;
-    free_output_tokens_per_month: number | null;
+    free_usage_pool_id: number | null;
+    rate_limits: {
+        id: number;
+        metric: 'requests' | 'tokens';
+        period: 'minute' | 'hour' | 'day';
+        limit_value: number;
+    }[];
+}
+
+interface PoolRow {
+    id: number;
+    name: string;
+    period: 'daily' | 'weekly' | 'monthly';
+    unified: boolean;
+    free_input_tokens: number | null;
+    free_output_tokens: number | null;
+    free_total_tokens: number | null;
+    documentation_url: string | null;
+    prices_count: number;
 }
 
 type RateField =
@@ -55,7 +85,10 @@ const BATCH_FIELD: Record<RateField, keyof PriceRow> = {
 
 const props = defineProps<{
     prices: PriceRow[];
+    pools: PoolRow[];
     refresh_running: boolean;
+    rate_limit_metrics: Array<{ value: string; label: string }>;
+    rate_limit_periods: Array<{ value: string; label: string }>;
 }>();
 
 defineOptions({
@@ -70,6 +103,48 @@ defineOptions({
 const showCreateDialog = ref(false);
 const editing = ref<PriceRow | null>(null);
 const refreshing = ref(props.refresh_running);
+
+const showPoolCreateDialog = ref(false);
+const editingPool = ref<PoolRow | null>(null);
+
+interface RateLimitDraft {
+    metric: 'requests' | 'tokens';
+    period: 'minute' | 'hour' | 'day';
+    limit_value: number | undefined;
+}
+
+const createRateLimits = ref<RateLimitDraft[]>([]);
+const editRateLimits = ref<RateLimitDraft[]>([]);
+
+const createPoolId = ref('none');
+const editPoolId = ref('none');
+
+function startPoolEdit(pool: PoolRow) {
+    editingPool.value = { ...pool };
+}
+
+function cancelPoolEdit() {
+    editingPool.value = null;
+}
+
+function destroyPool(pool: PoolRow) {
+    if (
+        !confirm(
+            `Remove pool "${pool.name}"? Member models keep their pricing but lose the free tier.`,
+        )
+    ) {
+        return;
+    }
+
+    router.visit(AiFreeUsagePoolController.destroy.url(pool.id), {
+        method: 'delete',
+        preserveScroll: true,
+    });
+}
+
+function formatTokens(value: number | null): string {
+    return value === null ? '—' : new Intl.NumberFormat().format(value);
+}
 
 const PRICE_REFRESH_CHANNEL = 'admin.ai-prices';
 
@@ -143,6 +218,21 @@ onUnmounted(() => {
 
 function startEdit(price: PriceRow) {
     editing.value = { ...price };
+    editPoolId.value =
+        price.free_usage_pool_id === null
+            ? 'none'
+            : String(price.free_usage_pool_id);
+    editRateLimits.value = price.rate_limits.map((limit) => ({
+        metric: limit.metric,
+        period: limit.period,
+        limit_value: limit.limit_value,
+    }));
+}
+
+function onCreateSuccess() {
+    showCreateDialog.value = false;
+    createRateLimits.value = [];
+    createPoolId.value = 'none';
 }
 
 function cancelEdit() {
@@ -260,7 +350,7 @@ const priciest = ref(
                             v-bind="AiModelPriceController.store.post()"
                             class="space-y-4"
                             v-slot="{ errors, processing }"
-                            @success="showCreateDialog = false"
+                            @success="onCreateSuccess"
                         >
                             <div class="space-y-2">
                                 <Label for="provider">Provider</Label>
@@ -334,40 +424,53 @@ const priciest = ref(
                                         :message="errors.reasoning_per_mtok"
                                     />
                                 </div>
-                                <div class="space-y-2">
-                                    <Label for="free_input_tokens_per_month"
-                                        >Free input / month</Label
+                                <div class="col-span-2 space-y-2">
+                                    <Label for="free_usage_pool_id"
+                                        >Free usage pool</Label
                                     >
-                                    <Input
-                                        id="free_input_tokens_per_month"
-                                        name="free_input_tokens_per_month"
-                                        type="number"
-                                        min="0"
-                                        placeholder="leave blank if none"
-                                    />
-                                    <InputError
-                                        :message="
-                                            errors.free_input_tokens_per_month
+                                    <input
+                                        type="hidden"
+                                        name="free_usage_pool_id"
+                                        :value="
+                                            createPoolId === 'none'
+                                                ? ''
+                                                : createPoolId
                                         "
                                     />
-                                </div>
-                                <div class="space-y-2">
-                                    <Label for="free_output_tokens_per_month"
-                                        >Free output / month</Label
+                                    <Select
+                                        id="free_usage_pool_id"
+                                        v-model="createPoolId"
                                     >
-                                    <Input
-                                        id="free_output_tokens_per_month"
-                                        name="free_output_tokens_per_month"
-                                        type="number"
-                                        min="0"
-                                        placeholder="leave blank if none"
-                                    />
+                                        <SelectTrigger
+                                            class="h-9 w-full text-sm"
+                                        >
+                                            <SelectValue
+                                                placeholder="No pool"
+                                            />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem value="none">
+                                                No pool
+                                            </SelectItem>
+                                            <SelectItem
+                                                v-for="pool in pools"
+                                                :key="pool.id"
+                                                :value="String(pool.id)"
+                                            >
+                                                {{ pool.name }}
+                                            </SelectItem>
+                                        </SelectContent>
+                                    </Select>
                                     <InputError
-                                        :message="
-                                            errors.free_output_tokens_per_month
-                                        "
+                                        :message="errors.free_usage_pool_id"
                                     />
                                 </div>
+                                <RateLimitEditor
+                                    v-model="createRateLimits"
+                                    :metrics="rate_limit_metrics"
+                                    :periods="rate_limit_periods"
+                                    :errors="errors"
+                                />
                             </div>
                             <DialogFooter>
                                 <Button type="submit" :disabled="processing"
@@ -424,6 +527,171 @@ const priciest = ref(
                 <div v-else class="text-sm text-fg-subtle">No data</div>
             </div>
         </div>
+
+        <!-- Free usage pools -->
+        <div class="overflow-hidden rounded-xl border border-border bg-card">
+            <div
+                class="flex items-center justify-between gap-3 border-b border-border px-4 py-3"
+            >
+                <span
+                    class="text-[12px] font-semibold tracking-[0.06em] text-muted-foreground uppercase"
+                >
+                    Free usage pools
+                </span>
+                <Dialog v-model:open="showPoolCreateDialog">
+                    <DialogTrigger as-child>
+                        <Button
+                            variant="outline"
+                            size="sm"
+                            class="h-7 gap-1.5 text-xs"
+                        >
+                            <Plus class="size-3.5" />Add pool
+                        </Button>
+                    </DialogTrigger>
+                    <DialogContent>
+                        <DialogHeader>
+                            <DialogTitle>Add free usage pool</DialogTitle>
+                        </DialogHeader>
+                        <Form
+                            v-bind="AiFreeUsagePoolController.store.post()"
+                            class="space-y-4"
+                            v-slot="{ errors, processing }"
+                            @success="showPoolCreateDialog = false"
+                        >
+                            <PoolFormFields id-prefix="pool" :errors="errors" />
+                            <DialogFooter>
+                                <Button type="submit" :disabled="processing"
+                                    >Save</Button
+                                >
+                            </DialogFooter>
+                        </Form>
+                    </DialogContent>
+                </Dialog>
+            </div>
+            <div class="overflow-x-auto">
+                <table class="w-full border-collapse text-[13px]">
+                    <thead>
+                        <tr>
+                            <th
+                                v-for="h in [
+                                    'Pool',
+                                    'Period',
+                                    'Budget',
+                                    'Models',
+                                    'Docs',
+                                    '',
+                                ]"
+                                :key="h"
+                                class="border-b border-border bg-card px-3 py-2 text-left text-[11.5px] font-medium tracking-[0.05em] text-muted-foreground uppercase"
+                            >
+                                {{ h }}
+                            </th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr
+                            v-for="pool in pools"
+                            :key="pool.id"
+                            class="border-b border-border last:border-b-0 hover:bg-bg-hover"
+                        >
+                            <td class="px-3 py-2.5 font-medium">
+                                {{ pool.name }}
+                            </td>
+                            <td class="px-3 py-2.5">
+                                <Pill>{{ pool.period }}</Pill>
+                            </td>
+                            <td class="font-mono-tabular px-3 py-2.5">
+                                <template v-if="pool.unified">
+                                    {{ formatTokens(pool.free_total_tokens) }}
+                                    total
+                                </template>
+                                <template v-else>
+                                    {{ formatTokens(pool.free_input_tokens) }}
+                                    in /
+                                    {{ formatTokens(pool.free_output_tokens) }}
+                                    out
+                                </template>
+                            </td>
+                            <td class="px-3 py-2.5">
+                                {{ pool.prices_count }}
+                            </td>
+                            <td class="px-3 py-2.5">
+                                <a
+                                    v-if="pool.documentation_url"
+                                    :href="pool.documentation_url"
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    class="underline hover:text-foreground"
+                                    >docs</a
+                                >
+                                <span v-else class="text-fg-subtle">—</span>
+                            </td>
+                            <td class="px-3 py-2.5 text-right">
+                                <div class="flex justify-end gap-1">
+                                    <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        class="h-7 px-2 text-xs"
+                                        @click="startPoolEdit(pool)"
+                                    >
+                                        Edit
+                                    </Button>
+                                    <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        class="size-7 p-0 text-destructive hover:text-destructive"
+                                        @click="destroyPool(pool)"
+                                    >
+                                        <Trash2 class="size-3.5" />
+                                    </Button>
+                                </div>
+                            </td>
+                        </tr>
+                        <tr v-if="pools.length === 0">
+                            <td
+                                colspan="6"
+                                class="px-3 py-6 text-center text-sm text-fg-subtle"
+                            >
+                                No pools yet. Pools let several models share one
+                                free-usage budget.
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Edit pool dialog -->
+        <Dialog
+            :open="editingPool !== null"
+            @update:open="(v) => !v && cancelPoolEdit()"
+        >
+            <DialogContent v-if="editingPool">
+                <DialogHeader>
+                    <DialogTitle>Edit {{ editingPool.name }}</DialogTitle>
+                </DialogHeader>
+                <Form
+                    v-bind="
+                        AiFreeUsagePoolController.update.form(editingPool.id)
+                    "
+                    class="space-y-4"
+                    v-slot="{ errors, processing }"
+                    @success="cancelPoolEdit"
+                >
+                    <PoolFormFields
+                        :key="editingPool.id"
+                        id-prefix="edit_pool"
+                        :pool="editingPool"
+                        :errors="errors"
+                    />
+                    <DialogFooter>
+                        <Button type="submit" :disabled="processing">
+                            Save
+                        </Button>
+                    </DialogFooter>
+                </Form>
+            </DialogContent>
+        </Dialog>
 
         <!-- Models table -->
         <div class="overflow-hidden rounded-xl border border-border bg-card">
@@ -686,42 +954,43 @@ const priciest = ref(
                             />
                             <InputError :message="errors.reasoning_per_mtok" />
                         </div>
-                        <div class="space-y-2">
-                            <Label for="edit_free_input"
-                                >Free input / month</Label
+                        <div class="col-span-2 space-y-2">
+                            <Label for="edit_free_usage_pool_id"
+                                >Free usage pool</Label
                             >
-                            <Input
-                                id="edit_free_input"
-                                name="free_input_tokens_per_month"
-                                type="number"
-                                min="0"
-                                placeholder="leave blank if none"
-                                :default-value="
-                                    editing.free_input_tokens_per_month ?? ''
-                                "
+                            <input
+                                type="hidden"
+                                name="free_usage_pool_id"
+                                :value="editPoolId === 'none' ? '' : editPoolId"
                             />
-                            <InputError
-                                :message="errors.free_input_tokens_per_month"
-                            />
-                        </div>
-                        <div class="space-y-2">
-                            <Label for="edit_free_output"
-                                >Free output / month</Label
+                            <Select
+                                id="edit_free_usage_pool_id"
+                                v-model="editPoolId"
                             >
-                            <Input
-                                id="edit_free_output"
-                                name="free_output_tokens_per_month"
-                                type="number"
-                                min="0"
-                                placeholder="leave blank if none"
-                                :default-value="
-                                    editing.free_output_tokens_per_month ?? ''
-                                "
-                            />
-                            <InputError
-                                :message="errors.free_output_tokens_per_month"
-                            />
+                                <SelectTrigger class="h-9 w-full text-sm">
+                                    <SelectValue placeholder="No pool" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="none">
+                                        No pool
+                                    </SelectItem>
+                                    <SelectItem
+                                        v-for="pool in pools"
+                                        :key="pool.id"
+                                        :value="String(pool.id)"
+                                    >
+                                        {{ pool.name }}
+                                    </SelectItem>
+                                </SelectContent>
+                            </Select>
+                            <InputError :message="errors.free_usage_pool_id" />
                         </div>
+                        <RateLimitEditor
+                            v-model="editRateLimits"
+                            :metrics="rate_limit_metrics"
+                            :periods="rate_limit_periods"
+                            :errors="errors"
+                        />
                     </div>
                     <DialogFooter>
                         <Button type="submit" :disabled="processing">

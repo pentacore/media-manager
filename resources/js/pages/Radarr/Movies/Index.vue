@@ -14,6 +14,7 @@ import {
 } from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useRealtimeReload } from '@/composables/useRealtimeReload';
+import { arrPosterUrl } from '@/lib/arr';
 import { dashboard } from '@/routes';
 
 interface QualityProfile {
@@ -327,6 +328,7 @@ function is4k(movie: Movie): boolean {
                 <div class="relative">
                     <Poster
                         :hint="movie.title.toLowerCase().slice(0, 12)"
+                        :src="arrPosterUrl(movie.images)"
                         size="full"
                     />
                     <Pill
