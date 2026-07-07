@@ -11,6 +11,7 @@ use App\Models\ActionRequest;
 use App\Models\ServiceConnection;
 use App\Models\StatRollup;
 use App\Services\Statistics\StatisticsRepository;
+use Carbon\CarbonImmutable;
 use Illuminate\Support\ServiceProvider;
 use Override;
 use Spatie\Prometheus\Facades\Prometheus;
@@ -114,6 +115,10 @@ class PrometheusServiceProvider extends ServiceProvider
      * (`sum / count`) is the representative gauge value for that window rather
      * than the summed total.
      *
+     * The two-hour bucket floor keeps the scrape query bounded (instead of
+     * hydrating the full hour retention) and lets series for dead or deleted
+     * connections go absent — a frozen last value would read as healthy.
+     *
      * @param  list<string>  $labelKeys
      * @return list<array{0: float, 1: list<string>}>
      */
@@ -122,6 +127,7 @@ class PrometheusServiceProvider extends ServiceProvider
         return StatRollup::query()
             ->where('metric', $metric)
             ->where('period', 'hour')
+            ->where('bucket', '>=', CarbonImmutable::now('UTC')->subHours(2))
             ->orderByDesc('bucket')
             ->get()
             ->groupBy(fn (StatRollup $statRollup): string => (string) json_encode($statRollup->dimensions))

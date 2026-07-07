@@ -38,6 +38,10 @@ it('serves prometheus metrics with a valid bearer token', function (): void {
         ->assertSee('mediamanager_service_up');
 });
 
+it('rejects an array token parameter with a 403 instead of erroring', function (): void {
+    $this->get('/metrics?token[]=test-token')->assertForbidden();
+});
+
 it('accepts the token via query string', function (): void {
     ServiceConnection::factory()->create(['is_active' => true, 'health_status' => HealthStatus::Healthy]);
 
@@ -78,4 +82,21 @@ it('exports the newest hour-bucket sample as the mean of the window', function (
     $this->get('/metrics?token=test-token')
         ->assertOk()
         ->assertSee('mediamanager_disk_free_bytes{connection="7",path="/data"} 150', escape: false);
+});
+
+it('drops latest-sample series whose newest bucket is stale', function (): void {
+    // A dead or deleted connection must go absent from /metrics rather than
+    // exporting its frozen last value for the whole hour retention.
+    StatRollup::factory()->create([
+        'metric' => 'queue.depth',
+        'period' => 'hour',
+        'bucket' => CarbonImmutable::now('UTC')->subHours(3)->startOfHour(),
+        'dimensions' => ['connection' => '9', 'service' => 'sabnzbd'],
+        'count' => 1,
+        'sum' => 40.0,
+    ]);
+
+    $this->get('/metrics?token=test-token')
+        ->assertOk()
+        ->assertDontSee('mediamanager_queue_depth{service="sabnzbd"}', escape: false);
 });

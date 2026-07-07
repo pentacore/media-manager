@@ -32,7 +32,9 @@ class StatisticsController extends Controller
             ],
             'watchSeries' => $statisticsRepository->series('watch.plays', $timeWindow),
             'downloadSeries' => $statisticsRepository->series('downloads.completed', $timeWindow),
-            'librarySeries' => $statisticsRepository->series('library.movies', $timeWindow),
+            // library.* only exists as daily snapshots — force day rows so
+            // short (hour-period) windows don't read an empty series.
+            'librarySeries' => $statisticsRepository->series('library.movies', $timeWindow, [], 'day'),
             'requestFunnel' => [
                 'created' => $statisticsRepository->total('requests.created', $timeWindow)['count'],
                 'approved' => $statisticsRepository->total('requests.approved', $timeWindow)['count'],

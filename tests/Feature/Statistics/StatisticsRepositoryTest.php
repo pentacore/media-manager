@@ -41,6 +41,38 @@ it('returns gap-padded hour series for a 7d window', function (): void {
         ->and(collect($series)->sum('count'))->toBe(7);
 });
 
+it('clamps the unbounded All window to the earliest rollup instead of the epoch', function (): void {
+    StatRollup::factory()->create([
+        'metric' => 'downloads.completed', 'period' => 'day',
+        'bucket' => CarbonImmutable::now('UTC')->subDays(10)->startOfDay(), 'count' => 5,
+    ]);
+
+    $series = $this->repo->series('downloads.completed', TimeWindow::All);
+
+    // 10 past days + today — not ~20k day buckets padded from 1970.
+    expect($series)->toHaveCount(11)
+        ->and(collect($series)->sum('count'))->toBe(5);
+});
+
+it('returns a single empty bucket for the All window when no rollups exist', function (): void {
+    expect($this->repo->series('downloads.completed', TimeWindow::All))->toHaveCount(1);
+});
+
+it('forces the day period for metrics recorded only as daily snapshots', function (): void {
+    // library.* is written by the daily snapshot as day rows only; a ≤7d
+    // window resolves to 'hour' and would read an all-zero series.
+    StatRollup::factory()->create([
+        'metric' => 'library.movies', 'period' => 'day',
+        'bucket' => CarbonImmutable::now('UTC')->subDay()->startOfDay(), 'count' => 420,
+    ]);
+
+    $hourPeriod = $this->repo->series('library.movies', TimeWindow::Last7d);
+    $forcedDay = $this->repo->series('library.movies', TimeWindow::Last7d, [], 'day');
+
+    expect(collect($hourPeriod)->sum('count'))->toBe(0)
+        ->and(collect($forcedDay)->sum('count'))->toBe(420);
+});
+
 it('respects the dimension filter in a series', function (): void {
     $bucket = CarbonImmutable::now('UTC')->subDays(2)->startOfDay();
     StatRollup::factory()->create(['metric' => 'webhooks.received', 'period' => 'day', 'bucket' => $bucket, 'dimensions' => ['service' => 'sonarr'], 'count' => 3]);

@@ -26,7 +26,11 @@ class PruneStatistics extends Command
         $this->info(sprintf('Pruned %s hour rollups.', $pruned));
 
         if (config('mediamanager.statistics.prune_service_metrics', true)) {
-            $metricCutoff = now()->subDays((int) config('mediamanager.statistics.service_metrics_retention_days', 90));
+            // Day-aligned so the boundary day keeps all of its raw samples —
+            // a later backfill put()-overwrites day rollups from whatever
+            // survives, and a mid-day cutoff would rewrite that day's
+            // uptime/latency from a partial day.
+            $metricCutoff = now()->subDays((int) config('mediamanager.statistics.service_metrics_retention_days', 90))->startOfDay();
 
             $prunedMetrics = ServiceMetric::query()->where('recorded_at', '<', $metricCutoff)->delete();
             $this->info(sprintf('Pruned %s raw service metrics.', $prunedMetrics));

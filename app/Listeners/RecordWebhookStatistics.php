@@ -44,6 +44,12 @@ class RecordWebhookStatistics
 
     private function recordDownloads(ServiceType $serviceType, string $eventType, CarbonImmutable $at): void
     {
+        // SABnzbd 'complete' and the arr 'Download' import fire for the same
+        // physical download when both webhooks are wired, and everything
+        // user-facing sums downloads.completed across the service dimension —
+        // so the client-side completion gets its own metric instead of
+        // double-counting. downloads.completed = imports (fires for any
+        // download client), downloads.fetched = SABnzbd finished fetching.
         $metric = match (true) {
             in_array($serviceType, [ServiceType::Sonarr, ServiceType::Radarr, ServiceType::Whisparr], true) => match ($eventType) {
                 'Grab' => 'downloads.grabbed',
@@ -51,7 +57,7 @@ class RecordWebhookStatistics
                 default => null,
             },
             $serviceType === ServiceType::SABnzbd => match ($eventType) {
-                'complete' => 'downloads.completed',
+                'complete' => 'downloads.fetched',
                 'failed' => 'downloads.failed',
                 default => null,
             },

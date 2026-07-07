@@ -34,8 +34,15 @@ it('records download lifecycle metrics from arr and sabnzbd events', function ()
     event(new WebhookEventProcessed(makeProcessedEvent(ServiceType::SABnzbd, 'failed')));
 
     expect(StatRollup::query()->where('metric', 'downloads.grabbed')->where('period', 'day')->sole()->count)->toBe(1)
-        ->and(StatRollup::query()->where('metric', 'downloads.completed')->where('period', 'day')->sole()->count)->toBe(1)
+        ->and(StatRollup::query()->where('metric', 'downloads.fetched')->where('period', 'day')->sole()->count)->toBe(1)
         ->and(StatRollup::query()->where('metric', 'downloads.failed')->where('period', 'day')->sole()->count)->toBe(1);
+});
+
+it('does not double-count a download completed by sabnzbd and imported by an arr', function (): void {
+    event(new WebhookEventProcessed(makeProcessedEvent(ServiceType::SABnzbd, 'complete')));
+    event(new WebhookEventProcessed(makeProcessedEvent(ServiceType::Sonarr, 'Download')));
+
+    expect(StatRollup::query()->where('metric', 'downloads.completed')->where('period', 'day')->sole()->count)->toBe(1);
 });
 
 it('records the seerr request funnel', function (): void {

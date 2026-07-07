@@ -19,9 +19,12 @@ class VerifyMetricsToken
     public function handle(Request $request, Closure $next): Response
     {
         $expected = (string) config('mediamanager.metrics.token', '');
-        $provided = $request->bearerToken() ?? (string) $request->query('token', '');
+        // query('token') returns an array for ?token[]=x — guard so a crafted
+        // request gets the same 403 instead of an array-to-string 500.
+        $token = $request->query('token', '');
+        $provided = $request->bearerToken() ?? (is_string($token) ? $token : '');
 
-        abort_unless($expected !== '' && hash_equals($expected, (string) $provided), 403);
+        abort_unless($expected !== '' && hash_equals($expected, $provided), 403);
 
         return $next($request);
     }

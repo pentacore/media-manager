@@ -17,7 +17,10 @@ return new class extends Migration
             $blueprint->timestampTz('bucket');
             $blueprint->jsonb('dimensions')->default('{}');
             $blueprint->bigInteger('count')->default(0);
-            $blueprint->decimal('sum', 20, 4)->nullable();
+            // 26 integer digits: byte-valued gauges (disk free/total) are
+            // sampled additively 288×/day, so a 20,4 column would overflow
+            // the day bucket for any volume ≥ ~35 TB.
+            $blueprint->decimal('sum', 30, 4)->nullable();
             $blueprint->decimal('min', 20, 4)->nullable();
             $blueprint->decimal('max', 20, 4)->nullable();
             $blueprint->timestamps();

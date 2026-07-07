@@ -9,13 +9,9 @@ import {
     StatCard,
     TimeWindowFilter,
 } from '@/components/mm';
+import { useStatisticsSeries } from '@/composables/useStatisticsSeries';
+import type { SeriesPoint } from '@/composables/useStatisticsSeries';
 import { dashboard } from '@/routes';
-
-interface SeriesPoint {
-    bucket: string;
-    count: number;
-    sum: number | null;
-}
 
 const props = defineProps<{
     window: string;
@@ -56,25 +52,7 @@ function setWindow(value: string): void {
     });
 }
 
-function bucketLabel(bucket: string): string {
-    const date = new Date(bucket);
-
-    if (Number.isNaN(date.getTime())) {
-        return bucket;
-    }
-
-    return date.toLocaleDateString(undefined, {
-        month: 'short',
-        day: 'numeric',
-    });
-}
-
-function toBarData(series: SeriesPoint[]): { label: string; value: number }[] {
-    return series.map((point) => ({
-        label: bucketLabel(point.bucket),
-        value: point.count,
-    }));
-}
+const { toBarData } = useStatisticsSeries();
 
 const watchBars = computed(() => toBarData(props.watchSeries));
 const libraryBars = computed(() => toBarData(props.librarySeries));

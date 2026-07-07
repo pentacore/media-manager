@@ -141,14 +141,14 @@ class StatisticsAggregator
                 ->groupBy('bucket', 'emby_user_link_id')
                 ->get();
 
-            foreach ($seconds as $row) {
+            foreach ($seconds as $second) {
                 $this->statsRecorder->put(
                     'watch.seconds',
                     $period,
-                    $this->bucket($row->bucket),
-                    ['emby_user_link_id' => (int) $row->emby_user_link_id],
-                    (int) $row->count,
-                    (float) $row->seconds,
+                    $this->bucket($second->bucket),
+                    ['emby_user_link_id' => (int) $second->emby_user_link_id],
+                    (int) $second->count,
+                    (float) $second->seconds,
                 );
             }
 
@@ -254,11 +254,9 @@ class StatisticsAggregator
             [$lo, $hi] = $this->periodSpan($from, $to, $period);
 
             $usage = DB::table('ai_usage_records')
-                ->leftJoin('ai_model_prices', function ($join): void {
+                ->leftJoin('ai_model_prices', function ($join) use ($baseModel): void {
                     $join->on('ai_usage_records.provider', '=', 'ai_model_prices.provider')
-                        ->whereRaw(
-                            "regexp_replace(ai_usage_records.model, '-[0-9]{4}-[0-9]{2}-[0-9]{2}$', '') = ai_model_prices.model"
-                        );
+                        ->whereRaw($baseModel.' = ai_model_prices.model');
                 })
                 ->where('ai_usage_records.created_at', '>=', $lo)->where('ai_usage_records.created_at', '<', $hi)
                 ->selectRaw("
@@ -292,7 +290,7 @@ class StatisticsAggregator
                 ->selectRaw("
                     date_trunc(?, created_at) AS bucket,
                     provider,
-                    regexp_replace(model, '-[0-9]{4}-[0-9]{2}-[0-9]{2}$', '') AS base_model,
+                    {$baseModel} AS base_model,
                     COUNT(*) AS count,
                     COALESCE(SUM({$tokenSum}), 0) AS sum
                 ", [$period])

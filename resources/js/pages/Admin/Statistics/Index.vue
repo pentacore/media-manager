@@ -2,14 +2,15 @@
 import { Head, router } from '@inertiajs/vue3';
 import { computed } from 'vue';
 import StatisticsController from '@/actions/App/Http/Controllers/Admin/StatisticsController';
-import { BarChart, StatCard, TimeWindowFilter } from '@/components/mm';
+import {
+    BarChart,
+    BreakdownMeter,
+    StatCard,
+    TimeWindowFilter,
+} from '@/components/mm';
+import { useStatisticsSeries } from '@/composables/useStatisticsSeries';
+import type { SeriesPoint } from '@/composables/useStatisticsSeries';
 import { dashboard } from '@/routes';
-
-interface SeriesPoint {
-    bucket: string;
-    count: number;
-    sum: number | null;
-}
 
 interface BreakdownRow {
     key: string;
@@ -61,57 +62,13 @@ function setWindow(value: string): void {
     });
 }
 
-function bucketLabel(bucket: string): string {
-    const date = new Date(bucket);
-
-    if (Number.isNaN(date.getTime())) {
-        return bucket;
-    }
-
-    return date.toLocaleDateString(undefined, {
-        month: 'short',
-        day: 'numeric',
-    });
-}
-
-function toBarData(series: SeriesPoint[]): { label: string; value: number }[] {
-    return series.map((point) => ({
-        label: bucketLabel(point.bucket),
-        value: point.count,
-    }));
-}
-
-/**
- * A gauge series stores a sample count in `count` and the summed value in
- * `sum`; the display value is the per-bucket average (guarding count === 0).
- */
-function toAvgBarData(
-    series: SeriesPoint[],
-): { label: string; value: number }[] {
-    return series.map((point) => ({
-        label: bucketLabel(point.bucket),
-        value: point.count > 0 ? (point.sum ?? 0) / point.count : 0,
-    }));
-}
+const { toBarData, toAvgBarData, toSumBarData } = useStatisticsSeries();
 
 const webhookBars = computed(() => toBarData(props.webhookSeries));
 const diskBars = computed(() => toAvgBarData(props.diskSeries));
 const queueBars = computed(() => toAvgBarData(props.queueSeries));
 const sessionBars = computed(() => toAvgBarData(props.sessionSeries));
-
-function meterRows(rows: BreakdownRow[]): (BreakdownRow & { pct: number })[] {
-    const max = rows.reduce((acc, row) => Math.max(acc, row.count), 0) || 1;
-
-    return rows.map((row) => ({
-        ...row,
-        pct: Math.round((row.count / max) * 100),
-    }));
-}
-
-const webhookServiceRows = computed(() => meterRows(props.webhooksByService));
-const actionStatusRows = computed(() => meterRows(props.actionsByStatus));
-const actionOriginRows = computed(() => meterRows(props.actionsByOrigin));
-const agentDecisionRows = computed(() => meterRows(props.agentDecisions));
+const aiCostBars = computed(() => toSumBarData(props.aiCostSeries));
 
 /** Fill colour by uptime health: green ≥ 99, amber ≥ 95, red below. */
 function uptimeClass(pct: number): string {
@@ -177,126 +134,31 @@ const aiCostTotal = computed(() =>
                         ${{ aiCostTotal.toFixed(2) }}
                     </span>
                 </div>
-                <BarChart
-                    :data="
-                        aiCostSeries.map((p) => ({
-                            label: bucketLabel(p.bucket),
-                            value: p.sum ?? 0,
-                        }))
-                    "
-                    :height="160"
-                />
+                <BarChart :data="aiCostBars" :height="160" />
             </div>
         </div>
 
         <div class="grid gap-6 lg:grid-cols-2">
-            <div class="rounded-xl border border-border bg-card p-5">
-                <h2 class="mb-4 text-sm font-semibold">Webhooks by service</h2>
-                <div v-if="webhookServiceRows.length" class="space-y-3">
-                    <div v-for="row in webhookServiceRows" :key="row.key">
-                        <div
-                            class="mb-1 flex items-center justify-between text-xs"
-                        >
-                            <span class="text-muted-foreground">{{
-                                row.key
-                            }}</span>
-                            <span class="tabular-nums">{{ row.count }}</span>
-                        </div>
-                        <div
-                            class="h-1.5 overflow-hidden rounded-full bg-muted"
-                        >
-                            <div
-                                class="h-full rounded-full bg-accent transition-all"
-                                :style="`width: ${row.pct}%`"
-                            />
-                        </div>
-                    </div>
-                </div>
-                <p v-else class="text-sm text-muted-foreground">
-                    No webhooks in this window.
-                </p>
-            </div>
-
-            <div class="rounded-xl border border-border bg-card p-5">
-                <h2 class="mb-4 text-sm font-semibold">Actions by status</h2>
-                <div v-if="actionStatusRows.length" class="space-y-3">
-                    <div v-for="row in actionStatusRows" :key="row.key">
-                        <div
-                            class="mb-1 flex items-center justify-between text-xs"
-                        >
-                            <span class="text-muted-foreground">{{
-                                row.key
-                            }}</span>
-                            <span class="tabular-nums">{{ row.count }}</span>
-                        </div>
-                        <div
-                            class="h-1.5 overflow-hidden rounded-full bg-muted"
-                        >
-                            <div
-                                class="h-full rounded-full bg-accent transition-all"
-                                :style="`width: ${row.pct}%`"
-                            />
-                        </div>
-                    </div>
-                </div>
-                <p v-else class="text-sm text-muted-foreground">
-                    No actions in this window.
-                </p>
-            </div>
-
-            <div class="rounded-xl border border-border bg-card p-5">
-                <h2 class="mb-4 text-sm font-semibold">Actions by origin</h2>
-                <div v-if="actionOriginRows.length" class="space-y-3">
-                    <div v-for="row in actionOriginRows" :key="row.key">
-                        <div
-                            class="mb-1 flex items-center justify-between text-xs"
-                        >
-                            <span class="text-muted-foreground">{{
-                                row.key
-                            }}</span>
-                            <span class="tabular-nums">{{ row.count }}</span>
-                        </div>
-                        <div
-                            class="h-1.5 overflow-hidden rounded-full bg-muted"
-                        >
-                            <div
-                                class="h-full rounded-full bg-accent transition-all"
-                                :style="`width: ${row.pct}%`"
-                            />
-                        </div>
-                    </div>
-                </div>
-                <p v-else class="text-sm text-muted-foreground">
-                    No actions in this window.
-                </p>
-            </div>
-
-            <div class="rounded-xl border border-border bg-card p-5">
-                <h2 class="mb-4 text-sm font-semibold">Agent decisions</h2>
-                <div v-if="agentDecisionRows.length" class="space-y-3">
-                    <div v-for="row in agentDecisionRows" :key="row.key">
-                        <div
-                            class="mb-1 flex items-center justify-between text-xs"
-                        >
-                            <span class="text-muted-foreground">{{
-                                row.key
-                            }}</span>
-                            <span class="tabular-nums">{{ row.count }}</span>
-                        </div>
-                        <div
-                            class="h-1.5 overflow-hidden rounded-full bg-muted"
-                        >
-                            <div
-                                class="h-full rounded-full bg-accent transition-all"
-                                :style="`width: ${row.pct}%`"
-                            />
-                        </div>
-                    </div>
-                </div>
-                <p v-else class="text-sm text-muted-foreground">
-                    No agent decisions in this window.
-                </p>
-            </div>
+            <BreakdownMeter
+                title="Webhooks by service"
+                :rows="webhooksByService"
+                empty-text="No webhooks in this window."
+            />
+            <BreakdownMeter
+                title="Actions by status"
+                :rows="actionsByStatus"
+                empty-text="No actions in this window."
+            />
+            <BreakdownMeter
+                title="Actions by origin"
+                :rows="actionsByOrigin"
+                empty-text="No actions in this window."
+            />
+            <BreakdownMeter
+                title="Agent decisions"
+                :rows="agentDecisions"
+                empty-text="No agent decisions in this window."
+            />
         </div>
 
         <div class="rounded-xl border border-border bg-card p-5">

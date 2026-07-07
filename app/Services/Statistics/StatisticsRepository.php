@@ -23,14 +23,29 @@ class StatisticsRepository
      * Gap-padded time series for a metric. Buckets step by the resolved
      * period ('hour' for windows ≤ 7d, 'day' otherwise) from the window
      * start to now; empty buckets come back as `{count: 0, sum: null}`.
+     * Pass $forcePeriod for metrics recorded at a single granularity
+     * (daily put() snapshots like library.*) that have no hour rows.
      *
      * @param  array<string, scalar>  $dimensionFilter
      * @return list<array{bucket: string, count: int, sum: float|null}>
      */
-    public function series(string $metric, TimeWindow $timeWindow, array $dimensionFilter = []): array
+    public function series(string $metric, TimeWindow $timeWindow, array $dimensionFilter = [], ?string $forcePeriod = null): array
     {
-        $period = $this->periodFor($timeWindow);
+        $period = $forcePeriod ?? $this->periodFor($timeWindow);
         $since = $this->windowStart($timeWindow, $period);
+
+        // The unbounded All window must not gap-pad from the epoch (~20k day
+        // buckets); clamp its start to the earliest rollup we actually hold.
+        if (! $timeWindow->cutoff() instanceof CarbonImmutable) {
+            $earliest = DB::table('stat_rollups')
+                ->where('metric', $metric)
+                ->where('period', $period)
+                ->min('bucket');
+
+            $since = $earliest === null
+                ? CarbonImmutable::now('UTC')->startOfDay()
+                : CarbonImmutable::parse((string) $earliest, 'UTC');
+        }
 
         $rows = $this->applyDimensionFilter(
             DB::table('stat_rollups')
@@ -164,20 +179,10 @@ class StatisticsRepository
      */
     public function watchLeaderboard(TimeWindow $timeWindow): array
     {
-        $period = $this->periodFor($timeWindow);
-        $since = $this->windowStart($timeWindow, $period);
-
         $plays = collect($this->breakdown('watch.user_plays', $timeWindow, 'emby_user_link_id'))
             ->keyBy('key');
 
-        $seconds = DB::table('stat_rollups')
-            ->where('metric', 'watch.seconds')
-            ->where('period', $period)
-            ->where('bucket', '>=', $since)
-            ->whereRaw("dimensions->>'emby_user_link_id' IS NOT NULL")
-            ->selectRaw("dimensions->>'emby_user_link_id' AS key, COALESCE(SUM(sum), 0) AS seconds")
-            ->groupByRaw("dimensions->>'emby_user_link_id'")
-            ->get()
+        $seconds = collect($this->breakdown('watch.seconds', $timeWindow, 'emby_user_link_id'))
             ->keyBy('key');
 
         $linkIds = $plays->keys()->merge($seconds->keys())->unique();
@@ -200,7 +205,7 @@ class StatisticsRepository
                 return [
                     'user' => (string) ($displayName ?? $id),
                     'plays' => (int) ($plays->get($id)['count'] ?? 0),
-                    'seconds' => (float) ($seconds->get($id)->seconds ?? 0),
+                    'seconds' => (float) ($seconds->get($id)['sum'] ?? 0),
                 ];
             })
             ->sortByDesc('plays')
