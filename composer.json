@@ -20,7 +20,7 @@
         "laravel/socialite": "^5.26",
         "laravel/tinker": "^3.0",
         "laravel/wayfinder": "^0.1.14",
-        "pentacore/laravel-typefinder": "^4.2",
+        "pentacore/laravel-typefinder": "^5.0",
         "socialiteproviders/authentik": "^5.3",
         "typesense/typesense-php": "^6.0"
     },
@@ -29,7 +29,7 @@
         "driftingly/rector-laravel": "^2.3",
         "fakerphp/faker": "^1.24",
         "itsgoingd/clockwork": "^5.3",
-        "laravel/boost": "^2.2",
+        "laravel/boost": "^2.4",
         "laravel/pail": "^1.2.5",
         "laravel/pint": "^1.27",
         "laravel/sail": "*",
