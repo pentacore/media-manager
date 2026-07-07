@@ -30,6 +30,7 @@ class StatisticsController extends Controller
                 'webhooks' => $webhooksTotal['count'],
                 'actions' => $this->sumCounts($actionsByStatus),
                 'approvalRate' => $this->approvalRate($actionsByStatus),
+                'resolvedRate' => $this->resolvedRate($actionsByStatus),
                 'agentNoActionRate' => $this->agentNoActionRate($agentDecisions),
             ],
             'webhookSeries' => $statisticsRepository->series('webhooks.received', $timeWindow),
@@ -56,12 +57,34 @@ class StatisticsController extends Controller
     }
 
     /**
+     * Share of decided actions (approved, executing, or completed) out of all
+     * actions that were either approved or rejected, as a whole-number percent.
+     * Rejected actions are the only "declined" outcome; pending actions have no
+     * decision yet and are excluded from the denominator.
+     *
+     * @param  list<array{key: string, count: int, sum: float}>  $actionsByStatus
+     */
+    private function approvalRate(array $actionsByStatus): int
+    {
+        $byStatus = collect($actionsByStatus)->keyBy('key');
+
+        $approved = (int) $byStatus->only(['approved', 'executing', 'completed'])->sum('count');
+        $decided = $approved + (int) ($byStatus->get('rejected')['count'] ?? 0);
+
+        if ($decided === 0) {
+            return 0;
+        }
+
+        return (int) round(($approved / $decided) * 100);
+    }
+
+    /**
      * Share of actions that reached a terminal state (completed, failed, or
      * rejected) out of all actions in the window, as a whole-number percent.
      *
      * @param  list<array{key: string, count: int, sum: float}>  $actionsByStatus
      */
-    private function approvalRate(array $actionsByStatus): int
+    private function resolvedRate(array $actionsByStatus): int
     {
         $byStatus = collect($actionsByStatus)->keyBy('key');
         $total = (int) $byStatus->sum('count');

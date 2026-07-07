@@ -30,6 +30,7 @@ const props = defineProps<{
         webhooks: number;
         actions: number;
         approvalRate: number;
+        resolvedRate: number;
         agentNoActionRate: number;
     };
     webhookSeries: SeriesPoint[];
@@ -153,6 +154,10 @@ const aiCostTotal = computed(() =>
             <StatCard
                 label="Approval rate"
                 :value="`${headline.approvalRate}%`"
+            />
+            <StatCard
+                label="Resolved rate"
+                :value="`${headline.resolvedRate}%`"
             />
             <StatCard
                 label="Agent no-action rate"
