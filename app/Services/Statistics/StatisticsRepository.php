@@ -65,21 +65,25 @@ class StatisticsRepository
 
     /**
      * Aggregate count + sum for a metric across the window, optionally
-     * scoped to a dimension filter. Reads 'day' rows only — the aggregator
-     * writes both 'hour' and 'day' rollups for the same events, so summing
-     * across periods would double-count.
+     * scoped to a dimension filter. Reads exactly one period — the same
+     * pick {@see series()} uses ('hour' for windows ≤ 7d, 'day' otherwise).
+     * The aggregator writes both 'hour' and 'day' rollups for the same
+     * events, so reading one period reflects real events once; reading 'day'
+     * only would drop a sub-day window's earlier hour buckets (a 24h window
+     * whose cutoff excludes yesterday's day bucket would undercount).
      *
      * @param  array<string, scalar>  $dimensionFilter
      * @return array{count: int, sum: float}
      */
     public function total(string $metric, TimeWindow $timeWindow, array $dimensionFilter = []): array
     {
-        $since = $timeWindow->cutoff() ?? CarbonImmutable::createFromTimestampUTC(0);
+        $period = $this->periodFor($timeWindow);
+        $since = $this->windowStart($timeWindow, $period);
 
         $row = $this->applyDimensionFilter(
             DB::table('stat_rollups')
                 ->where('metric', $metric)
-                ->where('period', 'day')
+                ->where('period', $period)
                 ->where('bucket', '>=', $since),
             $dimensionFilter,
         )
@@ -95,17 +99,20 @@ class StatisticsRepository
     /**
      * Group a metric by a single JSON dimension key, ordered by count
      * descending. Rows with a null dimension value are excluded. Reads
-     * 'day' rows only to avoid double-counting the parallel 'hour' rollups.
+     * exactly one period — the same pick {@see series()} uses ('hour' for
+     * windows ≤ 7d, 'day' otherwise) — so it neither double-counts the
+     * parallel 'hour'/'day' rollups nor drops a sub-day window's hour buckets.
      *
      * @return list<array{key: string, count: int, sum: float}>
      */
     public function breakdown(string $metric, TimeWindow $timeWindow, string $dimensionKey): array
     {
-        $since = $timeWindow->cutoff() ?? CarbonImmutable::createFromTimestampUTC(0);
+        $period = $this->periodFor($timeWindow);
+        $since = $this->windowStart($timeWindow, $period);
 
         return DB::table('stat_rollups')
             ->where('metric', $metric)
-            ->where('period', 'day')
+            ->where('period', $period)
             ->where('bucket', '>=', $since)
             ->whereRaw('dimensions->>? IS NOT NULL', [$dimensionKey])
             ->selectRaw('dimensions->>? AS key, SUM(count) AS count, COALESCE(SUM(sum), 0) AS sum', [$dimensionKey])
@@ -157,14 +164,15 @@ class StatisticsRepository
      */
     public function watchLeaderboard(TimeWindow $timeWindow): array
     {
-        $since = $timeWindow->cutoff() ?? CarbonImmutable::createFromTimestampUTC(0);
+        $period = $this->periodFor($timeWindow);
+        $since = $this->windowStart($timeWindow, $period);
 
         $plays = collect($this->breakdown('watch.user_plays', $timeWindow, 'emby_user_link_id'))
             ->keyBy('key');
 
         $seconds = DB::table('stat_rollups')
             ->where('metric', 'watch.seconds')
-            ->where('period', 'day')
+            ->where('period', $period)
             ->where('bucket', '>=', $since)
             ->whereRaw("dimensions->>'emby_user_link_id' IS NOT NULL")
             ->selectRaw("dimensions->>'emby_user_link_id' AS key, COALESCE(SUM(sum), 0) AS seconds")

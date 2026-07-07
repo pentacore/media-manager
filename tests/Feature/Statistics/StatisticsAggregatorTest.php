@@ -3,8 +3,13 @@
 declare(strict_types=1);
 
 use App\Enums\HealthStatus;
+use App\Models\ActionRequest;
+use App\Models\AgentDecision;
 use App\Models\AiUsageRecord;
 use App\Models\EmbyActivity;
+use App\Models\EmbyUserLink;
+use App\Models\IndexedMovie;
+use App\Models\IndexedSeries;
 use App\Models\ServiceMetric;
 use App\Models\StatRollup;
 use App\Services\Statistics\StatisticsAggregator;
@@ -75,6 +80,103 @@ it('sums all five token columns for the ai.tokens rollup', function (): void {
         ->sole();
 
     expect($statRollup->sum)->toBe(100.0 + 50.0 + 20.0 + 10.0 + 5.0);
+});
+
+it('rolls up actions by status with a system origin fallback', function (): void {
+    CarbonImmutable::setTestNow('2026-07-06 15:00:00');
+    // Mixed status/type/origin, plus one row that leaves origin at its 'system'
+    // default so the COALESCE(origin, 'system') dimension is exercised.
+    ActionRequest::factory()->create(['status' => 'completed', 'type' => 'delete_series', 'origin' => 'agent', 'created_at' => '2026-07-06 14:10:00']);
+    ActionRequest::factory()->count(2)->create(['status' => 'pending', 'type' => 'delete_movie', 'origin' => 'user', 'created_at' => '2026-07-06 14:20:00']);
+    ActionRequest::factory()->create(['status' => 'failed', 'type' => 'delete_series', 'origin' => 'system', 'created_at' => '2026-07-06 14:30:00']);
+
+    resolve(StatisticsAggregator::class)->aggregate(
+        CarbonImmutable::parse('2026-07-06 14:00:00', 'UTC'),
+        CarbonImmutable::parse('2026-07-06 15:00:00', 'UTC'),
+    );
+
+    $rows = StatRollup::query()->where(['metric' => 'actions.by_status', 'period' => 'hour'])->get();
+
+    expect($rows->sum('count'))->toBe(4)
+        ->and($rows->firstWhere('dimensions.status', 'pending')->count)->toBe(2)
+        // Null origin COALESCEs to 'system'.
+        ->and($rows->firstWhere('dimensions.status', 'failed')->dimensions['origin'])->toBe('system')
+        ->and($rows->firstWhere('dimensions.status', 'completed')->dimensions['origin'])->toBe('agent');
+});
+
+it('rolls up agent decisions with summed action counts', function (): void {
+    CarbonImmutable::setTestNow('2026-07-06 15:00:00');
+    AgentDecision::factory()->completed(3)->create(['service' => 'sonarr', 'created_at' => '2026-07-06 14:10:00']);
+    AgentDecision::factory()->completed(2)->create(['service' => 'sonarr', 'created_at' => '2026-07-06 14:20:00']);
+    AgentDecision::factory()->create(['status' => 'no_action', 'service' => 'radarr', 'actions_count' => 0, 'created_at' => '2026-07-06 14:30:00']);
+
+    resolve(StatisticsAggregator::class)->aggregate(
+        CarbonImmutable::parse('2026-07-06 14:00:00', 'UTC'),
+        CarbonImmutable::parse('2026-07-06 15:00:00', 'UTC'),
+    );
+
+    $completed = StatRollup::query()
+        ->where(['metric' => 'agent.decisions', 'period' => 'hour'])
+        ->where('dimensions->status', 'completed')
+        ->where('dimensions->service', 'sonarr')
+        ->sole();
+    $noAction = StatRollup::query()
+        ->where(['metric' => 'agent.decisions', 'period' => 'hour'])
+        ->where('dimensions->status', 'no_action')
+        ->sole();
+
+    expect($completed->count)->toBe(2)
+        ->and($completed->sum)->toBe(5.0)
+        ->and($noAction->count)->toBe(1)
+        ->and($noAction->dimensions['service'])->toBe('radarr');
+});
+
+it('rolls up library additions per kind and excludes null arr_added_at', function (): void {
+    CarbonImmutable::setTestNow('2026-07-06 15:00:00');
+    IndexedMovie::factory()->count(2)->create(['arr_added_at' => '2026-07-06 14:10:00']);
+    IndexedSeries::factory()->create(['arr_added_at' => '2026-07-06 14:20:00']);
+    // Never surfaced by arr (null arr_added_at) — excluded from the rollup.
+    IndexedMovie::factory()->create(['arr_added_at' => null]);
+
+    resolve(StatisticsAggregator::class)->aggregate(
+        CarbonImmutable::parse('2026-07-06 14:00:00', 'UTC'),
+        CarbonImmutable::parse('2026-07-06 15:00:00', 'UTC'),
+    );
+
+    $movies = StatRollup::query()
+        ->where(['metric' => 'library.added', 'period' => 'hour'])
+        ->where('dimensions->kind', 'movie')
+        ->sole();
+    $series = StatRollup::query()
+        ->where(['metric' => 'library.added', 'period' => 'hour'])
+        ->where('dimensions->kind', 'series')
+        ->sole();
+
+    expect($movies->count)->toBe(2)
+        ->and($series->count)->toBe(1);
+});
+
+it('sums watched seconds from stopped and finished ticks per user', function (): void {
+    CarbonImmutable::setTestNow('2026-07-06 15:00:00');
+    $link = EmbyUserLink::factory()->create();
+    // 1e7 ticks = 1s: 3e8 ticks = 30s, 1.5e8 ticks = 15s => 45s.
+    EmbyActivity::factory()->create(['emby_user_link_id' => $link->id, 'action' => 'stopped', 'play_position' => 300_000_000, 'created_at' => '2026-07-06 14:10:00']);
+    EmbyActivity::factory()->create(['emby_user_link_id' => $link->id, 'action' => 'finished', 'play_position' => 150_000_000, 'created_at' => '2026-07-06 14:20:00']);
+    // A played action is not a watch-seconds event and must be excluded.
+    EmbyActivity::factory()->create(['emby_user_link_id' => $link->id, 'action' => 'played', 'play_position' => 999_000_000, 'created_at' => '2026-07-06 14:30:00']);
+
+    resolve(StatisticsAggregator::class)->aggregate(
+        CarbonImmutable::parse('2026-07-06 14:00:00', 'UTC'),
+        CarbonImmutable::parse('2026-07-06 15:00:00', 'UTC'),
+    );
+
+    $statRollup = StatRollup::query()
+        ->where(['metric' => 'watch.seconds', 'period' => 'hour'])
+        ->where('dimensions->emby_user_link_id', (string) $link->id)
+        ->sole();
+
+    expect($statRollup->count)->toBe(2)
+        ->and($statRollup->sum)->toBe(45.0);
 });
 
 it('computes uptime and latency stats from service metrics', function (): void {

@@ -47,9 +47,13 @@ it('accepts the token via query string', function (): void {
 });
 
 it('exports the rollup-backed activity gauges', function (): void {
-    StatRollup::factory()->create([
+    // The "today" gauges resolve to the hour period (a sub-day window), so the
+    // gauge sums the current day's hour buckets — matching what the aggregator
+    // writes at runtime.
+    StatRollup::factory()->hour()->create([
         'metric' => 'webhooks.received',
-        'period' => 'day',
+        'period' => 'hour',
+        'bucket' => CarbonImmutable::now('UTC')->startOfHour(),
         'dimensions' => ['service' => 'sonarr'],
         'count' => 12,
     ]);

@@ -67,24 +67,51 @@ it('sums dimension-filtered totals', function (): void {
     StatRollup::factory()->create(['metric' => 'webhooks.received', 'period' => 'day', 'dimensions' => ['event_type' => 'Grab', 'service' => 'sonarr'], 'count' => 4]);
     StatRollup::factory()->create(['metric' => 'webhooks.received', 'period' => 'day', 'dimensions' => ['event_type' => 'Grab', 'service' => 'radarr'], 'count' => 2]);
 
-    expect($this->repo->total('webhooks.received', TimeWindow::Last7d, ['service' => 'sonarr'])['count'])->toBe(4)
-        ->and($this->repo->total('webhooks.received', TimeWindow::Last7d)['count'])->toBe(6);
+    expect($this->repo->total('webhooks.received', TimeWindow::Last30d, ['service' => 'sonarr'])['count'])->toBe(4)
+        ->and($this->repo->total('webhooks.received', TimeWindow::Last30d)['count'])->toBe(6);
+});
+
+it('counts a sub-day window from hour rows so it does not undercount', function (): void {
+    // now-20h is yesterday's day bucket but still within the last 24h. Reading
+    // 'day' rows keyed on the now-24h cutoff would exclude yesterday's whole-day
+    // bucket, so a 24h window would only show today-so-far. total() must read the
+    // 'hour' rows (the period series() picks for a ≤7d cutoff) instead.
+    $hourBucket = CarbonImmutable::now('UTC')->subHours(20)->startOfHour();
+    $dayBucket = CarbonImmutable::now('UTC')->subHours(20)->startOfDay();
+
+    StatRollup::factory()->hour()->create(['metric' => 'webhooks.received', 'period' => 'hour', 'bucket' => $hourBucket, 'dimensions' => ['service' => 'sonarr'], 'count' => 6]);
+    // Parallel day row for the same events — must NOT be summed in as well.
+    StatRollup::factory()->create(['metric' => 'webhooks.received', 'period' => 'day', 'bucket' => $dayBucket, 'dimensions' => ['service' => 'sonarr'], 'count' => 6]);
+
+    expect($this->repo->total('webhooks.received', TimeWindow::Last24h)['count'])->toBe(6);
+});
+
+it('reads day rows for a window beyond seven days', function (): void {
+    // A >7d cutoff resolves to the 'day' period, so day rows are counted and the
+    // parallel hour rows are ignored.
+    $bucket = CarbonImmutable::now('UTC')->subDays(10)->startOfDay();
+
+    StatRollup::factory()->create(['metric' => 'webhooks.received', 'period' => 'day', 'bucket' => $bucket, 'dimensions' => ['service' => 'sonarr'], 'count' => 9]);
+    StatRollup::factory()->hour()->create(['metric' => 'webhooks.received', 'period' => 'hour', 'bucket' => $bucket->addHours(3), 'dimensions' => ['service' => 'sonarr'], 'count' => 9]);
+
+    expect($this->repo->total('webhooks.received', TimeWindow::Last30d)['count'])->toBe(9);
 });
 
 it('does not double-count parallel hour and day rollups in totals', function (): void {
-    // The aggregator writes both hour and day rollups for the same events;
-    // total() must read only the day rows so it reflects real events once.
+    // The aggregator writes both hour and day rollups for the same events; a
+    // >7d window reads the day period, so it must ignore the parallel hour rows
+    // and reflect real events once.
     StatRollup::factory()->create(['metric' => 'webhooks.received', 'period' => 'day', 'dimensions' => ['service' => 'sonarr'], 'count' => 8]);
     StatRollup::factory()->hour()->create(['metric' => 'webhooks.received', 'period' => 'hour', 'dimensions' => ['service' => 'sonarr'], 'count' => 8]);
 
-    expect($this->repo->total('webhooks.received', TimeWindow::Last7d)['count'])->toBe(8);
+    expect($this->repo->total('webhooks.received', TimeWindow::Last30d)['count'])->toBe(8);
 });
 
 it('does not double-count parallel rollups in a breakdown', function (): void {
     StatRollup::factory()->create(['metric' => 'actions.by_status', 'period' => 'day', 'dimensions' => ['status' => 'completed'], 'count' => 3]);
     StatRollup::factory()->hour()->create(['metric' => 'actions.by_status', 'period' => 'hour', 'dimensions' => ['status' => 'completed'], 'count' => 3]);
 
-    $breakdown = $this->repo->breakdown('actions.by_status', TimeWindow::Last7d, 'status');
+    $breakdown = $this->repo->breakdown('actions.by_status', TimeWindow::Last30d, 'status');
 
     expect($breakdown[0])->toBe(['key' => 'completed', 'count' => 3, 'sum' => 0.0]);
 });
@@ -93,7 +120,7 @@ it('returns a float sum in totals', function (): void {
     StatRollup::factory()->create(['metric' => 'watch.seconds', 'period' => 'day', 'dimensions' => ['emby_user_link_id' => 1], 'count' => 1, 'sum' => 60.0]);
     StatRollup::factory()->create(['metric' => 'watch.seconds', 'period' => 'day', 'dimensions' => ['emby_user_link_id' => 2], 'count' => 1, 'sum' => 30.5]);
 
-    $total = $this->repo->total('watch.seconds', TimeWindow::Last7d);
+    $total = $this->repo->total('watch.seconds', TimeWindow::Last30d);
 
     expect($total['count'])->toBe(2)
         ->and($total['sum'])->toBe(90.5);
@@ -103,7 +130,7 @@ it('breaks a metric down by one dimension key', function (): void {
     StatRollup::factory()->create(['metric' => 'actions.by_status', 'period' => 'day', 'dimensions' => ['status' => 'completed', 'type' => 'x', 'origin' => 'agent'], 'count' => 3]);
     StatRollup::factory()->create(['metric' => 'actions.by_status', 'period' => 'day', 'dimensions' => ['status' => 'failed', 'type' => 'x', 'origin' => 'agent'], 'count' => 1]);
 
-    $breakdown = $this->repo->breakdown('actions.by_status', TimeWindow::Last7d, 'status');
+    $breakdown = $this->repo->breakdown('actions.by_status', TimeWindow::Last30d, 'status');
 
     expect($breakdown[0])->toBe(['key' => 'completed', 'count' => 3, 'sum' => 0.0]);
 });
@@ -112,7 +139,7 @@ it('orders a breakdown by count descending', function (): void {
     StatRollup::factory()->create(['metric' => 'actions.by_status', 'period' => 'day', 'dimensions' => ['status' => 'completed'], 'count' => 2]);
     StatRollup::factory()->create(['metric' => 'actions.by_status', 'period' => 'day', 'dimensions' => ['status' => 'failed'], 'count' => 5]);
 
-    $breakdown = $this->repo->breakdown('actions.by_status', TimeWindow::Last7d, 'status');
+    $breakdown = $this->repo->breakdown('actions.by_status', TimeWindow::Last30d, 'status');
 
     expect($breakdown)->toHaveCount(2)
         ->and($breakdown[0]['key'])->toBe('failed')
@@ -149,7 +176,7 @@ it('builds a watch leaderboard with display names', function (): void {
     StatRollup::factory()->create(['metric' => 'watch.user_plays', 'period' => 'day', 'dimensions' => ['emby_user_link_id' => $unlinked->id], 'count' => 4]);
     StatRollup::factory()->create(['metric' => 'watch.seconds', 'period' => 'day', 'dimensions' => ['emby_user_link_id' => $unlinked->id], 'count' => 4, 'sum' => 1200.0]);
 
-    $board = $this->repo->watchLeaderboard(TimeWindow::Last7d);
+    $board = $this->repo->watchLeaderboard(TimeWindow::Last30d);
 
     expect($board[0])->toBe(['user' => 'Alice', 'plays' => 10, 'seconds' => 3600.0])
         ->and($board[1])->toBe(['user' => 'bob_emby', 'plays' => 4, 'seconds' => 1200.0]);
