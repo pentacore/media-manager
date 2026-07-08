@@ -17,6 +17,7 @@ use Illuminate\Support\Facades\Http;
 use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
+use Throwable;
 
 class NotificationPreferencesController extends Controller
 {
@@ -48,11 +49,11 @@ class NotificationPreferencesController extends Controller
             ->get()
             ->keyBy(fn (NotificationPreference $notificationPreference): string => $notificationPreference->notification_class.'|'.$notificationPreference->severity);
 
-        $resolver = resolve(PreferenceResolver::class);
+        $preferenceResolver = resolve(PreferenceResolver::class);
 
         $catalog = [];
         foreach (self::CATALOG as $class => $meta) {
-            $defaults = $resolver->defaultsFor($class);
+            $defaults = $preferenceResolver->defaultsFor($class);
             $perSeverity = [];
             foreach (PreferenceResolver::SEVERITIES as $severity) {
                 $row = $rows[$class.'|'.$severity] ?? null;
@@ -159,7 +160,7 @@ class NotificationPreferencesController extends Controller
             }
 
             $ntfyRequest->post((string) config('services.ntfy.server'), $payload)->throw();
-        } catch (\Throwable $throwable) {
+        } catch (Throwable $throwable) {
             throw ValidationException::withMessages([
                 'ntfy_topic' => __('Ntfy delivery failed: :error', ['error' => $throwable->getMessage()]),
             ]);

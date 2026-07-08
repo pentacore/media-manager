@@ -36,13 +36,11 @@ test('NtfyChannel publishes to the configured server with the user topic', funct
 
     new NtfyChannel()->send($user, $notification);
 
-    Http::assertSent(function ($request): bool {
-        return $request->url() === 'https://ntfy.example.com'
-            && $request->hasHeader('Authorization', 'Bearer tk_secret')
-            && $request['topic'] === 'mm-alerts'
-            && $request['title'] === '[sonarr] Health issue'
-            && $request['priority'] === 3;
-    });
+    Http::assertSent(fn ($request): bool => $request->url() === 'https://ntfy.example.com'
+        && $request->hasHeader('Authorization', 'Bearer tk_secret')
+        && $request['topic'] === 'mm-alerts'
+        && $request['title'] === '[sonarr] Health issue'
+        && $request['priority'] === 3);
 });
 
 test('NtfyChannel skips users without a topic', function (): void {
