@@ -28,6 +28,9 @@ Route::middleware(['auth', 'verified'])->group(function (): void {
         ->name('settings.notifications.edit');
     Route::put('settings/notifications', [NotificationPreferencesController::class, 'update'])
         ->name('settings.notifications.update');
+    Route::post('settings/notifications/test', [NotificationPreferencesController::class, 'test'])
+        ->middleware('throttle:6,1')
+        ->name('settings.notifications.test');
 
     Route::get('settings/preferences', [UserPreferencesController::class, 'edit'])
         ->name('settings.preferences.edit');
