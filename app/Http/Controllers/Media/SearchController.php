@@ -93,7 +93,7 @@ class SearchController extends Controller
             return null;
         }
 
-        return ['url' => rtrim($connection->url, '/')];
+        return ['url' => $connection->linkUrl()];
     }
 
     /**

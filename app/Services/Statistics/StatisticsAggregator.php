@@ -106,13 +106,13 @@ class StatisticsAggregator
                 ->groupBy('bucket', 'media_type')
                 ->get();
 
-            foreach ($plays as $row) {
+            foreach ($plays as $play) {
                 $this->statsRecorder->put(
                     'watch.plays',
                     $period,
-                    $this->bucket($row->bucket),
-                    ['media_type' => (string) $row->media_type],
-                    (int) $row->count,
+                    $this->bucket($play->bucket),
+                    ['media_type' => (string) $play->media_type],
+                    (int) $play->count,
                 );
             }
 
@@ -123,13 +123,13 @@ class StatisticsAggregator
                 ->groupBy('bucket', 'media_type')
                 ->get();
 
-            foreach ($finishes as $row) {
+            foreach ($finishes as $finish) {
                 $this->statsRecorder->put(
                     'watch.finishes',
                     $period,
-                    $this->bucket($row->bucket),
-                    ['media_type' => (string) $row->media_type],
-                    (int) $row->count,
+                    $this->bucket($finish->bucket),
+                    ['media_type' => (string) $finish->media_type],
+                    (int) $finish->count,
                 );
             }
 

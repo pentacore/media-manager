@@ -29,7 +29,7 @@ class NowPlayingController extends Controller
 
         return Inertia::render('Emby/NowPlaying', [
             'connection' => [
-                'url' => rtrim($connection->url, '/'),
+                'url' => $connection->linkUrl(),
             ],
             'sessions' => Inertia::defer(function () use ($connection): array {
                 try {

@@ -19,6 +19,7 @@ class ServiceConnectionStoreRequest extends FormRequest
             'type' => ['required', 'string', ServiceType::validationRule()],
             'name' => ['required', 'string', 'max:255'],
             'url' => ['required', 'url', 'max:500'],
+            'external_url' => ['nullable', 'url', 'max:500'],
             'api_key' => ['required', 'string', 'max:500'],
             'webhook_token' => ['required', 'string', 'min:10', 'max:500'],
             // Whisparr-only: which API generation this connection speaks.
