@@ -5,8 +5,11 @@ declare(strict_types=1);
 namespace App\Notifications;
 
 use App\Models\ServiceConnection;
+use App\Services\Notifications\NtfyMessage;
+use App\Services\Notifications\PreferenceResolver;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
+use Illuminate\Notifications\Messages\BroadcastMessage;
 use Illuminate\Notifications\Messages\MailMessage;
 use Illuminate\Notifications\Notification;
 
@@ -25,7 +28,26 @@ class ServiceUpdateAvailable extends Notification implements ShouldQueue
      */
     public function via(object $notifiable): array
     {
-        return ['mail'];
+        return resolve(PreferenceResolver::class)
+            ->channelsFor($notifiable, self::class, 'info');
+    }
+
+    public function toBroadcast(object $notifiable): BroadcastMessage
+    {
+        return new BroadcastMessage($this->toArray($notifiable));
+    }
+
+    /**
+     * @return array{title: string, message: string, priority: int, tags: array<int, string>, click?: string}
+     */
+    public function toNtfy(object $notifiable): array
+    {
+        return NtfyMessage::for(
+            'info',
+            sprintf('Update available for %s', $this->serviceConnection->name),
+            sprintf('%s → %s', $this->currentVersion ?? 'unknown', $this->latestVersion),
+            route('monitoring.service-health'),
+        );
     }
 
     public function toMail(object $notifiable): MailMessage

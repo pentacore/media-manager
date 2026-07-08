@@ -39,6 +39,7 @@ use Override;
  * @property UserRole $role
  * @property string|null $avatar_url
  * @property array<string, mixed>|null $preferences
+ * @property string|null $ntfy_topic
  * @property CarbonImmutable|null $invite_accepted_at
  * @property-read Collection<int, ActivityLog> $activityLogs
  * @property-read int|null $activity_logs_count
@@ -70,7 +71,7 @@ use Override;
  *
  * @mixin \Eloquent
  */
-#[Fillable(['name', 'email', 'password', 'sso_provider', 'sso_id', 'role', 'avatar_url', 'preferences', 'invite_accepted_at'])]
+#[Fillable(['name', 'email', 'password', 'sso_provider', 'sso_id', 'role', 'avatar_url', 'preferences', 'ntfy_topic', 'invite_accepted_at'])]
 #[Hidden(['password', 'two_factor_secret', 'two_factor_recovery_codes', 'remember_token'])]
 class User extends Authenticatable implements MustVerifyEmail
 {
@@ -116,6 +117,15 @@ class User extends Authenticatable implements MustVerifyEmail
     public function isMember(): bool
     {
         return $this->role->isAtLeast(UserRole::Member);
+    }
+
+    /**
+     * Ntfy routing: the per-user topic pushes are published to. Null or
+     * empty means the ntfy channel skips this user.
+     */
+    public function routeNotificationForNtfy(): ?string
+    {
+        return $this->ntfy_topic;
     }
 
     /**
