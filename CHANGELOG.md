@@ -1,3 +1,60 @@
+# [1.5.0](https://github.com/pentacore/media-manager/compare/v1.4.0...v1.5.0) (2026-07-08)
+
+
+### Bug Fixes
+
+* **ai:** measure pool caps against full period usage, not the display window ([74a1773](https://github.com/pentacore/media-manager/commit/74a1773e40adee82ea69f7f0f350aef59ad57fb3))
+* **lint:** exclude .claude worktrees from eslint ([d8eebc9](https://github.com/pentacore/media-manager/commit/d8eebc9042b117c76c5385f248312a9790e3c633))
+* pin package name to media-manager so container npm installs keep lockfile stable ([ef80524](https://github.com/pentacore/media-manager/commit/ef8052421de1e79dfbd0219c2470b7956a4fb992))
+* **statistics:** buffer period boundary against clock-read drift ([723a8fd](https://github.com/pentacore/media-manager/commit/723a8fd1594f6b7b0fe9a0e1392d1bb3c5ea84e8))
+* **statistics:** include cache tokens in ai.tokens rollup ([53a989e](https://github.com/pentacore/media-manager/commit/53a989eca1bc137237ae9cee2507e8a24e73d11f))
+* **statistics:** post-merge review fixes for the statistics feature ([3854037](https://github.com/pentacore/media-manager/commit/385403788cdd9c4fab7bf2d18390bd0d5a5c6b31))
+* **statistics:** read one period by window size in total/breakdown ([e38f1c9](https://github.com/pentacore/media-manager/commit/e38f1c94fcd211cbf1b23a3fa58e4726e59637ff))
+* **ui:** export BreakdownMeter from the mm component barrel ([12acc33](https://github.com/pentacore/media-manager/commit/12acc33f778e6262933088632569b2db6075bf9a))
+* update typefinder ([26f45e1](https://github.com/pentacore/media-manager/commit/26f45e1b140459fcc1c4a61a59d25f85600fda6c))
+
+
+### Features
+
+* **admin:** gate AI admin pages behind ai.enabled middleware ([07e54ea](https://github.com/pentacore/media-manager/commit/07e54ea50b2469457565271171eb87ffb38929ef))
+* **admin:** TimeWindow-backed window filter on AI usage ([255686e](https://github.com/pentacore/media-manager/commit/255686e7528bb4b60136cb47039b2d6a9c97c57f))
+* **ai:** add free usage pools schema and migrate per-row free tiers ([99f4a8a](https://github.com/pentacore/media-manager/commit/99f4a8ad4a968b96624ca6063b2a96791ec25026))
+* **ai:** add FreeUsagePeriod enum with UTC calendar period math ([3df1799](https://github.com/pentacore/media-manager/commit/3df179990767033c87cddecaa2ea888cdfb70f76))
+* **ai:** ai_model_rate_limits schema, model and price relation ([2db9bc0](https://github.com/pentacore/media-manager/commit/2db9bc01337f331161c62ee583a5b74af51c4b7c))
+* **ai:** expose free usage pools on the AI usage dashboard ([ced1b28](https://github.com/pentacore/media-manager/commit/ced1b28794b30bb283758f9d7edf42980eabedc5))
+* **ai:** free usage pool CRUD endpoints and prices-page wiring ([c04f798](https://github.com/pentacore/media-manager/commit/c04f798b4d64c7d638559a9ded40e64350eb0149))
+* **ai:** persist model rate limits through price store/update ([194f3ca](https://github.com/pentacore/media-manager/commit/194f3ca995364af4ce6af2b179a4c38f2f1b11de))
+* **ai:** pool-aware free usage status and period-bucketed discount ([cfa3077](https://github.com/pentacore/media-manager/commit/cfa30779e92d9021c37dbcad0fd660227128195c))
+* **ai:** pools panel and pool assignment on the AI prices page ([31f2799](https://github.com/pentacore/media-manager/commit/31f2799016fe6f003235db3376c4de4f5068bd63))
+* **ai:** rate limit editing in price dialogs and usage panel ([04cfc0d](https://github.com/pentacore/media-manager/commit/04cfc0dadfa166a722a1d4acfdc40aff7f59a0a1))
+* **ai:** rate limit metric and rolling period enums ([1661ba6](https://github.com/pentacore/media-manager/commit/1661ba6953439f96b9b57dd4263c278585035e93))
+* **ai:** render free usage pools panel on the AI usage dashboard ([bd80c11](https://github.com/pentacore/media-manager/commit/bd80c113109ed6e309145869db52b6b75ce61845))
+* **ai:** rolling-window rate limit status on the usage dashboard ([c9d2e85](https://github.com/pentacore/media-manager/commit/c9d2e85f4d37c2629595cb6d2d65c0cf417eb4ec))
+* **emby:** shared TimeWindowFilter on watch history page ([45a959f](https://github.com/pentacore/media-manager/commit/45a959f400846c3ef979268a6253601133b6c47e))
+* **emby:** TimeWindow-backed since filter on watch history ([60a9a51](https://github.com/pentacore/media-manager/commit/60a9a519baf98cd3dcbbb0dc93fcf7d8d2713d05))
+* **media:** real posters in series and movies index views ([1b367dc](https://github.com/pentacore/media-manager/commit/1b367dc91aa6b4b8154fa8960f00d921c71572a5))
+* **requests:** render tmdb posters on request cards ([782adcc](https://github.com/pentacore/media-manager/commit/782adcc13e2f0dc40c491351ffcd55a09ac6fbf2))
+* **requests:** resolve seerr poster paths alongside titles ([dc83af2](https://github.com/pentacore/media-manager/commit/dc83af2857b0c1389c8004d25b47d6c8ca1563dd))
+* **search:** render result posters ([73709ec](https://github.com/pentacore/media-manager/commit/73709ec8e09409f947ff16323778a1dffa071313))
+* **statistics:** split approval and resolved rate stat cards ([3914cfa](https://github.com/pentacore/media-manager/commit/3914cfa5970440731798ee0693cf69aba5786695))
+* **stats:** admin operational statistics page ([cceede3](https://github.com/pentacore/media-manager/commit/cceede33a65654701e57d27c54078b9d291fa3b3))
+* **stats:** hourly statistics aggregator with watermark ([18f9afb](https://github.com/pentacore/media-manager/commit/18f9afbe93b130fcf6e57f083c99765361a99317))
+* **stats:** ingest listener for trim-safe webhook streams ([fc82eb3](https://github.com/pentacore/media-manager/commit/fc82eb34133049aeaf5456a3156d735bc412f1e5))
+* **stats:** navigation entries for statistics pages ([0e73f99](https://github.com/pentacore/media-manager/commit/0e73f99d2f7a2dd06f6f6078440259efc708aa69))
+* **stats:** rollup and service-metric retention pruning ([70d4bab](https://github.com/pentacore/media-manager/commit/70d4babb9e8104c8d5246ac74b273d14f4ff0393))
+* **stats:** service gauge poller and daily library snapshot ([7f7c0f5](https://github.com/pentacore/media-manager/commit/7f7c0f5b000f983460a966a12b15fc63887532ee))
+* **stats:** stat_rollups table, model, factory ([c2b9eae](https://github.com/pentacore/media-manager/commit/c2b9eaef7310e135c19450269f0fa60ffd88ee40))
+* **stats:** statistics:backfill command ([268cd13](https://github.com/pentacore/media-manager/commit/268cd13a837c91ec1f6598e8edbea27e1e5ba030))
+* **stats:** StatisticsRepository read layer ([8f6b119](https://github.com/pentacore/media-manager/commit/8f6b1198ad6101c1f02bc1fdad9dc47be392633e))
+* **stats:** StatsRecorder additive/overwrite upsert service ([07e6113](https://github.com/pentacore/media-manager/commit/07e61138849cc3e6fc0bebb72f2e8eec2a32681b))
+* **stats:** token-gated prometheus metrics endpoint ([23b647e](https://github.com/pentacore/media-manager/commit/23b647e1d83f77308db8e1fae65dfbcf2b0f1330))
+* **stats:** user statistics page with charts ([16b8d5e](https://github.com/pentacore/media-manager/commit/16b8d5e0917b3e173294756e6f311b0a0d357b82))
+* TimeWindow enum for shared table time filters ([38637b3](https://github.com/pentacore/media-manager/commit/38637b3b10b142dd42102bced36548bdf0739b1f))
+* **ui:** hide AI admin sidebar links when AI is disabled ([e56b452](https://github.com/pentacore/media-manager/commit/e56b4525bd8e088fb2835709c6be6584ba84bc61))
+* **ui:** optional src prop on Poster with gradient fallback ([76eb979](https://github.com/pentacore/media-manager/commit/76eb9798bc622bb63910e80740b3dd79806da6db))
+* **ui:** shared TimeWindowFilter component on AI usage page ([b2641e5](https://github.com/pentacore/media-manager/commit/b2641e599e7e8cb7b83f2a417932adce2b19e6da))
+* **ui:** tmdb poster url helper ([16eda65](https://github.com/pentacore/media-manager/commit/16eda65dc804b7ffaa3d2456fa45212f48a510a4))
+
 ## [1.3.1](https://github.com/pentacore/media-manager/compare/v1.3.0...v1.3.1) (2026-06-23)
 
 
