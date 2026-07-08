@@ -37,6 +37,11 @@ return [
         ],
     ],
 
+    'ntfy' => [
+        'server' => env('NTFY_SERVER', 'https://ntfy.sh'),
+        'token' => env('NTFY_TOKEN'),
+    ],
+
     'authentik' => [
         'client_id' => env('AUTHENTIK_CLIENT_ID'),
         'client_secret' => env('AUTHENTIK_CLIENT_SECRET'),

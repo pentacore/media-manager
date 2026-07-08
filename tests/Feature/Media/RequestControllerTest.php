@@ -791,3 +791,19 @@ test('member cannot bulk-clear', function (): void {
         ->post(route('media.requests.clear'), ['status' => 'completed'])
         ->assertForbidden();
 });
+
+test('requests page prefers external_url for connection link', function (): void {
+    $this->connection->update(['external_url' => 'https://seerr.example.com']);
+    $member = User::factory()->member()->create();
+
+    Http::fake([
+        'seerr.local:5055/*' => Http::response([]),
+    ]);
+
+    $this->actingAs($member)
+        ->get(route('media.requests.index'))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->where('connection.url', 'https://seerr.example.com')
+        );
+});
