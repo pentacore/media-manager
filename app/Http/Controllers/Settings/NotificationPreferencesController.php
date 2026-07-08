@@ -7,6 +7,7 @@ namespace App\Http\Controllers\Settings;
 use App\Http\Controllers\Controller;
 use App\Models\NotificationPreference;
 use App\Notifications\AiBudgetSoftLimitReached;
+use App\Notifications\ServiceUpdateAvailable;
 use App\Notifications\ServiceWarning;
 use App\Services\Notifications\PreferenceResolver;
 use Illuminate\Http\RedirectResponse;
@@ -30,6 +31,10 @@ class NotificationPreferencesController extends Controller
             'label' => 'AI soft budget limit reached',
             'description' => 'Heads-up when monthly AI spend crosses the soft cap.',
         ],
+        ServiceUpdateAvailable::class => [
+            'label' => 'Service update available',
+            'description' => 'A newer release was found for one of your connected services.',
+        ],
     ];
 
     public function edit(Request $request): Response
@@ -40,17 +45,20 @@ class NotificationPreferencesController extends Controller
             ->get()
             ->keyBy(fn (NotificationPreference $notificationPreference): string => $notificationPreference->notification_class.'|'.$notificationPreference->severity);
 
+        $resolver = resolve(PreferenceResolver::class);
+
         $catalog = [];
         foreach (self::CATALOG as $class => $meta) {
+            $defaults = $resolver->defaultsFor($class);
             $perSeverity = [];
             foreach (PreferenceResolver::SEVERITIES as $severity) {
                 $row = $rows[$class.'|'.$severity] ?? null;
 
                 $perSeverity[$severity] = [
-                    'database' => $row?->database ?? true,
-                    'broadcast' => $row?->broadcast ?? true,
-                    'mail' => $row?->mail ?? false,
-                    'ntfy' => $row?->ntfy ?? false,
+                    'database' => $row?->database ?? $defaults['database'],
+                    'broadcast' => $row?->broadcast ?? $defaults['broadcast'],
+                    'mail' => $row?->mail ?? $defaults['mail'],
+                    'ntfy' => $row?->ntfy ?? $defaults['ntfy'],
                 ];
             }
 

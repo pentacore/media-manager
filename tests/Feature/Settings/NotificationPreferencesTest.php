@@ -5,6 +5,7 @@ declare(strict_types=1);
 use App\Models\NotificationPreference;
 use App\Models\User;
 use App\Notifications\AiBudgetSoftLimitReached;
+use App\Notifications\ServiceUpdateAvailable;
 use App\Notifications\ServiceWarning;
 
 beforeEach(function (): void {
@@ -84,5 +85,17 @@ test('catalog entries cover both ServiceWarning and AiBudgetSoftLimitReached', f
         ->assertInertia(fn ($page) => $page
             ->where('catalog.0.class', ServiceWarning::class)
             ->where('catalog.1.class', AiBudgetSoftLimitReached::class)
+        );
+});
+
+test('catalog includes service update available with mail defaulting on', function (): void {
+    $user = User::factory()->create();
+
+    $this->actingAs($user)
+        ->get(route('settings.notifications.edit'))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->where('catalog.2.class', ServiceUpdateAvailable::class)
+            ->where('catalog.2.severities.info.mail', true)
         );
 });

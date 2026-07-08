@@ -43,6 +43,17 @@ class PreferenceResolver
     ];
 
     /**
+     * The default channel flags for a notification class when the user has
+     * no explicit preference row. Used by the settings UI to seed toggles.
+     *
+     * @return array<string, bool>
+     */
+    public function defaultsFor(string $notificationClass): array
+    {
+        return [...self::DEFAULTS, ...(self::CLASS_DEFAULTS[$notificationClass] ?? [])];
+    }
+
+    /**
      * @return array<int, string>
      */
     public function channelsFor(User $user, string $notificationClass, string $severity): array

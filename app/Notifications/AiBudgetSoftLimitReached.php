@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Notifications;
 
+use App\Services\Notifications\NtfyMessage;
 use App\Services\Notifications\PreferenceResolver;
 use Illuminate\Bus\Queueable;
 use Illuminate\Notifications\Messages\BroadcastMessage;
@@ -53,5 +54,15 @@ class AiBudgetSoftLimitReached extends Notification
     public function toBroadcast(object $notifiable): BroadcastMessage
     {
         return new BroadcastMessage($this->toArray($notifiable));
+    }
+
+    /**
+     * @return array{title: string, message: string, priority: int, tags: array<int, string>, click?: string}
+     */
+    public function toNtfy(object $notifiable): array
+    {
+        $data = $this->toArray($notifiable);
+
+        return NtfyMessage::for('warning', $data['title'], $data['message'], url('/admin/ai-usage'));
     }
 }
