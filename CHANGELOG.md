@@ -1,3 +1,21 @@
+# [1.6.0](https://github.com/pentacore/media-manager/compare/v1.5.0...v1.6.0) (2026-07-08)
+
+
+### Bug Fixes
+
+* **notifications:** prefix ntfy warning titles with service name ([c326bc0](https://github.com/pentacore/media-manager/commit/c326bc0685c7f563ae01da194c5c33e4ba51f53d))
+
+
+### Features
+
+* **admin:** external_url field on connection create/edit forms ([cf4afba](https://github.com/pentacore/media-manager/commit/cf4afba9dfe9be57f9b9a38c7d0d23ba9e00fe80))
+* **notifications:** live NtfyChannel and mail via preference resolver ([0c7a120](https://github.com/pentacore/media-manager/commit/0c7a1208243c8aa4b43b7559e22e2616888cdccb))
+* **notifications:** ntfy config and per-user topic ([fd2d0cd](https://github.com/pentacore/media-manager/commit/fd2d0cdb0882f6ab4d535500b75f8c0159e5372a))
+* **notifications:** toNtfy payloads and preference-driven update notices ([9e09d78](https://github.com/pentacore/media-manager/commit/9e09d78775a6e4d3da63da9eb4d7278d12099c7b))
+* **services:** add external_url column and linkUrl() helper ([c98d828](https://github.com/pentacore/media-manager/commit/c98d828ee13067e4cae4ce9b7e40e9233c91a132))
+* **services:** user-facing links use external_url via linkUrl() ([7f70751](https://github.com/pentacore/media-manager/commit/7f7075152499a120fc994c3e423975f53c434ff7))
+* **settings:** live mail/ntfy toggles, ntfy topic and test button ([0e0c88c](https://github.com/pentacore/media-manager/commit/0e0c88c1868a98b38ee6df932c155457c5ff42c9))
+
 # [1.5.0](https://github.com/pentacore/media-manager/compare/v1.4.0...v1.5.0) (2026-07-08)
 
 

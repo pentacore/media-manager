@@ -61,7 +61,7 @@ abstract class BaseArrController extends Controller
      */
     protected function connectionUrl(ServiceConnection $serviceConnection): array
     {
-        return ['url' => rtrim($serviceConnection->url, '/')];
+        return ['url' => $serviceConnection->linkUrl()];
     }
 
     /**

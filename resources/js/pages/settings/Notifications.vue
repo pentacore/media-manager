@@ -2,8 +2,15 @@
 import { Head, router } from '@inertiajs/vue3';
 import { reactive, ref } from 'vue';
 import Heading from '@/components/Heading.vue';
+import InputError from '@/components/InputError.vue';
 import { Button } from '@/components/ui/button';
-import { edit, update } from '@/routes/settings/notifications';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import {
+    edit,
+    test as testRoute,
+    update,
+} from '@/routes/settings/notifications';
 
 interface SeverityFlags {
     database: boolean;
@@ -23,6 +30,8 @@ const props = defineProps<{
     catalog: CatalogEntry[];
     channels: string[];
     severities: string[];
+    ntfyTopic: string | null;
+    ntfyConfigured: boolean;
 }>();
 
 defineOptions({
@@ -50,10 +59,6 @@ const SEVERITY_LABELS: Record<string, string> = {
     error: 'Error',
 };
 
-// mail and ntfy toggles are stored but the dispatch path doesn't honour
-// them yet — flag the columns visually so the user knows.
-const PENDING_CHANNELS = new Set(['mail', 'ntfy']);
-
 function channelLabel(channel: string): string {
     if (channel === 'database') {
         return 'In-app';
@@ -75,6 +80,22 @@ function channelLabel(channel: string): string {
 }
 
 const saving = ref(false);
+const ntfyTopic = ref(props.ntfyTopic ?? '');
+const testing = ref(false);
+
+function sendTest(): void {
+    testing.value = true;
+    router.post(
+        testRoute().url,
+        {},
+        {
+            preserveScroll: true,
+            onFinish: () => {
+                testing.value = false;
+            },
+        },
+    );
+}
 
 function save(): void {
     saving.value = true;
@@ -90,6 +111,7 @@ function save(): void {
                     ]),
                 ),
             })),
+            ntfy_topic: ntfyTopic.value === '' ? null : ntfyTopic.value,
         },
         {
             preserveScroll: true,
@@ -110,7 +132,7 @@ function save(): void {
         <Heading
             variant="small"
             title="Notification preferences"
-            description="Pick which channels each notification reaches you on. Defaults: in-app + live toast on. Email and ntfy are stored but not delivered yet."
+            description="Pick which channels each notification reaches you on. Defaults: in-app + live toast on."
         />
 
         <div class="space-y-6">
@@ -142,11 +164,6 @@ function save(): void {
                                     class="border-b border-border bg-card px-3 py-2 text-center text-[11px] font-medium tracking-[0.05em] text-muted-foreground uppercase"
                                 >
                                     {{ channelLabel(channel) }}
-                                    <span
-                                        v-if="PENDING_CHANNELS.has(channel)"
-                                        class="ml-1 text-[10px] text-fg-subtle"
-                                        >(soon)</span
-                                    >
                                 </th>
                             </tr>
                         </thead>
@@ -171,9 +188,6 @@ function save(): void {
                                                 channel as keyof SeverityFlags
                                             ]
                                         "
-                                        :disabled="
-                                            PENDING_CHANNELS.has(channel)
-                                        "
                                         class="size-4 rounded border-border accent-accent disabled:opacity-40"
                                     />
                                 </td>
@@ -182,6 +196,43 @@ function save(): void {
                     </table>
                 </div>
             </div>
+        </div>
+
+        <div
+            v-if="ntfyConfigured"
+            class="rounded-xl border border-border bg-card p-4"
+        >
+            <div class="text-[14px] font-semibold">ntfy topic</div>
+            <p class="mt-1 mb-3 text-[12.5px] text-muted-foreground">
+                Pushes go to this topic on the configured ntfy server. Leave
+                empty to disable ntfy for your account.
+            </p>
+            <div class="flex items-end gap-2">
+                <div class="flex-1 space-y-2">
+                    <Label for="ntfy_topic">Topic</Label>
+                    <Input
+                        id="ntfy_topic"
+                        v-model="ntfyTopic"
+                        name="ntfy_topic"
+                        placeholder="my-mediamanager-alerts"
+                    />
+                    <InputError :message="$page.props.errors.ntfy_topic" />
+                </div>
+                <Button
+                    type="button"
+                    variant="outline"
+                    :disabled="!props.ntfyTopic || testing"
+                    @click="sendTest"
+                >
+                    {{ testing ? 'Sending…' : 'Send test' }}
+                </Button>
+            </div>
+            <p
+                v-if="ntfyTopic !== (props.ntfyTopic ?? '')"
+                class="mt-2 text-[12px] text-muted-foreground"
+            >
+                Save preferences before sending a test to a changed topic.
+            </p>
         </div>
 
         <div class="flex justify-end">

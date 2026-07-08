@@ -371,7 +371,7 @@ class ActivityController extends Controller
         return [
             'id' => $record['id'] ?? null,
             'service' => 'sonarr',
-            'service_url' => rtrim($serviceConnection->url, '/'),
+            'service_url' => $serviceConnection->linkUrl(),
             'event_type' => $record['eventType'] ?? null,
             'title' => $title,
             'subtitle' => $subtitle,
@@ -396,7 +396,7 @@ class ActivityController extends Controller
         return [
             'id' => $record['id'] ?? null,
             'service' => 'radarr',
-            'service_url' => rtrim($serviceConnection->url, '/'),
+            'service_url' => $serviceConnection->linkUrl(),
             'event_type' => $record['eventType'] ?? null,
             'title' => $title,
             'subtitle' => $year === null ? null : (string) $year,
@@ -493,7 +493,7 @@ class ActivityController extends Controller
         return [
             'id' => $record['id'] ?? null,
             'service' => 'sonarr',
-            'service_url' => rtrim($serviceConnection->url, '/'),
+            'service_url' => $serviceConnection->linkUrl(),
             'title' => $title,
             'subtitle' => $subtitle,
             'status' => $record['status'] ?? null,
@@ -526,7 +526,7 @@ class ActivityController extends Controller
         return [
             'id' => $record['id'] ?? null,
             'service' => 'radarr',
-            'service_url' => rtrim($serviceConnection->url, '/'),
+            'service_url' => $serviceConnection->linkUrl(),
             'title' => $title,
             'subtitle' => $year === null ? null : (string) $year,
             'status' => $record['status'] ?? null,

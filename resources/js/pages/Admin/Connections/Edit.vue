@@ -57,6 +57,7 @@ interface Connection {
     type: { value: string } | string;
     name: string;
     url: string;
+    external_url: string | null;
     api_key_set: boolean;
     webhook_token_set: boolean;
     webhook_url: string;
@@ -393,6 +394,20 @@ function testIndexer(indexerId: number): void {
                             :default-value="connection.url"
                         />
                         <InputError :message="errors.url" />
+                    </div>
+
+                    <div class="space-y-2">
+                        <Label for="external_url">External URL</Label>
+                        <Input
+                            id="external_url"
+                            name="external_url"
+                            :default-value="connection.external_url ?? ''"
+                            placeholder="https://service.example.com (optional)"
+                        />
+                        <p class="text-sm text-muted-foreground">
+                            Used for user-facing links; falls back to URL.
+                        </p>
+                        <InputError :message="errors.external_url" />
                     </div>
 
                     <div class="space-y-2">

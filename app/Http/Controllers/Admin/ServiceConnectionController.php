@@ -66,6 +66,7 @@ class ServiceConnectionController extends Controller
                 'type' => $serviceConnection->type,
                 'name' => $serviceConnection->name,
                 'url' => $serviceConnection->url,
+                'external_url' => $serviceConnection->external_url,
                 'api_key_set' => $serviceConnection->api_key !== '' && $serviceConnection->api_key !== null,
                 'webhook_token_set' => $serviceConnection->webhook_token !== '' && $serviceConnection->webhook_token !== null,
                 'webhook_url' => $this->webhookUrlFor($serviceConnection),

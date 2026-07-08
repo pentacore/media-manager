@@ -115,7 +115,7 @@ it('rolls up agent decisions with summed action counts', function (): void {
         CarbonImmutable::parse('2026-07-06 15:00:00', 'UTC'),
     );
 
-    $completed = StatRollup::query()
+    $statRollup = StatRollup::query()
         ->where(['metric' => 'agent.decisions', 'period' => 'hour'])
         ->where('dimensions->status', 'completed')
         ->where('dimensions->service', 'sonarr')
@@ -125,8 +125,8 @@ it('rolls up agent decisions with summed action counts', function (): void {
         ->where('dimensions->status', 'no_action')
         ->sole();
 
-    expect($completed->count)->toBe(2)
-        ->and($completed->sum)->toBe(5.0)
+    expect($statRollup->count)->toBe(2)
+        ->and($statRollup->sum)->toBe(5.0)
         ->and($noAction->count)->toBe(1)
         ->and($noAction->dimensions['service'])->toBe('radarr');
 });
@@ -143,7 +143,7 @@ it('rolls up library additions per kind and excludes null arr_added_at', functio
         CarbonImmutable::parse('2026-07-06 15:00:00', 'UTC'),
     );
 
-    $movies = StatRollup::query()
+    $statRollup = StatRollup::query()
         ->where(['metric' => 'library.added', 'period' => 'hour'])
         ->where('dimensions->kind', 'movie')
         ->sole();
@@ -152,7 +152,7 @@ it('rolls up library additions per kind and excludes null arr_added_at', functio
         ->where('dimensions->kind', 'series')
         ->sole();
 
-    expect($movies->count)->toBe(2)
+    expect($statRollup->count)->toBe(2)
         ->and($series->count)->toBe(1);
 });
 
