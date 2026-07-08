@@ -283,3 +283,15 @@ test('delete passes deleteFiles flag when requested', function (): void {
         && str_contains((string) $request->url(), 'deleteFiles=true')
     );
 });
+
+test('series index prefers external_url for connection link', function (): void {
+    $this->connection->update(['external_url' => 'https://sonarr.example.com']);
+    $member = User::factory()->member()->create();
+
+    $this->actingAs($member)
+        ->get(route('media.series.index'))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->where('connection.url', 'https://sonarr.example.com')
+        );
+});

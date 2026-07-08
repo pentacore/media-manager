@@ -75,7 +75,7 @@ class RequestController extends Controller
         }
 
         return Inertia::render('Seerr/Requests', [
-            'connection' => ['url' => rtrim($connection->url, '/')],
+            'connection' => ['url' => $connection->linkUrl()],
             'filters' => ['page' => $page, 'status' => $status],
             'requests' => Inertia::defer(fn (): array => $this->loadRequests($connection, $page, $perPage, $status)),
             'summary' => Inertia::defer(fn (): array => $this->loadSummary($connection)),

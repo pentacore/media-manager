@@ -66,7 +66,7 @@ class WatchHistoryController extends Controller
             return null;
         }
 
-        return ['url' => rtrim($connection->url, '/')];
+        return ['url' => $connection->linkUrl()];
     }
 
     public function export(Request $request): StreamedResponse

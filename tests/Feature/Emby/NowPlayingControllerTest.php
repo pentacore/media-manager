@@ -95,3 +95,15 @@ test('now playing handles connection failure gracefully in deferred prop', funct
             )
         );
 });
+
+test('now playing prefers external_url for connection link', function (): void {
+    $this->connection->update(['external_url' => 'https://emby.example.com']);
+    $user = User::factory()->create();
+
+    $this->actingAs($user)
+        ->get(route('monitoring.now-playing'))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->where('connection.url', 'https://emby.example.com')
+        );
+});
