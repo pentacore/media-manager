@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use Rector\CodingStyle\Rector\PostInc\PostIncDecToPreIncDecRector;
 use Rector\Config\RectorConfig;
 use RectorLaravel\Rector\StaticCall\RouteActionCallableRector;
 use RectorLaravel\Set\LaravelSetList;
@@ -56,4 +57,7 @@ return RectorConfig::configure()
         __DIR__.'/routes',
         __DIR__.'/tests',
     ])
-    ->withSkipPath(__DIR__.'/bootstrap/cache');
+    ->withSkipPath(__DIR__.'/bootstrap/cache')
+    ->withSkip([
+        PostIncDecToPreIncDecRector::class,
+    ]);
