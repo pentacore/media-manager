@@ -6,11 +6,14 @@ namespace App\Services\Notifications;
 
 use App\Models\NotificationPreference;
 use App\Models\User;
+use App\Notifications\Channels\NtfyChannel;
+use App\Notifications\ServiceUpdateAvailable;
 
 /**
  * Resolves the channel list for a (user, notification class, severity)
  * tuple. Anything the user hasn't explicitly toggled falls back to the
- * defaults below — currently database + broadcast on, mail/ntfy off.
+ * defaults below — database + broadcast on by default; mail/ntfy off
+ * unless toggled — all four deliver.
  */
 class PreferenceResolver
 {
@@ -25,6 +28,18 @@ class PreferenceResolver
         'broadcast' => true,
         'mail' => false,
         'ntfy' => false,
+    ];
+
+    /**
+     * Per-notification-class default overrides, merged over DEFAULTS when
+     * the user has no explicit preference row. ServiceUpdateAvailable was
+     * always mailed before it joined the preference system; keep that
+     * behavior for unset preferences.
+     *
+     * @var array<class-string, array<string, bool>>
+     */
+    private const array CLASS_DEFAULTS = [
+        ServiceUpdateAvailable::class => ['mail' => true],
     ];
 
     /**
@@ -45,15 +60,17 @@ class PreferenceResolver
                 'mail' => $row->mail,
                 'ntfy' => $row->ntfy,
             ]
-            : self::DEFAULTS;
+            : [...self::DEFAULTS, ...(self::CLASS_DEFAULTS[$notificationClass] ?? [])];
 
-        // mail + ntfy aren't wired up yet; surface them in storage but
-        // never emit them from the dispatch path so a stale toggle from
-        // a future flip-back doesn't try to send through a non-existent
-        // channel.
-        return array_values(array_filter(
-            ['database', 'broadcast'],
+        $enabled = array_values(array_filter(
+            self::CHANNELS,
             static fn (string $channel): bool => $flags[$channel],
         ));
+
+        // 'ntfy' is a custom channel: Laravel resolves it by class name.
+        return array_map(
+            static fn (string $channel): string => $channel === 'ntfy' ? NtfyChannel::class : $channel,
+            $enabled,
+        );
     }
 }

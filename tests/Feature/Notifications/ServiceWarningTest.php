@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use App\Models\NotificationPreference;
 use App\Models\User;
+use App\Notifications\Channels\NtfyChannel;
 use App\Notifications\ServiceWarning;
 
 test('via defaults to database + broadcast for users with no overrides', function (): void {
@@ -47,7 +48,7 @@ test('warning level resolves to warning severity prefs', function (): void {
     expect($notification->via($user))->toEqual(['broadcast']);
 });
 
-test('mail and ntfy toggles are stored but never emitted yet', function (): void {
+test('mail and ntfy toggles resolve to live channels', function (): void {
     $user = User::factory()->create();
     NotificationPreference::create([
         'user_id' => $user->id,
@@ -61,7 +62,5 @@ test('mail and ntfy toggles are stored but never emitted yet', function (): void
 
     $notification = new ServiceWarning('sonarr', 'IndexerStatusCheck', '...', 'error');
 
-    // mail/ntfy aren't wired up — caller would otherwise dispatch through
-    // a nonexistent channel and 500.
-    expect($notification->via($user))->toEqual([]);
+    expect($notification->via($user))->toEqual(['mail', NtfyChannel::class]);
 });
