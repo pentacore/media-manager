@@ -40,7 +40,7 @@ test('NtfyChannel publishes to the configured server with the user topic', funct
         return $request->url() === 'https://ntfy.example.com'
             && $request->hasHeader('Authorization', 'Bearer tk_secret')
             && $request['topic'] === 'mm-alerts'
-            && $request['title'] === 'Health issue'
+            && $request['title'] === '[sonarr] Health issue'
             && $request['priority'] === 3;
     });
 });

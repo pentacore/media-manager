@@ -61,7 +61,7 @@ class ServiceWarning extends Notification
     {
         return NtfyMessage::for(
             $this->severityKey(),
-            $this->title,
+            sprintf('[%s] %s', $this->service, $this->title),
             $this->message,
             route('monitoring.service-health'),
         );
