@@ -19,6 +19,7 @@ class ServiceConnectionUpdateRequest extends FormRequest
             'type' => ['required', 'string', ServiceType::validationRule()],
             'name' => ['required', 'string', 'max:255'],
             'url' => ['required', 'url', 'max:500'],
+            'external_url' => ['nullable', 'url', 'max:500'],
             // Secrets are optional on update: blank means "keep existing value".
             // The controller filters empty strings so they never overwrite state.
             'api_key' => ['nullable', 'string', 'max:500'],

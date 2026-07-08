@@ -432,3 +432,81 @@ test('linkUrl falls back to url when external_url is unset', function (): void {
 
     expect($connection->linkUrl())->toBe('http://sonarr.internal:8989');
 });
+
+test('store persists external_url', function (): void {
+    $admin = User::factory()->admin()->create();
+
+    $this->actingAs($admin)
+        ->post(route('admin.connections.store'), [
+            'type' => 'sonarr',
+            'name' => 'My Sonarr',
+            'url' => 'http://sonarr.local:8989',
+            'external_url' => 'https://sonarr.example.com',
+            'api_key' => 'abc123def456',
+            'webhook_token' => 'my-webhook-secret',
+        ])
+        ->assertRedirect(route('admin.connections.index'));
+
+    $this->assertDatabaseHas('service_connections', [
+        'name' => 'My Sonarr',
+        'external_url' => 'https://sonarr.example.com',
+    ]);
+});
+
+test('store validates external_url format', function (): void {
+    $admin = User::factory()->admin()->create();
+
+    $this->actingAs($admin)
+        ->post(route('admin.connections.store'), [
+            'type' => 'sonarr',
+            'name' => 'Test',
+            'url' => 'http://sonarr.local:8989',
+            'external_url' => 'not-a-url',
+            'api_key' => 'key',
+            'webhook_token' => 'token12345',
+        ])
+        ->assertSessionHasErrors('external_url');
+});
+
+test('update can set and clear external_url', function (): void {
+    $admin = User::factory()->admin()->create();
+    $connection = ServiceConnection::factory()->sonarr()->create();
+
+    $payload = [
+        'type' => 'sonarr',
+        'name' => 'Sonarr',
+        'url' => 'http://sonarr.local:8989',
+    ];
+
+    $this->actingAs($admin)
+        ->put(route('admin.connections.update', $connection), [
+            ...$payload,
+            'external_url' => 'https://sonarr.example.com',
+        ])
+        ->assertRedirect(route('admin.connections.index'));
+
+    expect($connection->refresh()->external_url)->toBe('https://sonarr.example.com');
+
+    $this->actingAs($admin)
+        ->put(route('admin.connections.update', $connection), [
+            ...$payload,
+            'external_url' => null,
+        ])
+        ->assertRedirect(route('admin.connections.index'));
+
+    expect($connection->refresh()->external_url)->toBeNull();
+});
+
+test('edit form exposes external_url', function (): void {
+    $admin = User::factory()->admin()->create();
+    $connection = ServiceConnection::factory()->sonarr()->create([
+        'external_url' => 'https://sonarr.example.com',
+    ]);
+
+    $this->actingAs($admin)
+        ->get(route('admin.connections.edit', $connection))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->where('connection.external_url', 'https://sonarr.example.com')
+        );
+});
