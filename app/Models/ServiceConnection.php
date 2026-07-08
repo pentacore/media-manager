@@ -25,6 +25,7 @@ use Override;
  * @property ServiceType $type
  * @property string $name
  * @property string $url
+ * @property string|null $external_url
  * @property string $api_key
  * @property string $webhook_token
  * @property bool $is_active
@@ -62,7 +63,7 @@ use Override;
  * @mixin \Eloquent
  */
 #[ObservedBy(ServiceConnectionObserver::class)]
-#[Fillable(['type', 'name', 'url', 'api_key', 'webhook_token', 'is_active', 'version', 'latest_version', 'health_status', 'health_message', 'last_seen_at', 'settings'])]
+#[Fillable(['type', 'name', 'url', 'external_url', 'api_key', 'webhook_token', 'is_active', 'version', 'latest_version', 'health_status', 'health_message', 'last_seen_at', 'settings'])]
 class ServiceConnection extends Model
 {
     /** @use HasFactory<ServiceConnectionFactory> */
@@ -120,5 +121,16 @@ class ServiceConnection extends Model
         return is_string($value)
             ? (WhisparrVersion::tryFrom($value) ?? WhisparrVersion::V3)
             : WhisparrVersion::V3;
+    }
+
+    /**
+     * URL for user-facing "open in service" links. Prefers the admin-set
+     * external URL (reachable from the user's browser) and falls back to
+     * the internal `url`. API clients and health checks must keep using
+     * `url` directly.
+     */
+    public function linkUrl(): string
+    {
+        return rtrim($this->external_url ?? $this->url, '/');
     }
 }

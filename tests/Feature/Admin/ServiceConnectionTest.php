@@ -414,3 +414,21 @@ test('edit page falls back to empty indexers when Prowlarr is unreachable', func
             ->loadDeferredProps(fn (AssertableInertia $assertableInertia): AssertableInertia => $assertableInertia
                 ->where('indexers', [])));
 });
+
+test('linkUrl prefers external_url and trims trailing slash', function (): void {
+    $connection = ServiceConnection::factory()->sonarr()->create([
+        'url' => 'http://sonarr.internal:8989',
+        'external_url' => 'https://sonarr.example.com/',
+    ]);
+
+    expect($connection->linkUrl())->toBe('https://sonarr.example.com');
+});
+
+test('linkUrl falls back to url when external_url is unset', function (): void {
+    $connection = ServiceConnection::factory()->sonarr()->create([
+        'url' => 'http://sonarr.internal:8989/',
+        'external_url' => null,
+    ]);
+
+    expect($connection->linkUrl())->toBe('http://sonarr.internal:8989');
+});
