@@ -35,10 +35,7 @@ const label = computed(() =>
             :title="`v${version.latest} available`"
         >
             <span>{{ label }}</span>
-            <span
-                class="size-1.5 rounded-full bg-primary"
-                aria-hidden="true"
-            />
+            <span class="size-1.5 rounded-full bg-primary" aria-hidden="true" />
             <span class="sr-only">update available</span>
         </a>
         <span v-else>{{ label }}</span>
