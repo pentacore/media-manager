@@ -210,8 +210,14 @@ jobs:
       - name: Build frontend assets
         run: npm run build
 
-      - name: Run Pest
-        run: vendor/bin/pest --compact --parallel
+      - name: Run Pest (unit & feature)
+        run: vendor/bin/pest --compact --parallel --exclude-testsuite=Browser
+
+      # Browser tests drive a real Chromium via Playwright. Running them under
+      # --parallel starves the box and intermittently trips Playwright's 15s
+      # navigation timeout on page load. Run them serially, on their own.
+      - name: Run Pest (browser)
+        run: vendor/bin/pest --compact --testsuite=Browser
 
   octane-smoke:
     name: Octane smoke test
