@@ -1,3 +1,14 @@
+# [1.8.0](https://github.com/pentacore/media-manager/compare/v1.7.3...v1.8.0) (2026-07-09)
+
+
+### Features
+
+* add app:check-version command with daily schedule ([7d05b97](https://github.com/pentacore/media-manager/commit/7d05b975b91b3ab37750f23ef857370623d4134e))
+* add AppVersion helper for current/latest version state ([576818c](https://github.com/pentacore/media-manager/commit/576818cb75cecf7deb66ed7a91862f2505d0a160))
+* bake APP_VERSION into production images from release tag ([eb1f6da](https://github.com/pentacore/media-manager/commit/eb1f6da22036da10250de077d24875e452028f87))
+* display app version in sidebar footer with update hint ([2e49ce7](https://github.com/pentacore/media-manager/commit/2e49ce7471c6b9b14b0bbdd0693729f3e9156842))
+* share app version data via Inertia for authenticated users ([20b2cf6](https://github.com/pentacore/media-manager/commit/20b2cf66a1e42738bba360a381f688375ba9de8f))
+
 ## [1.7.3](https://github.com/pentacore/media-manager/compare/v1.7.2...v1.7.3) (2026-07-09)
 
 
