@@ -242,15 +242,15 @@ test('totals fall back to live catalog when snapshot is null', function (): void
     expect((float) $totals['total_cost'])->toBe(0.40);
 });
 
-function seedPooledPrice(AiFreeUsagePool $aiFreeUsagePool, string $provider, string $model, float $input, float $output): AiModelPrice
+function seedPooledPrice(AiFreeUsagePool $aiFreeUsagePool, string $provider, string $model, float $input, float $output, float $cacheRead = 0, float $cacheWrite = 0): AiModelPrice
 {
     return AiModelPrice::create([
         'provider' => $provider,
         'model' => $model,
         'input_per_mtok' => $input,
         'output_per_mtok' => $output,
-        'cache_read_per_mtok' => 0,
-        'cache_write_per_mtok' => 0,
+        'cache_read_per_mtok' => $cacheRead,
+        'cache_write_per_mtok' => $cacheWrite,
         'reasoning_per_mtok' => 0,
         'free_usage_pool_id' => $aiFreeUsagePool->id,
     ]);
@@ -617,4 +617,121 @@ test('totals with scenario accepts fractional rates', function (): void {
 
     // 1M * $0.75 + 0.5M * $4.50 = 0.75 + 2.25 = 3.00
     expect((float) $totals['total_cost'])->toBe(3.00);
+});
+
+test('split pools count cached read and write tokens against the input quota', function (): void {
+    $pool = AiFreeUsagePool::factory()->overflow(FreePoolOverflowBehavior::Split)->create([
+        'free_input_tokens' => 500_000,
+        'free_output_tokens' => null,
+    ]);
+    seedPooledPrice($pool, 'openai', 'gpt-5-mini', input: 1.00, output: 2.00, cacheRead: 0.10, cacheWrite: 1.25);
+
+    seedUsage([
+        'prompt_tokens' => 400_000,
+        'cache_read_input_tokens' => 400_000,
+        'cache_write_input_tokens' => 200_000,
+    ]);
+
+    $totals = resolve(AiUsageReporting::class)->totals(CarbonImmutable::now()->subDay());
+
+    // Input-side consumption: 400k + 400k + 200k = 1M vs 500k cap → ratio 0.5.
+    // Gross: 0.4M*$1 + 0.4M*$0.10 + 0.2M*$1.25 = 0.69.
+    // Forgiven: 0.69 * 0.5 = 0.345 → total 0.345.
+    expect((float) $totals['total_cost'])->toBe(0.345);
+});
+
+test('unified pools count cached tokens against the shared budget', function (): void {
+    $pool = AiFreeUsagePool::factory()->unified(600_000)->overflow(FreePoolOverflowBehavior::Split)->create();
+    seedPooledPrice($pool, 'openai', 'gpt-5-mini', input: 1.00, output: 2.00, cacheRead: 0.10);
+
+    seedUsage([
+        'prompt_tokens' => 400_000,
+        'cache_read_input_tokens' => 400_000,
+    ]);
+
+    $totals = resolve(AiUsageReporting::class)->totals(CarbonImmutable::now()->subDay());
+
+    // Total consumption: 800k vs 600k cap → ratio 0.75.
+    // Gross: 0.4M*$1 + 0.4M*$0.10 = 0.44. Forgiven 0.33 → total 0.11.
+    expect((float) $totals['total_cost'])->toBe(0.11);
+});
+
+test('freePoolStatus counts cached read and write tokens as used input', function (): void {
+    $pool = AiFreeUsagePool::factory()->overflow(FreePoolOverflowBehavior::Split)->create([
+        'free_input_tokens' => 1_000_000,
+        'free_output_tokens' => null,
+    ]);
+    seedPooledPrice($pool, 'openai', 'gpt-5-mini', input: 1.00, output: 2.00);
+
+    seedUsage([
+        'prompt_tokens' => 100_000,
+        'cache_read_input_tokens' => 50_000,
+        'cache_write_input_tokens' => 25_000,
+    ]);
+
+    $rows = resolve(AiUsageReporting::class)->freePoolStatus();
+
+    expect($rows)->toHaveCount(1);
+    expect($rows[0]['used_input'])->toBe(175_000);
+    expect($rows[0]['models'][0]['used_input'])->toBe(175_000);
+});
+
+test('fit-or-paid pools include cached tokens when checking whether a request fits', function (): void {
+    $pool = AiFreeUsagePool::factory()->overflow(FreePoolOverflowBehavior::FitOrPaid)->create([
+        'free_input_tokens' => 500_000,
+        'free_output_tokens' => null,
+    ]);
+    seedPooledPrice($pool, 'openai', 'gpt-5-mini', input: 1.00, output: 2.00, cacheRead: 0.10);
+
+    seedUsage([
+        'prompt_tokens' => 300_000,
+        'cache_read_input_tokens' => 300_000,
+    ]);
+
+    $totals = resolve(AiUsageReporting::class)->totals(CarbonImmutable::now()->subDay());
+
+    // 300k prompt + 300k cached = 600k > 500k cap → does not fit, billed in full.
+    // Gross: 0.3M*$1 + 0.3M*$0.10 = 0.33.
+    expect((float) $totals['total_cost'])->toBe(0.33);
+});
+
+test('fit-or-paid pools forgive cached tokens at their own rates on fitting requests', function (): void {
+    $pool = AiFreeUsagePool::factory()->overflow(FreePoolOverflowBehavior::FitOrPaid)->create([
+        'free_input_tokens' => 1_000_000,
+        'free_output_tokens' => null,
+    ]);
+    seedPooledPrice($pool, 'openai', 'gpt-5-mini', input: 1.00, output: 2.00, cacheRead: 0.10, cacheWrite: 1.25);
+
+    seedUsage([
+        'prompt_tokens' => 300_000,
+        'cache_read_input_tokens' => 300_000,
+        'cache_write_input_tokens' => 100_000,
+        'completion_tokens' => 100_000,
+    ]);
+
+    $totals = resolve(AiUsageReporting::class)->totals(CarbonImmutable::now()->subDay());
+
+    // 700k input-side fits the 1M cap → input classes forgiven at their own
+    // rates (0.3 + 0.03 + 0.125 = 0.455). Output is uncapped → stays billed:
+    // 0.1M*$2 = 0.20.
+    expect((float) $totals['total_cost'])->toBe(0.20);
+});
+
+test('freePoolStatus counts cached tokens for fit-or-paid pools', function (): void {
+    $pool = AiFreeUsagePool::factory()->overflow(FreePoolOverflowBehavior::FitOrPaid)->create([
+        'free_input_tokens' => 1_000_000,
+        'free_output_tokens' => null,
+    ]);
+    seedPooledPrice($pool, 'openai', 'gpt-5-mini', input: 1.00, output: 2.00);
+
+    seedUsage([
+        'prompt_tokens' => 100_000,
+        'cache_read_input_tokens' => 50_000,
+    ]);
+
+    $rows = resolve(AiUsageReporting::class)->freePoolStatus();
+
+    expect($rows)->toHaveCount(1);
+    expect($rows[0]['used_input'])->toBe(150_000);
+    expect($rows[0]['models'][0]['used_input'])->toBe(150_000);
 });
