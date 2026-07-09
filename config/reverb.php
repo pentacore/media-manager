@@ -101,4 +101,23 @@ return [
 
     ],
 
+    /*
+    |--------------------------------------------------------------------------
+    | Public (Browser-Facing) Connection
+    |--------------------------------------------------------------------------
+    |
+    | These values are rendered into the <meta name="reverb-config"> tag that
+    | the Echo client reads at runtime. They may differ from the server-side
+    | options above (e.g. a Docker DNS name vs the public hostname). Reading
+    | them through config — not env() in Blade — keeps them working when the
+    | configuration is cached (config:cache / Octane).
+    |
+    */
+
+    'public' => [
+        'host' => env('REVERB_PUBLIC_HOST'),
+        'port' => env('REVERB_PUBLIC_PORT'),
+        'scheme' => env('REVERB_PUBLIC_SCHEME'),
+    ],
+
 ];

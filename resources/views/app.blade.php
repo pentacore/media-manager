@@ -40,7 +40,9 @@
         {{-- Reverb config injected at runtime so deployments can change keys/host
              without rebuilding the Vite bundle. useWebSocket reads this.
              Public host/port/scheme are browser-facing and may differ from the
-             server-side options.host (e.g. Docker DNS name vs public hostname). --}}
+             server-side options.host (e.g. Docker DNS name vs public hostname).
+             Read via config('reverb.public.*') — env() here returns null once
+             the configuration is cached (config:cache / Octane). --}}
         @php
             $reverbApp = config('reverb.apps.apps.0', []);
             $reverbOptions = $reverbApp['options'] ?? [];
@@ -48,9 +50,9 @@
         @endphp
         <meta name="reverb-config" content="{{ json_encode([
             'key' => $reverbApp['key'] ?? null,
-            'host' => env('REVERB_PUBLIC_HOST', $appUrlHost ?: ($reverbOptions['host'] ?? null)),
-            'port' => (int) env('REVERB_PUBLIC_PORT', $reverbOptions['port'] ?? 443),
-            'scheme' => env('REVERB_PUBLIC_SCHEME', $reverbOptions['scheme'] ?? 'https'),
+            'host' => config('reverb.public.host') ?? ($appUrlHost ?: ($reverbOptions['host'] ?? null)),
+            'port' => (int) (config('reverb.public.port') ?? $reverbOptions['port'] ?? 443),
+            'scheme' => config('reverb.public.scheme') ?? $reverbOptions['scheme'] ?? 'https',
         ]) }}">
 
         @vite(['resources/css/app.css', 'resources/js/app.ts', "resources/js/pages/{$page['component']}.vue"])
