@@ -27,6 +27,7 @@ test('admin can create a split pool', function (): void {
             'unified' => false,
             'free_input_tokens' => 1_000_000,
             'free_output_tokens' => 250_000,
+            'overflow_behavior' => 'fit_or_paid',
             'documentation_url' => 'https://ai.google.dev/pricing',
         ])
         ->assertRedirect(route('admin.ai-prices.index'));
@@ -49,6 +50,7 @@ test('admin can create a unified pool', function (): void {
             'period' => 'monthly',
             'unified' => true,
             'free_total_tokens' => 2_000_000,
+            'overflow_behavior' => 'fit_or_paid',
         ])
         ->assertRedirect(route('admin.ai-prices.index'));
 
@@ -83,6 +85,39 @@ test('split pools require at least one of input or output budgets', function ():
         ->assertSessionHasErrors('free_input_tokens');
 });
 
+test('admin can choose the overflow behavior when creating a pool', function (): void {
+    $admin = User::factory()->admin()->create();
+
+    $this->actingAs($admin)
+        ->post(route('admin.ai-free-usage-pools.store'), [
+            'name' => 'Split tier',
+            'period' => 'daily',
+            'unified' => false,
+            'free_input_tokens' => 1_000_000,
+            'overflow_behavior' => 'split',
+        ])
+        ->assertRedirect(route('admin.ai-prices.index'));
+
+    $this->assertDatabaseHas('ai_free_usage_pools', [
+        'name' => 'Split tier',
+        'overflow_behavior' => 'split',
+    ]);
+});
+
+test('overflow behavior must be a known value', function (): void {
+    $admin = User::factory()->admin()->create();
+
+    $this->actingAs($admin)
+        ->post(route('admin.ai-free-usage-pools.store'), [
+            'name' => 'Bad overflow',
+            'period' => 'daily',
+            'unified' => false,
+            'free_input_tokens' => 1_000_000,
+            'overflow_behavior' => 'partial',
+        ])
+        ->assertSessionHasErrors('overflow_behavior');
+});
+
 test('pool names must be unique', function (): void {
     $admin = User::factory()->admin()->create();
     AiFreeUsagePool::factory()->create(['name' => 'Taken']);
@@ -93,6 +128,7 @@ test('pool names must be unique', function (): void {
             'period' => 'monthly',
             'unified' => false,
             'free_input_tokens' => 1,
+            'overflow_behavior' => 'fit_or_paid',
         ])
         ->assertSessionHasErrors('name');
 });
@@ -107,6 +143,7 @@ test('admin can update a pool keeping its own name', function (): void {
             'period' => 'weekly',
             'unified' => false,
             'free_input_tokens' => 42,
+            'overflow_behavior' => 'split',
         ])
         ->assertRedirect(route('admin.ai-prices.index'));
 

@@ -14,4 +14,4 @@
 - [x] Allow setting an external_url for a service, which is used when the user opens any links that points to the service in question.
 - [x] Show media images etc in the TV Series, Movies, Requests and search views, instead of just the title and year.
 - [x] Ntfy notification support
-- [ ] Allow setting if a free pool request is counted if it goes over the limit (OpenAI only counts a request to their free pool if the entire request can fit in the current quota), or if it should be counted as a paid request (This is useful for models that have a free pool, but also allow paid requests if the free pool is exceeded)
+- [x] Allow setting if a free pool request is counted if it goes over the limit (OpenAI only counts a request to their free pool if the entire request can fit in the current quota), or if it should be counted as a paid request (This is useful for models that have a free pool, but also allow paid requests if the free pool is exceeded)
