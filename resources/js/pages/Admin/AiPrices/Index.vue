@@ -348,7 +348,7 @@ const priciest = ref(
                             <DialogTitle>Add model price</DialogTitle>
                         </DialogHeader>
                         <Form
-                            v-bind="AiModelPriceController.store.post()"
+                            v-bind="AiModelPriceController.store.form()"
                             class="space-y-4"
                             v-slot="{ errors, processing }"
                             @success="onCreateSuccess"
@@ -554,7 +554,7 @@ const priciest = ref(
                             <DialogTitle>Add free usage pool</DialogTitle>
                         </DialogHeader>
                         <Form
-                            v-bind="AiFreeUsagePoolController.store.post()"
+                            v-bind="AiFreeUsagePoolController.store.form()"
                             class="space-y-4"
                             v-slot="{ errors, processing }"
                             @success="showPoolCreateDialog = false"
