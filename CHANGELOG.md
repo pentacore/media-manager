@@ -1,3 +1,15 @@
+# [1.7.0](https://github.com/pentacore/media-manager/compare/v1.6.0...v1.7.0) (2026-07-09)
+
+
+### Bug Fixes
+
+* **tests:** use derived non-matching user id in email verification test ([23a8e97](https://github.com/pentacore/media-manager/commit/23a8e976029be1fe53208e6591efeaa95de805e8))
+
+
+### Features
+
+* **ai:** add per-pool overflow behavior for free usage pools ([d35d650](https://github.com/pentacore/media-manager/commit/d35d6503bee0db20835a4197de4b224d2e5580c0))
+
 # [1.6.0](https://github.com/pentacore/media-manager/compare/v1.5.0...v1.6.0) (2026-07-08)
 
 
