@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Models;
 
+use App\Enums\FreePoolOverflowBehavior;
 use App\Enums\FreeUsagePeriod;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
@@ -21,6 +22,7 @@ use Override;
  * @property int|null $free_input_tokens
  * @property int|null $free_output_tokens
  * @property int|null $free_total_tokens
+ * @property FreePoolOverflowBehavior $overflow_behavior
  * @property string|null $documentation_url
  * @property CarbonImmutable|null $created_at
  * @property CarbonImmutable|null $updated_at
@@ -38,6 +40,7 @@ use Override;
     'free_input_tokens',
     'free_output_tokens',
     'free_total_tokens',
+    'overflow_behavior',
     'documentation_url',
 ])]
 class AiFreeUsagePool extends Model
@@ -64,6 +67,7 @@ class AiFreeUsagePool extends Model
             'free_input_tokens' => 'integer',
             'free_output_tokens' => 'integer',
             'free_total_tokens' => 'integer',
+            'overflow_behavior' => FreePoolOverflowBehavior::class,
         ];
     }
 }

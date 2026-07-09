@@ -64,6 +64,7 @@ interface PoolRow {
     free_input_tokens: number | null;
     free_output_tokens: number | null;
     free_total_tokens: number | null;
+    overflow_behavior: 'fit_or_paid' | 'split';
     documentation_url: string | null;
     prices_count: number;
 }
