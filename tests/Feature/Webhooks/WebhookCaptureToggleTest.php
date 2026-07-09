@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use App\Enums\WebhookHandlingStatus;
 use App\Jobs\ProcessWebhookEvent;
 use App\Models\ServiceConnection;
 use App\Models\User;
@@ -31,7 +32,7 @@ test('processing keeps the event row when capture is enabled', function (): void
     $event = WebhookEvent::factory()->create(['service_connection_id' => $connection->id]);
 
     $mock = Mockery::mock(WebhookHandler::class);
-    $mock->shouldReceive('handle')->once()->with($event);
+    $mock->shouldReceive('handle')->once()->with($event)->andReturn(WebhookHandlingStatus::Handled);
     $this->app->bind(SonarrWebhookHandler::class, fn (): WebhookHandler => $mock);
 
     new ProcessWebhookEvent($event)->handle();
@@ -46,7 +47,7 @@ test('processing discards the event row when capture is disabled', function (): 
     $event = WebhookEvent::factory()->create(['service_connection_id' => $connection->id]);
 
     $mock = Mockery::mock(WebhookHandler::class);
-    $mock->shouldReceive('handle')->once()->with($event);
+    $mock->shouldReceive('handle')->once()->with($event)->andReturn(WebhookHandlingStatus::Handled);
     $this->app->bind(SonarrWebhookHandler::class, fn (): WebhookHandler => $mock);
 
     new ProcessWebhookEvent($event)->handle();
