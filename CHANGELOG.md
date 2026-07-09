@@ -1,3 +1,10 @@
+## [1.7.1](https://github.com/pentacore/media-manager/compare/v1.7.0...v1.7.1) (2026-07-09)
+
+
+### Bug Fixes
+
+* **ui:** bind Inertia create forms to Wayfinder .form() instead of .post() ([df9fa9a](https://github.com/pentacore/media-manager/commit/df9fa9ac7aa81997c79cfd97dbf27b148432a5fc))
+
 # [1.7.0](https://github.com/pentacore/media-manager/compare/v1.6.0...v1.7.0) (2026-07-09)
 
 

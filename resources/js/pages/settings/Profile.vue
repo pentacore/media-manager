@@ -217,7 +217,7 @@ function unlinkEmby() {
 
             <Form
                 v-else
-                v-bind="UserLinkController.store.post()"
+                v-bind="UserLinkController.store.form()"
                 v-slot="{ errors, processing }"
                 class="space-y-4"
             >

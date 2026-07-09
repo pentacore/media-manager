@@ -231,7 +231,7 @@ function importFromEmby() {
                         </DialogHeader>
 
                         <Form
-                            v-bind="UserController.store.post()"
+                            v-bind="UserController.store.form()"
                             v-slot="{ errors, processing }"
                             class="space-y-4"
                             @success="
