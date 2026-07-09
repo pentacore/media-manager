@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use App\Ai\Agents\MediaAgent;
+use App\Enums\FreePoolOverflowBehavior;
 use App\Enums\FreeUsagePeriod;
 use App\Models\AiFreeUsagePool;
 use App\Models\AiModelPrice;
@@ -256,7 +257,7 @@ function seedPooledPrice(AiFreeUsagePool $aiFreeUsagePool, string $provider, str
 }
 
 test('totals subtracts pooled free usage from gross cost', function (): void {
-    $pool = AiFreeUsagePool::factory()->create([
+    $pool = AiFreeUsagePool::factory()->overflow(FreePoolOverflowBehavior::Split)->create([
         'free_input_tokens' => 500_000,
         'free_output_tokens' => 200_000,
     ]);
@@ -286,7 +287,7 @@ test('totals never go negative when usage stays under the pool quota', function 
 });
 
 test('pool free tokens are shared across member models', function (): void {
-    $pool = AiFreeUsagePool::factory()->create([
+    $pool = AiFreeUsagePool::factory()->overflow(FreePoolOverflowBehavior::Split)->create([
         'free_input_tokens' => 1_000_000,
         'free_output_tokens' => null,
     ]);
@@ -305,7 +306,7 @@ test('pool free tokens are shared across member models', function (): void {
 });
 
 test('unified pools draw input and output from one shared budget', function (): void {
-    $pool = AiFreeUsagePool::factory()->unified(600_000)->create();
+    $pool = AiFreeUsagePool::factory()->unified(600_000)->overflow(FreePoolOverflowBehavior::Split)->create();
     seedPooledPrice($pool, 'openai', 'gpt-5-mini', input: 1.00, output: 2.00);
 
     seedUsage(['prompt_tokens' => 400_000, 'completion_tokens' => 400_000]);
@@ -322,6 +323,7 @@ test('daily pools cap forgiveness per UTC day bucket', function (): void {
 
     $pool = AiFreeUsagePool::factory()
         ->period(FreeUsagePeriod::Daily)
+        ->overflow(FreePoolOverflowBehavior::Split)
         ->create(['free_input_tokens' => 100_000, 'free_output_tokens' => null]);
     seedPooledPrice($pool, 'openai', 'gpt-5-mini', input: 1.00, output: 0);
 
@@ -342,6 +344,7 @@ test('pool cap already spent earlier in the period is not re-granted to a narrow
 
     $pool = AiFreeUsagePool::factory()
         ->period(FreeUsagePeriod::Monthly)
+        ->overflow(FreePoolOverflowBehavior::Split)
         ->create(['free_input_tokens' => 500_000, 'free_output_tokens' => null]);
     seedPooledPrice($pool, 'openai', 'gpt-5-mini', input: 1.00, output: 0);
 
@@ -376,6 +379,7 @@ test('totals with a null window includes all records', function (): void {
 test('pool discount with a null window forgives per period across all history', function (): void {
     $pool = AiFreeUsagePool::factory()
         ->period(FreeUsagePeriod::Monthly)
+        ->overflow(FreePoolOverflowBehavior::Split)
         ->create(['free_input_tokens' => 100_000, 'free_output_tokens' => null]);
     seedPooledPrice($pool, 'openai', 'gpt-5-mini', input: 1.00, output: 0);
 
@@ -437,6 +441,165 @@ test('freePoolStatus lists configured pools even with zero usage', function (): 
 
     expect($rows)->toHaveCount(1);
     expect($rows[0]['used_total'])->toBe(0);
+});
+
+test('fit-or-paid pools bill the whole request when it does not fit the remaining quota', function (): void {
+    $pool = AiFreeUsagePool::factory()->create([
+        'free_input_tokens' => 500_000,
+        'free_output_tokens' => null,
+    ]);
+    seedPooledPrice($pool, 'openai', 'gpt-5-mini', input: 1.00, output: 0);
+
+    // 600k > 500k quota: OpenAI-style accounting bills the entire request
+    // instead of forgiving the first 500k.
+    seedUsage(['prompt_tokens' => 600_000]);
+
+    $totals = resolve(AiUsageReporting::class)->totals(CarbonImmutable::now()->subDay());
+
+    expect((float) $totals['total_cost'])->toBe(0.60);
+});
+
+test('fit-or-paid pools keep the quota for a later request that fits', function (): void {
+    $pool = AiFreeUsagePool::factory()->create([
+        'free_input_tokens' => 500_000,
+        'free_output_tokens' => null,
+    ]);
+    seedPooledPrice($pool, 'openai', 'gpt-5-mini', input: 1.00, output: 0);
+
+    // The oversized request is billed and leaves the pool untouched, so the
+    // later 400k request still fits and is free.
+    seedUsage(['prompt_tokens' => 600_000, 'created_at' => CarbonImmutable::now()->subHours(2)]);
+    seedUsage(['prompt_tokens' => 400_000, 'created_at' => CarbonImmutable::now()->subHour()]);
+
+    $totals = resolve(AiUsageReporting::class)->totals(CarbonImmutable::now()->subDay());
+
+    expect((float) $totals['total_cost'])->toBe(0.60);
+});
+
+test('fit-or-paid pools consume quota chronologically', function (): void {
+    $pool = AiFreeUsagePool::factory()->create([
+        'free_input_tokens' => 500_000,
+        'free_output_tokens' => null,
+    ]);
+    seedPooledPrice($pool, 'openai', 'gpt-5-mini', input: 1.00, output: 0);
+
+    // First request fits (500k → 200k remaining); the second no longer does.
+    seedUsage(['prompt_tokens' => 300_000, 'created_at' => CarbonImmutable::now()->subHours(2)]);
+    seedUsage(['prompt_tokens' => 300_000, 'created_at' => CarbonImmutable::now()->subHour()]);
+
+    $totals = resolve(AiUsageReporting::class)->totals(CarbonImmutable::now()->subDay());
+
+    expect((float) $totals['total_cost'])->toBe(0.30);
+});
+
+test('fit-or-paid unified pools require input plus output to fit together', function (): void {
+    $pool = AiFreeUsagePool::factory()->unified(600_000)->create();
+    seedPooledPrice($pool, 'openai', 'gpt-5-mini', input: 1.00, output: 2.00);
+
+    // 400k + 300k = 700k > 600k: whole request paid. The later 300k request
+    // fits the untouched budget and is fully forgiven.
+    seedUsage(['prompt_tokens' => 400_000, 'completion_tokens' => 300_000, 'created_at' => CarbonImmutable::now()->subHours(2)]);
+    seedUsage(['prompt_tokens' => 200_000, 'completion_tokens' => 100_000, 'created_at' => CarbonImmutable::now()->subHour()]);
+
+    $totals = resolve(AiUsageReporting::class)->totals(CarbonImmutable::now()->subDay());
+
+    // Paid: 0.4M * $1 + 0.3M * $2 = 1.00
+    expect((float) $totals['total_cost'])->toBe(1.00);
+});
+
+test('fit-or-paid split pools require every capped dimension to fit', function (): void {
+    $pool = AiFreeUsagePool::factory()->create([
+        'free_input_tokens' => 500_000,
+        'free_output_tokens' => 100_000,
+    ]);
+    seedPooledPrice($pool, 'openai', 'gpt-5-mini', input: 1.00, output: 2.00);
+
+    // Input fits but output (200k > 100k) does not — the entire request is
+    // billed, both sides included.
+    seedUsage(['prompt_tokens' => 100_000, 'completion_tokens' => 200_000]);
+
+    $totals = resolve(AiUsageReporting::class)->totals(CarbonImmutable::now()->subDay());
+
+    // 0.1M * $1 + 0.2M * $2 = 0.50
+    expect((float) $totals['total_cost'])->toBe(0.50);
+});
+
+test('fit-or-paid pools leave uncapped dimensions billed even on fitting requests', function (): void {
+    $pool = AiFreeUsagePool::factory()->create([
+        'free_input_tokens' => 500_000,
+        'free_output_tokens' => null,
+    ]);
+    seedPooledPrice($pool, 'openai', 'gpt-5-mini', input: 1.00, output: 2.00);
+
+    // Input fits and is forgiven; output has no free budget and stays paid.
+    seedUsage(['prompt_tokens' => 400_000, 'completion_tokens' => 1_000_000]);
+
+    $totals = resolve(AiUsageReporting::class)->totals(CarbonImmutable::now()->subDay());
+
+    // Paid output: 1M * $2 = 2.00; input forgiven.
+    expect((float) $totals['total_cost'])->toBe(2.00);
+});
+
+test('fit-or-paid quota spent earlier in the period is not re-granted to a narrower window', function (): void {
+    CarbonImmutable::setTestNow(CarbonImmutable::parse('2026-07-08 12:00:00', 'UTC'));
+
+    $pool = AiFreeUsagePool::factory()
+        ->period(FreeUsagePeriod::Monthly)
+        ->create(['free_input_tokens' => 500_000, 'free_output_tokens' => null]);
+    seedPooledPrice($pool, 'openai', 'gpt-5-mini', input: 1.00, output: 0);
+
+    // 300k earlier in the month fits and shrinks the quota to 200k, so
+    // today's 300k request no longer fits and is billed in full.
+    seedUsage(['prompt_tokens' => 300_000, 'created_at' => CarbonImmutable::parse('2026-07-02 10:00:00', 'UTC')]);
+    seedUsage(['prompt_tokens' => 300_000, 'created_at' => CarbonImmutable::parse('2026-07-08 10:00:00', 'UTC')]);
+
+    $totals = resolve(AiUsageReporting::class)->totals(CarbonImmutable::now('UTC')->startOfDay());
+
+    expect((float) $totals['total_cost'])->toBe(0.30);
+
+    CarbonImmutable::setTestNow();
+});
+
+test('fit-or-paid pools reset the quota each period bucket', function (): void {
+    CarbonImmutable::setTestNow(CarbonImmutable::parse('2026-07-08 12:00:00', 'UTC'));
+
+    $pool = AiFreeUsagePool::factory()
+        ->period(FreeUsagePeriod::Daily)
+        ->create(['free_input_tokens' => 100_000, 'free_output_tokens' => null]);
+    seedPooledPrice($pool, 'openai', 'gpt-5-mini', input: 1.00, output: 0);
+
+    // Each day gets its own quota: both 100k requests fit their own day,
+    // the 150k request never fits and is billed.
+    seedUsage(['prompt_tokens' => 100_000, 'created_at' => CarbonImmutable::parse('2026-07-07 10:00:00', 'UTC')]);
+    seedUsage(['prompt_tokens' => 150_000, 'created_at' => CarbonImmutable::parse('2026-07-07 11:00:00', 'UTC')]);
+    seedUsage(['prompt_tokens' => 100_000, 'created_at' => CarbonImmutable::parse('2026-07-08 10:00:00', 'UTC')]);
+
+    $totals = resolve(AiUsageReporting::class)->totals(CarbonImmutable::now()->subDays(7));
+
+    expect((float) $totals['total_cost'])->toBe(0.15);
+
+    CarbonImmutable::setTestNow();
+});
+
+test('freePoolStatus counts only fitting requests for fit-or-paid pools', function (): void {
+    $pool = AiFreeUsagePool::factory()->create([
+        'name' => 'OpenAI daily free',
+        'free_input_tokens' => 500_000,
+        'free_output_tokens' => null,
+    ]);
+    seedPooledPrice($pool, 'openai', 'gpt-5-mini', input: 1.00, output: 0);
+
+    // The 600k request never draws from the pool; only the 200k one does.
+    seedUsage(['prompt_tokens' => 600_000, 'created_at' => CarbonImmutable::now()->subHours(2)]);
+    seedUsage(['prompt_tokens' => 200_000, 'created_at' => CarbonImmutable::now()->subHour()]);
+
+    $rows = resolve(AiUsageReporting::class)->freePoolStatus();
+
+    expect($rows)->toHaveCount(1);
+    expect($rows[0]['used_input'])->toBe(200_000);
+    expect($rows[0]['used_total'])->toBe(200_000);
+    expect($rows[0]['models'])->toHaveCount(1);
+    expect($rows[0]['models'][0]['used_input'])->toBe(200_000);
 });
 
 test('totals with scenario accepts fractional rates', function (): void {

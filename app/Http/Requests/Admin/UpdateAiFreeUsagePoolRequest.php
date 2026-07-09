@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Http\Requests\Admin;
 
+use App\Enums\FreePoolOverflowBehavior;
 use App\Enums\FreeUsagePeriod;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
@@ -32,6 +33,7 @@ class UpdateAiFreeUsagePoolRequest extends FormRequest
                 Rule::requiredIf(fn (): bool => ! $this->boolean('unified') && $this->input('free_output_tokens') === null),
             ],
             'free_output_tokens' => ['nullable', 'integer', 'min:0'],
+            'overflow_behavior' => ['required', FreePoolOverflowBehavior::validationRule()],
             'documentation_url' => ['nullable', 'url', 'max:2048'],
         ];
     }
