@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Database\Factories;
 
+use App\Enums\FreePoolOverflowBehavior;
 use App\Enums\FreeUsagePeriod;
 use App\Models\AiFreeUsagePool;
 use Illuminate\Database\Eloquent\Factories\Factory;
@@ -25,8 +26,14 @@ class AiFreeUsagePoolFactory extends Factory
             'free_input_tokens' => 1_000_000,
             'free_output_tokens' => 500_000,
             'free_total_tokens' => null,
+            'overflow_behavior' => FreePoolOverflowBehavior::FitOrPaid,
             'documentation_url' => null,
         ];
+    }
+
+    public function overflow(FreePoolOverflowBehavior $freePoolOverflowBehavior): static
+    {
+        return $this->state(fn (): array => ['overflow_behavior' => $freePoolOverflowBehavior]);
     }
 
     public function unified(int $totalTokens = 1_000_000): static

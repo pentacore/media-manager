@@ -18,6 +18,7 @@ interface PoolInitial {
     free_input_tokens: number | null;
     free_output_tokens: number | null;
     free_total_tokens: number | null;
+    overflow_behavior: 'fit_or_paid' | 'split';
     documentation_url: string | null;
 }
 
@@ -33,8 +34,16 @@ const PERIODS = [
     { value: 'monthly', label: 'Monthly' },
 ];
 
+const OVERFLOW_BEHAVIORS = [
+    { value: 'fit_or_paid', label: 'Entire request must fit (OpenAI-style)' },
+    { value: 'split', label: 'Split — overage billed as paid' },
+];
+
 const unified = ref(props.pool?.unified ?? false);
 const period = ref<PoolInitial['period']>(props.pool?.period ?? 'monthly');
+const overflowBehavior = ref<PoolInitial['overflow_behavior']>(
+    props.pool?.overflow_behavior ?? 'fit_or_paid',
+);
 </script>
 
 <template>
@@ -129,6 +138,30 @@ const period = ref<PoolInitial['period']>(props.pool?.period ?? 'monthly');
                 />
                 <InputError :message="errors.free_output_tokens" />
             </div>
+        </div>
+        <div class="space-y-2">
+            <Label :for="`${idPrefix}_overflow`"
+                >When a request exceeds the remaining quota</Label
+            >
+            <Select
+                :id="`${idPrefix}_overflow`"
+                v-model="overflowBehavior"
+                name="overflow_behavior"
+            >
+                <SelectTrigger class="h-9 w-full text-sm">
+                    <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                    <SelectItem
+                        v-for="b in OVERFLOW_BEHAVIORS"
+                        :key="b.value"
+                        :value="b.value"
+                    >
+                        {{ b.label }}
+                    </SelectItem>
+                </SelectContent>
+            </Select>
+            <InputError :message="errors.overflow_behavior" />
         </div>
         <div class="space-y-2">
             <Label :for="`${idPrefix}_doc_url`">Documentation URL</Label>

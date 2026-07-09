@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Services\AiUsage;
 
+use App\Enums\FreePoolOverflowBehavior;
 use App\Enums\RateLimitMetric;
 use App\Models\AiFreeUsagePool;
 use App\Models\AiModelPrice;
@@ -85,7 +86,12 @@ class AiUsageReporting
         $rows = [];
 
         foreach ($pools as $pool) {
-            $usage = $this->poolUsageRows($pool, $pool->period->currentPeriodStart());
+            // Fit-or-paid pools only spend quota on requests that fit it in
+            // full, so "used" must come from the same per-request replay the
+            // discount uses — an aggregate sum would count billed requests.
+            $usage = $pool->overflow_behavior === FreePoolOverflowBehavior::FitOrPaid
+                ? $this->fitOrPaidUsageRows($pool)
+                : $this->poolUsageRows($pool, $pool->period->currentPeriodStart());
 
             $models = [];
             $usedInput = 0;
@@ -197,14 +203,19 @@ class AiUsageReporting
     /**
      * USD value of tokens forgiven by free-usage pools inside the window.
      * A window can span several pool resets (a 30d view over a daily pool
-     * crosses ~30 boundaries), so forgiveness is capped per (pool, period
-     * bucket): min(bucket usage, pool cap). The forgiven ratio is computed
-     * from the bucket's FULL period usage — including usage before $since —
-     * so a window that opens mid-period doesn't re-grant a cap the period
-     * already spent. The forgiven amount converts to USD proportionally
-     * across member models by their share of the bucket's usage — pools
-     * group same-family models, so exact chronological allocation isn't
-     * worth the extra SQL.
+     * crosses ~30 boundaries), so forgiveness is bounded per (pool, period
+     * bucket), measured against the bucket's FULL period usage — including
+     * usage before $since — so a window that opens mid-period doesn't
+     * re-grant a cap the period already spent.
+     *
+     * How a bucket's cap is applied depends on the pool's overflow behavior:
+     *
+     * - fit_or_paid replays requests chronologically; each draws from the
+     *   quota only when it fits in full, otherwise it is billed whole.
+     * - split forgives min(bucket usage, pool cap) and converts it to USD
+     *   proportionally across member models by their share of the bucket's
+     *   usage — pools group same-family models, so exact chronological
+     *   allocation isn't worth the extra SQL.
      */
     private function freePoolDiscount(?CarbonImmutable $since): float
     {
@@ -223,6 +234,12 @@ class AiUsageReporting
             }
 
             if ($rates === []) {
+                continue;
+            }
+
+            if ($pool->overflow_behavior === FreePoolOverflowBehavior::FitOrPaid) {
+                $discount += $this->fitOrPaidDiscount($pool, $rates, $since);
+
                 continue;
             }
 
@@ -334,6 +351,174 @@ class AiUsageReporting
             ->whereNotNull('ai_usage_records.model')
             ->selectRaw(implode(', ', $selects), $bindings)
             ->groupByRaw(implode(', ', $groupBy))
+            ->get()
+            ->filter(fn (object $row): bool => in_array($row->provider.'|'.$row->base_model, $memberKeys, true))
+            ->values();
+    }
+
+    /**
+     * USD forgiven by a fit-or-paid pool inside the window: requests replay
+     * chronologically from the start of the period containing $since (so
+     * quota spent before the window isn't re-granted), but only fitting
+     * requests at or after $since convert to USD. Uncapped split dimensions
+     * hold no free budget, so their tokens stay billed even on fitting
+     * requests — matching the split branch's treatment of null caps.
+     *
+     * @param  array<string, array{input: float, output: float}>  $rates
+     */
+    private function fitOrPaidDiscount(AiFreeUsagePool $aiFreeUsagePool, array $rates, ?CarbonImmutable $since): float
+    {
+        $discount = 0.0;
+
+        foreach ($this->replayFitOrPaid($aiFreeUsagePool, $since) as $row) {
+            if (! $row->fits) {
+                continue;
+            }
+
+            if ($since instanceof CarbonImmutable && CarbonImmutable::parse((string) $row->created_at, 'UTC')->lessThan($since)) {
+                continue;
+            }
+
+            $rate = $rates[$row->provider.'|'.$row->base_model];
+
+            if ($aiFreeUsagePool->unified) {
+                $discount += ((int) $row->prompt_tokens * $rate['input'] + (int) $row->completion_tokens * $rate['output']) / 1_000_000.0;
+
+                continue;
+            }
+
+            if ($aiFreeUsagePool->free_input_tokens !== null) {
+                $discount += (int) $row->prompt_tokens * $rate['input'] / 1_000_000.0;
+            }
+
+            if ($aiFreeUsagePool->free_output_tokens !== null) {
+                $discount += (int) $row->completion_tokens * $rate['output'] / 1_000_000.0;
+            }
+        }
+
+        return $discount;
+    }
+
+    /**
+     * Aggregate fitting-request usage per (provider, base model) for the
+     * pool's current period — the fit-or-paid analogue of poolUsageRows()
+     * for the status panel. Billed (non-fitting) requests draw nothing from
+     * the pool, so they don't count as used.
+     *
+     * @return Collection<int, object{provider: string, base_model: string, used_input: int, used_output: int}>
+     */
+    private function fitOrPaidUsageRows(AiFreeUsagePool $aiFreeUsagePool): Collection
+    {
+        $totals = [];
+
+        foreach ($this->replayFitOrPaid($aiFreeUsagePool, $aiFreeUsagePool->period->currentPeriodStart()) as $row) {
+            if (! $row->fits) {
+                continue;
+            }
+
+            $key = $row->provider.'|'.$row->base_model;
+            $totals[$key] ??= (object) [
+                'provider' => $row->provider,
+                'base_model' => $row->base_model,
+                'used_input' => 0,
+                'used_output' => 0,
+            ];
+            $totals[$key]->used_input += (int) $row->prompt_tokens;
+            $totals[$key]->used_output += (int) $row->completion_tokens;
+        }
+
+        return new Collection(array_values($totals));
+    }
+
+    /**
+     * Chronological replay of a pool's requests, marking each row with
+     * whether it fit the remaining free quota of its period bucket at its
+     * turn. A fitting request consumes quota; a non-fitting one leaves the
+     * quota untouched, so a later smaller request can still draw from it.
+     * Unified pools require input + output to fit the shared budget
+     * together; split pools require every capped dimension to fit its own.
+     *
+     * @return Collection<int, object{provider: string, base_model: string, prompt_tokens: int|string, completion_tokens: int|string, created_at: string, fits: bool}>
+     */
+    private function replayFitOrPaid(AiFreeUsagePool $aiFreeUsagePool, ?CarbonImmutable $since): Collection
+    {
+        $remaining = [];
+
+        return $this->poolUsageRecords($aiFreeUsagePool, $since)->map(function (object $row) use ($aiFreeUsagePool, &$remaining): object {
+            $bucket = $aiFreeUsagePool->period
+                ->periodStartAt(CarbonImmutable::parse((string) $row->created_at, 'UTC'))
+                ->toIso8601String();
+
+            $remaining[$bucket] ??= [
+                'input' => $aiFreeUsagePool->free_input_tokens,
+                'output' => $aiFreeUsagePool->free_output_tokens,
+                'total' => (int) ($aiFreeUsagePool->free_total_tokens ?? 0),
+            ];
+
+            $input = (int) $row->prompt_tokens;
+            $output = (int) $row->completion_tokens;
+
+            if ($aiFreeUsagePool->unified) {
+                $row->fits = $remaining[$bucket]['total'] >= $input + $output;
+
+                if ($row->fits) {
+                    $remaining[$bucket]['total'] -= $input + $output;
+                }
+
+                return $row;
+            }
+
+            $row->fits = ($remaining[$bucket]['input'] === null || $remaining[$bucket]['input'] >= $input)
+                && ($remaining[$bucket]['output'] === null || $remaining[$bucket]['output'] >= $output);
+
+            if ($row->fits) {
+                $remaining[$bucket]['input'] = $remaining[$bucket]['input'] === null ? null : $remaining[$bucket]['input'] - $input;
+                $remaining[$bucket]['output'] = $remaining[$bucket]['output'] === null ? null : $remaining[$bucket]['output'] - $output;
+            }
+
+            return $row;
+        });
+    }
+
+    /**
+     * Individual usage rows for a pool's member models in chronological
+     * order, fetched from the start of the period containing $since (null =
+     * all history) so replays always see the bucket's full usage.
+     *
+     * @return Collection<int, object{provider: string, base_model: string, prompt_tokens: int|string, completion_tokens: int|string, created_at: string}>
+     */
+    private function poolUsageRecords(AiFreeUsagePool $aiFreeUsagePool, ?CarbonImmutable $since): Collection
+    {
+        $memberProviders = $aiFreeUsagePool->prices
+            ->map(fn (AiModelPrice $aiModelPrice): string => $aiModelPrice->provider)
+            ->unique()
+            ->all();
+
+        $memberKeys = $aiFreeUsagePool->prices
+            ->map(fn (AiModelPrice $aiModelPrice): string => $aiModelPrice->provider.'|'.$aiModelPrice->model)
+            ->all();
+
+        if ($memberKeys === []) {
+            return new Collection;
+        }
+
+        $fetchStart = $since instanceof CarbonImmutable
+            ? $aiFreeUsagePool->period->periodStartAt($since)
+            : null;
+
+        return DB::table('ai_usage_records')
+            ->when($fetchStart instanceof CarbonImmutable, fn (Builder $builder) => $builder->where('ai_usage_records.created_at', '>=', $fetchStart))
+            ->whereIn('ai_usage_records.provider', $memberProviders)
+            ->whereNotNull('ai_usage_records.model')
+            ->selectRaw("
+                ai_usage_records.provider,
+                regexp_replace(ai_usage_records.model, '".self::BASE_MODEL_REGEX."', '') AS base_model,
+                ai_usage_records.prompt_tokens,
+                ai_usage_records.completion_tokens,
+                ai_usage_records.created_at
+            ")
+            ->oldest('ai_usage_records.created_at')
+            ->orderBy('ai_usage_records.id')
             ->get()
             ->filter(fn (object $row): bool => in_array($row->provider.'|'.$row->base_model, $memberKeys, true))
             ->values();
