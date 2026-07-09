@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Models;
 
+use App\Enums\WebhookHandlingStatus;
 use App\Events\WebhookEventProcessed;
 use Carbon\CarbonImmutable;
 use Database\Factories\WebhookEventFactory;
@@ -23,6 +24,7 @@ use Override;
  * @property array<array-key, mixed> $payload
  * @property string|null $payload_hash
  * @property CarbonImmutable|null $processed_at
+ * @property WebhookHandlingStatus|null $handling_status
  * @property CarbonImmutable|null $created_at
  * @property CarbonImmutable|null $updated_at
  * @property-read Collection<int, ActionRequest> $actionRequests
@@ -44,7 +46,7 @@ use Override;
  *
  * @mixin \Eloquent
  */
-#[Fillable(['service_connection_id', 'event_type', 'payload', 'payload_hash', 'processed_at'])]
+#[Fillable(['service_connection_id', 'event_type', 'payload', 'payload_hash', 'processed_at', 'handling_status'])]
 class WebhookEvent extends Model
 {
     /** @use HasFactory<WebhookEventFactory> */
@@ -59,6 +61,7 @@ class WebhookEvent extends Model
         return [
             'payload' => 'array',
             'processed_at' => 'datetime',
+            'handling_status' => WebhookHandlingStatus::class,
         ];
     }
 
