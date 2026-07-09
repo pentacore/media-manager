@@ -1,3 +1,10 @@
+## [1.7.2](https://github.com/pentacore/media-manager/compare/v1.7.1...v1.7.2) (2026-07-09)
+
+
+### Bug Fixes
+
+* **broadcasting:** survive config:cache for reverb client config ([98abd9d](https://github.com/pentacore/media-manager/commit/98abd9df5e74f84ce0eab8504a608fb039bf2e1a))
+
 ## [1.7.1](https://github.com/pentacore/media-manager/compare/v1.7.0...v1.7.1) (2026-07-09)
 
 
