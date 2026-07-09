@@ -21,6 +21,7 @@ use Pentacore\Typefinder\Attributes\TypefinderOverrides;
  * @property int $id
  * @property int|null $user_id
  * @property int|null $service_connection_id
+ * @property int|null $webhook_event_id
  * @property string $action
  * @property string|null $subject_type
  * @property int|null $subject_id
@@ -29,6 +30,7 @@ use Pentacore\Typefinder\Attributes\TypefinderOverrides;
  * @property CarbonImmutable|null $created_at
  * @property CarbonImmutable|null $updated_at
  * @property-read ServiceConnection|null $serviceConnection
+ * @property-read WebhookEvent|null $webhookEvent
  * @property-read Model|\Eloquent|null $subject
  * @property-read User|null $user
  *
@@ -50,7 +52,7 @@ use Pentacore\Typefinder\Attributes\TypefinderOverrides;
  * @mixin \Eloquent
  */
 #[ObservedBy(ActivityLogObserver::class)]
-#[Fillable(['user_id', 'service_connection_id', 'action', 'subject_type', 'subject_id', 'description', 'metadata'])]
+#[Fillable(['user_id', 'service_connection_id', 'webhook_event_id', 'action', 'subject_type', 'subject_id', 'description', 'metadata'])]
 #[TypefinderOverrides(['metadata' => 'Record<string|number, any> | null'])]
 class ActivityLog extends Model
 {
@@ -82,6 +84,14 @@ class ActivityLog extends Model
     public function serviceConnection(): BelongsTo
     {
         return $this->belongsTo(ServiceConnection::class);
+    }
+
+    /**
+     * @return BelongsTo<WebhookEvent, $this>
+     */
+    public function webhookEvent(): BelongsTo
+    {
+        return $this->belongsTo(WebhookEvent::class);
     }
 
     public function subject(): MorphTo

@@ -31,6 +31,7 @@ abstract class AbstractWebhookHandler implements WebhookHandler
     ): void {
         ActivityLog::create([
             'user_id' => null,
+            'webhook_event_id' => $webhookEvent->id,
             'service_connection_id' => $webhookEvent->service_connection_id,
             'action' => sprintf('webhook.%s.%s', $this->serviceSlug(), $action),
             'subject_type' => $subjectType,
