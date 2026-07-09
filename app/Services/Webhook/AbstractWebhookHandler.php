@@ -4,8 +4,10 @@ declare(strict_types=1);
 
 namespace App\Services\Webhook;
 
+use App\Enums\WebhookHandlingStatus;
 use App\Models\ActivityLog;
 use App\Models\WebhookEvent;
+use Illuminate\Support\Facades\Log;
 
 abstract class AbstractWebhookHandler implements WebhookHandler
 {
@@ -39,5 +41,19 @@ abstract class AbstractWebhookHandler implements WebhookHandler
             'description' => $description,
             'metadata' => $metadata,
         ]);
+    }
+
+    /**
+     * Log an unactionable event and report it as ignored. Concrete handlers
+     * call this from their match `default` arm.
+     */
+    protected function ignore(WebhookEvent $webhookEvent, int|string|null $eventType): WebhookHandlingStatus
+    {
+        Log::info(class_basename(static::class).': ignoring event', [
+            'webhook_event_id' => $webhookEvent->id,
+            'event_type' => $eventType,
+        ]);
+
+        return WebhookHandlingStatus::Ignored;
     }
 }

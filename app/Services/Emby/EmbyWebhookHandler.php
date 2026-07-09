@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Services\Emby;
 
+use App\Enums\WebhookHandlingStatus;
 use App\Events\EmbyPlaybackUpdated;
 use App\Models\EmbyActivity;
 use App\Models\EmbyUserLink;
@@ -21,7 +22,7 @@ class EmbyWebhookHandler extends AbstractWebhookHandler
         return 'emby';
     }
 
-    public function handle(WebhookEvent $webhookEvent): void
+    public function handle(WebhookEvent $webhookEvent): WebhookHandlingStatus
     {
         $payload = $webhookEvent->payload;
 
@@ -29,7 +30,7 @@ class EmbyWebhookHandler extends AbstractWebhookHandler
             $this->handleLibraryDeleted($webhookEvent, $payload);
             $webhookEvent->markProcessed();
 
-            return;
+            return WebhookHandlingStatus::Handled;
         }
 
         $embyEvent = $payload['Event'] ?? null;
@@ -43,7 +44,7 @@ class EmbyWebhookHandler extends AbstractWebhookHandler
 
             $webhookEvent->markProcessed();
 
-            return;
+            return WebhookHandlingStatus::Ignored;
         }
 
         $mediaType = $this->mapMediaType($payload['Item']['Type'] ?? null);
@@ -55,7 +56,7 @@ class EmbyWebhookHandler extends AbstractWebhookHandler
 
             $webhookEvent->markProcessed();
 
-            return;
+            return WebhookHandlingStatus::Ignored;
         }
 
         $embyUserId = $payload['User']['Id'] ?? null;
@@ -66,7 +67,7 @@ class EmbyWebhookHandler extends AbstractWebhookHandler
 
             $webhookEvent->markProcessed();
 
-            return;
+            return WebhookHandlingStatus::Ignored;
         }
 
         $userLink = EmbyUserLink::where('emby_user_id', $embyUserId)->first();
@@ -78,7 +79,7 @@ class EmbyWebhookHandler extends AbstractWebhookHandler
 
             $webhookEvent->markProcessed();
 
-            return;
+            return WebhookHandlingStatus::Ignored;
         }
 
         $embyItemId = (string) ($payload['Item']['Id'] ?? '');
@@ -89,7 +90,7 @@ class EmbyWebhookHandler extends AbstractWebhookHandler
 
             $webhookEvent->markProcessed();
 
-            return;
+            return WebhookHandlingStatus::Ignored;
         }
 
         $playSessionId = $payload['PlaybackInfo']['PlaySessionId'] ?? null;
@@ -117,6 +118,8 @@ class EmbyWebhookHandler extends AbstractWebhookHandler
         event(new EmbyPlaybackUpdated($activity));
 
         $webhookEvent->markProcessed();
+
+        return WebhookHandlingStatus::Handled;
     }
 
     /**
