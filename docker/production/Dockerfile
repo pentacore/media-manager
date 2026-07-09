@@ -50,9 +50,13 @@ RUN composer dump-autoload --optimize --classmap-authoritative --no-scripts \
 # Caddyfile at runtime under storage/octane/frankenphp/.
 FROM dunglas/frankenphp:1-php8.5-alpine AS runtime
 
+# Baked in by CI from the release tag; "dev" for local builds.
+ARG APP_VERSION=dev
+
 ENV APP_ENV=production \
     APP_DEBUG=false \
-    RUN_MIGRATIONS=false
+    RUN_MIGRATIONS=false \
+    APP_VERSION=${APP_VERSION}
 
 RUN apk add --no-cache \
         bash \
