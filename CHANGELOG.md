@@ -1,3 +1,10 @@
+## [1.7.3](https://github.com/pentacore/media-manager/compare/v1.7.2...v1.7.3) (2026-07-09)
+
+
+### Bug Fixes
+
+* **ai:** count cached read/write tokens toward free pool usage ([dc27fc6](https://github.com/pentacore/media-manager/commit/dc27fc6f6b3e75b3cd482f05fd820b8ddea10b74))
+
 ## [1.7.2](https://github.com/pentacore/media-manager/compare/v1.7.1...v1.7.2) (2026-07-09)
 
 

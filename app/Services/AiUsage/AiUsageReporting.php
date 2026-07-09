@@ -131,7 +131,8 @@ class AiUsageReporting
      * Per-model consumption against configured provider rate limits, each
      * limit measured over its rolling window (the last minute/hour/day —
      * rolling, unlike the free pools' calendar resets). Token limits count
-     * prompt + completion tokens, matching pool accounting. Display only.
+     * prompt + completion tokens only (unlike pool accounting, which also
+     * counts cached read/write tokens). Display only.
      *
      * @return array<int, array{provider: string, model: string, limits: array<int, array{metric: string, period: string, limit_value: int, used: int}>}>
      */
@@ -230,6 +231,8 @@ class AiUsageReporting
                 $rates[$price->provider.'|'.$price->model] = [
                     'input' => (float) $price->input_per_mtok,
                     'output' => (float) $price->output_per_mtok,
+                    'cache_read' => (float) $price->cache_read_per_mtok,
+                    'cache_write' => (float) $price->cache_write_per_mtok,
                 ];
             }
 
@@ -260,7 +263,7 @@ class AiUsageReporting
 
                     foreach ($bucket as $row) {
                         $rate = $rates[$row->provider.'|'.$row->base_model];
-                        $discount += ((int) $row->window_input * $rate['input'] + (int) $row->window_output * $rate['output'])
+                        $discount += ($this->windowInputValue($row, $rate) + (int) $row->window_output * $rate['output'])
                             * $forgivenRatio / 1_000_000.0;
                     }
 
@@ -276,7 +279,7 @@ class AiUsageReporting
 
                 foreach ($bucket as $row) {
                     $rate = $rates[$row->provider.'|'.$row->base_model];
-                    $discount += (int) $row->window_input * $rate['input'] * $inputRatio / 1_000_000.0;
+                    $discount += $this->windowInputValue($row, $rate) * $inputRatio / 1_000_000.0;
                     $discount += (int) $row->window_output * $rate['output'] * $outputRatio / 1_000_000.0;
                 }
             }
@@ -286,17 +289,35 @@ class AiUsageReporting
     }
 
     /**
+     * USD value of a bucketed row's window-side input tokens, each class at
+     * its own rate (uncached input vs cache read/write) — mirrors how gross
+     * cost prices them, so forgiveness never exceeds what was billed.
+     *
+     * @param  object{window_input: int|string, window_cache_read: int|string, window_cache_write: int|string}  $row
+     * @param  array{input: float, output: float, cache_read: float, cache_write: float}  $rate
+     */
+    private function windowInputValue(object $row, array $rate): float
+    {
+        return (int) $row->window_input * $rate['input']
+            + (int) $row->window_cache_read * $rate['cache_read']
+            + (int) $row->window_cache_write * $rate['cache_write'];
+    }
+
+    /**
      * Input/output token sums for a pool's member models since $since (null
      * = no lower bound), grouped by (provider, base model[, period bucket]).
      * Base model = recorded model id with any trailing -YYYY-MM-DD suffix
-     * stripped, so dated variants match their catalog row.
+     * stripped, so dated variants match their catalog row. Input-side sums
+     * (used_input) include cached read/write tokens — cache hits still
+     * consume provider free-tier quota.
      *
      * Bucketed rows fetch from the START of the period containing $since —
      * not $since itself — so per-bucket caps are measured against the full
      * period's usage. used_* covers the whole bucket; window_* only the
-     * rows at or after $since.
+     * rows at or after $since, split per token class so forgiveness can be
+     * valued at each class's own rate.
      *
-     * @return Collection<int, object{provider: string, base_model: string, bucket?: string, used_input: int|string, used_output: int|string, window_input?: int|string, window_output?: int|string}>
+     * @return Collection<int, object{provider: string, base_model: string, bucket?: string, used_input: int|string, used_output: int|string, window_input?: int|string, window_cache_read?: int|string, window_cache_write?: int|string, window_output?: int|string}>
      */
     private function poolUsageRows(AiFreeUsagePool $aiFreeUsagePool, ?CarbonImmutable $since, bool $bucketed = false): Collection
     {
@@ -316,7 +337,7 @@ class AiUsageReporting
         $selects = ["
             ai_usage_records.provider,
             regexp_replace(ai_usage_records.model, '".self::BASE_MODEL_REGEX."', '') AS base_model,
-            COALESCE(SUM(ai_usage_records.prompt_tokens), 0) AS used_input,
+            COALESCE(SUM(ai_usage_records.prompt_tokens + ai_usage_records.cache_read_input_tokens + ai_usage_records.cache_write_input_tokens), 0) AS used_input,
             COALESCE(SUM(ai_usage_records.completion_tokens), 0) AS used_output
         "];
         $bindings = [];
@@ -330,12 +351,16 @@ class AiUsageReporting
             if ($since instanceof CarbonImmutable) {
                 $selects[] = '
                     COALESCE(SUM(ai_usage_records.prompt_tokens) FILTER (WHERE ai_usage_records.created_at >= ?), 0) AS window_input,
+                    COALESCE(SUM(ai_usage_records.cache_read_input_tokens) FILTER (WHERE ai_usage_records.created_at >= ?), 0) AS window_cache_read,
+                    COALESCE(SUM(ai_usage_records.cache_write_input_tokens) FILTER (WHERE ai_usage_records.created_at >= ?), 0) AS window_cache_write,
                     COALESCE(SUM(ai_usage_records.completion_tokens) FILTER (WHERE ai_usage_records.created_at >= ?), 0) AS window_output
                 ';
-                $bindings = [$since, $since];
+                $bindings = [$since, $since, $since, $since];
             } else {
                 $selects[] = '
                     COALESCE(SUM(ai_usage_records.prompt_tokens), 0) AS window_input,
+                    COALESCE(SUM(ai_usage_records.cache_read_input_tokens), 0) AS window_cache_read,
+                    COALESCE(SUM(ai_usage_records.cache_write_input_tokens), 0) AS window_cache_write,
                     COALESCE(SUM(ai_usage_records.completion_tokens), 0) AS window_output
                 ';
             }
@@ -381,14 +406,20 @@ class AiUsageReporting
 
             $rate = $rates[$row->provider.'|'.$row->base_model];
 
+            // Cached read/write tokens count as input-side usage; each class
+            // is valued at its own rate, mirroring gross cost pricing.
+            $inputValue = (int) $row->prompt_tokens * $rate['input']
+                + (int) $row->cache_read_input_tokens * $rate['cache_read']
+                + (int) $row->cache_write_input_tokens * $rate['cache_write'];
+
             if ($aiFreeUsagePool->unified) {
-                $discount += ((int) $row->prompt_tokens * $rate['input'] + (int) $row->completion_tokens * $rate['output']) / 1_000_000.0;
+                $discount += ($inputValue + (int) $row->completion_tokens * $rate['output']) / 1_000_000.0;
 
                 continue;
             }
 
             if ($aiFreeUsagePool->free_input_tokens !== null) {
-                $discount += (int) $row->prompt_tokens * $rate['input'] / 1_000_000.0;
+                $discount += $inputValue / 1_000_000.0;
             }
 
             if ($aiFreeUsagePool->free_output_tokens !== null) {
@@ -423,7 +454,7 @@ class AiUsageReporting
                 'used_input' => 0,
                 'used_output' => 0,
             ];
-            $totals[$key]->used_input += (int) $row->prompt_tokens;
+            $totals[$key]->used_input += (int) $row->prompt_tokens + (int) $row->cache_read_input_tokens + (int) $row->cache_write_input_tokens;
             $totals[$key]->used_output += (int) $row->completion_tokens;
         }
 
@@ -437,8 +468,9 @@ class AiUsageReporting
      * quota untouched, so a later smaller request can still draw from it.
      * Unified pools require input + output to fit the shared budget
      * together; split pools require every capped dimension to fit its own.
+     * Input includes cached read/write tokens.
      *
-     * @return Collection<int, object{provider: string, base_model: string, prompt_tokens: int|string, completion_tokens: int|string, created_at: string, fits: bool}>
+     * @return Collection<int, object{provider: string, base_model: string, prompt_tokens: int|string, completion_tokens: int|string, cache_read_input_tokens: int|string, cache_write_input_tokens: int|string, created_at: string, fits: bool}>
      */
     private function replayFitOrPaid(AiFreeUsagePool $aiFreeUsagePool, ?CarbonImmutable $since): Collection
     {
@@ -455,7 +487,9 @@ class AiUsageReporting
                 'total' => (int) ($aiFreeUsagePool->free_total_tokens ?? 0),
             ];
 
-            $input = (int) $row->prompt_tokens;
+            // Cache hits still consume provider free-tier quota, so cached
+            // read/write tokens count toward the input side of the fit check.
+            $input = (int) $row->prompt_tokens + (int) $row->cache_read_input_tokens + (int) $row->cache_write_input_tokens;
             $output = (int) $row->completion_tokens;
 
             if ($aiFreeUsagePool->unified) {
@@ -485,7 +519,7 @@ class AiUsageReporting
      * order, fetched from the start of the period containing $since (null =
      * all history) so replays always see the bucket's full usage.
      *
-     * @return Collection<int, object{provider: string, base_model: string, prompt_tokens: int|string, completion_tokens: int|string, created_at: string}>
+     * @return Collection<int, object{provider: string, base_model: string, prompt_tokens: int|string, completion_tokens: int|string, cache_read_input_tokens: int|string, cache_write_input_tokens: int|string, created_at: string}>
      */
     private function poolUsageRecords(AiFreeUsagePool $aiFreeUsagePool, ?CarbonImmutable $since): Collection
     {
@@ -515,6 +549,8 @@ class AiUsageReporting
                 regexp_replace(ai_usage_records.model, '".self::BASE_MODEL_REGEX."', '') AS base_model,
                 ai_usage_records.prompt_tokens,
                 ai_usage_records.completion_tokens,
+                ai_usage_records.cache_read_input_tokens,
+                ai_usage_records.cache_write_input_tokens,
                 ai_usage_records.created_at
             ")
             ->oldest('ai_usage_records.created_at')
