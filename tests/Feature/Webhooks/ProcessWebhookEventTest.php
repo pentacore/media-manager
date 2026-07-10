@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use App\Enums\WebhookHandlingStatus;
 use App\Jobs\ProcessWebhookEvent;
 use App\Models\ActivityLog;
 use App\Models\ServiceConnection;
@@ -32,7 +33,7 @@ test('job invokes SonarrWebhookHandler for sonarr service connections when handl
     $event = WebhookEvent::factory()->create(['service_connection_id' => $connection->id]);
 
     $mock = Mockery::mock(WebhookHandler::class);
-    $mock->shouldReceive('handle')->once()->with($event);
+    $mock->shouldReceive('handle')->once()->with($event)->andReturn(WebhookHandlingStatus::Handled);
     $this->app->bind(SonarrWebhookHandler::class, fn (): WebhookHandler => $mock);
 
     new ProcessWebhookEvent($event)->handle();
@@ -47,7 +48,7 @@ test('job invokes EmbyWebhookHandler for emby service connections when handler e
     $event = WebhookEvent::factory()->create(['service_connection_id' => $connection->id]);
 
     $mock = Mockery::mock(WebhookHandler::class);
-    $mock->shouldReceive('handle')->once()->with($event);
+    $mock->shouldReceive('handle')->once()->with($event)->andReturn(WebhookHandlingStatus::Handled);
     $this->app->bind(EmbyWebhookHandler::class, fn (): WebhookHandler => $mock);
 
     new ProcessWebhookEvent($event)->handle();

@@ -6,11 +6,11 @@ namespace App\Services\Sabnzbd;
 
 use App\Cache\Services\SabnzbdCache;
 use App\Enums\UserRole;
+use App\Enums\WebhookHandlingStatus;
 use App\Models\User;
 use App\Models\WebhookEvent;
 use App\Notifications\ServiceWarning;
 use App\Services\Webhook\AbstractWebhookHandler;
-use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Notification;
 
 class SabnzbdWebhookHandler extends AbstractWebhookHandler
@@ -20,10 +20,12 @@ class SabnzbdWebhookHandler extends AbstractWebhookHandler
         return 'sabnzbd';
     }
 
-    public function handle(WebhookEvent $webhookEvent): void
+    public function handle(WebhookEvent $webhookEvent): WebhookHandlingStatus
     {
         $payload = $webhookEvent->payload;
         $eventType = (string) ($payload['eventType'] ?? '');
+
+        $status = WebhookHandlingStatus::Handled;
 
         match ($eventType) {
             'complete' => $this->handleComplete($webhookEvent, $payload),
@@ -35,10 +37,7 @@ class SabnzbdWebhookHandler extends AbstractWebhookHandler
             'warning' => $this->handleAlert($webhookEvent, $payload, 'warning'),
             'error' => $this->handleAlert($webhookEvent, $payload, 'error'),
             'disk_full' => $this->handleAlert($webhookEvent, $payload, 'disk_full'),
-            default => Log::info('SabnzbdWebhookHandler: ignoring event', [
-                'webhook_event_id' => $webhookEvent->id,
-                'event_type' => $eventType,
-            ]),
+            default => $status = $this->ignore($webhookEvent, $eventType),
         };
 
         $webhookEvent->markProcessed();
@@ -53,6 +52,8 @@ class SabnzbdWebhookHandler extends AbstractWebhookHandler
         if (in_array($eventType, ['complete', 'failed', 'queue_done'], true)) {
             resolve(SabnzbdDownloadCounter::class)->recompute();
         }
+
+        return $status;
     }
 
     /**

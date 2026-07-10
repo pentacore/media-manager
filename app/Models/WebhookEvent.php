@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Models;
 
+use App\Enums\WebhookHandlingStatus;
 use App\Events\WebhookEventProcessed;
 use Carbon\CarbonImmutable;
 use Database\Factories\WebhookEventFactory;
@@ -14,6 +15,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 use Override;
 
 /**
@@ -23,11 +25,14 @@ use Override;
  * @property array<array-key, mixed> $payload
  * @property string|null $payload_hash
  * @property CarbonImmutable|null $processed_at
+ * @property WebhookHandlingStatus|null $handling_status
  * @property CarbonImmutable|null $created_at
  * @property CarbonImmutable|null $updated_at
  * @property-read Collection<int, ActionRequest> $actionRequests
  * @property-read int|null $action_requests_count
  * @property-read ServiceConnection $serviceConnection
+ * @property-read AgentDecision|null $agentDecision
+ * @property-read Collection<int, ActivityLog> $activityLogs
  *
  * @method static WebhookEventFactory factory($count = null, $state = [])
  * @method static Builder<static>|WebhookEvent newModelQuery()
@@ -44,7 +49,7 @@ use Override;
  *
  * @mixin \Eloquent
  */
-#[Fillable(['service_connection_id', 'event_type', 'payload', 'payload_hash', 'processed_at'])]
+#[Fillable(['service_connection_id', 'event_type', 'payload', 'payload_hash', 'processed_at', 'handling_status'])]
 class WebhookEvent extends Model
 {
     /** @use HasFactory<WebhookEventFactory> */
@@ -59,6 +64,7 @@ class WebhookEvent extends Model
         return [
             'payload' => 'array',
             'processed_at' => 'datetime',
+            'handling_status' => WebhookHandlingStatus::class,
         ];
     }
 
@@ -76,6 +82,22 @@ class WebhookEvent extends Model
     public function actionRequests(): HasMany
     {
         return $this->hasMany(ActionRequest::class);
+    }
+
+    /**
+     * @return HasOne<AgentDecision, $this>
+     */
+    public function agentDecision(): HasOne
+    {
+        return $this->hasOne(AgentDecision::class);
+    }
+
+    /**
+     * @return HasMany<ActivityLog, $this>
+     */
+    public function activityLogs(): HasMany
+    {
+        return $this->hasMany(ActivityLog::class);
     }
 
     public function markProcessed(): void

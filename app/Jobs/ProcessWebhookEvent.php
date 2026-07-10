@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Jobs;
 
 use App\Enums\ServiceType;
+use App\Enums\WebhookHandlingStatus;
 use App\Models\WebhookEvent;
 use App\Services\Emby\EmbyWebhookHandler;
 use App\Services\Prowlarr\ProwlarrWebhookHandler;
@@ -21,6 +22,7 @@ use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
 use Illuminate\Support\Facades\Log;
+use Throwable;
 
 class ProcessWebhookEvent implements ShouldQueue
 {
@@ -66,14 +68,29 @@ class ProcessWebhookEvent implements ShouldQueue
                 'webhook_event_id' => $this->webhookEvent->id,
                 'service_type' => $connection->type->value,
             ]);
+            $this->webhookEvent->update(['handling_status' => WebhookHandlingStatus::NoHandler]);
             $this->discardIfCaptureDisabled();
 
             return;
         }
 
-        $handler->handle($this->webhookEvent);
+        $status = $handler->handle($this->webhookEvent);
+        $this->webhookEvent->update(['handling_status' => $status]);
 
         $this->discardIfCaptureDisabled();
+    }
+
+    /**
+     * Record the terminal failure after retries are exhausted, if the event
+     * row still exists (capture-off trimming may have removed it).
+     */
+    public function failed(?Throwable $throwable): void
+    {
+        if (WebhookEvent::query()->whereKey($this->webhookEvent->id)->exists()) {
+            WebhookEvent::query()
+                ->whereKey($this->webhookEvent->id)
+                ->update(['handling_status' => WebhookHandlingStatus::Failed->value]);
+        }
     }
 
     /**
