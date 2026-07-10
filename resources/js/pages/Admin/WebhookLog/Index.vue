@@ -198,10 +198,14 @@ function handlingVariant(status: string | null): PillVariant {
     }
 }
 
-function handlingLabel(status: string | null, processedAt: string | null): string {
+function handlingLabel(
+    status: string | null,
+    processedAt: string | null,
+): string {
     if (status) {
         return status.replace('_', ' ');
     }
+
     return processedAt ? 'unknown' : 'pending';
 }
 
@@ -382,26 +386,46 @@ function decisionVariant(status: string): PillVariant {
                             </td>
                             <td class="px-3 py-2.5">
                                 <Pill
-                                    :variant="handlingVariant(event.handling_status)"
+                                    :variant="
+                                        handlingVariant(event.handling_status)
+                                    "
                                     :dot="!!event.handling_status"
                                 >
-                                    {{ handlingLabel(event.handling_status, event.processed_at) }}
+                                    {{
+                                        handlingLabel(
+                                            event.handling_status,
+                                            event.processed_at,
+                                        )
+                                    }}
                                 </Pill>
                             </td>
-                            <td class="font-mono-tabular px-3 py-2.5 text-[12px]">
+                            <td
+                                class="font-mono-tabular px-3 py-2.5 text-[12px]"
+                            >
                                 {{ event.activity_count }}
                             </td>
                             <td class="px-3 py-2.5">
                                 <Pill
                                     v-if="event.agent_decision"
-                                    :variant="decisionVariant(event.agent_decision.status)"
+                                    :variant="
+                                        decisionVariant(
+                                            event.agent_decision.status,
+                                        )
+                                    "
                                     dot
                                 >
-                                    {{ event.agent_decision.status.replace('_', ' ') }}
+                                    {{
+                                        event.agent_decision.status.replace(
+                                            '_',
+                                            ' ',
+                                        )
+                                    }}
                                 </Pill>
                                 <span v-else class="text-fg-subtle">—</span>
                             </td>
-                            <td class="font-mono-tabular px-3 py-2.5 text-[12px]">
+                            <td
+                                class="font-mono-tabular px-3 py-2.5 text-[12px]"
+                            >
                                 {{ event.action_count }}
                             </td>
                             <td class="px-3 py-2.5">

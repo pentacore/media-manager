@@ -138,10 +138,19 @@ function formatTime(iso: string | null): string {
                     </div>
                 </div>
                 <div>
-                    <div class="text-[11.5px] font-semibold tracking-[0.05em] text-muted-foreground uppercase">
+                    <div
+                        class="text-[11.5px] font-semibold tracking-[0.05em] text-muted-foreground uppercase"
+                    >
                         Handling
                     </div>
-                    <div>{{ (event.handling_status ?? 'unknown').replace('_', ' ') }}</div>
+                    <div>
+                        {{
+                            (event.handling_status ?? 'unknown').replace(
+                                '_',
+                                ' ',
+                            )
+                        }}
+                    </div>
                 </div>
                 <div class="sm:col-span-2">
                     <div
@@ -177,21 +186,35 @@ function formatTime(iso: string | null): string {
                 class="flex items-center gap-2 border-b border-border px-4 py-3 text-[11.5px] font-semibold tracking-[0.05em] text-muted-foreground uppercase"
             >
                 Handling
-                <Pill :variant="event.handling_status === 'handled' ? 'ok' : 'default'">
+                <Pill
+                    :variant="
+                        event.handling_status === 'handled' ? 'ok' : 'default'
+                    "
+                >
                     {{ (event.handling_status ?? 'unknown').replace('_', ' ') }}
                 </Pill>
             </div>
             <ul class="divide-y divide-border">
-                <li v-for="entry in event.activity" :key="entry.id" class="px-4 py-3">
+                <li
+                    v-for="entry in event.activity"
+                    :key="entry.id"
+                    class="px-4 py-3"
+                >
                     <div class="flex items-center justify-between gap-3">
-                        <span class="font-mono-tabular text-[12px]">{{ entry.action }}</span>
-                        <span class="font-mono-tabular text-[11px] text-fg-subtle">
+                        <span class="font-mono-tabular text-[12px]">{{
+                            entry.action
+                        }}</span>
+                        <span
+                            class="font-mono-tabular text-[11px] text-fg-subtle"
+                        >
                             {{ formatTime(entry.created_at) }}
                         </span>
                     </div>
                     <p class="mt-1 text-[13px]">{{ entry.description }}</p>
                     <pre
-                        v-if="entry.metadata && Object.keys(entry.metadata).length"
+                        v-if="
+                            entry.metadata && Object.keys(entry.metadata).length
+                        "
                         class="mt-2 max-h-64 overflow-auto rounded-lg bg-bg-elev p-3 font-mono text-[11px] text-muted-foreground"
                         >{{ JSON.stringify(entry.metadata, null, 2) }}</pre>
                 </li>
@@ -202,9 +225,17 @@ function formatTime(iso: string | null): string {
             v-if="event.agent_decision"
             class="rounded-xl border border-border bg-card p-6"
         >
-            <div class="flex items-center gap-2 text-[11.5px] font-semibold tracking-[0.05em] text-muted-foreground uppercase">
+            <div
+                class="flex items-center gap-2 text-[11.5px] font-semibold tracking-[0.05em] text-muted-foreground uppercase"
+            >
                 AI decision
-                <Pill :variant="event.agent_decision.status === 'completed' ? 'ok' : 'default'">
+                <Pill
+                    :variant="
+                        event.agent_decision.status === 'completed'
+                            ? 'ok'
+                            : 'default'
+                    "
+                >
                     {{ event.agent_decision.status.replace('_', ' ') }}
                 </Pill>
             </div>
@@ -232,16 +263,26 @@ function formatTime(iso: string | null): string {
                         :key="action.id"
                         class="border-b border-border last:border-b-0"
                     >
-                        <td class="font-mono-tabular px-4 py-2.5 text-[12px]">{{ action.type }}</td>
+                        <td class="font-mono-tabular px-4 py-2.5 text-[12px]">
+                            {{ action.type }}
+                        </td>
                         <td class="px-4 py-2.5">
                             <SvcChip :id="action.target_service" />
                         </td>
                         <td class="px-4 py-2.5">
-                            <Pill :variant="action.status === 'completed' ? 'ok' : 'default'">
+                            <Pill
+                                :variant="
+                                    action.status === 'completed'
+                                        ? 'ok'
+                                        : 'default'
+                                "
+                            >
                                 {{ action.status.replace('_', ' ') }}
                             </Pill>
                         </td>
-                        <td class="font-mono-tabular px-4 py-2.5 text-[11px] text-fg-subtle">
+                        <td
+                            class="font-mono-tabular px-4 py-2.5 text-[11px] text-fg-subtle"
+                        >
                             {{ formatTime(action.created_at) }}
                         </td>
                     </tr>
