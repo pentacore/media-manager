@@ -26,7 +26,7 @@ type Props = {
     embyLinks: EmbyLink[];
 };
 
-const props = defineProps<Props>();
+defineProps<Props>();
 
 defineOptions({
     layout: {
