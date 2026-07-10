@@ -15,6 +15,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 use Override;
 
 /**
@@ -30,6 +31,8 @@ use Override;
  * @property-read Collection<int, ActionRequest> $actionRequests
  * @property-read int|null $action_requests_count
  * @property-read ServiceConnection $serviceConnection
+ * @property-read AgentDecision|null $agentDecision
+ * @property-read Collection<int, ActivityLog> $activityLogs
  *
  * @method static WebhookEventFactory factory($count = null, $state = [])
  * @method static Builder<static>|WebhookEvent newModelQuery()
@@ -79,6 +82,22 @@ class WebhookEvent extends Model
     public function actionRequests(): HasMany
     {
         return $this->hasMany(ActionRequest::class);
+    }
+
+    /**
+     * @return HasOne<AgentDecision, $this>
+     */
+    public function agentDecision(): HasOne
+    {
+        return $this->hasOne(AgentDecision::class);
+    }
+
+    /**
+     * @return HasMany<ActivityLog, $this>
+     */
+    public function activityLogs(): HasMany
+    {
+        return $this->hasMany(ActivityLog::class);
     }
 
     public function markProcessed(): void

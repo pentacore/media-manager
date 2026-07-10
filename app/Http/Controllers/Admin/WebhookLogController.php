@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers\Admin;
 
+use App\Enums\WebhookHandlingStatus;
 use App\Http\Controllers\Controller;
 use App\Models\ServiceConnection;
 use App\Models\WebhookEvent;
@@ -20,9 +21,11 @@ class WebhookLogController extends Controller
     {
         $serviceId = $request->integer('service_id');
         $eventType = $request->string('event_type')->toString();
+        $handlingStatus = $request->string('handling_status')->toString();
 
-        $builder = $this->buildBuilder($serviceId, $eventType)
-            ->with('serviceConnection:id,name,type');
+        $builder = $this->buildBuilder($serviceId, $eventType, $handlingStatus)
+            ->with(['serviceConnection:id,name,type', 'agentDecision:id,webhook_event_id,status,actions_count'])
+            ->withCount(['activityLogs', 'actionRequests']);
 
         $lengthAwarePaginator = $builder->paginate(50)->withQueryString();
 
@@ -36,6 +39,13 @@ class WebhookLogController extends Controller
                     'created_at' => $webhookEvent->created_at?->toIso8601String(),
                     'processed_at' => $webhookEvent->processed_at?->toIso8601String(),
                     'payload_hash' => $webhookEvent->payload_hash,
+                    'handling_status' => $webhookEvent->handling_status?->value,
+                    'activity_count' => $webhookEvent->activity_logs_count,
+                    'action_count' => $webhookEvent->action_requests_count,
+                    'agent_decision' => $webhookEvent->agentDecision === null ? null : [
+                        'status' => $webhookEvent->agentDecision->status->value,
+                        'actions_count' => $webhookEvent->agentDecision->actions_count,
+                    ],
                 ])->all(),
                 'links' => $lengthAwarePaginator->linkCollection()->toArray(),
                 'meta' => [
@@ -48,6 +58,7 @@ class WebhookLogController extends Controller
             'filters' => [
                 'service_id' => $serviceId > 0 ? $serviceId : null,
                 'event_type' => $eventType,
+                'handling_status' => $handlingStatus !== '' ? $handlingStatus : null,
             ],
             'filterOptions' => [
                 'services' => ServiceConnection::query()
@@ -67,6 +78,13 @@ class WebhookLogController extends Controller
                     ->filter()
                     ->values()
                     ->all(),
+                'handlingStatuses' => array_map(
+                    fn (WebhookHandlingStatus $status): array => [
+                        'value' => $status->value,
+                        'label' => $status->label(),
+                    ],
+                    WebhookHandlingStatus::cases(),
+                ),
             ],
             'settings' => [
                 'capture_enabled' => $webhookSettings->captureEnabled(),
@@ -113,7 +131,7 @@ class WebhookLogController extends Controller
     /**
      * @return Builder<WebhookEvent>
      */
-    private function buildBuilder(int $serviceId, string $eventType): Builder
+    private function buildBuilder(int $serviceId, string $eventType, string $handlingStatus): Builder
     {
         $builder = WebhookEvent::query()->latest();
 
@@ -123,6 +141,10 @@ class WebhookLogController extends Controller
 
         if ($eventType !== '') {
             $builder->where('event_type', $eventType);
+        }
+
+        if ($handlingStatus !== '') {
+            $builder->where('handling_status', $handlingStatus);
         }
 
         return $builder;
