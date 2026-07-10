@@ -12,6 +12,7 @@ use App\Models\User;
 use App\Providers\AIServiceProvider;
 use App\Services\Library\InterventionCounter;
 use App\Services\Sabnzbd\SabnzbdDownloadCounter;
+use App\Support\AppVersion;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
 use Inertia\Middleware;
@@ -63,6 +64,11 @@ class HandleInertiaRequests extends Middleware
                 'enabled' => AIServiceProvider::enabled(),
             ],
             'nav' => $user ? $this->navCounts($user) : ['pendingActions' => 0, 'activeSessions' => 0, 'unreadNotifications' => 0, 'libraryIntervention' => 0, 'sabnzbdDownloads' => ['queued' => 0, 'completed' => 0]],
+            'version' => $user ? [
+                'current' => AppVersion::current(),
+                'latest' => AppVersion::latest(),
+                'updateAvailable' => AppVersion::updateAvailable(),
+            ] : null,
             'sidebarOpen' => ! $request->hasCookie('sidebar_state') || $request->cookie('sidebar_state') === 'true',
         ];
     }

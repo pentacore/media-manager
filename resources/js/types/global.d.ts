@@ -28,6 +28,11 @@ declare module '@inertiajs/core' {
             ai: { enabled: boolean };
             nav: { pendingActions: number; activeSessions: number };
             sidebarOpen: boolean;
+            version: {
+                current: string;
+                latest: string | null;
+                updateAvailable: boolean;
+            } | null;
             [key: string]: unknown;
         };
     }

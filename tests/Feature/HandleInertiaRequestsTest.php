@@ -6,6 +6,7 @@ use App\Enums\UserRole;
 use App\Models\ServiceConnection;
 use App\Models\User;
 use App\Services\Library\InterventionCounter;
+use App\Support\AppVersion;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
 
@@ -87,4 +88,43 @@ test('libraryIntervention reads cache when already populated', function (): void
         ->get(route('dashboard'))
         ->assertOk()
         ->assertInertia(fn ($page) => $page->where('nav.libraryIntervention', 7));
+});
+
+test('shares version data with authenticated users', function (): void {
+    config()->set('app.version', '1.7.2');
+    Cache::put(AppVersion::CACHE_KEY, '1.8.0', 60);
+
+    $user = User::factory()->member()->create();
+
+    $this->actingAs($user)
+        ->get(route('dashboard'))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->where('version.current', '1.7.2')
+            ->where('version.latest', '1.8.0')
+            ->where('version.updateAvailable', true)
+        );
+});
+
+test('version update hint is off for dev builds', function (): void {
+    config()->set('app.version', 'dev');
+    Cache::put(AppVersion::CACHE_KEY, '1.8.0', 60);
+
+    $user = User::factory()->member()->create();
+
+    $this->actingAs($user)
+        ->get(route('dashboard'))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->where('version.current', 'dev')
+            ->where('version.updateAvailable', false)
+        );
+});
+
+test('version is not shared with guests', function (): void {
+    config()->set('app.version', '1.7.2');
+
+    $this->get(route('home'))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page->where('version', null));
 });

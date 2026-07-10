@@ -52,6 +52,7 @@ import ServiceHealthController from '@/actions/App/Http/Controllers/Monitoring/S
 import SabnzbdQueueController from '@/actions/App/Http/Controllers/Sabnzbd/QueueController';
 import StatisticsController from '@/actions/App/Http/Controllers/StatisticsController';
 import AppLogo from '@/components/AppLogo.vue';
+import AppVersion from '@/components/AppVersion.vue';
 import NavMain from '@/components/NavMain.vue';
 import NavUser from '@/components/NavUser.vue';
 import {
@@ -434,6 +435,7 @@ const adminNavItems = computed<NavItem[]>(() => [
                 </SidebarMenuItem>
             </SidebarMenu>
             <NavUser />
+            <AppVersion />
         </SidebarFooter>
     </Sidebar>
     <slot />
