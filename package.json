@@ -40,7 +40,7 @@
         "vue-tsc": "^3.3.5"
     },
     "dependencies": {
-        "@inertiajs/vite": "^3.0.0",
+        "@inertiajs/vite": "^3.6.1",
         "@inertiajs/vue3": "^3.0.0",
         "@lucide/vue": "^1.23.0",
         "@tanstack/vue-table": "^8.21.3",
