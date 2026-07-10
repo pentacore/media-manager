@@ -109,18 +109,34 @@ test('store rejects invalid emby credentials', function (): void {
     $this->assertDatabaseMissing('emby_user_links', ['user_id' => $user->id]);
 });
 
-test('user cannot link a second emby account', function (): void {
+test('user can link a second emby account', function (): void {
     $user = User::factory()->create();
-    EmbyUserLink::factory()->create(['user_id' => $user->id]);
+    EmbyUserLink::factory()->create([
+        'user_id' => $user->id,
+        'emby_user_id' => 'emby-user-first',
+        'emby_username' => 'first',
+    ]);
+
+    Http::fake([
+        'emby.local:8096/Users/AuthenticateByName' => Http::response([
+            'User' => ['Id' => 'emby-user-second', 'Name' => 'second'],
+            'AccessToken' => 'token-123',
+        ]),
+    ]);
 
     $this->actingAs($user)
         ->post(route('emby.links.store'), [
-            'emby_username' => 'alice',
+            'emby_username' => 'second',
             'password' => 'secret',
         ])
         ->assertRedirect();
 
-    expect(EmbyUserLink::where('user_id', $user->id)->count())->toBe(1);
+    $this->assertDatabaseHas('emby_user_links', [
+        'user_id' => $user->id,
+        'emby_user_id' => 'emby-user-second',
+        'emby_username' => 'second',
+    ]);
+    expect(EmbyUserLink::where('user_id', $user->id)->count())->toBe(2);
 });
 
 test('store rejects emby account already linked to another user', function (): void {

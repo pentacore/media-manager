@@ -37,12 +37,6 @@ class EmbyLinkController extends Controller
             'emby_username' => ['required', 'string', 'max:200'],
         ]);
 
-        if ($user->embyUserLinks()->exists()) {
-            Inertia::flash('toast', ['type' => 'error', 'message' => __(':name already has a linked Emby account.', ['name' => $user->name])]);
-
-            return back();
-        }
-
         try {
             $connection = ServiceConnection::resolveActive(ServiceType::Emby);
         } catch (ModelNotFoundException) {

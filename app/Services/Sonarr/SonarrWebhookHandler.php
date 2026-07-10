@@ -6,6 +6,7 @@ namespace App\Services\Sonarr;
 
 use App\Cache\Services\SonarrCache;
 use App\Enums\UserRole;
+use App\Enums\WebhookHandlingStatus;
 use App\Models\User;
 use App\Models\WebhookEvent;
 use App\Notifications\ServiceWarning;
@@ -13,7 +14,6 @@ use App\Services\Actions\ActionOrchestrator;
 use App\Services\Library\InterventionCounter;
 use App\Services\Search\SeriesIndexer;
 use App\Services\Webhook\AbstractWebhookHandler;
-use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Notification;
 
 class SonarrWebhookHandler extends AbstractWebhookHandler
@@ -28,10 +28,12 @@ class SonarrWebhookHandler extends AbstractWebhookHandler
         return 'sonarr';
     }
 
-    public function handle(WebhookEvent $webhookEvent): void
+    public function handle(WebhookEvent $webhookEvent): WebhookHandlingStatus
     {
         $payload = $webhookEvent->payload;
         $eventType = $payload['eventType'] ?? null;
+
+        $status = WebhookHandlingStatus::Handled;
 
         match ($eventType) {
             'Test' => $this->handleTest($webhookEvent, $payload),
@@ -45,10 +47,7 @@ class SonarrWebhookHandler extends AbstractWebhookHandler
             'Health' => $this->handleHealth($webhookEvent, $payload, 'health'),
             'HealthRestored' => $this->handleHealth($webhookEvent, $payload, 'health_restored'),
             'ApplicationUpdate' => $this->handleApplicationUpdate($webhookEvent, $payload),
-            default => Log::info('SonarrWebhookHandler: ignoring event', [
-                'webhook_event_id' => $webhookEvent->id,
-                'event_type' => $eventType,
-            ]),
+            default => $status = $this->ignore($webhookEvent, $eventType),
         };
 
         $webhookEvent->markProcessed();
@@ -56,6 +55,8 @@ class SonarrWebhookHandler extends AbstractWebhookHandler
         if ($webhookEvent->serviceConnection !== null) {
             new SonarrCache($webhookEvent->serviceConnection)->bustAll();
         }
+
+        return $status;
     }
 
     /**

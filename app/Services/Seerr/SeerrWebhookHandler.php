@@ -5,10 +5,10 @@ declare(strict_types=1);
 namespace App\Services\Seerr;
 
 use App\Cache\Services\SeerrCache;
+use App\Enums\WebhookHandlingStatus;
 use App\Models\WebhookEvent;
 use App\Services\Actions\ActionOrchestrator;
 use App\Services\Webhook\AbstractWebhookHandler;
-use Illuminate\Support\Facades\Log;
 
 class SeerrWebhookHandler extends AbstractWebhookHandler
 {
@@ -19,10 +19,12 @@ class SeerrWebhookHandler extends AbstractWebhookHandler
         return 'seerr';
     }
 
-    public function handle(WebhookEvent $webhookEvent): void
+    public function handle(WebhookEvent $webhookEvent): WebhookHandlingStatus
     {
         $payload = $webhookEvent->payload;
         $notificationType = $payload['notification_type'] ?? null;
+
+        $status = WebhookHandlingStatus::Handled;
 
         match ($notificationType) {
             'TEST_NOTIFICATION' => $this->handleTest($webhookEvent, $payload),
@@ -36,10 +38,7 @@ class SeerrWebhookHandler extends AbstractWebhookHandler
             'ISSUE_COMMENT' => $this->handleIssue($webhookEvent, $payload, 'issue_comment', 'Issue comment'),
             'ISSUE_RESOLVED' => $this->handleIssue($webhookEvent, $payload, 'issue_resolved', 'Issue resolved'),
             'ISSUE_REOPENED' => $this->handleIssue($webhookEvent, $payload, 'issue_reopened', 'Issue reopened'),
-            default => Log::info('SeerrWebhookHandler: ignoring notification', [
-                'webhook_event_id' => $webhookEvent->id,
-                'notification_type' => $notificationType,
-            ]),
+            default => $status = $this->ignore($webhookEvent, $notificationType),
         };
 
         $webhookEvent->markProcessed();
@@ -47,6 +46,8 @@ class SeerrWebhookHandler extends AbstractWebhookHandler
         if ($webhookEvent->serviceConnection !== null) {
             new SeerrCache($webhookEvent->serviceConnection)->bustAll();
         }
+
+        return $status;
     }
 
     /**

@@ -5,13 +5,13 @@ declare(strict_types=1);
 namespace App\Services\Prowlarr;
 
 use App\Enums\UserRole;
+use App\Enums\WebhookHandlingStatus;
 use App\Jobs\FetchLatestServiceVersion;
 use App\Jobs\PingServiceHealth;
 use App\Models\User;
 use App\Models\WebhookEvent;
 use App\Notifications\ServiceWarning;
 use App\Services\Webhook\AbstractWebhookHandler;
-use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Notification;
 
 class ProwlarrWebhookHandler extends AbstractWebhookHandler
@@ -21,23 +21,24 @@ class ProwlarrWebhookHandler extends AbstractWebhookHandler
         return 'prowlarr';
     }
 
-    public function handle(WebhookEvent $webhookEvent): void
+    public function handle(WebhookEvent $webhookEvent): WebhookHandlingStatus
     {
         $payload = $webhookEvent->payload;
         $eventType = $payload['eventType'] ?? null;
+
+        $status = WebhookHandlingStatus::Handled;
 
         match ($eventType) {
             'Test' => $this->handleTest($webhookEvent, $payload),
             'Health' => $this->handleHealth($webhookEvent, $payload, 'health'),
             'HealthRestored' => $this->handleHealth($webhookEvent, $payload, 'health_restored'),
             'ApplicationUpdate' => $this->handleApplicationUpdate($webhookEvent, $payload),
-            default => Log::info('ProwlarrWebhookHandler: ignoring event', [
-                'webhook_event_id' => $webhookEvent->id,
-                'event_type' => $eventType,
-            ]),
+            default => $status = $this->ignore($webhookEvent, $eventType),
         };
 
         $webhookEvent->markProcessed();
+
+        return $status;
     }
 
     /**

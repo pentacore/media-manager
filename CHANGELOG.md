@@ -1,3 +1,19 @@
+# [1.9.0](https://github.com/pentacore/media-manager/compare/v1.8.0...v1.9.0) (2026-07-10)
+
+
+### Features
+
+* **emby:** allow a user to link multiple Emby accounts (self-service) ([bbeb75f](https://github.com/pentacore/media-manager/commit/bbeb75f6f896d5277a7360f8c80f0b05870bdd46))
+* **emby:** allow an admin to link multiple Emby accounts to a user ([f6abdf1](https://github.com/pentacore/media-manager/commit/f6abdf1037797e448ff41eb83c8a51d72e3971ea))
+* **emby:** expose all of a user's Emby links on the profile page ([f88db5e](https://github.com/pentacore/media-manager/commit/f88db5ee9881f0e182b1d7aee51d126ff9d0f0cd))
+* **emby:** list linked Emby accounts on the profile page ([a472bb9](https://github.com/pentacore/media-manager/commit/a472bb9d62c3e68f2c7dea7bc1ecab4a7d73c7e0))
+* **webhooks:** add handling_status to webhook events ([6f7fdd3](https://github.com/pentacore/media-manager/commit/6f7fdd3b8eedf4ff83909494ae6c4fa63bdb73de))
+* **webhooks:** handlers report a handling status ([84d6e33](https://github.com/pentacore/media-manager/commit/84d6e33e35663c5eed606d8b5add851879f67f30))
+* **webhooks:** link activity log entries to webhook events ([cb157cb](https://github.com/pentacore/media-manager/commit/cb157cbf95c101fe25f7cc285d4a9c42e8eaa86e))
+* **webhooks:** persist handling status when processing events ([2d2cbeb](https://github.com/pentacore/media-manager/commit/2d2cbeb6e56772416f243191288150123075b434))
+* **webhooks:** show handling detail on webhook log pages ([7daccb1](https://github.com/pentacore/media-manager/commit/7daccb126c0d8216dc224354319fca45c1e9cdaf))
+* **webhooks:** surface handling data on webhook log index ([c376687](https://github.com/pentacore/media-manager/commit/c3766872b16943d0946eaaa21d1070903d7b1a1b))
+
 # [1.8.0](https://github.com/pentacore/media-manager/compare/v1.7.3...v1.8.0) (2026-07-09)
 
 

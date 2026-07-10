@@ -6,12 +6,12 @@ namespace App\Services\Whisparr;
 
 use App\Cache\Services\WhisparrCache;
 use App\Enums\UserRole;
+use App\Enums\WebhookHandlingStatus;
 use App\Models\User;
 use App\Models\WebhookEvent;
 use App\Notifications\ServiceWarning;
 use App\Services\Library\InterventionCounter;
 use App\Services\Webhook\AbstractWebhookHandler;
-use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Notification;
 
 class WhisparrWebhookHandler extends AbstractWebhookHandler
@@ -21,10 +21,12 @@ class WhisparrWebhookHandler extends AbstractWebhookHandler
         return 'whisparr';
     }
 
-    public function handle(WebhookEvent $webhookEvent): void
+    public function handle(WebhookEvent $webhookEvent): WebhookHandlingStatus
     {
         $payload = $webhookEvent->payload;
         $eventType = $payload['eventType'] ?? null;
+
+        $status = WebhookHandlingStatus::Handled;
 
         match ($eventType) {
             'Test' => $this->handleTest($webhookEvent, $payload),
@@ -41,10 +43,7 @@ class WhisparrWebhookHandler extends AbstractWebhookHandler
             'Health' => $this->handleHealth($webhookEvent, $payload, 'health'),
             'HealthRestored' => $this->handleHealth($webhookEvent, $payload, 'health_restored'),
             'ApplicationUpdate' => $this->handleApplicationUpdate($webhookEvent, $payload),
-            default => Log::info('WhisparrWebhookHandler: ignoring event', [
-                'webhook_event_id' => $webhookEvent->id,
-                'event_type' => $eventType,
-            ]),
+            default => $status = $this->ignore($webhookEvent, $eventType),
         };
 
         $webhookEvent->markProcessed();
@@ -52,6 +51,8 @@ class WhisparrWebhookHandler extends AbstractWebhookHandler
         if ($webhookEvent->serviceConnection !== null) {
             new WhisparrCache($webhookEvent->serviceConnection)->bustAll();
         }
+
+        return $status;
     }
 
     /**
