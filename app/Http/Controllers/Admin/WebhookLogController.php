@@ -6,6 +6,8 @@ namespace App\Http\Controllers\Admin;
 
 use App\Enums\WebhookHandlingStatus;
 use App\Http\Controllers\Controller;
+use App\Models\ActionRequest;
+use App\Models\ActivityLog;
 use App\Models\ServiceConnection;
 use App\Models\WebhookEvent;
 use App\Settings\WebhookSettings;
@@ -112,7 +114,12 @@ class WebhookLogController extends Controller
 
     public function show(WebhookEvent $webhookEvent): Response
     {
-        $webhookEvent->load('serviceConnection:id,name,type');
+        $webhookEvent->load([
+            'serviceConnection:id,name,type',
+            'activityLogs' => fn ($query) => $query->latest(),
+            'agentDecision',
+            'actionRequests' => fn ($query) => $query->latest(),
+        ]);
 
         return Inertia::render('Admin/WebhookLog/Show', [
             'event' => [
@@ -122,8 +129,29 @@ class WebhookLogController extends Controller
                 'event_type' => $webhookEvent->event_type,
                 'created_at' => $webhookEvent->created_at?->toIso8601String(),
                 'processed_at' => $webhookEvent->processed_at?->toIso8601String(),
+                'handling_status' => $webhookEvent->handling_status?->value,
                 'payload' => $webhookEvent->payload,
                 'payload_hash' => $webhookEvent->payload_hash,
+                'activity' => $webhookEvent->activityLogs->map(fn (ActivityLog $log): array => [
+                    'id' => $log->id,
+                    'action' => $log->action,
+                    'description' => $log->description,
+                    'metadata' => $log->metadata,
+                    'created_at' => $log->created_at?->toIso8601String(),
+                ])->all(),
+                'agent_decision' => $webhookEvent->agentDecision === null ? null : [
+                    'status' => $webhookEvent->agentDecision->status->value,
+                    'summary' => $webhookEvent->agentDecision->summary,
+                    'actions_count' => $webhookEvent->agentDecision->actions_count,
+                    'action_request_ids' => $webhookEvent->agentDecision->action_request_ids,
+                ],
+                'actions' => $webhookEvent->actionRequests->map(fn (ActionRequest $action): array => [
+                    'id' => $action->id,
+                    'type' => $action->type,
+                    'target_service' => $action->target_service,
+                    'status' => $action->status->value,
+                    'created_at' => $action->created_at?->toIso8601String(),
+                ])->all(),
             ],
         ]);
     }

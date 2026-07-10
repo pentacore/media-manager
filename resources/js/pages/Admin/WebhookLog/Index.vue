@@ -22,6 +22,10 @@ interface WebhookEvent {
     created_at: string | null;
     processed_at: string | null;
     payload_hash: string | null;
+    handling_status: string | null;
+    activity_count: number;
+    action_count: number;
+    agent_decision: { status: string; actions_count: number } | null;
 }
 
 interface PaginatorLink {
@@ -49,8 +53,16 @@ const props = defineProps<{
         links: PaginatorLink[];
         meta: PaginatorMeta;
     };
-    filters: { service_id: number | null; event_type: string };
-    filterOptions: { services: ServiceOption[]; eventTypes: string[] };
+    filters: {
+        service_id: number | null;
+        event_type: string;
+        handling_status: string | null;
+    };
+    filterOptions: {
+        services: ServiceOption[];
+        eventTypes: string[];
+        handlingStatuses: { value: string; label: string }[];
+    };
     settings: { capture_enabled: boolean };
 }>();
 
@@ -100,6 +112,7 @@ defineOptions({
 function applyFilters(next: {
     service_id?: number | null;
     event_type?: string;
+    handling_status?: string;
 }) {
     const merged = {
         service_id:
@@ -108,6 +121,10 @@ function applyFilters(next: {
             'event_type' in next
                 ? (next.event_type ?? '')
                 : props.filters.event_type,
+        handling_status:
+            'handling_status' in next
+                ? (next.handling_status ?? '')
+                : (props.filters.handling_status ?? ''),
     };
 
     const query: Record<string, string | number> = {};
@@ -118,6 +135,10 @@ function applyFilters(next: {
 
     if (merged.event_type) {
         query.event_type = merged.event_type;
+    }
+
+    if (merged.handling_status) {
+        query.handling_status = merged.handling_status;
     }
 
     router.get(WebhookLogController.index.url(), query, {
@@ -156,6 +177,43 @@ function svcId(type: string | null): string {
     }
 
     return type;
+}
+
+function setHandlingStatus(value: string) {
+    applyFilters({ handling_status: value === 'all' ? '' : value });
+}
+
+type PillVariant = 'default' | 'ok' | 'warn' | 'danger' | 'info';
+
+function handlingVariant(status: string | null): PillVariant {
+    switch (status) {
+        case 'handled':
+            return 'ok';
+        case 'no_handler':
+            return 'warn';
+        case 'failed':
+            return 'danger';
+        default:
+            return 'default';
+    }
+}
+
+function handlingLabel(status: string | null, processedAt: string | null): string {
+    if (status) {
+        return status.replace('_', ' ');
+    }
+    return processedAt ? 'unknown' : 'pending';
+}
+
+function decisionVariant(status: string): PillVariant {
+    switch (status) {
+        case 'completed':
+            return 'ok';
+        case 'failed':
+            return 'danger';
+        default:
+            return 'default';
+    }
 }
 </script>
 
@@ -245,6 +303,26 @@ function svcId(type: string | null): string {
                     </SelectItem>
                 </SelectContent>
             </Select>
+            <Select
+                :model-value="filters.handling_status || 'all'"
+                @update:model-value="
+                    (v) => typeof v === 'string' && setHandlingStatus(v)
+                "
+            >
+                <SelectTrigger class="h-7 w-40 text-xs">
+                    <SelectValue placeholder="Handling" />
+                </SelectTrigger>
+                <SelectContent>
+                    <SelectItem value="all">All handling</SelectItem>
+                    <SelectItem
+                        v-for="opt in filterOptions.handlingStatuses"
+                        :key="opt.value"
+                        :value="opt.value"
+                    >
+                        {{ opt.label }}
+                    </SelectItem>
+                </SelectContent>
+            </Select>
             <span
                 class="font-mono-tabular ml-auto text-[11.5px] text-muted-foreground"
             >
@@ -262,6 +340,10 @@ function svcId(type: string | null): string {
                                     'Received',
                                     'Service',
                                     'Event',
+                                    'Handling',
+                                    'Activity',
+                                    'AI',
+                                    'Actions',
                                     'Processed',
                                     'Hash',
                                     '',
@@ -297,6 +379,30 @@ function svcId(type: string | null): string {
                                 class="font-mono-tabular px-3 py-2.5 text-[12px]"
                             >
                                 {{ event.event_type ?? '—' }}
+                            </td>
+                            <td class="px-3 py-2.5">
+                                <Pill
+                                    :variant="handlingVariant(event.handling_status)"
+                                    :dot="!!event.handling_status"
+                                >
+                                    {{ handlingLabel(event.handling_status, event.processed_at) }}
+                                </Pill>
+                            </td>
+                            <td class="font-mono-tabular px-3 py-2.5 text-[12px]">
+                                {{ event.activity_count }}
+                            </td>
+                            <td class="px-3 py-2.5">
+                                <Pill
+                                    v-if="event.agent_decision"
+                                    :variant="decisionVariant(event.agent_decision.status)"
+                                    dot
+                                >
+                                    {{ event.agent_decision.status.replace('_', ' ') }}
+                                </Pill>
+                                <span v-else class="text-fg-subtle">—</span>
+                            </td>
+                            <td class="font-mono-tabular px-3 py-2.5 text-[12px]">
+                                {{ event.action_count }}
                             </td>
                             <td class="px-3 py-2.5">
                                 <Pill
@@ -339,7 +445,7 @@ function svcId(type: string | null): string {
                         </tr>
                         <tr v-if="events.data.length === 0">
                             <td
-                                colspan="6"
+                                colspan="10"
                                 class="px-3 py-12 text-center text-sm text-fg-subtle"
                             >
                                 No webhook events recorded yet.
