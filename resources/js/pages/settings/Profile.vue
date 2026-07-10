@@ -23,7 +23,7 @@ interface EmbyLink {
 type Props = {
     mustVerifyEmail: boolean;
     status?: string;
-    embyLink: EmbyLink | null;
+    embyLinks: EmbyLink[];
 };
 
 const props = defineProps<Props>();
@@ -42,16 +42,12 @@ defineOptions({
 const page = usePage();
 const user = computed(() => page.props.auth.user);
 
-function unlinkEmby() {
-    if (!props.embyLink) {
+function unlinkEmby(link: EmbyLink) {
+    if (!confirm(`Unlink Emby account "${link.emby_username}"?`)) {
         return;
     }
 
-    if (!confirm(`Unlink Emby account "${props.embyLink.emby_username}"?`)) {
-        return;
-    }
-
-    router.delete(UserLinkController.destroy.url(props.embyLink.id), {
+    router.delete(UserLinkController.destroy.url(link.id), {
         preserveScroll: true,
     });
 }
@@ -177,25 +173,26 @@ function unlinkEmby() {
             </p>
         </div>
 
-        <div class="rounded-xl border border-border bg-card p-6">
+        <div class="space-y-4 rounded-xl border border-border bg-card p-6">
             <div
-                v-if="embyLink"
+                v-for="link in embyLinks"
+                :key="link.id"
                 class="flex items-center justify-between gap-4"
             >
                 <div class="flex items-center gap-2.5">
                     <SvcChip id="emby" />
                     <div>
                         <div class="text-[14px] font-semibold">
-                            {{ embyLink.emby_username }}
+                            {{ link.emby_username }}
                         </div>
                         <div
                             class="font-mono-tabular text-[11.5px] text-muted-foreground"
                         >
                             Linked
                             {{
-                                embyLink.created_at
+                                link.created_at
                                     ? new Date(
-                                          embyLink.created_at,
+                                          link.created_at,
                                       ).toLocaleDateString()
                                     : '—'
                             }}
@@ -208,15 +205,16 @@ function unlinkEmby() {
                         variant="destructive"
                         size="sm"
                         class="h-8 text-xs"
-                        @click="unlinkEmby"
+                        @click="unlinkEmby(link)"
                     >
                         Unlink
                     </Button>
                 </div>
             </div>
 
+            <Separator v-if="embyLinks.length" />
+
             <Form
-                v-else
                 v-bind="UserLinkController.store.form()"
                 v-slot="{ errors, processing }"
                 class="space-y-4"
