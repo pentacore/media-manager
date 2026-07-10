@@ -45,3 +45,31 @@ test('admin can link a second emby account to a user', function (): void {
     ]);
     expect(EmbyUserLink::where('user_id', $target->id)->count())->toBe(2);
 });
+
+test('admin cannot link an emby account already owned by another user', function (): void {
+    $admin = User::factory()->admin()->create();
+    $other = User::factory()->create();
+    EmbyUserLink::factory()->create([
+        'user_id' => $other->id,
+        'emby_user_id' => 'emby-user-taken',
+        'emby_username' => 'taken',
+    ]);
+    $target = User::factory()->create();
+
+    Http::fake([
+        'emby.local:8096/Users' => Http::response([
+            ['Id' => 'emby-user-taken', 'Name' => 'taken'],
+        ]),
+    ]);
+
+    $this->actingAs($admin)
+        ->post(route('admin.users.link-emby', $target), [
+            'emby_username' => 'taken',
+        ]);
+
+    expect(EmbyUserLink::where('user_id', $target->id)->count())->toBe(0);
+    $this->assertDatabaseHas('emby_user_links', [
+        'user_id' => $other->id,
+        'emby_user_id' => 'emby-user-taken',
+    ]);
+});
