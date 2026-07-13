@@ -17,6 +17,7 @@ use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
+use InvalidArgumentException;
 use Throwable;
 
 /**
@@ -63,7 +64,15 @@ class SyncAnimeMappingJob implements ShouldBeUnique, ShouldQueue
         return 'sync-anime-mapping';
     }
 
-    public function handle(): void
+    /**
+     * Reload the mapping table. Returns the number of dataset rows written.
+     * Throws (keeping the current table intact) when the payload is unusable,
+     * so both the queue (via failed()) and the console command surface it
+     * instead of silently reporting success on an empty import.
+     *
+     * @throws InvalidArgumentException when the dataset is missing/malformed/undersized
+     */
+    public function handle(): int
     {
         $url = (string) config('mediamanager.anime.mapping_url');
 
@@ -86,9 +95,7 @@ class SyncAnimeMappingJob implements ShouldBeUnique, ShouldQueue
         // Require a non-empty, list-shaped payload — is_array() alone also
         // accepts {} and error objects, which would otherwise reach the delete.
         if (! is_array($dataset) || $dataset === [] || ! array_is_list($dataset)) {
-            Log::warning('SyncAnimeMappingJob: rejected non-list dataset payload', ['url' => $url]);
-
-            return;
+            throw new InvalidArgumentException('SyncAnimeMappingJob: dataset payload is not a non-empty list.');
         }
 
         $now = now();
@@ -107,14 +114,14 @@ class SyncAnimeMappingJob implements ShouldBeUnique, ShouldQueue
         }
 
         // Guard against a schema break or partial download replacing ~32k good
-        // rows with a handful of garbage ones.
+        // rows with a handful of garbage ones. Only rows with a usable TMDB
+        // destination id are counted (see mapRow).
         if (count($rows) < self::MIN_ROWS) {
-            Log::warning('SyncAnimeMappingJob: parsed too few rows, keeping current mappings', [
-                'parsed' => count($rows),
-                'minimum' => self::MIN_ROWS,
-            ]);
-
-            return;
+            throw new InvalidArgumentException(sprintf(
+                'SyncAnimeMappingJob: parsed only %d usable rows (minimum %d); keeping current mappings.',
+                count($rows),
+                self::MIN_ROWS,
+            ));
         }
 
         // Wipe only dataset-sourced rows; user-confirmed matches survive.
@@ -130,6 +137,8 @@ class SyncAnimeMappingJob implements ShouldBeUnique, ShouldQueue
         Cache::forever(self::LAST_SUCCESS_KEY, $now->toIso8601String());
 
         Log::info('SyncAnimeMappingJob: reloaded anime id map', ['rows' => count($rows)]);
+
+        return count($rows);
     }
 
     public function failed(?Throwable $throwable): void
@@ -156,6 +165,13 @@ class SyncAnimeMappingJob implements ShouldBeUnique, ShouldQueue
 
         [$tmdbTvId, $tmdbMovieId] = $this->extractTmdbIds($entry['themoviedb_id'] ?? null, (string) ($entry['type'] ?? ''));
 
+        // A row with no TMDB destination is unrequestable via Seerr, so it is
+        // not a usable mapping — drop it (and keep it out of the row count that
+        // gates the destructive reload).
+        if ($tmdbTvId === null && $tmdbMovieId === null) {
+            return null;
+        }
+
         return [
             'anilist_id' => $anilistId,
             'mal_id' => $malId,
@@ -172,8 +188,9 @@ class SyncAnimeMappingJob implements ShouldBeUnique, ShouldQueue
 
     /**
      * Fribb stores `themoviedb_id` as `{tv: id}` / `{movie: [id, ...]}` (movie
-     * ids are arrays, tv ids scalar), or occasionally a bare int whose media
-     * type is inferred from the entry `type`. Array values take the first id.
+     * ids are arrays and may list several TMDB entries for one anime; tv ids
+     * are scalar), or occasionally a bare int whose media type is inferred from
+     * the entry `type`.
      *
      * @return array{0: int|null, 1: int|null}
      */
@@ -181,8 +198,8 @@ class SyncAnimeMappingJob implements ShouldBeUnique, ShouldQueue
     {
         if (is_array($tmdb) && ! array_is_list($tmdb)) {
             return [
-                $this->firstId($tmdb['tv'] ?? null),
-                $this->firstId($tmdb['movie'] ?? null),
+                $this->pickId($tmdb['tv'] ?? null),
+                $this->pickId($tmdb['movie'] ?? null),
             ];
         }
 
@@ -197,11 +214,19 @@ class SyncAnimeMappingJob implements ShouldBeUnique, ShouldQueue
 
     /**
      * Normalize a TMDB id that may arrive as a scalar or as an array of ids.
+     * When Fribb lists multiple ids for one anime the lowest is chosen: the
+     * selection must be deterministic and independent of Fribb's array order,
+     * and the lowest id is the earliest-created (canonical) TMDB record.
      */
-    private function firstId(mixed $value): ?int
+    private function pickId(mixed $value): ?int
     {
         if (is_array($value)) {
-            $value = $value[0] ?? null;
+            $ids = array_filter(array_map(
+                fn (mixed $id): ?int => is_numeric($id) ? (int) $id : null,
+                $value,
+            ), fn (?int $id): bool => $id !== null);
+
+            return $ids === [] ? null : min($ids);
         }
 
         return is_numeric($value) ? (int) $value : null;

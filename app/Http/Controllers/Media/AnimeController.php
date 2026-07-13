@@ -47,8 +47,10 @@ class AnimeController extends Controller
         }
 
         // Self-bootstrap on a fresh deployment: the table is otherwise only
-        // filled by the weekly schedule. ShouldBeUnique keeps this to one run.
-        if (AnimeIdMap::query()->doesntExist()) {
+        // filled by the weekly schedule. Check for dataset-sourced rows so a
+        // lone user-confirmed match doesn't suppress the initial load.
+        // ShouldBeUnique keeps this to one run.
+        if (AnimeIdMap::query()->where('user_confirmed', false)->doesntExist()) {
             dispatch(new SyncAnimeMappingJob);
         }
 
@@ -248,7 +250,8 @@ class AnimeController extends Controller
     /**
      * Media already present in Seerr as requests, keyed by "mediaType:tmdbId".
      * TMDB tv/movie ids overlap numerically, so the media type is part of the
-     * key. All request pages are walked (bounded) so older requests are seen.
+     * key. Every page reported by `pageInfo` is walked so older requests are
+     * never missed.
      *
      * @return Collection<string, int>
      */
@@ -256,30 +259,15 @@ class AnimeController extends Controller
     {
         $seerrClient = new SeerrClient($serviceConnection);
         $keys = collect();
-        $take = 100;
-        $skip = 0;
-        $maxPages = 20;
 
         try {
-            for ($page = 0; $page < $maxPages; $page++) {
-                $payload = $seerrClient->getRequests(['take' => $take, 'skip' => $skip, 'filter' => 'all']);
-                $results = $payload['results'] ?? [];
+            foreach ($this->walkSeerrPages(fn (int $take, int $skip): array => $seerrClient->getRequests(['take' => $take, 'skip' => $skip, 'filter' => 'all'])) as $result) {
+                $media = $result['media'] ?? [];
+                $tmdbId = $media['tmdbId'] ?? null;
+                $mediaType = $media['mediaType'] ?? null;
 
-                foreach ($results as $result) {
-                    $media = $result['media'] ?? [];
-                    $tmdbId = $media['tmdbId'] ?? null;
-                    $mediaType = $media['mediaType'] ?? null;
-
-                    if ($tmdbId !== null && $mediaType !== null) {
-                        $keys->put($mediaType.':'.(int) $tmdbId, (int) $tmdbId);
-                    }
-                }
-
-                $total = (int) ($payload['pageInfo']['results'] ?? count($results));
-                $skip += $take;
-
-                if (count($results) < $take || $skip >= $total) {
-                    break;
+                if ($tmdbId !== null && $mediaType !== null) {
+                    $keys->put($mediaType.':'.(int) $tmdbId, (int) $tmdbId);
                 }
             }
         } catch (RequestException|ConnectionException) {
@@ -287,6 +275,36 @@ class AnimeController extends Controller
         }
 
         return $keys;
+    }
+
+    /**
+     * Walk every page of a Seerr paginated list endpoint, yielding each result.
+     * Iterates until `pageInfo.pages` is exhausted (falls back to a short page /
+     * empty page as the terminator) so nothing is silently truncated.
+     *
+     * @param  callable(int, int): array<string, mixed>  $fetch
+     * @return iterable<int, array<string, mixed>>
+     */
+    private function walkSeerrPages(callable $fetch): iterable
+    {
+        $take = 100;
+        $skip = 0;
+
+        do {
+            $payload = $fetch($take, $skip);
+            $results = $payload['results'] ?? [];
+
+            yield from $results;
+
+            $pageInfo = $payload['pageInfo'] ?? [];
+            $pages = (int) ($pageInfo['pages'] ?? 0);
+            $currentPage = (int) ($pageInfo['page'] ?? 0);
+            $skip += $take;
+
+            // Stop on the last reported page, or when a short/empty page shows
+            // the list is exhausted (covers servers that omit pageInfo).
+            $more = count($results) === $take && ($pages === 0 || $currentPage < $pages);
+        } while ($more);
     }
 
     /**
@@ -344,39 +362,26 @@ class AnimeController extends Controller
 
         $users = collect();
         $defaultId = null;
-        $take = 100;
-        $skip = 0;
-        $maxPages = 20;
 
+        // Scan every page so the full picker list is available and the
+        // email-matched default is found even when the current user is not on
+        // the first page.
         try {
-            for ($page = 0; $page < $maxPages; $page++) {
-                $payload = $seerrClient->getUsers(['take' => $take, 'skip' => $skip]);
-                $results = $payload['results'] ?? [];
+            foreach ($this->walkSeerrPages(fn (int $take, int $skip): array => $seerrClient->getUsers(['take' => $take, 'skip' => $skip])) as $result) {
+                $id = (int) $result['id'];
+                $userEmail = strtolower((string) ($result['email'] ?? ''));
 
-                foreach ($results as $result) {
-                    $id = (int) $result['id'];
-                    $userEmail = strtolower((string) ($result['email'] ?? ''));
-
-                    if ($defaultId === null && $email !== '' && $userEmail === $email) {
-                        $defaultId = $id;
-                    }
-
-                    $users->push([
-                        'id' => $id,
-                        'label' => $result['displayName'] ?? $result['email'] ?? ('User #'.$id),
-                    ]);
+                if ($defaultId === null && $email !== '' && $userEmail === $email) {
+                    $defaultId = $id;
                 }
 
-                $total = (int) ($payload['pageInfo']['results'] ?? count($results));
-                $skip += $take;
-
-                // Stop early once the current user is found, or the list ends.
-                if ($defaultId !== null || count($results) < $take || $skip >= $total) {
-                    break;
-                }
+                $users->push([
+                    'id' => $id,
+                    'label' => $result['displayName'] ?? $result['email'] ?? ('User #'.$id),
+                ]);
             }
         } catch (RequestException|ConnectionException) {
-            return ['users' => $users->all(), 'defaultId' => $defaultId ?? ($users->first()['id'] ?? null)];
+            // Return whatever was collected before the failure.
         }
 
         return [
