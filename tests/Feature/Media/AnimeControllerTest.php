@@ -156,6 +156,89 @@ test('index defers requesting users with an email-matched default', function ():
         );
 });
 
+test('index finds the email-matched default user on the second page of Seerr users', function (): void {
+    Queue::fake();
+    $member = User::factory()->member()->create(['email' => 'me@example.com']);
+
+    // Page 1 is a full page (100 users) with no email match, so walkSeerrPages
+    // must continue to page 2 (per pageInfo.pages) to find the current user.
+    $firstPage = collect()->range(1, 100)->map(fn (int $i): array => [
+        'id' => $i,
+        'displayName' => 'User '.$i,
+        'email' => 'user'.$i.'@example.com',
+    ])->all();
+
+    Http::fake([
+        'graphql.anilist.co' => Http::response(anilistSeasonResponse()),
+        'seerr.local:5055/api/v1/request*' => Http::response(['results' => [], 'pageInfo' => ['page' => 1, 'pages' => 1]]),
+        'seerr.local:5055/api/v1/user*' => Http::sequence()
+            ->push(['pageInfo' => ['page' => 1, 'pages' => 2], 'results' => $firstPage])
+            ->push(['pageInfo' => ['page' => 2, 'pages' => 2], 'results' => [
+                ['id' => 500, 'displayName' => 'Me', 'email' => 'me@example.com'],
+            ]]),
+    ]);
+
+    $this->actingAs($member)
+        ->get(route('media.anime.index'))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->loadDeferredProps('default', function ($page): void {
+                $page
+                    ->has('requestingUsers.users', 101)
+                    ->where('requestingUsers.defaultId', 500);
+            })
+        );
+});
+
+test('index marks a tv entry requested when the matching request is on the second page', function (): void {
+    $member = User::factory()->member()->create();
+
+    AnimeIdMap::factory()->tv()->create([
+        'anilist_id' => 154587,
+        'tmdb_tv_id' => 1396,
+        'tvdb_id' => 81189,
+        'tmdb_season' => 1,
+    ]);
+
+    // Page 1 is a full page of unrelated requests; the matching request sits on
+    // page 2, reachable only if pageInfo.pages is honoured.
+    $firstPage = collect()->range(1, 100)->map(fn (int $i): array => [
+        'media' => ['tmdbId' => 900000 + $i, 'mediaType' => 'tv'],
+    ])->all();
+
+    Http::fake([
+        'graphql.anilist.co' => Http::response(anilistSeasonResponse([
+            [
+                'id' => 154587,
+                'idMal' => 52991,
+                'format' => 'TV',
+                'status' => 'RELEASING',
+                'episodes' => 12,
+                'popularity' => 5000,
+                'averageScore' => 88,
+                'title' => ['romaji' => 'Test', 'english' => 'Test Show'],
+                'startDate' => ['year' => 2026, 'month' => 7, 'day' => 1],
+                'coverImage' => ['large' => 'https://img/test.jpg'],
+            ],
+        ])),
+        'seerr.local:5055/api/v1/request*' => Http::sequence()
+            ->push(['pageInfo' => ['page' => 1, 'pages' => 2], 'results' => $firstPage])
+            ->push(['pageInfo' => ['page' => 2, 'pages' => 2], 'results' => [
+                ['media' => ['tmdbId' => 1396, 'mediaType' => 'tv']],
+            ]]),
+        'seerr.local:5055/api/v1/user*' => Http::response(['results' => []]),
+    ]);
+
+    $this->actingAs($member)
+        ->get(route('media.anime.index', ['year' => 2026, 'season' => 'summer']))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->loadDeferredProps('default', function ($page): void {
+                $page->where('entries.0.status', 'requested');
+            })
+        );
+});
+
 test('index marks a tv entry as requested when a matching tv request keyed by mediaType:tmdbId exists', function (): void {
     $member = User::factory()->member()->create();
 
@@ -243,7 +326,7 @@ test('index does not mark a tv entry as requested when only a movie request with
         );
 });
 
-test('index dispatches the sync job when the id map table is empty and not when it has rows', function (): void {
+test('index dispatches the sync job when there are no dataset rows and not when one exists', function (): void {
     $member = User::factory()->member()->create();
 
     Http::fake([
@@ -257,11 +340,29 @@ test('index dispatches the sync job when the id map table is empty and not when 
     $this->actingAs($member)->get(route('media.anime.index'))->assertOk();
     Queue::assertPushed(SyncAnimeMappingJob::class);
 
-    // Populated table → no dispatch.
-    AnimeIdMap::factory()->tv()->create();
+    // A dataset-sourced row (user_confirmed = false) → no dispatch.
+    AnimeIdMap::factory()->tv()->create(['user_confirmed' => false]);
     Queue::fake();
     $this->actingAs($member)->get(route('media.anime.index'))->assertOk();
     Queue::assertNotPushed(SyncAnimeMappingJob::class);
+});
+
+test('index still dispatches the sync job when only a user_confirmed row exists', function (): void {
+    $member = User::factory()->member()->create();
+
+    Http::fake([
+        'graphql.anilist.co' => Http::response(anilistSeasonResponse()),
+        'seerr.local:5055/api/v1/request*' => Http::response(['results' => []]),
+        'seerr.local:5055/api/v1/user*' => Http::response(['results' => []]),
+    ]);
+
+    // A lone user-confirmed match must not suppress the bootstrap dispatch:
+    // the check keys on dataset (user_confirmed = false) rows only.
+    AnimeIdMap::factory()->userConfirmed()->create();
+
+    Queue::fake();
+    $this->actingAs($member)->get(route('media.anime.index'))->assertOk();
+    Queue::assertPushed(SyncAnimeMappingJob::class);
 });
 
 test('request submits a tv createRequest with the given season and userId', function (): void {

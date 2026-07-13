@@ -35,8 +35,9 @@ test('anime:sync-mappings populates the table from the mapping url', function ()
     expect(AnimeIdMap::query()->count())->toBe(1000);
 });
 
-test('anime:sync-mappings with --if-empty skips when the table already has rows', function (): void {
-    AnimeIdMap::factory()->tv()->create();
+test('anime:sync-mappings with --if-empty skips when a dataset row already exists', function (): void {
+    // A dataset-sourced row (user_confirmed = false) counts as populated.
+    AnimeIdMap::factory()->tv()->create(['user_confirmed' => false]);
 
     Http::fake(['fribb.test/*' => Http::response(commandMappingDataset())]);
 
@@ -49,10 +50,48 @@ test('anime:sync-mappings with --if-empty skips when the table already has rows'
     Http::assertNothingSent();
 });
 
+test('anime:sync-mappings with --if-empty still runs when only a user_confirmed row exists', function (): void {
+    // A lone user-confirmed match must not suppress the bootstrap: --if-empty
+    // only counts dataset-sourced rows.
+    AnimeIdMap::factory()->userConfirmed()->create();
+
+    Http::fake(['fribb.test/*' => Http::response(commandMappingDataset())]);
+
+    $this->artisan('anime:sync-mappings', ['--if-empty' => true])->assertSuccessful();
+
+    // The confirmed row survives (only dataset rows are wiped) plus 1000 loaded.
+    expect(AnimeIdMap::query()->count())->toBe(1001);
+    expect(AnimeIdMap::query()->where('user_confirmed', false)->count())->toBe(1000);
+});
+
 test('anime:sync-mappings with --if-empty runs when the table is empty', function (): void {
     Http::fake(['fribb.test/*' => Http::response(commandMappingDataset())]);
 
     $this->artisan('anime:sync-mappings', ['--if-empty' => true])->assertSuccessful();
 
     expect(AnimeIdMap::query()->count())->toBe(1000);
+});
+
+test('anime:sync-mappings fails when the dataset is rejected as an empty list', function (): void {
+    AnimeIdMap::factory()->tv()->create(['anilist_id' => 111, 'user_confirmed' => false]);
+
+    Http::fake(['fribb.test/*' => Http::response([])]);
+
+    // A rejected payload throws in the job; the command must surface a failure
+    // rather than reporting a false success, and the existing row is untouched.
+    $this->artisan('anime:sync-mappings')
+        ->expectsOutputToContain('failed')
+        ->assertFailed();
+
+    expect(AnimeIdMap::query()->where('anilist_id', 111)->exists())->toBeTrue();
+});
+
+test('anime:sync-mappings fails when the dataset has fewer than the minimum rows', function (): void {
+    Http::fake(['fribb.test/*' => Http::response(commandMappingDataset(count: 10))]);
+
+    $this->artisan('anime:sync-mappings')
+        ->expectsOutputToContain('failed')
+        ->assertFailed();
+
+    expect(AnimeIdMap::query()->count())->toBe(0);
 });

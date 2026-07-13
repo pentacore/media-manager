@@ -61,8 +61,9 @@ test('handle loads the dataset and inserts one row per valid entry', function ()
         ],
     ]));
 
-    (new SyncAnimeMappingJob)->handle();
+    $written = (new SyncAnimeMappingJob)->handle();
 
+    expect($written)->toBe(1002);
     expect(AnimeIdMap::query()->count())->toBe(1002);
 
     $animeIdMap = AnimeIdMap::query()->where('anilist_id', 100)->firstOrFail();
@@ -78,16 +79,20 @@ test('handle loads the dataset and inserts one row per valid entry', function ()
     expect($movie->tmdb_tv_id)->toBeNull();
 });
 
-test('handle extracts the first element of an array movie id and keeps scalar tv ids', function (): void {
+test('handle picks the lowest of multiple array movie ids and keeps scalar tv ids', function (): void {
     fakeMappingDataset(fribbDatasetWithMinRows([
-        ['type' => 'MOVIE', 'anilist_id' => 10, 'themoviedb_id' => ['movie' => [128, 999]]],
+        // Out-of-order list — the lowest id (99) must win regardless of position.
+        ['type' => 'MOVIE', 'anilist_id' => 10, 'themoviedb_id' => ['movie' => [128, 99, 205]]],
+        // A single-element movie array collapses to that one id.
+        ['type' => 'MOVIE', 'anilist_id' => 12, 'themoviedb_id' => ['movie' => [128]]],
         ['type' => 'TV', 'anilist_id' => 11, 'themoviedb_id' => ['tv' => 26209]],
     ]));
 
     (new SyncAnimeMappingJob)->handle();
 
-    expect(AnimeIdMap::query()->where('anilist_id', 10)->value('tmdb_movie_id'))->toBe(128);
+    expect(AnimeIdMap::query()->where('anilist_id', 10)->value('tmdb_movie_id'))->toBe(99);
     expect(AnimeIdMap::query()->where('anilist_id', 10)->value('tmdb_tv_id'))->toBeNull();
+    expect(AnimeIdMap::query()->where('anilist_id', 12)->value('tmdb_movie_id'))->toBe(128);
     expect(AnimeIdMap::query()->where('anilist_id', 11)->value('tmdb_tv_id'))->toBe(26209);
     expect(AnimeIdMap::query()->where('anilist_id', 11)->value('tmdb_movie_id'))->toBeNull();
 });
@@ -103,6 +108,26 @@ test('handle skips entries with neither an anilist nor a mal id', function (): v
     // The keyless entry is skipped; only the 500 row + 1000 filler survive.
     expect(AnimeIdMap::query()->count())->toBe(1001);
     expect(AnimeIdMap::query()->where('anilist_id', 500)->exists())->toBeTrue();
+});
+
+test('handle drops rows without any tmdb id and does not count them toward the floor', function (): void {
+    // Key-only rows (anilist/mal present, no themoviedb_id) are unrequestable
+    // and must be excluded entirely — not inserted, and not counted against the
+    // MIN_ROWS floor. Paired with exactly MIN_ROWS usable filler rows so that if
+    // these were miscounted the total would differ.
+    fakeMappingDataset(fribbDatasetWithMinRows([
+        ['type' => 'TV', 'anilist_id' => 700, 'mal_id' => 701],
+        ['type' => 'MOVIE', 'anilist_id' => 702, 'themoviedb_id' => []],
+        ['type' => 'TV', 'anilist_id' => 703, 'mal_id' => 704, 'themoviedb_id' => ['tv' => 'not-a-number']],
+    ]));
+
+    $written = (new SyncAnimeMappingJob)->handle();
+
+    // Only the 1000 usable filler rows are written; the three key-only rows are
+    // dropped and excluded from the count.
+    expect($written)->toBe(1000);
+    expect(AnimeIdMap::query()->count())->toBe(1000);
+    expect(AnimeIdMap::query()->whereIn('anilist_id', [700, 702, 703])->exists())->toBeFalse();
 });
 
 test('handle deletes dataset rows but preserves user_confirmed matches', function (): void {
@@ -153,54 +178,56 @@ test('handle records the last-synced marker after a successful reload', function
 
     fakeMappingDataset(fribbDatasetWithMinRows());
 
-    (new SyncAnimeMappingJob)->handle();
+    $written = (new SyncAnimeMappingJob)->handle();
 
+    expect($written)->toBe(1000);
     expect(Cache::get('anime:mapping:last-synced-at'))->not->toBeNull();
 });
 
-test('handle returns early without wiping rows when the payload is not an array', function (): void {
+test('handle throws and keeps existing rows when the payload is not an array', function (): void {
     AnimeIdMap::factory()->tv()->create(['anilist_id' => 111, 'user_confirmed' => false]);
 
     Http::fake(['fribb.test/*' => Http::response('"not-an-array"')]);
 
-    (new SyncAnimeMappingJob)->handle();
+    // A non-list payload is rejected before the delete — the throw happens first
+    // so the existing table is left intact.
+    expect(fn (): int => (new SyncAnimeMappingJob)->handle())->toThrow(InvalidArgumentException::class);
 
-    // Non-array payload → early return, existing rows untouched.
     expect(AnimeIdMap::query()->where('anilist_id', 111)->exists())->toBeTrue();
 });
 
-test('handle keeps existing rows when the payload is an empty list', function (): void {
+test('handle throws and keeps existing rows when the payload is an empty list', function (): void {
     AnimeIdMap::factory()->tv()->create(['anilist_id' => 111, 'user_confirmed' => false]);
 
     fakeMappingDataset([]);
 
-    (new SyncAnimeMappingJob)->handle();
+    expect(fn (): int => (new SyncAnimeMappingJob)->handle())->toThrow(InvalidArgumentException::class);
 
     expect(AnimeIdMap::query()->where('anilist_id', 111)->exists())->toBeTrue();
 });
 
-test('handle keeps existing rows when the payload is an assoc/error object', function (): void {
+test('handle throws and keeps existing rows when the payload is an assoc/error object', function (): void {
     AnimeIdMap::factory()->tv()->create(['anilist_id' => 111, 'user_confirmed' => false]);
 
     // An error object like {"error":"rate limited"} passes is_array() but is
     // not a list, so it must be rejected before the delete.
     Http::fake(['fribb.test/*' => Http::response(['error' => 'rate limited'])]);
 
-    (new SyncAnimeMappingJob)->handle();
+    expect(fn (): int => (new SyncAnimeMappingJob)->handle())->toThrow(InvalidArgumentException::class);
 
     expect(AnimeIdMap::query()->where('anilist_id', 111)->exists())->toBeTrue();
 });
 
-test('handle keeps existing rows when a valid list has fewer than the minimum mappable rows', function (): void {
+test('handle throws and keeps existing rows when a valid list has fewer than the minimum mappable rows', function (): void {
     AnimeIdMap::factory()->tv()->create(['anilist_id' => 111, 'user_confirmed' => false]);
 
     // A well-formed but too-small list (below MIN_ROWS = 1000) is treated as
-    // corrupt: existing rows must be kept and the small list ignored.
+    // corrupt: it throws, existing rows are kept and the small list is ignored.
     fakeMappingDataset(fribbDatasetWithMinRows([
         ['type' => 'TV', 'anilist_id' => 222, 'themoviedb_id' => ['tv' => 1396]],
     ], count: 10));
 
-    (new SyncAnimeMappingJob)->handle();
+    expect(fn (): int => (new SyncAnimeMappingJob)->handle())->toThrow(InvalidArgumentException::class);
 
     expect(AnimeIdMap::query()->where('anilist_id', 111)->exists())->toBeTrue();
     expect(AnimeIdMap::query()->where('anilist_id', 222)->exists())->toBeFalse();
