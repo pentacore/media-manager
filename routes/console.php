@@ -16,6 +16,7 @@ use App\Console\Commands\RefreshInterventionCount;
 use App\Console\Commands\RefreshSabnzbdDownloadCounts;
 use App\Console\Commands\WarmServiceCaches;
 use App\Jobs\ReconcileSearchIndex;
+use App\Jobs\SyncAnimeMappingJob;
 use Illuminate\Support\Facades\Schedule;
 
 Schedule::command(CheckServiceHealth::class)
@@ -61,6 +62,10 @@ Schedule::command(WarmServiceCaches::class)
 
 Schedule::job(new ReconcileSearchIndex)
     ->dailyAt('03:30')
+    ->withoutOverlapping();
+
+Schedule::job(new SyncAnimeMappingJob)
+    ->weekly()
     ->withoutOverlapping();
 
 Schedule::command(AggregateStatistics::class)

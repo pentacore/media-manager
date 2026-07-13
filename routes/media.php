@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use App\Http\Controllers\Library\ActivityController as LibraryActivityController;
+use App\Http\Controllers\Media\AnimeController;
 use App\Http\Controllers\Media\InstantSearchController;
 use App\Http\Controllers\Media\MovieController;
 use App\Http\Controllers\Media\RequestController;
@@ -20,6 +21,12 @@ Route::middleware(['auth', 'verified', 'password.set', 'role:member'])
         Route::post('series', [SeriesController::class, 'store'])->name('series.store');
         Route::get('series/{id}', [SeriesController::class, 'show'])->whereNumber('id')->name('series.show');
         Route::delete('series/{id}', [SeriesController::class, 'destroy'])->whereNumber('id')->name('series.destroy');
+
+        // Seasonal anime discovery + requests
+        Route::get('anime', [AnimeController::class, 'index'])->name('anime.index');
+        Route::post('anime/request', [AnimeController::class, 'request'])->name('anime.request');
+        Route::post('anime/find-match', [AnimeController::class, 'findMatch'])->name('anime.find-match');
+        Route::post('anime/confirm-match', [AnimeController::class, 'confirmMatch'])->name('anime.confirm-match');
 
         // Radarr movies
         Route::get('movies', [MovieController::class, 'index'])->name('movies.index');

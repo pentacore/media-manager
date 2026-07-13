@@ -113,6 +113,38 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Seasonal Anime
+    |--------------------------------------------------------------------------
+    |
+    | Discovery + request of anime by broadcast season (e.g. Summer 2026).
+    | Seasonal lists are fetched live from AniList or Jikan (switchable per
+    | request via ?source=). Ids are mapped to TMDB/TVDB via the Fribb
+    | anime-lists dataset, reloaded weekly into the anime_id_maps table.
+    |
+    */
+
+    'anime' => [
+        // Default seasonal source: 'anilist' or 'jikan'. AniList yields the
+        // MAL id + start date + cover art in a single call, so it maps best.
+        'source' => env('MEDIAMANAGER_ANIME_SOURCE', 'anilist'),
+
+        // Fribb anime-lists minified dataset used by SyncAnimeMappingJob.
+        'mapping_url' => env(
+            'MEDIAMANAGER_ANIME_MAPPING_URL',
+            'https://raw.githubusercontent.com/Fribb/anime-lists/master/anime-list-mini.json',
+        ),
+
+        'cache_ttl' => [
+            // Current/future seasons still gain entries and change airing
+            // status, so refresh a few times a day.
+            'current' => (int) env('MEDIAMANAGER_ANIME_TTL_CURRENT', 21600),
+            // Past seasons are immutable — cache hard.
+            'past' => (int) env('MEDIAMANAGER_ANIME_TTL_PAST', 2592000),
+        ],
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
     | Webhooks
     |--------------------------------------------------------------------------
     |
