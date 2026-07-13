@@ -21,6 +21,7 @@ import {
     Search,
     Shield,
     Sparkles,
+    Sprout,
     Tv,
     Users,
     ListTodo,
@@ -44,6 +45,7 @@ import AIChatController from '@/actions/App/Http/Controllers/AI/ChatController';
 import NowPlayingController from '@/actions/App/Http/Controllers/Emby/NowPlayingController';
 import WatchHistoryController from '@/actions/App/Http/Controllers/Emby/WatchHistoryController';
 import LibraryActivityController from '@/actions/App/Http/Controllers/Library/ActivityController';
+import AnimeController from '@/actions/App/Http/Controllers/Media/AnimeController';
 import MovieController from '@/actions/App/Http/Controllers/Media/MovieController';
 import RequestController from '@/actions/App/Http/Controllers/Media/RequestController';
 import SearchController from '@/actions/App/Http/Controllers/Media/SearchController';
@@ -271,6 +273,11 @@ const mediaNavItems = computed<NavItem[]>(() => [
         title: 'Requests',
         href: RequestController.index.url(),
         icon: Heart,
+    },
+    {
+        title: 'Seasonal Anime',
+        href: AnimeController.index.url(),
+        icon: Sprout,
     },
     {
         title: 'Search',

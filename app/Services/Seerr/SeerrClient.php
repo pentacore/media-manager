@@ -91,6 +91,47 @@ class SeerrClient implements Warmable
     }
 
     /**
+     * Create a new media request. Only mediaType + mediaId are required; the
+     * payload is kept minimal so Seerr applies its own server defaults and
+     * anime profile detection. For TV, pass the specific season numbers (or
+     * 'all'); movies ignore the seasons field. A userId files the request on
+     * behalf of that Seerr user.
+     *
+     * @param  array<int, int>|string  $seasons
+     * @return array<string, mixed>
+     *
+     * @throws RequestException|ConnectionException
+     */
+    public function createRequest(int $tmdbId, string $mediaType, array|string $seasons = 'all', ?int $userId = null): array
+    {
+        if (! in_array($mediaType, ['tv', 'movie'], true)) {
+            throw new InvalidArgumentException(sprintf('Invalid media type "%s". Expected "tv" or "movie".', $mediaType));
+        }
+
+        $payload = [
+            'mediaType' => $mediaType,
+            'mediaId' => $tmdbId,
+        ];
+
+        if ($mediaType === 'tv') {
+            $payload['seasons'] = $seasons;
+        }
+
+        if ($userId !== null) {
+            $payload['userId'] = $userId;
+        }
+
+        $response = $this->buildClient()
+            ->post(sprintf('/api/%s/request', $this->apiVersion), $payload)
+            ->throw()
+            ->json() ?? [];
+
+        $this->cache()->bustAll();
+
+        return $response;
+    }
+
+    /**
      * PUT a full request body to Seerr — the upstream contract requires
      * mediaType + mediaId in every payload, so callers should merge
      * incoming changes onto the existing request before invoking this.
