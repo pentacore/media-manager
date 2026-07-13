@@ -69,16 +69,18 @@ class AnimeIdMapper
 
     /**
      * Persist a user-confirmed fuzzy match so the entry maps automatically
-     * next time. Overwrites any existing confirmed row for the same key.
+     * next time. Overwrites any existing confirmed row for the same key. The
+     * TMDB id is stored in the column matching the *chosen candidate's* media
+     * type, which may differ from the anime's format.
+     *
+     * @param  'tv'|'movie'  $mediaType
      */
     public function persistConfirmedMatch(
         ?int $anilistId,
         ?int $malId,
         int $tmdbId,
-        AnimeFormat $animeFormat,
+        string $mediaType,
     ): AnimeIdMap {
-        $mediaType = $animeFormat->seerrMediaType();
-
         return AnimeIdMap::query()->updateOrCreate(
             $anilistId !== null
                 ? ['anilist_id' => $anilistId, 'user_confirmed' => true]
@@ -88,7 +90,7 @@ class AnimeIdMapper
                 'mal_id' => $malId,
                 'tmdb_tv_id' => $mediaType === 'tv' ? $tmdbId : null,
                 'tmdb_movie_id' => $mediaType === 'movie' ? $tmdbId : null,
-                'type' => strtoupper($animeFormat->value),
+                'type' => strtoupper($mediaType),
                 'user_confirmed' => true,
             ],
         );
@@ -100,10 +102,18 @@ class AnimeIdMapper
             return AnimeMapping::unmapped($animeFormat);
         }
 
-        $mediaType = $animeFormat->seerrMediaType();
-        $tmdbId = $mediaType === 'movie'
-            ? ($animeIdMap->tmdb_movie_id ?? $animeIdMap->tmdb_tv_id)
-            : ($animeIdMap->tmdb_tv_id ?? $animeIdMap->tmdb_movie_id);
+        // The id and its media type must come from the same populated column:
+        // TMDB tv/movie ids overlap numerically, and Fribb maps some MOVIE
+        // entries onto TMDB tv records (and vice versa). Prefer the format's
+        // own namespace, but when only the other column is populated adopt
+        // *that* column's media type so we never request an unrelated title.
+        [$tmdbId, $mediaType] = $animeFormat->seerrMediaType() === 'movie'
+            ? ($animeIdMap->tmdb_movie_id !== null
+                ? [$animeIdMap->tmdb_movie_id, 'movie']
+                : [$animeIdMap->tmdb_tv_id, 'tv'])
+            : ($animeIdMap->tmdb_tv_id !== null
+                ? [$animeIdMap->tmdb_tv_id, 'tv']
+                : [$animeIdMap->tmdb_movie_id, 'movie']);
 
         if ($tmdbId === null) {
             return AnimeMapping::unmapped($animeFormat);

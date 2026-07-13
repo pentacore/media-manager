@@ -31,7 +31,7 @@ interface EntryContext {
     title: string;
     anilistId: number | null;
     malId: number | null;
-    format: string;
+    startDate: string | null;
 }
 
 const props = defineProps<{
@@ -42,12 +42,11 @@ const props = defineProps<{
 
 const emit = defineEmits<{
     (event: 'update:open', value: boolean): void;
-    (event: 'confirmed', tmdbId: number): void;
 }>();
 
 const searching = ref(false);
 const confirming = ref(false);
-const selectedTmdbId = ref<number | null>(null);
+const selectedCandidate = ref<MatchCandidate | null>(null);
 const searched = ref(false);
 const candidates = ref<MatchCandidate[]>([]);
 
@@ -82,7 +81,7 @@ function runSearch(): void {
 
     searching.value = true;
     searched.value = false;
-    selectedTmdbId.value = null;
+    selectedCandidate.value = null;
     candidates.value = [];
 
     router.post(
@@ -106,7 +105,7 @@ watch(
         if (isOpen) {
             runSearch();
         } else {
-            selectedTmdbId.value = null;
+            selectedCandidate.value = null;
             searched.value = false;
         }
     },
@@ -122,9 +121,9 @@ function close(): void {
 
 function confirm(): void {
     const entry = props.entry;
-    const tmdbId = selectedTmdbId.value;
+    const candidate = selectedCandidate.value;
 
-    if (!entry || tmdbId === null) {
+    if (!entry || candidate === null) {
         return;
     }
 
@@ -135,14 +134,18 @@ function confirm(): void {
         {
             anilistId: entry.anilistId,
             malId: entry.malId,
-            tmdbId,
-            format: entry.format,
+            tmdbId: candidate.tmdbId,
+            mediaType: candidate.mediaType,
+            tmdbSeason: null,
+            startDate: entry.startDate,
             userId: props.userId,
         },
         {
             preserveScroll: true,
+            preserveState: true,
+            // The card is only flipped to "requested" once the backend flashes
+            // a `requestOutcome` with `ok === true` (handled in Season.vue).
             onSuccess: () => {
-                emit('confirmed', tmdbId);
                 emit('update:open', false);
             },
             onFinish: () => {
@@ -191,12 +194,14 @@ function confirm(): void {
                     :class="
                         cn(
                             'flex items-center gap-3 rounded-lg border p-2.5 text-left transition-colors',
-                            selectedTmdbId === candidate.tmdbId
+                            selectedCandidate?.tmdbId === candidate.tmdbId &&
+                                selectedCandidate?.mediaType ===
+                                    candidate.mediaType
                                 ? 'border-accent bg-accent/10'
                                 : 'border-border hover:bg-bg-hover',
                         )
                     "
-                    @click="selectedTmdbId = candidate.tmdbId"
+                    @click="selectedCandidate = candidate"
                 >
                     <Poster
                         :hint="candidate.title.toLowerCase().slice(0, 12)"
@@ -228,7 +233,7 @@ function confirm(): void {
                 </Button>
                 <Button
                     :disabled="
-                        confirming || searching || selectedTmdbId === null
+                        confirming || searching || selectedCandidate === null
                     "
                     @click="confirm"
                 >

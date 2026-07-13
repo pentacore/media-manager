@@ -115,8 +115,47 @@ test('resolveMany prefers a user_confirmed row over a dataset row for the same i
     expect($resolved['anilist:700']->tmdbId)->toBe(222);
 });
 
+test('resolveMany falls back to the tv id and tv media type for a movie-format entry whose row only has a tv id', function (): void {
+    // P1 regression: a MOVIE-format entry whose Fribb row only populates
+    // tmdb_tv_id must resolve as a *tv* mapping with the tv id — never as a
+    // movie mapping carrying a tv id.
+    AnimeIdMap::factory()->create([
+        'anilist_id' => 321,
+        'mal_id' => null,
+        'tmdb_tv_id' => 4242,
+        'tmdb_movie_id' => null,
+        'type' => 'MOVIE',
+    ]);
+
+    $resolved = $this->mapper->resolveMany(collect([anilistEntry(321, null, AnimeFormat::Movie)]));
+
+    $mapping = $resolved['anilist:321'];
+    expect($mapping->isMapped())->toBeTrue();
+    expect($mapping->tmdbId)->toBe(4242);
+    expect($mapping->mediaType)->toBe('tv');
+});
+
+test('resolveMany falls back to the movie id and movie media type for a tv-format entry whose row only has a movie id', function (): void {
+    // The mirror of the above: a TV-format entry whose row only populates
+    // tmdb_movie_id must resolve as a *movie* mapping with the movie id.
+    AnimeIdMap::factory()->create([
+        'anilist_id' => 654,
+        'mal_id' => null,
+        'tmdb_tv_id' => null,
+        'tmdb_movie_id' => 7373,
+        'type' => 'TV',
+    ]);
+
+    $resolved = $this->mapper->resolveMany(collect([anilistEntry(654, null, AnimeFormat::Tv)]));
+
+    $mapping = $resolved['anilist:654'];
+    expect($mapping->isMapped())->toBeTrue();
+    expect($mapping->tmdbId)->toBe(7373);
+    expect($mapping->mediaType)->toBe('movie');
+});
+
 test('persistConfirmedMatch upserts a user_confirmed tv row', function (): void {
-    $row = $this->mapper->persistConfirmedMatch(500, 600, 1396, AnimeFormat::Tv);
+    $row = $this->mapper->persistConfirmedMatch(500, 600, 1396, 'tv');
 
     expect($row->user_confirmed)->toBeTrue();
     expect($row->tmdb_tv_id)->toBe(1396);
@@ -132,7 +171,7 @@ test('persistConfirmedMatch upserts a user_confirmed tv row', function (): void 
 });
 
 test('persistConfirmedMatch stores a movie tmdb id under tmdb_movie_id', function (): void {
-    $row = $this->mapper->persistConfirmedMatch(null, 601, 129, AnimeFormat::Movie);
+    $row = $this->mapper->persistConfirmedMatch(null, 601, 129, 'movie');
 
     expect($row->tmdb_movie_id)->toBe(129);
     expect($row->tmdb_tv_id)->toBeNull();
@@ -141,8 +180,8 @@ test('persistConfirmedMatch stores a movie tmdb id under tmdb_movie_id', functio
 });
 
 test('persistConfirmedMatch overwrites an existing confirmed row for the same anilist id', function (): void {
-    $this->mapper->persistConfirmedMatch(800, null, 10, AnimeFormat::Tv);
-    $this->mapper->persistConfirmedMatch(800, null, 20, AnimeFormat::Tv);
+    $this->mapper->persistConfirmedMatch(800, null, 10, 'tv');
+    $this->mapper->persistConfirmedMatch(800, null, 20, 'tv');
 
     expect(AnimeIdMap::query()->where('anilist_id', 800)->where('user_confirmed', true)->count())->toBe(1);
     expect(AnimeIdMap::query()->where('anilist_id', 800)->value('tmdb_tv_id'))->toBe(20);

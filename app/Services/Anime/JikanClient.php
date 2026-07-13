@@ -7,9 +7,9 @@ namespace App\Services\Anime;
 use App\Enums\AnimeAirStatus;
 use App\Enums\AnimeFormat;
 use App\Enums\AnimeSeason;
+use App\Services\Anime\Concerns\BuildsPublicApiClient;
 use Illuminate\Http\Client\PendingRequest;
 use Illuminate\Support\Collection;
-use Illuminate\Support\Facades\Http;
 use Throwable;
 
 /**
@@ -21,6 +21,8 @@ use Throwable;
  */
 class JikanClient implements SeasonalAnimeSource
 {
+    use BuildsPublicApiClient;
+
     private const string BASE_URL = 'https://api.jikan.moe/v4';
 
     private const int MAX_PAGES = 15;
@@ -82,11 +84,7 @@ class JikanClient implements SeasonalAnimeSource
 
     private function client(): PendingRequest
     {
-        return Http::acceptJson()
-            ->timeout(15)
-            ->connectTimeout(5)
-            ->withUserAgent('MediaManager/'.config('app.version').' JikanClient')
-            ->retry(3, fn (int $attempt): int => $attempt * 500, throw: false);
+        return $this->publicApiClient('JikanClient');
     }
 
     /**

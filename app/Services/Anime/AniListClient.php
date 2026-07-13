@@ -7,9 +7,9 @@ namespace App\Services\Anime;
 use App\Enums\AnimeAirStatus;
 use App\Enums\AnimeFormat;
 use App\Enums\AnimeSeason;
+use App\Services\Anime\Concerns\BuildsPublicApiClient;
 use Illuminate\Http\Client\PendingRequest;
 use Illuminate\Support\Collection;
-use Illuminate\Support\Facades\Http;
 use Throwable;
 
 /**
@@ -21,6 +21,8 @@ use Throwable;
  */
 class AniListClient implements SeasonalAnimeSource
 {
+    use BuildsPublicApiClient;
+
     private const string ENDPOINT = 'https://graphql.anilist.co';
 
     private const int PER_PAGE = 50;
@@ -114,11 +116,7 @@ class AniListClient implements SeasonalAnimeSource
 
     private function client(): PendingRequest
     {
-        return Http::acceptJson()
-            ->timeout(15)
-            ->connectTimeout(5)
-            ->withUserAgent('MediaManager/'.config('app.version').' AniListClient')
-            ->retry(3, fn (int $attempt): int => $attempt * 500, throw: false);
+        return $this->publicApiClient('AniListClient');
     }
 
     /**

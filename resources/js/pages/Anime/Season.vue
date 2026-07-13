@@ -7,7 +7,7 @@ import {
     Loader2,
     Sprout,
 } from '@lucide/vue';
-import { computed, ref } from 'vue';
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 import AnimeController from '@/actions/App/Http/Controllers/Media/AnimeController';
 import { request as requestAnime } from '@/actions/App/Http/Controllers/Media/AnimeController';
 import { Poster, StatusPill, SvcChip } from '@/components/mm';
@@ -210,12 +210,54 @@ function toggleAirStatus(status: AnimeAirStatus): void {
     activeAirStatuses.value = next;
 }
 
-// Cards optimistically flipped to "requested" after a successful request.
+// Cards flipped to "requested" once the backend confirms the request
+// succeeded via the `requestOutcome` flash payload (see the listener below).
 const requestedKeys = ref<Set<string>>(new Set());
 
 function effectiveStatus(entry: SeasonEntry): EntryStatus {
     return requestedKeys.value.has(entry.key) ? 'requested' : entry.status;
 }
+
+interface RequestOutcome {
+    ok: boolean;
+    tmdbId: number;
+    mediaType: string;
+}
+
+// Inertia v3 delivers flash data through the `flash` router event, not through
+// page props — mirror the pattern used in lib/flashToast.ts. The controller
+// turns a Seerr failure into a normal `back()` redirect (a *successful* Inertia
+// visit), so we must only flip a card when `ok === true`.
+let stopFlashListener: (() => void) | null = null;
+
+onMounted(() => {
+    stopFlashListener = router.on('flash', (event) => {
+        const outcome = (event as CustomEvent).detail?.flash?.requestOutcome as
+            RequestOutcome | undefined;
+
+        if (!outcome || !outcome.ok) {
+            return;
+        }
+
+        const flipped = new Set(requestedKeys.value);
+
+        for (const entry of props.entries ?? []) {
+            if (
+                entry.mapping.tmdbId === outcome.tmdbId &&
+                entry.mapping.mediaType === outcome.mediaType
+            ) {
+                flipped.add(entry.key);
+            }
+        }
+
+        requestedKeys.value = flipped;
+    });
+});
+
+onBeforeUnmount(() => {
+    stopFlashListener?.();
+    stopFlashListener = null;
+});
 
 const visibleEntries = computed<SeasonEntry[]>(() => {
     const entries = props.entries ?? [];
@@ -330,11 +372,10 @@ function requestEntry(entry: SeasonEntry): void {
         {
             preserveScroll: true,
             preserveState: true,
-            onSuccess: () => {
-                const flipped = new Set(requestedKeys.value);
-                flipped.add(entry.key);
-                requestedKeys.value = flipped;
-            },
+            // The card is only flipped to "requested" when the backend flashes a
+            // successful `requestOutcome` (handled by the flash listener above),
+            // never optimistically — a Seerr failure still resolves as a
+            // successful Inertia visit.
             onFinish: () => {
                 const next = new Set(requestingKeys.value);
                 next.delete(entry.key);
@@ -359,18 +400,10 @@ const matchEntryContext = computed(() =>
               title: matchEntry.value.title,
               anilistId: matchEntry.value.anilistId,
               malId: matchEntry.value.malId,
-              format: matchEntry.value.format,
+              startDate: matchEntry.value.startDate,
           }
         : null,
 );
-
-function onMatchConfirmed(): void {
-    if (matchEntry.value) {
-        const flipped = new Set(requestedKeys.value);
-        flipped.add(matchEntry.value.key);
-        requestedKeys.value = flipped;
-    }
-}
 </script>
 
 <template>
@@ -734,7 +767,6 @@ function onMatchConfirmed(): void {
             v-model:open="matchDialogOpen"
             :entry="matchEntryContext"
             :user-id="resolvedUserId"
-            @confirmed="onMatchConfirmed"
         />
     </div>
 </template>
