@@ -9,6 +9,7 @@ use App\Models\ServiceConnection;
 use App\Services\MediaReplacement\MediaReplacementActions;
 use App\Services\MediaReplacement\ReleaseFingerprint;
 use App\Settings\MediaReplacementSettings;
+use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\Request;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
@@ -58,18 +59,28 @@ function sonarrReplacementRelease(): array
  * Method-aware fake so a GET and DELETE on the same /episodefile/{id} URL can
  * return different statuses.
  *
- * @param  array{grabOk?: bool, deleteOk?: bool, currentFileId?: int, releases?: list<array<string, mixed>>}  $opts
+ * @param  array{grabOk?: bool, grabConnection?: bool, deleteOk?: bool, currentFileId?: int, releases?: list<array<string, mixed>>, onDelete?: callable}  $opts
  */
 function fakeExecutor(array $opts = []): void
 {
     $grabOk = $opts['grabOk'] ?? true;
+    $grabConnection = $opts['grabConnection'] ?? false;
     $deleteOk = $opts['deleteOk'] ?? true;
     $currentFileId = $opts['currentFileId'] ?? 501;
     $releases = $opts['releases'] ?? [sonarrReplacementRelease()];
+    $onDelete = $opts['onDelete'] ?? null;
 
-    Http::fake(function (Request $request) use ($grabOk, $deleteOk, $currentFileId, $releases) {
+    Http::fake(function (Request $request) use ($grabOk, $grabConnection, $deleteOk, $currentFileId, $releases, $onDelete) {
         $method = $request->method();
         $url = $request->url();
+
+        if ($method === 'POST' && str_contains($url, '/api/v3/release') && $grabConnection) {
+            throw new ConnectionException('Connection timed out');
+        }
+
+        if ($method === 'DELETE' && str_contains($url, '/api/v3/episodefile/') && $onDelete !== null) {
+            $onDelete();
+        }
 
         return match (true) {
             $method === 'POST' && str_contains($url, '/api/v3/release') => Http::response([], $grabOk ? 201 : 500),
@@ -225,6 +236,60 @@ test('marks the attempt failed and never deletes when the grab is rejected', fun
     Http::assertNotSent(fn (Request $request): bool => $request->method() === 'DELETE');
 
     expect(MediaReplacementAttempt::first()->status)->toBe(MediaReplacementStatus::Failed);
+});
+
+test('an indeterminate grab (connection error) keeps the attempt trackable instead of failing it', function (): void {
+    fakeExecutor(['grabConnection' => true]);
+
+    $result = resolve(MediaReplacementActions::class)->execute(replaceActionRequest());
+
+    expect($result['replacement_initiated'])->toBeFalse()
+        ->and($result['grab_outcome'])->toBe('indeterminate')
+        ->and($result['status'])->toBe('downloading');
+
+    // No delete or blocklist on an indeterminate grab; attempt stays trackable
+    // (non-terminal) so webhooks / reconciliation can resolve it.
+    Http::assertNotSent(fn (Request $request): bool => $request->method() === 'DELETE');
+    Http::assertNotSent(fn (Request $request): bool => str_contains($request->url(), '/api/v3/history/failed/'));
+
+    expect(MediaReplacementAttempt::first()->status)->toBe(MediaReplacementStatus::Downloading);
+});
+
+test('a retry reuses the existing attempt row instead of hitting a duplicate key', function (): void {
+    fakeExecutor();
+    $actionRequest = replaceActionRequest();
+
+    // A prior run already created an attempt for this ActionRequest and failed.
+    // The Action Queue reuses the same ActionRequest on Retry, and
+    // action_request_id is unique, so a plain create() would duplicate-key here.
+    MediaReplacementAttempt::factory()->create([
+        'action_request_id' => $actionRequest->id,
+        'status' => MediaReplacementStatus::Failed,
+        'failure_reason' => 'Replacement grab was rejected; the current file was left untouched.',
+    ]);
+
+    $result = resolve(MediaReplacementActions::class)->execute($actionRequest);
+
+    expect($result['replacement_initiated'])->toBeTrue()
+        ->and(MediaReplacementAttempt::where('action_request_id', $actionRequest->id)->count())->toBe(1)
+        ->and(MediaReplacementAttempt::first()->status)->toBe(MediaReplacementStatus::Downloading)
+        ->and(MediaReplacementAttempt::first()->failure_reason)->toBeNull();
+});
+
+test('does not regress a terminal state a webhook set during execution', function (): void {
+    // Simulate a fast Download webhook that verifies the attempt while the
+    // executor is still deleting the old file.
+    fakeExecutor([
+        'onDelete' => function (): void {
+            MediaReplacementAttempt::query()->update(['status' => MediaReplacementStatus::Verified->value]);
+        },
+    ]);
+
+    resolve(MediaReplacementActions::class)->execute(replaceActionRequest());
+
+    // The executor must not write `downloading` after the grab, so the
+    // webhook-set `verified` survives.
+    expect(MediaReplacementAttempt::first()->status)->toBe(MediaReplacementStatus::Verified);
 });
 
 test('marks the attempt needs_attention when deletion fails after a successful grab', function (): void {

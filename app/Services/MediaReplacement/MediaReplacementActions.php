@@ -14,6 +14,8 @@ use App\Models\ServiceConnection;
 use App\Services\Actions\ActionExecutor;
 use App\Services\Radarr\RadarrClient;
 use App\Services\Sonarr\SonarrClient;
+use Illuminate\Http\Client\ConnectionException;
+use Illuminate\Http\Client\RequestException;
 use Illuminate\Support\Facades\Log;
 use InvalidArgumentException;
 use RuntimeException;
@@ -86,18 +88,46 @@ final readonly class MediaReplacementActions implements ActionExecutor
             ? new SonarrClient($serviceConnection)
             : new RadarrClient($serviceConnection);
 
-        $attempt = MediaReplacementAttempt::create([
-            'action_request_id' => $actionRequest->id,
-            'service_connection_id' => $serviceConnection->id,
-            'status' => MediaReplacementStatus::Requested,
-            'scope' => (string) ($payload['scope'] ?? ($freshTarget['scope'] ?? 'movie')),
-            'target' => $freshTarget,
-            'candidate_fingerprint' => $fingerprint,
-            'candidate' => is_array($payload['candidate'] ?? null) ? $payload['candidate'] : [],
-            'required_languages' => $requiredLanguages ?? $eligible['effective_languages'],
-        ]);
+        // Claim the attempt as `downloading` BEFORE the grab. Keying updateOrCreate
+        // on the unique action_request_id makes Action-Queue Retry idempotent — a
+        // prior failed attempt row is reset and reused instead of hitting a
+        // duplicate-key error. Setting `downloading` here (not after the grab)
+        // means a fast Grab/Download webhook that advances the attempt to a
+        // terminal state is never regressed by a later executor write.
+        $attempt = MediaReplacementAttempt::updateOrCreate(
+            ['action_request_id' => $actionRequest->id],
+            [
+                'service_connection_id' => $serviceConnection->id,
+                'status' => MediaReplacementStatus::Downloading,
+                'scope' => (string) ($payload['scope'] ?? ($freshTarget['scope'] ?? 'movie')),
+                'target' => $freshTarget,
+                'candidate_fingerprint' => $fingerprint,
+                'candidate' => is_array($payload['candidate'] ?? null) ? $payload['candidate'] : [],
+                'required_languages' => $requiredLanguages ?? $eligible['effective_languages'],
+                'download_id' => null,
+                'verification' => null,
+                'failure_reason' => null,
+                'started_at' => now(),
+                'completed_at' => null,
+            ],
+        );
 
-        $deletedFiles = $this->grabThenDelete($client, $serviceType, $freshTarget, $rawRelease, $attempt);
+        if ($this->grab($client, $rawRelease, $attempt) === 'indeterminate') {
+            // The grab may or may not have been accepted (connection/timeout
+            // after the request was sent). Do NOT delete the current file,
+            // blocklist, or fail terminally — leave the attempt `downloading` so
+            // the Grab/Download webhooks and the reconciliation sweep resolve it.
+            return [
+                'attempt_id' => $attempt->id,
+                'status' => MediaReplacementStatus::Downloading->value,
+                'replacement_initiated' => false,
+                'grab_outcome' => 'indeterminate',
+                'deleted_files' => 0,
+                'message' => 'Grab outcome was indeterminate; tracking it via webhooks and reconciliation.',
+            ];
+        }
+
+        $deletedFiles = $this->deleteAfterGrab($client, $serviceType, $freshTarget, $attempt);
 
         // Unmonitor the reviewed target BEFORE blocklisting the old release.
         // markHistoryFailed() fires DownloadFailedEvent, and with AutoRedownloadFailed
@@ -108,11 +138,8 @@ final readonly class MediaReplacementActions implements ActionExecutor
 
         $blocklistWarning = $this->blocklistOriginal($client, $payload['original_history_id'] ?? null, $actionRequest);
 
-        $attempt->update([
-            'status' => MediaReplacementStatus::Downloading,
-            'started_at' => now(),
-        ]);
-
+        // No status write here: the attempt is already `downloading` (set before
+        // the grab), so a terminal state a webhook set in the meantime survives.
         $serviceType === ServiceType::Sonarr
             ? new SonarrCache($serviceConnection)->bustAll()
             : new RadarrCache($serviceConnection)->bustAll();
@@ -127,40 +154,74 @@ final readonly class MediaReplacementActions implements ActionExecutor
     }
 
     /**
-     * Grab the replacement first; only delete the reviewed files once the grab
-     * is accepted. A failure before the grab leaves the current file untouched;
-     * a failure after the grab flags the attempt for manual attention.
+     * Grab the replacement. Returns 'accepted' on success or 'indeterminate' when
+     * the outcome is unknown (connection/timeout — the release may still have been
+     * accepted, so the attempt must stay trackable). Marks the attempt terminally
+     * failed and throws only on an explicit rejection (the arr responded with an
+     * error, so the release was definitely not accepted and no file was touched).
      *
-     * @param  array<string, mixed>  $freshTarget
      * @param  array<string, mixed>  $rawRelease
      */
-    private function grabThenDelete(
+    private function grab(SonarrClient|RadarrClient $client, array $rawRelease, MediaReplacementAttempt $attempt): string
+    {
+        try {
+            $client->grabRelease($rawRelease);
+
+            return 'accepted';
+        } catch (ConnectionException $connectionException) {
+            Log::warning('Media replacement grab outcome indeterminate (connection error); leaving the attempt trackable.', [
+                'action_request_id' => $attempt->action_request_id,
+                'exception' => $connectionException::class,
+            ]);
+
+            return 'indeterminate';
+        } catch (RequestException $requestException) {
+            $this->markTerminal($attempt, MediaReplacementStatus::Failed, 'Replacement grab was rejected; the current file was left untouched.');
+
+            throw new RuntimeException('Replacement grab was rejected.', previous: $requestException);
+        }
+    }
+
+    /**
+     * Delete the reviewed file(s) after an accepted grab. A failure here means
+     * the replacement was grabbed but the old file could not be removed.
+     *
+     * @param  array<string, mixed>  $freshTarget
+     */
+    private function deleteAfterGrab(
         SonarrClient|RadarrClient $client,
         ServiceType $serviceType,
         array $freshTarget,
-        array $rawRelease,
-        MediaReplacementAttempt $mediaReplacementAttempt,
+        MediaReplacementAttempt $attempt,
     ): int {
-        $grabAccepted = false;
-
         try {
-            $client->grabRelease($rawRelease);
-            $grabAccepted = true;
-
             return $this->deleteReviewedFiles($client, $serviceType, $freshTarget);
         } catch (Throwable $throwable) {
-            $mediaReplacementAttempt->update([
-                'status' => $grabAccepted ? MediaReplacementStatus::NeedsAttention : MediaReplacementStatus::Failed,
-                'failure_reason' => $grabAccepted
-                    ? 'Grab accepted but current file deletion failed; the old file remains.'
-                    : 'Replacement grab failed; the current file was left untouched.',
+            $this->markTerminal($attempt, MediaReplacementStatus::NeedsAttention, 'Grab accepted but current file deletion failed; the old file remains.');
+
+            throw new RuntimeException('Replacement grabbed but deletion of the reviewed file failed.', previous: $throwable);
+        }
+    }
+
+    /**
+     * Transition the attempt to a terminal state only if a webhook has not
+     * already moved it to one, so a concurrent verified/needs_attention result
+     * is not clobbered by the executor.
+     */
+    private function markTerminal(MediaReplacementAttempt $attempt, MediaReplacementStatus $status, string $reason): void
+    {
+        MediaReplacementAttempt::query()
+            ->whereKey($attempt->id)
+            ->whereNotIn('status', [
+                MediaReplacementStatus::Verified->value,
+                MediaReplacementStatus::Failed->value,
+                MediaReplacementStatus::NeedsAttention->value,
+            ])
+            ->update([
+                'status' => $status->value,
+                'failure_reason' => $reason,
                 'completed_at' => now(),
             ]);
-
-            throw new RuntimeException($grabAccepted
-                ? 'Replacement grabbed but deletion of the reviewed file failed.'
-                : 'Replacement grab was rejected.', $throwable->getCode(), previous: $throwable);
-        }
     }
 
     /**
