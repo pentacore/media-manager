@@ -6,11 +6,14 @@ namespace App\Http\Controllers\Admin;
 
 use App\Enums\AiMode;
 use App\Enums\AiReasoningLevel;
+use App\Enums\SeasonPackPolicy;
+use App\Enums\SubtitleRuleStrength;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Admin\UpdateAiSettingsRequest;
 use App\Models\AiModelPrice;
 use App\Services\AiBudget\AiBudgetGuard;
 use App\Settings\AiSettings;
+use App\Settings\MediaReplacementSettings;
 use Illuminate\Http\RedirectResponse;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -18,8 +21,11 @@ use Laravel\Ai\Enums\Lab;
 
 class AiSettingsController extends Controller
 {
-    public function index(AiSettings $aiSettings, AiBudgetGuard $aiBudgetGuard): Response
-    {
+    public function index(
+        AiSettings $aiSettings,
+        AiBudgetGuard $aiBudgetGuard,
+        MediaReplacementSettings $mediaReplacementSettings,
+    ): Response {
         return Inertia::render('Admin/AiSettings/Index', [
             'settings' => [
                 'mode' => $aiSettings->mode()->value,
@@ -29,6 +35,7 @@ class AiSettingsController extends Controller
                 'hard_budget_usd' => $aiSettings->hardBudgetUsd(),
                 'advisor_reasoning_level' => $aiSettings->advisorReasoningLevel(),
                 'failover_provider' => $aiSettings->failoverProvider()?->value ?? 'none',
+                'media_replacement' => $mediaReplacementSettings->configuration(),
             ],
             'budget' => [
                 'spend' => round($aiBudgetGuard->currentMonthSpend(), 4),
@@ -46,6 +53,14 @@ class AiSettingsController extends Controller
                 ['value' => Lab::Gemini->value, 'label' => 'Gemini'],
                 ['value' => Lab::Groq->value, 'label' => 'Groq'],
                 ['value' => Lab::Mistral->value, 'label' => 'Mistral'],
+            ],
+            'seasonPackPolicies' => SeasonPackPolicy::mapForSelect(labelKey: 'label'),
+            'subtitleRuleStrengths' => SubtitleRuleStrength::mapForSelect(labelKey: 'label'),
+            'conditionFields' => [
+                ['value' => 'release_group', 'label' => 'Release group'],
+                ['value' => 'subgroup', 'label' => 'Subgroup'],
+                ['value' => 'title', 'label' => 'Title token/phrase'],
+                ['value' => 'custom_format', 'label' => 'Custom format'],
             ],
         ]);
     }
@@ -75,8 +90,11 @@ class AiSettingsController extends Controller
             ->all();
     }
 
-    public function update(UpdateAiSettingsRequest $updateAiSettingsRequest, AiSettings $aiSettings): RedirectResponse
-    {
+    public function update(
+        UpdateAiSettingsRequest $updateAiSettingsRequest,
+        AiSettings $aiSettings,
+        MediaReplacementSettings $mediaReplacementSettings,
+    ): RedirectResponse {
         $validated = $updateAiSettingsRequest->validated();
 
         $aiSettings->setMode(AiMode::from($validated['mode']));
@@ -92,6 +110,7 @@ class AiSettingsController extends Controller
         $aiSettings->setFailoverProvider(
             empty($validated['failover_provider']) ? null : Lab::tryFrom($validated['failover_provider']),
         );
+        $mediaReplacementSettings->setConfiguration($validated['media_replacement']);
 
         Inertia::flash('toast', ['type' => 'success', 'message' => __('AI settings updated.')]);
 
