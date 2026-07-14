@@ -10,6 +10,8 @@ use App\Models\MediaReplacementAttempt;
 use App\Models\ServiceConnection;
 use App\Models\User;
 use App\Notifications\MediaReplacementStatusChanged;
+use App\Services\Radarr\RadarrClient;
+use App\Services\Sonarr\SonarrClient;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Notification;
@@ -101,6 +103,10 @@ final readonly class MediaReplacementTracker
 
             $verification = ['required' => $required, 'found' => $found, 'missing' => $missing];
             $verified = ($snapshot['ambiguous'] ?? false) !== true && $missing === [];
+
+            // The replacement imported, so restore monitoring the executor
+            // suspended to suppress the arr's auto-redownload search.
+            $this->remonitorTarget($serviceConnection, is_array($attempt->target) ? $attempt->target : []);
 
             $attempt->update([
                 'status' => $verified ? MediaReplacementStatus::Verified : MediaReplacementStatus::NeedsAttention,
@@ -303,6 +309,39 @@ final readonly class MediaReplacementTracker
      * processing. Log and swallow; the scheduled reconciliation sweep flags any
      * attempt left stuck in `downloading` as `needs_attention`.
      */
+    /**
+     * Restore monitoring on the target after the replacement imported. The
+     * executor unmonitors it before blocklisting to suppress the arr's
+     * auto-redownload search; this puts it back. Best-effort.
+     *
+     * @param  array<string, mixed>  $target
+     */
+    private function remonitorTarget(ServiceConnection $serviceConnection, array $target): void
+    {
+        try {
+            if (mb_strtolower(trim((string) ($target['service'] ?? ''))) === 'radarr') {
+                $movieId = (int) ($target['movie_id'] ?? 0);
+
+                if ($movieId > 0) {
+                    new RadarrClient($serviceConnection)->setMovieMonitored($movieId, true);
+                }
+
+                return;
+            }
+
+            $episodeIds = array_values(array_map('intval', is_array($target['episode_ids'] ?? null) ? $target['episode_ids'] : []));
+
+            if ($episodeIds !== []) {
+                new SonarrClient($serviceConnection)->setEpisodesMonitored($episodeIds, true);
+            }
+        } catch (Throwable $throwable) {
+            Log::warning('Media replacement could not restore monitoring after import.', [
+                'service_connection_id' => $serviceConnection->id,
+                'exception' => $throwable::class,
+            ]);
+        }
+    }
+
     private function guarded(callable $callback): void
     {
         try {

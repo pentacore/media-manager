@@ -99,6 +99,13 @@ final readonly class MediaReplacementActions implements ActionExecutor
 
         $deletedFiles = $this->grabThenDelete($client, $serviceType, $freshTarget, $rawRelease, $attempt);
 
+        // Unmonitor the reviewed target BEFORE blocklisting the old release.
+        // markHistoryFailed() fires DownloadFailedEvent, and with AutoRedownloadFailed
+        // (arr default) the service would auto-search and could grab a non-rule-vetted
+        // release racing the one we just grabbed. Unmonitoring suppresses that search;
+        // our grabbed release still imports. The tracker re-monitors after import.
+        $this->unmonitorTarget($client, $serviceType, $freshTarget, $actionRequest);
+
         $blocklistWarning = $this->blocklistOriginal($client, $payload['original_history_id'] ?? null, $actionRequest);
 
         $attempt->update([
@@ -180,6 +187,41 @@ final readonly class MediaReplacementActions implements ActionExecutor
         }
 
         return $deleted;
+    }
+
+    /**
+     * Best-effort: unmonitor the reviewed target so the arr's auto-redownload
+     * search cannot grab a competing release during the replacement window. A
+     * failure here is non-fatal — the replacement still proceeds.
+     *
+     * @param  array<string, mixed>  $freshTarget
+     */
+    private function unmonitorTarget(
+        SonarrClient|RadarrClient $client,
+        ServiceType $serviceType,
+        array $freshTarget,
+        ActionRequest $actionRequest,
+    ): void {
+        try {
+            if ($serviceType === ServiceType::Sonarr && $client instanceof SonarrClient) {
+                $episodeIds = array_values(array_map('intval', is_array($freshTarget['episode_ids'] ?? null) ? $freshTarget['episode_ids'] : []));
+
+                if ($episodeIds !== []) {
+                    $client->setEpisodesMonitored($episodeIds, false);
+                }
+            } elseif ($client instanceof RadarrClient) {
+                $movieId = (int) ($freshTarget['movie_id'] ?? 0);
+
+                if ($movieId > 0) {
+                    $client->setMovieMonitored($movieId, false);
+                }
+            }
+        } catch (Throwable $throwable) {
+            Log::warning('Media replacement could not unmonitor the target before blocklisting.', [
+                'action_request_id' => $actionRequest->id,
+                'exception' => $throwable::class,
+            ]);
+        }
     }
 
     private function blocklistOriginal(SonarrClient|RadarrClient $client, mixed $historyId, ActionRequest $actionRequest): ?string

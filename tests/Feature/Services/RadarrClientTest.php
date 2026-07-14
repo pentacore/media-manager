@@ -146,3 +146,16 @@ test('deleteMovieFile sends DELETE to the movie file', function (): void {
     Http::assertSent(fn (Request $request): bool => $request->method() === 'DELETE'
         && str_contains($request->url(), '/api/v3/moviefile/601'));
 });
+
+test('setMovieMonitored PUTs the movie editor toggle', function (): void {
+    Http::fake([
+        'radarr.local:7878/api/v3/movie/editor' => Http::response([], 202),
+    ]);
+
+    $this->client->setMovieMonitored(88, true);
+
+    Http::assertSent(fn (Request $request): bool => $request->method() === 'PUT'
+        && str_contains($request->url(), '/api/v3/movie/editor')
+        && $request->data()['movieIds'] === [88]
+        && $request->data()['monitored'] === true);
+});

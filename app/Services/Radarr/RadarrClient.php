@@ -162,6 +162,22 @@ class RadarrClient extends ArrClient implements Warmable
     }
 
     /**
+     * Toggle monitoring for a movie via the editor endpoint. Used to suppress
+     * the arr's auto-redownload search while a subtitle replacement is in flight.
+     *
+     * @throws RequestException|ConnectionException
+     */
+    public function setMovieMonitored(int $movieId, bool $monitored): void
+    {
+        $this->buildClient()
+            ->put(sprintf('/api/%s/movie/editor', $this->apiVersion), [
+                'movieIds' => [$movieId],
+                'monitored' => $monitored,
+            ])
+            ->throw();
+    }
+
+    /**
      * @return array<int, array<string, mixed>>
      *
      * @throws RequestException|ConnectionException

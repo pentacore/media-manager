@@ -157,3 +157,16 @@ test('deleteEpisodeFile sends DELETE to the episode file', function (): void {
     Http::assertSent(fn (Request $request): bool => $request->method() === 'DELETE'
         && str_contains($request->url(), '/api/v3/episodefile/501'));
 });
+
+test('setEpisodesMonitored PUTs the episode monitor toggle', function (): void {
+    Http::fake([
+        'sonarr.local:8989/api/v3/episode/monitor' => Http::response([], 200),
+    ]);
+
+    $this->client->setEpisodesMonitored([101, 102], false);
+
+    Http::assertSent(fn (Request $request): bool => $request->method() === 'PUT'
+        && str_contains($request->url(), '/api/v3/episode/monitor')
+        && $request->data()['episodeIds'] === [101, 102]
+        && $request->data()['monitored'] === false);
+});

@@ -9,6 +9,7 @@ use App\Models\ServiceConnection;
 use App\Models\User;
 use App\Notifications\MediaReplacementStatusChanged;
 use App\Services\MediaReplacement\MediaReplacementTracker;
+use Illuminate\Http\Client\Request;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Notification;
@@ -94,6 +95,7 @@ function fakeInspectSubtitles(string $subtitles): void
         'sonarr.local:8989/api/v3/episodefile/501' => Http::response([
             'id' => 501, 'sceneName' => 'Trusted.Anime.S01E01.CR', 'mediaInfo' => ['subtitles' => $subtitles],
         ]),
+        'sonarr.local:8989/api/v3/episode/monitor' => Http::response([], 200),
         'sonarr.local:8989/api/v3/history*' => Http::response(['records' => []]),
     ]);
 }
@@ -137,6 +139,12 @@ test('a download verifies the attempt when every required language is present', 
     expect($fresh->status)->toBe(MediaReplacementStatus::Verified)
         ->and($fresh->verification['missing'])->toBe([]);
     Notification::assertSentTimes(MediaReplacementStatusChanged::class, 1);
+
+    // Monitoring suspended by the executor is restored after import.
+    Http::assertSent(fn (Request $request): bool => $request->method() === 'PUT'
+        && str_contains($request->url(), '/api/v3/episode/monitor')
+        && $request->data()['episodeIds'] === [101]
+        && $request->data()['monitored'] === true);
 });
 
 test('a download missing a required language needs attention with verification evidence', function (): void {

@@ -138,6 +138,28 @@ test('grabs the replacement before deleting the reviewed file', function (): voi
         ->and(MediaReplacementAttempt::first()->status)->toBe(MediaReplacementStatus::Downloading);
 });
 
+test('unmonitors the target after grabbing and before blocklisting to avoid the auto-redownload race', function (): void {
+    fakeExecutor();
+
+    $result = resolve(MediaReplacementActions::class)->execute(replaceActionRequest());
+
+    expect($result['replacement_initiated'])->toBeTrue();
+
+    $requests = Http::recorded()->map(fn (array $pair): string => $pair[0]->method().' '.$pair[0]->url())->values();
+    $grabIndex = $requests->search(fn (string $value): bool => $value === 'POST http://sonarr.local:8989/api/v3/release');
+    $unmonitorIndex = $requests->search(fn (string $value): bool => $value === 'PUT http://sonarr.local:8989/api/v3/episode/monitor');
+    $blocklistIndex = $requests->search(fn (string $value): bool => str_contains($value, 'POST http://sonarr.local:8989/api/v3/history/failed/'));
+
+    expect($unmonitorIndex)->not->toBeFalse()
+        ->and($grabIndex)->toBeLessThan($unmonitorIndex)
+        ->and($unmonitorIndex)->toBeLessThan($blocklistIndex);
+
+    Http::assertSent(fn (Request $request): bool => $request->method() === 'PUT'
+        && str_contains($request->url(), '/api/v3/episode/monitor')
+        && $request->data()['episodeIds'] === [101]
+        && $request->data()['monitored'] === false);
+});
+
 test('pins execution to the approved connection when multiple are active', function (): void {
     // The beforeEach connection is sonarr.local (id A). Add a second active
     // Sonarr and approve the request against IT.
