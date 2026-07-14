@@ -309,7 +309,19 @@ final readonly class ReleaseCandidateRanker
         $releaseIds = $this->validatedIds($release['episodeIds']);
         $targetIds = $this->validatedIds($target['episode_ids']);
 
-        return $releaseIds !== null && $releaseIds === $targetIds;
+        if ($releaseIds === null || $targetIds === null) {
+            return false;
+        }
+
+        // A season pack covers the whole season, so its episode set is a
+        // superset of the requested episode(s) rather than an exact match; the
+        // season-pack policy gate then decides whether it is selectable. An
+        // individual release must map exactly to the reviewed episode set.
+        if (($release['fullSeason'] ?? null) === true) {
+            return array_values(array_intersect($targetIds, $releaseIds)) === $targetIds;
+        }
+
+        return $releaseIds === $targetIds;
     }
 
     /**

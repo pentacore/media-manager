@@ -61,7 +61,7 @@ final readonly class MediaFileInspector
         return $this->inspect(
             'sonarr',
             $this->integer($target['series_id'] ?? null) ?? 0,
-            seasonNumber: $this->integer($target['season_number'] ?? null),
+            seasonNumber: $this->wholeNumber($target['season_number'] ?? null),
             episodeNumber: $episodeNumbers === [] ? null : $this->integer($episodeNumbers[0]),
         );
     }
@@ -132,7 +132,7 @@ final readonly class MediaFileInspector
             'scope' => $scope->value,
             'series_id' => $seriesId,
             'display_name' => $this->sonarrDisplayName($series, $episode),
-            'season_number' => $this->integer($episode['seasonNumber'] ?? null),
+            'season_number' => $this->wholeNumber($episode['seasonNumber'] ?? null),
             'episode_numbers' => array_values(array_filter(
                 [$this->integer($episode['episodeNumber'] ?? null)],
                 static fn (?int $number): bool => $number !== null,
@@ -150,6 +150,8 @@ final readonly class MediaFileInspector
                 $sonarrClient->getHistory(['episodeId' => $episodeId, 'pageSize' => 100]),
                 'episodeId',
                 $episodeId,
+                $fileId,
+                'episodeFileId',
             ),
         ];
     }
@@ -188,6 +190,8 @@ final readonly class MediaFileInspector
                 $radarrClient->getHistory(['movieId' => $movieId, 'pageSize' => 100]),
                 'movieId',
                 $movieId,
+                $fileId,
+                'movieFileId',
             ),
         ];
     }
@@ -215,7 +219,7 @@ final readonly class MediaFileInspector
 
         return array_values(array_filter(
             $episodes,
-            fn (array $episode): bool => $this->integer($episode['seasonNumber'] ?? null) === $seasonNumber
+            fn (array $episode): bool => $this->wholeNumber($episode['seasonNumber'] ?? null) === $seasonNumber
                 && ($episodeNumber === null || $this->integer($episode['episodeNumber'] ?? null) === $episodeNumber),
         ));
     }
@@ -228,7 +232,7 @@ final readonly class MediaFileInspector
     {
         return [
             'episode_id' => $this->integer($episode['id'] ?? null),
-            'season_number' => $this->integer($episode['seasonNumber'] ?? null),
+            'season_number' => $this->wholeNumber($episode['seasonNumber'] ?? null),
             'episode_number' => $this->integer($episode['episodeNumber'] ?? null),
             'absolute_episode_number' => $this->integer($episode['absoluteEpisodeNumber'] ?? null),
         ];
@@ -241,7 +245,7 @@ final readonly class MediaFileInspector
     private function sonarrDisplayName(array $series, array $episode): string
     {
         $title = $this->nonEmptyString($series['title'] ?? null) ?? 'Series';
-        $season = $this->integer($episode['seasonNumber'] ?? null);
+        $season = $this->wholeNumber($episode['seasonNumber'] ?? null);
         $number = $this->integer($episode['episodeNumber'] ?? null);
 
         if ($season === null || $number === null) {
@@ -279,13 +283,17 @@ final readonly class MediaFileInspector
     }
 
     /**
-     * Identify the single history record whose release should be blocklisted.
-     * Prefers a unique `grabbed` record; falls back to a unique import record.
-     * Returns null when the correlation is ambiguous or unavailable.
+     * Identify the `grabbed` history record for the release that produced the
+     * currently installed file, so the executor blocklists the right release.
+     * Correlates the import of the installed file (by file id) to its download
+     * id, then to the matching grab. Falls back to the most recent grab. Returns
+     * null when no grab can be resolved. This avoids the false negative of a
+     * global-uniqueness requirement on items that were grabbed more than once
+     * (initial grab + quality upgrades).
      *
      * @param  array<string, mixed>  $history
      */
-    private function originalHistoryId(array $history, string $idField, ?int $targetId): ?int
+    private function originalHistoryId(array $history, string $idField, ?int $targetId, ?int $installedFileId, string $fileIdField): ?int
     {
         if ($targetId === null) {
             return null;
@@ -304,25 +312,72 @@ final readonly class MediaFileInspector
                 && $this->integer($record[$idField] ?? null) === $targetId,
         ));
 
-        foreach (self::HISTORY_EVENT_TYPES as $eventType) {
-            $ids = [];
+        // Newest first, so "most recent grab" fallbacks are deterministic.
+        usort($matching, static fn (array $left, array $right): int => (string) ($right['date'] ?? '') <=> (string) ($left['date'] ?? ''));
 
+        $downloadId = $this->correlatedDownloadId($matching, $installedFileId, $fileIdField);
+
+        if ($downloadId !== null) {
             foreach ($matching as $record) {
-                if (($record['eventType'] ?? null) === $eventType) {
+                if (($record['eventType'] ?? null) === 'grabbed' && $this->recordDownloadId($record) === $downloadId) {
                     $id = $this->integer($record['id'] ?? null);
 
                     if ($id !== null) {
-                        $ids[$id] = $id;
+                        return $id;
                     }
                 }
             }
+        }
 
-            if (count($ids) === 1) {
-                return array_first($ids);
+        foreach ($matching as $record) {
+            if (($record['eventType'] ?? null) === 'grabbed') {
+                $id = $this->integer($record['id'] ?? null);
+
+                if ($id !== null) {
+                    return $id;
+                }
             }
         }
 
         return null;
+    }
+
+    /**
+     * Download id of the import that produced the installed file, matched by
+     * file id. Falls back to the download id of the most recent import.
+     *
+     * @param  array<int, array<string, mixed>>  $records  Newest first.
+     */
+    private function correlatedDownloadId(array $records, ?int $installedFileId, string $fileIdField): ?string
+    {
+        $mostRecentImportDownloadId = null;
+
+        foreach ($records as $record) {
+            if (($record['eventType'] ?? null) !== 'downloadFolderImported') {
+                continue;
+            }
+
+            $downloadId = $this->recordDownloadId($record);
+            $mostRecentImportDownloadId ??= $downloadId;
+
+            $recordFileId = $this->integer($record[$fileIdField] ?? ($record['data'][$fileIdField] ?? null));
+
+            if ($installedFileId !== null && $recordFileId === $installedFileId && $downloadId !== null) {
+                return $downloadId;
+            }
+        }
+
+        return $mostRecentImportDownloadId;
+    }
+
+    /**
+     * @param  array<string, mixed>  $record
+     */
+    private function recordDownloadId(array $record): ?string
+    {
+        $downloadId = $record['downloadId'] ?? ($record['data']['downloadId'] ?? null);
+
+        return is_string($downloadId) && trim($downloadId) !== '' ? $downloadId : null;
     }
 
     /**
@@ -365,6 +420,26 @@ final readonly class MediaFileInspector
 
         if (is_string($value) && preg_match('/^\d+$/D', trim($value)) === 1) {
             $integer = filter_var(trim($value), FILTER_VALIDATE_INT, ['options' => ['min_range' => 1]]);
+
+            return is_int($integer) ? $integer : null;
+        }
+
+        return null;
+    }
+
+    /**
+     * Coerce a season number, which is a valid whole number >= 0 (Sonarr uses
+     * season 0 for Specials/OVAs). Distinct from integer(), which is for
+     * positive identifiers.
+     */
+    private function wholeNumber(mixed $value): ?int
+    {
+        if (is_int($value)) {
+            return $value >= 0 ? $value : null;
+        }
+
+        if (is_string($value) && preg_match('/^\d+$/D', trim($value)) === 1) {
+            $integer = filter_var(trim($value), FILTER_VALIDATE_INT, ['options' => ['min_range' => 0]]);
 
             return is_int($integer) ? $integer : null;
         }

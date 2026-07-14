@@ -242,11 +242,13 @@ test('hard exclusions use the documented first-failing gate precedence', functio
 ]);
 
 test('eligible season packs remain candidates for non-never policies', function (SeasonPackPolicy $seasonPackPolicy): void {
+    // A realistic season pack: its episode set is the whole season, a superset
+    // of the single requested episode (101).
     $result = rcrRanker()->rank(
-        [rcrRelease(['fullSeason' => true])],
+        [rcrRelease(['fullSeason' => true, 'episodeIds' => [101, 102, 103]])],
         ['eng'],
         [rcrRule()],
-        rcrSonarrTarget(),
+        rcrSonarrTarget(['episode_ids' => [101]]),
         $seasonPackPolicy,
     );
 
@@ -257,6 +259,33 @@ test('eligible season packs remain candidates for non-never policies', function 
     'approval required' => SeasonPackPolicy::ApprovalRequired,
     'automatic above threshold' => SeasonPackPolicy::AutomaticAboveThreshold,
 ]);
+
+test('a realistic season pack (superset episode set) is gated by policy, not dropped at mapping', function (): void {
+    $pack = rcrRelease(['fullSeason' => true, 'episodeIds' => [101, 102, 103]]);
+    $target = rcrSonarrTarget(['episode_ids' => [101]]);
+
+    $never = rcrRanker()->rank([$pack], ['eng'], [rcrRule()], $target, SeasonPackPolicy::Never);
+    $approval = rcrRanker()->rank([$pack], ['eng'], [rcrRule()], $target, SeasonPackPolicy::ApprovalRequired);
+
+    expect($never['candidates'])->toBe([])
+        ->and($never['excluded']['season_pack_policy'])->toBe(1)
+        ->and($never['excluded']['mapping'])->toBe(0)
+        ->and($approval['candidates'])->toHaveCount(1)
+        ->and($approval['candidates'][0]['season_pack'])->toBeTrue();
+});
+
+test('a season pack that does not cover the requested episode is excluded at mapping', function (): void {
+    $result = rcrRanker()->rank(
+        [rcrRelease(['fullSeason' => true, 'episodeIds' => [201, 202, 203]])],
+        ['eng'],
+        [rcrRule()],
+        rcrSonarrTarget(['episode_ids' => [101]]),
+        SeasonPackPolicy::ApprovalRequired,
+    );
+
+    expect($result['candidates'])->toBe([])
+        ->and($result['excluded']['mapping'])->toBe(1);
+});
 
 test('multi-language confidence uses the strongest evidence per language and then the weakest language', function (): void {
     $result = rcrRanker()->rank(

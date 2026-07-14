@@ -177,6 +177,51 @@ test('flags a shared multi-episode file as ambiguity with the affected episodes'
         ->and($snapshot['episode_ids'])->toBe([101, 102]);
 });
 
+test('inspects a season 0 special (season number zero is valid)', function (): void {
+    sonarrInspectorConnection();
+
+    Http::fake([
+        'sonarr.local:8989/api/v3/series/42' => Http::response(['id' => 42, 'title' => 'Trusted Anime', 'seriesType' => 'anime']),
+        'sonarr.local:8989/api/v3/episode?seriesId=42' => Http::response([
+            ['id' => 900, 'seasonNumber' => 0, 'episodeNumber' => 1, 'episodeFileId' => 555],
+        ]),
+        'sonarr.local:8989/api/v3/episodefile/555' => Http::response([
+            'id' => 555, 'sceneName' => 'Trusted.Anime.S00E01.OVA', 'mediaInfo' => ['subtitles' => 'English'],
+        ]),
+        'sonarr.local:8989/api/v3/history*' => Http::response(['records' => []]),
+    ]);
+
+    $snapshot = resolve(MediaFileInspector::class)->inspect('sonarr', 42, seasonNumber: 0, episodeNumber: 1);
+
+    expect($snapshot['ambiguous'])->toBeFalse()
+        ->and($snapshot['season_number'])->toBe(0)
+        ->and($snapshot['episode_file_ids'])->toBe([555]);
+});
+
+test('blocklists the grab correlated to the installed file, not a global-unique grab', function (): void {
+    sonarrInspectorConnection();
+
+    Http::fake([
+        'sonarr.local:8989/api/v3/series/42' => Http::response(['id' => 42, 'title' => 'A', 'seriesType' => 'anime']),
+        'sonarr.local:8989/api/v3/episode?seriesId=42' => Http::response([
+            ['id' => 101, 'seasonNumber' => 1, 'episodeNumber' => 1, 'episodeFileId' => 501],
+        ]),
+        'sonarr.local:8989/api/v3/episodefile/501' => Http::response([
+            'id' => 501, 'sceneName' => 'current', 'mediaInfo' => ['subtitles' => 'Japanese']],
+        ),
+        // Two grabs over the item's life (initial + upgrade); import ties the current file (501) to downloadId DL2.
+        'sonarr.local:8989/api/v3/history*' => Http::response(['records' => [
+            ['id' => 10, 'eventType' => 'grabbed', 'episodeId' => 101, 'downloadId' => 'DL1', 'date' => '2026-01-01T00:00:00Z'],
+            ['id' => 11, 'eventType' => 'grabbed', 'episodeId' => 101, 'downloadId' => 'DL2', 'date' => '2026-02-01T00:00:00Z'],
+            ['id' => 12, 'eventType' => 'downloadFolderImported', 'episodeId' => 101, 'downloadId' => 'DL2', 'episodeFileId' => 501, 'date' => '2026-02-01T01:00:00Z'],
+        ]]),
+    ]);
+
+    $snapshot = resolve(MediaFileInspector::class)->inspect('sonarr', 42, seasonNumber: 1, episodeNumber: 1);
+
+    expect($snapshot['original_history_id'])->toBe(11);
+});
+
 test('returns ambiguity data when no episode matches the selector', function (): void {
     sonarrInspectorConnection();
 
