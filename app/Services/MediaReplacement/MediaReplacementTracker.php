@@ -90,6 +90,7 @@ final readonly class MediaReplacementTracker
 
             $snapshot = $this->mediaFileInspector->inspectFromSnapshot(
                 is_array($attempt->target) ? $attempt->target : [],
+                $serviceConnection,
             );
 
             $required = $this->normalizeCodes($attempt->required_languages);
@@ -294,17 +295,23 @@ final readonly class MediaReplacementTracker
         );
     }
 
+    /**
+     * Replacement tracking is best-effort and must degrade gracefully: it is
+     * wired into webhook handlers ahead of pre-existing must-run side effects
+     * (Emby library scan, markProcessed, cache busting, intervention badge), so
+     * a transient arr-API failure here must NOT tear down the rest of webhook
+     * processing. Log and swallow; the scheduled reconciliation sweep flags any
+     * attempt left stuck in `downloading` as `needs_attention`.
+     */
     private function guarded(callable $callback): void
     {
         try {
             $callback();
         } catch (Throwable $throwable) {
-            Log::error('Media replacement webhook tracking failed.', [
+            Log::error('Media replacement webhook tracking failed; continuing webhook processing.', [
                 'exception' => $throwable::class,
                 'message' => $throwable->getMessage(),
             ]);
-
-            throw $throwable;
         }
     }
 }

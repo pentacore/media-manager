@@ -35,11 +35,11 @@ final readonly class ReplacementCandidateFinder
      * @param  array<string, mixed>  $target
      * @return array<string, mixed>|null
      */
-    public function freshRawRelease(array $target, string $fingerprint): ?array
+    public function freshRawRelease(array $target, string $fingerprint, ?ServiceConnection $connection = null): ?array
     {
         $service = mb_strtolower(trim((string) ($target['service'] ?? '')));
 
-        foreach ($this->searchReleases($service, $target) as $release) {
+        foreach ($this->searchReleases($service, $target, $connection) as $release) {
             if (is_array($release) && $this->releaseFingerprint->make($service, $release) === $fingerprint) {
                 return $release;
             }
@@ -65,6 +65,7 @@ final readonly class ReplacementCandidateFinder
         array $target,
         ?array $languageOverride = null,
         int $limit = 5,
+        ?ServiceConnection $connection = null,
     ): array {
         $service = mb_strtolower(trim((string) ($target['service'] ?? '')));
         $scope = MediaReplacementScope::tryFrom((string) ($target['scope'] ?? ''))
@@ -75,7 +76,7 @@ final readonly class ReplacementCandidateFinder
         $seasonPackPolicy = $this->mediaReplacementSettings->seasonPackPolicy();
 
         $ranked = $this->releaseCandidateRanker->rank(
-            releases: $this->searchReleases($service, $target),
+            releases: $this->searchReleases($service, $target, $connection),
             requiredLanguages: $effectiveLanguages,
             rules: is_array($guidance['rules']) ? $guidance['rules'] : [],
             target: $target,
@@ -98,15 +99,35 @@ final readonly class ReplacementCandidateFinder
      * @param  array<string, mixed>  $target
      * @return array<int, array<string, mixed>>
      */
-    private function searchReleases(string $service, array $target): array
+    private function searchReleases(string $service, array $target, ?ServiceConnection $connection): array
     {
+        $connection ??= $this->connectionFor($service, $target);
+
         return match ($service) {
-            'sonarr' => new SonarrClient(ServiceConnection::resolveActive(ServiceType::Sonarr))
-                ->getReleases($this->sonarrSearchParams($target)),
-            'radarr' => new RadarrClient(ServiceConnection::resolveActive(ServiceType::Radarr))
-                ->getReleases(['movieId' => (int) ($target['movie_id'] ?? 0)]),
+            'sonarr' => new SonarrClient($connection)->getReleases($this->sonarrSearchParams($target)),
+            'radarr' => new RadarrClient($connection)->getReleases(['movieId' => (int) ($target['movie_id'] ?? 0)]),
             default => throw new InvalidArgumentException('target service must be "sonarr" or "radarr".'),
         };
+    }
+
+    /**
+     * Resolve the pinned connection from the target, else the active connection.
+     *
+     * @param  array<string, mixed>  $target
+     */
+    private function connectionFor(string $service, array $target): ServiceConnection
+    {
+        $id = $target['service_connection_id'] ?? null;
+
+        if (is_int($id) && $id > 0) {
+            $connection = ServiceConnection::find($id);
+
+            if ($connection instanceof ServiceConnection) {
+                return $connection;
+            }
+        }
+
+        return ServiceConnection::resolveActive($service === 'radarr' ? ServiceType::Radarr : ServiceType::Sonarr);
     }
 
     /**

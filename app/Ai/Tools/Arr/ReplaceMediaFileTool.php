@@ -94,6 +94,7 @@ class ReplaceMediaFileTool extends BaseTool
                 'title' => sprintf('Replace %s', $snapshot['display_name'] ?? 'media file'),
                 'detail' => $reason,
                 'service' => $service,
+                'service_connection_id' => $snapshot['service_connection_id'] ?? null,
                 'scope' => $snapshot['scope'] ?? null,
                 'target' => $snapshot,
                 'candidate_fingerprint' => $candidate['fingerprint'],

@@ -60,6 +60,30 @@ function grabPayload(array $overrides = []): array
     ], $overrides);
 }
 
+test('a tracking failure degrades gracefully instead of tearing down webhook processing', function (): void {
+    $attempt = trackerAttempt($this->connection->id, [
+        'status' => MediaReplacementStatus::Downloading,
+        'download_id' => 'DL-2',
+    ]);
+
+    // Re-inspection fails at the arr API mid-verification.
+    Http::fake([
+        'sonarr.local:8989/api/v3/series/42' => Http::response([], 500),
+        'sonarr.local:8989/api/v3/episode*' => Http::response([], 500),
+        'sonarr.local:8989/api/v3/history*' => Http::response([], 500),
+    ]);
+
+    // Must not throw — the webhook handler's other side effects must still run.
+    resolve(MediaReplacementTracker::class)->verifyDownload($this->connection, [
+        'eventType' => 'Download',
+        'series' => ['id' => 42],
+        'episodes' => [['seasonNumber' => 1, 'episodeNumber' => 1]],
+        'downloadId' => 'DL-2',
+    ]);
+
+    expect($attempt->fresh()->status)->toBe(MediaReplacementStatus::Downloading);
+});
+
 function fakeInspectSubtitles(string $subtitles): void
 {
     Http::fake([

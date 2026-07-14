@@ -138,6 +138,42 @@ test('grabs the replacement before deleting the reviewed file', function (): voi
         ->and(MediaReplacementAttempt::first()->status)->toBe(MediaReplacementStatus::Downloading);
 });
 
+test('pins execution to the approved connection when multiple are active', function (): void {
+    // The beforeEach connection is sonarr.local (id A). Add a second active
+    // Sonarr and approve the request against IT.
+    $pinned = ServiceConnection::factory()->sonarr()->create([
+        'url' => 'http://sonarr-b.local:8989', 'api_key' => 'b', 'is_active' => true,
+    ]);
+
+    fakeExecutor(); // host-agnostic path matching, so both hosts get faked responses
+
+    $fingerprint = (new ReleaseFingerprint)->make('sonarr', sonarrReplacementRelease());
+    $actionRequest = ActionRequest::factory()->create([
+        'type' => 'replace_media_file', 'source_service' => 'ai', 'target_service' => 'sonarr',
+        'payload' => [
+            'service' => 'sonarr',
+            'service_connection_id' => $pinned->id,
+            'scope' => 'anime',
+            'target' => [
+                'service' => 'sonarr', 'service_connection_id' => $pinned->id, 'scope' => 'anime',
+                'series_id' => 42, 'season_number' => 1, 'episode_numbers' => [1], 'episode_ids' => [101],
+                'episode_file_ids' => [501], 'installed_release' => 'Trusted.Anime.S01E01.OLD', 'original_history_id' => 999,
+            ],
+            'candidate_fingerprint' => $fingerprint,
+            'candidate' => ['fingerprint' => $fingerprint, 'title' => 'Trusted.Anime.S01E01.CR', 'confidence' => 98],
+            'required_languages' => ['eng'], 'selection_mode' => 'manual', 'original_history_id' => 999,
+        ],
+    ]);
+
+    resolve(MediaReplacementActions::class)->execute($actionRequest);
+
+    Http::assertSent(fn (Request $request): bool => $request->method() === 'POST'
+        && str_contains($request->url(), 'sonarr-b.local') && str_contains($request->url(), '/api/v3/release'));
+    Http::assertNotSent(fn (Request $request): bool => str_contains($request->url(), 'sonarr.local:8989'));
+
+    expect(MediaReplacementAttempt::first()->service_connection_id)->toBe($pinned->id);
+});
+
 test('aborts without grabbing or deleting when the installed file changed after approval', function (): void {
     fakeExecutor(['currentFileId' => 777]);
 

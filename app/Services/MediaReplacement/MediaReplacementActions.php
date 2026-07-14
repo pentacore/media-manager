@@ -57,24 +57,31 @@ final readonly class MediaReplacementActions implements ActionExecutor
             ? array_values(array_filter($payload['required_languages'], is_string(...)))
             : null;
 
-        $freshTarget = $this->mediaFileInspector->inspectFromSnapshot($storedTarget);
+        // Pin to the exact connection the request was approved against. Multiple
+        // same-type connections can be active and their media IDs overlap across
+        // instances, so re-resolving the "active" one could act on a different
+        // server and delete the wrong file.
+        $connectionId = (int) ($payload['service_connection_id'] ?? 0);
+        $serviceConnection = ($connectionId > 0 ? ServiceConnection::find($connectionId) : null)
+            ?? ServiceConnection::resolveActive($serviceType);
+
+        $freshTarget = $this->mediaFileInspector->inspectFromSnapshot($storedTarget, $serviceConnection);
         throw_unless(
             $this->sameFiles($storedTarget, $freshTarget),
             InvalidArgumentException::class,
             'Installed media files changed after approval; aborting replacement.',
         );
 
-        $eligible = $this->replacementCandidateFinder->find($freshTarget, $requiredLanguages, 10);
+        $eligible = $this->replacementCandidateFinder->find($freshTarget, $requiredLanguages, 10, $serviceConnection);
         $stillEligible = array_filter(
             $eligible['candidates'],
             static fn (array $candidate): bool => ($candidate['fingerprint'] ?? null) === $fingerprint,
         );
         throw_if($stillEligible === [], InvalidArgumentException::class, 'Selected release is no longer eligible.');
 
-        $rawRelease = $this->replacementCandidateFinder->freshRawRelease($freshTarget, $fingerprint);
+        $rawRelease = $this->replacementCandidateFinder->freshRawRelease($freshTarget, $fingerprint, $serviceConnection);
         throw_if($rawRelease === null, InvalidArgumentException::class, 'Selected release is no longer available.');
 
-        $serviceConnection = ServiceConnection::resolveActive($serviceType);
         $client = $serviceType === ServiceType::Sonarr
             ? new SonarrClient($serviceConnection)
             : new RadarrClient($serviceConnection);

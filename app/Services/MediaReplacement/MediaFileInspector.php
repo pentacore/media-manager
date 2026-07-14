@@ -33,27 +33,32 @@ final readonly class MediaFileInspector
         ?int $seasonNumber = null,
         ?int $episodeNumber = null,
         ?int $absoluteEpisodeNumber = null,
+        ?ServiceConnection $connection = null,
     ): array {
         return match (mb_strtolower(trim($service))) {
-            'sonarr' => $this->inspectSonarr($itemId, $seasonNumber, $episodeNumber, $absoluteEpisodeNumber),
-            'radarr' => $this->inspectRadarr($itemId),
+            'sonarr' => $this->inspectSonarr($itemId, $seasonNumber, $episodeNumber, $absoluteEpisodeNumber, $connection),
+            'radarr' => $this->inspectRadarr($itemId, $connection),
             default => throw new InvalidArgumentException('service must be "sonarr" or "radarr".'),
         };
     }
 
     /**
      * Re-inspect the current installed file(s) from a previously stored target
-     * snapshot, so an executor can confirm nothing changed after approval.
+     * snapshot, so an executor can confirm nothing changed after approval. The
+     * connection is pinned to the one the request was approved against (stored
+     * in the snapshot), because multiple same-type connections can be active and
+     * their media IDs overlap across instances.
      *
      * @param  array<string, mixed>  $target
      * @return array<string, mixed>
      */
-    public function inspectFromSnapshot(array $target): array
+    public function inspectFromSnapshot(array $target, ?ServiceConnection $connection = null): array
     {
         $service = mb_strtolower(trim((string) ($target['service'] ?? '')));
+        $connection ??= $this->connectionFor($target);
 
         if ($service === 'radarr') {
-            return $this->inspect('radarr', $this->integer($target['movie_id'] ?? null) ?? 0);
+            return $this->inspect('radarr', $this->integer($target['movie_id'] ?? null) ?? 0, connection: $connection);
         }
 
         $episodeNumbers = is_array($target['episode_numbers'] ?? null) ? array_values($target['episode_numbers']) : [];
@@ -63,6 +68,32 @@ final readonly class MediaFileInspector
             $this->integer($target['series_id'] ?? null) ?? 0,
             seasonNumber: $this->wholeNumber($target['season_number'] ?? null),
             episodeNumber: $episodeNumbers === [] ? null : $this->integer($episodeNumbers[0]),
+            connection: $connection,
+        );
+    }
+
+    /**
+     * Resolve the pinned connection stored on a snapshot, falling back to the
+     * active connection of the matching service when absent.
+     *
+     * @param  array<string, mixed>  $target
+     */
+    public function connectionFor(array $target): ServiceConnection
+    {
+        $id = $this->integer($target['service_connection_id'] ?? null);
+
+        if ($id !== null) {
+            $connection = ServiceConnection::find($id);
+
+            if ($connection instanceof ServiceConnection) {
+                return $connection;
+            }
+        }
+
+        return ServiceConnection::resolveActive(
+            mb_strtolower(trim((string) ($target['service'] ?? ''))) === 'radarr'
+                ? ServiceType::Radarr
+                : ServiceType::Sonarr,
         );
     }
 
@@ -74,8 +105,10 @@ final readonly class MediaFileInspector
         ?int $seasonNumber,
         ?int $episodeNumber,
         ?int $absoluteEpisodeNumber,
+        ?ServiceConnection $connection = null,
     ): array {
-        $sonarrClient = new SonarrClient(ServiceConnection::resolveActive(ServiceType::Sonarr));
+        $serviceConnection = $connection ?? ServiceConnection::resolveActive(ServiceType::Sonarr);
+        $sonarrClient = new SonarrClient($serviceConnection);
         $series = $sonarrClient->getSeriesById($seriesId);
         $scope = ($series['seriesType'] ?? null) === 'anime'
             ? MediaReplacementScope::Anime
@@ -129,6 +162,7 @@ final readonly class MediaFileInspector
         return [
             'ambiguous' => false,
             'service' => 'sonarr',
+            'service_connection_id' => $serviceConnection->id,
             'scope' => $scope->value,
             'series_id' => $seriesId,
             'display_name' => $this->sonarrDisplayName($series, $episode),
@@ -159,9 +193,10 @@ final readonly class MediaFileInspector
     /**
      * @return array<string, mixed>
      */
-    private function inspectRadarr(int $movieId): array
+    private function inspectRadarr(int $movieId, ?ServiceConnection $connection = null): array
     {
-        $radarrClient = new RadarrClient(ServiceConnection::resolveActive(ServiceType::Radarr));
+        $serviceConnection = $connection ?? ServiceConnection::resolveActive(ServiceType::Radarr);
+        $radarrClient = new RadarrClient($serviceConnection);
         $movie = $radarrClient->getMovieById($movieId);
         $fileId = $this->integer($movie['movieFileId'] ?? null);
 
@@ -175,6 +210,7 @@ final readonly class MediaFileInspector
         return [
             'ambiguous' => false,
             'service' => 'radarr',
+            'service_connection_id' => $serviceConnection->id,
             'scope' => MediaReplacementScope::Movie->value,
             'movie_id' => $movieId,
             'display_name' => $this->nonEmptyString($movie['title'] ?? null) ?? sprintf('Movie %d', $movieId),
