@@ -2,12 +2,12 @@
 
 declare(strict_types=1);
 
-use Illuminate\Database\QueryException;
 use App\Enums\MediaReplacementStatus;
 use App\Models\ActionRequest;
 use App\Models\MediaReplacementAttempt;
 use App\Models\ServiceConnection;
 use Carbon\CarbonImmutable;
+use Illuminate\Database\QueryException;
 
 test('it persists and casts a replacement attempt', function (): void {
     $attempt = MediaReplacementAttempt::factory()->create([

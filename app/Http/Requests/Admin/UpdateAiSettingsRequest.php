@@ -13,7 +13,12 @@ use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
 use JsonException;
 use Override;
+use Pentacore\Typefinder\Attributes\TypefinderOverrides;
 
+// The deeply nested `media_replacement.*` wildcard rules cannot be expressed as
+// valid TypeScript by Typefinder's request extractor, and the field is posted as
+// a JSON string anyway; the Vue editor owns the concrete shape.
+#[TypefinderOverrides(['media_replacement' => 'Record<string, unknown>'])]
 class UpdateAiSettingsRequest extends FormRequest
 {
     /**
