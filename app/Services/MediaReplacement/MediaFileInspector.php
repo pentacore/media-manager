@@ -82,7 +82,7 @@ final readonly class MediaFileInspector
             : MediaReplacementScope::Tv;
         $episodes = array_values(array_filter(
             $sonarrClient->getEpisodesBySeries($seriesId),
-            'is_array',
+            is_array(...),
         ));
 
         $matched = $this->matchEpisodes($episodes, $seasonNumber, $episodeNumber, $absoluteEpisodeNumber);
@@ -273,7 +273,7 @@ final readonly class MediaFileInspector
             return [];
         }
 
-        $strings = array_filter($subtitles, 'is_string');
+        $strings = array_filter($subtitles, is_string(...));
 
         return $this->languageNormalizer->normalizeMany(array_values($strings));
     }
@@ -318,7 +318,7 @@ final readonly class MediaFileInspector
             }
 
             if (count($ids) === 1) {
-                return array_values($ids)[0];
+                return array_first($ids);
             }
         }
 

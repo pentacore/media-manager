@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Models;
 
+use Override;
 use App\Enums\MediaReplacementStatus;
 use Carbon\CarbonImmutable;
 use Database\Factories\MediaReplacementAttemptFactory;
@@ -75,6 +76,7 @@ class MediaReplacementAttempt extends Model
     /**
      * @return array<string, string>
      */
+    #[Override]
     protected function casts(): array
     {
         return [

@@ -214,14 +214,14 @@ test('admin can update media replacement settings and the service round-trips th
         ->assertRedirect(route('admin.ai-settings.index'))
         ->assertSessionHasNoErrors();
 
-    $settings = resolve(MediaReplacementSettings::class);
+    $mediaReplacementSettings = resolve(MediaReplacementSettings::class);
 
-    expect($settings->automaticSelectionThreshold())->toBe(95)
-        ->and($settings->automaticSelectionEnabled())->toBeTrue()
-        ->and($settings->effectiveLanguages(MediaReplacementScope::Anime))->toBe(['jpn'])
-        ->and($settings->effectiveLanguages(MediaReplacementScope::Tv))->toBe(['eng'])
-        ->and($settings->guidance(MediaReplacementScope::Anime)['notes'])->toBe('CR-tagged releases are trusted.')
-        ->and($settings->guidance(MediaReplacementScope::Anime)['rules'])->toHaveCount(1);
+    expect($mediaReplacementSettings->automaticSelectionThreshold())->toBe(95)
+        ->and($mediaReplacementSettings->automaticSelectionEnabled())->toBeTrue()
+        ->and($mediaReplacementSettings->effectiveLanguages(MediaReplacementScope::Anime))->toBe(['jpn'])
+        ->and($mediaReplacementSettings->effectiveLanguages(MediaReplacementScope::Tv))->toBe(['eng'])
+        ->and($mediaReplacementSettings->guidance(MediaReplacementScope::Anime)['notes'])->toBe('CR-tagged releases are trusted.')
+        ->and($mediaReplacementSettings->guidance(MediaReplacementScope::Anime)['rules'])->toHaveCount(1);
 });
 
 test('update accepts a request without media replacement and preserves stored configuration', function (): void {

@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use App\Models\ActionTypeConfig;
 use App\Ai\Risk;
 use App\Ai\Tools\Arr\ReplaceMediaFileTool;
 use App\Enums\AiMode;
@@ -158,7 +159,7 @@ test('automatic selection queues when the fingerprint matches the automatic cand
 });
 
 test('an approval_required season pack forces approval even when the rule auto-executes', function (): void {
-    App\Models\ActionTypeConfig::where('type', 'replace_media_file')->update(['requires_approval' => false]);
+    ActionTypeConfig::where('type', 'replace_media_file')->update(['requires_approval' => false]);
     fakeReplaceableTarget(['fullSeason' => true]);
     $fingerprint = candidateFingerprint();
 

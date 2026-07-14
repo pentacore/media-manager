@@ -91,5 +91,5 @@ test('refuses to search an ambiguous target', function (): void {
     expect($result['ambiguous'])->toBeTrue()
         ->and($result)->not->toHaveKey('candidates');
 
-    Http::assertNotSent(fn ($request): bool => str_contains($request->url(), '/api/v3/release'));
+    Http::assertNotSent(fn ($request): bool => str_contains((string) $request->url(), '/api/v3/release'));
 });

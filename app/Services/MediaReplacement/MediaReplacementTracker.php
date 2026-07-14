@@ -48,8 +48,8 @@ final readonly class MediaReplacementTracker
             }
 
             $matches = $this->nonTerminalAttempts($serviceConnection)->filter(
-                fn (MediaReplacementAttempt $attempt): bool => $this->attemptTargetId($attempt) === $targetId
-                    && $this->normalizeTitle((string) ($attempt->candidate['title'] ?? '')) === $this->normalizeTitle($title),
+                fn (MediaReplacementAttempt $mediaReplacementAttempt): bool => $this->attemptTargetId($mediaReplacementAttempt) === $targetId
+                    && $this->normalizeTitle((string) ($mediaReplacementAttempt->candidate['title'] ?? '')) === $this->normalizeTitle($title),
             );
 
             if ($matches->count() === 1) {
@@ -143,8 +143,8 @@ final readonly class MediaReplacementTracker
                 return;
             }
 
-            $attempt = $matches->first();
-            $attempt->update([
+            $mediaReplacementAttempt = $matches->first();
+            $mediaReplacementAttempt->update([
                 'status' => MediaReplacementStatus::NeedsAttention,
                 'failure_reason' => 'manual_interaction_required',
                 'completed_at' => now(),
@@ -152,7 +152,7 @@ final readonly class MediaReplacementTracker
 
             $this->notify(
                 $serviceConnection,
-                $attempt,
+                $mediaReplacementAttempt,
                 'warning',
                 'Replacement needs manual import in Sonarr/Radarr.',
             );
@@ -166,7 +166,7 @@ final readonly class MediaReplacementTracker
     {
         return MediaReplacementAttempt::query()
             ->where('service_connection_id', $serviceConnection->id)
-            ->whereNotIn('status', array_map(static fn (MediaReplacementStatus $status): string => $status->value, self::TERMINAL_STATUSES))
+            ->whereNotIn('status', array_map(static fn (MediaReplacementStatus $mediaReplacementStatus): string => $mediaReplacementStatus->value, self::TERMINAL_STATUSES))
             ->get();
     }
 
@@ -176,7 +176,7 @@ final readonly class MediaReplacementTracker
     private function attemptsByDownloadId(ServiceConnection $serviceConnection, string $downloadId): Collection
     {
         return $this->nonTerminalAttempts($serviceConnection)->filter(
-            static fn (MediaReplacementAttempt $attempt): bool => $attempt->download_id === $downloadId,
+            static fn (MediaReplacementAttempt $mediaReplacementAttempt): bool => $mediaReplacementAttempt->download_id === $downloadId,
         )->values();
     }
 
@@ -203,7 +203,7 @@ final readonly class MediaReplacementTracker
 
     private function notify(
         ServiceConnection $serviceConnection,
-        MediaReplacementAttempt $attempt,
+        MediaReplacementAttempt $mediaReplacementAttempt,
         string $level,
         string $message,
     ): void {
@@ -213,7 +213,7 @@ final readonly class MediaReplacementTracker
             return;
         }
 
-        $title = (string) ($attempt->candidate['title'] ?? 'Media replacement');
+        $title = (string) ($mediaReplacementAttempt->candidate['title'] ?? 'Media replacement');
 
         Notification::send($admins, new MediaReplacementStatusChanged(
             service: $serviceConnection->type->value,
@@ -265,9 +265,9 @@ final readonly class MediaReplacementTracker
         return is_int($id) && $id > 0 ? $id : null;
     }
 
-    private function attemptTargetId(MediaReplacementAttempt $attempt): ?int
+    private function attemptTargetId(MediaReplacementAttempt $mediaReplacementAttempt): ?int
     {
-        $target = is_array($attempt->target) ? $attempt->target : [];
+        $target = is_array($mediaReplacementAttempt->target) ? $mediaReplacementAttempt->target : [];
         $id = ($target['service'] ?? null) === 'radarr'
             ? ($target['movie_id'] ?? null)
             : ($target['series_id'] ?? null);
@@ -281,7 +281,6 @@ final readonly class MediaReplacementTracker
     }
 
     /**
-     * @param  mixed  $languages
      * @return list<string>
      */
     private function normalizeCodes(mixed $languages): array
@@ -291,7 +290,7 @@ final readonly class MediaReplacementTracker
         }
 
         return $this->languageNormalizer->normalizeMany(
-            array_values(array_filter($languages, 'is_string')),
+            array_values(array_filter($languages, is_string(...))),
         );
     }
 

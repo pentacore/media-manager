@@ -53,7 +53,8 @@ class ReplaceMediaFileTool extends BaseTool
 
         throw_if(
             ($snapshot['ambiguous'] ?? false) === true,
-            new InvalidArgumentException('The target is ambiguous. Inspect and clarify with the user before replacing.'),
+            InvalidArgumentException::class,
+            'The target is ambiguous. Inspect and clarify with the user before replacing.',
         );
 
         $result = resolve(ReplacementCandidateFinder::class)->find(
@@ -66,7 +67,8 @@ class ReplaceMediaFileTool extends BaseTool
 
         throw_if(
             $candidate === null,
-            new InvalidArgumentException('The selected candidate is no longer eligible. Re-run the search and choose again.'),
+            InvalidArgumentException::class,
+            'The selected candidate is no longer eligible. Re-run the search and choose again.',
         );
 
         if ($selectionMode === 'automatic') {
@@ -74,7 +76,8 @@ class ReplaceMediaFileTool extends BaseTool
 
             throw_if(
                 ! is_array($automatic) || ($automatic['fingerprint'] ?? null) !== $fingerprint,
-                new InvalidArgumentException('Automatic selection is only allowed for the finder\'s automatic_candidate.'),
+                InvalidArgumentException::class,
+                "Automatic selection is only allowed for the finder's automatic_candidate.",
             );
         }
 
@@ -133,7 +136,7 @@ class ReplaceMediaFileTool extends BaseTool
             return null;
         }
 
-        return array_values(array_filter($value, 'is_string'));
+        return array_values(array_filter($value, is_string(...)));
     }
 
     private function nullableInt(mixed $value): ?int
@@ -171,7 +174,7 @@ class ReplaceMediaFileTool extends BaseTool
                 ->required(),
             'selection_mode' => $schema->string()
                 ->enum(['manual', 'automatic'])
-                ->description('manual when the user chose the candidate; automatic only for the finder\'s automatic_candidate.')
+                ->description("manual when the user chose the candidate; automatic only for the finder's automatic_candidate.")
                 ->required(),
             'required_languages' => $schema->array()
                 ->items($schema->string())

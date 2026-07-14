@@ -39,7 +39,8 @@ final readonly class MediaReplacementActions implements ActionExecutor
     {
         throw_if(
             $actionRequest->type !== 'replace_media_file',
-            new InvalidArgumentException(sprintf('MediaReplacementActions cannot execute type "%s"', $actionRequest->type)),
+            InvalidArgumentException::class,
+            sprintf('MediaReplacementActions cannot execute type "%s"', $actionRequest->type),
         );
 
         $payload = $actionRequest->payload;
@@ -53,13 +54,14 @@ final readonly class MediaReplacementActions implements ActionExecutor
         $storedTarget = is_array($payload['target'] ?? null) ? $payload['target'] : [];
         $fingerprint = (string) ($payload['candidate_fingerprint'] ?? '');
         $requiredLanguages = is_array($payload['required_languages'] ?? null)
-            ? array_values(array_filter($payload['required_languages'], 'is_string'))
+            ? array_values(array_filter($payload['required_languages'], is_string(...)))
             : null;
 
         $freshTarget = $this->mediaFileInspector->inspectFromSnapshot($storedTarget);
         throw_unless(
             $this->sameFiles($storedTarget, $freshTarget),
-            new InvalidArgumentException('Installed media files changed after approval; aborting replacement.'),
+            InvalidArgumentException::class,
+            'Installed media files changed after approval; aborting replacement.',
         );
 
         $eligible = $this->replacementCandidateFinder->find($freshTarget, $requiredLanguages, 10);
@@ -67,10 +69,10 @@ final readonly class MediaReplacementActions implements ActionExecutor
             $eligible['candidates'],
             static fn (array $candidate): bool => ($candidate['fingerprint'] ?? null) === $fingerprint,
         );
-        throw_if($stillEligible === [], new InvalidArgumentException('Selected release is no longer eligible.'));
+        throw_if($stillEligible === [], InvalidArgumentException::class, 'Selected release is no longer eligible.');
 
         $rawRelease = $this->replacementCandidateFinder->freshRawRelease($freshTarget, $fingerprint);
-        throw_if($rawRelease === null, new InvalidArgumentException('Selected release is no longer available.'));
+        throw_if($rawRelease === null, InvalidArgumentException::class, 'Selected release is no longer available.');
 
         $serviceConnection = ServiceConnection::resolveActive($serviceType);
         $client = $serviceType === ServiceType::Sonarr
@@ -123,7 +125,7 @@ final readonly class MediaReplacementActions implements ActionExecutor
         ServiceType $serviceType,
         array $freshTarget,
         array $rawRelease,
-        MediaReplacementAttempt $attempt,
+        MediaReplacementAttempt $mediaReplacementAttempt,
     ): int {
         $grabAccepted = false;
 
@@ -133,7 +135,7 @@ final readonly class MediaReplacementActions implements ActionExecutor
 
             return $this->deleteReviewedFiles($client, $serviceType, $freshTarget);
         } catch (Throwable $throwable) {
-            $attempt->update([
+            $mediaReplacementAttempt->update([
                 'status' => $grabAccepted ? MediaReplacementStatus::NeedsAttention : MediaReplacementStatus::Failed,
                 'failure_reason' => $grabAccepted
                     ? 'Grab accepted but current file deletion failed; the old file remains.'
@@ -141,12 +143,9 @@ final readonly class MediaReplacementActions implements ActionExecutor
                 'completed_at' => now(),
             ]);
 
-            throw new RuntimeException(
-                $grabAccepted
-                    ? 'Replacement grabbed but deletion of the reviewed file failed.'
-                    : 'Replacement grab was rejected.',
-                previous: $throwable,
-            );
+            throw new RuntimeException($grabAccepted
+                ? 'Replacement grabbed but deletion of the reviewed file failed.'
+                : 'Replacement grab was rejected.', $throwable->getCode(), previous: $throwable);
         }
     }
 
@@ -226,7 +225,7 @@ final readonly class MediaReplacementActions implements ActionExecutor
             return [];
         }
 
-        $normalized = array_values(array_unique(array_map('intval', $ids)));
+        $normalized = array_values(array_unique(array_map(intval(...), $ids)));
         sort($normalized, SORT_NUMERIC);
 
         return $normalized;

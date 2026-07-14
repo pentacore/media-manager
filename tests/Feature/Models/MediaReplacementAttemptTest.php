@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use Illuminate\Database\QueryException;
 use App\Enums\MediaReplacementStatus;
 use App\Models\ActionRequest;
 use App\Models\MediaReplacementAttempt;
@@ -42,5 +43,5 @@ test('it enforces one attempt per action request', function (): void {
     MediaReplacementAttempt::factory()->create(['action_request_id' => $actionRequest->id]);
 
     expect(fn (): MediaReplacementAttempt => MediaReplacementAttempt::factory()->create(['action_request_id' => $actionRequest->id]))
-        ->toThrow(Illuminate\Database\QueryException::class);
+        ->toThrow(QueryException::class);
 });

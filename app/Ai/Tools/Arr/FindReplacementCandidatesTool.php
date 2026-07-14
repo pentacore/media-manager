@@ -64,7 +64,7 @@ class FindReplacementCandidatesTool extends BaseTool
             return null;
         }
 
-        return array_values(array_filter($value, 'is_string'));
+        return array_values(array_filter($value, is_string(...)));
     }
 
     private function nullableInt(mixed $value): ?int

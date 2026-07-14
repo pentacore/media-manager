@@ -75,29 +75,29 @@ function fakeInspectSubtitles(string $subtitles): void
 }
 
 test('a unique grab attaches the download id to the requested attempt', function (): void {
-    $attempt = trackerAttempt($this->connection->id);
+    $mediaReplacementAttempt = trackerAttempt($this->connection->id);
 
     resolve(MediaReplacementTracker::class)->recordGrab($this->connection, grabPayload());
 
-    expect($attempt->fresh()->download_id)->toBe('DL-1')
-        ->and($attempt->fresh()->status)->toBe(MediaReplacementStatus::Requested);
+    expect($mediaReplacementAttempt->fresh()->download_id)->toBe('DL-1')
+        ->and($mediaReplacementAttempt->fresh()->status)->toBe(MediaReplacementStatus::Requested);
     Notification::assertNothingSent();
 });
 
 test('multiple matching attempts on grab are flagged for attention rather than guessed', function (): void {
-    $a = trackerAttempt($this->connection->id);
+    $mediaReplacementAttempt = trackerAttempt($this->connection->id);
     $b = trackerAttempt($this->connection->id);
 
     resolve(MediaReplacementTracker::class)->recordGrab($this->connection, grabPayload());
 
-    expect($a->fresh()->status)->toBe(MediaReplacementStatus::NeedsAttention)
+    expect($mediaReplacementAttempt->fresh()->status)->toBe(MediaReplacementStatus::NeedsAttention)
         ->and($b->fresh()->status)->toBe(MediaReplacementStatus::NeedsAttention)
-        ->and($a->fresh()->failure_reason)->toBe('ambiguous_webhook_correlation');
+        ->and($mediaReplacementAttempt->fresh()->failure_reason)->toBe('ambiguous_webhook_correlation');
     Notification::assertSentTimes(MediaReplacementStatusChanged::class, 2);
 });
 
 test('a download verifies the attempt when every required language is present', function (): void {
-    $attempt = trackerAttempt($this->connection->id, [
+    $mediaReplacementAttempt = trackerAttempt($this->connection->id, [
         'download_id' => 'DL-1',
         'required_languages' => ['eng', 'jpn'],
     ]);
@@ -109,14 +109,14 @@ test('a download verifies the attempt when every required language is present', 
         'downloadId' => 'DL-1',
     ]);
 
-    $fresh = $attempt->fresh();
+    $fresh = $mediaReplacementAttempt->fresh();
     expect($fresh->status)->toBe(MediaReplacementStatus::Verified)
         ->and($fresh->verification['missing'])->toBe([]);
     Notification::assertSentTimes(MediaReplacementStatusChanged::class, 1);
 });
 
 test('a download missing a required language needs attention with verification evidence', function (): void {
-    $attempt = trackerAttempt($this->connection->id, [
+    $mediaReplacementAttempt = trackerAttempt($this->connection->id, [
         'download_id' => 'DL-1',
         'required_languages' => ['eng', 'swe'],
     ]);
@@ -128,7 +128,7 @@ test('a download missing a required language needs attention with verification e
         'downloadId' => 'DL-1',
     ]);
 
-    $fresh = $attempt->fresh();
+    $fresh = $mediaReplacementAttempt->fresh();
     expect($fresh->status)->toBe(MediaReplacementStatus::NeedsAttention)
         ->and($fresh->verification['required'])->toBe(['eng', 'swe'])
         ->and($fresh->verification['found'])->toBe(['eng'])
@@ -136,18 +136,18 @@ test('a download missing a required language needs attention with verification e
 });
 
 test('a download with an unknown download id is a no-op', function (): void {
-    $attempt = trackerAttempt($this->connection->id, ['download_id' => 'DL-1']);
+    $mediaReplacementAttempt = trackerAttempt($this->connection->id, ['download_id' => 'DL-1']);
 
     resolve(MediaReplacementTracker::class)->verifyDownload($this->connection, [
         'eventType' => 'Download', 'series' => ['id' => 42], 'downloadId' => 'OTHER',
     ]);
 
-    expect($attempt->fresh()->status)->toBe(MediaReplacementStatus::Requested);
+    expect($mediaReplacementAttempt->fresh()->status)->toBe(MediaReplacementStatus::Requested);
     Notification::assertNothingSent();
 });
 
 test('manual interaction on a tracked download needs attention', function (): void {
-    $attempt = trackerAttempt($this->connection->id, [
+    $mediaReplacementAttempt = trackerAttempt($this->connection->id, [
         'download_id' => 'DL-1',
         'status' => MediaReplacementStatus::Downloading,
     ]);
@@ -158,6 +158,6 @@ test('manual interaction on a tracked download needs attention', function (): vo
         'downloadInfo' => ['downloadId' => 'DL-1'],
     ]);
 
-    expect($attempt->fresh()->status)->toBe(MediaReplacementStatus::NeedsAttention);
+    expect($mediaReplacementAttempt->fresh()->status)->toBe(MediaReplacementStatus::NeedsAttention);
     Notification::assertSentTimes(MediaReplacementStatusChanged::class, 1);
 });

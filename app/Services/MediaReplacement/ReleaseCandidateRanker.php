@@ -510,9 +510,11 @@ final readonly class ReleaseCandidateRanker
             if (! is_string($language)) {
                 continue;
             }
+
             if (! mb_check_encoding($language, 'UTF-8')) {
                 continue;
             }
+
             $validLanguages[] = $language;
         }
 
