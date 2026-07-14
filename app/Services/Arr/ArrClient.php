@@ -185,6 +185,53 @@ abstract class ArrClient
     }
 
     /**
+     * Run the service's native interactive release search. Sonarr accepts
+     * `seriesId`/`episodeId`/`seasonNumber`; Radarr accepts `movieId`. The
+     * response is the raw ReleaseResource[] from upstream, including mapping,
+     * rejections, custom-format scores, and the fields required for a later grab.
+     *
+     * @param  array<string, mixed>  $params
+     * @return array<int, array<string, mixed>>
+     *
+     * @throws RequestException|ConnectionException
+     */
+    public function getReleases(array $params): array
+    {
+        return $this->buildClient()
+            ->get(sprintf('/api/%s/release', $this->apiVersion), $params)
+            ->throw()
+            ->json() ?? [];
+    }
+
+    /**
+     * Grab a release by posting the full ReleaseResource returned by a fresh
+     * native search. Callers must never reconstruct this payload from AI output.
+     *
+     * @param  array<string, mixed>  $release
+     *
+     * @throws RequestException|ConnectionException
+     */
+    public function grabRelease(array $release): void
+    {
+        $this->buildClient()
+            ->post(sprintf('/api/%s/release', $this->apiVersion), $release)
+            ->throw();
+    }
+
+    /**
+     * Mark a history record as failed so the managing service blocklists the
+     * bad release and does not re-grab it.
+     *
+     * @throws RequestException|ConnectionException
+     */
+    public function markHistoryFailed(int $historyId): void
+    {
+        $this->buildClient()
+            ->post(sprintf('/api/%s/history/failed/%d', $this->apiVersion, $historyId))
+            ->throw();
+    }
+
+    /**
      * @return array<int, array<string, mixed>>
      *
      * @throws RequestException|ConnectionException

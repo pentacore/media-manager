@@ -105,3 +105,44 @@ test('searchMovies encodes query and returns results', function (): void {
 
     expect($result)->toHaveCount(1);
 });
+
+test('getMovieFiles requests the movie files', function (): void {
+    Http::fake([
+        'radarr.local:7878/api/v3/moviefile*' => Http::response([
+            ['id' => 601, 'movieId' => 88],
+        ]),
+    ]);
+
+    $result = $this->client->getMovieFiles(88);
+
+    Http::assertSent(fn (Request $request): bool => $request->method() === 'GET'
+        && str_contains($request->url(), '/api/v3/moviefile')
+        && str_contains($request->url(), 'movieId=88'));
+
+    expect($result)->toHaveCount(1)
+        ->and($result[0]['id'])->toBe(601);
+});
+
+test('getMovieFileById requests a single movie file', function (): void {
+    Http::fake([
+        'radarr.local:7878/api/v3/moviefile/601' => Http::response(['id' => 601, 'movieId' => 88]),
+    ]);
+
+    $result = $this->client->getMovieFileById(601);
+
+    Http::assertSent(fn (Request $request): bool => $request->method() === 'GET'
+        && str_contains($request->url(), '/api/v3/moviefile/601'));
+
+    expect($result['id'])->toBe(601);
+});
+
+test('deleteMovieFile sends DELETE to the movie file', function (): void {
+    Http::fake([
+        'radarr.local:7878/api/v3/moviefile/601' => Http::response([], 200),
+    ]);
+
+    $this->client->deleteMovieFile(601);
+
+    Http::assertSent(fn (Request $request): bool => $request->method() === 'DELETE'
+        && str_contains($request->url(), '/api/v3/moviefile/601'));
+});

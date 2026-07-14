@@ -116,3 +116,44 @@ test('searchSeries encodes query and returns results', function (): void {
     expect($result)->toHaveCount(1);
     expect($result[0]['title'])->toBe('Breaking Bad');
 });
+
+test('getEpisodeFiles requests the series episode files', function (): void {
+    Http::fake([
+        'sonarr.local:8989/api/v3/episodefile*' => Http::response([
+            ['id' => 501, 'seriesId' => 42],
+        ]),
+    ]);
+
+    $result = $this->client->getEpisodeFiles(42);
+
+    Http::assertSent(fn (Request $request): bool => $request->method() === 'GET'
+        && str_contains($request->url(), '/api/v3/episodefile')
+        && str_contains($request->url(), 'seriesId=42'));
+
+    expect($result)->toHaveCount(1)
+        ->and($result[0]['id'])->toBe(501);
+});
+
+test('getEpisodeFileById requests a single episode file', function (): void {
+    Http::fake([
+        'sonarr.local:8989/api/v3/episodefile/501' => Http::response(['id' => 501, 'seriesId' => 42]),
+    ]);
+
+    $result = $this->client->getEpisodeFileById(501);
+
+    Http::assertSent(fn (Request $request): bool => $request->method() === 'GET'
+        && str_contains($request->url(), '/api/v3/episodefile/501'));
+
+    expect($result['id'])->toBe(501);
+});
+
+test('deleteEpisodeFile sends DELETE to the episode file', function (): void {
+    Http::fake([
+        'sonarr.local:8989/api/v3/episodefile/501' => Http::response([], 200),
+    ]);
+
+    $this->client->deleteEpisodeFile(501);
+
+    Http::assertSent(fn (Request $request): bool => $request->method() === 'DELETE'
+        && str_contains($request->url(), '/api/v3/episodefile/501'));
+});

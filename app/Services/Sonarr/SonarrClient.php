@@ -147,6 +147,42 @@ class SonarrClient extends ArrClient implements Warmable
      *
      * @throws RequestException|ConnectionException
      */
+    public function getEpisodeFiles(int $seriesId): array
+    {
+        return $this->buildClient()
+            ->get(sprintf('/api/%s/episodefile', $this->apiVersion), ['seriesId' => $seriesId])
+            ->throw()
+            ->json() ?? [];
+    }
+
+    /**
+     * @return array<string, mixed>
+     *
+     * @throws RequestException|ConnectionException
+     */
+    public function getEpisodeFileById(int $episodeFileId): array
+    {
+        return $this->buildClient()
+            ->get(sprintf('/api/%s/episodefile/%d', $this->apiVersion, $episodeFileId))
+            ->throw()
+            ->json() ?? [];
+    }
+
+    /**
+     * @throws RequestException|ConnectionException
+     */
+    public function deleteEpisodeFile(int $episodeFileId): void
+    {
+        $this->buildClient()
+            ->delete(sprintf('/api/%s/episodefile/%d', $this->apiVersion, $episodeFileId))
+            ->throw();
+    }
+
+    /**
+     * @return array<int, array<string, mixed>>
+     *
+     * @throws RequestException|ConnectionException
+     */
     private function fetchSeries(): array
     {
         return $this->buildClient()->get(sprintf('/api/%s/series', $this->apiVersion))->throw()->json() ?? [];

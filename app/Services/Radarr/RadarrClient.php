@@ -130,6 +130,42 @@ class RadarrClient extends ArrClient implements Warmable
      *
      * @throws RequestException|ConnectionException
      */
+    public function getMovieFiles(int $movieId): array
+    {
+        return $this->buildClient()
+            ->get(sprintf('/api/%s/moviefile', $this->apiVersion), ['movieId' => $movieId])
+            ->throw()
+            ->json() ?? [];
+    }
+
+    /**
+     * @return array<string, mixed>
+     *
+     * @throws RequestException|ConnectionException
+     */
+    public function getMovieFileById(int $movieFileId): array
+    {
+        return $this->buildClient()
+            ->get(sprintf('/api/%s/moviefile/%d', $this->apiVersion, $movieFileId))
+            ->throw()
+            ->json() ?? [];
+    }
+
+    /**
+     * @throws RequestException|ConnectionException
+     */
+    public function deleteMovieFile(int $movieFileId): void
+    {
+        $this->buildClient()
+            ->delete(sprintf('/api/%s/moviefile/%d', $this->apiVersion, $movieFileId))
+            ->throw();
+    }
+
+    /**
+     * @return array<int, array<string, mixed>>
+     *
+     * @throws RequestException|ConnectionException
+     */
     private function fetchMovies(): array
     {
         return $this->buildClient()->get(sprintf('/api/%s/movie', $this->apiVersion))->throw()->json() ?? [];
