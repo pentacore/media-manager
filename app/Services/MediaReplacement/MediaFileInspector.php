@@ -42,6 +42,31 @@ final readonly class MediaFileInspector
     }
 
     /**
+     * Re-inspect the current installed file(s) from a previously stored target
+     * snapshot, so an executor can confirm nothing changed after approval.
+     *
+     * @param  array<string, mixed>  $target
+     * @return array<string, mixed>
+     */
+    public function inspectFromSnapshot(array $target): array
+    {
+        $service = mb_strtolower(trim((string) ($target['service'] ?? '')));
+
+        if ($service === 'radarr') {
+            return $this->inspect('radarr', $this->integer($target['movie_id'] ?? null) ?? 0);
+        }
+
+        $episodeNumbers = is_array($target['episode_numbers'] ?? null) ? array_values($target['episode_numbers']) : [];
+
+        return $this->inspect(
+            'sonarr',
+            $this->integer($target['series_id'] ?? null) ?? 0,
+            seasonNumber: $this->integer($target['season_number'] ?? null),
+            episodeNumber: $episodeNumbers === [] ? null : $this->integer($episodeNumbers[0]),
+        );
+    }
+
+    /**
      * @return array<string, mixed>
      */
     private function inspectSonarr(

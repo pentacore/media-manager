@@ -24,7 +24,29 @@ final readonly class ReplacementCandidateFinder
     public function __construct(
         private MediaReplacementSettings $mediaReplacementSettings,
         private ReleaseCandidateRanker $releaseCandidateRanker,
+        private ReleaseFingerprint $releaseFingerprint,
     ) {}
+
+    /**
+     * Re-run the native search and return the raw release resource whose
+     * fingerprint matches, so an executor can grab exactly the reviewed release.
+     * Returns null when the release is no longer present.
+     *
+     * @param  array<string, mixed>  $target
+     * @return array<string, mixed>|null
+     */
+    public function freshRawRelease(array $target, string $fingerprint): ?array
+    {
+        $service = mb_strtolower(trim((string) ($target['service'] ?? '')));
+
+        foreach ($this->searchReleases($service, $target) as $release) {
+            if (is_array($release) && $this->releaseFingerprint->make($service, $release) === $fingerprint) {
+                return $release;
+            }
+        }
+
+        return null;
+    }
 
     /**
      * @param  array<string, mixed>  $target

@@ -7,6 +7,7 @@ use App\Events\ActionRequestStatusChanged;
 use App\Jobs\ExecuteActionRequest;
 use App\Models\ActionRequest;
 use App\Services\Actions\ActionExecutor;
+use App\Services\MediaReplacement\MediaReplacementActions;
 use App\Services\Radarr\RadarrActions;
 use App\Services\Sonarr\SonarrActions;
 use Illuminate\Contracts\Queue\Job;
@@ -61,6 +62,23 @@ test('sets status to Executing then Completed on success', function (): void {
     expect($fresh->result)->toMatchArray(['success' => true, 'deleted' => true]);
 
     Event::assertDispatchedTimes(ActionRequestStatusChanged::class, 2); // Executing, Completed
+});
+
+test('routes replace_media_file to the media replacement executor', function (): void {
+    $request = ActionRequest::factory()->create([
+        'status' => ActionRequestStatus::Approved,
+        'type' => 'replace_media_file',
+    ]);
+
+    $mock = Mockery::mock(ActionExecutor::class);
+    $mock->shouldReceive('execute')->once()->andReturn(['replacement_initiated' => true]);
+    $this->app->bind(MediaReplacementActions::class, fn (): ActionExecutor => $mock);
+
+    new ExecuteActionRequest($request)->handle();
+
+    $fresh = $request->fresh();
+    expect($fresh->status)->toBe(ActionRequestStatus::Completed);
+    expect($fresh->result)->toMatchArray(['success' => true, 'replacement_initiated' => true]);
 });
 
 test('marks as Failed immediately for permanent (non-transient) exceptions', function (): void {

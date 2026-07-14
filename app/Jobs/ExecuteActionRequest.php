@@ -11,6 +11,7 @@ use App\Services\Actions\ActionExecutor;
 use App\Services\Arr\ManualImportActions;
 use App\Services\Arr\RemoveStuckDownloadActions;
 use App\Services\Emby\EmbyActions;
+use App\Services\MediaReplacement\MediaReplacementActions;
 use App\Services\Radarr\RadarrActions;
 use App\Services\Seerr\SeerrActions;
 use App\Services\Sonarr\SonarrActions;
@@ -160,6 +161,7 @@ class ExecuteActionRequest implements ShouldBeUnique, ShouldQueue
             'emby_library_scan' => EmbyActions::class,
             'resolve_manual_import' => ManualImportActions::class,
             'remove_stuck_download' => RemoveStuckDownloadActions::class,
+            'replace_media_file' => MediaReplacementActions::class,
             default => null,
         };
 
