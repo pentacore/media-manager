@@ -12,7 +12,7 @@ import {
 } from '@/components/ui/select';
 import { Separator } from '@/components/ui/separator';
 import SubtitleRuleEditor from './SubtitleRuleEditor.vue';
-import type {SubtitleRule} from './SubtitleRuleEditor.vue';
+import type { SubtitleRule } from './SubtitleRuleEditor.vue';
 
 interface ScopeGuidance {
     notes: string;

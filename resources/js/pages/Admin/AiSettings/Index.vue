@@ -4,7 +4,7 @@ import { computed, ref } from 'vue';
 import AiSettingsController from '@/actions/App/Http/Controllers/Admin/AiSettingsController';
 import InputError from '@/components/InputError.vue';
 import MediaReplacementSettings from '@/components/media-replacement/MediaReplacementSettings.vue';
-import type {MediaReplacementConfiguration} from '@/components/media-replacement/MediaReplacementSettings.vue';
+import type { MediaReplacementConfiguration } from '@/components/media-replacement/MediaReplacementSettings.vue';
 import { Field, Pill } from '@/components/mm';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';

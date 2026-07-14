@@ -221,7 +221,7 @@ function refresh(): void {
 }
 
 function isDestructive(type: string | null | undefined): boolean {
-    return /delete|remove|destroy/.test(type ?? '');
+    return /delete|remove|destroy|replace/.test(type ?? '');
 }
 
 function svcId(name: string | null | undefined): string {
@@ -298,6 +298,70 @@ function payloadDetail(row: ActionRequestRow): string {
     const detail = row.payload?.['detail'] ?? row.payload?.['summary'];
 
     return typeof detail === 'string' ? detail : '';
+}
+
+function replacementLanguages(row: ActionRequestRow): string {
+    const languages = row.payload?.['required_languages'];
+
+    return Array.isArray(languages) && languages.length > 0
+        ? languages.filter((item) => typeof item === 'string').join(', ')
+        : '—';
+}
+
+function replacementConfidence(row: ActionRequestRow): string {
+    const confidence = row.payload?.['confidence'];
+
+    return typeof confidence === 'number' ? `${confidence}%` : '—';
+}
+
+function replacementSelectionMode(row: ActionRequestRow): string {
+    const mode = row.payload?.['selection_mode'];
+
+    return typeof mode === 'string' ? mode : '—';
+}
+
+function replacementAffectedFiles(row: ActionRequestRow): number {
+    const target = row.payload?.['target'];
+
+    if (target === null || typeof target !== 'object') {
+        return 0;
+    }
+
+    const ids =
+        (target as Record<string, unknown>)['episode_file_ids'] ??
+        (target as Record<string, unknown>)['movie_file_ids'];
+
+    return Array.isArray(ids) ? ids.length : 0;
+}
+
+function replacementEvidence(row: ActionRequestRow): string {
+    const rules = row.payload?.['matched_rules'];
+
+    if (!Array.isArray(rules)) {
+        return '—';
+    }
+
+    const names = rules
+        .map((rule) =>
+            rule !== null &&
+            typeof rule === 'object' &&
+            typeof (rule as Record<string, unknown>)['name'] === 'string'
+                ? ((rule as Record<string, unknown>)['name'] as string)
+                : '',
+        )
+        .filter((name) => name.length > 0);
+
+    return names.length > 0 ? names.join(', ') : '—';
+}
+
+function replacementIsSeasonPack(row: ActionRequestRow): boolean {
+    const candidate = row.payload?.['candidate'];
+
+    return (
+        candidate !== null &&
+        typeof candidate === 'object' &&
+        (candidate as Record<string, unknown>)['season_pack'] === true
+    );
 }
 
 function statusCount(id: string): number {
@@ -620,6 +684,31 @@ function pipelineState(
                                 payloadDetail(selected)
                             }}</span>
                         </Field>
+
+                        <template v-if="selected.type === 'replace_media_file'">
+                            <Field label="Required subtitles">{{
+                                replacementLanguages(selected)
+                            }}</Field>
+                            <Field label="Confidence">{{
+                                replacementConfidence(selected)
+                            }}</Field>
+                            <Field label="Selection">{{
+                                replacementSelectionMode(selected)
+                            }}</Field>
+                            <Field label="Affected files">{{
+                                replacementAffectedFiles(selected)
+                            }}</Field>
+                            <Field label="Evidence">{{
+                                replacementEvidence(selected)
+                            }}</Field>
+                            <div
+                                v-if="replacementIsSeasonPack(selected)"
+                                class="rounded-lg border border-warning/30 bg-warning/10 p-3 text-xs text-warning"
+                            >
+                                This replacement affects a season pack and may
+                                delete multiple existing episode files.
+                            </div>
+                        </template>
 
                         <div
                             v-if="isDestructive(selected.type)"

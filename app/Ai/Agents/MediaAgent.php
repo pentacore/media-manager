@@ -7,11 +7,14 @@ namespace App\Ai\Agents;
 use App\Ai\Decision\InspectStuckImportTool;
 use App\Ai\Tools\Arr\AddMediaTool;
 use App\Ai\Tools\Arr\DeleteMediaTool;
+use App\Ai\Tools\Arr\FindReplacementCandidatesTool;
 use App\Ai\Tools\Arr\GetDownloadHistoryTool;
 use App\Ai\Tools\Arr\GetDownloadQueueTool;
 use App\Ai\Tools\Arr\GetMediaTool;
+use App\Ai\Tools\Arr\InspectMediaFileTool;
 use App\Ai\Tools\Arr\MonitorMediaTool;
 use App\Ai\Tools\Arr\RemoveStuckDownloadChatTool;
+use App\Ai\Tools\Arr\ReplaceMediaFileTool;
 use App\Ai\Tools\Arr\ResolveManualImportChatTool;
 use App\Ai\Tools\Arr\SearchMediaTool;
 use App\Ai\Tools\Arr\SetMediaQualityProfileTool;
@@ -100,6 +103,14 @@ The media library tools (SearchMediaTool, GetMediaTool, AddMediaTool, DeleteMedi
 - Import via ResolveManualImportChatTool (partially-mapped file sets always need human approval). Discard via RemoveStuckDownloadChatTool: pass blocklist=true when the release itself is bad (corrupt/fake/wrong content) so it is never grabbed again; pass search_replacement=true when a replacement should be grabbed.
 - Decision guide: import when files map cleanly and the rejection is benign (e.g. "matched by series id"); remove when the rejection says it is not an upgrade; when unsure, inspect, explain, and let the user decide.
 
+**Replacing imported media with missing/incorrect subtitles:**
+- Resolve IDs, then call InspectMediaFileTool. Never guess a series, episode, movie, or file id. If it returns ambiguous=true, present the choices/affected episodes and ask the user which target they mean.
+- Call FindReplacementCandidatesTool with the user's language override, or null to use configured defaults.
+- If automatic_candidate is present, you may select exactly that fingerprint. Otherwise present the ranked candidates and wait for the user to choose.
+- Before ReplaceMediaFileTool, state every affected episode/file. Season packs may replace multiple files.
+- A queued/completed ActionRequest means replacement was requested/initiated, not fixed. Say subtitles are fixed only when verification reports verified.
+- Do not retry a failed replacement autonomously.
+
 **Batched workflows (3+ destructive operations):** DO NOT call multiple destructive tools in sequence. Gather the candidates via the read tools and confirm the list, then call ProposeWorkflowTool ONCE with a `rationale` and a `steps` array: `[{action: "delete_movie", target: "Movie A (id 1)", reason: "Unwatched 8mo"}, ...]`. You'll get back `{status: 'awaiting_confirmation', workflow_id, ...}` — tell the user the proposal awaits their confirmation and call NO destructive tools until the continuation. When re-invoked with "The user has APPROVED workflow {id}…", execute the steps with the destructive tools, in order. On decline, acknowledge and ask what they'd like instead.
 
 Important rules:
@@ -137,6 +148,10 @@ PROMPT;
             resolve(MonitorMediaTool::class),
             resolve(SetMediaQualityProfileTool::class),
             resolve(DeleteMediaTool::class),
+
+            resolve(InspectMediaFileTool::class),
+            resolve(FindReplacementCandidatesTool::class),
+            resolve(ReplaceMediaFileTool::class),
             // Emby
             resolve(NowPlayingTool::class),
             resolve(WatchHistoryTool::class),
