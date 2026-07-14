@@ -110,6 +110,13 @@ class ActionTypeConfigSeeder extends Seeder
                 'requires_approval' => true,
                 'is_enabled' => true,
             ],
+            [
+                'type' => 'replace_media_file',
+                'label' => 'Replace media file with better subtitles',
+                'description' => 'Grab a ranked replacement release for an imported Sonarr episode or Radarr movie, then delete the reviewed file only after the grab is accepted (AI-initiated). Defaults to requiring approval.',
+                'requires_approval' => true,
+                'is_enabled' => true,
+            ],
         ];
 
         foreach ($types as $type) {
