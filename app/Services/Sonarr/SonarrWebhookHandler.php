@@ -12,6 +12,7 @@ use App\Models\WebhookEvent;
 use App\Notifications\ServiceWarning;
 use App\Services\Actions\ActionOrchestrator;
 use App\Services\Library\InterventionCounter;
+use App\Services\MediaReplacement\MediaReplacementTracker;
 use App\Services\Search\SeriesIndexer;
 use App\Services\Webhook\AbstractWebhookHandler;
 use Illuminate\Support\Facades\Notification;
@@ -21,6 +22,7 @@ class SonarrWebhookHandler extends AbstractWebhookHandler
     public function __construct(
         private readonly ActionOrchestrator $actionOrchestrator,
         private readonly SeriesIndexer $seriesIndexer,
+        private readonly MediaReplacementTracker $mediaReplacementTracker,
     ) {}
 
     protected function serviceSlug(): string
@@ -96,6 +98,10 @@ class SonarrWebhookHandler extends AbstractWebhookHandler
             ],
             subjectId: $payload['series']['id'] ?? null,
         );
+
+        if ($webhookEvent->serviceConnection !== null) {
+            $this->mediaReplacementTracker->recordGrab($webhookEvent->serviceConnection, $payload);
+        }
     }
 
     /**
@@ -120,6 +126,10 @@ class SonarrWebhookHandler extends AbstractWebhookHandler
             ],
             subjectId: $payload['series']['id'] ?? null,
         );
+
+        if ($webhookEvent->serviceConnection !== null) {
+            $this->mediaReplacementTracker->verifyDownload($webhookEvent->serviceConnection, $payload);
+        }
 
         $this->actionOrchestrator->dispatch(
             type: 'emby_library_scan',
@@ -264,6 +274,10 @@ class SonarrWebhookHandler extends AbstractWebhookHandler
             ],
             subjectId: $payload['series']['id'] ?? null,
         );
+
+        if ($webhookEvent->serviceConnection !== null) {
+            $this->mediaReplacementTracker->recordManualIntervention($webhookEvent->serviceConnection, $payload);
+        }
 
         // The library activity badge needs to reflect the new stuck import
         // immediately — without this it would only update on the next

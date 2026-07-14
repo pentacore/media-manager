@@ -2,10 +2,12 @@
 
 declare(strict_types=1);
 
+use App\Enums\MediaReplacementStatus;
 use App\Jobs\ProcessWebhookEvent;
 use App\Models\ActionRequest;
 use App\Models\ActionTypeConfig;
 use App\Models\ActivityLog;
+use App\Models\MediaReplacementAttempt;
 use App\Models\ServiceConnection;
 use App\Models\WebhookEvent;
 use App\Services\Radarr\RadarrWebhookHandler;
@@ -18,6 +20,32 @@ beforeEach(function (): void {
         'requires_approval' => false,
         'is_enabled' => true,
     ]);
+});
+
+test('Grab event correlates a pending replacement attempt and attaches the download id', function (): void {
+    $attempt = MediaReplacementAttempt::factory()->create([
+        'service_connection_id' => $this->connection->id,
+        'status' => MediaReplacementStatus::Requested,
+        'scope' => 'movie',
+        'target' => ['service' => 'radarr', 'scope' => 'movie', 'movie_id' => 88, 'movie_file_ids' => [601]],
+        'candidate' => ['title' => 'A.Movie.2026.BluRay'],
+        'download_id' => null,
+    ]);
+
+    $webhookEvent = WebhookEvent::factory()->create([
+        'service_connection_id' => $this->connection->id,
+        'event_type' => 'Grab',
+        'payload' => [
+            'eventType' => 'Grab',
+            'movie' => ['id' => 88, 'title' => 'A Movie'],
+            'release' => ['releaseTitle' => 'A.Movie.2026.BluRay'],
+            'downloadId' => 'RDL-88',
+        ],
+    ]);
+
+    resolve(RadarrWebhookHandler::class)->handle($webhookEvent);
+
+    expect($attempt->fresh()->download_id)->toBe('RDL-88');
 });
 
 test('Test event writes ActivityLog', function (): void {

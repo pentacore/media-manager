@@ -2,13 +2,16 @@
 
 declare(strict_types=1);
 
+use App\Enums\MediaReplacementStatus;
 use App\Jobs\ProcessWebhookEvent;
 use App\Models\ActionRequest;
 use App\Models\ActionTypeConfig;
 use App\Models\ActivityLog;
+use App\Models\MediaReplacementAttempt;
 use App\Models\ServiceConnection;
 use App\Models\WebhookEvent;
 use App\Services\Sonarr\SonarrWebhookHandler;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
 
 beforeEach(function (): void {
@@ -45,6 +48,74 @@ test('Download event dispatches emby_library_scan', function (): void {
         'service_connection_id' => $this->connection->id,
         'action' => 'webhook.sonarr.download',
     ]);
+});
+
+test('Grab event correlates a pending replacement attempt and attaches the download id', function (): void {
+    $attempt = MediaReplacementAttempt::factory()->create([
+        'service_connection_id' => $this->connection->id,
+        'status' => MediaReplacementStatus::Requested,
+        'target' => ['service' => 'sonarr', 'scope' => 'anime', 'series_id' => 42, 'episode_file_ids' => [501]],
+        'candidate' => ['title' => 'My.Show.S01E01.CR'],
+        'download_id' => null,
+    ]);
+
+    $webhookEvent = WebhookEvent::factory()->create([
+        'service_connection_id' => $this->connection->id,
+        'event_type' => 'Grab',
+        'payload' => [
+            'eventType' => 'Grab',
+            'series' => ['id' => 42, 'title' => 'My Show'],
+            'episodes' => [['seasonNumber' => 1, 'episodeNumber' => 1]],
+            'release' => ['releaseTitle' => 'My.Show.S01E01.CR'],
+            'downloadId' => 'DL-42',
+        ],
+    ]);
+
+    resolve(SonarrWebhookHandler::class)->handle($webhookEvent);
+
+    expect($attempt->fresh()->download_id)->toBe('DL-42');
+});
+
+test('Download event verifies a tracked replacement attempt', function (): void {
+    Cache::flush();
+    Http::fake([
+        'sonarr.local:8989/api/v3/series/42' => Http::response(['id' => 42, 'title' => 'My Show', 'seriesType' => 'anime']),
+        'sonarr.local:8989/api/v3/episode?seriesId=42' => Http::response([
+            ['id' => 101, 'seasonNumber' => 1, 'episodeNumber' => 1, 'episodeFileId' => 501],
+        ]),
+        'sonarr.local:8989/api/v3/episodefile/501' => Http::response([
+            'id' => 501, 'sceneName' => 'My.Show.S01E01.CR', 'mediaInfo' => ['subtitles' => 'English'],
+        ]),
+        'sonarr.local:8989/api/v3/history*' => Http::response(['records' => []]),
+    ]);
+
+    // The inspector resolves the active Sonarr connection itself, so point the
+    // single connection at the faked host.
+    $this->connection->update(['url' => 'http://sonarr.local:8989', 'api_key' => 'test', 'is_active' => true]);
+    $connection = $this->connection;
+
+    $attempt = MediaReplacementAttempt::factory()->create([
+        'service_connection_id' => $connection->id,
+        'status' => MediaReplacementStatus::Downloading,
+        'target' => ['service' => 'sonarr', 'scope' => 'anime', 'series_id' => 42, 'season_number' => 1, 'episode_numbers' => [1], 'episode_file_ids' => [501]],
+        'required_languages' => ['eng'],
+        'download_id' => 'DL-99',
+    ]);
+
+    $webhookEvent = WebhookEvent::factory()->create([
+        'service_connection_id' => $connection->id,
+        'event_type' => 'Download',
+        'payload' => [
+            'eventType' => 'Download',
+            'series' => ['id' => 42, 'title' => 'My Show'],
+            'episodes' => [['seasonNumber' => 1, 'episodeNumber' => 1]],
+            'downloadId' => 'DL-99',
+        ],
+    ]);
+
+    resolve(SonarrWebhookHandler::class)->handle($webhookEvent);
+
+    expect($attempt->fresh()->status)->toBe(MediaReplacementStatus::Verified);
 });
 
 test('unknown events are ignored', function (): void {
