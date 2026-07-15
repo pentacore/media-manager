@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use App\Jobs\Ai\GenerateConversationTitle;
 use App\Jobs\EmbedLibraryItem;
+use App\Jobs\ExecuteActionRequest;
 use App\Jobs\FetchLatestServiceVersion;
 use App\Jobs\PingServiceHealth;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -40,7 +41,15 @@ pest()->extend(TestCase::class)
         // EmbedLibraryItem is faked for the same reason: the MovieIndexer /
         // SeriesIndexer dispatch it on create, and its handle() calls the
         // Embeddings SDK (unfaked, dummy keys → 401) synchronously otherwise.
-        Queue::fake([PingServiceHealth::class, FetchLatestServiceVersion::class, GenerateConversationTitle::class, EmbedLibraryItem::class]);
+        // ExecuteActionRequest is faked because webhook handlers dispatch
+        // auto-executing ActionRequests (e.g. emby_library_scan on a Download)
+        // that would otherwise run inline under the sync queue and make real
+        // HTTP to the (Faker-random) ServiceConnection URLs — nondeterministic
+        // outbound requests that flake under --parallel. This matches production
+        // (async queue); action execution is covered by the direct executor
+        // tests (ExecuteActionRequestTest, *ActionsTest) and by suites that
+        // re-fake the queue and assert push behaviour.
+        Queue::fake([PingServiceHealth::class, FetchLatestServiceVersion::class, GenerateConversationTitle::class, EmbedLibraryItem::class, ExecuteActionRequest::class]);
 
         // External-API caches (app/Cache/Services) default to redis in production.
         // Force the array store in tests so per-test state is isolated and tagged
