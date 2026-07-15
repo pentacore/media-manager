@@ -82,33 +82,36 @@ final readonly class MediaReplacementActions implements ActionExecutor
             ->first();
 
         if ($existing instanceof MediaReplacementAttempt && $existing->grab_accepted_at !== null) {
-            // Only the executor's OWN unfinished deletion-cleanup failure is
-            // resumable. Any other terminal state (a webhook's verified /
-            // needs_attention / restore-failure result, a manual-intervention or
-            // timeout row) is a real outcome that a Retry must NOT clobber — the
-            // grab already happened, so there is nothing to re-grab, and reopening
-            // it could blocklist an already-remonitored target and consume a
-            // webhook that never re-fires. `deletion_failed` is written only by
-            // deleteAfterGrab(), so it uniquely identifies the resumable state.
-            if ($existing->failure_reason !== 'deletion_failed') {
+            // `cleanup_completed_at` is the durable evidence of whether the
+            // executor finished its post-grab cleanup. If it is set, the run
+            // completed (or a webhook produced a real terminal outcome after it)
+            // — nothing to do, and re-grabbing would duplicate the download.
+            if ($existing->cleanup_completed_at !== null) {
                 return [
                     'attempt_id' => $existing->id,
                     'status' => $existing->status->value,
                     'replacement_initiated' => false,
                     'grab_outcome' => 'already_resolved',
                     'deleted_files' => 0,
-                    'message' => 'The grab was already accepted and the attempt has a terminal outcome; not re-grabbing or reopening.',
+                    'message' => 'The grab was already accepted and cleanup completed; not re-grabbing or reopening.',
                 ];
             }
 
-            // Reopen the executor's own cleanup-failure to a trackable state and
-            // resume the remaining cleanup.
-            $existing->update([
-                'status' => MediaReplacementStatus::Downloading,
-                'failure_reason' => null,
-                'completed_at' => null,
-                'cleanup_completed_at' => null,
-            ]);
+            // Cleanup is unfinished (a worker crash after the grab, or a deletion
+            // failure). Resume the remaining destructive steps idempotently. Only
+            // reopen the status to `downloading` when it is safe — the executor's
+            // own deletion failure, or a row still `downloading` (crash before any
+            // terminal write). NEVER reopen a webhook-produced terminal outcome
+            // (verified / needs_attention with verification); completePostGrab
+            // still finishes the delete/restore for it without touching its status.
+            if (in_array($existing->status, [MediaReplacementStatus::Downloading, MediaReplacementStatus::Requested], true)
+                || $existing->failure_reason === 'deletion_failed') {
+                $existing->update([
+                    'status' => MediaReplacementStatus::Downloading,
+                    'failure_reason' => null,
+                    'completed_at' => null,
+                ]);
+            }
 
             return $this->completePostGrab(
                 $client,

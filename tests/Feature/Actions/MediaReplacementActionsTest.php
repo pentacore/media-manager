@@ -368,6 +368,64 @@ test('resumes the interrupted post-grab cleanup without re-grabbing', function (
         ->and(MediaReplacementAttempt::first()->completed_at)->toBeNull();
 });
 
+test('resumes cleanup after a worker crash left it unfinished with no failure marker', function (): void {
+    fakeExecutor();
+    $actionRequest = replaceActionRequest();
+
+    // Hard kill after grab_accepted_at was saved but before cleanup finished:
+    // status is still `downloading`, failure_reason is null, and
+    // cleanup_completed_at is null. `deletion_failed` alone would miss this — the
+    // durable signal that cleanup is unfinished is cleanup_completed_at === null.
+    MediaReplacementAttempt::factory()->create([
+        'action_request_id' => $actionRequest->id,
+        'status' => MediaReplacementStatus::Downloading,
+        'grab_accepted_at' => now(),
+        'cleanup_completed_at' => null,
+        'failure_reason' => null,
+        'was_monitored' => false,
+        'target' => [
+            'service' => 'sonarr', 'scope' => 'anime', 'series_id' => 42,
+            'episode_ids' => [101], 'episode_file_ids' => [501],
+            'installed_release' => 'Trusted.Anime.S01E01.OLD', 'original_history_id' => 999,
+        ],
+    ]);
+
+    $result = resolve(MediaReplacementActions::class)->execute($actionRequest);
+
+    Http::assertNotSent(fn (Request $request): bool => $request->method() === 'POST' && str_contains($request->url(), '/api/v3/release'));
+    Http::assertSent(fn (Request $request): bool => $request->method() === 'DELETE' && str_contains($request->url(), '/api/v3/episodefile/501'));
+    expect($result['replacement_initiated'])->toBeTrue()
+        ->and(MediaReplacementAttempt::first()->cleanup_completed_at)->not->toBeNull();
+});
+
+test('resume finishes cleanup without clobbering a webhook terminal outcome', function (): void {
+    fakeExecutor();
+    $actionRequest = replaceActionRequest();
+
+    // A Download webhook verified the import during the prior run, which then
+    // crashed before completing cleanup (cleanup_completed_at null). The resume
+    // must finish the cleanup but NOT reopen/clobber the verified result.
+    MediaReplacementAttempt::factory()->create([
+        'action_request_id' => $actionRequest->id,
+        'status' => MediaReplacementStatus::Verified,
+        'grab_accepted_at' => now(),
+        'cleanup_completed_at' => null,
+        'was_monitored' => false,
+        'verification' => ['required' => ['eng'], 'found' => ['eng'], 'missing' => []],
+        'target' => [
+            'service' => 'sonarr', 'scope' => 'anime', 'series_id' => 42,
+            'episode_ids' => [101], 'episode_file_ids' => [501],
+            'installed_release' => 'Trusted.Anime.S01E01.OLD', 'original_history_id' => 999,
+        ],
+    ]);
+
+    resolve(MediaReplacementActions::class)->execute($actionRequest);
+
+    Http::assertNotSent(fn (Request $request): bool => $request->method() === 'POST' && str_contains($request->url(), '/api/v3/release'));
+    expect(MediaReplacementAttempt::first()->status)->toBe(MediaReplacementStatus::Verified)
+        ->and(MediaReplacementAttempt::first()->cleanup_completed_at)->not->toBeNull();
+});
+
 test('a resume with a durably-failed suspension does not blocklist (independent of failure_reason)', function (): void {
     fakeExecutor();
     $actionRequest = replaceActionRequest();
