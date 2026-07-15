@@ -125,7 +125,12 @@ final readonly class MediaReplacementTracker
             // (no restore was attempted). The executor finalizes this stored
             // verification once its cleanup completes and monitoring is restored.
             if ($needsRestore && ! $cleanupDone) {
-                $attempt->update(['verification' => $verification]);
+                // Persist the EXACT success predicate (which also rejects an
+                // ambiguous / no-file inspection), not just an empty `missing`:
+                // with empty required languages `missing === []` alone would later
+                // finalize an ambiguous inspection as Verified, whereas the direct
+                // path correctly rejects it.
+                $attempt->update(['verification' => [...$verification, 'subtitles_ok' => $subtitlesOk]]);
 
                 return;
             }
@@ -200,7 +205,11 @@ final readonly class MediaReplacementTracker
                 is_array($verification['missing'] ?? null) ? $verification['missing'] : [],
                 is_string(...),
             ));
-            $subtitlesOk = $missing === [];
+            // Use the EXACT predicate the pending verification captured (it also
+            // rejects an ambiguous / no-file inspection); reconstructing it from
+            // `missing === []` here would wrongly pass an empty-required ambiguous
+            // inspection.
+            $subtitlesOk = ($verification['subtitles_ok'] ?? null) === true;
             // Cleanup is complete by now, so monitoring_suspended is false when the
             // executor restored it (or there was nothing to restore) and true only
             // when its restore genuinely failed.
@@ -212,11 +221,26 @@ final readonly class MediaReplacementTracker
                 $restored ? null : 'restore_monitoring_failed',
             ]));
 
-            $mediaReplacementAttempt->update([
-                'status' => $ok ? MediaReplacementStatus::Verified : MediaReplacementStatus::NeedsAttention,
-                'completed_at' => now(),
-                'failure_reason' => $ok ? null : implode(',', $reasons),
-            ]);
+            // CONDITIONAL terminal transition: another webhook (e.g.
+            // recordManualIntervention) may terminalize the attempt after the
+            // refresh/check above, so only the transition that wins the
+            // whereNotIn(terminal) race writes — never clobbering an operator-facing
+            // terminal result — and only that winner notifies.
+            $won = MediaReplacementAttempt::query()
+                ->whereKey($mediaReplacementAttempt->id)
+                ->whereNotIn('status', array_map(
+                    static fn (MediaReplacementStatus $status): string => $status->value,
+                    self::TERMINAL_STATUSES,
+                ))
+                ->update([
+                    'status' => $ok ? MediaReplacementStatus::Verified->value : MediaReplacementStatus::NeedsAttention->value,
+                    'completed_at' => now(),
+                    'failure_reason' => $ok ? null : implode(',', $reasons),
+                ]);
+
+            if ($won === 0) {
+                return;
+            }
 
             $this->notify(
                 $serviceConnection,

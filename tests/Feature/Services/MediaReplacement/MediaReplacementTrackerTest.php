@@ -284,3 +284,74 @@ test('manual interaction on a tracked download needs attention', function (): vo
     expect($mediaReplacementAttempt->fresh()->status)->toBe(MediaReplacementStatus::NeedsAttention);
     Notification::assertSentTimes(MediaReplacementStatusChanged::class, 1);
 });
+
+test('an ambiguous mid-cleanup inspection with empty required languages is not finalized verified', function (): void {
+    // Empty effective languages are supported, so `missing === []` alone is not a
+    // success signal: an ambiguous / no-file inspection must still fail. The pending
+    // verification captures the exact predicate so the executor's finalizer respects
+    // it rather than reconstructing success from an empty `missing`.
+    $attempt = trackerAttempt($this->connection->id, [
+        'download_id' => 'DL-1',
+        'required_languages' => [],
+        'status' => MediaReplacementStatus::Downloading,
+        'was_monitored' => true,
+        // Mid-cleanup: monitoring suspended, cleanup not yet complete → pending.
+        'monitoring_suspended' => true,
+        'cleanup_completed_at' => null,
+    ]);
+
+    // Episode resolves but has no file id → inspection is ambiguous ('no_file').
+    Http::fake([
+        'sonarr.local:8989/api/v3/series/42' => Http::response(['id' => 42, 'title' => 'Trusted Anime', 'seriesType' => 'anime']),
+        'sonarr.local:8989/api/v3/episode?seriesId=42' => Http::response([
+            ['id' => 101, 'seasonNumber' => 1, 'episodeNumber' => 1],
+        ]),
+        'sonarr.local:8989/api/v3/episode/monitor' => Http::response([], 200),
+        'sonarr.local:8989/api/v3/history*' => Http::response(['records' => []]),
+    ]);
+
+    resolve(MediaReplacementTracker::class)->verifyDownload($this->connection, [
+        'eventType' => 'Download', 'series' => ['id' => 42], 'downloadId' => 'DL-1',
+    ]);
+
+    // Left pending (non-terminal) with the exact predicate stored as false.
+    $pending = $attempt->fresh();
+    expect($pending->status)->toBe(MediaReplacementStatus::Downloading)
+        ->and($pending->verification['subtitles_ok'])->toBeFalse();
+
+    // Executor finishes cleanup (monitoring restored); the finalizer must NOT
+    // report the ambiguous inspection as Verified despite an empty `missing`.
+    $pending->forceFill(['monitoring_suspended' => false, 'cleanup_completed_at' => now()])->save();
+    resolve(MediaReplacementTracker::class)->finalizeAfterCleanup($this->connection, $pending);
+
+    expect($attempt->fresh()->status)->toBe(MediaReplacementStatus::NeedsAttention)
+        ->and($attempt->fresh()->failure_reason)->toBe('imported_subtitles_missing_required_language');
+});
+
+test('the cleanup finalizer does not clobber a terminal state another webhook set', function (): void {
+    // A Download webhook verified subtitles mid-cleanup and left the attempt
+    // pending. Before the executor finalizes, a ManualInteractionRequired webhook
+    // terminalizes it (operator action required). The finalizer must preserve that
+    // terminal result rather than reporting Verified and hiding the action.
+    $attempt = trackerAttempt($this->connection->id, [
+        'download_id' => 'DL-1',
+        'status' => MediaReplacementStatus::Downloading,
+        'monitoring_suspended' => false,
+        'cleanup_completed_at' => now(),
+        'verification' => ['required' => ['eng'], 'found' => ['eng'], 'missing' => [], 'subtitles_ok' => true],
+    ]);
+
+    resolve(MediaReplacementTracker::class)->recordManualIntervention($this->connection, [
+        'eventType' => 'ManualInteractionRequired',
+        'series' => ['id' => 42],
+        'downloadInfo' => ['downloadId' => 'DL-1'],
+    ]);
+
+    resolve(MediaReplacementTracker::class)->finalizeAfterCleanup($this->connection, $attempt);
+
+    $fresh = $attempt->fresh();
+    expect($fresh->status)->toBe(MediaReplacementStatus::NeedsAttention)
+        ->and($fresh->failure_reason)->toBe('manual_interaction_required');
+    // Only the manual-intervention notification fired; the finalizer added none.
+    Notification::assertSentTimes(MediaReplacementStatusChanged::class, 1);
+});
