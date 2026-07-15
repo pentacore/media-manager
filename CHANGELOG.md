@@ -1,3 +1,41 @@
+# [1.10.0](https://github.com/pentacore/media-manager/compare/v1.9.1...v1.10.0) (2026-07-15)
+
+
+### Bug Fixes
+
+* **ai:** atomic cleanup finalizer and exact pending verification predicate ([6f8dc79](https://github.com/pentacore/media-manager/commit/6f8dc791429b2b67a503090510a0a2311f7e64c1))
+* **ai:** close lost-wakeup window in cleanup verification handoff ([13872b4](https://github.com/pentacore/media-manager/commit/13872b463b8d01e20e61931134d05eb352c25b16))
+* **ai:** conditional resume reopen, phase-gated blocklist, accurate result status ([fffa908](https://github.com/pentacore/media-manager/commit/fffa908f81c7e161b8131cea4a40d361b754d6d2))
+* **ai:** coordinate cleanup/remonitor phase and scope resumable retries precisely ([e320f74](https://github.com/pentacore/media-manager/commit/e320f74c4fa3153611f9ba6670e835e8577eefa4))
+* **ai:** durable suspension state, resumable-to-trackable retry, race-safe blocklist ([30c6be0](https://github.com/pentacore/media-manager/commit/30c6be09d653aeb4db3f4aa9621b0838217e5d35))
+* **ai:** harden connection pinning, grab idempotency, and monitor lifecycle ([bf0b2f7](https://github.com/pentacore/media-manager/commit/bf0b2f758ec45979b0e80e23803440b086ac083c))
+* **ai:** idempotent retry, indeterminate-grab safety, and no terminal-state regression ([4a38102](https://github.com/pentacore/media-manager/commit/4a38102940a16f89c4203b633bd07ba88883e05e))
+* **ai:** pin replacement to approved connection; degrade webhook tracking gracefully ([f2741d2](https://github.com/pentacore/media-manager/commit/f2741d242e0d412d94257f2c67616c58646dd010))
+* **ai:** reset cleanup checkpoint on reclaim and defer mid-cleanup verification ([952b239](https://github.com/pentacore/media-manager/commit/952b2399620054debaddc72ec836bfeb635e5d99))
+* **ai:** resumable retry, durable monitor restore, fresh verify, packs deferred ([dca4fe1](https://github.com/pentacore/media-manager/commit/dca4fe179e9f53cd8f46d2c1952690f42a35838a))
+* **ai:** resume on unfinished cleanup (cleanup_completed_at), covering worker crashes ([1f5e275](https://github.com/pentacore/media-manager/commit/1f5e275d337f40b368d242eec41381945f99f118))
+* **ai:** satisfy CI pint and typefinder type-check ([395d6ef](https://github.com/pentacore/media-manager/commit/395d6ef684a20fa3b782f4e9cad9e6fae775c215))
+* **ai:** season 0, season-pack mapping, and history correlation ([5d7a73f](https://github.com/pentacore/media-manager/commit/5d7a73f49c1ab6bc84c8dd21876a31bdbfc83450))
+* **ai:** suppress auto-redownload race and reconcile stuck replacements ([0d68936](https://github.com/pentacore/media-manager/commit/0d68936c9011a859804cf7762a9f9e85bb4d7539))
+* **anime:** address code review findings ([243d536](https://github.com/pentacore/media-manager/commit/243d53660a45863a46ee9f9ee03c9af565a0e3cf))
+* **anime:** address follow-up review findings ([015f8ec](https://github.com/pentacore/media-manager/commit/015f8ec222f7f521518df37f1448f007bd7367e9))
+
+
+### Features
+
+* **ai:** add media replacement settings domain ([a7253cd](https://github.com/pentacore/media-manager/commit/a7253cd18070cf60a202fc304f5376e8dfcbdc3f))
+* **ai:** configure subtitle replacement guidance ([cd4a459](https://github.com/pentacore/media-manager/commit/cd4a459c43f22940e091149a4e91aed7a02930df))
+* **ai:** execute safe media replacements ([b78b931](https://github.com/pentacore/media-manager/commit/b78b9312f066f5ccbb70cce84514bd9b8745f5f9))
+* **ai:** expose subtitle replacement workflow ([8eee2dc](https://github.com/pentacore/media-manager/commit/8eee2dcb7fce43700af482957468fb2c8c936338))
+* **ai:** find subtitle replacement candidates ([5089931](https://github.com/pentacore/media-manager/commit/50899311b0295824c6f44a2c6ea9b19345e1b836))
+* **ai:** inspect installed media subtitles ([037844f](https://github.com/pentacore/media-manager/commit/037844fdfdf76371aed1d96d8300fd638b6480a5))
+* **ai:** persist media replacement attempts ([a504b34](https://github.com/pentacore/media-manager/commit/a504b34b1009f4b87bdd47586c7f9a8b71626e88))
+* **ai:** queue approval-gated media replacements ([4d0111a](https://github.com/pentacore/media-manager/commit/4d0111a9533a34bac817c5b8df7e3c9b8a848d14))
+* **ai:** rank subtitle replacement releases ([f6acfa6](https://github.com/pentacore/media-manager/commit/f6acfa680578a4328d4a2dd38d0892809b545281))
+* **ai:** verify replacement subtitles after import ([fb3fce3](https://github.com/pentacore/media-manager/commit/fb3fce35fe5e320bd0d9e8ce283c2684625525da))
+* **anime:** seasonal anime discovery and requests ([0054ea8](https://github.com/pentacore/media-manager/commit/0054ea868fdfa3e156c606003f63585c30270a2e))
+* **arr:** add native release and media file APIs ([cafbe00](https://github.com/pentacore/media-manager/commit/cafbe00af366deab82839512686383312cf0a3e5))
+
 ## [1.9.1](https://github.com/pentacore/media-manager/compare/v1.9.0...v1.9.1) (2026-07-10)
 
 # [1.9.0](https://github.com/pentacore/media-manager/compare/v1.8.0...v1.9.0) (2026-07-10)
