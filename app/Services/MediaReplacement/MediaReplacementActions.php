@@ -98,20 +98,28 @@ final readonly class MediaReplacementActions implements ActionExecutor
             }
 
             // Cleanup is unfinished (a worker crash after the grab, or a deletion
-            // failure). Resume the remaining destructive steps idempotently. Only
-            // reopen the status to `downloading` when it is safe — the executor's
-            // own deletion failure, or a row still `downloading` (crash before any
-            // terminal write). NEVER reopen a webhook-produced terminal outcome
-            // (verified / needs_attention with verification); completePostGrab
-            // still finishes the delete/restore for it without touching its status.
-            if (in_array($existing->status, [MediaReplacementStatus::Downloading, MediaReplacementStatus::Requested], true)
-                || $existing->failure_reason === 'deletion_failed') {
-                $existing->update([
-                    'status' => MediaReplacementStatus::Downloading,
+            // failure). Resume the remaining destructive steps idempotently. Reopen
+            // the status to `downloading` ONLY when it is still an executor-owned
+            // state — via a single CONDITIONAL update, so a webhook that
+            // terminalizes the row between the load above and here is never
+            // regressed (a check-then-act update could clobber it). completePostGrab
+            // then finishes the delete/restore either way, without touching a
+            // webhook-produced terminal status.
+            MediaReplacementAttempt::query()
+                ->whereKey($existing->id)
+                ->whereNull('cleanup_completed_at')
+                ->where(function ($query): void {
+                    $query->whereIn('status', [
+                        MediaReplacementStatus::Downloading->value,
+                        MediaReplacementStatus::Requested->value,
+                    ])->orWhere('failure_reason', 'deletion_failed');
+                })
+                ->update([
+                    'status' => MediaReplacementStatus::Downloading->value,
                     'failure_reason' => null,
                     'completed_at' => null,
                 ]);
-            }
+            $existing->refresh();
 
             return $this->completePostGrab(
                 $client,
@@ -289,7 +297,7 @@ final readonly class MediaReplacementActions implements ActionExecutor
     ): array {
         $deletedFiles = $this->deleteAfterGrab($client, $serviceType, $target, $attempt);
 
-        $blocklistWarning = $this->blocklistAfterGrab($client, $originalHistoryId, $attempt, $blocklistAllowed, $actionRequest);
+        $blocklistWarning = $this->blocklistAfterGrab($client, $originalHistoryId, $blocklistAllowed, $actionRequest);
 
         // The executor OWNS restoring monitoring, here — AFTER blocklisting —
         // rather than leaving it to the tracker, which is what closes the
@@ -319,9 +327,15 @@ final readonly class MediaReplacementActions implements ActionExecutor
             ? new SonarrCache($serviceConnection)->bustAll()
             : new RadarrCache($serviceConnection)->bustAll();
 
+        // Report the PERSISTED status, not a hardcoded 'downloading': on the
+        // resume path a webhook may already have terminalized the attempt
+        // (verified / needs_attention), and the caller persists this into the
+        // ActionRequest result — it must reflect the real state.
+        $attempt->refresh();
+
         return [
             'attempt_id' => $attempt->id,
-            'status' => MediaReplacementStatus::Downloading->value,
+            'status' => $attempt->status->value,
             'replacement_initiated' => true,
             'deleted_files' => $deletedFiles,
             'blocklist_warning' => $blocklistWarning,
@@ -329,18 +343,17 @@ final readonly class MediaReplacementActions implements ActionExecutor
     }
 
     /**
-     * Blocklist the old release, but only when it is still safe to do so.
-     * markHistoryFailed() triggers the arr's auto-redownload search; it must not
-     * run when (a) monitoring was never suspended, or (b) a fast Download webhook
-     * has already verified the import and restored monitoring during deletion —
-     * in which case the target is monitored again and blocklisting would launch
-     * the competing search this flow suppresses. The attempt is only still
-     * `downloading` if no webhook terminalized it, so that is the durable gate.
+     * Blocklist the old release when it is safe. Safety is determined by the
+     * cleanup PHASE, not the attempt's status: this runs while cleanup_completed_at
+     * is still null, and the tracker will not restore monitoring until that is set,
+     * so the target is guaranteed to remain suspended here — blocklisting cannot
+     * race a remonitor. It is skipped only when we never successfully suspended
+     * monitoring (a monitored target we could not unmonitor), where markHistoryFailed
+     * would launch the competing auto-search.
      */
     private function blocklistAfterGrab(
         SonarrClient|RadarrClient $client,
         mixed $originalHistoryId,
-        MediaReplacementAttempt $attempt,
         bool $blocklistAllowed,
         ActionRequest $actionRequest,
     ): ?string {
@@ -348,15 +361,9 @@ final readonly class MediaReplacementActions implements ActionExecutor
             return 'Skipped blocklisting the old release because monitoring could not be suspended (avoids a competing auto-search).';
         }
 
-        $stillDownloading = MediaReplacementAttempt::query()
-            ->whereKey($attempt->id)
-            ->where('status', MediaReplacementStatus::Downloading->value)
-            ->exists();
-
-        if (! $stillDownloading) {
-            return 'Skipped blocklisting because a webhook already resolved the import and restored monitoring (avoids a competing auto-search).';
-        }
-
+        // Safe regardless of the attempt's status: the cleanup phase is still
+        // open (cleanup_completed_at null), so the tracker has not remonitored and
+        // the target is guaranteed suspended.
         return $this->blocklistOriginal($client, $originalHistoryId, $actionRequest);
     }
 

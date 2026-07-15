@@ -419,11 +419,19 @@ test('resume finishes cleanup without clobbering a webhook terminal outcome', fu
         ],
     ]);
 
-    resolve(MediaReplacementActions::class)->execute($actionRequest);
+    $result = resolve(MediaReplacementActions::class)->execute($actionRequest);
 
+    // No re-grab; the verified terminal status is preserved and completed cleanup.
     Http::assertNotSent(fn (Request $request): bool => $request->method() === 'POST' && str_contains($request->url(), '/api/v3/release'));
     expect(MediaReplacementAttempt::first()->status)->toBe(MediaReplacementStatus::Verified)
-        ->and(MediaReplacementAttempt::first()->cleanup_completed_at)->not->toBeNull();
+        ->and(MediaReplacementAttempt::first()->cleanup_completed_at)->not->toBeNull()
+        // The returned result reflects the PERSISTED terminal status, not a
+        // hardcoded 'downloading' the ActionRequest would otherwise record.
+        ->and($result['status'])->toBe('verified');
+
+    // Blocklisting is still safe here (cleanup phase open → target stays
+    // suspended), so the bad release is blocklisted rather than left eligible.
+    Http::assertSent(fn (Request $request): bool => $request->method() === 'POST' && str_contains($request->url(), '/api/v3/history/failed/'));
 });
 
 test('a resume with a durably-failed suspension does not blocklist (independent of failure_reason)', function (): void {
@@ -534,14 +542,15 @@ test('does not regress a terminal state the real tracker set during execution', 
     resolve(MediaReplacementActions::class)->execute(replaceActionRequest());
 
     // The tracker terminalized it (needs_attention: the fixture file still has
-    // only Japanese subtitles vs required English) and restored monitoring; the
-    // executor must not have regressed it back to downloading.
+    // only Japanese subtitles vs required English) but, per the handshake, did
+    // NOT restore monitoring (cleanup_completed_at was still null). The executor's
+    // conditional reopen must not regress that terminal status back to downloading.
     expect(MediaReplacementAttempt::first()->status)->toBe(MediaReplacementStatus::NeedsAttention);
 
-    // Critically: because the webhook already won (attempt no longer
-    // `downloading`), the executor must NOT blocklist afterward — doing so would
-    // trigger the competing auto-search on the now-remonitored target.
-    Http::assertNotSent(fn (Request $request): bool => $request->method() === 'POST' && str_contains($request->url(), '/api/v3/history/failed/'));
+    // Blocklisting still runs and is safe: because the tracker deferred the
+    // remonitor, the target stayed suspended throughout the cleanup, so
+    // markHistoryFailed cannot trigger a competing auto-search.
+    Http::assertSent(fn (Request $request): bool => $request->method() === 'POST' && str_contains($request->url(), '/api/v3/history/failed/'));
 });
 
 test('marks the attempt needs_attention when deletion fails after a successful grab', function (): void {
