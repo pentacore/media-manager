@@ -40,6 +40,18 @@ test('media replacement enums expose stable domain values', function (): void {
         ->and(SubtitleRuleStrength::Preference->confidence())->toBeNull();
 });
 
+test('media replacement enum options have human-readable labels', function (): void {
+    expect(SeasonPackPolicy::mapForSelect(labelKey: 'label'))->toBe([
+        ['label' => 'Approval required', 'value' => 'approval_required'],
+        ['label' => 'Automatic above threshold', 'value' => 'automatic_above_threshold'],
+        ['label' => 'Never', 'value' => 'never'],
+    ])->and(SubtitleRuleStrength::mapForSelect(labelKey: 'label'))->toBe([
+        ['label' => 'Guarantee', 'value' => 'guarantee'],
+        ['label' => 'Preference', 'value' => 'preference'],
+        ['label' => 'Strong evidence', 'value' => 'strong_evidence'],
+    ]);
+});
+
 test('it provides safe defaults', function (): void {
     $mediaReplacementSettings = resolve(MediaReplacementSettings::class);
 

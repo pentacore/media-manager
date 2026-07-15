@@ -19,7 +19,7 @@ test('admin can open AI chat and send a message', function (): void {
     $this->actingAs($admin);
 
     visit('/ai/chat')
-        ->assertNoJavaScriptErrors()
+        ->assertNoSmoke()
         ->assertSee('AI Assistant')
         ->type('textarea[placeholder^="Ask"]', 'What is on my watchlist?')
         ->click('Send')
@@ -62,7 +62,7 @@ test('proposed workflow renders confirm card and approval round-trips', function
     $this->actingAs($admin);
 
     visit('/ai/chat')
-        ->assertNoJavaScriptErrors()
+        ->assertNoSmoke()
         ->type('textarea[placeholder^="Ask"]', 'Clean up my old shows please.')
         ->click('Send')
         ->assertSee('I have proposed a 3-step workflow.')
@@ -107,7 +107,7 @@ test('proposed workflow can be declined from confirm card', function (): void {
     $this->actingAs($admin);
 
     visit('/ai/chat')
-        ->assertNoJavaScriptErrors()
+        ->assertNoSmoke()
         ->type('textarea[placeholder^="Ask"]', 'Try something risky.')
         ->click('Send')
         ->assertSee('Proposed workflow')
