@@ -1,3 +1,10 @@
+## [1.10.1](https://github.com/pentacore/media-manager/compare/v1.10.0...v1.10.1) (2026-07-15)
+
+
+### Bug Fixes
+
+* media settings and expand browser coverage ([0194135](https://github.com/pentacore/media-manager/commit/0194135c228edafa8fd5219a496fbbd79f41d78e))
+
 # [1.10.0](https://github.com/pentacore/media-manager/compare/v1.9.1...v1.10.0) (2026-07-15)
 
 
