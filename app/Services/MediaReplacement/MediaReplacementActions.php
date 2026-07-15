@@ -32,6 +32,7 @@ final readonly class MediaReplacementActions implements ActionExecutor
     public function __construct(
         private MediaFileInspector $mediaFileInspector,
         private ReplacementCandidateFinder $replacementCandidateFinder,
+        private MediaReplacementTracker $mediaReplacementTracker,
     ) {}
 
     /**
@@ -179,6 +180,13 @@ final readonly class MediaReplacementActions implements ActionExecutor
                 'required_languages' => $requiredLanguages ?? $eligible['effective_languages'],
                 'download_id' => null,
                 'grab_accepted_at' => null,
+                // Reset the durable cleanup checkpoint too: a prior INDETERMINATE
+                // run sets cleanup_completed_at while leaving grab_accepted_at null,
+                // so a Retry lands here (not the resume branch) and reuses this row.
+                // If the stale timestamp survived, a fast Download during the NEW
+                // cleanup would see cleanupDone=true and remonitor the target before
+                // the executor blocklists — reopening the competing auto-search race.
+                'cleanup_completed_at' => null,
                 'was_monitored' => $wasMonitored,
                 'monitoring_suspended' => null,
                 'verification' => null,
@@ -322,6 +330,15 @@ final readonly class MediaReplacementActions implements ActionExecutor
         // monitoring (for any remaining suspension) on a subsequent import event.
         // No status write — a terminal state a webhook set in the meantime survives.
         $attempt->forceFill(['cleanup_completed_at' => now()])->save();
+
+        // Finalize a verification a Download webhook recorded WHILE this cleanup was
+        // in flight. In that window restoration was deferred to us (the executor),
+        // so the tracker deliberately left the attempt pending rather than falsely
+        // reporting restore_monitoring_failed. Now that cleanup is done and
+        // monitoring restored, terminalize that stored verification. No-op unless
+        // such a pending verification exists, so it never clobbers a real webhook
+        // terminal outcome.
+        $this->mediaReplacementTracker->finalizeAfterCleanup($serviceConnection, $attempt);
 
         $serviceType === ServiceType::Sonarr
             ? new SonarrCache($serviceConnection)->bustAll()

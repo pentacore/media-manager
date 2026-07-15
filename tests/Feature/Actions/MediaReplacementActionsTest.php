@@ -60,7 +60,7 @@ function sonarrReplacementRelease(): array
  * Method-aware fake so a GET and DELETE on the same /episodefile/{id} URL can
  * return different statuses.
  *
- * @param  array{grabOk?: bool, grabConnection?: bool, grabStatus?: int, deleteOk?: bool, monitorOk?: bool, monitored?: bool, currentFileId?: int, releases?: list<array<string, mixed>>, onDelete?: callable}  $opts
+ * @param  array{grabOk?: bool, grabConnection?: bool, grabStatus?: int, deleteOk?: bool, monitorOk?: bool, monitored?: bool, currentFileId?: int, subtitles?: string, releases?: list<array<string, mixed>>, onDelete?: callable}  $opts
  */
 function fakeExecutor(array $opts = []): void
 {
@@ -72,10 +72,11 @@ function fakeExecutor(array $opts = []): void
     $monitorOk = $opts['monitorOk'] ?? true;
     $monitored = $opts['monitored'] ?? true;
     $currentFileId = $opts['currentFileId'] ?? 501;
+    $subtitles = $opts['subtitles'] ?? 'Japanese';
     $releases = $opts['releases'] ?? [sonarrReplacementRelease()];
     $onDelete = $opts['onDelete'] ?? null;
 
-    Http::fake(function (Request $request) use ($grabConnection, $grabStatus, $deleteStatus, $monitorOk, $monitored, $currentFileId, $releases, $onDelete) {
+    Http::fake(function (Request $request) use ($grabConnection, $grabStatus, $deleteStatus, $monitorOk, $monitored, $currentFileId, $subtitles, $releases, $onDelete) {
         $method = $request->method();
         $url = $request->url();
 
@@ -99,7 +100,7 @@ function fakeExecutor(array $opts = []): void
             str_contains($url, '/api/v3/episodefile/') => Http::response([
                 'id' => $currentFileId,
                 'sceneName' => $currentFileId === 501 ? 'Trusted.Anime.S01E01.OLD' : 'DIFFERENT',
-                'mediaInfo' => ['subtitles' => 'Japanese'],
+                'mediaInfo' => ['subtitles' => $subtitles],
             ]),
             str_contains($url, '/api/v3/history/failed/') => Http::response([], 200),
             str_contains($url, '/api/v3/history') => Http::response(['records' => [
@@ -527,8 +528,10 @@ test('a retry reuses the existing attempt row instead of hitting a duplicate key
 test('does not regress a terminal state the real tracker set during execution', function (): void {
     // Drive the REAL tracker (not a raw DB write) as a fast Download webhook
     // arriving while the executor is still deleting: it correlates by download
-    // id, busts the cache, re-inspects, and terminalizes the attempt. The
-    // executor must not then write `downloading` back over that terminal state.
+    // id, busts the cache, and re-inspects. Because cleanup is still in flight
+    // (monitoring suspended, cleanup_completed_at null), restoration is deferred
+    // to the executor, so the tracker leaves the attempt PENDING with its
+    // verification stored. The executor then finalizes it to a terminal state.
     fakeExecutor([
         'onDelete' => function (): void {
             MediaReplacementAttempt::query()->update(['download_id' => 'DL-INTERLEAVE']);
@@ -541,11 +544,12 @@ test('does not regress a terminal state the real tracker set during execution', 
 
     resolve(MediaReplacementActions::class)->execute(replaceActionRequest());
 
-    // The tracker terminalized it (needs_attention: the fixture file still has
-    // only Japanese subtitles vs required English) but, per the handshake, did
-    // NOT restore monitoring (cleanup_completed_at was still null). The executor's
-    // conditional reopen must not regress that terminal status back to downloading.
-    expect(MediaReplacementAttempt::first()->status)->toBe(MediaReplacementStatus::NeedsAttention);
+    // The executor finalized the pending verification to needs_attention: the
+    // fixture file still has only Japanese subtitles vs required English. Monitoring
+    // was restored by the executor (not the tracker, which deferred it), so the sole
+    // failure reason is the missing subtitles, not a false restore failure.
+    expect(MediaReplacementAttempt::first()->status)->toBe(MediaReplacementStatus::NeedsAttention)
+        ->and(MediaReplacementAttempt::first()->failure_reason)->toBe('imported_subtitles_missing_required_language');
 
     // Blocklisting still runs and is safe: because the tracker deferred the
     // remonitor, the target stayed suspended throughout the cleanup, so
@@ -562,4 +566,83 @@ test('marks the attempt needs_attention when deletion fails after a successful g
     Http::assertSent(fn (Request $request): bool => $request->method() === 'POST' && str_contains($request->url(), '/api/v3/release'));
 
     expect(MediaReplacementAttempt::first()->status)->toBe(MediaReplacementStatus::NeedsAttention);
+});
+
+test('a retry after an indeterminate grab resets the stale cleanup checkpoint so a fast webhook cannot remonitor before blocklisting', function (): void {
+    $actionRequest = replaceActionRequest();
+
+    // A prior INDETERMINATE run set cleanup_completed_at (its only synchronous
+    // marker) but never accepted a grab (grab_accepted_at null), then the worker
+    // died before the ActionRequest completed. On Retry this row is reused via the
+    // normal claim path. If the stale checkpoint were NOT reset, a Download during
+    // the new cleanup would see cleanupDone=true and remonitor the target BEFORE
+    // the executor blocklists — reopening the competing auto-search race.
+    MediaReplacementAttempt::factory()->create([
+        'action_request_id' => $actionRequest->id,
+        'status' => MediaReplacementStatus::Downloading,
+        'grab_accepted_at' => null,
+        'cleanup_completed_at' => now(),
+        'was_monitored' => true,
+        'target' => [
+            'service' => 'sonarr', 'scope' => 'anime', 'series_id' => 42,
+            'episode_ids' => [101], 'episode_file_ids' => [501],
+            'installed_release' => 'Trusted.Anime.S01E01.OLD', 'original_history_id' => 999,
+        ],
+    ]);
+
+    // A Grab webhook records the download id, then a Download webhook arrives while
+    // the executor is deleting the reviewed file.
+    fakeExecutor([
+        'onDelete' => function (): void {
+            MediaReplacementAttempt::query()->update(['download_id' => 'DL-STALE']);
+            resolve(MediaReplacementTracker::class)->verifyDownload(
+                ServiceConnection::query()->firstOrFail(),
+                ['eventType' => 'Download', 'series' => ['id' => 42], 'downloadId' => 'DL-STALE'],
+            );
+        },
+    ]);
+
+    resolve(MediaReplacementActions::class)->execute($actionRequest);
+
+    $requests = Http::recorded()
+        ->map(fn (array $pair): string => $pair[0]->method().' '.$pair[0]->url().' '.json_encode($pair[0]->data()))
+        ->values();
+    $blocklistIndex = $requests->search(fn (string $value): bool => str_contains($value, 'POST http://sonarr.local:8989/api/v3/history/failed/'));
+    $remonitorIndex = $requests->search(fn (string $value): bool => str_contains($value, 'PUT http://sonarr.local:8989/api/v3/episode/monitor')
+        && str_contains($value, '"monitored":true'));
+
+    // The only remonitor is the executor's own, AFTER blocklisting; the fast
+    // webhook did not remonitor because the stale checkpoint was reset.
+    expect($blocklistIndex)->not->toBeFalse()
+        ->and($remonitorIndex)->not->toBeFalse()
+        ->and($blocklistIndex)->toBeLessThan($remonitorIndex);
+});
+
+test('a clean-subtitles Download arriving during cleanup stays pending, then the executor finalizes it verified', function (): void {
+    // The replacement imports with the required subtitles, and the Download webhook
+    // fires while the executor is still deleting the old file (monitoring suspended,
+    // cleanup_completed_at null). Restoration is deferred to the executor, so the
+    // tracker must leave the attempt PENDING with its verification stored rather
+    // than falsely terminalizing it as restore_monitoring_failed.
+    fakeExecutor([
+        'subtitles' => 'English',
+        'onDelete' => function (): void {
+            MediaReplacementAttempt::query()->update(['download_id' => 'DL-CLEAN']);
+            resolve(MediaReplacementTracker::class)->verifyDownload(
+                ServiceConnection::query()->firstOrFail(),
+                ['eventType' => 'Download', 'series' => ['id' => 42], 'downloadId' => 'DL-CLEAN'],
+            );
+        },
+    ]);
+
+    $result = resolve(MediaReplacementActions::class)->execute(replaceActionRequest());
+
+    // Once cleanup completed and monitoring was restored, the executor finalized the
+    // pending verification to Verified with no false restore-failure reason.
+    expect(MediaReplacementAttempt::first()->status)->toBe(MediaReplacementStatus::Verified)
+        ->and(MediaReplacementAttempt::first()->failure_reason)->toBeNull()
+        ->and($result['status'])->toBe('verified');
+
+    // The blocklist ran (target stayed suspended through cleanup) and was safe.
+    Http::assertSent(fn (Request $request): bool => $request->method() === 'POST' && str_contains($request->url(), '/api/v3/history/failed/'));
 });

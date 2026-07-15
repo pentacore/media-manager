@@ -114,6 +114,22 @@ final readonly class MediaReplacementTracker
             $verification = ['required' => $required, 'found' => $found, 'missing' => $missing];
             $subtitlesOk = ($snapshot['ambiguous'] ?? false) !== true && $missing === [];
 
+            $needsRestore = $attempt->monitoring_suspended === true;
+            $cleanupDone = $attempt->cleanup_completed_at !== null;
+
+            // Import arrived while the executor is still mid-cleanup: monitoring was
+            // intentionally suspended and its restoration is DEFERRED to the executor
+            // (it owns the restore during its own run, to not race the blocklist).
+            // Record the subtitle verification but leave the attempt PENDING —
+            // terminalizing it here as restore_monitoring_failed would be false
+            // (no restore was attempted). The executor finalizes this stored
+            // verification once its cleanup completes and monitoring is restored.
+            if ($needsRestore && ! $cleanupDone) {
+                $attempt->update(['verification' => $verification]);
+
+                return;
+            }
+
             // Restore the ORIGINAL monitoring the executor suspended — but ONLY
             // once the executor has finished its cleanup phase
             // (cleanup_completed_at set) and monitoring is in fact still
@@ -121,8 +137,6 @@ final readonly class MediaReplacementTracker
             // remonitor from racing the executor's blocklist (the executor owns
             // the restore during its own run). If the executor is still cleaning
             // up, leave monitoring alone; it (or a later event) will restore it.
-            $needsRestore = $attempt->monitoring_suspended === true;
-            $cleanupDone = $attempt->cleanup_completed_at !== null;
             $restored = ! $needsRestore
                 || ($cleanupDone && $this->remonitorTarget($serviceConnection, is_array($attempt->target) ? $attempt->target : []));
 
@@ -150,6 +164,63 @@ final readonly class MediaReplacementTracker
             $this->notify(
                 $serviceConnection,
                 $attempt,
+                $ok ? 'info' : 'warning',
+                $this->verificationMessage($subtitlesOk, $restored, $missing),
+            );
+        });
+    }
+
+    /**
+     * Finalize a verification a Download webhook recorded while the executor was
+     * still mid-cleanup. During that window restoration was deferred to the
+     * executor, so verifyDownload() left the attempt PENDING (non-terminal) with
+     * only its subtitle verification stored, rather than falsely failing it. The
+     * executor calls this once it has finished cleanup and restored monitoring, to
+     * terminalize that stored verification against the now-settled monitoring
+     * state. No-op unless the attempt is still pending with a recorded
+     * verification, so it never clobbers a real webhook terminal outcome nor acts
+     * before an import event.
+     */
+    public function finalizeAfterCleanup(ServiceConnection $serviceConnection, MediaReplacementAttempt $mediaReplacementAttempt): void
+    {
+        $this->guarded(function () use ($serviceConnection, $mediaReplacementAttempt): void {
+            $mediaReplacementAttempt->refresh();
+
+            if (in_array($mediaReplacementAttempt->status, self::TERMINAL_STATUSES, true)) {
+                return;
+            }
+
+            $verification = is_array($mediaReplacementAttempt->verification) ? $mediaReplacementAttempt->verification : null;
+
+            if ($verification === null) {
+                return;
+            }
+
+            $missing = array_values(array_filter(
+                is_array($verification['missing'] ?? null) ? $verification['missing'] : [],
+                is_string(...),
+            ));
+            $subtitlesOk = $missing === [];
+            // Cleanup is complete by now, so monitoring_suspended is false when the
+            // executor restored it (or there was nothing to restore) and true only
+            // when its restore genuinely failed.
+            $restored = $mediaReplacementAttempt->monitoring_suspended !== true;
+
+            $ok = $subtitlesOk && $restored;
+            $reasons = array_values(array_filter([
+                $subtitlesOk ? null : 'imported_subtitles_missing_required_language',
+                $restored ? null : 'restore_monitoring_failed',
+            ]));
+
+            $mediaReplacementAttempt->update([
+                'status' => $ok ? MediaReplacementStatus::Verified : MediaReplacementStatus::NeedsAttention,
+                'completed_at' => now(),
+                'failure_reason' => $ok ? null : implode(',', $reasons),
+            ]);
+
+            $this->notify(
+                $serviceConnection,
+                $mediaReplacementAttempt,
                 $ok ? 'info' : 'warning',
                 $this->verificationMessage($subtitlesOk, $restored, $missing),
             );
