@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Concerns;
 
 use Generator;
+use Illuminate\Support\Str;
 use Illuminate\Support\Stringable;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\Rules\In;
@@ -82,9 +83,9 @@ trait EnumUtils
 
         $values = array_map(
             static fn ($case): array => [
-                $labelKey => method_exists($case, 'label') ? $case->label() : $case->name
-                        |> (static fn ($str): string|array => str_replace('_', ' ', $str))
-                        |> ucwords(...),
+                $labelKey => method_exists($case, 'label')
+                    ? $case->label()
+                    : Str::of($case->name)->snake()->replace('_', ' ')->ucfirst()->toString(),
                 'value' => $case->value,
             ],
             self::cases()

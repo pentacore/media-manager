@@ -10,7 +10,7 @@ test('AI admin nav links are hidden when AI is disabled', function (): void {
     $this->actingAs(User::factory()->admin()->create());
 
     visit('/dashboard')
-        ->assertNoJavaScriptErrors()
+        ->assertNoSmoke()
         ->assertSee('Connections')
         ->assertDontSee('AI Settings')
         ->assertDontSee('Decision Agent')
@@ -26,7 +26,7 @@ test('AI admin nav links are visible when AI is enabled', function (): void {
     $this->actingAs(User::factory()->admin()->create());
 
     visit('/dashboard')
-        ->assertNoJavaScriptErrors()
+        ->assertNoSmoke()
         ->assertSee('AI Settings')
         ->assertSee('Decision Agent')
         ->assertSee('AI Usage')

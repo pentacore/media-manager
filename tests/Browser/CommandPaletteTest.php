@@ -10,7 +10,7 @@ test('Cmd+K opens the command palette and Enter searches', function (): void {
     $this->actingAs($member);
 
     visit('/dashboard')
-        ->assertNoJavaScriptErrors()
+        ->assertNoSmoke()
         ->keys(':root', 'Meta+k')
         ->assertSee('Now Playing')
         ->type('input[type="search"]', 'severance')
@@ -28,6 +28,7 @@ test('command palette filters quick links by query', function (): void {
     // proves the palette's own filtering ran (sidebar nav has the same
     // link text as the palette so we can't use sidebar-vs-palette diffs).
     visit('/dashboard')
+        ->assertNoSmoke()
         ->keys(':root', 'Meta+k')
         ->type('input[type="search"]', 'qqqqqqqq')
         ->assertSee('No matching pages');
@@ -41,6 +42,7 @@ test('clicking a palette quick link navigates to that page', function (): void {
     // Scope to the palette button (sidebar has the same text, so an
     // unscoped click on "Activity Log" would be ambiguous).
     visit('/dashboard')
+        ->assertNoSmoke()
         ->keys(':root', 'Meta+k')
         ->click('[data-palette-link]:has-text("Activity Log")')
         ->assertPathIs('/activity-log');

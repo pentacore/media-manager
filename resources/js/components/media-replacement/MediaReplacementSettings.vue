@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { reactive } from 'vue';
+import { reactive, toRaw } from 'vue';
 import { Field } from '@/components/mm';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -39,7 +39,7 @@ const props = defineProps<{
 }>();
 
 const state = reactive<MediaReplacementConfiguration>(
-    structuredClone(props.configuration),
+    structuredClone(toRaw(props.configuration)),
 );
 
 const scopes: Array<{ key: Scope; label: string }> = [

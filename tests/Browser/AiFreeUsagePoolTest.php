@@ -11,7 +11,7 @@ test('admin can create a free usage pool from the AI prices page', function (): 
     $this->actingAs(User::factory()->admin()->create());
 
     visit('/admin/ai-prices')
-        ->assertNoJavaScriptErrors()
+        ->assertNoSmoke()
         ->click('Add pool')
         ->fill('name', 'Gemini free tier')
         ->fill('free_input_tokens', '1000000')
