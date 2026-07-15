@@ -127,6 +127,10 @@ test('a download verifies the attempt when every required language is present', 
         'download_id' => 'DL-1',
         'required_languages' => ['eng', 'jpn'],
         'was_monitored' => true,
+        // Executor finished its cleanup and left monitoring suspended (the
+        // indeterminate/late-import path), so the tracker owns restoration.
+        'monitoring_suspended' => true,
+        'cleanup_completed_at' => now(),
     ]);
     fakeInspectSubtitles('English / Japanese');
 
@@ -168,6 +172,8 @@ test('a verified import whose monitoring cannot be restored needs attention rath
     $mediaReplacementAttempt = trackerAttempt($this->connection->id, [
         'download_id' => 'DL-1',
         'was_monitored' => true,
+        'monitoring_suspended' => true,
+        'cleanup_completed_at' => now(),
     ]);
     Http::fake([
         'sonarr.local:8989/api/v3/series/42' => Http::response(['id' => 42, 'title' => 'A', 'seriesType' => 'anime']),

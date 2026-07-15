@@ -82,18 +82,33 @@ final readonly class MediaReplacementActions implements ActionExecutor
             ->first();
 
         if ($existing instanceof MediaReplacementAttempt && $existing->grab_accepted_at !== null) {
-            // Reopen the interrupted attempt to a trackable state so the eventual
-            // Grab/Download webhook can correlate, verify, and restore monitoring
-            // — unless a webhook has already verified it (never regress that).
-            MediaReplacementAttempt::query()
-                ->whereKey($existing->id)
-                ->where('status', '!=', MediaReplacementStatus::Verified->value)
-                ->update([
-                    'status' => MediaReplacementStatus::Downloading->value,
-                    'failure_reason' => null,
-                    'completed_at' => null,
-                ]);
-            $existing->refresh();
+            // Only the executor's OWN unfinished deletion-cleanup failure is
+            // resumable. Any other terminal state (a webhook's verified /
+            // needs_attention / restore-failure result, a manual-intervention or
+            // timeout row) is a real outcome that a Retry must NOT clobber — the
+            // grab already happened, so there is nothing to re-grab, and reopening
+            // it could blocklist an already-remonitored target and consume a
+            // webhook that never re-fires. `deletion_failed` is written only by
+            // deleteAfterGrab(), so it uniquely identifies the resumable state.
+            if ($existing->failure_reason !== 'deletion_failed') {
+                return [
+                    'attempt_id' => $existing->id,
+                    'status' => $existing->status->value,
+                    'replacement_initiated' => false,
+                    'grab_outcome' => 'already_resolved',
+                    'deleted_files' => 0,
+                    'message' => 'The grab was already accepted and the attempt has a terminal outcome; not re-grabbing or reopening.',
+                ];
+            }
+
+            // Reopen the executor's own cleanup-failure to a trackable state and
+            // resume the remaining cleanup.
+            $existing->update([
+                'status' => MediaReplacementStatus::Downloading,
+                'failure_reason' => null,
+                'completed_at' => null,
+                'cleanup_completed_at' => null,
+            ]);
 
             return $this->completePostGrab(
                 $client,
@@ -163,20 +178,23 @@ final readonly class MediaReplacementActions implements ActionExecutor
         );
 
         // Suspend monitoring BEFORE the grab — before any Grab/Download webhook
-        // can fire and restore it — so the executor never writes monitoring after
-        // a webhook could have. Only when the target was originally monitored; an
-        // already-unmonitored target needs no suppression. This stops the
+        // can fire and restore it. Only when the target was originally monitored;
+        // an already-unmonitored target needs no suppression. This stops the
         // AutoRedownloadFailed search that markHistoryFailed() would otherwise
         // trigger from grabbing a competing, non-rule-vetted release.
-        $monitoringSuspended = $wasMonitored
-            ? $this->unmonitorTarget($client, $serviceType, $freshTarget, $actionRequest)
-            : true;
+        //
+        // `didSuspend` = we actually suspended monitoring and therefore own its
+        // restoration; false for an already-unmonitored target (nothing to
+        // restore) OR when suspension failed. It is persisted so the blocklist
+        // decision and the restore decision (this run and any Retry) are driven
+        // by durable state, never inferred from the mutable failure_reason.
+        $didSuspend = $wasMonitored && $this->unmonitorTarget($client, $serviceType, $freshTarget, $actionRequest);
+        $attempt->forceFill(['monitoring_suspended' => $didSuspend])->save();
 
-        // Persist the suspension outcome in its own durable column so the
-        // blocklist decision (this run and any Retry's resume) is never inferred
-        // from the mutable failure_reason, which a later terminal write could
-        // overwrite.
-        $attempt->forceFill(['monitoring_suspended' => $monitoringSuspended])->save();
+        // Blocklisting is safe when the target was never monitored, or when we
+        // successfully suspended it. A failed suspension of a monitored target
+        // must NOT blocklist (that triggers the competing auto-search).
+        $blocklistAllowed = ! $wasMonitored || $didSuspend;
 
         $grabOutcome = $this->grab($client, $rawRelease);
 
@@ -187,7 +205,7 @@ final readonly class MediaReplacementActions implements ActionExecutor
             // stuck `downloading` (which would make the job retry the whole grab).
             $restoreFailed = false;
 
-            if ($wasMonitored && $monitoringSuspended) {
+            if ($didSuspend) {
                 try {
                     $this->setMonitored($client, $serviceType, $freshTarget, true);
                 } catch (Throwable $throwable) {
@@ -214,8 +232,12 @@ final readonly class MediaReplacementActions implements ActionExecutor
             // The grab may or may not have been accepted (connection loss / 5xx
             // on the non-idempotent POST). Do NOT delete, blocklist, or fail
             // terminally — leave the attempt `downloading` so the Grab/Download
-            // webhooks and the reconciliation sweep resolve it. Monitoring stays
-            // suspended; the tracker restores it if the download imports.
+            // webhooks and the reconciliation sweep resolve it. Mark the cleanup
+            // phase complete (there is no further synchronous work here) so the
+            // tracker is cleared to restore monitoring if/when the download
+            // imports; monitoring stays suspended until then.
+            $attempt->forceFill(['cleanup_completed_at' => now()])->save();
+
             return [
                 'attempt_id' => $attempt->id,
                 'status' => MediaReplacementStatus::Downloading->value,
@@ -237,7 +259,7 @@ final readonly class MediaReplacementActions implements ActionExecutor
             $freshTarget,
             $attempt,
             $payload['original_history_id'] ?? null,
-            blocklistAllowed: $monitoringSuspended,
+            blocklistAllowed: $blocklistAllowed,
             actionRequest: $actionRequest,
         );
     }
@@ -266,8 +288,30 @@ final readonly class MediaReplacementActions implements ActionExecutor
 
         $blocklistWarning = $this->blocklistAfterGrab($client, $originalHistoryId, $attempt, $blocklistAllowed, $actionRequest);
 
-        // No status write here: the attempt is already `downloading` (set before
-        // the grab), so a terminal state a webhook set in the meantime survives.
+        // The executor OWNS restoring monitoring, here — AFTER blocklisting —
+        // rather than leaving it to the tracker, which is what closes the
+        // blocklist/remonitor race: the tracker will not restore monitoring
+        // until cleanup_completed_at is set (below), so throughout this cleanup
+        // the target is guaranteed to stay suspended while markHistoryFailed runs.
+        // A failed restore leaves monitoring_suspended=true so the tracker retries
+        // it once the download imports.
+        if ($attempt->monitoring_suspended === true) {
+            try {
+                $this->setMonitored($client, $serviceType, $target, true);
+                $attempt->forceFill(['monitoring_suspended' => false])->save();
+            } catch (Throwable $throwable) {
+                Log::warning('Media replacement could not restore monitoring after cleanup; the tracker will retry on import.', [
+                    'action_request_id' => $actionRequest->id,
+                    'exception' => $throwable::class,
+                ]);
+            }
+        }
+
+        // Mark the cleanup phase complete: only now may the tracker restore
+        // monitoring (for any remaining suspension) on a subsequent import event.
+        // No status write — a terminal state a webhook set in the meantime survives.
+        $attempt->forceFill(['cleanup_completed_at' => now()])->save();
+
         $serviceType === ServiceType::Sonarr
             ? new SonarrCache($serviceConnection)->bustAll()
             : new RadarrCache($serviceConnection)->bustAll();
@@ -395,7 +439,12 @@ final readonly class MediaReplacementActions implements ActionExecutor
         try {
             return $this->deleteReviewedFiles($client, $serviceType, $freshTarget);
         } catch (Throwable $throwable) {
-            $this->markTerminal($attempt, MediaReplacementStatus::NeedsAttention, 'Grab accepted but current file deletion failed; the old file remains.');
+            // 'deletion_failed' is the durable marker that this is the executor's
+            // own resumable cleanup failure — a Retry reopens ONLY this state,
+            // never a webhook-produced terminal result. cleanup_completed_at is
+            // left null (we threw before setting it), so the resume knows cleanup
+            // did not finish.
+            $this->markTerminal($attempt, MediaReplacementStatus::NeedsAttention, 'deletion_failed');
 
             throw new RuntimeException('Replacement grabbed but deletion of the reviewed file failed.', previous: $throwable);
         }

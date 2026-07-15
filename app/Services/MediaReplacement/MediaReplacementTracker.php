@@ -114,12 +114,21 @@ final readonly class MediaReplacementTracker
             $verification = ['required' => $required, 'found' => $found, 'missing' => $missing];
             $subtitlesOk = ($snapshot['ambiguous'] ?? false) !== true && $missing === [];
 
-            // The replacement imported, so restore the ORIGINAL monitoring state
-            // the executor suspended. Only when the target was originally
-            // monitored — never start monitoring media that was unmonitored.
-            $restored = $attempt->was_monitored === true
-                ? $this->remonitorTarget($serviceConnection, is_array($attempt->target) ? $attempt->target : [])
-                : true;
+            // Restore the ORIGINAL monitoring the executor suspended — but ONLY
+            // once the executor has finished its cleanup phase
+            // (cleanup_completed_at set) and monitoring is in fact still
+            // suspended. Deferring until cleanup is complete is what prevents this
+            // remonitor from racing the executor's blocklist (the executor owns
+            // the restore during its own run). If the executor is still cleaning
+            // up, leave monitoring alone; it (or a later event) will restore it.
+            $needsRestore = $attempt->monitoring_suspended === true;
+            $cleanupDone = $attempt->cleanup_completed_at !== null;
+            $restored = ! $needsRestore
+                || ($cleanupDone && $this->remonitorTarget($serviceConnection, is_array($attempt->target) ? $attempt->target : []));
+
+            if ($restored && $needsRestore && $cleanupDone) {
+                $attempt->forceFill(['monitoring_suspended' => false])->save();
+            }
 
             // A clean success needs BOTH the required subtitles present AND (if
             // the executor suspended it) monitoring restored. Either failing —

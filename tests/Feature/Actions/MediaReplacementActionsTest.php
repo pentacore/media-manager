@@ -347,6 +347,7 @@ test('resumes the interrupted post-grab cleanup without re-grabbing', function (
         'action_request_id' => $actionRequest->id,
         'status' => MediaReplacementStatus::NeedsAttention,
         'grab_accepted_at' => now(),
+        'failure_reason' => 'deletion_failed',
         'was_monitored' => false,
         'target' => [
             'service' => 'sonarr', 'scope' => 'anime', 'series_id' => 42,
@@ -372,16 +373,16 @@ test('a resume with a durably-failed suspension does not blocklist (independent 
     $actionRequest = replaceActionRequest();
 
     // Prior run: monitoring suspension FAILED (monitoring_suspended=false) AND
-    // then deletion failed, so failure_reason holds the deletion message — not
-    // the suspension one. The resume must still skip the blocklist, driven by
-    // the durable monitoring_suspended column, not the mutable failure_reason.
+    // then deletion failed (failure_reason='deletion_failed', the resumable
+    // marker). The resume must still skip the blocklist — driven by the durable
+    // monitoring_suspended=false, NOT by parsing the failure_reason.
     MediaReplacementAttempt::factory()->create([
         'action_request_id' => $actionRequest->id,
         'status' => MediaReplacementStatus::NeedsAttention,
         'grab_accepted_at' => now(),
         'was_monitored' => true,
         'monitoring_suspended' => false,
-        'failure_reason' => 'Grab accepted but current file deletion failed; the old file remains.',
+        'failure_reason' => 'deletion_failed',
         'target' => [
             'service' => 'sonarr', 'scope' => 'anime', 'series_id' => 42,
             'episode_ids' => [101], 'episode_file_ids' => [501],
@@ -421,6 +422,7 @@ test('resume tolerates an already-deleted file (idempotent delete)', function ()
         'action_request_id' => $actionRequest->id,
         'status' => MediaReplacementStatus::NeedsAttention,
         'grab_accepted_at' => now(),
+        'failure_reason' => 'deletion_failed',
         'was_monitored' => false,
         'target' => [
             'service' => 'sonarr', 'scope' => 'anime', 'series_id' => 42,
