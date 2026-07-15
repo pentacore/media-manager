@@ -132,6 +132,21 @@ final readonly class MediaReplacementTracker
                 // path correctly rejects it.
                 $attempt->update(['verification' => [...$verification, 'subtitles_ok' => $subtitlesOk]]);
 
+                // Close the lost-wakeup window in the handoff: $cleanupDone was read
+                // BEFORE the slow inspection above. If the executor completed cleanup
+                // meanwhile, its finalizeAfterCleanup() already ran against a still
+                // null verification and no-oped — so no actor would finalize this
+                // now-stored verification, leaving the attempt stuck downloading. Re
+                // read the phase and finalize here when cleanup is already done;
+                // otherwise the executor's own post-cleanup call completes it. Either
+                // ordering resolves, and the conditional terminal update makes a
+                // double finalize idempotent.
+                $attempt->refresh();
+
+                if ($attempt->cleanup_completed_at !== null) {
+                    $this->finalizeAfterCleanup($serviceConnection, $attempt);
+                }
+
                 return;
             }
 
@@ -190,6 +205,14 @@ final readonly class MediaReplacementTracker
     {
         $this->guarded(function () use ($serviceConnection, $mediaReplacementAttempt): void {
             $mediaReplacementAttempt->refresh();
+
+            // Invariant: only finalize once cleanup is actually complete. This makes
+            // the handshake safe from either side — a call that races ahead of the
+            // executor setting cleanup_completed_at (e.g. the webhook's own re-read)
+            // no-ops rather than finalizing against an unfinished restore.
+            if ($mediaReplacementAttempt->cleanup_completed_at === null) {
+                return;
+            }
 
             if (in_array($mediaReplacementAttempt->status, self::TERMINAL_STATUSES, true)) {
                 return;

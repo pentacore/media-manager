@@ -328,6 +328,54 @@ test('an ambiguous mid-cleanup inspection with empty required languages is not f
         ->and($attempt->fresh()->failure_reason)->toBe('imported_subtitles_missing_required_language');
 });
 
+test('a Download whose inspection outlives the executor cleanup still finalizes (no lost wakeup)', function (): void {
+    // Mid-cleanup snapshot: monitoring suspended, cleanup not yet complete.
+    $attempt = trackerAttempt($this->connection->id, [
+        'download_id' => 'DL-1',
+        'status' => MediaReplacementStatus::Downloading,
+        'was_monitored' => true,
+        'monitoring_suspended' => true,
+        'cleanup_completed_at' => null,
+        'required_languages' => ['eng'],
+    ]);
+
+    $tracker = resolve(MediaReplacementTracker::class);
+
+    // While the tracker is still inspecting (the slow episodefile GET), the executor
+    // finishes its cleanup: it restores monitoring, sets cleanup_completed_at, and
+    // calls finalizeAfterCleanup() — a no-op here because the pending verification is
+    // not written yet. verifyDownload() then resumes with its STALE phase snapshot
+    // (cleanupDone=false) and takes the pending branch. Without the re-read handoff
+    // nobody would finalize the consumed Download.
+    Http::fake(function (Request $request) use ($attempt, $tracker): mixed {
+        if (str_contains($request->url(), '/api/v3/episodefile/501') && $attempt->fresh()->cleanup_completed_at === null) {
+            $attempt->forceFill(['monitoring_suspended' => false, 'cleanup_completed_at' => now()])->save();
+            $tracker->finalizeAfterCleanup($this->connection, $attempt->fresh());
+        }
+
+        return match (true) {
+            str_contains($request->url(), '/api/v3/series/42') => Http::response(['id' => 42, 'title' => 'A', 'seriesType' => 'anime']),
+            str_contains($request->url(), '/api/v3/episode?seriesId=42') => Http::response([
+                ['id' => 101, 'seasonNumber' => 1, 'episodeNumber' => 1, 'episodeFileId' => 501],
+            ]),
+            str_contains($request->url(), '/api/v3/episodefile/501') => Http::response([
+                'id' => 501, 'sceneName' => 'x', 'mediaInfo' => ['subtitles' => 'English'],
+            ]),
+            str_contains($request->url(), '/api/v3/history') => Http::response(['records' => []]),
+            default => Http::response([], 200),
+        };
+    });
+
+    $tracker->verifyDownload($this->connection, [
+        'eventType' => 'Download', 'series' => ['id' => 42], 'downloadId' => 'DL-1',
+    ]);
+
+    // The webhook re-read the phase after storing verification, saw cleanup done,
+    // and finalized it itself rather than leaving it stuck downloading.
+    expect($attempt->fresh()->status)->toBe(MediaReplacementStatus::Verified)
+        ->and($attempt->fresh()->verification['subtitles_ok'])->toBeTrue();
+});
+
 test('the cleanup finalizer does not clobber a terminal state another webhook set', function (): void {
     // A Download webhook verified subtitles mid-cleanup and left the attempt
     // pending. Before the executor finalizes, a ManualInteractionRequired webhook
