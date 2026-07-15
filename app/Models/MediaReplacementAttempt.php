@@ -26,6 +26,7 @@ use Override;
  * @property string|null $download_id
  * @property CarbonImmutable|null $grab_accepted_at
  * @property bool|null $was_monitored
+ * @property bool|null $monitoring_suspended
  * @property array<array-key, mixed>|null $verification
  * @property string|null $failure_reason
  * @property CarbonImmutable|null $started_at
@@ -51,6 +52,7 @@ use Override;
     'download_id',
     'grab_accepted_at',
     'was_monitored',
+    'monitoring_suspended',
     'verification',
     'failure_reason',
     'started_at',
@@ -91,6 +93,7 @@ class MediaReplacementAttempt extends Model
             'verification' => 'array',
             'grab_accepted_at' => 'immutable_datetime',
             'was_monitored' => 'boolean',
+            'monitoring_suspended' => 'boolean',
             'started_at' => 'immutable_datetime',
             'completed_at' => 'immutable_datetime',
         ];

@@ -82,6 +82,19 @@ final readonly class MediaReplacementActions implements ActionExecutor
             ->first();
 
         if ($existing instanceof MediaReplacementAttempt && $existing->grab_accepted_at !== null) {
+            // Reopen the interrupted attempt to a trackable state so the eventual
+            // Grab/Download webhook can correlate, verify, and restore monitoring
+            // — unless a webhook has already verified it (never regress that).
+            MediaReplacementAttempt::query()
+                ->whereKey($existing->id)
+                ->where('status', '!=', MediaReplacementStatus::Verified->value)
+                ->update([
+                    'status' => MediaReplacementStatus::Downloading->value,
+                    'failure_reason' => null,
+                    'completed_at' => null,
+                ]);
+            $existing->refresh();
+
             return $this->completePostGrab(
                 $client,
                 $serviceType,
@@ -89,7 +102,10 @@ final readonly class MediaReplacementActions implements ActionExecutor
                 is_array($existing->target) ? $existing->target : $storedTarget,
                 $existing,
                 $payload['original_history_id'] ?? null,
-                blocklistAllowed: $existing->was_monitored !== true || $existing->failure_reason !== 'monitoring_suspend_failed',
+                // Independent, durable suspension state — never inferred from the
+                // mutable failure_reason. Blocklist is safe when monitoring was
+                // suspended, or when nothing needed suspending.
+                blocklistAllowed: $existing->was_monitored !== true || $existing->monitoring_suspended === true,
                 actionRequest: $actionRequest,
             );
         }
@@ -111,7 +127,13 @@ final readonly class MediaReplacementActions implements ActionExecutor
         $rawRelease = $this->replacementCandidateFinder->freshRawRelease($freshTarget, $fingerprint, $serviceConnection);
         throw_if($rawRelease === null, InvalidArgumentException::class, 'Selected release is no longer available.');
 
-        $wasMonitored = ($freshTarget['monitored'] ?? null) === true;
+        // Preserve the ORIGINAL monitored state across retries: if a prior run
+        // already recorded it as monitored, keep that — a rejected-grab whose
+        // restore failed leaves ARR unmonitored, and re-inspecting that current
+        // state would otherwise wrongly overwrite was_monitored to false and skip
+        // restoration on a later success.
+        $wasMonitored = $existing?->was_monitored === true
+            || ($freshTarget['monitored'] ?? null) === true;
 
         // Claim the attempt as `downloading` BEFORE the grab. Keying updateOrCreate
         // on the unique action_request_id makes Action-Queue Retry idempotent — a
@@ -132,6 +154,7 @@ final readonly class MediaReplacementActions implements ActionExecutor
                 'download_id' => null,
                 'grab_accepted_at' => null,
                 'was_monitored' => $wasMonitored,
+                'monitoring_suspended' => null,
                 'verification' => null,
                 'failure_reason' => null,
                 'started_at' => now(),
@@ -149,11 +172,11 @@ final readonly class MediaReplacementActions implements ActionExecutor
             ? $this->unmonitorTarget($client, $serviceType, $freshTarget, $actionRequest)
             : true;
 
-        // Record a failed suspension durably so a Retry's resume path also skips
-        // the blocklist (which would trigger the competing auto-search).
-        if ($wasMonitored && ! $monitoringSuspended) {
-            $attempt->forceFill(['failure_reason' => 'monitoring_suspend_failed'])->save();
-        }
+        // Persist the suspension outcome in its own durable column so the
+        // blocklist decision (this run and any Retry's resume) is never inferred
+        // from the mutable failure_reason, which a later terminal write could
+        // overwrite.
+        $attempt->forceFill(['monitoring_suspended' => $monitoringSuspended])->save();
 
         $grabOutcome = $this->grab($client, $rawRelease);
 
@@ -241,12 +264,7 @@ final readonly class MediaReplacementActions implements ActionExecutor
     ): array {
         $deletedFiles = $this->deleteAfterGrab($client, $serviceType, $target, $attempt);
 
-        // Only blocklist the old release when monitoring is genuinely suspended.
-        // markHistoryFailed() triggers the arr's auto-redownload search; running
-        // it while the target is still monitored would grab a competing release.
-        $blocklistWarning = $blocklistAllowed
-            ? $this->blocklistOriginal($client, $originalHistoryId, $actionRequest)
-            : 'Skipped blocklisting the old release because monitoring could not be suspended (avoids a competing auto-search).';
+        $blocklistWarning = $this->blocklistAfterGrab($client, $originalHistoryId, $attempt, $blocklistAllowed, $actionRequest);
 
         // No status write here: the attempt is already `downloading` (set before
         // the grab), so a terminal state a webhook set in the meantime survives.
@@ -261,6 +279,38 @@ final readonly class MediaReplacementActions implements ActionExecutor
             'deleted_files' => $deletedFiles,
             'blocklist_warning' => $blocklistWarning,
         ];
+    }
+
+    /**
+     * Blocklist the old release, but only when it is still safe to do so.
+     * markHistoryFailed() triggers the arr's auto-redownload search; it must not
+     * run when (a) monitoring was never suspended, or (b) a fast Download webhook
+     * has already verified the import and restored monitoring during deletion —
+     * in which case the target is monitored again and blocklisting would launch
+     * the competing search this flow suppresses. The attempt is only still
+     * `downloading` if no webhook terminalized it, so that is the durable gate.
+     */
+    private function blocklistAfterGrab(
+        SonarrClient|RadarrClient $client,
+        mixed $originalHistoryId,
+        MediaReplacementAttempt $attempt,
+        bool $blocklistAllowed,
+        ActionRequest $actionRequest,
+    ): ?string {
+        if (! $blocklistAllowed) {
+            return 'Skipped blocklisting the old release because monitoring could not be suspended (avoids a competing auto-search).';
+        }
+
+        $stillDownloading = MediaReplacementAttempt::query()
+            ->whereKey($attempt->id)
+            ->where('status', MediaReplacementStatus::Downloading->value)
+            ->exists();
+
+        if (! $stillDownloading) {
+            return 'Skipped blocklisting because a webhook already resolved the import and restored monitoring (avoids a competing auto-search).';
+        }
+
+        return $this->blocklistOriginal($client, $originalHistoryId, $actionRequest);
     }
 
     /**

@@ -241,6 +241,28 @@ test('a late download still verifies an attempt the reconcile sweep timed out', 
     expect($attempt->fresh()->status)->toBe(MediaReplacementStatus::Verified);
 });
 
+test('a download completes an attempt that was awaiting manual interaction', function (): void {
+    // An operator resolved a manual import; ARR then emits the Download event.
+    // The attempt (needs_attention / manual_interaction_required) must still be
+    // verifiable and remonitorable, not permanently excluded.
+    $attempt = trackerAttempt($this->connection->id, [
+        'status' => MediaReplacementStatus::NeedsAttention,
+        'failure_reason' => 'manual_interaction_required',
+        'download_id' => 'DL-1',
+        'was_monitored' => false,
+        'required_languages' => ['eng'],
+    ]);
+    fakeInspectSubtitles('English');
+
+    resolve(MediaReplacementTracker::class)->verifyDownload($this->connection, [
+        'eventType' => 'Download',
+        'series' => ['id' => 42],
+        'downloadId' => 'DL-1',
+    ]);
+
+    expect($attempt->fresh()->status)->toBe(MediaReplacementStatus::Verified);
+});
+
 test('manual interaction on a tracked download needs attention', function (): void {
     $mediaReplacementAttempt = trackerAttempt($this->connection->id, [
         'download_id' => 'DL-1',

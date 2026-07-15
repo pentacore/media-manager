@@ -203,10 +203,11 @@ final readonly class MediaReplacementTracker
      */
     private function attemptsByDownloadId(ServiceConnection $serviceConnection, string $downloadId): Collection
     {
-        // Non-terminal attempts, plus attempts the reconciliation sweep timed
-        // out (needs_attention / download_timeout): a late Download webhook must
-        // still be able to verify and remonitor a download that finished after
-        // the timeout, rather than being permanently excluded.
+        // Non-terminal attempts, plus recoverable needs_attention attempts: one
+        // the reconciliation sweep timed out (download_timeout) or one that was
+        // waiting on a manual import (manual_interaction_required). In both cases
+        // a late Download event means the file finally imported, so it must still
+        // be verifiable/remonitorable rather than permanently excluded.
         return MediaReplacementAttempt::query()
             ->where('service_connection_id', $serviceConnection->id)
             ->where('download_id', $downloadId)
@@ -214,9 +215,9 @@ final readonly class MediaReplacementTracker
                 $query->whereNotIn('status', array_map(
                     static fn (MediaReplacementStatus $status): string => $status->value,
                     self::TERMINAL_STATUSES,
-                ))->orWhere(function ($timedOut): void {
-                    $timedOut->where('status', MediaReplacementStatus::NeedsAttention->value)
-                        ->where('failure_reason', 'download_timeout');
+                ))->orWhere(function ($recoverable): void {
+                    $recoverable->where('status', MediaReplacementStatus::NeedsAttention->value)
+                        ->whereIn('failure_reason', ['download_timeout', 'manual_interaction_required']);
                 });
             })
             ->get();

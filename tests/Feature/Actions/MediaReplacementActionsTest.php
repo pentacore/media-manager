@@ -360,7 +360,57 @@ test('resumes the interrupted post-grab cleanup without re-grabbing', function (
     // No duplicate grab, but the interrupted deletion is resumed.
     Http::assertNotSent(fn (Request $request): bool => $request->method() === 'POST' && str_contains($request->url(), '/api/v3/release'));
     Http::assertSent(fn (Request $request): bool => $request->method() === 'DELETE' && str_contains($request->url(), '/api/v3/episodefile/501'));
-    expect($result['replacement_initiated'])->toBeTrue();
+    expect($result['replacement_initiated'])->toBeTrue()
+        // The persisted row is reopened to a trackable state (not left terminal),
+        // so the eventual Grab/Download webhook can still correlate and verify it.
+        ->and(MediaReplacementAttempt::first()->status)->toBe(MediaReplacementStatus::Downloading)
+        ->and(MediaReplacementAttempt::first()->completed_at)->toBeNull();
+});
+
+test('a resume with a durably-failed suspension does not blocklist (independent of failure_reason)', function (): void {
+    fakeExecutor();
+    $actionRequest = replaceActionRequest();
+
+    // Prior run: monitoring suspension FAILED (monitoring_suspended=false) AND
+    // then deletion failed, so failure_reason holds the deletion message — not
+    // the suspension one. The resume must still skip the blocklist, driven by
+    // the durable monitoring_suspended column, not the mutable failure_reason.
+    MediaReplacementAttempt::factory()->create([
+        'action_request_id' => $actionRequest->id,
+        'status' => MediaReplacementStatus::NeedsAttention,
+        'grab_accepted_at' => now(),
+        'was_monitored' => true,
+        'monitoring_suspended' => false,
+        'failure_reason' => 'Grab accepted but current file deletion failed; the old file remains.',
+        'target' => [
+            'service' => 'sonarr', 'scope' => 'anime', 'series_id' => 42,
+            'episode_ids' => [101], 'episode_file_ids' => [501],
+            'installed_release' => 'Trusted.Anime.S01E01.OLD', 'original_history_id' => 999,
+        ],
+    ]);
+
+    resolve(MediaReplacementActions::class)->execute($actionRequest);
+
+    Http::assertNotSent(fn (Request $request): bool => $request->method() === 'POST' && str_contains($request->url(), '/api/v3/history/failed/'));
+});
+
+test('preserves the original was_monitored across a retry', function (): void {
+    // ARR is currently unmonitored (a prior rejected-grab left it so), but the
+    // original attempt recorded was_monitored=true. Re-inspection sees false;
+    // the executor must keep the original true so restoration is not skipped.
+    fakeExecutor(['monitored' => false]);
+    $actionRequest = replaceActionRequest();
+
+    MediaReplacementAttempt::factory()->create([
+        'action_request_id' => $actionRequest->id,
+        'status' => MediaReplacementStatus::Failed,
+        'was_monitored' => true,
+        'grab_accepted_at' => null,
+    ]);
+
+    resolve(MediaReplacementActions::class)->execute($actionRequest);
+
+    expect(MediaReplacementAttempt::first()->was_monitored)->toBeTrue();
 });
 
 test('resume tolerates an already-deleted file (idempotent delete)', function (): void {
@@ -424,9 +474,14 @@ test('does not regress a terminal state the real tracker set during execution', 
     resolve(MediaReplacementActions::class)->execute(replaceActionRequest());
 
     // The tracker terminalized it (needs_attention: the fixture file still has
-    // only Japanese subtitles vs required English); the executor must not have
-    // regressed it back to downloading.
+    // only Japanese subtitles vs required English) and restored monitoring; the
+    // executor must not have regressed it back to downloading.
     expect(MediaReplacementAttempt::first()->status)->toBe(MediaReplacementStatus::NeedsAttention);
+
+    // Critically: because the webhook already won (attempt no longer
+    // `downloading`), the executor must NOT blocklist afterward — doing so would
+    // trigger the competing auto-search on the now-remonitored target.
+    Http::assertNotSent(fn (Request $request): bool => $request->method() === 'POST' && str_contains($request->url(), '/api/v3/history/failed/'));
 });
 
 test('marks the attempt needs_attention when deletion fails after a successful grab', function (): void {
