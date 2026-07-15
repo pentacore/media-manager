@@ -17,7 +17,7 @@ test('a member sees a pending action request and can approve it', function (): v
     $this->actingAs($member);
 
     visit('/actions/requests')
-        ->assertNoJavaScriptErrors()
+        ->assertNoSmoke()
         ->assertSee('Action queue')
         ->assertSee('sonarr.scan')
         ->assertSee('Pending')
@@ -41,10 +41,10 @@ test('a completed action request renders with a non-pending status', function ()
     $this->actingAs($member);
 
     visit('/actions/requests')
-        ->assertNoJavaScriptErrors()
+        ->assertNoSmoke()
         ->assertSee('sonarr.scan')
         ->assertSee('Completed');
-})->skip('Flaky under parallel browser hydration on CI (Playwright timing), not a product defect — disabled to stop intermittent CI failures until the browser test harness is stabilised.');
+});
 
 test('a replacement action request shows subtitle evidence in the detail panel', function (): void {
     $member = User::factory()->member()->create();
@@ -70,7 +70,7 @@ test('a replacement action request shows subtitle evidence in the detail panel',
     $this->actingAs($member);
 
     visit('/actions/requests')
-        ->assertNoJavaScriptErrors()
+        ->assertNoSmoke()
         ->assertSee('Required subtitles')
         ->assertSee('Confidence')
         ->assertSee('98%')
