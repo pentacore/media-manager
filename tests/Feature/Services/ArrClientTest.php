@@ -139,3 +139,64 @@ test('throws on client error', function (): void {
     $client = new SonarrClient($this->connection);
     $client->getSystemStatus();
 })->throws(RequestException::class);
+
+test('getReleases requests the native interactive search with the given params', function (): void {
+    Http::fake([
+        'sonarr.local:8989/api/v3/release*' => Http::response([
+            ['guid' => 'a', 'title' => 'Show S01E01'],
+        ]),
+    ]);
+
+    $client = new SonarrClient($this->connection);
+    $result = $client->getReleases(['seriesId' => 42, 'episodeId' => 101]);
+
+    Http::assertSent(fn (Request $request): bool => $request->method() === 'GET'
+        && str_contains($request->url(), '/api/v3/release')
+        && str_contains($request->url(), 'seriesId=42')
+        && str_contains($request->url(), 'episodeId=101'));
+
+    expect($result)->toHaveCount(1)
+        ->and($result[0]['guid'])->toBe('a');
+});
+
+test('grabRelease posts the full release resource unchanged', function (): void {
+    Http::fake([
+        'sonarr.local:8989/api/v3/release' => Http::response([], 201),
+    ]);
+
+    $release = ['guid' => 'abc', 'indexerId' => 3, 'title' => 'Show S01E01', 'downloadUrl' => 'http://x/y'];
+    $client = new SonarrClient($this->connection);
+    $client->grabRelease($release);
+
+    Http::assertSent(fn (Request $request): bool => $request->method() === 'POST'
+        && str_contains($request->url(), '/api/v3/release')
+        && $request->data() === $release);
+});
+
+test('markHistoryFailed posts to the failed-history endpoint', function (): void {
+    Http::fake([
+        'sonarr.local:8989/api/v3/history/failed/77' => Http::response([], 200),
+    ]);
+
+    $client = new SonarrClient($this->connection);
+    $client->markHistoryFailed(77);
+
+    Http::assertSent(fn (Request $request): bool => $request->method() === 'POST'
+        && str_contains($request->url(), '/api/v3/history/failed/77'));
+});
+
+test('grabRelease is not retried on a server error (single non-idempotent POST)', function (): void {
+    Http::fake(['sonarr.local:8989/api/v3/release' => Http::response([], 500)]);
+
+    $client = new SonarrClient($this->connection);
+
+    // A generic retry would issue this non-idempotent POST up to 3 times and
+    // could start duplicate downloads; grabRelease opts out of the retry.
+    try {
+        $client->grabRelease(['guid' => 'abc', 'title' => 'X']);
+    } catch (RequestException) {
+        // expected — a 500 surfaces to the caller to classify
+    }
+
+    Http::assertSentCount(1);
+});

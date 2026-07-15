@@ -130,6 +130,58 @@ class RadarrClient extends ArrClient implements Warmable
      *
      * @throws RequestException|ConnectionException
      */
+    public function getMovieFiles(int $movieId): array
+    {
+        return $this->buildClient()
+            ->get(sprintf('/api/%s/moviefile', $this->apiVersion), ['movieId' => $movieId])
+            ->throw()
+            ->json() ?? [];
+    }
+
+    /**
+     * @return array<string, mixed>
+     *
+     * @throws RequestException|ConnectionException
+     */
+    public function getMovieFileById(int $movieFileId): array
+    {
+        return $this->buildClient()
+            ->get(sprintf('/api/%s/moviefile/%d', $this->apiVersion, $movieFileId))
+            ->throw()
+            ->json() ?? [];
+    }
+
+    /**
+     * @throws RequestException|ConnectionException
+     */
+    public function deleteMovieFile(int $movieFileId): void
+    {
+        $this->buildClient()
+            ->delete(sprintf('/api/%s/moviefile/%d', $this->apiVersion, $movieFileId))
+            ->throw();
+    }
+
+    /**
+     * Toggle monitoring for a movie via the editor endpoint. Used to suppress
+     * the arr's auto-redownload search while a subtitle replacement is in flight.
+     *
+     * @throws RequestException|ConnectionException
+     */
+    public function setMovieMonitored(int $movieId, bool $monitored): void
+    {
+        $this->buildClient()
+            ->put(sprintf('/api/%s/movie/editor', $this->apiVersion), [
+                'movieIds' => [$movieId],
+                'monitored' => $monitored,
+            ])
+            ->throw();
+    }
+
+    /**
+     * @return array<int, array<string, mixed>>
+     *
+     * @throws RequestException|ConnectionException
+     */
     private function fetchMovies(): array
     {
         return $this->buildClient()->get(sprintf('/api/%s/movie', $this->apiVersion))->throw()->json() ?? [];

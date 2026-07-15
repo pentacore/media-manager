@@ -147,6 +147,60 @@ class SonarrClient extends ArrClient implements Warmable
      *
      * @throws RequestException|ConnectionException
      */
+    public function getEpisodeFiles(int $seriesId): array
+    {
+        return $this->buildClient()
+            ->get(sprintf('/api/%s/episodefile', $this->apiVersion), ['seriesId' => $seriesId])
+            ->throw()
+            ->json() ?? [];
+    }
+
+    /**
+     * @return array<string, mixed>
+     *
+     * @throws RequestException|ConnectionException
+     */
+    public function getEpisodeFileById(int $episodeFileId): array
+    {
+        return $this->buildClient()
+            ->get(sprintf('/api/%s/episodefile/%d', $this->apiVersion, $episodeFileId))
+            ->throw()
+            ->json() ?? [];
+    }
+
+    /**
+     * @throws RequestException|ConnectionException
+     */
+    public function deleteEpisodeFile(int $episodeFileId): void
+    {
+        $this->buildClient()
+            ->delete(sprintf('/api/%s/episodefile/%d', $this->apiVersion, $episodeFileId))
+            ->throw();
+    }
+
+    /**
+     * Toggle episode-level monitoring for the given episodes. Used to suppress
+     * the arr's auto-redownload search while a subtitle replacement is in flight.
+     *
+     * @param  array<int, int>  $episodeIds
+     *
+     * @throws RequestException|ConnectionException
+     */
+    public function setEpisodesMonitored(array $episodeIds, bool $monitored): void
+    {
+        $this->buildClient()
+            ->put(sprintf('/api/%s/episode/monitor', $this->apiVersion), [
+                'episodeIds' => array_values($episodeIds),
+                'monitored' => $monitored,
+            ])
+            ->throw();
+    }
+
+    /**
+     * @return array<int, array<string, mixed>>
+     *
+     * @throws RequestException|ConnectionException
+     */
     private function fetchSeries(): array
     {
         return $this->buildClient()->get(sprintf('/api/%s/series', $this->apiVersion))->throw()->json() ?? [];

@@ -5,6 +5,7 @@ declare(strict_types=1);
 use App\Models\NotificationPreference;
 use App\Models\User;
 use App\Notifications\AiBudgetSoftLimitReached;
+use App\Notifications\MediaReplacementStatusChanged;
 use App\Notifications\ServiceUpdateAvailable;
 use App\Notifications\ServiceWarning;
 use Illuminate\Support\Facades\Http;
@@ -98,6 +99,18 @@ test('catalog includes service update available with mail defaulting on', functi
         ->assertInertia(fn ($page) => $page
             ->where('catalog.2.class', ServiceUpdateAvailable::class)
             ->where('catalog.2.severities.info.mail', true)
+        );
+});
+
+test('catalog includes the subtitle replacement status notification', function (): void {
+    $user = User::factory()->create();
+
+    $this->actingAs($user)
+        ->get(route('settings.notifications.edit'))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->where('catalog.3.class', MediaReplacementStatusChanged::class)
+            ->where('catalog.3.severities.warning.database', true)
         );
 });
 

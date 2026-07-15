@@ -7,6 +7,7 @@ namespace App\Http\Controllers\Settings;
 use App\Http\Controllers\Controller;
 use App\Models\NotificationPreference;
 use App\Notifications\AiBudgetSoftLimitReached;
+use App\Notifications\MediaReplacementStatusChanged;
 use App\Notifications\ServiceUpdateAvailable;
 use App\Notifications\ServiceWarning;
 use App\Services\Notifications\NtfyMessage;
@@ -38,6 +39,10 @@ class NotificationPreferencesController extends Controller
         ServiceUpdateAvailable::class => [
             'label' => 'Service update available',
             'description' => 'A newer release was found for one of your connected services.',
+        ],
+        MediaReplacementStatusChanged::class => [
+            'label' => 'Subtitle replacement status',
+            'description' => 'When a subtitle replacement is verified, fails, or needs manual attention.',
         ],
     ];
 

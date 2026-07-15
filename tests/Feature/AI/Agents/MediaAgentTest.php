@@ -78,10 +78,19 @@ test('tool list includes the download queue/history/stuck-import tools', functio
     expect($shortNames)->toContain('RemoveStuckDownloadChatTool');
 });
 
-test('tool list has the 28 core tools when no optional integration is configured', function (): void {
+test('tool list includes the subtitle replacement tools', function (): void {
+    $shortNames = collect(iterator_to_array((new MediaAgent)->tools(), false))
+        ->map(fn ($t): string => class_basename($t))->all();
+
+    expect($shortNames)->toContain('InspectMediaFileTool')
+        ->toContain('FindReplacementCandidatesTool')
+        ->toContain('ReplaceMediaFileTool');
+});
+
+test('tool list has the 31 core tools when no optional integration is configured', function (): void {
     $tools = collect(iterator_to_array((new MediaAgent)->tools(), false));
 
-    expect($tools->count())->toBe(28);
+    expect($tools->count())->toBe(31);
 });
 
 test('Prowlarr tools appear only with an active Prowlarr connection', function (): void {
@@ -149,4 +158,11 @@ test('instructions cover the behavioral guidance the schemas cannot express', fu
         ->toContain('advisory_mode_blocks_destructive')
         ->toContain('no_action_type_config')
         ->toContain('awaiting_confirmation');
+
+    // Subtitle replacement workflow guidance
+    expect($instructions)->toContain('InspectMediaFileTool')
+        ->toContain('FindReplacementCandidatesTool')
+        ->toContain('ReplaceMediaFileTool')
+        ->toContain('automatic_candidate')
+        ->toContain('verified');
 });

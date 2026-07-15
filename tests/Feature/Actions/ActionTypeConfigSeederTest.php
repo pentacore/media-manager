@@ -21,7 +21,17 @@ test('seeder is idempotent', function (): void {
     $this->seed(ActionTypeConfigSeeder::class);
     $this->seed(ActionTypeConfigSeeder::class);
 
-    expect(ActionTypeConfig::count())->toBe(14);
+    expect(ActionTypeConfig::count())->toBe(15);
+});
+
+test('seeds the media replacement rule as enabled and requiring approval', function (): void {
+    $this->seed(ActionTypeConfigSeeder::class);
+
+    $config = ActionTypeConfig::where('type', 'replace_media_file')->first();
+
+    expect($config)->not->toBeNull()
+        ->and($config->is_enabled)->toBeTrue()
+        ->and($config->requires_approval)->toBeTrue();
 });
 
 test('destructive types default to requires_approval=true', function (): void {
