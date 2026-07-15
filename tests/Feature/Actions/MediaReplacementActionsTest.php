@@ -59,18 +59,21 @@ function sonarrReplacementRelease(): array
  * Method-aware fake so a GET and DELETE on the same /episodefile/{id} URL can
  * return different statuses.
  *
- * @param  array{grabOk?: bool, grabConnection?: bool, deleteOk?: bool, currentFileId?: int, releases?: list<array<string, mixed>>, onDelete?: callable}  $opts
+ * @param  array{grabOk?: bool, grabConnection?: bool, grabStatus?: int, deleteOk?: bool, monitorOk?: bool, monitored?: bool, currentFileId?: int, releases?: list<array<string, mixed>>, onDelete?: callable}  $opts
  */
 function fakeExecutor(array $opts = []): void
 {
     $grabOk = $opts['grabOk'] ?? true;
     $grabConnection = $opts['grabConnection'] ?? false;
+    $grabStatus = $opts['grabStatus'] ?? ($grabOk ? 201 : 500);
     $deleteOk = $opts['deleteOk'] ?? true;
+    $monitorOk = $opts['monitorOk'] ?? true;
+    $monitored = $opts['monitored'] ?? true;
     $currentFileId = $opts['currentFileId'] ?? 501;
     $releases = $opts['releases'] ?? [sonarrReplacementRelease()];
     $onDelete = $opts['onDelete'] ?? null;
 
-    Http::fake(function (Request $request) use ($grabOk, $grabConnection, $deleteOk, $currentFileId, $releases, $onDelete) {
+    Http::fake(function (Request $request) use ($grabConnection, $grabStatus, $deleteOk, $monitorOk, $monitored, $currentFileId, $releases, $onDelete) {
         $method = $request->method();
         $url = $request->url();
 
@@ -83,12 +86,13 @@ function fakeExecutor(array $opts = []): void
         }
 
         return match (true) {
-            $method === 'POST' && str_contains($url, '/api/v3/release') => Http::response([], $grabOk ? 201 : 500),
+            $method === 'POST' && str_contains($url, '/api/v3/release') => Http::response([], $grabStatus),
             $method === 'GET' && str_contains($url, '/api/v3/release') => Http::response($releases),
+            $method === 'PUT' && str_contains($url, '/api/v3/episode/monitor') => Http::response([], $monitorOk ? 200 : 500),
             $method === 'DELETE' && str_contains($url, '/api/v3/episodefile/') => Http::response([], $deleteOk ? 200 : 500),
             str_contains($url, '/api/v3/series/42') => Http::response(['id' => 42, 'title' => 'Trusted Anime', 'seriesType' => 'anime']),
             str_contains($url, '/api/v3/episode?') => Http::response([
-                ['id' => 101, 'seasonNumber' => 1, 'episodeNumber' => 1, 'episodeFileId' => $currentFileId],
+                ['id' => 101, 'seasonNumber' => 1, 'episodeNumber' => 1, 'episodeFileId' => $currentFileId, 'monitored' => $monitored],
             ]),
             str_contains($url, '/api/v3/episodefile/') => Http::response([
                 'id' => $currentFileId,
@@ -149,7 +153,7 @@ test('grabs the replacement before deleting the reviewed file', function (): voi
         ->and(MediaReplacementAttempt::first()->status)->toBe(MediaReplacementStatus::Downloading);
 });
 
-test('unmonitors the target after grabbing and before blocklisting to avoid the auto-redownload race', function (): void {
+test('unmonitors the target BEFORE the grab (before a webhook can restore it) and before blocklisting', function (): void {
     fakeExecutor();
 
     $result = resolve(MediaReplacementActions::class)->execute(replaceActionRequest());
@@ -162,13 +166,49 @@ test('unmonitors the target after grabbing and before blocklisting to avoid the 
     $blocklistIndex = $requests->search(fn (string $value): bool => str_contains($value, 'POST http://sonarr.local:8989/api/v3/history/failed/'));
 
     expect($unmonitorIndex)->not->toBeFalse()
-        ->and($grabIndex)->toBeLessThan($unmonitorIndex)
-        ->and($unmonitorIndex)->toBeLessThan($blocklistIndex);
+        ->and($unmonitorIndex)->toBeLessThan($grabIndex)
+        ->and($grabIndex)->toBeLessThan($blocklistIndex);
 
     Http::assertSent(fn (Request $request): bool => $request->method() === 'PUT'
         && str_contains($request->url(), '/api/v3/episode/monitor')
         && $request->data()['episodeIds'] === [101]
         && $request->data()['monitored'] === false);
+});
+
+test('does not unmonitor an originally-unmonitored target, and still blocklists', function (): void {
+    fakeExecutor(['monitored' => false]);
+
+    $result = resolve(MediaReplacementActions::class)->execute(replaceActionRequest());
+
+    expect($result['replacement_initiated'])->toBeTrue()
+        ->and($result['blocklist_warning'])->toBeNull();
+
+    Http::assertNotSent(fn (Request $request): bool => str_contains($request->url(), '/api/v3/episode/monitor'));
+    Http::assertSent(fn (Request $request): bool => str_contains($request->url(), '/api/v3/history/failed/'));
+});
+
+test('skips blocklisting when monitoring could not be suspended', function (): void {
+    fakeExecutor(['monitorOk' => false]);
+
+    $result = resolve(MediaReplacementActions::class)->execute(replaceActionRequest());
+
+    expect($result['replacement_initiated'])->toBeTrue()
+        ->and($result['blocklist_warning'])->toContain('monitoring could not be suspended');
+
+    // Blocklisting is skipped so the arr never starts a competing auto-search.
+    Http::assertNotSent(fn (Request $request): bool => str_contains($request->url(), '/api/v3/history/failed/'));
+});
+
+test('restores monitoring when the grab is rejected after unmonitoring', function (): void {
+    fakeExecutor(['grabStatus' => 400]);
+
+    expect(fn (): array => resolve(MediaReplacementActions::class)->execute(replaceActionRequest()))
+        ->toThrow(RuntimeException::class);
+
+    // Suspended then restored (monitored=true) since no replacement will arrive.
+    Http::assertSent(fn (Request $request): bool => $request->method() === 'PUT'
+        && str_contains($request->url(), '/api/v3/episode/monitor')
+        && $request->data()['monitored'] === true);
 });
 
 test('pins execution to the approved connection when multiple are active', function (): void {
@@ -227,8 +267,8 @@ test('aborts without deleting when the selected release disappeared', function (
     Http::assertNotSent(fn (Request $request): bool => $request->method() === 'POST' && str_contains($request->url(), '/api/v3/release'));
 });
 
-test('marks the attempt failed and never deletes when the grab is rejected', function (): void {
-    fakeExecutor(['grabOk' => false]);
+test('marks the attempt failed and never deletes when the grab is explicitly rejected (4xx)', function (): void {
+    fakeExecutor(['grabStatus' => 400]);
 
     expect(fn (): array => resolve(MediaReplacementActions::class)->execute(replaceActionRequest()))
         ->toThrow(RuntimeException::class);
@@ -253,6 +293,62 @@ test('an indeterminate grab (connection error) keeps the attempt trackable inste
     Http::assertNotSent(fn (Request $request): bool => str_contains($request->url(), '/api/v3/history/failed/'));
 
     expect(MediaReplacementAttempt::first()->status)->toBe(MediaReplacementStatus::Downloading);
+});
+
+test('a server error (5xx) on the grab is indeterminate, not a rejection', function (): void {
+    fakeExecutor(['grabStatus' => 500]);
+
+    $result = resolve(MediaReplacementActions::class)->execute(replaceActionRequest());
+
+    // A 5xx may mean the non-idempotent grab was already accepted, so treat it
+    // like connection loss: trackable, no delete/blocklist, no terminal failure.
+    expect($result['grab_outcome'])->toBe('indeterminate')
+        ->and($result['replacement_initiated'])->toBeFalse();
+
+    Http::assertNotSent(fn (Request $request): bool => $request->method() === 'DELETE');
+    expect(MediaReplacementAttempt::first()->status)->toBe(MediaReplacementStatus::Downloading);
+});
+
+test('aborts when the approved connection id no longer resolves', function (): void {
+    fakeExecutor();
+
+    $fingerprint = (new ReleaseFingerprint)->make('sonarr', sonarrReplacementRelease());
+    $actionRequest = ActionRequest::factory()->create([
+        'type' => 'replace_media_file', 'source_service' => 'ai', 'target_service' => 'sonarr',
+        'payload' => [
+            'service' => 'sonarr',
+            'service_connection_id' => 999999, // present but deleted since approval
+            'scope' => 'anime',
+            'target' => ['service' => 'sonarr', 'scope' => 'anime', 'series_id' => 42, 'episode_ids' => [101], 'episode_file_ids' => [501]],
+            'candidate_fingerprint' => $fingerprint,
+            'candidate' => ['fingerprint' => $fingerprint], 'required_languages' => ['eng'], 'selection_mode' => 'manual',
+        ],
+    ]);
+
+    expect(fn (): array => resolve(MediaReplacementActions::class)->execute($actionRequest))
+        ->toThrow(InvalidArgumentException::class);
+
+    // Never fell through to another active connection.
+    Http::assertNotSent(fn (Request $request): bool => $request->method() === 'DELETE');
+    Http::assertNotSent(fn (Request $request): bool => $request->method() === 'POST' && str_contains($request->url(), '/api/v3/release'));
+});
+
+test('does not re-grab a release whose grab was already accepted on a prior run', function (): void {
+    fakeExecutor();
+    $actionRequest = replaceActionRequest();
+
+    // A prior run grabbed the release, then deletion failed → NeedsAttention with
+    // a durable grab_accepted_at marker. Retry must NOT re-POST the release.
+    MediaReplacementAttempt::factory()->create([
+        'action_request_id' => $actionRequest->id,
+        'status' => MediaReplacementStatus::NeedsAttention,
+        'grab_accepted_at' => now(),
+    ]);
+
+    $result = resolve(MediaReplacementActions::class)->execute($actionRequest);
+
+    expect($result['grab_outcome'])->toBe('already_grabbed');
+    Http::assertNotSent(fn (Request $request): bool => $request->method() === 'POST' && str_contains($request->url(), '/api/v3/release'));
 });
 
 test('a retry reuses the existing attempt row instead of hitting a duplicate key', function (): void {

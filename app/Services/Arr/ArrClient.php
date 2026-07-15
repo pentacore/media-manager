@@ -19,20 +19,28 @@ abstract class ArrClient
         protected ServiceConnection $connection,
     ) {}
 
-    protected function buildClient(): PendingRequest
+    protected function buildClient(bool $withRetry = true): PendingRequest
     {
-        return Http::baseUrl(rtrim($this->connection->url, '/'))
+        $client = Http::baseUrl(rtrim($this->connection->url, '/'))
             ->withHeaders(['X-Api-Key' => $this->connection->api_key])
             ->timeout(10)
             ->connectTimeout(3)
-            ->withUserAgent('MediaManager/'.config('app.version').' '.class_basename($this))
-            ->retry(
-                times: 3,
-                sleepMilliseconds: fn (int $attempt): int => $attempt * 500,
-                when: fn (Throwable $throwable): bool => $throwable instanceof ConnectionException
-                    || ($throwable instanceof RequestException && $throwable->response->serverError()),
-                throw: false,
-            );
+            ->withUserAgent('MediaManager/'.config('app.version').' '.class_basename($this));
+
+        // Non-idempotent writes (e.g. grabbing a release) must opt out of the
+        // generic retry: a server error could mean the request was already
+        // accepted, and retrying would issue the side effect multiple times.
+        if (! $withRetry) {
+            return $client;
+        }
+
+        return $client->retry(
+            times: 3,
+            sleepMilliseconds: fn (int $attempt): int => $attempt * 500,
+            when: fn (Throwable $throwable): bool => $throwable instanceof ConnectionException
+                || ($throwable instanceof RequestException && $throwable->response->serverError()),
+            throw: false,
+        );
     }
 
     /**
@@ -207,13 +215,18 @@ abstract class ArrClient
      * Grab a release by posting the full ReleaseResource returned by a fresh
      * native search. Callers must never reconstruct this payload from AI output.
      *
+     * This POST is non-idempotent and deliberately opts out of the generic
+     * retry: a server error may mean the grab was already accepted, so retrying
+     * could start duplicate downloads. Callers must treat a server error /
+     * connection loss as an indeterminate outcome, not a definitive rejection.
+     *
      * @param  array<string, mixed>  $release
      *
      * @throws RequestException|ConnectionException
      */
     public function grabRelease(array $release): void
     {
-        $this->buildClient()
+        $this->buildClient(withRetry: false)
             ->post(sprintf('/api/%s/release', $this->apiVersion), $release)
             ->throw();
     }

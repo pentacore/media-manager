@@ -184,3 +184,19 @@ test('markHistoryFailed posts to the failed-history endpoint', function (): void
     Http::assertSent(fn (Request $request): bool => $request->method() === 'POST'
         && str_contains($request->url(), '/api/v3/history/failed/77'));
 });
+
+test('grabRelease is not retried on a server error (single non-idempotent POST)', function (): void {
+    Http::fake(['sonarr.local:8989/api/v3/release' => Http::response([], 500)]);
+
+    $client = new SonarrClient($this->connection);
+
+    // A generic retry would issue this non-idempotent POST up to 3 times and
+    // could start duplicate downloads; grabRelease opts out of the retry.
+    try {
+        $client->grabRelease(['guid' => 'abc', 'title' => 'X']);
+    } catch (RequestException) {
+        // expected — a 500 surfaces to the caller to classify
+    }
+
+    Http::assertSentCount(1);
+});

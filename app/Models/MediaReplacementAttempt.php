@@ -24,6 +24,8 @@ use Override;
  * @property array<array-key, mixed> $candidate
  * @property array<array-key, mixed> $required_languages
  * @property string|null $download_id
+ * @property CarbonImmutable|null $grab_accepted_at
+ * @property bool|null $was_monitored
  * @property array<array-key, mixed>|null $verification
  * @property string|null $failure_reason
  * @property CarbonImmutable|null $started_at
@@ -47,6 +49,8 @@ use Override;
     'candidate',
     'required_languages',
     'download_id',
+    'grab_accepted_at',
+    'was_monitored',
     'verification',
     'failure_reason',
     'started_at',
@@ -85,6 +89,8 @@ class MediaReplacementAttempt extends Model
             'candidate' => 'array',
             'required_languages' => 'array',
             'verification' => 'array',
+            'grab_accepted_at' => 'immutable_datetime',
+            'was_monitored' => 'boolean',
             'started_at' => 'immutable_datetime',
             'completed_at' => 'immutable_datetime',
         ];

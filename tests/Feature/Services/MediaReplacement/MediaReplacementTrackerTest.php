@@ -126,6 +126,7 @@ test('a download verifies the attempt when every required language is present', 
     $mediaReplacementAttempt = trackerAttempt($this->connection->id, [
         'download_id' => 'DL-1',
         'required_languages' => ['eng', 'jpn'],
+        'was_monitored' => true,
     ]);
     fakeInspectSubtitles('English / Japanese');
 
@@ -140,11 +141,51 @@ test('a download verifies the attempt when every required language is present', 
         ->and($fresh->verification['missing'])->toBe([]);
     Notification::assertSentTimes(MediaReplacementStatusChanged::class, 1);
 
-    // Monitoring suspended by the executor is restored after import.
+    // Monitoring suspended by the executor is restored to the ORIGINAL state.
     Http::assertSent(fn (Request $request): bool => $request->method() === 'PUT'
         && str_contains($request->url(), '/api/v3/episode/monitor')
         && $request->data()['episodeIds'] === [101]
         && $request->data()['monitored'] === true);
+});
+
+test('does not restore monitoring for an originally-unmonitored target', function (): void {
+    $mediaReplacementAttempt = trackerAttempt($this->connection->id, [
+        'download_id' => 'DL-1',
+        'was_monitored' => false,
+    ]);
+    fakeInspectSubtitles('English');
+
+    resolve(MediaReplacementTracker::class)->verifyDownload($this->connection, [
+        'eventType' => 'Download', 'series' => ['id' => 42], 'downloadId' => 'DL-1',
+    ]);
+
+    expect($mediaReplacementAttempt->fresh()->status)->toBe(MediaReplacementStatus::Verified);
+    // Never (re)monitor media that was unmonitored to begin with.
+    Http::assertNotSent(fn (Request $request): bool => str_contains($request->url(), '/api/v3/episode/monitor'));
+});
+
+test('a verified import whose monitoring cannot be restored needs attention rather than reporting success', function (): void {
+    $mediaReplacementAttempt = trackerAttempt($this->connection->id, [
+        'download_id' => 'DL-1',
+        'was_monitored' => true,
+    ]);
+    Http::fake([
+        'sonarr.local:8989/api/v3/series/42' => Http::response(['id' => 42, 'title' => 'A', 'seriesType' => 'anime']),
+        'sonarr.local:8989/api/v3/episode?seriesId=42' => Http::response([
+            ['id' => 101, 'seasonNumber' => 1, 'episodeNumber' => 1, 'episodeFileId' => 501, 'monitored' => false],
+        ]),
+        'sonarr.local:8989/api/v3/episodefile/501' => Http::response(['id' => 501, 'sceneName' => 'x', 'mediaInfo' => ['subtitles' => 'English']]),
+        'sonarr.local:8989/api/v3/episode/monitor' => Http::response([], 500), // restore fails
+        'sonarr.local:8989/api/v3/history*' => Http::response(['records' => []]),
+    ]);
+
+    resolve(MediaReplacementTracker::class)->verifyDownload($this->connection, [
+        'eventType' => 'Download', 'series' => ['id' => 42], 'downloadId' => 'DL-1',
+    ]);
+
+    $fresh = $mediaReplacementAttempt->fresh();
+    expect($fresh->status)->toBe(MediaReplacementStatus::NeedsAttention)
+        ->and($fresh->failure_reason)->toBe('restore_monitoring_failed');
 });
 
 test('a download missing a required language needs attention with verification evidence', function (): void {

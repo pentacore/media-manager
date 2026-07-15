@@ -59,13 +59,33 @@ final readonly class MediaReplacementActions implements ActionExecutor
             ? array_values(array_filter($payload['required_languages'], is_string(...)))
             : null;
 
+        // Do not re-grab a release whose grab was already accepted on a prior
+        // run (e.g. Retry after a post-grab deletion failure). The grab POST is
+        // a non-idempotent external side effect, so re-issuing it would start a
+        // duplicate download. The in-flight download is resolved by webhooks /
+        // the reconciliation sweep.
+        $existing = MediaReplacementAttempt::query()
+            ->where('action_request_id', $actionRequest->id)
+            ->first();
+
+        if ($existing instanceof MediaReplacementAttempt && $existing->grab_accepted_at !== null) {
+            return [
+                'attempt_id' => $existing->id,
+                'status' => $existing->status->value,
+                'replacement_initiated' => false,
+                'grab_outcome' => 'already_grabbed',
+                'deleted_files' => 0,
+                'message' => 'A grab was already accepted for this request; not re-grabbing to avoid a duplicate download.',
+            ];
+        }
+
         // Pin to the exact connection the request was approved against. Multiple
         // same-type connections can be active and their media IDs overlap across
         // instances, so re-resolving the "active" one could act on a different
-        // server and delete the wrong file.
-        $connectionId = (int) ($payload['service_connection_id'] ?? 0);
-        $serviceConnection = ($connectionId > 0 ? ServiceConnection::find($connectionId) : null)
-            ?? ServiceConnection::resolveActive($serviceType);
+        // server and delete the wrong file. A supplied-but-missing id (connection
+        // deleted after approval) aborts rather than falling through to another
+        // instance; only a genuinely absent field falls back for legacy payloads.
+        $serviceConnection = $this->resolveConnection($payload, $serviceType);
 
         $freshTarget = $this->mediaFileInspector->inspectFromSnapshot($storedTarget, $serviceConnection);
         throw_unless(
@@ -88,6 +108,8 @@ final readonly class MediaReplacementActions implements ActionExecutor
             ? new SonarrClient($serviceConnection)
             : new RadarrClient($serviceConnection);
 
+        $wasMonitored = ($freshTarget['monitored'] ?? null) === true;
+
         // Claim the attempt as `downloading` BEFORE the grab. Keying updateOrCreate
         // on the unique action_request_id makes Action-Queue Retry idempotent — a
         // prior failed attempt row is reset and reused instead of hitting a
@@ -105,6 +127,8 @@ final readonly class MediaReplacementActions implements ActionExecutor
                 'candidate' => is_array($payload['candidate'] ?? null) ? $payload['candidate'] : [],
                 'required_languages' => $requiredLanguages ?? $eligible['effective_languages'],
                 'download_id' => null,
+                'grab_accepted_at' => null,
+                'was_monitored' => $wasMonitored,
                 'verification' => null,
                 'failure_reason' => null,
                 'started_at' => now(),
@@ -112,11 +136,36 @@ final readonly class MediaReplacementActions implements ActionExecutor
             ],
         );
 
-        if ($this->grab($client, $rawRelease, $attempt) === 'indeterminate') {
-            // The grab may or may not have been accepted (connection/timeout
-            // after the request was sent). Do NOT delete the current file,
-            // blocklist, or fail terminally — leave the attempt `downloading` so
-            // the Grab/Download webhooks and the reconciliation sweep resolve it.
+        // Suspend monitoring BEFORE the grab — before any Grab/Download webhook
+        // can fire and restore it — so the executor never writes monitoring after
+        // a webhook could have. Only when the target was originally monitored; an
+        // already-unmonitored target needs no suppression. This stops the
+        // AutoRedownloadFailed search that markHistoryFailed() would otherwise
+        // trigger from grabbing a competing, non-rule-vetted release.
+        $monitoringSuspended = $wasMonitored
+            ? $this->unmonitorTarget($client, $serviceType, $freshTarget, $actionRequest)
+            : true;
+
+        $grabOutcome = $this->grab($client, $rawRelease);
+
+        if ($grabOutcome === 'rejected') {
+            // Definitive client-side rejection: the release was not accepted and
+            // no file was touched. Restore any monitoring we suspended, then fail.
+            if ($wasMonitored && $monitoringSuspended) {
+                $this->setMonitored($client, $serviceType, $freshTarget, true);
+            }
+
+            $this->markTerminal($attempt, MediaReplacementStatus::Failed, 'Replacement grab was rejected; the current file was left untouched.');
+
+            throw new RuntimeException('Replacement grab was rejected.');
+        }
+
+        if ($grabOutcome === 'indeterminate') {
+            // The grab may or may not have been accepted (connection loss / 5xx
+            // on the non-idempotent POST). Do NOT delete, blocklist, or fail
+            // terminally — leave the attempt `downloading` so the Grab/Download
+            // webhooks and the reconciliation sweep resolve it. Monitoring stays
+            // suspended; the tracker restores it if the download imports.
             return [
                 'attempt_id' => $attempt->id,
                 'status' => MediaReplacementStatus::Downloading->value,
@@ -127,16 +176,17 @@ final readonly class MediaReplacementActions implements ActionExecutor
             ];
         }
 
+        // Accepted: record the durable grab marker so a retry never re-grabs.
+        $attempt->forceFill(['grab_accepted_at' => now()])->save();
+
         $deletedFiles = $this->deleteAfterGrab($client, $serviceType, $freshTarget, $attempt);
 
-        // Unmonitor the reviewed target BEFORE blocklisting the old release.
-        // markHistoryFailed() fires DownloadFailedEvent, and with AutoRedownloadFailed
-        // (arr default) the service would auto-search and could grab a non-rule-vetted
-        // release racing the one we just grabbed. Unmonitoring suppresses that search;
-        // our grabbed release still imports. The tracker re-monitors after import.
-        $this->unmonitorTarget($client, $serviceType, $freshTarget, $actionRequest);
-
-        $blocklistWarning = $this->blocklistOriginal($client, $payload['original_history_id'] ?? null, $actionRequest);
+        // Only blocklist the old release when monitoring is genuinely suspended.
+        // markHistoryFailed() triggers the arr's auto-redownload search; running
+        // it while the target is still monitored would grab a competing release.
+        $blocklistWarning = $monitoringSuspended
+            ? $this->blocklistOriginal($client, $payload['original_history_id'] ?? null, $actionRequest)
+            : 'Skipped blocklisting the old release because monitoring could not be suspended (avoids a competing auto-search).';
 
         // No status write here: the attempt is already `downloading` (set before
         // the grab), so a terminal state a webhook set in the meantime survives.
@@ -154,15 +204,48 @@ final readonly class MediaReplacementActions implements ActionExecutor
     }
 
     /**
-     * Grab the replacement. Returns 'accepted' on success or 'indeterminate' when
-     * the outcome is unknown (connection/timeout — the release may still have been
-     * accepted, so the attempt must stay trackable). Marks the attempt terminally
-     * failed and throws only on an explicit rejection (the arr responded with an
-     * error, so the release was definitely not accepted and no file was touched).
+     * Resolve the connection the request was approved against. Aborts when a
+     * pinned id is supplied but no longer resolves, or resolves to a different
+     * service type; only a genuinely absent field falls back to the active one.
+     *
+     * @param  array<string, mixed>  $payload
+     */
+    private function resolveConnection(array $payload, ServiceType $serviceType): ServiceConnection
+    {
+        if (! array_key_exists('service_connection_id', $payload) || $payload['service_connection_id'] === null) {
+            return ServiceConnection::resolveActive($serviceType);
+        }
+
+        $connectionId = (int) $payload['service_connection_id'];
+        $connection = $connectionId > 0 ? ServiceConnection::find($connectionId) : null;
+
+        throw_if(
+            $connection === null,
+            InvalidArgumentException::class,
+            'The approved service connection no longer exists; aborting to avoid acting on a different server.',
+        );
+
+        throw_unless(
+            $connection->type === $serviceType,
+            InvalidArgumentException::class,
+            'The approved service connection type does not match the replacement service; aborting.',
+        );
+
+        return $connection;
+    }
+
+    /**
+     * Classify the grab outcome without side effects on the attempt:
+     *  - 'accepted'      — the arr accepted the release.
+     *  - 'rejected'      — an explicit client-side (4xx) rejection: definitely
+     *                      not accepted, so no file was touched.
+     *  - 'indeterminate' — connection loss or a server error (5xx) on the
+     *                      non-idempotent POST: the grab may already have been
+     *                      accepted, so it must stay trackable rather than fail.
      *
      * @param  array<string, mixed>  $rawRelease
      */
-    private function grab(SonarrClient|RadarrClient $client, array $rawRelease, MediaReplacementAttempt $attempt): string
+    private function grab(SonarrClient|RadarrClient $client, array $rawRelease): string
     {
         try {
             $client->grabRelease($rawRelease);
@@ -170,15 +253,20 @@ final readonly class MediaReplacementActions implements ActionExecutor
             return 'accepted';
         } catch (ConnectionException $connectionException) {
             Log::warning('Media replacement grab outcome indeterminate (connection error); leaving the attempt trackable.', [
-                'action_request_id' => $attempt->action_request_id,
                 'exception' => $connectionException::class,
             ]);
 
             return 'indeterminate';
         } catch (RequestException $requestException) {
-            $this->markTerminal($attempt, MediaReplacementStatus::Failed, 'Replacement grab was rejected; the current file was left untouched.');
+            if ($requestException->response->clientError()) {
+                return 'rejected';
+            }
 
-            throw new RuntimeException('Replacement grab was rejected.', previous: $requestException);
+            Log::warning('Media replacement grab outcome indeterminate (server error); leaving the attempt trackable.', [
+                'status' => $requestException->response->status(),
+            ]);
+
+            return 'indeterminate';
         }
     }
 
@@ -251,9 +339,9 @@ final readonly class MediaReplacementActions implements ActionExecutor
     }
 
     /**
-     * Best-effort: unmonitor the reviewed target so the arr's auto-redownload
-     * search cannot grab a competing release during the replacement window. A
-     * failure here is non-fatal — the replacement still proceeds.
+     * Suspend monitoring on the reviewed target so the arr's auto-redownload
+     * search cannot grab a competing release. Returns whether it succeeded;
+     * callers must skip blocklisting when it did not.
      *
      * @param  array<string, mixed>  $freshTarget
      */
@@ -262,26 +350,44 @@ final readonly class MediaReplacementActions implements ActionExecutor
         ServiceType $serviceType,
         array $freshTarget,
         ActionRequest $actionRequest,
-    ): void {
+    ): bool {
         try {
-            if ($serviceType === ServiceType::Sonarr && $client instanceof SonarrClient) {
-                $episodeIds = array_values(array_map('intval', is_array($freshTarget['episode_ids'] ?? null) ? $freshTarget['episode_ids'] : []));
+            $this->setMonitored($client, $serviceType, $freshTarget, false);
 
-                if ($episodeIds !== []) {
-                    $client->setEpisodesMonitored($episodeIds, false);
-                }
-            } elseif ($client instanceof RadarrClient) {
-                $movieId = (int) ($freshTarget['movie_id'] ?? 0);
-
-                if ($movieId > 0) {
-                    $client->setMovieMonitored($movieId, false);
-                }
-            }
+            return true;
         } catch (Throwable $throwable) {
-            Log::warning('Media replacement could not unmonitor the target before blocklisting.', [
+            Log::warning('Media replacement could not suspend monitoring; the old release will not be blocklisted.', [
                 'action_request_id' => $actionRequest->id,
                 'exception' => $throwable::class,
             ]);
+
+            return false;
+        }
+    }
+
+    /**
+     * Set the target's monitored flag. Throws on failure so callers can react.
+     *
+     * @param  array<string, mixed>  $target
+     */
+    private function setMonitored(SonarrClient|RadarrClient $client, ServiceType $serviceType, array $target, bool $monitored): void
+    {
+        if ($serviceType === ServiceType::Sonarr && $client instanceof SonarrClient) {
+            $episodeIds = array_values(array_map(intval(...), is_array($target['episode_ids'] ?? null) ? $target['episode_ids'] : []));
+
+            if ($episodeIds !== []) {
+                $client->setEpisodesMonitored($episodeIds, $monitored);
+            }
+
+            return;
+        }
+
+        if ($client instanceof RadarrClient) {
+            $movieId = (int) ($target['movie_id'] ?? 0);
+
+            if ($movieId > 0) {
+                $client->setMovieMonitored($movieId, $monitored);
+            }
         }
     }
 

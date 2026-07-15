@@ -36,27 +36,40 @@ class ReconcileMediaReplacementAttempts extends Command
         }
 
         $admins = User::query()->where('role', UserRole::Admin)->get();
+        $flagged = 0;
 
         foreach ($stuck as $attempt) {
-            $attempt->update([
-                'status' => MediaReplacementStatus::NeedsAttention,
-                'failure_reason' => 'download_timeout',
-                'completed_at' => CarbonImmutable::now(),
-            ]);
+            // Conditional transition: a concurrent Download webhook may have
+            // moved this row to a terminal state (verified/needs_attention)
+            // between selection and here. Only flag rows that are still
+            // `downloading`, and only notify when this update actually changed
+            // one — never regress a webhook result.
+            $affected = MediaReplacementAttempt::query()
+                ->whereKey($attempt->id)
+                ->where('status', MediaReplacementStatus::Downloading->value)
+                ->update([
+                    'status' => MediaReplacementStatus::NeedsAttention->value,
+                    'failure_reason' => 'download_timeout',
+                    'completed_at' => CarbonImmutable::now(),
+                ]);
+
+            if ($affected !== 1) {
+                continue;
+            }
+
+            $flagged++;
 
             if ($admins->isNotEmpty()) {
-                $title = (string) ($attempt->candidate['title'] ?? 'Media replacement');
-
                 Notification::send($admins, new MediaReplacementStatusChanged(
                     service: (string) ($attempt->target['service'] ?? ''),
-                    title: $title,
+                    title: (string) ($attempt->candidate['title'] ?? 'Media replacement'),
                     message: sprintf('Replacement download stalled for over %d hour(s) and needs manual review; the old file was already removed.', $hours),
                     level: 'warning',
                 ));
             }
         }
 
-        $this->info(sprintf('Flagged %d stuck media replacement attempt(s) as needs_attention.', $stuck->count()));
+        $this->info(sprintf('Flagged %d stuck media replacement attempt(s) as needs_attention.', $flagged));
 
         return self::SUCCESS;
     }

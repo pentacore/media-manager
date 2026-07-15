@@ -173,6 +173,7 @@ final readonly class MediaFileInspector
             )),
             'episode_ids' => $episodeId === null ? [] : [$episodeId],
             'episode_file_ids' => [$fileId],
+            'monitored' => ($episode['monitored'] ?? null) === true,
             'scene_name' => $sceneName,
             'installed_release' => $sceneName,
             'release_group' => $this->nonEmptyString($episodeFile['releaseGroup'] ?? null),
@@ -215,6 +216,7 @@ final readonly class MediaFileInspector
             'movie_id' => $movieId,
             'display_name' => $this->nonEmptyString($movie['title'] ?? null) ?? sprintf('Movie %d', $movieId),
             'movie_file_ids' => [$fileId],
+            'monitored' => ($movie['monitored'] ?? null) === true,
             'scene_name' => $sceneName,
             'installed_release' => $sceneName,
             'release_group' => $this->nonEmptyString($movieFile['releaseGroup'] ?? null),
@@ -321,11 +323,13 @@ final readonly class MediaFileInspector
     /**
      * Identify the `grabbed` history record for the release that produced the
      * currently installed file, so the executor blocklists the right release.
-     * Correlates the import of the installed file (by file id) to its download
-     * id, then to the matching grab. Falls back to the most recent grab. Returns
-     * null when no grab can be resolved. This avoids the false negative of a
-     * global-uniqueness requirement on items that were grabbed more than once
-     * (initial grab + quality upgrades).
+     *
+     * `markHistoryFailed` is destructive (it triggers redownload behaviour), so
+     * this must not guess: it returns a grab id only when it is (a) positively
+     * correlated — the import of the installed file (matched by file id) ties to
+     * a download id that has a matching grab — or (b) truly unique (exactly one
+     * grabbed record for the target). Otherwise it returns null and blocklisting
+     * is skipped, rather than risk failing an unrelated (e.g. later manual) grab.
      *
      * @param  array<string, mixed>  $history
      */
@@ -348,9 +352,7 @@ final readonly class MediaFileInspector
                 && $this->integer($record[$idField] ?? null) === $targetId,
         ));
 
-        // Newest first, so "most recent grab" fallbacks are deterministic.
-        usort($matching, static fn (array $left, array $right): int => (string) ($right['date'] ?? '') <=> (string) ($left['date'] ?? ''));
-
+        // (a) Positive correlation: the installed file's import → download id → grab.
         $downloadId = $this->correlatedDownloadId($matching, $installedFileId, $fileIdField);
 
         if ($downloadId !== null) {
@@ -365,45 +367,49 @@ final readonly class MediaFileInspector
             }
         }
 
+        // (b) Unique fallback: exactly one grabbed record for the target.
+        $grabIds = [];
+
         foreach ($matching as $record) {
             if (($record['eventType'] ?? null) === 'grabbed') {
                 $id = $this->integer($record['id'] ?? null);
 
                 if ($id !== null) {
-                    return $id;
+                    $grabIds[$id] = $id;
                 }
             }
         }
 
-        return null;
+        return count($grabIds) === 1 ? array_values($grabIds)[0] : null;
     }
 
     /**
-     * Download id of the import that produced the installed file, matched by
-     * file id. Falls back to the download id of the most recent import.
+     * Download id of the import that produced the installed file, matched
+     * strictly by file id. Returns null when no import positively identifies the
+     * installed file — never guesses from an uncorrelated import.
      *
-     * @param  array<int, array<string, mixed>>  $records  Newest first.
+     * @param  array<int, array<string, mixed>>  $records
      */
     private function correlatedDownloadId(array $records, ?int $installedFileId, string $fileIdField): ?string
     {
-        $mostRecentImportDownloadId = null;
+        if ($installedFileId === null) {
+            return null;
+        }
 
         foreach ($records as $record) {
             if (($record['eventType'] ?? null) !== 'downloadFolderImported') {
                 continue;
             }
 
-            $downloadId = $this->recordDownloadId($record);
-            $mostRecentImportDownloadId ??= $downloadId;
-
             $recordFileId = $this->integer($record[$fileIdField] ?? ($record['data'][$fileIdField] ?? null));
+            $downloadId = $this->recordDownloadId($record);
 
-            if ($installedFileId !== null && $recordFileId === $installedFileId && $downloadId !== null) {
+            if ($recordFileId === $installedFileId && $downloadId !== null) {
                 return $downloadId;
             }
         }
 
-        return $mostRecentImportDownloadId;
+        return null;
     }
 
     /**

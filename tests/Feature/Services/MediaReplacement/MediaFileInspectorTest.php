@@ -222,6 +222,32 @@ test('blocklists the grab correlated to the installed file, not a global-unique 
     expect($snapshot['original_history_id'])->toBe(11);
 });
 
+test('does not blocklist an uncorrelated grab when multiple grabs exist', function (): void {
+    sonarrInspectorConnection();
+
+    Http::fake([
+        'sonarr.local:8989/api/v3/series/42' => Http::response(['id' => 42, 'title' => 'A', 'seriesType' => 'anime']),
+        'sonarr.local:8989/api/v3/episode?seriesId=42' => Http::response([
+            ['id' => 101, 'seasonNumber' => 1, 'episodeNumber' => 1, 'episodeFileId' => 501],
+        ]),
+        'sonarr.local:8989/api/v3/episodefile/501' => Http::response([
+            'id' => 501, 'sceneName' => 'current', 'mediaInfo' => ['subtitles' => 'Japanese']],
+        ),
+        // Two grabs, and the import does NOT correlate to the installed file
+        // (its episodeFileId differs), so neither grab is positively tied to the
+        // current file and there is no unique grab → must not guess.
+        'sonarr.local:8989/api/v3/history*' => Http::response(['records' => [
+            ['id' => 10, 'eventType' => 'grabbed', 'episodeId' => 101, 'downloadId' => 'DL1', 'date' => '2026-01-01T00:00:00Z'],
+            ['id' => 11, 'eventType' => 'grabbed', 'episodeId' => 101, 'downloadId' => 'DL2', 'date' => '2026-02-01T00:00:00Z'],
+            ['id' => 12, 'eventType' => 'downloadFolderImported', 'episodeId' => 101, 'downloadId' => 'DL3', 'episodeFileId' => 999, 'date' => '2026-02-01T01:00:00Z'],
+        ]]),
+    ]);
+
+    $snapshot = resolve(MediaFileInspector::class)->inspect('sonarr', 42, seasonNumber: 1, episodeNumber: 1);
+
+    expect($snapshot['original_history_id'])->toBeNull();
+});
+
 test('returns ambiguity data when no episode matches the selector', function (): void {
     sonarrInspectorConnection();
 

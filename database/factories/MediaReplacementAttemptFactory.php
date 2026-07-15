@@ -30,6 +30,8 @@ class MediaReplacementAttemptFactory extends Factory
             'candidate' => ['title' => 'Show S01E01 CR', 'confidence' => 98],
             'required_languages' => ['eng'],
             'download_id' => null,
+            'grab_accepted_at' => null,
+            'was_monitored' => null,
             'verification' => null,
             'failure_reason' => null,
             'started_at' => null,

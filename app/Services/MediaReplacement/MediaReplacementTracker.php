@@ -104,9 +104,33 @@ final readonly class MediaReplacementTracker
             $verification = ['required' => $required, 'found' => $found, 'missing' => $missing];
             $verified = ($snapshot['ambiguous'] ?? false) !== true && $missing === [];
 
-            // The replacement imported, so restore monitoring the executor
-            // suspended to suppress the arr's auto-redownload search.
-            $this->remonitorTarget($serviceConnection, is_array($attempt->target) ? $attempt->target : []);
+            // The replacement imported, so restore the ORIGINAL monitoring state
+            // the executor suspended. Only when the target was originally
+            // monitored — never start monitoring media that was unmonitored.
+            $restored = $attempt->was_monitored === true
+                ? $this->remonitorTarget($serviceConnection, is_array($attempt->target) ? $attempt->target : [])
+                : true;
+
+            // A verified import whose monitoring could not be restored must not
+            // be reported as a clean success — surface it for manual review so
+            // the target is not silently left unmonitored.
+            if ($verified && ! $restored) {
+                $attempt->update([
+                    'status' => MediaReplacementStatus::NeedsAttention,
+                    'verification' => $verification,
+                    'completed_at' => now(),
+                    'failure_reason' => 'restore_monitoring_failed',
+                ]);
+
+                $this->notify(
+                    $serviceConnection,
+                    $attempt,
+                    'warning',
+                    'Replacement verified but monitoring could not be restored; needs manual review.',
+                );
+
+                return;
+            }
 
             $attempt->update([
                 'status' => $verified ? MediaReplacementStatus::Verified : MediaReplacementStatus::NeedsAttention,
@@ -302,21 +326,16 @@ final readonly class MediaReplacementTracker
     }
 
     /**
-     * Replacement tracking is best-effort and must degrade gracefully: it is
-     * wired into webhook handlers ahead of pre-existing must-run side effects
-     * (Emby library scan, markProcessed, cache busting, intervention badge), so
-     * a transient arr-API failure here must NOT tear down the rest of webhook
-     * processing. Log and swallow; the scheduled reconciliation sweep flags any
-     * attempt left stuck in `downloading` as `needs_attention`.
-     */
-    /**
      * Restore monitoring on the target after the replacement imported. The
      * executor unmonitors it before blocklisting to suppress the arr's
-     * auto-redownload search; this puts it back. Best-effort.
+     * auto-redownload search; this puts it back.
+     *
+     * Returns whether restoration succeeded so the caller can avoid reporting a
+     * verified-but-unmonitored target as a clean success.
      *
      * @param  array<string, mixed>  $target
      */
-    private function remonitorTarget(ServiceConnection $serviceConnection, array $target): void
+    private function remonitorTarget(ServiceConnection $serviceConnection, array $target): bool
     {
         try {
             if (mb_strtolower(trim((string) ($target['service'] ?? ''))) === 'radarr') {
@@ -326,22 +345,34 @@ final readonly class MediaReplacementTracker
                     new RadarrClient($serviceConnection)->setMovieMonitored($movieId, true);
                 }
 
-                return;
+                return true;
             }
 
-            $episodeIds = array_values(array_map('intval', is_array($target['episode_ids'] ?? null) ? $target['episode_ids'] : []));
+            $episodeIds = array_values(array_map(intval(...), is_array($target['episode_ids'] ?? null) ? $target['episode_ids'] : []));
 
             if ($episodeIds !== []) {
                 new SonarrClient($serviceConnection)->setEpisodesMonitored($episodeIds, true);
             }
+
+            return true;
         } catch (Throwable $throwable) {
             Log::warning('Media replacement could not restore monitoring after import.', [
                 'service_connection_id' => $serviceConnection->id,
                 'exception' => $throwable::class,
             ]);
+
+            return false;
         }
     }
 
+    /**
+     * Tracking is best-effort and must degrade gracefully: it is wired into
+     * webhook handlers ahead of pre-existing must-run side effects (Emby library
+     * scan, markProcessed, cache busting, intervention badge), so a transient
+     * arr-API failure here must NOT tear down the rest of webhook processing.
+     * Log and swallow; the reconciliation sweep flags any attempt left stuck in
+     * `downloading` as `needs_attention`.
+     */
     private function guarded(callable $callback): void
     {
         try {
