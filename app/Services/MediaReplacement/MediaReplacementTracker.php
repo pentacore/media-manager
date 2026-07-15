@@ -4,7 +4,10 @@ declare(strict_types=1);
 
 namespace App\Services\MediaReplacement;
 
+use App\Cache\Services\RadarrCache;
+use App\Cache\Services\SonarrCache;
 use App\Enums\MediaReplacementStatus;
+use App\Enums\ServiceType;
 use App\Enums\UserRole;
 use App\Models\MediaReplacementAttempt;
 use App\Models\ServiceConnection;
@@ -90,6 +93,13 @@ final readonly class MediaReplacementTracker
                 return;
             }
 
+            // Bust the connection's ARR cache BEFORE re-inspecting: the webhook
+            // handler only busts it after this runs, so a cached
+            // getSeries/getEpisodes/getMovie would otherwise return the
+            // pre-replacement file id/subtitles and falsely verify (or 404 on)
+            // the old file during a fast webhook-during-delete interleave.
+            $this->bustConnectionCache($serviceConnection);
+
             $snapshot = $this->mediaFileInspector->inspectFromSnapshot(
                 is_array($attempt->target) ? $attempt->target : [],
                 $serviceConnection,
@@ -102,7 +112,7 @@ final readonly class MediaReplacementTracker
             $missing = array_values(array_diff($required, $found));
 
             $verification = ['required' => $required, 'found' => $found, 'missing' => $missing];
-            $verified = ($snapshot['ambiguous'] ?? false) !== true && $missing === [];
+            $subtitlesOk = ($snapshot['ambiguous'] ?? false) !== true && $missing === [];
 
             // The replacement imported, so restore the ORIGINAL monitoring state
             // the executor suspended. Only when the target was originally
@@ -111,41 +121,28 @@ final readonly class MediaReplacementTracker
                 ? $this->remonitorTarget($serviceConnection, is_array($attempt->target) ? $attempt->target : [])
                 : true;
 
-            // A verified import whose monitoring could not be restored must not
-            // be reported as a clean success — surface it for manual review so
-            // the target is not silently left unmonitored.
-            if ($verified && ! $restored) {
-                $attempt->update([
-                    'status' => MediaReplacementStatus::NeedsAttention,
-                    'verification' => $verification,
-                    'completed_at' => now(),
-                    'failure_reason' => 'restore_monitoring_failed',
-                ]);
-
-                $this->notify(
-                    $serviceConnection,
-                    $attempt,
-                    'warning',
-                    'Replacement verified but monitoring could not be restored; needs manual review.',
-                );
-
-                return;
-            }
+            // A clean success needs BOTH the required subtitles present AND (if
+            // the executor suspended it) monitoring restored. Either failing —
+            // independently — must be recorded in the terminal state and the
+            // notification so neither is silently dropped.
+            $ok = $subtitlesOk && $restored;
+            $reasons = array_values(array_filter([
+                $subtitlesOk ? null : 'imported_subtitles_missing_required_language',
+                $restored ? null : 'restore_monitoring_failed',
+            ]));
 
             $attempt->update([
-                'status' => $verified ? MediaReplacementStatus::Verified : MediaReplacementStatus::NeedsAttention,
+                'status' => $ok ? MediaReplacementStatus::Verified : MediaReplacementStatus::NeedsAttention,
                 'verification' => $verification,
                 'completed_at' => now(),
-                'failure_reason' => $verified ? null : 'imported_subtitles_missing_required_language',
+                'failure_reason' => $ok ? null : implode(',', $reasons),
             ]);
 
             $this->notify(
                 $serviceConnection,
                 $attempt,
-                $verified ? 'info' : 'warning',
-                $verified
-                    ? 'Replacement verified: all required subtitles are present.'
-                    : sprintf('Replacement imported but missing subtitles: %s.', implode(', ', $missing)),
+                $ok ? 'info' : 'warning',
+                $this->verificationMessage($subtitlesOk, $restored, $missing),
             );
         });
     }
@@ -206,9 +203,23 @@ final readonly class MediaReplacementTracker
      */
     private function attemptsByDownloadId(ServiceConnection $serviceConnection, string $downloadId): Collection
     {
-        return $this->nonTerminalAttempts($serviceConnection)->filter(
-            static fn (MediaReplacementAttempt $mediaReplacementAttempt): bool => $mediaReplacementAttempt->download_id === $downloadId,
-        )->values();
+        // Non-terminal attempts, plus attempts the reconciliation sweep timed
+        // out (needs_attention / download_timeout): a late Download webhook must
+        // still be able to verify and remonitor a download that finished after
+        // the timeout, rather than being permanently excluded.
+        return MediaReplacementAttempt::query()
+            ->where('service_connection_id', $serviceConnection->id)
+            ->where('download_id', $downloadId)
+            ->where(function ($query): void {
+                $query->whereNotIn('status', array_map(
+                    static fn (MediaReplacementStatus $status): string => $status->value,
+                    self::TERMINAL_STATUSES,
+                ))->orWhere(function ($timedOut): void {
+                    $timedOut->where('status', MediaReplacementStatus::NeedsAttention->value)
+                        ->where('failure_reason', 'download_timeout');
+                });
+            })
+            ->get();
     }
 
     /**
@@ -323,6 +334,39 @@ final readonly class MediaReplacementTracker
         return $this->languageNormalizer->normalizeMany(
             array_values(array_filter($languages, is_string(...))),
         );
+    }
+
+    /**
+     * Clear the connection's ARR entity cache so post-import re-inspection reads
+     * fresh (post-replacement) file metadata rather than the cached pre-grab file.
+     */
+    private function bustConnectionCache(ServiceConnection $serviceConnection): void
+    {
+        $serviceConnection->type === ServiceType::Radarr
+            ? new RadarrCache($serviceConnection)->bustAll()
+            : new SonarrCache($serviceConnection)->bustAll();
+    }
+
+    /**
+     * @param  list<string>  $missing
+     */
+    private function verificationMessage(bool $subtitlesOk, bool $restored, array $missing): string
+    {
+        if ($subtitlesOk && $restored) {
+            return 'Replacement verified: all required subtitles are present.';
+        }
+
+        $parts = [];
+
+        if (! $subtitlesOk) {
+            $parts[] = sprintf('missing subtitles: %s', implode(', ', $missing));
+        }
+
+        if (! $restored) {
+            $parts[] = 'monitoring could not be restored';
+        }
+
+        return sprintf('Replacement imported but needs review (%s).', implode('; ', $parts));
     }
 
     /**

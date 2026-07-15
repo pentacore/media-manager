@@ -7,6 +7,7 @@ use App\Models\ActionRequest;
 use App\Models\MediaReplacementAttempt;
 use App\Models\ServiceConnection;
 use App\Services\MediaReplacement\MediaReplacementActions;
+use App\Services\MediaReplacement\MediaReplacementTracker;
 use App\Services\MediaReplacement\ReleaseFingerprint;
 use App\Settings\MediaReplacementSettings;
 use Illuminate\Http\Client\ConnectionException;
@@ -67,13 +68,14 @@ function fakeExecutor(array $opts = []): void
     $grabConnection = $opts['grabConnection'] ?? false;
     $grabStatus = $opts['grabStatus'] ?? ($grabOk ? 201 : 500);
     $deleteOk = $opts['deleteOk'] ?? true;
+    $deleteStatus = $opts['deleteStatus'] ?? ($deleteOk ? 200 : 500);
     $monitorOk = $opts['monitorOk'] ?? true;
     $monitored = $opts['monitored'] ?? true;
     $currentFileId = $opts['currentFileId'] ?? 501;
     $releases = $opts['releases'] ?? [sonarrReplacementRelease()];
     $onDelete = $opts['onDelete'] ?? null;
 
-    Http::fake(function (Request $request) use ($grabConnection, $grabStatus, $deleteOk, $monitorOk, $monitored, $currentFileId, $releases, $onDelete) {
+    Http::fake(function (Request $request) use ($grabConnection, $grabStatus, $deleteStatus, $monitorOk, $monitored, $currentFileId, $releases, $onDelete) {
         $method = $request->method();
         $url = $request->url();
 
@@ -89,7 +91,7 @@ function fakeExecutor(array $opts = []): void
             $method === 'POST' && str_contains($url, '/api/v3/release') => Http::response([], $grabStatus),
             $method === 'GET' && str_contains($url, '/api/v3/release') => Http::response($releases),
             $method === 'PUT' && str_contains($url, '/api/v3/episode/monitor') => Http::response([], $monitorOk ? 200 : 500),
-            $method === 'DELETE' && str_contains($url, '/api/v3/episodefile/') => Http::response([], $deleteOk ? 200 : 500),
+            $method === 'DELETE' && str_contains($url, '/api/v3/episodefile/') => Http::response([], $deleteStatus),
             str_contains($url, '/api/v3/series/42') => Http::response(['id' => 42, 'title' => 'Trusted Anime', 'seriesType' => 'anime']),
             str_contains($url, '/api/v3/episode?') => Http::response([
                 ['id' => 101, 'seasonNumber' => 1, 'episodeNumber' => 1, 'episodeFileId' => $currentFileId, 'monitored' => $monitored],
@@ -333,22 +335,54 @@ test('aborts when the approved connection id no longer resolves', function (): v
     Http::assertNotSent(fn (Request $request): bool => $request->method() === 'POST' && str_contains($request->url(), '/api/v3/release'));
 });
 
-test('does not re-grab a release whose grab was already accepted on a prior run', function (): void {
+test('resumes the interrupted post-grab cleanup without re-grabbing', function (): void {
     fakeExecutor();
     $actionRequest = replaceActionRequest();
 
-    // A prior run grabbed the release, then deletion failed → NeedsAttention with
-    // a durable grab_accepted_at marker. Retry must NOT re-POST the release.
+    // A prior run grabbed the release (durable grab_accepted_at) then died/failed
+    // before completing deletion. Retry must NOT re-POST the release (duplicate
+    // download) but MUST resume and finish the delete/blocklist — not report a
+    // no-op as success.
     MediaReplacementAttempt::factory()->create([
         'action_request_id' => $actionRequest->id,
         'status' => MediaReplacementStatus::NeedsAttention,
         'grab_accepted_at' => now(),
+        'was_monitored' => false,
+        'target' => [
+            'service' => 'sonarr', 'scope' => 'anime', 'series_id' => 42,
+            'episode_ids' => [101], 'episode_file_ids' => [501],
+            'installed_release' => 'Trusted.Anime.S01E01.OLD', 'original_history_id' => 999,
+        ],
     ]);
 
     $result = resolve(MediaReplacementActions::class)->execute($actionRequest);
 
-    expect($result['grab_outcome'])->toBe('already_grabbed');
+    // No duplicate grab, but the interrupted deletion is resumed.
     Http::assertNotSent(fn (Request $request): bool => $request->method() === 'POST' && str_contains($request->url(), '/api/v3/release'));
+    Http::assertSent(fn (Request $request): bool => $request->method() === 'DELETE' && str_contains($request->url(), '/api/v3/episodefile/501'));
+    expect($result['replacement_initiated'])->toBeTrue();
+});
+
+test('resume tolerates an already-deleted file (idempotent delete)', function (): void {
+    fakeExecutor(['deleteStatus' => 404]);
+    $actionRequest = replaceActionRequest();
+
+    MediaReplacementAttempt::factory()->create([
+        'action_request_id' => $actionRequest->id,
+        'status' => MediaReplacementStatus::NeedsAttention,
+        'grab_accepted_at' => now(),
+        'was_monitored' => false,
+        'target' => [
+            'service' => 'sonarr', 'scope' => 'anime', 'series_id' => 42,
+            'episode_ids' => [101], 'episode_file_ids' => [501],
+            'installed_release' => 'Trusted.Anime.S01E01.OLD', 'original_history_id' => 999,
+        ],
+    ]);
+
+    // A 404 on the file delete (already gone) must not fail the resume.
+    $result = resolve(MediaReplacementActions::class)->execute($actionRequest);
+
+    expect($result['replacement_initiated'])->toBeTrue();
 });
 
 test('a retry reuses the existing attempt row instead of hitting a duplicate key', function (): void {
@@ -372,20 +406,27 @@ test('a retry reuses the existing attempt row instead of hitting a duplicate key
         ->and(MediaReplacementAttempt::first()->failure_reason)->toBeNull();
 });
 
-test('does not regress a terminal state a webhook set during execution', function (): void {
-    // Simulate a fast Download webhook that verifies the attempt while the
-    // executor is still deleting the old file.
+test('does not regress a terminal state the real tracker set during execution', function (): void {
+    // Drive the REAL tracker (not a raw DB write) as a fast Download webhook
+    // arriving while the executor is still deleting: it correlates by download
+    // id, busts the cache, re-inspects, and terminalizes the attempt. The
+    // executor must not then write `downloading` back over that terminal state.
     fakeExecutor([
         'onDelete' => function (): void {
-            MediaReplacementAttempt::query()->update(['status' => MediaReplacementStatus::Verified->value]);
+            MediaReplacementAttempt::query()->update(['download_id' => 'DL-INTERLEAVE']);
+            resolve(MediaReplacementTracker::class)->verifyDownload(
+                ServiceConnection::query()->firstOrFail(),
+                ['eventType' => 'Download', 'series' => ['id' => 42], 'downloadId' => 'DL-INTERLEAVE'],
+            );
         },
     ]);
 
     resolve(MediaReplacementActions::class)->execute(replaceActionRequest());
 
-    // The executor must not write `downloading` after the grab, so the
-    // webhook-set `verified` survives.
-    expect(MediaReplacementAttempt::first()->status)->toBe(MediaReplacementStatus::Verified);
+    // The tracker terminalized it (needs_attention: the fixture file still has
+    // only Japanese subtitles vs required English); the executor must not have
+    // regressed it back to downloading.
+    expect(MediaReplacementAttempt::first()->status)->toBe(MediaReplacementStatus::NeedsAttention);
 });
 
 test('marks the attempt needs_attention when deletion fails after a successful grab', function (): void {

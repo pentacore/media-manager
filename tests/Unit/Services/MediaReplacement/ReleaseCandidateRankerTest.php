@@ -241,9 +241,11 @@ test('hard exclusions use the documented first-failing gate precedence', functio
     ],
 ]);
 
-test('eligible season packs remain candidates for non-never policies', function (SeasonPackPolicy $seasonPackPolicy): void {
+test('season packs are recognised but excluded as not-yet-supported under every policy', function (SeasonPackPolicy $seasonPackPolicy): void {
     // A realistic season pack: its episode set is the whole season, a superset
-    // of the single requested episode (101).
+    // of the single requested episode (101). It is recognised (not dropped at
+    // mapping) but excluded, because the executor cannot yet scope a multi-file
+    // pack replacement against the single approved target.
     $result = rcrRanker()->rank(
         [rcrRelease(['fullSeason' => true, 'episodeIds' => [101, 102, 103]])],
         ['eng'],
@@ -252,27 +254,14 @@ test('eligible season packs remain candidates for non-never policies', function 
         $seasonPackPolicy,
     );
 
-    expect($result['candidates'])->toHaveCount(1)
-        ->and($result['candidates'][0]['season_pack'])->toBeTrue()
-        ->and($result['excluded']['season_pack_policy'])->toBe(0);
+    expect($result['candidates'])->toBe([])
+        ->and($result['excluded']['season_pack_policy'])->toBe(1)
+        ->and($result['excluded']['mapping'])->toBe(0);
 })->with([
+    'never' => SeasonPackPolicy::Never,
     'approval required' => SeasonPackPolicy::ApprovalRequired,
     'automatic above threshold' => SeasonPackPolicy::AutomaticAboveThreshold,
 ]);
-
-test('a realistic season pack (superset episode set) is gated by policy, not dropped at mapping', function (): void {
-    $pack = rcrRelease(['fullSeason' => true, 'episodeIds' => [101, 102, 103]]);
-    $target = rcrSonarrTarget(['episode_ids' => [101]]);
-
-    $never = rcrRanker()->rank([$pack], ['eng'], [rcrRule()], $target, SeasonPackPolicy::Never);
-    $approval = rcrRanker()->rank([$pack], ['eng'], [rcrRule()], $target, SeasonPackPolicy::ApprovalRequired);
-
-    expect($never['candidates'])->toBe([])
-        ->and($never['excluded']['season_pack_policy'])->toBe(1)
-        ->and($never['excluded']['mapping'])->toBe(0)
-        ->and($approval['candidates'])->toHaveCount(1)
-        ->and($approval['candidates'][0]['season_pack'])->toBeTrue();
-});
 
 test('a season pack that does not cover the requested episode is excluded at mapping', function (): void {
     $result = rcrRanker()->rank(

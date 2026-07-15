@@ -111,7 +111,14 @@ final readonly class ReleaseCandidateRanker
 
             $seasonPack = ($release['fullSeason'] ?? null) === true;
 
-            if ($seasonPack && $seasonPackPolicy === SeasonPackPolicy::Never) {
+            // Season packs are not yet selectable: the approved target is the
+            // single inspected episode/file, but importing a pack replaces every
+            // mapped episode — a scope the executor cannot currently revalidate,
+            // delete, unmonitor, or verify. Until the full affected set can be
+            // inspected and snapshotted, packs are recognised (via the superset
+            // match above) but excluded here regardless of the season-pack
+            // policy, rather than acting on an unverified multi-file scope.
+            if ($seasonPack) {
                 $excluded['season_pack_policy']++;
 
                 continue;

@@ -6,7 +6,6 @@ use App\Ai\Risk;
 use App\Ai\Tools\Arr\ReplaceMediaFileTool;
 use App\Enums\AiMode;
 use App\Models\ActionRequest;
-use App\Models\ActionTypeConfig;
 use App\Models\ServiceConnection;
 use App\Services\MediaReplacement\ReplacementCandidateFinder;
 use App\Settings\AiSettings;
@@ -158,17 +157,18 @@ test('automatic selection queues when the fingerprint matches the automatic cand
     expect(ActionRequest::first()->payload['selection_mode'])->toBe('automatic');
 });
 
-test('an approval_required season pack forces approval even when the rule auto-executes', function (): void {
-    ActionTypeConfig::where('type', 'replace_media_file')->update(['requires_approval' => false]);
+test('a season pack is rejected because packs are not yet selectable', function (): void {
+    // Season packs are recognised by the ranker but excluded (the executor
+    // cannot yet scope a multi-file pack replacement), so no candidate matches
+    // and the destructive tool must not queue anything.
     fakeReplaceableTarget(['fullSeason' => true]);
-    $fingerprint = candidateFingerprint();
 
     $result = json_decode((new ReplaceMediaFileTool)->handle(new Request([
         'service' => 'sonarr', 'item_id' => 42, 'season_number' => 1, 'episode_number' => 1,
-        'absolute_episode_number' => null, 'candidate_fingerprint' => $fingerprint,
+        'absolute_episode_number' => null, 'candidate_fingerprint' => 'any-fingerprint',
         'selection_mode' => 'manual', 'required_languages' => ['English'], 'reason' => 'x',
     ])), true, flags: JSON_THROW_ON_ERROR);
 
-    expect($result['queued'])->toBeTrue()
-        ->and($result['requires_approval'])->toBeTrue();
+    expect($result)->toHaveKey('error')
+        ->and(ActionRequest::count())->toBe(0);
 });
