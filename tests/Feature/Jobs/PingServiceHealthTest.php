@@ -67,9 +67,12 @@ test('Bazarr health checks bypass cached system status', function (): void {
 
     expect($connection->fresh()->version)->toBe('1.6.1');
 
-    Http::assertSent(fn (Request $request): bool => $request->url() === 'http://bazarr.local:6767/api/system/status'
-        && $request->hasHeader('X-API-KEY', 'bazarr-secret'));
-    Http::assertSentCount(2);
+    $authenticatedStatusRequests = Http::recorded(
+        fn (Request $request): bool => $request->url() === 'http://bazarr.local:6767/api/system/status'
+            && $request->hasHeader('X-API-KEY', 'bazarr-secret'),
+    );
+
+    expect($authenticatedStatusRequests)->toHaveCount(2);
 });
 
 test('marks healthy and updates version on success', function (): void {
