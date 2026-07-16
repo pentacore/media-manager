@@ -1,10 +1,10 @@
-# Production stack — deploy with: `docker compose -f docker/production/compose.yaml --env-file .env up -d`
+# Production stack — deploy from docker/production with: `docker compose --env-file .env up -d`
 #
 # Image is built by .github/workflows/docker.yml and pushed to GHCR. Override with IMAGE env var.
 # All app roles share one image; CONTAINER_ROLE selects entrypoint behavior.
 # Reverse proxy (traefik/caddy/nginx) terminates TLS in front of `web` and `reverb` services.
 #
-# One-shot migration container runs first; web/queue/scheduler/reverb start after it exits 0.
+# One-shot migration container runs first; web/queue/scheduler/ssr/reverb start after it exits 0.
 
 x-app: &app
   image: ${IMAGE:-ghcr.io/pentacore/media-manager:latest}
@@ -84,6 +84,11 @@ services:
       CONTAINER_ROLE: web
     ports:
       - '${WEB_PORT:-8080}:8080'
+
+  ssr:
+    <<: *app
+    environment:
+      CONTAINER_ROLE: ssr
 
   queue:
     <<: *app

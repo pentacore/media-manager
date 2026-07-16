@@ -17,7 +17,13 @@ export default defineConfig({
             input: ['resources/css/app.css', 'resources/js/app.ts'],
             refresh: true,
         }),
-        inertia(),
+        inertia({
+            ssr: {
+                entry: 'resources/js/ssr.ts',
+                host: '0.0.0.0',
+                port: 13714,
+            },
+        }),
         tailwindcss(),
         vue({
             template: {

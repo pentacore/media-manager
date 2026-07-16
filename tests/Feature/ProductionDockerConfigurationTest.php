@@ -36,3 +36,57 @@ test('production migrate role uses isolated migrations', function (): void {
 
     expect($migrateBlock[1])->toContain('php artisan migrate --force --isolated');
 });
+
+test('production frontend build creates an Inertia SSR bundle', function (): void {
+    $package = json_decode(
+        (string) file_get_contents(base_path('package.json')),
+        true,
+        flags: JSON_THROW_ON_ERROR,
+    );
+    $viteConfig = file_get_contents(base_path('vite.config.ts'));
+
+    expect($package['scripts']['build'])->toBe('vite build && vite build --ssr')
+        ->and(base_path('resources/js/ssr.ts'))->toBeFile()
+        ->and($viteConfig)->toContain("entry: 'resources/js/ssr.ts'")
+        ->and($viteConfig)->toContain("host: '0.0.0.0'")
+        ->and($viteConfig)->toContain('port: 13714');
+});
+
+test('production stack runs SSR as an internal graceful-degradation service', function (): void {
+    $dockerfile = file_get_contents(base_path('docker/production/Dockerfile'));
+    $entrypoint = file_get_contents(base_path('docker/production/entrypoint.sh'));
+    $healthcheck = file_get_contents(base_path('docker/production/healthcheck.sh'));
+    $compose = file_get_contents(base_path('docker/production/compose.yaml'));
+    $environment = file_get_contents(base_path('docker/production/.env.example'));
+
+    preg_match('/\s+ssr\)(.*?)\s+;;/s', (string) $entrypoint, $ssrEntrypointBlock);
+    preg_match('/\s+ssr\)(.*?)\s+;;/s', (string) $healthcheck, $ssrHealthcheckBlock);
+    preg_match('/\n  ssr:\n(.*?)(?=\n  [a-z][a-z-]+:|\nvolumes:)/s', (string) $compose, $ssrServiceBlock);
+    preg_match('/\n  web:\n(.*?)(?=\n  [a-z][a-z-]+:|\nvolumes:)/s', (string) $compose, $webServiceBlock);
+
+    $ssrEntrypoint = $ssrEntrypointBlock[1] ?? '';
+    $ssrHealthcheck = $ssrHealthcheckBlock[1] ?? '';
+    $ssrService = $ssrServiceBlock[1] ?? '';
+    $webService = $webServiceBlock[1] ?? '';
+
+    expect($dockerfile)->toMatch('/FROM dunglas\/frankenphp:.*?RUN apk add --no-cache\s+.*?nodejs/s')
+        ->and($ssrEntrypoint)->toContain('php artisan inertia:start-ssr')
+        ->and($ssrHealthcheck)->toContain('php artisan inertia:check-ssr')
+        ->and($ssrService)->toContain('CONTAINER_ROLE: ssr')
+        ->and($ssrService)->not->toContain('ports:')
+        ->and($webService)->not->toBeEmpty()
+        ->and($webService)->not->toContain('ssr:')
+        ->and($environment)->toContain('INERTIA_SSR_ENABLED=true')
+        ->and($environment)->toContain('INERTIA_SSR_URL=http://ssr:13714')
+        ->and($environment)->toContain('INERTIA_SSR_ENSURE_RUNTIME_EXISTS=true');
+});
+
+test('production documentation explains SSR rollout and rollback', function (): void {
+    $readme = file_get_contents(base_path('README.md'));
+
+    expect($readme)->toContain('## Production deployment')
+        ->and($readme)->toContain('docker compose --env-file .env up -d')
+        ->and($readme)->toContain('php artisan inertia:check-ssr')
+        ->and($readme)->toContain('docker compose --env-file .env restart ssr')
+        ->and($readme)->toContain('INERTIA_SSR_ENABLED=false');
+});

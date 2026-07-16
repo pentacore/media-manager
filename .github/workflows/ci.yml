@@ -216,8 +216,26 @@ jobs:
       # Browser tests drive a real Chromium via Playwright. Running them under
       # --parallel starves the box and intermittently trips Playwright's 15s
       # navigation timeout on page load. Run them serially, on their own.
-      - name: Run Pest (browser)
-        run: vendor/bin/pest --compact --testsuite=Browser
+      - name: Run Pest (browser with SSR)
+        run: |
+          INERTIA_SSR_ENABLED=true php artisan inertia:start-ssr > /tmp/inertia-ssr.log 2>&1 &
+          SSR_PID=$!
+          trap 'kill "$SSR_PID" 2>/dev/null || true; cat /tmp/inertia-ssr.log' EXIT
+
+          for attempt in $(seq 1 30); do
+            if php artisan inertia:check-ssr > /dev/null 2>&1; then
+              break
+            fi
+
+            if [ "$attempt" -eq 30 ]; then
+              echo "Inertia SSR failed to become healthy." >&2
+              exit 1
+            fi
+
+            sleep 1
+          done
+
+          INERTIA_SSR_ENABLED=true INERTIA_SSR_THROW_ON_ERROR=true vendor/bin/pest --compact --testsuite=Browser
 
   octane-smoke:
     name: Octane smoke test
