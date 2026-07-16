@@ -73,6 +73,7 @@ test('Bazarr health checks bypass cached system status', function (): void {
     );
 
     expect($authenticatedStatusRequests)->toHaveCount(2);
+    Http::assertSentCount(2);
 });
 
 test('marks healthy and updates version on success', function (): void {
