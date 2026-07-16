@@ -137,6 +137,36 @@ test('attempt summaries accept only bounded scalar objects', function (): void {
     expect($attempt->fresh()->summary)->toBe($summary);
 });
 
+test('nullable compact JSON attributes round trip', function (): void {
+    $case = SubtitleCase::factory()->create(['evidence' => null]);
+    $attempt = SubtitleCaseAttempt::factory()->for($case)->create(['summary' => null]);
+
+    expect($case->fresh()->evidence)->toBeNull()
+        ->and($attempt->fresh()->summary)->toBeNull();
+});
+
+test('empty attempt summaries round trip through the array cast', function (): void {
+    $attempt = SubtitleCaseAttempt::factory()->create(['summary' => []]);
+
+    expect($attempt->fresh()->summary)->toBe([]);
+});
+
+test('non JSON encodable compact records are rejected at assignment', function (string $attribute, string $message): void {
+    $operation = match ($attribute) {
+        'evidence' => fn (): SubtitleCase => SubtitleCase::factory()->create([
+            'evidence' => ['score' => NAN],
+        ]),
+        'summary' => fn (): SubtitleCaseAttempt => SubtitleCaseAttempt::factory()->create([
+            'summary' => ['score' => NAN],
+        ]),
+    };
+
+    expect($operation)->toThrow(InvalidArgumentException::class, $message);
+})->with([
+    'case evidence' => ['evidence', 'Subtitle case evidence must be JSON encodable.'],
+    'attempt summary' => ['summary', 'Subtitle case attempt summary must be JSON encodable.'],
+]);
+
 test('oversized attempt summaries are rejected at assignment', function (): void {
     $encodedOverhead = strlen(json_encode(['note' => ''], JSON_THROW_ON_ERROR));
 
@@ -279,10 +309,9 @@ test('nullable audit links survive deleted users and action requests', function 
         ->and($upload->fresh()->user_id)->toBeNull();
 });
 
-test('cases with durable attempts and upload cleanup metadata cannot be deleted directly', function (): void {
+test('a case with a :dataset cannot be deleted directly', function (string $childModel): void {
     $case = SubtitleCase::factory()->create();
-    $attempt = SubtitleCaseAttempt::factory()->for($case)->create();
-    $upload = SubtitleUpload::factory()->for($case)->create();
+    $child = $childModel::factory()->for($case)->create();
     $caught = null;
 
     try {
@@ -294,6 +323,8 @@ test('cases with durable attempts and upload cleanup metadata cannot be deleted 
     expect($caught)->toBeInstanceOf(QueryException::class)
         ->and((string) $caught?->getCode())->toBe('23001');
     $this->assertModelExists($case);
-    $this->assertModelExists($attempt);
-    $this->assertModelExists($upload);
-});
+    $this->assertModelExists($child);
+})->with([
+    'subtitle attempt' => SubtitleCaseAttempt::class,
+    'subtitle upload' => SubtitleUpload::class,
+]);
