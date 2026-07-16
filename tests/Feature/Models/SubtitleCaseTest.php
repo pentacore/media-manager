@@ -161,7 +161,18 @@ test('non JSON encodable compact records are rejected at assignment', function (
         ]),
     };
 
-    expect($operation)->toThrow(InvalidArgumentException::class, $message);
+    $caught = null;
+
+    try {
+        $operation();
+    } catch (InvalidArgumentException $invalidArgumentException) {
+        $caught = $invalidArgumentException;
+    }
+
+    expect($caught)->toBeInstanceOf(InvalidArgumentException::class)
+        ->and($caught?->getMessage())->toBe($message)
+        ->and($caught?->getCode())->toBe(0)
+        ->and($caught?->getPrevious())->toBeInstanceOf(JsonException::class);
 })->with([
     'case evidence' => ['evidence', 'Subtitle case evidence must be JSON encodable.'],
     'attempt summary' => ['summary', 'Subtitle case attempt summary must be JSON encodable.'],

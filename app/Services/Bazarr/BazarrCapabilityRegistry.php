@@ -101,6 +101,7 @@ final class BazarrCapabilityRegistry
             if (! is_array($pathItem)) {
                 continue;
             }
+
             if ($pathItem !== [] && array_is_list($pathItem)) {
                 continue;
             }
@@ -138,6 +139,7 @@ final class BazarrCapabilityRegistry
         if (! is_array($responses) || $responses === [] || array_is_list($responses)) {
             return false;
         }
+
         return array_any($responses, fn($response, int|string $status): bool => $this->isResponseStatus($status) && $this->isResponseDefinition($response));
     }
 

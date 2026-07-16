@@ -108,7 +108,7 @@ class SubtitleCaseAttempt extends Model
         try {
             $encoded = $value === [] ? '{}' : json_encode($value, JSON_THROW_ON_ERROR);
         } catch (JsonException $jsonException) {
-            throw new InvalidArgumentException('Subtitle case attempt summary must be JSON encodable.', $jsonException->getCode(), previous: $jsonException);
+            throw new InvalidArgumentException('Subtitle case attempt summary must be JSON encodable.', code: 0, previous: $jsonException);
         }
 
         throw_if(strlen($encoded) > self::MAX_SUMMARY_BYTES, InvalidArgumentException::class, 'Subtitle case attempt summary cannot exceed 4000 encoded bytes.');

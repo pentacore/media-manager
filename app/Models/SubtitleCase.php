@@ -150,7 +150,7 @@ class SubtitleCase extends Model
         try {
             $encoded = json_encode($value, JSON_THROW_ON_ERROR);
         } catch (JsonException $jsonException) {
-            throw new InvalidArgumentException('Subtitle case evidence must be JSON encodable.', $jsonException->getCode(), previous: $jsonException);
+            throw new InvalidArgumentException('Subtitle case evidence must be JSON encodable.', code: 0, previous: $jsonException);
         }
 
         throw_if(strlen($encoded) > self::MAX_EVIDENCE_BYTES, InvalidArgumentException::class, 'Subtitle case evidence cannot exceed 4000 encoded bytes.');
