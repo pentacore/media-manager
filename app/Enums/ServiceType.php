@@ -12,6 +12,7 @@ enum ServiceType: string
 
     case Sonarr = 'sonarr';
     case Radarr = 'radarr';
+    case Bazarr = 'bazarr';
     case Emby = 'emby';
     case Seerr = 'seerr';
     case Prowlarr = 'prowlarr';
@@ -23,6 +24,7 @@ enum ServiceType: string
         return match ($this) {
             self::Sonarr => 'Sonarr',
             self::Radarr => 'Radarr',
+            self::Bazarr => 'Bazarr',
             self::Emby => 'Emby',
             self::Seerr => 'Seerr',
             self::Prowlarr => 'Prowlarr',

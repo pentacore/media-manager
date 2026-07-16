@@ -54,6 +54,14 @@ class ServiceConnectionFactory extends Factory
         ]);
     }
 
+    public function bazarr(): static
+    {
+        return $this->state(fn (array $attributes): array => [
+            'type' => ServiceType::Bazarr,
+            'name' => 'Bazarr',
+        ]);
+    }
+
     public function emby(): static
     {
         return $this->state(fn (array $attributes): array => [

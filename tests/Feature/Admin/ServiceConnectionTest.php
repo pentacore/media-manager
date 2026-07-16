@@ -1,5 +1,6 @@
 <?php
 
+use App\Enums\ServiceType;
 use App\Jobs\FetchLatestServiceVersion;
 use App\Jobs\PingServiceHealth;
 use App\Models\ServiceConnection;
@@ -7,6 +8,13 @@ use App\Models\User;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Queue;
 use Inertia\Testing\AssertableInertia;
+
+test('Bazarr is an available service connection type', function (): void {
+    expect(ServiceType::Bazarr->value)->toBe('bazarr')
+        ->and(ServiceType::Bazarr->label())->toBe('Bazarr')
+        ->and(ServiceType::Bazarr->supportsWebhookConfiguration())->toBeFalse()
+        ->and(ServiceConnection::factory()->bazarr()->make()->type)->toBe(ServiceType::Bazarr);
+});
 
 test('guests cannot access service connections', function (): void {
     $this->get(route('admin.connections.index'))
