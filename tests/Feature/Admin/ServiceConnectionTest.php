@@ -58,6 +58,37 @@ test('admin can view create form', function (): void {
         );
 });
 
+test('create form exposes only active Arr connections in a safe ordered shape', function (): void {
+    $admin = User::factory()->admin()->create();
+    $sonarr = ServiceConnection::factory()->sonarr()->create([
+        'name' => 'Zulu Sonarr',
+        'api_key' => 'sonarr-secret',
+        'webhook_token' => 'sonarr-webhook-secret',
+    ]);
+    $radarr = ServiceConnection::factory()->radarr()->create([
+        'name' => 'Alpha Radarr',
+        'api_key' => 'radarr-secret',
+        'webhook_token' => 'radarr-webhook-secret',
+    ]);
+    ServiceConnection::factory()->sonarr()->inactive()->create(['name' => 'Inactive Sonarr']);
+    ServiceConnection::factory()->bazarr()->create(['name' => 'Bazarr']);
+    ServiceConnection::factory()->emby()->create(['name' => 'Emby']);
+
+    $this->actingAs($admin)
+        ->get(route('admin.connections.create'))
+        ->assertOk()
+        ->assertInertia(fn (AssertableInertia $assertableInertia): AssertableInertia => $assertableInertia
+            ->where('arrConnections', [
+                ['id' => $radarr->id, 'type' => ServiceType::Radarr->value, 'name' => 'Alpha Radarr'],
+                ['id' => $sonarr->id, 'type' => ServiceType::Sonarr->value, 'name' => 'Zulu Sonarr'],
+            ])
+            ->missing('arrConnections.0.api_key')
+            ->missing('arrConnections.0.webhook_token')
+            ->missing('arrConnections.1.api_key')
+            ->missing('arrConnections.1.webhook_token')
+        );
+});
+
 test('admin can store a service connection', function (): void {
     $admin = User::factory()->admin()->create();
 
@@ -219,6 +250,54 @@ test('admin can view edit form', function (): void {
             ->missing('connection.webhook_token')
             ->where('connection.api_key_set', true)
             ->where('connection.webhook_token_set', true)
+            ->where('connection.sonarr_connection_id', null)
+            ->where('connection.radarr_connection_id', null)
+        );
+});
+
+test('Bazarr edit form exposes safe Arr options and selected mappings', function (): void {
+    $admin = User::factory()->admin()->create();
+    $bazarr = ServiceConnection::factory()->bazarr()->create([
+        'api_key' => 'bazarr-secret',
+        'webhook_token' => 'bazarr-webhook-secret',
+    ]);
+    $sonarr = ServiceConnection::factory()->sonarr()->create([
+        'name' => 'Zulu Sonarr',
+        'api_key' => 'sonarr-secret',
+        'webhook_token' => 'sonarr-webhook-secret',
+    ]);
+    $radarr = ServiceConnection::factory()->radarr()->create([
+        'name' => 'Alpha Radarr',
+        'api_key' => 'radarr-secret',
+        'webhook_token' => 'radarr-webhook-secret',
+    ]);
+    ServiceConnection::factory()->radarr()->inactive()->create(['name' => 'Inactive Radarr']);
+    ServiceConnection::factory()->prowlarr()->create(['name' => 'Prowlarr']);
+    BazarrServiceLink::factory()->sonarr()->create([
+        'bazarr_connection_id' => $bazarr->id,
+        'related_connection_id' => $sonarr->id,
+    ]);
+    BazarrServiceLink::factory()->radarr()->create([
+        'bazarr_connection_id' => $bazarr->id,
+        'related_connection_id' => $radarr->id,
+    ]);
+
+    $this->actingAs($admin)
+        ->get(route('admin.connections.edit', $bazarr))
+        ->assertOk()
+        ->assertInertia(fn (AssertableInertia $assertableInertia): AssertableInertia => $assertableInertia
+            ->where('arrConnections', [
+                ['id' => $radarr->id, 'type' => ServiceType::Radarr->value, 'name' => 'Alpha Radarr'],
+                ['id' => $sonarr->id, 'type' => ServiceType::Sonarr->value, 'name' => 'Zulu Sonarr'],
+            ])
+            ->where('connection.sonarr_connection_id', $sonarr->id)
+            ->where('connection.radarr_connection_id', $radarr->id)
+            ->missing('connection.api_key')
+            ->missing('connection.webhook_token')
+            ->missing('arrConnections.0.api_key')
+            ->missing('arrConnections.0.webhook_token')
+            ->missing('arrConnections.1.api_key')
+            ->missing('arrConnections.1.webhook_token')
         );
 });
 
@@ -552,8 +631,8 @@ test('a concurrent subtitle case reference is handled during connection deletion
     $connection = ServiceConnection::factory()->sonarr()->create();
     $bazarr = ServiceConnection::factory()->bazarr()->create();
 
-    ServiceConnection::deleting(function (ServiceConnection $deletingConnection) use ($bazarr, $connection): void {
-        if (! $deletingConnection->is($connection)) {
+    ServiceConnection::deleting(function (ServiceConnection $serviceConnection) use ($bazarr, $connection): void {
+        if (! $serviceConnection->is($connection)) {
             return;
         }
 

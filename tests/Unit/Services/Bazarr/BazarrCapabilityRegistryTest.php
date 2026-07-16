@@ -104,10 +104,10 @@ function completeBazarrSwagger(
     ];
 }
 
-function capabilityBazarrConnection(?int $id = 91, ServiceType $type = ServiceType::Bazarr): ServiceConnection
+function capabilityBazarrConnection(?int $id = 91, ServiceType $serviceType = ServiceType::Bazarr): ServiceConnection
 {
     $connection = ServiceConnection::factory()->make([
-        'type' => $type,
+        'type' => $serviceType,
         'url' => 'http://bazarr.local:6767',
         'api_key' => 'discovery-secret',
     ]);
@@ -359,7 +359,7 @@ test('unavailable or malformed Swagger falls back to bounded safe reads', functi
     ));
 
     $fallbackPaths = collect(Http::recorded())
-        ->map(fn (array $record): string => (string) parse_url($record[0]->url(), PHP_URL_PATH))
+        ->map(fn (array $record): string => (string) parse_url((string) $record[0]->url(), PHP_URL_PATH))
         ->filter(fn (string $path): bool => $path !== '/api/swagger.json')
         ->values()
         ->all();
@@ -390,11 +390,11 @@ test('fallback probes exact bounded query parameters without unsafe requests', f
 
     expect($fallbackRequests)->toHaveCount(5);
 
-    foreach ($fallbackRequests as $request) {
-        $path = (string) parse_url($request->url(), PHP_URL_PATH);
-        parse_str((string) parse_url($request->url(), PHP_URL_QUERY), $query);
+    foreach ($fallbackRequests as $fallbackRequest) {
+        $path = (string) parse_url($fallbackRequest->url(), PHP_URL_PATH);
+        parse_str((string) parse_url($fallbackRequest->url(), PHP_URL_QUERY), $query);
 
-        expect($request->method())->toBe('GET');
+        expect($fallbackRequest->method())->toBe('GET');
 
         if ($path === '/api/system/languages/profiles') {
             expect($query)->toBe([]);
@@ -462,7 +462,7 @@ test('discovery keeps the API key in the header only', function (): void {
 });
 
 test('capability discovery keeps the client constructor connection invariants', function (): void {
-    expect(fn (): BazarrClient => new BazarrClient(capabilityBazarrConnection(type: ServiceType::Sonarr)))
+    expect(fn (): BazarrClient => new BazarrClient(capabilityBazarrConnection(serviceType: ServiceType::Sonarr)))
         ->toThrow(InvalidArgumentException::class, 'Bazarr')
         ->and(fn (): BazarrClient => new BazarrClient(capabilityBazarrConnection(id: null)))
         ->toThrow(InvalidArgumentException::class, 'persisted');

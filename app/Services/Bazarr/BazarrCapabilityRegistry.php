@@ -98,8 +98,10 @@ final class BazarrCapabilityRegistry
             }
 
             throw_unless(Str::startsWith($path, '/'), UnexpectedValueException::class, 'Bazarr Swagger contains a malformed path key.');
-
-            if (! is_array($pathItem) || ($pathItem !== [] && array_is_list($pathItem))) {
+            if (! is_array($pathItem)) {
+                continue;
+            }
+            if ($pathItem !== [] && array_is_list($pathItem)) {
                 continue;
             }
 
@@ -136,14 +138,7 @@ final class BazarrCapabilityRegistry
         if (! is_array($responses) || $responses === [] || array_is_list($responses)) {
             return false;
         }
-
-        foreach ($responses as $status => $response) {
-            if ($this->isResponseStatus($status) && $this->isResponseDefinition($response)) {
-                return true;
-            }
-        }
-
-        return false;
+        return array_any($responses, fn($response, int|string $status): bool => $this->isResponseStatus($status) && $this->isResponseDefinition($response));
     }
 
     private function isResponseStatus(int|string $status): bool

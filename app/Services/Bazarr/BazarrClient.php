@@ -259,12 +259,12 @@ final class BazarrClient
     public function getCapabilities(): array
     {
         return $this->cache()->rememberMetadata('capabilities', function (): array {
-            $registry = new BazarrCapabilityRegistry;
+            $bazarrCapabilityRegistry = new BazarrCapabilityRegistry;
 
             try {
-                return $registry->detect($this->getOpenApi());
+                return $bazarrCapabilityRegistry->detect($this->getOpenApi());
             } catch (ConnectionException|RequestException|UnexpectedValueException) {
-                return $this->fallbackCapabilities($registry);
+                return $this->fallbackCapabilities($bazarrCapabilityRegistry);
             }
         });
     }
@@ -427,7 +427,7 @@ final class BazarrClient
             return $value;
         }
 
-        return array_map(fn (mixed $item): mixed => $this->normalizeJson($item), $value);
+        return array_map($this->normalizeJson(...), $value);
     }
 
     private function cache(): BazarrCache
@@ -438,9 +438,9 @@ final class BazarrClient
     /**
      * @return array<string, bool>
      */
-    private function fallbackCapabilities(BazarrCapabilityRegistry $registry): array
+    private function fallbackCapabilities(BazarrCapabilityRegistry $bazarrCapabilityRegistry): array
     {
-        $capabilities = $registry->unavailable();
+        $capabilities = $bazarrCapabilityRegistry->unavailable();
         $wantedEpisodes = $this->safeReadProbe(fn (): array => $this->getWantedEpisodes(0, 1));
         $wantedMovies = $this->safeReadProbe(fn (): array => $this->getWantedMovies(0, 1));
         $episodeHistory = $this->safeReadProbe(fn (): array => $this->getEpisodeHistory(0, 1));

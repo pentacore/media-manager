@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use App\Models\AiModelPrice;
+use App\Models\BazarrServiceLink;
 use App\Models\ServiceConnection;
 use App\Models\User;
 use App\Settings\MediaReplacementSettings;
@@ -107,6 +108,66 @@ test('admin can classify imported Sonarr root folders without browser errors', f
         'path' => '/anime',
         'scope' => 'anime',
     ]);
+
+    $webpage->assertNoSmoke();
+});
+
+test('admin can create a Bazarr mapping without browser errors', function (): void {
+    Queue::fake();
+    $sonarr = ServiceConnection::factory()->sonarr()->create(['name' => 'Main Sonarr']);
+    $radarr = ServiceConnection::factory()->radarr()->create(['name' => 'Main Radarr']);
+
+    $this->actingAs(User::factory()->admin()->create());
+
+    $webpage = visit(route('admin.connections.create', absolute: false))
+        ->click('#service_type')
+        ->click('[role="option"][aria-label="Bazarr"]')
+        ->assertSee('Sonarr connection')
+        ->assertSee('Radarr connection')
+        ->fill('name', 'Main Bazarr')
+        ->fill('url', 'http://bazarr.local:6767')
+        ->fill('api_key', 'bazarr-api-key')
+        ->fill('webhook_token', 'bazarr-webhook-token')
+        ->click('#sonarr_connection_id')
+        ->click('[role="option"][aria-label="Use Main Sonarr as Sonarr connection"]')
+        ->click('#radarr_connection_id')
+        ->click('[role="option"][aria-label="Use Main Radarr as Radarr connection"]')
+        ->click('Create Connection')
+        ->assertSee('Connection created.');
+
+    $serviceConnection = ServiceConnection::query()->where('name', 'Main Bazarr')->sole();
+
+    expect(BazarrServiceLink::query()
+        ->where('bazarr_connection_id', $serviceConnection->id)
+        ->where('related_connection_id', $sonarr->id)
+        ->where('role', 'sonarr')
+        ->exists())->toBeTrue()
+        ->and(BazarrServiceLink::query()
+            ->where('bazarr_connection_id', $serviceConnection->id)
+            ->where('related_connection_id', $radarr->id)
+            ->where('role', 'radarr')
+            ->exists())->toBeTrue();
+
+    $webpage->navigate(route('admin.connections.edit', $serviceConnection, absolute: false))
+        ->assertScript(
+            'document.querySelector("#sonarr_connection_id").textContent.includes("Main Sonarr")',
+        )
+        ->assertScript(
+            'document.querySelector("#radarr_connection_id").textContent.includes("Main Radarr")',
+        )
+        ->click('#radarr_connection_id')
+        ->click('[role="option"][aria-label="No Radarr connection"]')
+        ->click('Update Connection')
+        ->assertSee('Connection updated.');
+
+    expect(BazarrServiceLink::query()
+        ->where('bazarr_connection_id', $serviceConnection->id)
+        ->where('role', 'sonarr')
+        ->exists())->toBeTrue()
+        ->and(BazarrServiceLink::query()
+            ->where('bazarr_connection_id', $serviceConnection->id)
+            ->where('role', 'radarr')
+            ->doesntExist())->toBeTrue();
 
     $webpage->assertNoSmoke();
 });

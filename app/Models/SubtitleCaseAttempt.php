@@ -56,6 +56,7 @@ class SubtitleCaseAttempt extends Model
     use HasFactory;
 
     /** @var array<string, mixed> */
+    #[Override]
     protected $attributes = [
         'candidate_count' => 0,
         'eligible_candidate_count' => 0,
@@ -92,38 +93,25 @@ class SubtitleCaseAttempt extends Model
             return null;
         }
 
-        if (! is_array($value)) {
-            throw new InvalidArgumentException('Subtitle case attempt summary must be an object or null.');
-        }
+        throw_unless(is_array($value), InvalidArgumentException::class, 'Subtitle case attempt summary must be an object or null.');
 
         foreach ($value as $summaryValue) {
-            if ($summaryValue !== null && ! is_scalar($summaryValue)) {
-                throw new InvalidArgumentException('Subtitle case attempt summary values must be scalar or null.');
-            }
+            throw_if($summaryValue !== null && ! is_scalar($summaryValue), InvalidArgumentException::class, 'Subtitle case attempt summary values must be scalar or null.');
         }
 
-        if ($value !== [] && array_is_list($value)) {
-            throw new InvalidArgumentException('Subtitle case attempt summary must be an object.');
-        }
+        throw_if($value !== [] && array_is_list($value), InvalidArgumentException::class, 'Subtitle case attempt summary must be an object.');
 
         foreach (array_keys($value) as $summaryKey) {
-            if (! is_string($summaryKey)) {
-                throw new InvalidArgumentException('Subtitle case attempt summary must be an object.');
-            }
+            throw_unless(is_string($summaryKey), InvalidArgumentException::class, 'Subtitle case attempt summary must be an object.');
         }
 
         try {
             $encoded = $value === [] ? '{}' : json_encode($value, JSON_THROW_ON_ERROR);
         } catch (JsonException $jsonException) {
-            throw new InvalidArgumentException(
-                'Subtitle case attempt summary must be JSON encodable.',
-                previous: $jsonException,
-            );
+            throw new InvalidArgumentException('Subtitle case attempt summary must be JSON encodable.', $jsonException->getCode(), previous: $jsonException);
         }
 
-        if (strlen($encoded) > self::MAX_SUMMARY_BYTES) {
-            throw new InvalidArgumentException('Subtitle case attempt summary cannot exceed 4000 encoded bytes.');
-        }
+        throw_if(strlen($encoded) > self::MAX_SUMMARY_BYTES, InvalidArgumentException::class, 'Subtitle case attempt summary cannot exceed 4000 encoded bytes.');
 
         return $encoded;
     }

@@ -77,6 +77,7 @@ class SubtitleCase extends Model
     use HasFactory;
 
     /** @var array<string, mixed> */
+    #[Override]
     protected $attributes = [
         'status' => 'observing',
     ];
@@ -144,22 +145,15 @@ class SubtitleCase extends Model
             return null;
         }
 
-        if (! is_array($value)) {
-            throw new InvalidArgumentException('Subtitle case evidence must be an array or null.');
-        }
+        throw_unless(is_array($value), InvalidArgumentException::class, 'Subtitle case evidence must be an array or null.');
 
         try {
             $encoded = json_encode($value, JSON_THROW_ON_ERROR);
         } catch (JsonException $jsonException) {
-            throw new InvalidArgumentException(
-                'Subtitle case evidence must be JSON encodable.',
-                previous: $jsonException,
-            );
+            throw new InvalidArgumentException('Subtitle case evidence must be JSON encodable.', $jsonException->getCode(), previous: $jsonException);
         }
 
-        if (strlen($encoded) > self::MAX_EVIDENCE_BYTES) {
-            throw new InvalidArgumentException('Subtitle case evidence cannot exceed 4000 encoded bytes.');
-        }
+        throw_if(strlen($encoded) > self::MAX_EVIDENCE_BYTES, InvalidArgumentException::class, 'Subtitle case evidence cannot exceed 4000 encoded bytes.');
 
         return $encoded;
     }

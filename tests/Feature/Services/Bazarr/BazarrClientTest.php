@@ -413,11 +413,11 @@ test('client errors throw without retrying', function (int $status): void {
         'bazarr.local:6767/api/system/health' => Http::response(['message' => 'upstream rejected request'], $status),
     ]);
 
-    $exception = captureBazarrException(fn (): array => $this->client->getHealth());
+    $throwable = captureBazarrException(fn (): array => $this->client->getHealth());
 
-    expect($exception)
+    expect($throwable)
         ->toBeInstanceOf(RequestException::class)
-        ->and($exception->getMessage())->not->toContain('secret');
+        ->and($throwable->getMessage())->not->toContain('secret');
 
     Http::assertSentCount(1);
 })->with([401, 404]);
@@ -430,11 +430,11 @@ test('server errors retry twice and then throw', function (): void {
             ->pushStatus(500),
     ]);
 
-    $exception = captureBazarrException(fn (): array => $this->client->getHealth());
+    $throwable = captureBazarrException(fn (): array => $this->client->getHealth());
 
-    expect($exception)
+    expect($throwable)
         ->toBeInstanceOf(RequestException::class)
-        ->and($exception->getMessage())->not->toContain('secret');
+        ->and($throwable->getMessage())->not->toContain('secret');
 
     Http::assertSentCount(3);
 });
@@ -444,11 +444,11 @@ test('connection failures retry twice and then throw', function (): void {
         'bazarr.local:6767/api/system/health' => Http::failedConnection(),
     ]);
 
-    $exception = captureBazarrException(fn (): array => $this->client->getHealth());
+    $throwable = captureBazarrException(fn (): array => $this->client->getHealth());
 
-    expect($exception)
+    expect($throwable)
         ->toBeInstanceOf(ConnectionException::class)
-        ->and($exception->getMessage())->not->toContain('secret');
+        ->and($throwable->getMessage())->not->toContain('secret');
 
     Http::assertSentCount(3);
 });

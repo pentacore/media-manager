@@ -43,10 +43,8 @@ test('marks Bazarr healthy and stores its reported version', function (): void {
         ->and($fresh->version)->toBe('1.6.0')
         ->and($fresh->last_seen_at)->not->toBeNull();
 
-    Http::assertSent(function (Request $request): bool {
-        return $request->url() === 'http://bazarr.local:6767/api/system/status'
-            && $request->hasHeader('X-API-KEY', 'bazarr-secret');
-    });
+    Http::assertSent(fn(Request $request): bool => $request->url() === 'http://bazarr.local:6767/api/system/status'
+        && $request->hasHeader('X-API-KEY', 'bazarr-secret'));
     Http::assertSentCount(1);
 });
 

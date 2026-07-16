@@ -44,6 +44,7 @@ class ServiceConnectionController extends Controller
     {
         return Inertia::render('Admin/Connections/Create', [
             'serviceTypes' => ServiceType::mapForSelect(labelKey: 'label'),
+            'arrConnections' => $this->arrConnections(),
         ]);
     }
 
@@ -76,6 +77,8 @@ class ServiceConnectionController extends Controller
         ServiceConnection $serviceConnection,
         SonarrRootFolderCatalog $sonarrRootFolderCatalog,
     ): Response {
+        $serviceConnection->load('bazarrServiceLinks');
+
         $diskSettings = is_array($serviceConnection->settings['disk'] ?? null)
             ? $serviceConnection->settings['disk']
             : ['mode' => 'all', 'paths' => [], 'display' => []];
@@ -106,8 +109,17 @@ class ServiceConnectionController extends Controller
                     ? $this->sabnzbdNotificationScriptFor($serviceConnection)
                     : null,
                 'whisparr_version' => $serviceConnection->whisparrVersion()->value,
+                'sonarr_connection_id' => $serviceConnection->type === ServiceType::Bazarr
+                    ? $serviceConnection->bazarrServiceLinks
+                        ->firstWhere('role', BazarrServiceRole::Sonarr)?->related_connection_id
+                    : null,
+                'radarr_connection_id' => $serviceConnection->type === ServiceType::Bazarr
+                    ? $serviceConnection->bazarrServiceLinks
+                        ->firstWhere('role', BazarrServiceRole::Radarr)?->related_connection_id
+                    : null,
             ],
             'serviceTypes' => ServiceType::mapForSelect(labelKey: 'label'),
+            'arrConnections' => $this->arrConnections(),
             'indexers' => $serviceConnection->type === ServiceType::Prowlarr
                 ? Inertia::defer(fn (): array => $this->loadProwlarrIndexers($serviceConnection))
                 : [],
@@ -118,6 +130,24 @@ class ServiceConnectionController extends Controller
                 ? Inertia::defer(fn (): array => $sonarrRootFolderCatalog->forConnection($serviceConnection))
                 : [],
         ]);
+    }
+
+    /**
+     * @return list<array{id: int, type: string, name: string}>
+     */
+    private function arrConnections(): array
+    {
+        return ServiceConnection::query()
+            ->whereIn('type', [ServiceType::Sonarr->value, ServiceType::Radarr->value])
+            ->where('is_active', true)
+            ->orderBy('name')
+            ->get(['id', 'type', 'name'])
+            ->map(fn (ServiceConnection $serviceConnection): array => [
+                'id' => $serviceConnection->id,
+                'type' => $serviceConnection->type->value,
+                'name' => $serviceConnection->name,
+            ])
+            ->all();
     }
 
     /**
@@ -392,9 +422,7 @@ class ServiceConnectionController extends Controller
         try {
             DB::transaction(fn (): ?bool => $serviceConnection->delete());
         } catch (QueryException $queryException) {
-            if (! $this->isSubtitleHistoryRestrictViolation($queryException)) {
-                throw $queryException;
-            }
+            throw_unless($this->isSubtitleHistoryRestrictViolation($queryException), $queryException);
 
             return $this->subtitleHistoryDeletionConflict();
         }
