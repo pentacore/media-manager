@@ -83,13 +83,15 @@ class ReplaceMediaFileTool extends BaseTool
 
         $mediaReplacementSettings = resolve(MediaReplacementSettings::class);
         $isSeasonPack = ($candidate['season_pack'] ?? false) === true;
+        $candidateRequiresApproval = ($candidate['requires_approval'] ?? false) === true;
 
         return [
             'type' => 'replace_media_file',
             'source_service' => 'ai',
             'target_service' => $service,
-            'force_requires_approval' => $isSeasonPack
-                && $mediaReplacementSettings->seasonPackPolicy() === SeasonPackPolicy::ApprovalRequired,
+            'force_requires_approval' => $candidateRequiresApproval
+                || ($isSeasonPack
+                    && $mediaReplacementSettings->seasonPackPolicy() === SeasonPackPolicy::ApprovalRequired),
             'payload' => [
                 'title' => sprintf('Replace %s', $snapshot['display_name'] ?? 'media file'),
                 'detail' => $reason,

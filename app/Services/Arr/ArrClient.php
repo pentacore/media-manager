@@ -21,7 +21,7 @@ abstract class ArrClient
 
     protected function buildClient(bool $withRetry = true): PendingRequest
     {
-        $client = Http::baseUrl(rtrim($this->connection->url, '/'))
+        $pendingRequest = Http::baseUrl(rtrim($this->connection->url, '/'))
             ->withHeaders(['X-Api-Key' => $this->connection->api_key])
             ->timeout(10)
             ->connectTimeout(3)
@@ -31,10 +31,10 @@ abstract class ArrClient
         // generic retry: a server error could mean the request was already
         // accepted, and retrying would issue the side effect multiple times.
         if (! $withRetry) {
-            return $client;
+            return $pendingRequest;
         }
 
-        return $client->retry(
+        return $pendingRequest->retry(
             times: 3,
             sleepMilliseconds: fn (int $attempt): int => $attempt * 500,
             when: fn (Throwable $throwable): bool => $throwable instanceof ConnectionException

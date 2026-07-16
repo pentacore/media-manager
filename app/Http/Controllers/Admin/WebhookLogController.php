@@ -81,9 +81,9 @@ class WebhookLogController extends Controller
                     ->values()
                     ->all(),
                 'handlingStatuses' => array_map(
-                    fn (WebhookHandlingStatus $status): array => [
-                        'value' => $status->value,
-                        'label' => $status->label(),
+                    fn (WebhookHandlingStatus $webhookHandlingStatus): array => [
+                        'value' => $webhookHandlingStatus->value,
+                        'label' => $webhookHandlingStatus->label(),
                     ],
                     WebhookHandlingStatus::cases(),
                 ),
@@ -132,12 +132,12 @@ class WebhookLogController extends Controller
                 'handling_status' => $webhookEvent->handling_status?->value,
                 'payload' => $webhookEvent->payload,
                 'payload_hash' => $webhookEvent->payload_hash,
-                'activity' => $webhookEvent->activityLogs->map(fn (ActivityLog $log): array => [
-                    'id' => $log->id,
-                    'action' => $log->action,
-                    'description' => $log->description,
-                    'metadata' => $log->metadata,
-                    'created_at' => $log->created_at?->toIso8601String(),
+                'activity' => $webhookEvent->activityLogs->map(fn (ActivityLog $activityLog): array => [
+                    'id' => $activityLog->id,
+                    'action' => $activityLog->action,
+                    'description' => $activityLog->description,
+                    'metadata' => $activityLog->metadata,
+                    'created_at' => $activityLog->created_at?->toIso8601String(),
                 ])->all(),
                 'agent_decision' => $webhookEvent->agentDecision === null ? null : [
                     'status' => $webhookEvent->agentDecision->status->value,
@@ -145,12 +145,12 @@ class WebhookLogController extends Controller
                     'actions_count' => $webhookEvent->agentDecision->actions_count,
                     'action_request_ids' => $webhookEvent->agentDecision->action_request_ids,
                 ],
-                'actions' => $webhookEvent->actionRequests->map(fn (ActionRequest $action): array => [
-                    'id' => $action->id,
-                    'type' => $action->type,
-                    'target_service' => $action->target_service,
-                    'status' => $action->status->value,
-                    'created_at' => $action->created_at?->toIso8601String(),
+                'actions' => $webhookEvent->actionRequests->map(fn (ActionRequest $actionRequest): array => [
+                    'id' => $actionRequest->id,
+                    'type' => $actionRequest->type,
+                    'target_service' => $actionRequest->target_service,
+                    'status' => $actionRequest->status->value,
+                    'created_at' => $actionRequest->created_at?->toIso8601String(),
                 ])->all(),
             ],
         ]);

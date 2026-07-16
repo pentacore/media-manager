@@ -22,6 +22,7 @@ final readonly class MediaFileInspector
 
     public function __construct(
         private LanguageNormalizer $languageNormalizer,
+        private SonarrMediaScopeResolver $sonarrMediaScopeResolver,
     ) {}
 
     /**
@@ -33,11 +34,11 @@ final readonly class MediaFileInspector
         ?int $seasonNumber = null,
         ?int $episodeNumber = null,
         ?int $absoluteEpisodeNumber = null,
-        ?ServiceConnection $connection = null,
+        ?ServiceConnection $serviceConnection = null,
     ): array {
         return match (mb_strtolower(trim($service))) {
-            'sonarr' => $this->inspectSonarr($itemId, $seasonNumber, $episodeNumber, $absoluteEpisodeNumber, $connection),
-            'radarr' => $this->inspectRadarr($itemId, $connection),
+            'sonarr' => $this->inspectSonarr($itemId, $seasonNumber, $episodeNumber, $absoluteEpisodeNumber, $serviceConnection),
+            'radarr' => $this->inspectRadarr($itemId, $serviceConnection),
             default => throw new InvalidArgumentException('service must be "sonarr" or "radarr".'),
         };
     }
@@ -52,13 +53,13 @@ final readonly class MediaFileInspector
      * @param  array<string, mixed>  $target
      * @return array<string, mixed>
      */
-    public function inspectFromSnapshot(array $target, ?ServiceConnection $connection = null): array
+    public function inspectFromSnapshot(array $target, ?ServiceConnection $serviceConnection = null): array
     {
         $service = mb_strtolower(trim((string) ($target['service'] ?? '')));
-        $connection ??= $this->connectionFor($target);
+        $serviceConnection ??= $this->connectionFor($target);
 
         if ($service === 'radarr') {
-            return $this->inspect('radarr', $this->integer($target['movie_id'] ?? null) ?? 0, connection: $connection);
+            return $this->inspect('radarr', $this->integer($target['movie_id'] ?? null) ?? 0, serviceConnection: $serviceConnection);
         }
 
         $episodeNumbers = is_array($target['episode_numbers'] ?? null) ? array_values($target['episode_numbers']) : [];
@@ -68,7 +69,7 @@ final readonly class MediaFileInspector
             $this->integer($target['series_id'] ?? null) ?? 0,
             seasonNumber: $this->wholeNumber($target['season_number'] ?? null),
             episodeNumber: $episodeNumbers === [] ? null : $this->integer($episodeNumbers[0]),
-            connection: $connection,
+            serviceConnection: $serviceConnection,
         );
     }
 
@@ -110,9 +111,16 @@ final readonly class MediaFileInspector
         $serviceConnection = $connection ?? ServiceConnection::resolveActive(ServiceType::Sonarr);
         $sonarrClient = new SonarrClient($serviceConnection);
         $series = $sonarrClient->getSeriesById($seriesId);
-        $scope = ($series['seriesType'] ?? null) === 'anime'
-            ? MediaReplacementScope::Anime
-            : MediaReplacementScope::Tv;
+        $scope = $this->sonarrMediaScopeResolver->resolve($serviceConnection, $series);
+
+        if (! $scope instanceof MediaReplacementScope) {
+            return [
+                'ambiguous' => true,
+                'reason' => 'unconfigured_root_scope',
+                'service' => 'sonarr',
+            ];
+        }
+
         $episodes = array_values(array_filter(
             $sonarrClient->getEpisodesBySeries($seriesId),
             is_array(...),
@@ -380,7 +388,7 @@ final readonly class MediaFileInspector
             }
         }
 
-        return count($grabIds) === 1 ? array_values($grabIds)[0] : null;
+        return count($grabIds) === 1 ? array_first($grabIds) : null;
     }
 
     /**

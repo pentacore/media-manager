@@ -78,6 +78,7 @@ export default defineConfigWithVueTs(
     {
         ignores: [
             '.claude',
+            '.worktrees/**',
             'vendor',
             'node_modules',
             'public',

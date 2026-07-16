@@ -27,7 +27,7 @@ class ReconcileMediaReplacementAttempts extends Command
         $stuck = MediaReplacementAttempt::query()
             ->where('status', MediaReplacementStatus::Downloading->value)
             ->get()
-            ->filter(fn (MediaReplacementAttempt $attempt): bool => ($attempt->started_at ?? $attempt->created_at)?->lessThan($cutoff) ?? false);
+            ->filter(fn (MediaReplacementAttempt $mediaReplacementAttempt): bool => ($mediaReplacementAttempt->started_at ?? $mediaReplacementAttempt->created_at)?->lessThan($cutoff) ?? false);
 
         if ($stuck->isEmpty()) {
             $this->info('No stuck media replacement attempts to reconcile.');

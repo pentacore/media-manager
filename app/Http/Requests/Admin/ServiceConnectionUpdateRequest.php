@@ -41,6 +41,13 @@ class ServiceConnectionUpdateRequest extends FormRequest
             // the matching connection types.
             'hidden_categories' => ['nullable', 'array'],
             'hidden_categories.*' => ['string', 'max:100'],
+            // Sonarr-only: root folders are scoped to this connection, so the
+            // connection ID is deliberately not accepted from the browser.
+            'sonarr_root_folders' => ['nullable', 'array', 'max:100'],
+            'sonarr_root_folders.*' => ['required', 'array:root_folder_id,path,scope'],
+            'sonarr_root_folders.*.root_folder_id' => ['required', 'integer', 'min:1'],
+            'sonarr_root_folders.*.path' => ['required', 'string', 'max:1000'],
+            'sonarr_root_folders.*.scope' => ['nullable', 'string', 'in:anime,tv'],
             // Whisparr-only: which API generation this connection speaks.
             'whisparr_version' => ['nullable', 'string', 'in:v2,v3'],
         ];

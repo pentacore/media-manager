@@ -70,6 +70,7 @@ RUN apk add --no-cache \
         libjpeg-turbo \
         freetype \
         postgresql-libs \
+        nodejs \
     && install-php-extensions \
         bcmath \
         gd \

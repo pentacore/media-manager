@@ -15,6 +15,7 @@ use App\Models\User;
 use App\Notifications\MediaReplacementStatusChanged;
 use App\Services\Radarr\RadarrClient;
 use App\Services\Sonarr\SonarrClient;
+use Illuminate\Contracts\Database\Query\Builder;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Notification;
@@ -252,7 +253,7 @@ final readonly class MediaReplacementTracker
             $won = MediaReplacementAttempt::query()
                 ->whereKey($mediaReplacementAttempt->id)
                 ->whereNotIn('status', array_map(
-                    static fn (MediaReplacementStatus $status): string => $status->value,
+                    static fn (MediaReplacementStatus $mediaReplacementStatus): string => $mediaReplacementStatus->value,
                     self::TERMINAL_STATUSES,
                 ))
                 ->update([
@@ -338,12 +339,12 @@ final readonly class MediaReplacementTracker
         return MediaReplacementAttempt::query()
             ->where('service_connection_id', $serviceConnection->id)
             ->where('download_id', $downloadId)
-            ->where(function ($query): void {
-                $query->whereNotIn('status', array_map(
-                    static fn (MediaReplacementStatus $status): string => $status->value,
+            ->where(function (Builder $builder): void {
+                $builder->whereNotIn('status', array_map(
+                    static fn (MediaReplacementStatus $mediaReplacementStatus): string => $mediaReplacementStatus->value,
                     self::TERMINAL_STATUSES,
-                ))->orWhere(function ($recoverable): void {
-                    $recoverable->where('status', MediaReplacementStatus::NeedsAttention->value)
+                ))->orWhere(function (Builder $builder): void {
+                    $builder->where('status', MediaReplacementStatus::NeedsAttention->value)
                         ->whereIn('failure_reason', ['download_timeout', 'manual_interaction_required']);
                 });
             })

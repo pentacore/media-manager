@@ -80,9 +80,7 @@ function fakeExecutor(array $opts = []): void
         $method = $request->method();
         $url = $request->url();
 
-        if ($method === 'POST' && str_contains($url, '/api/v3/release') && $grabConnection) {
-            throw new ConnectionException('Connection timed out');
-        }
+        throw_if($method === 'POST' && str_contains($url, '/api/v3/release') && $grabConnection, ConnectionException::class, 'Connection timed out');
 
         if ($method === 'DELETE' && str_contains($url, '/api/v3/episodefile/') && $onDelete !== null) {
             $onDelete();
@@ -154,6 +152,31 @@ test('grabs the replacement before deleting the reviewed file', function (): voi
         ->and($deleteIndex)->not->toBeFalse()
         ->and($grabIndex)->toBeLessThan($deleteIndex)
         ->and(MediaReplacementAttempt::first()->status)->toBe(MediaReplacementStatus::Downloading);
+});
+
+test('an approved rejected candidate tells Sonarr to override its release decision', function (): void {
+    $release = sonarrReplacementRelease();
+    $release['rejections'] = ['Existing file on disk has a equal or higher Custom Format score: 143600'];
+    fakeExecutor(['releases' => [$release]]);
+
+    $fingerprint = (new ReleaseFingerprint)->make('sonarr', $release);
+    $actionRequest = replaceActionRequest();
+    $payload = $actionRequest->payload;
+    $payload['candidate_fingerprint'] = $fingerprint;
+    $payload['candidate'] = [
+        'fingerprint' => $fingerprint,
+        'title' => $release['title'],
+        'confidence' => 98,
+        'requires_approval' => true,
+        'rejection_reasons' => $release['rejections'],
+    ];
+    $actionRequest->forceFill(['payload' => $payload])->save();
+
+    resolve(MediaReplacementActions::class)->execute($actionRequest);
+
+    Http::assertSent(fn (Request $request): bool => $request->method() === 'POST'
+        && str_contains($request->url(), '/api/v3/release')
+        && $request->data()['shouldOverride'] === true);
 });
 
 test('unmonitors the target BEFORE the grab (before a webhook can restore it) and before blocklisting', function (): void {

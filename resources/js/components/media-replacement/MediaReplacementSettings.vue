@@ -20,7 +20,6 @@ interface ScopeGuidance {
 }
 
 type Scope = 'anime' | 'tv' | 'movie';
-
 export interface MediaReplacementConfiguration {
     automatic_selection_enabled: boolean;
     automatic_selection_threshold: number;
