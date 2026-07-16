@@ -64,6 +64,89 @@ During development you probably want the Vite dev server running instead of `npm
 vendor/bin/sail npm run dev
 ```
 
+## Production deployment
+
+The production stack lives in `docker/production` and runs the published application image as separate web, queue, scheduler, Reverb, migration, and Inertia SSR services. The SSR service uses the same image as the web service, so both processes always run the same application release and frontend bundle.
+
+For a new deployment, create the production environment file and fill in the required application, database, Reverb, Typesense, and service credentials:
+
+```bash
+cd docker/production
+cp .env.example .env
+```
+
+Keep these SSR settings in `.env`:
+
+```ini
+INERTIA_SSR_ENABLED=true
+INERTIA_SSR_RUNTIME=node
+INERTIA_SSR_ENSURE_RUNTIME_EXISTS=true
+INERTIA_SSR_URL=http://ssr:13714
+INERTIA_SSR_ENSURE_BUNDLE_EXISTS=true
+INERTIA_SSR_THROW_ON_ERROR=false
+```
+
+Pull and start the stack from `docker/production`:
+
+```bash
+docker compose --env-file .env pull
+docker compose --env-file .env up -d
+docker compose --env-file .env ps
+```
+
+The normal image build creates both the browser bundle and `bootstrap/ssr/ssr.js`. The `ssr` container runs that bundle with Node.js on the private Compose network; port `13714` is not exposed publicly.
+
+### Adding SSR to an existing production stack
+
+After updating to a release that contains the SSR service, copy the six SSR variables above into the existing `docker/production/.env`, pull the new image, and reconcile the stack:
+
+```bash
+cd docker/production
+docker compose --env-file .env pull
+docker compose --env-file .env up -d
+```
+
+Compose creates the new `ssr` service and recreates application services whose image or configuration changed. No additional reverse-proxy route is required because only the `web` and `reverb` ports remain public.
+
+### Verify SSR
+
+Check the container state and ask Inertia to probe the renderer:
+
+```bash
+docker compose --env-file .env ps ssr
+docker compose --env-file .env exec ssr php artisan inertia:check-ssr
+```
+
+The Artisan command should print `Inertia SSR server is running.` You can also confirm that an initial Inertia response contains server-rendered markup; replace the URL with the deployment's public login URL:
+
+```bash
+curl -fsSL https://media.example.com/login | grep 'data-server-rendered="true"'
+```
+
+Inspect or restart only the renderer without restarting Octane:
+
+```bash
+docker compose --env-file .env logs -f ssr
+docker compose --env-file .env restart ssr
+```
+
+The web service deliberately does not depend on SSR health. If the renderer is starting, restarting, or unavailable, Inertia logs the rendering failure and falls back to the normal client-rendered application. Compose reports a stuck renderer as unhealthy and restarts it if its process exits.
+
+### Disable or roll back SSR
+
+Set `INERTIA_SSR_ENABLED=false` in `docker/production/.env`, recreate the web container so its cached configuration uses the new value, and stop the renderer:
+
+```bash
+docker compose --env-file .env up -d --force-recreate web
+docker compose --env-file .env stop ssr
+```
+
+To re-enable SSR, restore `INERTIA_SSR_ENABLED=true` and recreate both services:
+
+```bash
+docker compose --env-file .env up -d --force-recreate web ssr
+```
+
 ## Configuration
 
 ### Required

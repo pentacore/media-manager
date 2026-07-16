@@ -36,6 +36,8 @@ final readonly class ReleaseCandidateRanker
      *         seeders: int|float,
      *         custom_format_score: int|float,
      *         confidence: int,
+     *         requires_approval: bool,
+     *         rejection_reasons: list<string>,
      *         matched_rules: list<array{
      *             name: string,
      *             strength: 'guarantee'|'strong_evidence'|'preference',
@@ -89,12 +91,6 @@ final readonly class ReleaseCandidateRanker
                 continue;
             }
 
-            if ($this->hasRejections($release['rejections'] ?? null)) {
-                $excluded['rejected']++;
-
-                continue;
-            }
-
             if ($this->isInstalledRelease($release['title'] ?? null, $target['installed_release'] ?? null)) {
                 $excluded['installed_release']++;
 
@@ -129,6 +125,7 @@ final readonly class ReleaseCandidateRanker
             $qualityWeight = $this->number($release['qualityWeight'] ?? null);
             $seeders = $this->number($release['seeders'] ?? null);
             $age = $this->number($release['ageMinutes'] ?? null);
+            $rejectionReasons = $this->rejectionReasons($release['rejections'] ?? null);
 
             $rankedCandidates[] = [
                 'candidate' => [
@@ -143,6 +140,8 @@ final readonly class ReleaseCandidateRanker
                     'seeders' => $seeders,
                     'custom_format_score' => $customFormatScore,
                     'confidence' => $ruleEvaluation['confidence'],
+                    'requires_approval' => $rejectionReasons !== [],
+                    'rejection_reasons' => $rejectionReasons,
                     'matched_rules' => $ruleEvaluation['matched_rules'],
                     'season_pack' => $seasonPack,
                 ],
@@ -343,13 +342,33 @@ final readonly class ReleaseCandidateRanker
         return $releaseId !== null && $releaseId === $targetId;
     }
 
-    private function hasRejections(mixed $rejections): bool
+    /**
+     * @return list<string>
+     */
+    private function rejectionReasons(mixed $rejections): array
     {
-        if (is_array($rejections)) {
-            return $rejections !== [];
+        if (in_array($rejections, [null, '', []], true)) {
+            return [];
         }
 
-        return $rejections !== null && $rejections !== '';
+        $values = is_array($rejections) ? $rejections : [$rejections];
+        $reasons = [];
+
+        foreach ($values as $value) {
+            $reason = $this->nonEmptyString($value);
+
+            if ($reason !== null) {
+                $reasons[$reason] = Str::limit($reason, 500);
+            }
+
+            if (count($reasons) >= 10) {
+                break;
+            }
+        }
+
+        return $reasons === []
+            ? ['ARR rejected this release for an unspecified reason.']
+            : array_values($reasons);
     }
 
     private function isInstalledRelease(mixed $title, mixed $installedRelease): bool

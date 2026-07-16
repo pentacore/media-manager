@@ -1,3 +1,16 @@
+# [1.11.0](https://github.com/pentacore/media-manager/compare/v1.10.1...v1.11.0) (2026-07-16)
+
+
+### Bug Fixes
+
+* **media-replacement:** scope library types per Sonarr connection ([d99e6f8](https://github.com/pentacore/media-manager/commit/d99e6f8117d6c414f9bca33fc367932e8e1e08e0))
+* **media-replacement:** support Sonarr subtitle downgrades ([f385a24](https://github.com/pentacore/media-manager/commit/f385a24a288e79229b5db3ae1b66610e54f2109c))
+
+
+### Features
+
+* **deployment:** add production Inertia SSR ([60037ce](https://github.com/pentacore/media-manager/commit/60037cee3900b2f88fb1b1c8379e98872a897f80))
+
 ## [1.10.1](https://github.com/pentacore/media-manager/compare/v1.10.0...v1.10.1) (2026-07-15)
 
 

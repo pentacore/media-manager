@@ -31,7 +31,7 @@ test('show exposes handling, activity, ai decision and actions', function (): vo
     $this->actingAs($admin)
         ->get(route('admin.webhook-log.show', $event))
         ->assertOk()
-        ->assertInertia(fn (AssertableInertia $page) => $page
+        ->assertInertia(fn (AssertableInertia $assertableInertia): AssertableInertia => $assertableInertia
             ->component('Admin/WebhookLog/Show')
             ->where('event.handling_status', 'handled')
             ->has('event.activity', 1)

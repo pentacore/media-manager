@@ -203,13 +203,34 @@ test('index exposes media replacement configuration and enum options', function 
         );
 });
 
+test('index does not expose legacy Sonarr root-folder classifications', function (): void {
+    $admin = User::factory()->admin()->create();
+    resolve(MediaReplacementSettings::class)->setConfiguration([
+        'sonarr_root_folders' => [[
+            'service_connection_id' => 123,
+            'root_folder_id' => 2,
+            'path' => '/anime',
+            'scope' => 'anime',
+        ]],
+    ]);
+
+    $this->actingAs($admin)
+        ->get(route('admin.ai-settings.index'))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->missing('sonarrRootFolders')
+            ->missing('settings.media_replacement.sonarr_root_folders')
+        );
+});
+
 test('admin can update media replacement settings and the service round-trips them', function (): void {
     $admin = User::factory()->admin()->create();
+    $configuration = validMediaReplacementConfiguration();
 
     $this->actingAs($admin)
         ->put(route('admin.ai-settings.update'), [
             ...baseAiSettingsPayload(),
-            'media_replacement' => json_encode(validMediaReplacementConfiguration(), JSON_THROW_ON_ERROR),
+            'media_replacement' => json_encode($configuration, JSON_THROW_ON_ERROR),
         ])
         ->assertRedirect(route('admin.ai-settings.index'))
         ->assertSessionHasNoErrors();
@@ -222,6 +243,29 @@ test('admin can update media replacement settings and the service round-trips th
         ->and($mediaReplacementSettings->effectiveLanguages(MediaReplacementScope::Tv))->toBe(['eng'])
         ->and($mediaReplacementSettings->guidance(MediaReplacementScope::Anime)['notes'])->toBe('CR-tagged releases are trusted.')
         ->and($mediaReplacementSettings->guidance(MediaReplacementScope::Anime)['rules'])->toHaveCount(1);
+});
+
+test('updating AI settings preserves legacy Sonarr root-folder classifications', function (): void {
+    $admin = User::factory()->admin()->create();
+    $legacyAssignments = [[
+        'service_connection_id' => 123,
+        'root_folder_id' => 2,
+        'path' => '/anime',
+        'scope' => 'anime',
+    ]];
+    resolve(MediaReplacementSettings::class)->setConfiguration([
+        'sonarr_root_folders' => $legacyAssignments,
+    ]);
+
+    $this->actingAs($admin)
+        ->put(route('admin.ai-settings.update'), [
+            ...baseAiSettingsPayload(),
+            'media_replacement' => json_encode(validMediaReplacementConfiguration(), JSON_THROW_ON_ERROR),
+        ])
+        ->assertRedirect(route('admin.ai-settings.index'))
+        ->assertSessionHasNoErrors();
+
+    expect(resolve(MediaReplacementSettings::class)->sonarrRootFolders())->toBe($legacyAssignments);
 });
 
 test('update accepts a request without media replacement and preserves stored configuration', function (): void {

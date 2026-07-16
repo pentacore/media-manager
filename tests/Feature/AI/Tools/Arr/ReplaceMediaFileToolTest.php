@@ -6,6 +6,7 @@ use App\Ai\Risk;
 use App\Ai\Tools\Arr\ReplaceMediaFileTool;
 use App\Enums\AiMode;
 use App\Models\ActionRequest;
+use App\Models\ActionTypeConfig;
 use App\Models\ServiceConnection;
 use App\Services\MediaReplacement\ReplacementCandidateFinder;
 use App\Settings\AiSettings;
@@ -112,6 +113,27 @@ test('manual selection queues an approval-gated replacement action request', fun
         'scope' => 'anime',
         'original_history_id' => 999,
     ]);
+});
+
+test('a Sonarr-rejected candidate forces approval even when the action type is configured to auto-execute', function (): void {
+    ActionTypeConfig::query()
+        ->where('type', 'replace_media_file')
+        ->update(['requires_approval' => false]);
+    fakeReplaceableTarget([
+        'rejections' => ['Existing file on disk is of equal or higher preference: WEBDL-1080p v1'],
+    ]);
+    $fingerprint = candidateFingerprint();
+
+    $result = json_decode((new ReplaceMediaFileTool)->handle(new Request([
+        'service' => 'sonarr', 'item_id' => 42, 'season_number' => 1, 'episode_number' => 1,
+        'absolute_episode_number' => null, 'candidate_fingerprint' => $fingerprint,
+        'selection_mode' => 'manual', 'required_languages' => ['English'],
+        'reason' => 'Choose subtitles over the installed release score.',
+    ])), true, flags: JSON_THROW_ON_ERROR);
+
+    expect($result['requires_approval'])->toBeTrue()
+        ->and(ActionRequest::first()->requires_approval)->toBeTrue()
+        ->and(ActionRequest::first()->payload['candidate']['requires_approval'])->toBeTrue();
 });
 
 test('advisory mode blocks the destructive replacement', function (): void {

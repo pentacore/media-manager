@@ -1,1 +1,0 @@
-When running the pest tests and youre not running browser tests (!IMPORTANT! SINCE BROWSER TESTS SHOULD BE SERIAL), make sure to use the `--parallel` flag to run tests in parallel. This can significantly reduce the time it takes to run all tests, especially if you have a large test suite.

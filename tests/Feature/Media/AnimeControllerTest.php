@@ -511,10 +511,10 @@ test('confirmMatch persists a user_confirmed tv row then requests it', function 
         ])
         ->assertRedirect(route('media.anime.index'));
 
-    $row = AnimeIdMap::query()->where('anilist_id', 12345)->firstOrFail();
-    expect($row->user_confirmed)->toBeTrue();
-    expect($row->tmdb_tv_id)->toBe(1396);
-    expect($row->tmdb_movie_id)->toBeNull();
+    $animeIdMap = AnimeIdMap::query()->where('anilist_id', 12345)->firstOrFail();
+    expect($animeIdMap->user_confirmed)->toBeTrue();
+    expect($animeIdMap->tmdb_tv_id)->toBe(1396);
+    expect($animeIdMap->tmdb_movie_id)->toBeNull();
 
     Http::assertSent(fn ($request): bool => $request->method() === 'POST'
         && str_ends_with((string) $request->url(), '/api/v1/request')
@@ -539,10 +539,10 @@ test('confirmMatch persists a movie mapping under tmdb_movie_id and requests it 
         ->assertRedirect(route('media.anime.index'));
 
     // Posting mediaType=movie must set tmdb_movie_id and leave tmdb_tv_id null.
-    $row = AnimeIdMap::query()->where('anilist_id', 54321)->firstOrFail();
-    expect($row->user_confirmed)->toBeTrue();
-    expect($row->tmdb_movie_id)->toBe(129);
-    expect($row->tmdb_tv_id)->toBeNull();
+    $animeIdMap = AnimeIdMap::query()->where('anilist_id', 54321)->firstOrFail();
+    expect($animeIdMap->user_confirmed)->toBeTrue();
+    expect($animeIdMap->tmdb_movie_id)->toBe(129);
+    expect($animeIdMap->tmdb_tv_id)->toBeNull();
 
     Http::assertSent(fn ($request): bool => str_ends_with((string) $request->url(), '/api/v1/request')
         && ($request->data()['mediaType'] ?? null) === 'movie'
@@ -570,10 +570,10 @@ test('confirmMatch honours the posted media type even when it differs from the a
         ])
         ->assertRedirect(route('media.anime.index'));
 
-    $row = AnimeIdMap::query()->where('anilist_id', 99999)->firstOrFail();
-    expect($row->tmdb_movie_id)->toBe(777);
-    expect($row->tmdb_tv_id)->toBeNull();
-    expect($row->type)->toBe('MOVIE');
+    $animeIdMap = AnimeIdMap::query()->where('anilist_id', 99999)->firstOrFail();
+    expect($animeIdMap->tmdb_movie_id)->toBe(777);
+    expect($animeIdMap->tmdb_tv_id)->toBeNull();
+    expect($animeIdMap->type)->toBe('MOVIE');
 });
 
 test('confirmMatch validates that a media type is supplied', function (): void {

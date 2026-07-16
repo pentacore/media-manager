@@ -78,6 +78,11 @@ case "$role" in
         exec php artisan schedule:work --no-interaction
         ;;
 
+    ssr)
+        warm_caches
+        exec php artisan inertia:start-ssr --no-interaction
+        ;;
+
     reverb)
         warm_caches
         exec php artisan reverb:start --host=0.0.0.0 --port=8080 --no-interaction
@@ -89,7 +94,7 @@ case "$role" in
 
     *)
         echo "Unknown CONTAINER_ROLE: $role" >&2
-        echo "Valid roles: web, queue, scheduler, reverb, migrate" >&2
+        echo "Valid roles: web, queue, scheduler, ssr, reverb, migrate" >&2
         exit 1
         ;;
 esac

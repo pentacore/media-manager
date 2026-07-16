@@ -75,6 +75,42 @@ test('admin can edit and save media replacement configuration without browser er
     $webpage->assertNoSmoke();
 });
 
+test('admin can classify imported Sonarr root folders without browser errors', function (): void {
+    $connection = ServiceConnection::factory()->sonarr()->create([
+        'name' => 'Main Sonarr',
+        'url' => 'http://sonarr.local:8989',
+        'api_key' => 'test',
+    ]);
+    Http::fake([
+        'sonarr.local:8989/api/v3/rootfolder' => Http::response([
+            ['id' => 1, 'path' => '/tv'],
+            ['id' => 2, 'path' => '/anime'],
+        ]),
+    ]);
+
+    $this->actingAs(User::factory()->admin()->create());
+
+    $webpage = visit(route('admin.connections.edit', $connection, absolute: false))
+        ->assertSee('Sonarr library types')
+        ->assertSee('/anime')
+        ->assertSee('/tv')
+        ->select('sonarr_root_scope_1', 'tv')
+        ->select('sonarr_root_scope_2', 'anime')
+        ->assertScript(
+            'document.querySelector(\'#sonarr_root_scope_2\').value === "anime"',
+        )
+        ->click('Update Connection')
+        ->assertSee('Connection updated.');
+
+    expect($connection->refresh()->settings['sonarr_root_folders'])->toContainEqual([
+        'root_folder_id' => 2,
+        'path' => '/anime',
+        'scope' => 'anime',
+    ]);
+
+    $webpage->assertNoSmoke();
+});
+
 test('every static authenticated page route is classified for browser coverage', function (): void {
     $coveredRouteNames = collect([
         ...browserSmokeMemberRouteNames(),

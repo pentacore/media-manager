@@ -94,9 +94,7 @@ class SyncAnimeMappingJob implements ShouldBeUnique, ShouldQueue
 
         // Require a non-empty, list-shaped payload — is_array() alone also
         // accepts {} and error objects, which would otherwise reach the delete.
-        if (! is_array($dataset) || $dataset === [] || ! array_is_list($dataset)) {
-            throw new InvalidArgumentException('SyncAnimeMappingJob: dataset payload is not a non-empty list.');
-        }
+        throw_if(! is_array($dataset) || $dataset === [] || ! array_is_list($dataset), InvalidArgumentException::class, 'SyncAnimeMappingJob: dataset payload is not a non-empty list.');
 
         $now = now();
 

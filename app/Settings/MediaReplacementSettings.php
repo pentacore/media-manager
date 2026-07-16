@@ -17,6 +17,12 @@ final readonly class MediaReplacementSettings
      *     global_languages: list<string>,
      *     scoped_languages: array{anime: null, tv: null, movie: null},
      *     season_pack_policy: value-of<SeasonPackPolicy>,
+     *     sonarr_root_folders: list<array{
+     *         service_connection_id: int,
+     *         root_folder_id: int,
+     *         path: string,
+     *         scope: 'anime'|'tv'|null
+     *     }>,
      *     guidance: array{
      *         anime: array{rules: array<array-key, mixed>, notes: string},
      *         tv: array{rules: array<array-key, mixed>, notes: string},
@@ -34,6 +40,7 @@ final readonly class MediaReplacementSettings
             'movie' => null,
         ],
         'season_pack_policy' => 'approval_required',
+        'sonarr_root_folders' => [],
         'guidance' => [
             'anime' => [
                 'rules' => [],
@@ -68,6 +75,12 @@ final readonly class MediaReplacementSettings
      *         movie: list<string>|null
      *     },
      *     season_pack_policy: value-of<SeasonPackPolicy>,
+     *     sonarr_root_folders: list<array{
+     *         service_connection_id: int,
+     *         root_folder_id: int,
+     *         path: string,
+     *         scope: 'anime'|'tv'|null
+     *     }>,
      *     guidance: array{
      *         anime: array{rules: array<array-key, mixed>, notes: string},
      *         tv: array{rules: array<array-key, mixed>, notes: string},
@@ -112,6 +125,19 @@ final readonly class MediaReplacementSettings
     }
 
     /**
+     * @return list<array{
+     *     service_connection_id: int,
+     *     root_folder_id: int,
+     *     path: string,
+     *     scope: 'anime'|'tv'|null
+     * }>
+     */
+    public function sonarrRootFolders(): array
+    {
+        return $this->configuration()['sonarr_root_folders'];
+    }
+
+    /**
      * @param  array<array-key, mixed>|null  $requestOverride
      * @return list<string>
      */
@@ -151,6 +177,12 @@ final readonly class MediaReplacementSettings
      *         movie: list<string>|null
      *     },
      *     season_pack_policy: value-of<SeasonPackPolicy>,
+     *     sonarr_root_folders: list<array{
+     *         service_connection_id: int,
+     *         root_folder_id: int,
+     *         path: string,
+     *         scope: 'anime'|'tv'|null
+     *     }>,
      *     guidance: array{
      *         anime: array{rules: array<array-key, mixed>, notes: string},
      *         tv: array{rules: array<array-key, mixed>, notes: string},
@@ -165,6 +197,7 @@ final readonly class MediaReplacementSettings
         $seasonPackPolicy = $configuration['season_pack_policy'] ?? null;
         $globalLanguages = $configuration['global_languages'] ?? null;
         $scopedLanguages = $configuration['scoped_languages'] ?? null;
+        $sonarrRootFolders = $configuration['sonarr_root_folders'] ?? null;
         $scopeGuidance = $configuration['guidance'] ?? null;
 
         $normalizedConfiguration = self::DEFAULT_CONFIGURATION;
@@ -182,6 +215,9 @@ final readonly class MediaReplacementSettings
         $normalizedConfiguration['global_languages'] = is_array($globalLanguages)
             ? $this->normalizeLanguageList($globalLanguages)
             : self::DEFAULT_CONFIGURATION['global_languages'];
+        $normalizedConfiguration['sonarr_root_folders'] = is_array($sonarrRootFolders)
+            ? $this->normalizeSonarrRootFolders($sonarrRootFolders)
+            : self::DEFAULT_CONFIGURATION['sonarr_root_folders'];
 
         foreach (MediaReplacementScope::cases() as $scope) {
             $languages = is_array($scopedLanguages)
@@ -215,5 +251,77 @@ final readonly class MediaReplacementSettings
     private function normalizeLanguageList(array $languages): array
     {
         return $this->languageNormalizer->normalizeMany($languages);
+    }
+
+    /**
+     * @param  array<array-key, mixed>  $rootFolders
+     * @return list<array{
+     *     service_connection_id: int,
+     *     root_folder_id: int,
+     *     path: string,
+     *     scope: 'anime'|'tv'|null
+     * }>
+     */
+    private function normalizeSonarrRootFolders(array $rootFolders): array
+    {
+        $normalizedRootFolders = [];
+
+        foreach ($rootFolders as $rootFolder) {
+            if (! is_array($rootFolder)) {
+                continue;
+            }
+
+            $serviceConnectionId = $rootFolder['service_connection_id'] ?? null;
+            $rootFolderId = $rootFolder['root_folder_id'] ?? null;
+            $path = $this->normalizePath($rootFolder['path'] ?? null);
+            $scope = $rootFolder['scope'] ?? null;
+            if (! is_int($serviceConnectionId)) {
+                continue;
+            }
+
+            if ($serviceConnectionId <= 0) {
+                continue;
+            }
+
+            if (! is_int($rootFolderId)) {
+                continue;
+            }
+
+            if ($rootFolderId <= 0) {
+                continue;
+            }
+
+            if ($path === null) {
+                continue;
+            }
+
+            if (! is_null($scope) && ! in_array($scope, [MediaReplacementScope::Anime->value, MediaReplacementScope::Tv->value], true)) {
+                continue;
+            }
+
+            $normalizedRootFolders[$serviceConnectionId.':'.$rootFolderId] = [
+                'service_connection_id' => $serviceConnectionId,
+                'root_folder_id' => $rootFolderId,
+                'path' => $path,
+                'scope' => $scope,
+            ];
+        }
+
+        return array_values($normalizedRootFolders);
+    }
+
+    private function normalizePath(mixed $path): ?string
+    {
+        if (! is_string($path) || ! mb_check_encoding($path, 'UTF-8')) {
+            return null;
+        }
+
+        $normalizedPath = str_replace('\\', '/', trim($path));
+
+        if ($normalizedPath !== '/') {
+            $normalizedPath = rtrim($normalizedPath, '/');
+        }
+
+        return $normalizedPath === '' ? null : $normalizedPath;
     }
 }

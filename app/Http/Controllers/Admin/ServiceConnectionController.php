@@ -13,6 +13,8 @@ use App\Jobs\FetchLatestServiceVersion;
 use App\Jobs\PingServiceHealth;
 use App\Models\ServiceConnection;
 use App\Services\Arr\ArrClient;
+use App\Services\MediaReplacement\SonarrLibraryTypeSettings;
+use App\Services\MediaReplacement\SonarrRootFolderCatalog;
 use App\Services\Prowlarr\ProwlarrClient;
 use App\Services\ServiceClientFactory;
 use Illuminate\Http\JsonResponse;
@@ -54,8 +56,10 @@ class ServiceConnectionController extends Controller
         return to_route('admin.connections.index');
     }
 
-    public function edit(ServiceConnection $serviceConnection): Response
-    {
+    public function edit(
+        ServiceConnection $serviceConnection,
+        SonarrRootFolderCatalog $sonarrRootFolderCatalog,
+    ): Response {
         $diskSettings = is_array($serviceConnection->settings['disk'] ?? null)
             ? $serviceConnection->settings['disk']
             : ['mode' => 'all', 'paths' => [], 'display' => []];
@@ -93,6 +97,9 @@ class ServiceConnectionController extends Controller
                 : [],
             'availableDiskPaths' => in_array($serviceConnection->type, [ServiceType::Sonarr, ServiceType::Radarr], true)
                 ? Inertia::defer(fn (): array => $this->loadAvailableDiskPaths($serviceConnection))
+                : [],
+            'sonarrRootFolders' => $serviceConnection->type === ServiceType::Sonarr
+                ? Inertia::defer(fn (): array => $sonarrRootFolderCatalog->forConnection($serviceConnection))
                 : [],
         ]);
     }
@@ -246,8 +253,11 @@ class ServiceConnectionController extends Controller
         }
     }
 
-    public function update(ServiceConnectionUpdateRequest $serviceConnectionUpdateRequest, ServiceConnection $serviceConnection): RedirectResponse
-    {
+    public function update(
+        ServiceConnectionUpdateRequest $serviceConnectionUpdateRequest,
+        ServiceConnection $serviceConnection,
+        SonarrLibraryTypeSettings $sonarrLibraryTypeSettings,
+    ): RedirectResponse {
         $validated = $serviceConnectionUpdateRequest->validated();
 
         // Do not wipe existing secrets when the admin submits the form without
@@ -267,11 +277,13 @@ class ServiceConnectionController extends Controller
         $diskPaths = $validated['disk_paths'] ?? null;
         $diskDisplay = $validated['disk_display'] ?? null;
         $hiddenCategories = $validated['hidden_categories'] ?? null;
+        $sonarrRootFolders = $validated['sonarr_root_folders'] ?? null;
         unset(
             $validated['disk_mode'],
             $validated['disk_paths'],
             $validated['disk_display'],
             $validated['hidden_categories'],
+            $validated['sonarr_root_folders'],
         );
 
         if ($diskMode !== null || $diskPaths !== null || $diskDisplay !== null) {
@@ -294,6 +306,11 @@ class ServiceConnectionController extends Controller
                 static fn (mixed $category): bool => is_string($category) && trim($category) !== '',
             ));
             $validated['settings'] = $existingSettings;
+        }
+
+        if (is_array($sonarrRootFolders) && $serviceConnection->type === ServiceType::Sonarr) {
+            $existingSettings = $validated['settings'] ?? $serviceConnection->settings ?? [];
+            $validated['settings'] = $sonarrLibraryTypeSettings->mergeInto($existingSettings, $sonarrRootFolders);
         }
 
         $validated = $this->mergeWhisparrVersion($validated, $serviceConnection);

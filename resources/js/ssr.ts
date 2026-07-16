@@ -1,16 +1,7 @@
 import { createInertiaApp } from '@inertiajs/vue3';
-import { initializeTheme } from '@/composables/useAppearance';
 import { appName, resolveLayout } from '@/inertia';
-import { initializeFlashToast } from '@/lib/flashToast';
 
 createInertiaApp({
     title: (title) => (title ? `${title} - ${appName}` : appName),
     layout: resolveLayout,
-    progress: {
-        color: '#4B5563',
-    },
 });
-
-initializeTheme();
-
-initializeFlashToast();
