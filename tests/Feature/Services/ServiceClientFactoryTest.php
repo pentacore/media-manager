@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use App\Enums\ServiceType;
 use App\Models\ServiceConnection;
+use App\Services\Bazarr\BazarrClient;
 use App\Services\Emby\EmbyClient;
 use App\Services\Prowlarr\ProwlarrClient;
 use App\Services\Radarr\RadarrClient;
@@ -22,6 +23,7 @@ test('make returns the right client per service type', function (ServiceType $se
 })->with([
     [ServiceType::Sonarr, SonarrClient::class],
     [ServiceType::Radarr, RadarrClient::class],
+    [ServiceType::Bazarr, BazarrClient::class],
     [ServiceType::Emby, EmbyClient::class],
     [ServiceType::Seerr, SeerrClient::class],
     [ServiceType::SABnzbd, SabnzbdClient::class],
@@ -33,6 +35,14 @@ test('makeForType resolves the active connection then makes a client', function 
     $client = resolve(ServiceClientFactory::class)->makeForType(ServiceType::Sonarr);
 
     expect($client)->toBeInstanceOf(SonarrClient::class);
+});
+
+test('makeForType resolves an active Bazarr connection', function (): void {
+    ServiceConnection::factory()->bazarr()->create(['is_active' => true]);
+
+    $client = resolve(ServiceClientFactory::class)->makeForType(ServiceType::Bazarr);
+
+    expect($client)->toBeInstanceOf(BazarrClient::class);
 });
 
 test('makeForType throws when no active connection exists', function (): void {

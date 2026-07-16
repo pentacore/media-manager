@@ -10,6 +10,7 @@ use App\Models\StatRollup;
 use App\Services\Statistics\ServiceGaugeCollector;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
 
 beforeEach(function (): void {
     Http::preventStrayRequests();
@@ -71,6 +72,20 @@ it('samples disk space and queue depth for an Arr connection', function (): void
         ->and($total->sum)->toBe(500.0)
         ->and($queue->sum)->toBe(7.0)
         ->and($queue->dimensions)->toEqualCanonicalizing(['connection' => (string) $sonarr->id, 'service' => 'sonarr']);
+});
+
+it('skips unsupported Bazarr gauges without issuing requests or logging a collection failure', function (): void {
+    ServiceConnection::factory()->bazarr()->create([
+        'is_active' => true,
+        'url' => 'http://bazarr.test',
+    ]);
+    Log::spy();
+
+    resolve(ServiceGaugeCollector::class)->collect();
+
+    Http::assertNothingSent();
+    Log::shouldNotHaveReceived('info');
+    expect(StatRollup::query()->count())->toBe(0);
 });
 
 it('samples pending requests for a Seerr connection', function (): void {

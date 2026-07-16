@@ -96,6 +96,7 @@ class ServiceGaugeCollector
             ),
             ServiceType::SABnzbd => $this->collectSabnzbd($client, $serviceConnection, $at),
             ServiceType::Prowlarr => $this->collectDiskSpace($client->getDiskSpace(), $serviceConnection, $at),
+            ServiceType::Bazarr => null,
             default => $this->collectArr($client, $serviceConnection, $at), // Sonarr / Radarr / Whisparr
         };
     }
