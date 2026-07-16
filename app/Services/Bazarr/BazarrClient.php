@@ -7,6 +7,7 @@ namespace App\Services\Bazarr;
 use App\Cache\Services\BazarrCache;
 use App\Enums\ServiceType;
 use App\Models\ServiceConnection;
+use Closure;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\PendingRequest;
 use Illuminate\Http\Client\RequestException;
@@ -253,6 +254,22 @@ final class BazarrClient
         });
     }
 
+    /**
+     * @return array<string, bool>
+     */
+    public function getCapabilities(): array
+    {
+        return $this->cache()->rememberMetadata('capabilities', function (): array {
+            $registry = new BazarrCapabilityRegistry;
+
+            try {
+                return $registry->detect($this->getOpenApi());
+            } catch (ConnectionException|RequestException|UnexpectedValueException) {
+                return $this->fallbackCapabilities($registry);
+            }
+        });
+    }
+
     private function buildClient(): PendingRequest
     {
         return Http::baseUrl(rtrim((string) $this->serviceConnection->url, '/'))
@@ -398,5 +415,34 @@ final class BazarrClient
     private function cache(): BazarrCache
     {
         return $this->bazarrCache ??= new BazarrCache($this->serviceConnection);
+    }
+
+    /**
+     * @return array<string, bool>
+     */
+    private function fallbackCapabilities(BazarrCapabilityRegistry $registry): array
+    {
+        $capabilities = $registry->unavailable();
+        $wantedEpisodes = $this->safeReadProbe(fn (): array => $this->getWantedEpisodes(0, 1));
+        $wantedMovies = $this->safeReadProbe(fn (): array => $this->getWantedMovies(0, 1));
+        $episodeHistory = $this->safeReadProbe(fn (): array => $this->getEpisodeHistory(0, 1));
+        $movieHistory = $this->safeReadProbe(fn (): array => $this->getMovieHistory(0, 1));
+
+        $capabilities['wanted'] = $wantedEpisodes && $wantedMovies;
+        $capabilities['history'] = $episodeHistory && $movieHistory;
+        $capabilities['language_profiles'] = $this->safeReadProbe(fn (): array => $this->getLanguageProfiles());
+
+        return $capabilities;
+    }
+
+    private function safeReadProbe(Closure $probe): bool
+    {
+        try {
+            $probe();
+
+            return true;
+        } catch (ConnectionException|RequestException|UnexpectedValueException) {
+            return false;
+        }
     }
 }
