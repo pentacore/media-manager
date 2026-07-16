@@ -6,13 +6,12 @@ namespace App\Services\MediaReplacement;
 
 use App\Enums\MediaReplacementScope;
 use App\Models\ServiceConnection;
-use App\Settings\MediaReplacementSettings;
 use Illuminate\Support\Str;
 
 class SonarrMediaScopeResolver
 {
     public function __construct(
-        private readonly MediaReplacementSettings $mediaReplacementSettings,
+        private readonly SonarrLibraryTypeSettings $sonarrLibraryTypeSettings,
     ) {}
 
     /**
@@ -30,15 +29,14 @@ class SonarrMediaScopeResolver
         }
 
         $matches = array_values(array_filter(
-            $this->mediaReplacementSettings->sonarrRootFolders(),
-            fn (array $rootFolder): bool => $rootFolder['service_connection_id'] === $serviceConnection->id
-                && is_string($rootFolder['scope'])
+            $this->sonarrLibraryTypeSettings->forConnection($serviceConnection),
+            fn (array $rootFolder): bool => is_string($rootFolder['scope'])
                 && $this->matchesPath($rootFolder['path'], $rootFolderPath, $seriesPath),
         ));
 
         usort(
             $matches,
-            static fn (array $left, array $right): int => mb_strlen($right['path']) <=> mb_strlen($left['path']),
+            static fn (array $left, array $right): int => mb_strlen((string) $right['path']) <=> mb_strlen((string) $left['path']),
         );
 
         return MediaReplacementScope::tryFrom((string) ($matches[0]['scope'] ?? ''));

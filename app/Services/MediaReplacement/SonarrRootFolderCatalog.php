@@ -4,63 +4,71 @@ declare(strict_types=1);
 
 namespace App\Services\MediaReplacement;
 
-use App\Enums\ServiceType;
 use App\Models\ServiceConnection;
 use App\Services\Sonarr\SonarrClient;
 use Throwable;
 
 class SonarrRootFolderCatalog
 {
+    public function __construct(
+        private readonly SonarrLibraryTypeSettings $sonarrLibraryTypeSettings,
+    ) {}
+
     /**
      * @return list<array{
-     *     service_connection_id: int,
-     *     connection_name: string,
      *     root_folder_id: int,
-     *     path: string
+     *     path: string,
+     *     scope: 'anime'|'tv'|null
      * }>
      */
-    public function all(): array
+    public function forConnection(ServiceConnection $serviceConnection): array
     {
-        $catalog = [];
-        $connections = ServiceConnection::query()
-            ->where('type', ServiceType::Sonarr)
-            ->where('is_active', true)
-            ->orderBy('id')
-            ->get();
+        $configuredRootFolders = $this->sonarrLibraryTypeSettings->forConnection($serviceConnection);
 
-        foreach ($connections as $connection) {
-            try {
-                $rootFolders = new SonarrClient($connection)->getRootFolders();
-            } catch (Throwable) {
+        if (! $serviceConnection->is_active) {
+            return $configuredRootFolders;
+        }
+
+        try {
+            $importedRootFolders = new SonarrClient($serviceConnection)->getRootFolders();
+        } catch (Throwable) {
+            return $configuredRootFolders;
+        }
+
+        $scopeByRootFolderId = [];
+
+        foreach ($configuredRootFolders as $configuredRootFolder) {
+            $scopeByRootFolderId[$configuredRootFolder['root_folder_id']] = $configuredRootFolder['scope'];
+        }
+
+        $catalog = [];
+
+        foreach ($importedRootFolders as $importedRootFolder) {
+            if (! is_array($importedRootFolder)) {
                 continue;
             }
 
-            foreach ($rootFolders as $rootFolder) {
-                if (! is_array($rootFolder)) {
-                    continue;
-                }
-
-                if (! is_int($rootFolder['id'] ?? null)) {
-                    continue;
-                }
-
-                if (! is_string($rootFolder['path'] ?? null)) {
-                    continue;
-                }
-
-                if (trim($rootFolder['path']) === '') {
-                    continue;
-                }
-
-                $catalog[] = [
-                    'service_connection_id' => $connection->id,
-                    'connection_name' => $connection->name,
-                    'root_folder_id' => $rootFolder['id'],
-                    'path' => $rootFolder['path'],
-                ];
+            $rootFolderId = $importedRootFolder['id'] ?? null;
+            $path = $importedRootFolder['path'] ?? null;
+            if (! is_int($rootFolderId)) {
+                continue;
             }
+
+            if (! is_string($path)) {
+                continue;
+            }
+
+            if (trim($path) === '') {
+                continue;
+            }
+
+            $catalog[] = [
+                'root_folder_id' => $rootFolderId,
+                'path' => $path,
+                'scope' => $scopeByRootFolderId[$rootFolderId] ?? null,
+            ];
         }
 
-        return $catalog;
+        return $catalog === [] ? $configuredRootFolders : $catalog;
     }
 }

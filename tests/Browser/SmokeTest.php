@@ -76,11 +76,6 @@ test('admin can edit and save media replacement configuration without browser er
 });
 
 test('admin can classify imported Sonarr root folders without browser errors', function (): void {
-    config()->set('mediamanager.ai.enabled', true);
-    AiModelPrice::factory()->create([
-        'provider' => 'openai',
-        'model' => 'gpt-5-mini',
-    ]);
     $connection = ServiceConnection::factory()->sonarr()->create([
         'name' => 'Main Sonarr',
         'url' => 'http://sonarr.local:8989',
@@ -95,20 +90,19 @@ test('admin can classify imported Sonarr root folders without browser errors', f
 
     $this->actingAs(User::factory()->admin()->create());
 
-    $webpage = visit('/admin/ai-settings')
+    $webpage = visit(route('admin.connections.edit', $connection, absolute: false))
         ->assertSee('Sonarr library types')
         ->assertSee('/anime')
         ->assertSee('/tv')
-        ->select('sonarr_root_scope_'.$connection->id.'_1', 'tv')
-        ->select('sonarr_root_scope_'.$connection->id.'_2', 'anime')
+        ->select('sonarr_root_scope_1', 'tv')
+        ->select('sonarr_root_scope_2', 'anime')
         ->assertScript(
-            'JSON.parse(document.querySelector(\'input[name="media_replacement"]\').value).sonarr_root_folders.find((folder) => folder.path === "/anime").scope === "anime"',
+            'document.querySelector(\'#sonarr_root_scope_2\').value === "anime"',
         )
-        ->click('Save settings')
-        ->assertSee('AI settings updated.');
+        ->click('Update Connection')
+        ->assertSee('Connection updated.');
 
-    expect(resolve(MediaReplacementSettings::class)->sonarrRootFolders())->toContainEqual([
-        'service_connection_id' => $connection->id,
+    expect($connection->refresh()->settings['sonarr_root_folders'])->toContainEqual([
         'root_folder_id' => 2,
         'path' => '/anime',
         'scope' => 'anime',

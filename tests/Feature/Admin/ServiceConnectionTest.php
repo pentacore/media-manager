@@ -166,6 +166,67 @@ test('admin can update a service connection', function (): void {
     expect($connection->webhook_token)->toBe('new-token-12345');
 });
 
+test('Sonarr root-folder classifications are stored on their connection', function (): void {
+    $admin = User::factory()->admin()->create();
+    $connection = ServiceConnection::factory()->sonarr()->create([
+        'settings' => ['disk' => ['mode' => 'all', 'paths' => [], 'display' => []]],
+    ]);
+    $otherConnection = ServiceConnection::factory()->sonarr()->create([
+        'settings' => [
+            'sonarr_root_folders' => [[
+                'root_folder_id' => 9,
+                'path' => '/other-anime',
+                'scope' => 'anime',
+            ]],
+        ],
+    ]);
+
+    $this->actingAs($admin)
+        ->put(route('admin.connections.update', $connection), [
+            'type' => 'sonarr',
+            'name' => $connection->name,
+            'url' => $connection->url,
+            'sonarr_root_folders' => [
+                ['root_folder_id' => 1, 'path' => '/tv', 'scope' => 'tv'],
+                ['root_folder_id' => 2, 'path' => '/anime', 'scope' => 'anime'],
+            ],
+        ])
+        ->assertRedirect(route('admin.connections.index'))
+        ->assertSessionHasNoErrors();
+
+    expect($connection->refresh()->settings)
+        ->toMatchArray([
+            'disk' => ['mode' => 'all', 'paths' => [], 'display' => []],
+            'sonarr_root_folders' => [
+                ['root_folder_id' => 1, 'path' => '/tv', 'scope' => 'tv'],
+                ['root_folder_id' => 2, 'path' => '/anime', 'scope' => 'anime'],
+            ],
+        ])
+        ->and($otherConnection->refresh()->settings['sonarr_root_folders'])->toBe([[
+            'root_folder_id' => 9,
+            'path' => '/other-anime',
+            'scope' => 'anime',
+        ]]);
+});
+
+test('Sonarr root-folder classifications reject unsupported scopes', function (): void {
+    $admin = User::factory()->admin()->create();
+    $connection = ServiceConnection::factory()->sonarr()->create();
+
+    $this->actingAs($admin)
+        ->put(route('admin.connections.update', $connection), [
+            'type' => 'sonarr',
+            'name' => $connection->name,
+            'url' => $connection->url,
+            'sonarr_root_folders' => [[
+                'root_folder_id' => 2,
+                'path' => '/anime',
+                'scope' => 'movie',
+            ]],
+        ])
+        ->assertSessionHasErrors('sonarr_root_folders.0.scope');
+});
+
 test('update with blank api_key keeps the existing value', function (): void {
     $admin = User::factory()->admin()->create();
     $connection = ServiceConnection::factory()->sonarr()->create([
@@ -413,6 +474,53 @@ test('edit page falls back to empty indexers when Prowlarr is unreachable', func
             ->component('Admin/Connections/Edit')
             ->loadDeferredProps(fn (AssertableInertia $assertableInertia): AssertableInertia => $assertableInertia
                 ->where('indexers', [])));
+});
+
+test('Sonarr edit page imports and classifies only that connection root folders', function (): void {
+    config()->set('inertia.ssr.enabled', false);
+    Http::preventStrayRequests();
+
+    $admin = User::factory()->admin()->create();
+    $connection = ServiceConnection::factory()->sonarr()->create([
+        'url' => 'http://primary-sonarr.local:8989',
+        'api_key' => 'test',
+        'settings' => [
+            'sonarr_root_folders' => [[
+                'root_folder_id' => 2,
+                'path' => '/old-anime-path',
+                'scope' => 'anime',
+            ]],
+        ],
+    ]);
+    ServiceConnection::factory()->sonarr()->create([
+        'url' => 'http://other-sonarr.local:8989',
+        'api_key' => 'test',
+        'settings' => [
+            'sonarr_root_folders' => [[
+                'root_folder_id' => 9,
+                'path' => '/other-library',
+                'scope' => 'tv',
+            ]],
+        ],
+    ]);
+
+    Http::fake([
+        'primary-sonarr.local:8989/api/v3/rootfolder' => Http::response([
+            ['id' => 1, 'path' => '/tv'],
+            ['id' => 2, 'path' => '/anime'],
+        ]),
+    ]);
+
+    $this->actingAs($admin)
+        ->get(route('admin.connections.edit', $connection))
+        ->assertOk()
+        ->assertInertia(fn (AssertableInertia $assertableInertia): AssertableInertia => $assertableInertia
+            ->component('Admin/Connections/Edit')
+            ->loadDeferredProps(fn (AssertableInertia $assertableInertia): AssertableInertia => $assertableInertia
+                ->where('sonarrRootFolders', [
+                    ['root_folder_id' => 1, 'path' => '/tv', 'scope' => null],
+                    ['root_folder_id' => 2, 'path' => '/anime', 'scope' => 'anime'],
+                ])));
 });
 
 test('linkUrl prefers external_url and trims trailing slash', function (): void {

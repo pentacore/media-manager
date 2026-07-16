@@ -5,7 +5,6 @@ import AiSettingsController from '@/actions/App/Http/Controllers/Admin/AiSetting
 import InputError from '@/components/InputError.vue';
 import MediaReplacementSettings from '@/components/media-replacement/MediaReplacementSettings.vue';
 import type { MediaReplacementConfiguration } from '@/components/media-replacement/MediaReplacementSettings.vue';
-import type { SonarrRootFolderOption } from '@/components/media-replacement/MediaReplacementSettings.vue';
 import { Field, Pill } from '@/components/mm';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -66,7 +65,6 @@ const props = defineProps<{
     seasonPackPolicies: EnumOption[];
     subtitleRuleStrengths: EnumOption[];
     conditionFields: EnumOption[];
-    sonarrRootFolders: SonarrRootFolderOption[];
 }>();
 
 defineOptions({
@@ -446,7 +444,6 @@ const budgetState = computed<{
                     :season-pack-policies="seasonPackPolicies"
                     :subtitle-rule-strengths="subtitleRuleStrengths"
                     :condition-fields="conditionFields"
-                    :sonarr-root-folders="sonarrRootFolders"
                     :errors="errors"
                 />
 

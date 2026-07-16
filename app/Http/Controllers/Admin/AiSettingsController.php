@@ -12,7 +12,6 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\Admin\UpdateAiSettingsRequest;
 use App\Models\AiModelPrice;
 use App\Services\AiBudget\AiBudgetGuard;
-use App\Services\MediaReplacement\SonarrRootFolderCatalog;
 use App\Settings\AiSettings;
 use App\Settings\MediaReplacementSettings;
 use Illuminate\Http\RedirectResponse;
@@ -26,8 +25,10 @@ class AiSettingsController extends Controller
         AiSettings $aiSettings,
         AiBudgetGuard $aiBudgetGuard,
         MediaReplacementSettings $mediaReplacementSettings,
-        SonarrRootFolderCatalog $sonarrRootFolderCatalog,
     ): Response {
+        $mediaReplacementConfiguration = $mediaReplacementSettings->configuration();
+        unset($mediaReplacementConfiguration['sonarr_root_folders']);
+
         return Inertia::render('Admin/AiSettings/Index', [
             'settings' => [
                 'mode' => $aiSettings->mode()->value,
@@ -37,7 +38,7 @@ class AiSettingsController extends Controller
                 'hard_budget_usd' => $aiSettings->hardBudgetUsd(),
                 'advisor_reasoning_level' => $aiSettings->advisorReasoningLevel(),
                 'failover_provider' => $aiSettings->failoverProvider()?->value ?? 'none',
-                'media_replacement' => $mediaReplacementSettings->configuration(),
+                'media_replacement' => $mediaReplacementConfiguration,
             ],
             'budget' => [
                 'spend' => round($aiBudgetGuard->currentMonthSpend(), 4),
@@ -64,7 +65,6 @@ class AiSettingsController extends Controller
                 ['value' => 'title', 'label' => 'Title token/phrase'],
                 ['value' => 'custom_format', 'label' => 'Custom format'],
             ],
-            'sonarrRootFolders' => $sonarrRootFolderCatalog->all(),
         ]);
     }
 
@@ -113,7 +113,9 @@ class AiSettingsController extends Controller
         $aiSettings->setFailoverProvider(
             empty($validated['failover_provider']) ? null : Lab::tryFrom($validated['failover_provider']),
         );
-        $mediaReplacementSettings->setConfiguration($validated['media_replacement']);
+        $mediaReplacementConfiguration = $validated['media_replacement'];
+        $mediaReplacementConfiguration['sonarr_root_folders'] = $mediaReplacementSettings->sonarrRootFolders();
+        $mediaReplacementSettings->setConfiguration($mediaReplacementConfiguration);
 
         Inertia::flash('toast', ['type' => 'success', 'message' => __('AI settings updated.')]);
 

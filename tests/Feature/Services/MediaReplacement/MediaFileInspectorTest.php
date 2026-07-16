@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use App\Models\ServiceConnection;
 use App\Services\MediaReplacement\MediaFileInspector;
+use App\Services\MediaReplacement\SonarrMediaScopeResolver;
 use App\Settings\MediaReplacementSettings;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
@@ -102,12 +103,19 @@ test('resolves the ordinary TV scope for non-anime series', function (): void {
 
 test('resolves standard-numbered anime from its configured Sonarr root folder', function (): void {
     $serviceConnection = sonarrInspectorConnection();
+    $serviceConnection->update(['settings' => [
+        'sonarr_root_folders' => [[
+            'root_folder_id' => 2,
+            'path' => '/anime',
+            'scope' => 'anime',
+        ]],
+    ]]);
     resolve(MediaReplacementSettings::class)->setConfiguration([
         'sonarr_root_folders' => [[
             'service_connection_id' => $serviceConnection->id,
             'root_folder_id' => 2,
             'path' => '/anime',
-            'scope' => 'anime',
+            'scope' => 'tv',
         ]],
     ]);
 
@@ -133,6 +141,26 @@ test('resolves standard-numbered anime from its configured Sonarr root folder', 
     expect($snapshot['ambiguous'])->toBeFalse()
         ->and($snapshot['scope'])->toBe('anime')
         ->and($snapshot)->not->toHaveKey('path');
+});
+
+test('falls back to legacy root-folder classifications until a Sonarr connection saves its own', function (): void {
+    $serviceConnection = sonarrInspectorConnection();
+    resolve(MediaReplacementSettings::class)->setConfiguration([
+        'sonarr_root_folders' => [[
+            'service_connection_id' => $serviceConnection->id,
+            'root_folder_id' => 2,
+            'path' => '/anime',
+            'scope' => 'anime',
+        ]],
+    ]);
+
+    $scope = resolve(SonarrMediaScopeResolver::class)->resolve($serviceConnection, [
+        'seriesType' => 'standard',
+        'rootFolderPath' => '/anime',
+        'path' => '/anime/Legacy Classified Anime',
+    ]);
+
+    expect($scope?->value)->toBe('anime');
 });
 
 test('requires an explicit content type for an unconfigured Sonarr root folder', function (): void {
