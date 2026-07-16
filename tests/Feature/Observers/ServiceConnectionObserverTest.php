@@ -3,9 +3,12 @@
 declare(strict_types=1);
 
 use App\Enums\ServiceType;
+use App\Events\ServiceConnectionUpserted;
 use App\Jobs\FetchLatestServiceVersion;
 use App\Jobs\PingServiceHealth;
 use App\Models\ServiceConnection;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Queue;
 
 beforeEach(function (): void {
@@ -90,4 +93,46 @@ test('does not dispatch when an inactive connection is updated', function (): vo
     $connection->update(['url' => 'http://new.local']);
 
     Queue::assertNotPushed(PingServiceHealth::class);
+});
+
+test('defers observer jobs and upsert events until the transaction commits', function (): void {
+    Event::fake([ServiceConnectionUpserted::class]);
+
+    $connection = DB::transaction(function (): ServiceConnection {
+        $connection = ServiceConnection::factory()->sonarr()->create();
+
+        Queue::assertNotPushed(PingServiceHealth::class);
+        Queue::assertNotPushed(FetchLatestServiceVersion::class);
+        Event::assertNotDispatched(ServiceConnectionUpserted::class);
+
+        return $connection;
+    });
+
+    Queue::assertPushed(PingServiceHealth::class, 1);
+    Queue::assertPushed(FetchLatestServiceVersion::class, 1);
+    Event::assertDispatched(
+        fn (ServiceConnectionUpserted $serviceConnectionUpserted): bool => $serviceConnectionUpserted->serviceConnection->is($connection),
+    );
+});
+
+test('discards observer jobs and upsert events when the transaction rolls back', function (): void {
+    Event::fake([ServiceConnectionUpserted::class]);
+
+    try {
+        DB::transaction(function (): never {
+            ServiceConnection::factory()->sonarr()->create();
+
+            Queue::assertNotPushed(PingServiceHealth::class);
+            Queue::assertNotPushed(FetchLatestServiceVersion::class);
+            Event::assertNotDispatched(ServiceConnectionUpserted::class);
+
+            throw new RuntimeException('Roll back observer transaction.');
+        });
+    } catch (RuntimeException $runtimeException) {
+        expect($runtimeException->getMessage())->toBe('Roll back observer transaction.');
+    }
+
+    Queue::assertNotPushed(PingServiceHealth::class);
+    Queue::assertNotPushed(FetchLatestServiceVersion::class);
+    Event::assertNotDispatched(ServiceConnectionUpserted::class);
 });

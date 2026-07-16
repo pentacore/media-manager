@@ -1,8 +1,10 @@
 <?php
 
+use App\Enums\BazarrServiceRole;
 use App\Enums\ServiceType;
 use App\Jobs\FetchLatestServiceVersion;
 use App\Jobs\PingServiceHealth;
+use App\Models\BazarrServiceLink;
 use App\Models\ServiceConnection;
 use App\Models\User;
 use Illuminate\Support\Facades\Http;
@@ -115,6 +117,88 @@ test('store validates url format', function (): void {
         ->assertSessionHasErrors('url');
 });
 
+test('store rejects a Bazarr connection without a Sonarr or Radarr mapping', function (): void {
+    $admin = User::factory()->admin()->create();
+
+    $this->actingAs($admin)
+        ->post(route('admin.connections.store'), [
+            'type' => 'bazarr',
+            'name' => 'My Bazarr',
+            'url' => 'http://bazarr.local:6767',
+            'api_key' => 'abc123def456',
+            'webhook_token' => 'my-webhook-secret',
+        ])
+        ->assertSessionHasErrors([
+            'sonarr_connection_id' => 'Select a Sonarr or Radarr connection.',
+            'radarr_connection_id' => 'Select a Sonarr or Radarr connection.',
+        ]);
+});
+
+test('store rejects a Radarr connection used as the Sonarr mapping', function (): void {
+    $admin = User::factory()->admin()->create();
+    $radarr = ServiceConnection::factory()->radarr()->create();
+
+    $this->actingAs($admin)
+        ->post(route('admin.connections.store'), [
+            'type' => 'bazarr',
+            'name' => 'My Bazarr',
+            'url' => 'http://bazarr.local:6767',
+            'api_key' => 'abc123def456',
+            'webhook_token' => 'my-webhook-secret',
+            'sonarr_connection_id' => $radarr->id,
+        ])
+        ->assertSessionHasErrors([
+            'sonarr_connection_id' => 'The selected connection has the wrong service type.',
+        ]);
+});
+
+test('admin can store a Bazarr connection with one valid mapping', function (): void {
+    $admin = User::factory()->admin()->create();
+    $sonarr = ServiceConnection::factory()->sonarr()->create();
+
+    $this->actingAs($admin)
+        ->post(route('admin.connections.store'), [
+            'type' => 'bazarr',
+            'name' => 'My Bazarr',
+            'url' => 'http://bazarr.local:6767',
+            'api_key' => 'abc123def456',
+            'webhook_token' => 'my-webhook-secret',
+            'sonarr_connection_id' => $sonarr->id,
+        ])
+        ->assertRedirect(route('admin.connections.index'))
+        ->assertSessionHasNoErrors();
+
+    $serviceConnection = ServiceConnection::query()->where('type', ServiceType::Bazarr)->sole();
+
+    $this->assertDatabaseHas('bazarr_service_links', [
+        'bazarr_connection_id' => $serviceConnection->id,
+        'related_connection_id' => $sonarr->id,
+        'role' => BazarrServiceRole::Sonarr->value,
+    ]);
+});
+
+test('non-Bazarr store excludes malformed mapping fields', function (): void {
+    $admin = User::factory()->admin()->create();
+
+    $this->actingAs($admin)
+        ->post(route('admin.connections.store'), [
+            'type' => 'emby',
+            'name' => 'My Emby',
+            'url' => 'http://emby.local:8096',
+            'api_key' => 'abc123def456',
+            'webhook_token' => 'my-webhook-secret',
+            'sonarr_connection_id' => 'junk',
+            'radarr_connection_id' => -1,
+        ])
+        ->assertRedirect(route('admin.connections.index'))
+        ->assertSessionHasNoErrors();
+
+    $serviceConnection = ServiceConnection::query()->where('type', ServiceType::Emby)->sole();
+
+    expect($serviceConnection->bazarrServiceLinks()->doesntExist())->toBeTrue()
+        ->and($serviceConnection->incomingBazarrServiceLinks()->doesntExist())->toBeTrue();
+});
+
 test('admin can view edit form', function (): void {
     $admin = User::factory()->admin()->create();
     $connection = ServiceConnection::factory()->sonarr()->create([
@@ -172,6 +256,143 @@ test('admin can update a service connection', function (): void {
     expect($connection->url)->toBe('http://new-sonarr.local:8989');
     expect($connection->api_key)->toBe('new-key');
     expect($connection->webhook_token)->toBe('new-token-12345');
+});
+
+test('non-Bazarr update excludes malformed mapping fields', function (): void {
+    $admin = User::factory()->admin()->create();
+    $connection = ServiceConnection::factory()->emby()->create();
+
+    $this->actingAs($admin)
+        ->put(route('admin.connections.update', $connection), [
+            'type' => 'emby',
+            'name' => 'Updated Emby',
+            'url' => $connection->url,
+            'sonarr_connection_id' => 'junk',
+            'radarr_connection_id' => -1,
+        ])
+        ->assertRedirect(route('admin.connections.index'))
+        ->assertSessionHasNoErrors();
+
+    expect($connection->refresh()->name)->toBe('Updated Emby')
+        ->and($connection->bazarrServiceLinks()->doesntExist())->toBeTrue()
+        ->and($connection->incomingBazarrServiceLinks()->doesntExist())->toBeTrue();
+});
+
+test('admin can add replace and remove omitted Bazarr mappings', function (): void {
+    $admin = User::factory()->admin()->create();
+    $bazarr = ServiceConnection::factory()->bazarr()->create();
+    $firstSonarr = ServiceConnection::factory()->sonarr()->create();
+    $secondSonarr = ServiceConnection::factory()->sonarr()->create();
+    $radarr = ServiceConnection::factory()->radarr()->create();
+
+    $payload = [
+        'type' => 'bazarr',
+        'name' => $bazarr->name,
+        'url' => $bazarr->url,
+    ];
+
+    $this->actingAs($admin)
+        ->put(route('admin.connections.update', $bazarr), [
+            ...$payload,
+            'sonarr_connection_id' => $firstSonarr->id,
+            'radarr_connection_id' => $radarr->id,
+        ])
+        ->assertRedirect(route('admin.connections.index'))
+        ->assertSessionHasNoErrors();
+
+    expect($bazarr->mappedConnection(BazarrServiceRole::Sonarr)?->is($firstSonarr))->toBeTrue()
+        ->and($bazarr->mappedConnection(BazarrServiceRole::Radarr)?->is($radarr))->toBeTrue();
+
+    $this->actingAs($admin)
+        ->put(route('admin.connections.update', $bazarr), [
+            ...$payload,
+            'sonarr_connection_id' => $secondSonarr->id,
+        ])
+        ->assertRedirect(route('admin.connections.index'))
+        ->assertSessionHasNoErrors();
+
+    expect($bazarr->mappedConnection(BazarrServiceRole::Sonarr)?->is($secondSonarr))->toBeTrue()
+        ->and($bazarr->mappedConnection(BazarrServiceRole::Radarr))->toBeNull();
+});
+
+test('changing a Bazarr connection to another type removes all mappings', function (): void {
+    $admin = User::factory()->admin()->create();
+    $bazarr = ServiceConnection::factory()->bazarr()->create();
+    $sonarr = ServiceConnection::factory()->sonarr()->create();
+    $link = BazarrServiceLink::factory()->sonarr()->create([
+        'bazarr_connection_id' => $bazarr->id,
+        'related_connection_id' => $sonarr->id,
+    ]);
+
+    $this->actingAs($admin)
+        ->put(route('admin.connections.update', $bazarr), [
+            'type' => 'emby',
+            'name' => 'Now Emby',
+            'url' => 'http://emby.local:8096',
+        ])
+        ->assertRedirect(route('admin.connections.index'))
+        ->assertSessionHasNoErrors();
+
+    expect($bazarr->refresh()->type)->toBe(ServiceType::Emby);
+    $this->assertModelMissing($link);
+});
+
+test('changing mapped arr connection types removes their incoming Bazarr mappings', function (): void {
+    $admin = User::factory()->admin()->create();
+    $sonarrBazarr = ServiceConnection::factory()->bazarr()->create();
+    $radarrBazarr = ServiceConnection::factory()->bazarr()->create();
+    $sonarr = ServiceConnection::factory()->sonarr()->create();
+    $radarr = ServiceConnection::factory()->radarr()->create();
+    $sonarrLink = BazarrServiceLink::factory()->sonarr()->create([
+        'bazarr_connection_id' => $sonarrBazarr->id,
+        'related_connection_id' => $sonarr->id,
+    ]);
+    $radarrLink = BazarrServiceLink::factory()->radarr()->create([
+        'bazarr_connection_id' => $radarrBazarr->id,
+        'related_connection_id' => $radarr->id,
+    ]);
+
+    $this->actingAs($admin)
+        ->put(route('admin.connections.update', $sonarr), [
+            'type' => 'emby',
+            'name' => 'Former Sonarr',
+            'url' => $sonarr->url,
+        ])
+        ->assertRedirect(route('admin.connections.index'))
+        ->assertSessionHasNoErrors();
+
+    $this->actingAs($admin)
+        ->put(route('admin.connections.update', $radarr), [
+            'type' => 'prowlarr',
+            'name' => 'Former Radarr',
+            'url' => $radarr->url,
+        ])
+        ->assertRedirect(route('admin.connections.index'))
+        ->assertSessionHasNoErrors();
+
+    $this->assertModelMissing($sonarrLink);
+    $this->assertModelMissing($radarrLink);
+});
+
+test('updating a mapped arr connection without changing its type preserves the mapping', function (): void {
+    $admin = User::factory()->admin()->create();
+    $bazarr = ServiceConnection::factory()->bazarr()->create();
+    $sonarr = ServiceConnection::factory()->sonarr()->create();
+    $link = BazarrServiceLink::factory()->sonarr()->create([
+        'bazarr_connection_id' => $bazarr->id,
+        'related_connection_id' => $sonarr->id,
+    ]);
+
+    $this->actingAs($admin)
+        ->put(route('admin.connections.update', $sonarr), [
+            'type' => 'sonarr',
+            'name' => 'Renamed Sonarr',
+            'url' => $sonarr->url,
+        ])
+        ->assertRedirect(route('admin.connections.index'))
+        ->assertSessionHasNoErrors();
+
+    $this->assertModelExists($link);
 });
 
 test('Sonarr root-folder classifications are stored on their connection', function (): void {

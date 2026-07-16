@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers\Admin;
 
+use App\Enums\BazarrServiceRole;
 use App\Enums\ServiceType;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Admin\ServiceConnectionStoreRequest;
@@ -20,6 +21,7 @@ use App\Services\ServiceClientFactory;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -47,9 +49,22 @@ class ServiceConnectionController extends Controller
     public function store(ServiceConnectionStoreRequest $serviceConnectionStoreRequest): RedirectResponse
     {
         $validated = $serviceConnectionStoreRequest->validated();
+        $mappingIds = [
+            BazarrServiceRole::Sonarr->value => isset($validated['sonarr_connection_id'])
+                ? (int) $validated['sonarr_connection_id']
+                : null,
+            BazarrServiceRole::Radarr->value => isset($validated['radarr_connection_id'])
+                ? (int) $validated['radarr_connection_id']
+                : null,
+        ];
+        unset($validated['sonarr_connection_id'], $validated['radarr_connection_id']);
         $validated = $this->mergeWhisparrVersion($validated);
 
-        ServiceConnection::create($validated);
+        DB::transaction(function () use ($validated, $mappingIds): void {
+            $serviceConnection = ServiceConnection::create($validated);
+
+            $this->syncBazarrLinks($serviceConnection, $mappingIds);
+        });
 
         Inertia::flash('toast', ['type' => 'success', 'message' => __('Connection created.')]);
 
@@ -259,6 +274,15 @@ class ServiceConnectionController extends Controller
         SonarrLibraryTypeSettings $sonarrLibraryTypeSettings,
     ): RedirectResponse {
         $validated = $serviceConnectionUpdateRequest->validated();
+        $mappingIds = [
+            BazarrServiceRole::Sonarr->value => isset($validated['sonarr_connection_id'])
+                ? (int) $validated['sonarr_connection_id']
+                : null,
+            BazarrServiceRole::Radarr->value => isset($validated['radarr_connection_id'])
+                ? (int) $validated['radarr_connection_id']
+                : null,
+        ];
+        unset($validated['sonarr_connection_id'], $validated['radarr_connection_id']);
 
         // Do not wipe existing secrets when the admin submits the form without
         // retyping them (blank/null means "keep existing value").
@@ -315,11 +339,46 @@ class ServiceConnectionController extends Controller
 
         $validated = $this->mergeWhisparrVersion($validated, $serviceConnection);
 
-        $serviceConnection->update($validated);
+        DB::transaction(function () use ($serviceConnection, $validated, $mappingIds): void {
+            $serviceConnection->update($validated);
+
+            if ($serviceConnection->wasChanged('type')) {
+                $serviceConnection->incomingBazarrServiceLinks()->delete();
+            }
+
+            $this->syncBazarrLinks($serviceConnection, $mappingIds);
+        });
 
         Inertia::flash('toast', ['type' => 'success', 'message' => __('Connection updated.')]);
 
         return to_route('admin.connections.index');
+    }
+
+    /**
+     * @param  array{sonarr: int|null, radarr: int|null}  $mappingIds
+     */
+    private function syncBazarrLinks(ServiceConnection $serviceConnection, array $mappingIds): void
+    {
+        if ($serviceConnection->type !== ServiceType::Bazarr) {
+            $serviceConnection->bazarrServiceLinks()->delete();
+
+            return;
+        }
+
+        foreach (BazarrServiceRole::cases() as $role) {
+            $relatedConnectionId = $mappingIds[$role->value] ?? null;
+
+            if ($relatedConnectionId === null) {
+                $serviceConnection->bazarrServiceLinks()->where('role', $role->value)->delete();
+
+                continue;
+            }
+
+            $serviceConnection->bazarrServiceLinks()->updateOrCreate(
+                ['role' => $role->value],
+                ['related_connection_id' => $relatedConnectionId],
+            );
+        }
     }
 
     public function destroy(ServiceConnection $serviceConnection): RedirectResponse
