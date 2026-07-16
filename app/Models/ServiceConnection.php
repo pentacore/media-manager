@@ -45,6 +45,10 @@ use Override;
  * @property-read int|null $bazarr_service_links_count
  * @property-read Collection<int, BazarrServiceLink> $incomingBazarrServiceLinks
  * @property-read int|null $incoming_bazarr_service_links_count
+ * @property-read Collection<int, SubtitleCase> $bazarrSubtitleCases
+ * @property-read int|null $bazarr_subtitle_cases_count
+ * @property-read Collection<int, SubtitleCase> $managedSubtitleCases
+ * @property-read int|null $managed_subtitle_cases_count
  *
  * @method static ServiceConnectionFactory factory($count = null, $state = [])
  * @method static Builder<static>|ServiceConnection newModelQuery()
@@ -121,6 +125,22 @@ class ServiceConnection extends Model
     public function incomingBazarrServiceLinks(): HasMany
     {
         return $this->hasMany(BazarrServiceLink::class, 'related_connection_id');
+    }
+
+    /**
+     * @return HasMany<SubtitleCase, $this>
+     */
+    public function bazarrSubtitleCases(): HasMany
+    {
+        return $this->hasMany(SubtitleCase::class, 'bazarr_connection_id');
+    }
+
+    /**
+     * @return HasMany<SubtitleCase, $this>
+     */
+    public function managedSubtitleCases(): HasMany
+    {
+        return $this->hasMany(SubtitleCase::class, 'service_connection_id');
     }
 
     public function mappedConnection(BazarrServiceRole $bazarrServiceRole): ?self

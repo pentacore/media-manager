@@ -8,11 +8,14 @@ use App\Enums\SubtitleCaseStatus;
 use Carbon\CarbonImmutable;
 use Database\Factories\SubtitleCaseFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
+use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use InvalidArgumentException;
+use JsonException;
 use Override;
 
 /**
@@ -78,6 +81,8 @@ class SubtitleCase extends Model
         'status' => 'observing',
     ];
 
+    private const int MAX_EVIDENCE_BYTES = 4_000;
+
     /**
      * @return BelongsTo<ServiceConnection, $this>
      */
@@ -124,6 +129,39 @@ class SubtitleCase extends Model
     public function uploads(): HasMany
     {
         return $this->hasMany(SubtitleUpload::class);
+    }
+
+    protected function evidence(): Attribute
+    {
+        return Attribute::make(
+            set: fn (mixed $value): ?string => $this->encodeBoundedEvidence($value),
+        );
+    }
+
+    private function encodeBoundedEvidence(mixed $value): ?string
+    {
+        if ($value === null) {
+            return null;
+        }
+
+        if (! is_array($value)) {
+            throw new InvalidArgumentException('Subtitle case evidence must be an array or null.');
+        }
+
+        try {
+            $encoded = json_encode($value, JSON_THROW_ON_ERROR);
+        } catch (JsonException $jsonException) {
+            throw new InvalidArgumentException(
+                'Subtitle case evidence must be JSON encodable.',
+                previous: $jsonException,
+            );
+        }
+
+        if (strlen($encoded) > self::MAX_EVIDENCE_BYTES) {
+            throw new InvalidArgumentException('Subtitle case evidence cannot exceed 4000 encoded bytes.');
+        }
+
+        return $encoded;
     }
 
     /**

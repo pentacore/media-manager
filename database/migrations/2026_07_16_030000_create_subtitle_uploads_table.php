@@ -13,7 +13,7 @@ return new class extends Migration
         Schema::create('subtitle_uploads', function (Blueprint $blueprint): void {
             $blueprint->id();
             $blueprint->foreignId('user_id')->nullable()->constrained()->nullOnDelete();
-            $blueprint->foreignId('subtitle_case_id')->constrained()->cascadeOnDelete();
+            $blueprint->foreignId('subtitle_case_id')->constrained()->restrictOnDelete();
             $blueprint->foreignId('action_request_id')->nullable()->constrained()->nullOnDelete();
             $blueprint->string('path')->unique();
             $blueprint->string('display_name');
@@ -27,6 +27,7 @@ return new class extends Migration
             $blueprint->timestamp('cleaned_up_at')->nullable();
             $blueprint->timestamps();
 
+            $blueprint->index('user_id');
             $blueprint->index('subtitle_case_id');
             $blueprint->index('action_request_id');
         });

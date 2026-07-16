@@ -95,6 +95,77 @@ test('subtitle workflow records cast their durable state', function (): void {
         ->and($upload->fresh()->cleaned_up_at)->toBeInstanceOf(CarbonImmutable::class);
 });
 
+test('attempt count defaults are available before persistence', function (): void {
+    $attempt = new SubtitleCaseAttempt();
+
+    expect($attempt->candidate_count)->toBe(0)
+        ->and($attempt->eligible_candidate_count)->toBe(0);
+});
+
+test('bounded evidence retains nested language details', function (): void {
+    $encodedOverhead = strlen(json_encode(['note' => ''], JSON_THROW_ON_ERROR));
+    $evidence = [
+        'note' => str_repeat('x', 4_000 - $encodedOverhead),
+    ];
+
+    expect(strlen(json_encode($evidence, JSON_THROW_ON_ERROR)))->toBe(4_000);
+
+    $case = SubtitleCase::factory()->create(['evidence' => $evidence]);
+
+    expect($case->fresh()->evidence)->toBe($evidence);
+});
+
+test('oversized case evidence is rejected at assignment', function (): void {
+    $encodedOverhead = strlen(json_encode(['note' => ''], JSON_THROW_ON_ERROR));
+
+    expect(fn (): SubtitleCase => SubtitleCase::factory()->create([
+        'evidence' => ['note' => str_repeat('x', 4_001 - $encodedOverhead)],
+    ]))->toThrow(InvalidArgumentException::class, 'Subtitle case evidence cannot exceed 4000 encoded bytes.');
+});
+
+test('attempt summaries accept only bounded scalar objects', function (): void {
+    $summary = [
+        'candidate_count' => 4,
+        'eligible_candidate_count' => 1,
+        'provider' => 'opensubtitles',
+        'threshold_met' => true,
+        'error_category' => null,
+    ];
+
+    $attempt = SubtitleCaseAttempt::factory()->create(['summary' => $summary]);
+
+    expect($attempt->fresh()->summary)->toBe($summary);
+});
+
+test('oversized attempt summaries are rejected at assignment', function (): void {
+    $encodedOverhead = strlen(json_encode(['note' => ''], JSON_THROW_ON_ERROR));
+
+    expect(fn (): SubtitleCaseAttempt => SubtitleCaseAttempt::factory()->create([
+        'summary' => ['note' => str_repeat('x', 4_001 - $encodedOverhead)],
+    ]))->toThrow(InvalidArgumentException::class, 'Subtitle case attempt summary cannot exceed 4000 encoded bytes.');
+});
+
+test('nested attempt summary values are rejected at assignment', function (array $summary): void {
+    expect(fn (): SubtitleCaseAttempt => SubtitleCaseAttempt::factory()->create([
+        'summary' => $summary,
+    ]))->toThrow(
+        InvalidArgumentException::class,
+        'Subtitle case attempt summary values must be scalar or null.',
+    );
+})->with([
+    'candidate list' => [[['provider' => 'opensubtitles']]],
+    'nested payload' => [['payload' => ['provider' => 'opensubtitles']]],
+]);
+
+test('attempt summary lists are rejected at assignment', function (): void {
+    expect(fn (): SubtitleCaseAttempt => SubtitleCaseAttempt::factory()->create([
+        'summary' => ['eligible', 'empty'],
+    ]))->toThrow(
+        InvalidArgumentException::class,
+        'Subtitle case attempt summary must be an object.',
+    );
+});
+
 test('a case owns compact attempts and private uploads', function (): void {
     $case = SubtitleCase::factory()->create();
     $attempt = SubtitleCaseAttempt::factory()->for($case)->create();
@@ -152,10 +223,11 @@ test('materially identical subtitle cases are unique', function (): void {
         ->and((string) $caught?->getCode())->toBe('23505');
 });
 
-test('the material identity and grace queue indexes are present', function (): void {
-    $indexes = collect(Schema::getIndexes('subtitle_cases'));
+test('workflow lookup indexes are present', function (): void {
+    $caseIndexes = collect(Schema::getIndexes('subtitle_cases'));
+    $uploadIndexes = collect(Schema::getIndexes('subtitle_uploads'));
 
-    expect($indexes->contains(
+    expect($caseIndexes->contains(
         fn (array $index): bool => $index['name'] === 'subtitle_cases_material_identity_unique'
             && $index['unique']
             && $index['columns'] === [
@@ -165,9 +237,17 @@ test('the material identity and grace queue indexes are present', function (): v
                 'requirements_fingerprint',
             ],
     ))->toBeTrue()
-        ->and($indexes->contains(
+        ->and($caseIndexes->contains(
             fn (array $index): bool => ! $index['unique']
                 && $index['columns'] === ['status', 'grace_until'],
+        ))->toBeTrue()
+        ->and($caseIndexes->contains(
+            fn (array $index): bool => ! $index['unique']
+                && $index['columns'] === ['service_connection_id'],
+        ))->toBeTrue()
+        ->and($uploadIndexes->contains(
+            fn (array $index): bool => ! $index['unique']
+                && $index['columns'] === ['user_id'],
         ))->toBeTrue();
 });
 
@@ -197,4 +277,23 @@ test('nullable audit links survive deleted users and action requests', function 
         ->and($upload->fresh())->not->toBeNull()
         ->and($upload->fresh()->action_request_id)->toBeNull()
         ->and($upload->fresh()->user_id)->toBeNull();
+});
+
+test('cases with durable attempts and upload cleanup metadata cannot be deleted directly', function (): void {
+    $case = SubtitleCase::factory()->create();
+    $attempt = SubtitleCaseAttempt::factory()->for($case)->create();
+    $upload = SubtitleUpload::factory()->for($case)->create();
+    $caught = null;
+
+    try {
+        DB::transaction(fn (): ?bool => $case->delete());
+    } catch (QueryException $queryException) {
+        $caught = $queryException;
+    }
+
+    expect($caught)->toBeInstanceOf(QueryException::class)
+        ->and((string) $caught?->getCode())->toBe('23001');
+    $this->assertModelExists($case);
+    $this->assertModelExists($attempt);
+    $this->assertModelExists($upload);
 });

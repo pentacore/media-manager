@@ -6,6 +6,7 @@ use App\Jobs\FetchLatestServiceVersion;
 use App\Jobs\PingServiceHealth;
 use App\Models\BazarrServiceLink;
 use App\Models\ServiceConnection;
+use App\Models\SubtitleCase;
 use App\Models\User;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Queue;
@@ -508,6 +509,66 @@ test('admin can delete a service connection', function (): void {
         ->assertRedirect(route('admin.connections.index'));
 
     $this->assertDatabaseMissing('service_connections', ['id' => $connection->id]);
+});
+
+test('admin cannot delete a Bazarr connection referenced by subtitle workflow history', function (): void {
+    $admin = User::factory()->admin()->create();
+    $case = SubtitleCase::factory()->create();
+    $connection = $case->bazarrConnection;
+
+    $this->actingAs($admin)
+        ->delete(route('admin.connections.destroy', $connection))
+        ->assertRedirect(route('admin.connections.index'))
+        ->assertSessionHas('inertia.flash_data.toast.type', 'error')
+        ->assertSessionHas(
+            'inertia.flash_data.toast.message',
+            'Connection cannot be deleted because subtitle workflow history references it.',
+        );
+
+    $this->assertModelExists($connection);
+    expect($connection->bazarrSubtitleCases()->sole()->is($case))->toBeTrue();
+});
+
+test('admin cannot delete a managing connection referenced by subtitle workflow history', function (): void {
+    $admin = User::factory()->admin()->create();
+    $case = SubtitleCase::factory()->create();
+    $connection = $case->serviceConnection;
+
+    $this->actingAs($admin)
+        ->delete(route('admin.connections.destroy', $connection))
+        ->assertRedirect(route('admin.connections.index'))
+        ->assertSessionHas('inertia.flash_data.toast.type', 'error')
+        ->assertSessionHas(
+            'inertia.flash_data.toast.message',
+            'Connection cannot be deleted because subtitle workflow history references it.',
+        );
+
+    $this->assertModelExists($connection);
+    expect($connection->managedSubtitleCases()->sole()->is($case))->toBeTrue();
+});
+
+test('a concurrent subtitle case reference is handled during connection deletion', function (): void {
+    $admin = User::factory()->admin()->create();
+    $connection = ServiceConnection::factory()->sonarr()->create();
+    $bazarr = ServiceConnection::factory()->bazarr()->create();
+
+    ServiceConnection::deleting(function (ServiceConnection $deletingConnection) use ($bazarr, $connection): void {
+        if (! $deletingConnection->is($connection)) {
+            return;
+        }
+
+        SubtitleCase::factory()->create([
+            'bazarr_connection_id' => $bazarr->id,
+            'service_connection_id' => $connection->id,
+        ]);
+    });
+
+    $this->actingAs($admin)
+        ->delete(route('admin.connections.destroy', $connection))
+        ->assertRedirect(route('admin.connections.index'))
+        ->assertSessionHas('inertia.flash_data.toast.type', 'error');
+
+    $this->assertModelExists($connection);
 });
 
 test('admin can toggle connection active status', function (): void {

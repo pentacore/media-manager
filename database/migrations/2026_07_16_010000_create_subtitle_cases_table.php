@@ -38,6 +38,7 @@ return new class extends Migration
                 'requirements_fingerprint',
             ], 'subtitle_cases_material_identity_unique');
             $blueprint->index(['status', 'grace_until']);
+            $blueprint->index('service_connection_id');
             $blueprint->index('download_action_request_id');
             $blueprint->index('replacement_action_request_id');
         });

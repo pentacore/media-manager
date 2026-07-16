@@ -18,6 +18,7 @@ use App\Services\MediaReplacement\SonarrLibraryTypeSettings;
 use App\Services\MediaReplacement\SonarrRootFolderCatalog;
 use App\Services\Prowlarr\ProwlarrClient;
 use App\Services\ServiceClientFactory;
+use Illuminate\Database\QueryException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -383,11 +384,44 @@ class ServiceConnectionController extends Controller
 
     public function destroy(ServiceConnection $serviceConnection): RedirectResponse
     {
-        $serviceConnection->delete();
+        if ($serviceConnection->bazarrSubtitleCases()->exists()
+            || $serviceConnection->managedSubtitleCases()->exists()) {
+            return $this->subtitleHistoryDeletionConflict();
+        }
+
+        try {
+            DB::transaction(fn (): ?bool => $serviceConnection->delete());
+        } catch (QueryException $queryException) {
+            if (! $this->isSubtitleHistoryRestrictViolation($queryException)) {
+                throw $queryException;
+            }
+
+            return $this->subtitleHistoryDeletionConflict();
+        }
 
         Inertia::flash('toast', ['type' => 'success', 'message' => __('Connection deleted.')]);
 
         return to_route('admin.connections.index');
+    }
+
+    private function subtitleHistoryDeletionConflict(): RedirectResponse
+    {
+        Inertia::flash('toast', [
+            'type' => 'error',
+            'message' => __('Connection cannot be deleted because subtitle workflow history references it.'),
+        ]);
+
+        return to_route('admin.connections.index');
+    }
+
+    private function isSubtitleHistoryRestrictViolation(QueryException $queryException): bool
+    {
+        if (! in_array((string) $queryException->getCode(), ['23001', '23503'], true)) {
+            return false;
+        }
+
+        return str_contains($queryException->getMessage(), 'subtitle_cases_bazarr_connection_id_foreign')
+            || str_contains($queryException->getMessage(), 'subtitle_cases_service_connection_id_foreign');
     }
 
     public function toggle(ServiceConnection $serviceConnection): RedirectResponse

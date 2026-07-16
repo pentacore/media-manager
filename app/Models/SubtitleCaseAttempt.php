@@ -9,9 +9,12 @@ use App\Enums\SubtitleCaseAttemptType;
 use Carbon\CarbonImmutable;
 use Database\Factories\SubtitleCaseAttemptFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
+use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use InvalidArgumentException;
+use JsonException;
 use Override;
 
 /**
@@ -52,6 +55,14 @@ class SubtitleCaseAttempt extends Model
     /** @use HasFactory<SubtitleCaseAttemptFactory> */
     use HasFactory;
 
+    /** @var array<string, mixed> */
+    protected $attributes = [
+        'candidate_count' => 0,
+        'eligible_candidate_count' => 0,
+    ];
+
+    private const int MAX_SUMMARY_BYTES = 4_000;
+
     /**
      * @return BelongsTo<SubtitleCase, $this>
      */
@@ -66,6 +77,55 @@ class SubtitleCaseAttempt extends Model
     public function actionRequest(): BelongsTo
     {
         return $this->belongsTo(ActionRequest::class);
+    }
+
+    protected function summary(): Attribute
+    {
+        return Attribute::make(
+            set: fn (mixed $value): ?string => $this->encodeCompactSummary($value),
+        );
+    }
+
+    private function encodeCompactSummary(mixed $value): ?string
+    {
+        if ($value === null) {
+            return null;
+        }
+
+        if (! is_array($value)) {
+            throw new InvalidArgumentException('Subtitle case attempt summary must be an object or null.');
+        }
+
+        foreach ($value as $summaryValue) {
+            if ($summaryValue !== null && ! is_scalar($summaryValue)) {
+                throw new InvalidArgumentException('Subtitle case attempt summary values must be scalar or null.');
+            }
+        }
+
+        if ($value !== [] && array_is_list($value)) {
+            throw new InvalidArgumentException('Subtitle case attempt summary must be an object.');
+        }
+
+        foreach (array_keys($value) as $summaryKey) {
+            if (! is_string($summaryKey)) {
+                throw new InvalidArgumentException('Subtitle case attempt summary must be an object.');
+            }
+        }
+
+        try {
+            $encoded = $value === [] ? '{}' : json_encode($value, JSON_THROW_ON_ERROR);
+        } catch (JsonException $jsonException) {
+            throw new InvalidArgumentException(
+                'Subtitle case attempt summary must be JSON encodable.',
+                previous: $jsonException,
+            );
+        }
+
+        if (strlen($encoded) > self::MAX_SUMMARY_BYTES) {
+            throw new InvalidArgumentException('Subtitle case attempt summary cannot exceed 4000 encoded bytes.');
+        }
+
+        return $encoded;
     }
 
     /**

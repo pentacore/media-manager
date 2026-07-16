@@ -12,7 +12,7 @@ return new class extends Migration
     {
         Schema::create('subtitle_case_attempts', function (Blueprint $blueprint): void {
             $blueprint->id();
-            $blueprint->foreignId('subtitle_case_id')->constrained()->cascadeOnDelete();
+            $blueprint->foreignId('subtitle_case_id')->constrained()->restrictOnDelete();
             $blueprint->foreignId('action_request_id')->nullable()->constrained()->nullOnDelete();
             $blueprint->string('type');
             $blueprint->unsignedSmallInteger('candidate_count')->default(0);
