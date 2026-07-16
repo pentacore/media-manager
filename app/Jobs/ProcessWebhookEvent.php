@@ -74,8 +74,8 @@ class ProcessWebhookEvent implements ShouldQueue
             return;
         }
 
-        $status = $handler->handle($this->webhookEvent);
-        $this->webhookEvent->update(['handling_status' => $status]);
+        $webhookHandlingStatus = $handler->handle($this->webhookEvent);
+        $this->webhookEvent->update(['handling_status' => $webhookHandlingStatus]);
 
         $this->discardIfCaptureDisabled();
     }

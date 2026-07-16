@@ -14,6 +14,7 @@ use App\Models\ServiceConnection;
 use App\Services\Actions\ActionExecutor;
 use App\Services\Radarr\RadarrClient;
 use App\Services\Sonarr\SonarrClient;
+use Illuminate\Contracts\Database\Query\Builder;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\RequestException;
 use Illuminate\Support\Facades\Log;
@@ -109,8 +110,8 @@ final readonly class MediaReplacementActions implements ActionExecutor
             MediaReplacementAttempt::query()
                 ->whereKey($existing->id)
                 ->whereNull('cleanup_completed_at')
-                ->where(function ($query): void {
-                    $query->whereIn('status', [
+                ->where(function (Builder $builder): void {
+                    $builder->whereIn('status', [
                         MediaReplacementStatus::Downloading->value,
                         MediaReplacementStatus::Requested->value,
                     ])->orWhere('failure_reason', 'deletion_failed');
@@ -150,9 +151,14 @@ final readonly class MediaReplacementActions implements ActionExecutor
             static fn (array $candidate): bool => ($candidate['fingerprint'] ?? null) === $fingerprint,
         );
         throw_if($stillEligible === [], InvalidArgumentException::class, 'Selected release is no longer eligible.');
+        $selectedCandidate = array_first($stillEligible);
 
         $rawRelease = $this->replacementCandidateFinder->freshRawRelease($freshTarget, $fingerprint, $serviceConnection);
         throw_if($rawRelease === null, InvalidArgumentException::class, 'Selected release is no longer available.');
+
+        if ($serviceType === ServiceType::Sonarr && ($selectedCandidate['requires_approval'] ?? false) === true) {
+            $rawRelease['shouldOverride'] = true;
+        }
 
         // Preserve the ORIGINAL monitored state across retries: if a prior run
         // already recorded it as monitored, keep that — a rejected-grab whose
@@ -298,12 +304,12 @@ final readonly class MediaReplacementActions implements ActionExecutor
         ServiceType $serviceType,
         ServiceConnection $serviceConnection,
         array $target,
-        MediaReplacementAttempt $attempt,
+        MediaReplacementAttempt $mediaReplacementAttempt,
         mixed $originalHistoryId,
         bool $blocklistAllowed,
         ActionRequest $actionRequest,
     ): array {
-        $deletedFiles = $this->deleteAfterGrab($client, $serviceType, $target, $attempt);
+        $deletedFiles = $this->deleteAfterGrab($client, $serviceType, $target, $mediaReplacementAttempt);
 
         $blocklistWarning = $this->blocklistAfterGrab($client, $originalHistoryId, $blocklistAllowed, $actionRequest);
 
@@ -314,10 +320,10 @@ final readonly class MediaReplacementActions implements ActionExecutor
         // the target is guaranteed to stay suspended while markHistoryFailed runs.
         // A failed restore leaves monitoring_suspended=true so the tracker retries
         // it once the download imports.
-        if ($attempt->monitoring_suspended === true) {
+        if ($mediaReplacementAttempt->monitoring_suspended === true) {
             try {
                 $this->setMonitored($client, $serviceType, $target, true);
-                $attempt->forceFill(['monitoring_suspended' => false])->save();
+                $mediaReplacementAttempt->forceFill(['monitoring_suspended' => false])->save();
             } catch (Throwable $throwable) {
                 Log::warning('Media replacement could not restore monitoring after cleanup; the tracker will retry on import.', [
                     'action_request_id' => $actionRequest->id,
@@ -329,7 +335,7 @@ final readonly class MediaReplacementActions implements ActionExecutor
         // Mark the cleanup phase complete: only now may the tracker restore
         // monitoring (for any remaining suspension) on a subsequent import event.
         // No status write — a terminal state a webhook set in the meantime survives.
-        $attempt->forceFill(['cleanup_completed_at' => now()])->save();
+        $mediaReplacementAttempt->forceFill(['cleanup_completed_at' => now()])->save();
 
         // Finalize a verification a Download webhook recorded WHILE this cleanup was
         // in flight. In that window restoration was deferred to us (the executor),
@@ -338,7 +344,7 @@ final readonly class MediaReplacementActions implements ActionExecutor
         // monitoring restored, terminalize that stored verification. No-op unless
         // such a pending verification exists, so it never clobbers a real webhook
         // terminal outcome.
-        $this->mediaReplacementTracker->finalizeAfterCleanup($serviceConnection, $attempt);
+        $this->mediaReplacementTracker->finalizeAfterCleanup($serviceConnection, $mediaReplacementAttempt);
 
         $serviceType === ServiceType::Sonarr
             ? new SonarrCache($serviceConnection)->bustAll()
@@ -348,11 +354,11 @@ final readonly class MediaReplacementActions implements ActionExecutor
         // resume path a webhook may already have terminalized the attempt
         // (verified / needs_attention), and the caller persists this into the
         // ActionRequest result — it must reflect the real state.
-        $attempt->refresh();
+        $mediaReplacementAttempt->refresh();
 
         return [
-            'attempt_id' => $attempt->id,
-            'status' => $attempt->status->value,
+            'attempt_id' => $mediaReplacementAttempt->id,
+            'status' => $mediaReplacementAttempt->status->value,
             'replacement_initiated' => true,
             'deleted_files' => $deletedFiles,
             'blocklist_warning' => $blocklistWarning,
@@ -461,7 +467,7 @@ final readonly class MediaReplacementActions implements ActionExecutor
         SonarrClient|RadarrClient $client,
         ServiceType $serviceType,
         array $freshTarget,
-        MediaReplacementAttempt $attempt,
+        MediaReplacementAttempt $mediaReplacementAttempt,
     ): int {
         try {
             return $this->deleteReviewedFiles($client, $serviceType, $freshTarget);
@@ -471,9 +477,9 @@ final readonly class MediaReplacementActions implements ActionExecutor
             // never a webhook-produced terminal result. cleanup_completed_at is
             // left null (we threw before setting it), so the resume knows cleanup
             // did not finish.
-            $this->markTerminal($attempt, MediaReplacementStatus::NeedsAttention, 'deletion_failed');
+            $this->markTerminal($mediaReplacementAttempt, MediaReplacementStatus::NeedsAttention, 'deletion_failed');
 
-            throw new RuntimeException('Replacement grabbed but deletion of the reviewed file failed.', previous: $throwable);
+            throw new RuntimeException('Replacement grabbed but deletion of the reviewed file failed.', $throwable->getCode(), previous: $throwable);
         }
     }
 
@@ -482,17 +488,17 @@ final readonly class MediaReplacementActions implements ActionExecutor
      * already moved it to one, so a concurrent verified/needs_attention result
      * is not clobbered by the executor.
      */
-    private function markTerminal(MediaReplacementAttempt $attempt, MediaReplacementStatus $status, string $reason): void
+    private function markTerminal(MediaReplacementAttempt $mediaReplacementAttempt, MediaReplacementStatus $mediaReplacementStatus, string $reason): void
     {
         MediaReplacementAttempt::query()
-            ->whereKey($attempt->id)
+            ->whereKey($mediaReplacementAttempt->id)
             ->whereNotIn('status', [
                 MediaReplacementStatus::Verified->value,
                 MediaReplacementStatus::Failed->value,
                 MediaReplacementStatus::NeedsAttention->value,
             ])
             ->update([
-                'status' => $status->value,
+                'status' => $mediaReplacementStatus->value,
                 'failure_reason' => $reason,
                 'completed_at' => now(),
             ]);
@@ -522,9 +528,7 @@ final readonly class MediaReplacementActions implements ActionExecutor
                 // A 404 means the file is already gone — idempotent for the
                 // resume path (a prior run deleted it before dying). Any other
                 // error is a real deletion failure and must surface.
-                if ($requestException->response->status() !== 404) {
-                    throw $requestException;
-                }
+                throw_if($requestException->response->status() !== 404, $requestException);
             }
 
             $deleted++;

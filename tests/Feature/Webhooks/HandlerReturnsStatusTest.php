@@ -14,9 +14,9 @@ test('a matched event returns Handled', function (): void {
         'payload' => ['eventType' => 'Test'],
     ]);
 
-    $status = resolve(SonarrWebhookHandler::class)->handle($event);
+    $webhookHandlingStatus = resolve(SonarrWebhookHandler::class)->handle($event);
 
-    expect($status)->toBe(WebhookHandlingStatus::Handled);
+    expect($webhookHandlingStatus)->toBe(WebhookHandlingStatus::Handled);
 });
 
 test('an unmatched event returns Ignored', function (): void {
@@ -26,7 +26,7 @@ test('an unmatched event returns Ignored', function (): void {
         'payload' => ['eventType' => 'SomethingUnknown'],
     ]);
 
-    $status = resolve(SonarrWebhookHandler::class)->handle($event);
+    $webhookHandlingStatus = resolve(SonarrWebhookHandler::class)->handle($event);
 
-    expect($status)->toBe(WebhookHandlingStatus::Ignored);
+    expect($webhookHandlingStatus)->toBe(WebhookHandlingStatus::Ignored);
 });

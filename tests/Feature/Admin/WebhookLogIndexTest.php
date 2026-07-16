@@ -29,7 +29,7 @@ test('index exposes handling status, counts and ai decision per row', function (
     $this->actingAs($admin)
         ->get(route('admin.webhook-log.index'))
         ->assertOk()
-        ->assertInertia(fn (AssertableInertia $page) => $page
+        ->assertInertia(fn (AssertableInertia $assertableInertia): AssertableInertia => $assertableInertia
             ->component('Admin/WebhookLog/Index')
             ->where('events.data.0.handling_status', 'handled')
             ->where('events.data.0.activity_count', 1)
@@ -48,7 +48,7 @@ test('index filters by handling status', function (): void {
     $this->actingAs($admin)
         ->get(route('admin.webhook-log.index', ['handling_status' => 'ignored']))
         ->assertOk()
-        ->assertInertia(fn (AssertableInertia $page) => $page
+        ->assertInertia(fn (AssertableInertia $assertableInertia): AssertableInertia => $assertableInertia
             ->has('events.data', 1)
             ->where('events.data.0.handling_status', 'ignored')
         );

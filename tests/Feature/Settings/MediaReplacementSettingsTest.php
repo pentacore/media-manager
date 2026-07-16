@@ -62,7 +62,43 @@ test('it provides safe defaults', function (): void {
         ->and($mediaReplacementSettings->guidance(MediaReplacementScope::Anime))->toBe([
             'rules' => [],
             'notes' => '',
-        ]);
+        ])
+        ->and($mediaReplacementSettings->configuration()['sonarr_root_folders'])->toBe([]);
+});
+
+test('it normalizes Sonarr root folder content assignments', function (): void {
+    resolve(MediaReplacementSettings::class)->setConfiguration([
+        'sonarr_root_folders' => [
+            [
+                'service_connection_id' => 3,
+                'root_folder_id' => 2,
+                'path' => '/anime/',
+                'scope' => 'anime',
+            ],
+            [
+                'service_connection_id' => 3,
+                'root_folder_id' => 1,
+                'path' => '/tv',
+                'scope' => 'tv',
+            ],
+            ['service_connection_id' => 'invalid', 'path' => '/discard', 'scope' => 'anime'],
+        ],
+    ]);
+
+    expect(resolve(MediaReplacementSettings::class)->configuration()['sonarr_root_folders'])->toBe([
+        [
+            'service_connection_id' => 3,
+            'root_folder_id' => 2,
+            'path' => '/anime',
+            'scope' => 'anime',
+        ],
+        [
+            'service_connection_id' => 3,
+            'root_folder_id' => 1,
+            'path' => '/tv',
+            'scope' => 'tv',
+        ],
+    ]);
 });
 
 test('scoped languages inherit globally and request overrides win', function (): void {
@@ -214,6 +250,7 @@ test('it emits only the canonical known configuration schema', function (): void
             'movie' => null,
         ],
         'season_pack_policy' => 'approval_required',
+        'sonarr_root_folders' => [],
         'guidance' => [
             'anime' => [
                 'rules' => [],

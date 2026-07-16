@@ -62,7 +62,7 @@ function grabPayload(array $overrides = []): array
 }
 
 test('a tracking failure degrades gracefully instead of tearing down webhook processing', function (): void {
-    $attempt = trackerAttempt($this->connection->id, [
+    $mediaReplacementAttempt = trackerAttempt($this->connection->id, [
         'status' => MediaReplacementStatus::Downloading,
         'download_id' => 'DL-2',
     ]);
@@ -82,7 +82,7 @@ test('a tracking failure degrades gracefully instead of tearing down webhook pro
         'downloadId' => 'DL-2',
     ]);
 
-    expect($attempt->fresh()->status)->toBe(MediaReplacementStatus::Downloading);
+    expect($mediaReplacementAttempt->fresh()->status)->toBe(MediaReplacementStatus::Downloading);
 });
 
 function fakeInspectSubtitles(string $subtitles): void
@@ -229,7 +229,7 @@ test('a late download still verifies an attempt the reconcile sweep timed out', 
     // The reconciliation sweep terminalized a stuck download as
     // needs_attention/download_timeout; a later Download webhook must still be
     // able to verify and restore it rather than being permanently excluded.
-    $attempt = trackerAttempt($this->connection->id, [
+    $mediaReplacementAttempt = trackerAttempt($this->connection->id, [
         'status' => MediaReplacementStatus::NeedsAttention,
         'failure_reason' => 'download_timeout',
         'download_id' => 'DL-1',
@@ -244,14 +244,14 @@ test('a late download still verifies an attempt the reconcile sweep timed out', 
         'downloadId' => 'DL-1',
     ]);
 
-    expect($attempt->fresh()->status)->toBe(MediaReplacementStatus::Verified);
+    expect($mediaReplacementAttempt->fresh()->status)->toBe(MediaReplacementStatus::Verified);
 });
 
 test('a download completes an attempt that was awaiting manual interaction', function (): void {
     // An operator resolved a manual import; ARR then emits the Download event.
     // The attempt (needs_attention / manual_interaction_required) must still be
     // verifiable and remonitorable, not permanently excluded.
-    $attempt = trackerAttempt($this->connection->id, [
+    $mediaReplacementAttempt = trackerAttempt($this->connection->id, [
         'status' => MediaReplacementStatus::NeedsAttention,
         'failure_reason' => 'manual_interaction_required',
         'download_id' => 'DL-1',
@@ -266,7 +266,7 @@ test('a download completes an attempt that was awaiting manual interaction', fun
         'downloadId' => 'DL-1',
     ]);
 
-    expect($attempt->fresh()->status)->toBe(MediaReplacementStatus::Verified);
+    expect($mediaReplacementAttempt->fresh()->status)->toBe(MediaReplacementStatus::Verified);
 });
 
 test('manual interaction on a tracked download needs attention', function (): void {
@@ -290,7 +290,7 @@ test('an ambiguous mid-cleanup inspection with empty required languages is not f
     // success signal: an ambiguous / no-file inspection must still fail. The pending
     // verification captures the exact predicate so the executor's finalizer respects
     // it rather than reconstructing success from an empty `missing`.
-    $attempt = trackerAttempt($this->connection->id, [
+    $mediaReplacementAttempt = trackerAttempt($this->connection->id, [
         'download_id' => 'DL-1',
         'required_languages' => [],
         'status' => MediaReplacementStatus::Downloading,
@@ -315,7 +315,7 @@ test('an ambiguous mid-cleanup inspection with empty required languages is not f
     ]);
 
     // Left pending (non-terminal) with the exact predicate stored as false.
-    $pending = $attempt->fresh();
+    $pending = $mediaReplacementAttempt->fresh();
     expect($pending->status)->toBe(MediaReplacementStatus::Downloading)
         ->and($pending->verification['subtitles_ok'])->toBeFalse();
 
@@ -324,13 +324,13 @@ test('an ambiguous mid-cleanup inspection with empty required languages is not f
     $pending->forceFill(['monitoring_suspended' => false, 'cleanup_completed_at' => now()])->save();
     resolve(MediaReplacementTracker::class)->finalizeAfterCleanup($this->connection, $pending);
 
-    expect($attempt->fresh()->status)->toBe(MediaReplacementStatus::NeedsAttention)
-        ->and($attempt->fresh()->failure_reason)->toBe('imported_subtitles_missing_required_language');
+    expect($mediaReplacementAttempt->fresh()->status)->toBe(MediaReplacementStatus::NeedsAttention)
+        ->and($mediaReplacementAttempt->fresh()->failure_reason)->toBe('imported_subtitles_missing_required_language');
 });
 
 test('a Download whose inspection outlives the executor cleanup still finalizes (no lost wakeup)', function (): void {
     // Mid-cleanup snapshot: monitoring suspended, cleanup not yet complete.
-    $attempt = trackerAttempt($this->connection->id, [
+    $mediaReplacementAttempt = trackerAttempt($this->connection->id, [
         'download_id' => 'DL-1',
         'status' => MediaReplacementStatus::Downloading,
         'was_monitored' => true,
@@ -339,7 +339,7 @@ test('a Download whose inspection outlives the executor cleanup still finalizes 
         'required_languages' => ['eng'],
     ]);
 
-    $tracker = resolve(MediaReplacementTracker::class);
+    $mediaReplacementTracker = resolve(MediaReplacementTracker::class);
 
     // While the tracker is still inspecting (the slow episodefile GET), the executor
     // finishes its cleanup: it restores monitoring, sets cleanup_completed_at, and
@@ -347,10 +347,10 @@ test('a Download whose inspection outlives the executor cleanup still finalizes 
     // not written yet. verifyDownload() then resumes with its STALE phase snapshot
     // (cleanupDone=false) and takes the pending branch. Without the re-read handoff
     // nobody would finalize the consumed Download.
-    Http::fake(function (Request $request) use ($attempt, $tracker): mixed {
-        if (str_contains($request->url(), '/api/v3/episodefile/501') && $attempt->fresh()->cleanup_completed_at === null) {
-            $attempt->forceFill(['monitoring_suspended' => false, 'cleanup_completed_at' => now()])->save();
-            $tracker->finalizeAfterCleanup($this->connection, $attempt->fresh());
+    Http::fake(function (Request $request) use ($mediaReplacementAttempt, $mediaReplacementTracker): mixed {
+        if (str_contains($request->url(), '/api/v3/episodefile/501') && $mediaReplacementAttempt->fresh()->cleanup_completed_at === null) {
+            $mediaReplacementAttempt->forceFill(['monitoring_suspended' => false, 'cleanup_completed_at' => now()])->save();
+            $mediaReplacementTracker->finalizeAfterCleanup($this->connection, $mediaReplacementAttempt->fresh());
         }
 
         return match (true) {
@@ -366,14 +366,14 @@ test('a Download whose inspection outlives the executor cleanup still finalizes 
         };
     });
 
-    $tracker->verifyDownload($this->connection, [
+    $mediaReplacementTracker->verifyDownload($this->connection, [
         'eventType' => 'Download', 'series' => ['id' => 42], 'downloadId' => 'DL-1',
     ]);
 
     // The webhook re-read the phase after storing verification, saw cleanup done,
     // and finalized it itself rather than leaving it stuck downloading.
-    expect($attempt->fresh()->status)->toBe(MediaReplacementStatus::Verified)
-        ->and($attempt->fresh()->verification['subtitles_ok'])->toBeTrue();
+    expect($mediaReplacementAttempt->fresh()->status)->toBe(MediaReplacementStatus::Verified)
+        ->and($mediaReplacementAttempt->fresh()->verification['subtitles_ok'])->toBeTrue();
 });
 
 test('the cleanup finalizer does not clobber a terminal state another webhook set', function (): void {
@@ -381,7 +381,7 @@ test('the cleanup finalizer does not clobber a terminal state another webhook se
     // pending. Before the executor finalizes, a ManualInteractionRequired webhook
     // terminalizes it (operator action required). The finalizer must preserve that
     // terminal result rather than reporting Verified and hiding the action.
-    $attempt = trackerAttempt($this->connection->id, [
+    $mediaReplacementAttempt = trackerAttempt($this->connection->id, [
         'download_id' => 'DL-1',
         'status' => MediaReplacementStatus::Downloading,
         'monitoring_suspended' => false,
@@ -395,9 +395,9 @@ test('the cleanup finalizer does not clobber a terminal state another webhook se
         'downloadInfo' => ['downloadId' => 'DL-1'],
     ]);
 
-    resolve(MediaReplacementTracker::class)->finalizeAfterCleanup($this->connection, $attempt);
+    resolve(MediaReplacementTracker::class)->finalizeAfterCleanup($this->connection, $mediaReplacementAttempt);
 
-    $fresh = $attempt->fresh();
+    $fresh = $mediaReplacementAttempt->fresh();
     expect($fresh->status)->toBe(MediaReplacementStatus::NeedsAttention)
         ->and($fresh->failure_reason)->toBe('manual_interaction_required');
     // Only the manual-intervention notification fired; the finalizer added none.

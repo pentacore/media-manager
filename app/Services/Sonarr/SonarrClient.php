@@ -107,6 +107,26 @@ class SonarrClient extends ArrClient implements Warmable
     }
 
     /**
+     * Normalize Sonarr v4's mappedEpisodeInfo resources to the episodeIds field
+     * used by the replacement safety boundary. Keep the complete release row so
+     * a later approved grab can post Sonarr's original resource back unchanged
+     * apart from the documented override flag.
+     *
+     * @param  array<string, mixed>  $params
+     * @return array<int, array<string, mixed>>
+     *
+     * @throws RequestException|ConnectionException
+     */
+    #[Override]
+    public function getReleases(array $params): array
+    {
+        return array_values(array_map(
+            $this->normalizeReleaseMapping(...),
+            array_filter(parent::getReleases($params), is_array(...)),
+        ));
+    }
+
+    /**
      * @return array<int, array<string, mixed>>
      *
      * @throws RequestException|ConnectionException
@@ -140,6 +160,35 @@ class SonarrClient extends ArrClient implements Warmable
         $cache->warmList('list', fn (): array => $this->fetchSeries());
         $cache->warmMetadata('quality-profiles', fn (): array => parent::getQualityProfiles());
         $cache->warmMetadata('root-folders', fn (): array => parent::getRootFolders());
+    }
+
+    /**
+     * @param  array<string, mixed>  $release
+     * @return array<string, mixed>
+     */
+    private function normalizeReleaseMapping(array $release): array
+    {
+        if (is_array($release['episodeIds'] ?? null)) {
+            return $release;
+        }
+
+        $mappedEpisodeInfo = is_array($release['mappedEpisodeInfo'] ?? null)
+            ? $release['mappedEpisodeInfo']
+            : [];
+        $episodeIds = [];
+
+        foreach ($mappedEpisodeInfo as $episode) {
+            $episodeId = is_array($episode) ? ($episode['id'] ?? null) : null;
+
+            if (is_int($episodeId) && $episodeId > 0) {
+                $episodeIds[$episodeId] = $episodeId;
+            }
+        }
+
+        sort($episodeIds, SORT_NUMERIC);
+        $release['episodeIds'] = array_values($episodeIds);
+
+        return $release;
     }
 
     /**

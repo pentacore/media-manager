@@ -102,6 +102,53 @@ test('finds Sonarr candidates using the native interactive search by series and 
         ->and($result['guidance']['notes'])->toBe('CR releases are trusted for English.');
 });
 
+test('finds Sonarr v4 candidates mapped through mapped episode info', function (): void {
+    ServiceConnection::factory()->sonarr()->create([
+        'url' => 'http://sonarr.local:8989', 'api_key' => 'test', 'is_active' => true,
+    ]);
+    configureCrGuarantee();
+
+    $release = nativeRelease([
+        'mappedSeriesId' => 42,
+        'mappedEpisodeInfo' => [[
+            'id' => 101,
+            'seasonNumber' => 1,
+            'episodeNumber' => 1,
+            'absoluteEpisodeNumber' => 1,
+        ]],
+    ]);
+    unset($release['episodeIds']);
+
+    Http::fake(['sonarr.local:8989/api/v3/release*' => Http::response([$release])]);
+
+    $result = resolve(ReplacementCandidateFinder::class)->find(sonarrTargetSnapshot());
+
+    expect($result['candidates'])->toHaveCount(1)
+        ->and($result['candidates'][0]['mapped_ids'])->toBe([101]);
+});
+
+test('keeps downloadable rejected releases for manual approval and never selects them automatically', function (): void {
+    ServiceConnection::factory()->sonarr()->create([
+        'url' => 'http://sonarr.local:8989', 'api_key' => 'test', 'is_active' => true,
+    ]);
+    configureCrGuarantee();
+
+    Http::fake(['sonarr.local:8989/api/v3/release*' => Http::response([
+        nativeRelease([
+            'rejections' => ['Existing file on disk has a equal or higher Custom Format score: 143600'],
+        ]),
+    ])]);
+
+    $result = resolve(ReplacementCandidateFinder::class)->find(sonarrTargetSnapshot());
+
+    expect($result['candidates'])->toHaveCount(1)
+        ->and($result['candidates'][0]['requires_approval'])->toBeTrue()
+        ->and($result['candidates'][0]['rejection_reasons'])->toBe([
+            'Existing file on disk has a equal or higher Custom Format score: 143600',
+        ])
+        ->and($result['automatic_candidate'])->toBeNull();
+});
+
 test('never leaks download urls, magnet urls, or bulky custom format payloads', function (): void {
     ServiceConnection::factory()->sonarr()->create([
         'url' => 'http://sonarr.local:8989', 'api_key' => 'test', 'is_active' => true,

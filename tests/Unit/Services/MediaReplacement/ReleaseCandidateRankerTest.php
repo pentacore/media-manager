@@ -127,6 +127,25 @@ test('confidence ranks ahead of arr suitability scores', function (): void {
         ->and(array_column($result['candidates'], 'confidence'))->toBe([98, 85]);
 });
 
+test('downloadable ARR rejections become approval-required candidate metadata', function (): void {
+    $result = rcrRanker()->rank(
+        [rcrRelease(['rejections' => [
+            'Existing file on disk is of equal or higher preference: WEBDL-1080p v1',
+        ]])],
+        ['eng'],
+        [rcrRule()],
+        rcrSonarrTarget(),
+        SeasonPackPolicy::ApprovalRequired,
+    );
+
+    expect($result['candidates'])->toHaveCount(1)
+        ->and($result['candidates'][0]['requires_approval'])->toBeTrue()
+        ->and($result['candidates'][0]['rejection_reasons'])->toBe([
+            'Existing file on disk is of equal or higher preference: WEBDL-1080p v1',
+        ])
+        ->and($result['excluded']['rejected'])->toBe(0);
+});
+
 test('each hard exclusion increments only its first failing gate', function (
     array $releaseOverrides,
     array $requiredLanguages,
@@ -155,9 +174,6 @@ test('each hard exclusion increments only its first failing gate', function (
     ],
     'downloadAllowed not strict true -> unavailable' => fn (): array => [
         ['downloadAllowed' => 1], ['eng'], [rcrRule()], [], SeasonPackPolicy::ApprovalRequired, 'unavailable',
-    ],
-    'non-empty rejections -> rejected' => fn (): array => [
-        ['rejections' => ['Indexer rejected release']], ['eng'], [rcrRule()], [], SeasonPackPolicy::ApprovalRequired, 'rejected',
     ],
     'installed release title exact case-insensitively -> installed_release' => fn (): array => [
         ['title' => ' Example Show CR '], ['eng'], [rcrRule()], ['installed_release' => 'example show cr'], SeasonPackPolicy::ApprovalRequired, 'installed_release',
@@ -215,11 +231,11 @@ test('hard exclusions use the documented first-failing gate precedence', functio
         ['installed_release' => 'installed cr'],
         'unavailable',
     ],
-    'rejected precedes every later failure' => fn (): array => [
+    'rejection metadata does not precede installed release exclusion' => fn (): array => [
         ['rejections' => ['Rejected'], 'title' => 'Installed CR', 'fullSeason' => true],
         [],
         ['installed_release' => 'installed cr'],
-        'rejected',
+        'installed_release',
     ],
     'installed release precedes evidence and season pack failures' => fn (): array => [
         ['title' => 'Installed CR', 'fullSeason' => true],
@@ -551,6 +567,8 @@ test('candidate projection is an exact safe whitelist with compact auditable evi
         'seeders',
         'custom_format_score',
         'confidence',
+        'requires_approval',
+        'rejection_reasons',
         'matched_rules',
         'season_pack',
     ])->and($candidate)->toMatchArray([

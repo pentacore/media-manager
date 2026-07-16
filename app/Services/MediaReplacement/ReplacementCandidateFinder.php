@@ -35,11 +35,11 @@ final readonly class ReplacementCandidateFinder
      * @param  array<string, mixed>  $target
      * @return array<string, mixed>|null
      */
-    public function freshRawRelease(array $target, string $fingerprint, ?ServiceConnection $connection = null): ?array
+    public function freshRawRelease(array $target, string $fingerprint, ?ServiceConnection $serviceConnection = null): ?array
     {
         $service = mb_strtolower(trim((string) ($target['service'] ?? '')));
 
-        foreach ($this->searchReleases($service, $target, $connection) as $release) {
+        foreach ($this->searchReleases($service, $target, $serviceConnection) as $release) {
             if (is_array($release) && $this->releaseFingerprint->make($service, $release) === $fingerprint) {
                 return $release;
             }
@@ -65,7 +65,7 @@ final readonly class ReplacementCandidateFinder
         array $target,
         ?array $languageOverride = null,
         int $limit = 5,
-        ?ServiceConnection $connection = null,
+        ?ServiceConnection $serviceConnection = null,
     ): array {
         $service = mb_strtolower(trim((string) ($target['service'] ?? '')));
         $scope = MediaReplacementScope::tryFrom((string) ($target['scope'] ?? ''))
@@ -76,7 +76,7 @@ final readonly class ReplacementCandidateFinder
         $seasonPackPolicy = $this->mediaReplacementSettings->seasonPackPolicy();
 
         $ranked = $this->releaseCandidateRanker->rank(
-            releases: $this->searchReleases($service, $target, $connection),
+            releases: $this->searchReleases($service, $target, $serviceConnection),
             requiredLanguages: $effectiveLanguages,
             rules: is_array($guidance['rules']) ? $guidance['rules'] : [],
             target: $target,
@@ -99,13 +99,13 @@ final readonly class ReplacementCandidateFinder
      * @param  array<string, mixed>  $target
      * @return array<int, array<string, mixed>>
      */
-    private function searchReleases(string $service, array $target, ?ServiceConnection $connection): array
+    private function searchReleases(string $service, array $target, ?ServiceConnection $serviceConnection): array
     {
-        $connection ??= $this->connectionFor($service, $target);
+        $serviceConnection ??= $this->connectionFor($service, $target);
 
         return match ($service) {
-            'sonarr' => new SonarrClient($connection)->getReleases($this->sonarrSearchParams($target)),
-            'radarr' => new RadarrClient($connection)->getReleases(['movieId' => (int) ($target['movie_id'] ?? 0)]),
+            'sonarr' => new SonarrClient($serviceConnection)->getReleases($this->sonarrSearchParams($target)),
+            'radarr' => new RadarrClient($serviceConnection)->getReleases(['movieId' => (int) ($target['movie_id'] ?? 0)]),
             default => throw new InvalidArgumentException('target service must be "sonarr" or "radarr".'),
         };
     }
@@ -161,6 +161,10 @@ final readonly class ReplacementCandidateFinder
         }
 
         $best = $ranked['candidates'][0];
+
+        if (($best['requires_approval'] ?? false) === true) {
+            return null;
+        }
 
         if (($best['confidence'] ?? 0) < $this->mediaReplacementSettings->automaticSelectionThreshold()) {
             return null;

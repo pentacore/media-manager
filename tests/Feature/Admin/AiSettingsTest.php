@@ -4,10 +4,12 @@ declare(strict_types=1);
 
 use App\Enums\AiMode;
 use App\Enums\MediaReplacementScope;
+use App\Models\ServiceConnection;
 use App\Models\User;
 use App\Settings\AiSettings;
 use App\Settings\MediaReplacementSettings;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Http;
 use Laravel\Ai\Enums\Lab;
 
 beforeEach(function (): void {
@@ -28,6 +30,7 @@ function validMediaReplacementConfiguration(array $overrides = []): array
         'global_languages' => ['English'],
         'scoped_languages' => ['anime' => ['Japanese'], 'tv' => null, 'movie' => null],
         'season_pack_policy' => 'approval_required',
+        'sonarr_root_folders' => [],
         'guidance' => [
             'anime' => [
                 'notes' => 'CR-tagged releases are trusted.',
@@ -203,13 +206,57 @@ test('index exposes media replacement configuration and enum options', function 
         );
 });
 
+test('index imports safe root-folder choices from active Sonarr connections', function (): void {
+    $admin = User::factory()->admin()->create();
+    $connection = ServiceConnection::factory()->sonarr()->create([
+        'name' => 'Anime Sonarr',
+        'url' => 'http://sonarr.local:8989',
+        'api_key' => 'secret',
+    ]);
+    Http::fake([
+        'sonarr.local:8989/api/v3/rootfolder' => Http::response([
+            ['id' => 1, 'path' => '/tv', 'freeSpace' => 1000],
+            ['id' => 2, 'path' => '/anime', 'freeSpace' => 2000],
+        ]),
+    ]);
+
+    $this->actingAs($admin)
+        ->get(route('admin.ai-settings.index'))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->where('sonarrRootFolders', [
+                [
+                    'service_connection_id' => $connection->id,
+                    'connection_name' => 'Anime Sonarr',
+                    'root_folder_id' => 1,
+                    'path' => '/tv',
+                ],
+                [
+                    'service_connection_id' => $connection->id,
+                    'connection_name' => 'Anime Sonarr',
+                    'root_folder_id' => 2,
+                    'path' => '/anime',
+                ],
+            ])
+        );
+});
+
 test('admin can update media replacement settings and the service round-trips them', function (): void {
     $admin = User::factory()->admin()->create();
+    $connection = ServiceConnection::factory()->sonarr()->create();
+    $configuration = validMediaReplacementConfiguration([
+        'sonarr_root_folders' => [[
+            'service_connection_id' => $connection->id,
+            'root_folder_id' => 2,
+            'path' => '/anime',
+            'scope' => 'anime',
+        ]],
+    ]);
 
     $this->actingAs($admin)
         ->put(route('admin.ai-settings.update'), [
             ...baseAiSettingsPayload(),
-            'media_replacement' => json_encode(validMediaReplacementConfiguration(), JSON_THROW_ON_ERROR),
+            'media_replacement' => json_encode($configuration, JSON_THROW_ON_ERROR),
         ])
         ->assertRedirect(route('admin.ai-settings.index'))
         ->assertSessionHasNoErrors();
@@ -221,7 +268,13 @@ test('admin can update media replacement settings and the service round-trips th
         ->and($mediaReplacementSettings->effectiveLanguages(MediaReplacementScope::Anime))->toBe(['jpn'])
         ->and($mediaReplacementSettings->effectiveLanguages(MediaReplacementScope::Tv))->toBe(['eng'])
         ->and($mediaReplacementSettings->guidance(MediaReplacementScope::Anime)['notes'])->toBe('CR-tagged releases are trusted.')
-        ->and($mediaReplacementSettings->guidance(MediaReplacementScope::Anime)['rules'])->toHaveCount(1);
+        ->and($mediaReplacementSettings->guidance(MediaReplacementScope::Anime)['rules'])->toHaveCount(1)
+        ->and($mediaReplacementSettings->sonarrRootFolders())->toBe([[
+            'service_connection_id' => $connection->id,
+            'root_folder_id' => 2,
+            'path' => '/anime',
+            'scope' => 'anime',
+        ]]);
 });
 
 test('update accepts a request without media replacement and preserves stored configuration', function (): void {
@@ -260,6 +313,15 @@ test('update rejects invalid media replacement configuration', function (array $
     'unknown scope key' => [
         ['scoped_languages' => ['anime' => null, 'tv' => null, 'movie' => null, 'music' => ['English']]],
         'media_replacement.scoped_languages',
+    ],
+    'movie scope for a Sonarr root folder' => [
+        ['sonarr_root_folders' => [[
+            'service_connection_id' => 1,
+            'root_folder_id' => 2,
+            'path' => '/anime',
+            'scope' => 'movie',
+        ]]],
+        'media_replacement.sonarr_root_folders.0.scope',
     ],
     'notes longer than 4000 characters' => [
         ['guidance' => [

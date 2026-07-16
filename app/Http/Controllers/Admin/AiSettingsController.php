@@ -12,6 +12,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\Admin\UpdateAiSettingsRequest;
 use App\Models\AiModelPrice;
 use App\Services\AiBudget\AiBudgetGuard;
+use App\Services\MediaReplacement\SonarrRootFolderCatalog;
 use App\Settings\AiSettings;
 use App\Settings\MediaReplacementSettings;
 use Illuminate\Http\RedirectResponse;
@@ -25,6 +26,7 @@ class AiSettingsController extends Controller
         AiSettings $aiSettings,
         AiBudgetGuard $aiBudgetGuard,
         MediaReplacementSettings $mediaReplacementSettings,
+        SonarrRootFolderCatalog $sonarrRootFolderCatalog,
     ): Response {
         return Inertia::render('Admin/AiSettings/Index', [
             'settings' => [
@@ -62,6 +64,7 @@ class AiSettingsController extends Controller
                 ['value' => 'title', 'label' => 'Title token/phrase'],
                 ['value' => 'custom_format', 'label' => 'Custom format'],
             ],
+            'sonarrRootFolders' => $sonarrRootFolderCatalog->all(),
         ]);
     }
 
