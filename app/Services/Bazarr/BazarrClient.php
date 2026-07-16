@@ -41,18 +41,17 @@ final class BazarrClient
      */
     public function getSystemStatus(): array
     {
-        return $this->cache()->rememberMetadata('system-status', function (): array {
-            $payload = $this->dataEnvelope(
-                $this->buildClient()->get('/api/system/status'),
-            );
-            $version = $payload['data']['bazarr_version'] ?? null;
+        return $this->cache()->rememberMetadata('system-status', fn (): array => $this->fetchSystemStatus());
+    }
 
-            throw_if(! is_string($version) || $version === '', UnexpectedValueException::class, 'Bazarr system status response is missing a valid version.');
-
-            $payload['version'] = $version;
-
-            return $payload;
-        });
+    /**
+     * @return array{data: array<string, mixed>, version: string}
+     *
+     * @throws ConnectionException|RequestException|UnexpectedValueException
+     */
+    public function getFreshSystemStatus(): array
+    {
+        return $this->fetchSystemStatus();
     }
 
     /**
@@ -284,6 +283,25 @@ final class BazarrClient
                     || ($throwable instanceof RequestException && $throwable->response->serverError()),
                 throw: false,
             );
+    }
+
+    /**
+     * @return array{data: array<string, mixed>, version: string}
+     *
+     * @throws ConnectionException|RequestException|UnexpectedValueException
+     */
+    private function fetchSystemStatus(): array
+    {
+        $payload = $this->dataEnvelope(
+            $this->buildClient()->get('/api/system/status'),
+        );
+        $version = $payload['data']['bazarr_version'] ?? null;
+
+        throw_if(! is_string($version) || $version === '', UnexpectedValueException::class, 'Bazarr system status response is missing a valid version.');
+
+        $payload['version'] = $version;
+
+        return $payload;
     }
 
     /**

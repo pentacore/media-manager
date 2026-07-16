@@ -50,6 +50,28 @@ test('marks Bazarr healthy and stores its reported version', function (): void {
     Http::assertSentCount(1);
 });
 
+test('Bazarr health checks bypass cached system status', function (): void {
+    $connection = ServiceConnection::factory()->bazarr()->create([
+        'url' => 'http://bazarr.local:6767',
+        'api_key' => 'bazarr-secret',
+    ]);
+
+    Http::fake([
+        'bazarr.local:6767/api/system/status' => Http::sequence()
+            ->push(['data' => ['bazarr_version' => '1.6.0']])
+            ->push(['data' => ['bazarr_version' => '1.6.1']]),
+    ]);
+
+    new PingServiceHealth($connection)->handle();
+    new PingServiceHealth($connection)->handle();
+
+    expect($connection->fresh()->version)->toBe('1.6.1');
+
+    Http::assertSent(fn (Request $request): bool => $request->url() === 'http://bazarr.local:6767/api/system/status'
+        && $request->hasHeader('X-API-KEY', 'bazarr-secret'));
+    Http::assertSentCount(2);
+});
+
 test('marks healthy and updates version on success', function (): void {
     $connection = ServiceConnection::factory()->sonarr()->create([
         'url' => 'http://sonarr.local:8989',
