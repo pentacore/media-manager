@@ -1,0 +1,12 @@
+{
+    "data": [
+        {
+            "title": "Example Movie",
+            "missing_subtitles": [{"name": "Swedish", "code2": "sv", "code3": "swe", "forced": false, "hi": false}],
+            "radarrId": 801,
+            "sceneName": "Example.Movie.2024.1080p",
+            "tags": ["4"]
+        }
+    ],
+    "total": 8
+}
