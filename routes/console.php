@@ -12,6 +12,7 @@ use App\Console\Commands\CollectServiceGauges;
 use App\Console\Commands\PollSabnzbdHistory;
 use App\Console\Commands\PruneAiProposedWorkflows;
 use App\Console\Commands\PruneStatistics;
+use App\Console\Commands\ReconcileBazarrSubtitles;
 use App\Console\Commands\ReconcileMediaReplacementAttempts;
 use App\Console\Commands\ReconcileStuckActionRequests;
 use App\Console\Commands\RefreshInterventionCount;
@@ -57,6 +58,10 @@ Schedule::command(ReconcileMediaReplacementAttempts::class)
 
 Schedule::command(ReconcileStuckActionRequests::class)
     ->hourly()
+    ->withoutOverlapping();
+
+Schedule::command(ReconcileBazarrSubtitles::class)
+    ->everyFiveMinutes()
     ->withoutOverlapping();
 
 Schedule::command(RefreshAiPrices::class)
