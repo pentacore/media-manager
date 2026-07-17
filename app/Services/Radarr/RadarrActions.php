@@ -39,7 +39,7 @@ class RadarrActions implements ActionExecutor
 
         $deleteFiles = (bool) ($payload['delete_files'] ?? false);
 
-        $serviceConnection = ServiceConnection::resolveActive(ServiceType::Radarr);
+        $serviceConnection = ServiceConnection::resolvePinned($payload, ServiceType::Radarr);
         new RadarrClient($serviceConnection)->deleteMovie($movieId, $deleteFiles);
         new RadarrCache($serviceConnection)->bustAll();
 
@@ -59,7 +59,7 @@ class RadarrActions implements ActionExecutor
 
         throw_if($tmdbId <= 0, InvalidArgumentException::class, 'tmdb_id is required');
 
-        $serviceConnection = ServiceConnection::resolveActive(ServiceType::Radarr);
+        $serviceConnection = ServiceConnection::resolvePinned($payload, ServiceType::Radarr);
         $radarrClient = new RadarrClient($serviceConnection);
 
         // Look up the full movie spec by tmdb_id (Radarr's lookup accepts "tmdb:{id}" syntax).
@@ -97,7 +97,7 @@ class RadarrActions implements ActionExecutor
 
         $monitored = (bool) ($payload['monitored'] ?? true);
 
-        $serviceConnection = ServiceConnection::resolveActive(ServiceType::Radarr);
+        $serviceConnection = ServiceConnection::resolvePinned($payload, ServiceType::Radarr);
         $radarrClient = new RadarrClient($serviceConnection);
         $movie = $radarrClient->getMovieById($movieId);
         $movie['monitored'] = $monitored;
@@ -122,7 +122,7 @@ class RadarrActions implements ActionExecutor
         throw_if($movieId <= 0, InvalidArgumentException::class, 'movie_id is required');
         throw_if($qualityProfileId <= 0, InvalidArgumentException::class, 'quality_profile_id is required');
 
-        $serviceConnection = ServiceConnection::resolveActive(ServiceType::Radarr);
+        $serviceConnection = ServiceConnection::resolvePinned($payload, ServiceType::Radarr);
         $radarrClient = new RadarrClient($serviceConnection);
         $movie = $radarrClient->getMovieById($movieId);
         $movie['qualityProfileId'] = $qualityProfileId;

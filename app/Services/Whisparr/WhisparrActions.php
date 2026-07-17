@@ -37,7 +37,7 @@ class WhisparrActions implements ActionExecutor
         throw_if($itemId <= 0, InvalidArgumentException::class, 'whisparr_item_id is required');
 
         $deleteFiles = (bool) ($payload['delete_files'] ?? false);
-        $serviceConnection = ServiceConnection::resolveActive(ServiceType::Whisparr);
+        $serviceConnection = ServiceConnection::resolvePinned($payload, ServiceType::Whisparr);
         new WhisparrClient($serviceConnection)->deleteItem($itemId, $deleteFiles);
         new WhisparrCache($serviceConnection)->bustAll();
 
@@ -53,7 +53,7 @@ class WhisparrActions implements ActionExecutor
         $tmdbId = (int) ($payload['tmdb_id'] ?? 0);
         throw_if($tmdbId <= 0, InvalidArgumentException::class, 'tmdb_id is required');
 
-        $serviceConnection = ServiceConnection::resolveActive(ServiceType::Whisparr);
+        $serviceConnection = ServiceConnection::resolvePinned($payload, ServiceType::Whisparr);
         $whisparrClient = new WhisparrClient($serviceConnection);
 
         $candidates = $whisparrClient->searchItems(sprintf('tmdb:%d', $tmdbId));
@@ -83,7 +83,7 @@ class WhisparrActions implements ActionExecutor
         throw_if($itemId <= 0, InvalidArgumentException::class, 'whisparr_item_id is required');
 
         $monitored = (bool) ($payload['monitored'] ?? true);
-        $serviceConnection = ServiceConnection::resolveActive(ServiceType::Whisparr);
+        $serviceConnection = ServiceConnection::resolvePinned($payload, ServiceType::Whisparr);
         $whisparrClient = new WhisparrClient($serviceConnection);
         $item = $whisparrClient->getItemById($itemId);
         $item['monitored'] = $monitored;
@@ -104,7 +104,7 @@ class WhisparrActions implements ActionExecutor
         throw_if($itemId <= 0, InvalidArgumentException::class, 'whisparr_item_id is required');
         throw_if($qualityProfileId <= 0, InvalidArgumentException::class, 'quality_profile_id is required');
 
-        $serviceConnection = ServiceConnection::resolveActive(ServiceType::Whisparr);
+        $serviceConnection = ServiceConnection::resolvePinned($payload, ServiceType::Whisparr);
         $whisparrClient = new WhisparrClient($serviceConnection);
         $item = $whisparrClient->getItemById($itemId);
         $item['qualityProfileId'] = $qualityProfileId;

@@ -39,7 +39,7 @@ class SonarrActions implements ActionExecutor
 
         $deleteFiles = (bool) ($payload['delete_files'] ?? false);
 
-        $serviceConnection = ServiceConnection::resolveActive(ServiceType::Sonarr);
+        $serviceConnection = ServiceConnection::resolvePinned($payload, ServiceType::Sonarr);
         new SonarrClient($serviceConnection)->deleteSeries($seriesId, $deleteFiles);
         new SonarrCache($serviceConnection)->bustAll();
 
@@ -59,7 +59,7 @@ class SonarrActions implements ActionExecutor
 
         throw_if($tvdbId <= 0, InvalidArgumentException::class, 'tvdb_id is required');
 
-        $serviceConnection = ServiceConnection::resolveActive(ServiceType::Sonarr);
+        $serviceConnection = ServiceConnection::resolvePinned($payload, ServiceType::Sonarr);
         $sonarrClient = new SonarrClient($serviceConnection);
 
         // Look up the full series spec by tvdb_id (Sonarr's lookup accepts "tvdb:{id}" syntax).
@@ -98,7 +98,7 @@ class SonarrActions implements ActionExecutor
 
         $monitored = (bool) ($payload['monitored'] ?? true);
 
-        $serviceConnection = ServiceConnection::resolveActive(ServiceType::Sonarr);
+        $serviceConnection = ServiceConnection::resolvePinned($payload, ServiceType::Sonarr);
         $sonarrClient = new SonarrClient($serviceConnection);
         $series = $sonarrClient->getSeriesById($seriesId);
         $series['monitored'] = $monitored;
@@ -123,7 +123,7 @@ class SonarrActions implements ActionExecutor
         throw_if($seriesId <= 0, InvalidArgumentException::class, 'series_id is required');
         throw_if($qualityProfileId <= 0, InvalidArgumentException::class, 'quality_profile_id is required');
 
-        $serviceConnection = ServiceConnection::resolveActive(ServiceType::Sonarr);
+        $serviceConnection = ServiceConnection::resolvePinned($payload, ServiceType::Sonarr);
         $sonarrClient = new SonarrClient($serviceConnection);
         $series = $sonarrClient->getSeriesById($seriesId);
         $series['qualityProfileId'] = $qualityProfileId;

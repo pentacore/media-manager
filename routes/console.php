@@ -13,6 +13,7 @@ use App\Console\Commands\PollSabnzbdHistory;
 use App\Console\Commands\PruneAiProposedWorkflows;
 use App\Console\Commands\PruneStatistics;
 use App\Console\Commands\ReconcileMediaReplacementAttempts;
+use App\Console\Commands\ReconcileStuckActionRequests;
 use App\Console\Commands\RefreshInterventionCount;
 use App\Console\Commands\RefreshSabnzbdDownloadCounts;
 use App\Console\Commands\WarmServiceCaches;
@@ -42,6 +43,10 @@ Schedule::command(PruneAiProposedWorkflows::class)
     ->withoutOverlapping();
 
 Schedule::command(ReconcileMediaReplacementAttempts::class)
+    ->hourly()
+    ->withoutOverlapping();
+
+Schedule::command(ReconcileStuckActionRequests::class)
     ->hourly()
     ->withoutOverlapping();
 

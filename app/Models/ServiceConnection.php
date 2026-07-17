@@ -103,11 +103,51 @@ class ServiceConnection extends Model
     }
 
     /**
+     * Deterministically ordered so multiple active same-type connections
+     * always resolve to the same instance instead of whatever the database
+     * returns first. Destructive action executors should prefer
+     * {@see resolvePinned()} with their request payload.
+     *
      * @throws ModelNotFoundException
      */
     public static function resolveActive(ServiceType $serviceType): self
     {
-        return self::where('type', $serviceType)->where('is_active', true)->firstOrFail();
+        return self::where('type', $serviceType)->where('is_active', true)->orderBy('id')->firstOrFail();
+    }
+
+    /**
+     * Resolve the connection an action should run against, honoring the
+     * `service_connection_id` the orchestrator stamped into the payload from
+     * the originating webhook. Media IDs overlap across same-type instances,
+     * so re-resolving "the active one" could act on a different server than
+     * the one that emitted the event. A pinned-but-deleted connection aborts;
+     * a pinned connection of a different type (cross-service action, e.g. a
+     * sonarr event triggering an emby scan) falls back to resolveActive().
+     *
+     * @param  array<string, mixed>  $payload
+     *
+     * @throws ModelNotFoundException
+     */
+    public static function resolvePinned(array $payload, ServiceType $serviceType): self
+    {
+        $connectionId = (int) ($payload['service_connection_id'] ?? 0);
+
+        if ($connectionId > 0) {
+            $connection = self::query()->find($connectionId);
+
+            if ($connection === null) {
+                throw (new ModelNotFoundException(sprintf(
+                    'Service connection %d pinned to this action no longer exists; aborting instead of acting on a different instance.',
+                    $connectionId,
+                )))->setModel(self::class, [$connectionId]);
+            }
+
+            if ($connection->type === $serviceType) {
+                return $connection;
+            }
+        }
+
+        return self::resolveActive($serviceType);
     }
 
     /**

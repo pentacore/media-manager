@@ -67,6 +67,14 @@ class ActionOrchestrator
         // The override can only tighten the gate (force approval), never relax it.
         $requiresApproval = $advisoryMode || $config->requires_approval || ($forceRequiresApproval ?? false);
 
+        // Pin the originating connection so executors act on the instance
+        // that emitted the event — media IDs overlap across same-type
+        // instances, and re-resolving "the active one" at execution time
+        // could target a different server.
+        if ($webhookEvent?->service_connection_id !== null && ! array_key_exists('service_connection_id', $payload)) {
+            $payload['service_connection_id'] = $webhookEvent->service_connection_id;
+        }
+
         $actionRequest = ActionRequest::create([
             'webhook_event_id' => $webhookEvent?->id,
             'type' => $type,
@@ -125,6 +133,16 @@ class ActionOrchestrator
 
         // The override can only tighten the gate (force approval), never relax it.
         $requiresApproval = $config->requires_approval || ($forceRequiresApproval ?? false);
+
+        // Same connection pinning as dispatch(): agent proposals originate
+        // from a webhook event too.
+        if ($webhookEventId !== null && ! array_key_exists('service_connection_id', $payload)) {
+            $originConnectionId = WebhookEvent::query()->whereKey($webhookEventId)->value('service_connection_id');
+
+            if ($originConnectionId !== null) {
+                $payload['service_connection_id'] = $originConnectionId;
+            }
+        }
 
         $actionRequest = ActionRequest::create([
             'webhook_event_id' => $webhookEventId,

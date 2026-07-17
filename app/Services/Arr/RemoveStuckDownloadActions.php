@@ -55,7 +55,7 @@ class RemoveStuckDownloadActions implements ActionExecutor
             default => throw new InvalidArgumentException(sprintf('Unsupported service "%s"', $service)),
         };
 
-        $serviceConnection = ServiceConnection::resolveActive($type);
+        $serviceConnection = ServiceConnection::resolvePinned($payload, $type);
         $client = $type === ServiceType::Sonarr
             ? new SonarrClient($serviceConnection)
             : new RadarrClient($serviceConnection);
