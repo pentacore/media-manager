@@ -62,16 +62,16 @@
         },
         {
             "name": "aws/aws-sdk-php",
-            "version": "3.388.3",
+            "version": "3.388.8",
             "source": {
                 "type": "git",
                 "url": "https://github.com/aws/aws-sdk-php.git",
-                "reference": "dc03d7967241af550214ba210d238482fbafb24d"
+                "reference": "ff7499bfa2b987c8fbae495fe0e851cfdde6172f"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/aws/aws-sdk-php/zipball/dc03d7967241af550214ba210d238482fbafb24d",
-                "reference": "dc03d7967241af550214ba210d238482fbafb24d",
+                "url": "https://api.github.com/repos/aws/aws-sdk-php/zipball/ff7499bfa2b987c8fbae495fe0e851cfdde6172f",
+                "reference": "ff7499bfa2b987c8fbae495fe0e851cfdde6172f",
                 "shasum": ""
             },
             "require": {
@@ -153,9 +153,9 @@
             "support": {
                 "forum": "https://github.com/aws/aws-sdk-php/discussions",
                 "issues": "https://github.com/aws/aws-sdk-php/issues",
-                "source": "https://github.com/aws/aws-sdk-php/tree/3.388.3"
+                "source": "https://github.com/aws/aws-sdk-php/tree/3.388.8"
             },
-            "time": "2026-07-09T18:07:47+00:00"
+            "time": "2026-07-16T18:07:15+00:00"
         },
         {
             "name": "bacon/bacon-qr-code",
@@ -1832,16 +1832,16 @@
         },
         {
             "name": "laravel/ai",
-            "version": "v0.9.0",
+            "version": "v0.9.1",
             "source": {
                 "type": "git",
                 "url": "https://github.com/laravel/ai.git",
-                "reference": "1091772a6c2dba104c741286b4a73cc71a47cd00"
+                "reference": "2760a62bff6ab515cdf10222f61b7973356450e1"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/laravel/ai/zipball/1091772a6c2dba104c741286b4a73cc71a47cd00",
-                "reference": "1091772a6c2dba104c741286b4a73cc71a47cd00",
+                "url": "https://api.github.com/repos/laravel/ai/zipball/2760a62bff6ab515cdf10222f61b7973356450e1",
+                "reference": "2760a62bff6ab515cdf10222f61b7973356450e1",
                 "shasum": ""
             },
             "require": {
@@ -1902,7 +1902,7 @@
                 "issues": "https://github.com/laravel/ai/issues",
                 "source": "https://github.com/laravel/ai"
             },
-            "time": "2026-07-07T17:38:48+00:00"
+            "time": "2026-07-14T18:41:31+00:00"
         },
         {
             "name": "laravel/fortify",
