@@ -55,6 +55,7 @@ final class ParseMultipartBrowserRequests
             if ($part === '') {
                 continue;
             }
+
             if (str_starts_with($part, '--')) {
                 continue;
             }
@@ -63,10 +64,12 @@ final class ParseMultipartBrowserRequests
             if (! is_string($rawHeaders)) {
                 continue;
             }
+
             if (! is_string($body)) {
                 continue;
             }
-            if (preg_match('/name="([^"]+)"/i', (string) $rawHeaders, $nameMatch) !== 1) {
+
+            if (preg_match('/name="([^"]+)"/i', $rawHeaders, $nameMatch) !== 1) {
                 continue;
             }
 

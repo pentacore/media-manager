@@ -112,7 +112,7 @@ function requestToolConnection(): ServiceConnection
 
 function fakeRequestToolMovie(): void
 {
-    Http::fake(fn(HttpRequest $request) => match (parse_url($request->url(), PHP_URL_PATH)) {
+    Http::fake(fn(HttpRequest $httpRequest) => match (parse_url($httpRequest->url(), PHP_URL_PATH)) {
         '/api/movies' => Http::response(['data' => [[
             'radarrId' => 801,
             'title' => 'Example Movie',

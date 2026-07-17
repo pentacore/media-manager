@@ -271,6 +271,7 @@ function browserSmokeAdminRouteNames(): array
         'admin.connections.index',
         'admin.connections.create',
         'admin.users.index',
+        'bazarr.admin.index',
         'actions.rules.index',
         'emby.links.index',
         'admin.statistics.index',
@@ -296,6 +297,7 @@ function browserSmokeExcludedRouteNames(): array
         'ai.chat.pending-workflow',
         'ai.conversations.index',
         'media.search.instant',
+        'bazarr.search',
         'monitoring.watch-history.export',
         'security.edit',
     ];
