@@ -20,6 +20,7 @@ jobs:
   php-lint:
     name: PHP lint (Pint)
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v7
 
@@ -46,6 +47,7 @@ jobs:
   js-lint:
     name: JS lint, format & types
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7
 
@@ -114,6 +116,8 @@ jobs:
   tests:
     name: Pest tests
     runs-on: ubuntu-latest
+    # A hung Playwright browser otherwise burns the 6h default.
+    timeout-minutes: 40
 
     services:
       pgsql:
@@ -240,6 +244,7 @@ jobs:
   octane-smoke:
     name: Octane smoke test
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     needs: tests
 
     services:
@@ -391,6 +396,57 @@ jobs:
             exit 1
           fi
 
-      - name: Stop container
+      # The queue/scheduler/reverb/migrate entrypoint blocks otherwise run
+      # for the first time in production — a bash typo or renamed artisan
+      # flag would ship green and crash-loop the worker. Boot each role and
+      # assert it stays up. (reverb binds :8080, so the web container is
+      # stopped first.)
+      - name: Smoke queue/scheduler/reverb roles
+        env:
+          APP_KEY: ${{ steps.app_key.outputs.APP_KEY }}
+        run: |
+          docker rm -f octane
+          for role in queue scheduler reverb; do
+            docker run -d \
+              --name "$role" \
+              --network host \
+              -e APP_KEY="$APP_KEY" \
+              -e APP_ENV=production \
+              -e APP_DEBUG=false \
+              -e APP_URL=http://127.0.0.1:8080 \
+              -e CONTAINER_ROLE="$role" \
+              -e LOG_CHANNEL=stderr \
+              -e DB_CONNECTION=pgsql \
+              -e DB_HOST=127.0.0.1 \
+              -e DB_PORT=5432 \
+              -e DB_DATABASE=app \
+              -e DB_USERNAME=postgres \
+              -e DB_PASSWORD=postgres \
+              -e CACHE_STORE=redis \
+              -e SESSION_DRIVER=redis \
+              -e QUEUE_CONNECTION=redis \
+              -e BROADCAST_CONNECTION=log \
+              -e MAIL_MAILER=log \
+              -e REDIS_HOST=127.0.0.1 \
+              -e REDIS_PORT=6379 \
+              -e TYPESENSE_HOST=127.0.0.1 \
+              -e TYPESENSE_PORT=8108 \
+              -e TYPESENSE_API_KEY=xyz \
+              mediamanager:octane-smoke
+          done
+          sleep 10
+          fail=0
+          for role in queue scheduler reverb; do
+            if [ "$(docker inspect -f '{{.State.Running}}' "$role")" != "true" ]; then
+              echo "--- $role container exited ---" >&2
+              docker logs "$role" >&2 || true
+              fail=1
+            else
+              echo "$role role healthy after 10s"
+            fi
+          done
+          exit "$fail"
+
+      - name: Stop containers
         if: always()
-        run: docker rm -f octane || true
+        run: docker rm -f octane queue scheduler reverb || true

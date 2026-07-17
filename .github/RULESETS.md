@@ -14,9 +14,23 @@ all let repository admins bypass when needed (e.g. fixing a misconfig).
 
 **No PR rule on main.** semantic-release pushes the `chore(release): X.Y.Z`
 commit and the `vX.Y.Z` tag directly to main, and the GitHub-Actions internal
-token (id 15368) cannot be added as a bypass actor on personal repos. The
-gate happens upstream — features flow through PRs into `develop`, and only
-`develop → main` merges (done by an admin) reach `main`.
+token (id 15368) cannot be added as a bypass actor on personal repos.
+
+> **Known gap (2026-07):** the "gate happens upstream on `develop`" story
+> below no longer reflects reality — features now flow through PRs directly
+> into `main` and the develop channel has been retired (release.yml,
+> dependabot, releaserc all target main only). That leaves `main` with **no
+> required status checks**: a PR merged before CI finishes, or a direct
+> push, lands untested, and release.yml will happily tag the tip after any
+> later green run. Closing this properly needs one of:
+>
+> 1. A `pull_request` + `required_status_checks` ruleset on main **plus** a
+>    PAT for semantic-release from a bypass-listed actor (replacing
+>    GITHUB_TOKEN in release.yml), or
+> 2. Moving the release commit/tag push off main-protected refs.
+>
+> Until then, discipline: never merge a PR before `PHP lint (Pint)`,
+> `JS lint, format & types`, and `Pest tests` are green.
 
 ## develop protection
 

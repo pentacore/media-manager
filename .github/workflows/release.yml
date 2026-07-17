@@ -5,14 +5,14 @@ name: release
 # and pushes a `v{version}` tag — which docker.yml consumes to build versioned
 # images.
 #
-# main    → stable channel,    tags vX.Y.Z,             commits CHANGELOG.md back
-# develop → prerelease channel, tags vX.Y.Z-develop.N,   no CHANGELOG mutation
+# main → stable channel, tags vX.Y.Z, commits CHANGELOG.md back. The develop
+# prerelease channel was retired when the workflow moved to PRs → main.
 
 on:
   workflow_run:
     workflows: [ci]
     types: [completed]
-    branches: [main, develop]
+    branches: [main]
 
 concurrency:
   group: release-${{ github.event.workflow_run.head_branch }}
@@ -38,13 +38,13 @@ jobs:
       # merged after the triggering ci kicked off, head_sha is behind tip and
       # semantic-release refuses to publish ("local branch is behind remote").
       # Operating on the tip means we always release the latest commit.
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
         with:
           fetch-depth: 0
           persist-credentials: true
           ref: ${{ github.event.workflow_run.head_branch }}
 
-      - uses: actions/setup-node@v6
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
           node-version: '25'
           cache: npm
@@ -52,35 +52,11 @@ jobs:
       - name: Install npm dependencies
         run: npm ci
 
-      - name: Stage releaserc for branch
-        env:
-          BRANCH: ${{ github.event.workflow_run.head_branch }}
-        run: |
-          if [ "$BRANCH" = "main" ]; then
-            cp .releaserc.main.json .releaserc.json
-          else
-            cp .releaserc.develop.json .releaserc.json
-          fi
-
-      # semantic-release evaluates every branch in its config (main + develop)
-      # and runs `git tag --merged <branch>` for each. checkout only creates a
-      # local branch for the checked-out ref, so the other branch resolves only
-      # as origin/<branch> and `git tag --merged <branch>` fails with
-      # "malformed object name". Point local branches at their origin refs
-      # (fetch-depth: 0 already fetched them) so every configured branch resolves.
-      - name: Ensure configured release branches exist locally
-        env:
-          BRANCH: ${{ github.event.workflow_run.head_branch }}
-        run: |
-          set -euo pipefail
-          for b in main develop; do
-            if [ "$b" != "$BRANCH" ]; then
-              git branch --force "$b" "origin/$b"
-            fi
-          done
+      - name: Stage releaserc
+        run: cp .releaserc.main.json .releaserc.json
 
       - id: sr
-        uses: cycjimmy/semantic-release-action@v6
+        uses: cycjimmy/semantic-release-action@b12c8f6015dc215fe37bc154d4ad456dd3833c90 # v6.0.0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -112,7 +88,7 @@ jobs:
       # `develop` is protected — direct pushes are rejected by repository
       # rules, so we open a PR from a temporary sync branch and let GitHub
       # auto-merge it once required checks pass.
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
         with:
           fetch-depth: 0
           persist-credentials: true
