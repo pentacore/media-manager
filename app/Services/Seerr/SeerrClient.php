@@ -30,20 +30,33 @@ class SeerrClient implements Warmable
         protected ServiceConnection $connection,
     ) {}
 
-    protected function buildClient(): PendingRequest
+    /**
+     * $withRetry MUST be false for creation-style POSTs (createRequest,
+     * updateRequestStatus, retryRequest): Seerr may have accepted the request
+     * before the response was lost, so a transparent re-POST can file
+     * duplicate requests or double-transition one — the same hazard
+     * ArrClient::grabRelease() documents. Connection loss on those calls is
+     * an indeterminate outcome, not a retryable failure.
+     */
+    protected function buildClient(bool $withRetry = true): PendingRequest
     {
-        return Http::baseUrl(rtrim($this->connection->url, '/'))
+        $pendingRequest = Http::baseUrl(rtrim($this->connection->url, '/'))
             ->withHeaders(['X-Api-Key' => $this->connection->api_key])
             ->timeout(10)
             ->connectTimeout(3)
-            ->withUserAgent('MediaManager/'.config('app.version').' '.class_basename($this))
-            ->retry(
-                times: 3,
-                sleepMilliseconds: fn (int $attempt): int => $attempt * 500,
-                when: fn (Throwable $throwable): bool => $throwable instanceof ConnectionException
-                    || ($throwable instanceof RequestException && $throwable->response->serverError()),
-                throw: false,
-            );
+            ->withUserAgent('MediaManager/'.config('app.version').' '.class_basename($this));
+
+        if (! $withRetry) {
+            return $pendingRequest;
+        }
+
+        return $pendingRequest->retry(
+            times: 3,
+            sleepMilliseconds: fn (int $attempt): int => $attempt * 500,
+            when: fn (Throwable $throwable): bool => $throwable instanceof ConnectionException
+                || ($throwable instanceof RequestException && $throwable->response->serverError()),
+            throw: false,
+        );
     }
 
     /**
@@ -121,7 +134,7 @@ class SeerrClient implements Warmable
             $payload['userId'] = $userId;
         }
 
-        $response = $this->buildClient()
+        $response = $this->buildClient(withRetry: false)
             ->post(sprintf('/api/%s/request', $this->apiVersion), $payload)
             ->throw()
             ->json() ?? [];
@@ -162,7 +175,7 @@ class SeerrClient implements Warmable
             throw new InvalidArgumentException(sprintf('Invalid request status "%s". Expected "approve" or "decline".', $status));
         }
 
-        return $this->buildClient()
+        return $this->buildClient(withRetry: false)
             ->post(sprintf('/api/%s/request/%d/%s', $this->apiVersion, $id, $status))
             ->throw()
             ->json() ?? [];
@@ -177,7 +190,7 @@ class SeerrClient implements Warmable
      */
     public function retryRequest(int $id): array
     {
-        return $this->buildClient()
+        return $this->buildClient(withRetry: false)
             ->post(sprintf('/api/%s/request/%d/retry', $this->apiVersion, $id))
             ->throw()
             ->json() ?? [];
