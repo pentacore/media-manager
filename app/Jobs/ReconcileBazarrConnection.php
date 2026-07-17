@@ -75,6 +75,7 @@ final class ReconcileBazarrConnection implements ShouldBeUnique, ShouldQueue
 
         $maximumCases = $bazarrAutomationSettings->maxCasesPerCycle();
         $processed = 0;
+        $probeSlotsUsed = 0;
         $page = 1;
         $perPage = min(100, $maximumCases);
 
@@ -86,8 +87,10 @@ final class ReconcileBazarrConnection implements ShouldBeUnique, ShouldQueue
                     break;
                 }
 
-                dispatch(new ReconcileSubtitleCase($candidate));
+                $probeAllowed = $probeSlotsUsed < $bazarrAutomationSettings->maxProbesPerCycle();
+                dispatch(new ReconcileSubtitleCase($candidate, $probeAllowed));
                 $processed++;
+                $probeSlotsUsed += (int) $probeAllowed;
             }
 
             $page++;
