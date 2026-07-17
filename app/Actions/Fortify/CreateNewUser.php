@@ -4,9 +4,9 @@ declare(strict_types=1);
 
 namespace App\Actions\Fortify;
 
+use App\Actions\CreateUserWithBootstrapRole;
 use App\Concerns\PasswordValidationRules;
 use App\Concerns\ProfileValidationRules;
-use App\Enums\UserRole;
 use App\Models\User;
 use Illuminate\Support\Facades\Validator;
 use Laravel\Fortify\Contracts\CreatesNewUsers;
@@ -28,13 +28,10 @@ class CreateNewUser implements CreatesNewUsers
             'password' => $this->passwordRules(),
         ])->validate();
 
-        $role = User::count() === 0 ? UserRole::Admin : UserRole::Viewer;
-
-        return User::create([
+        return resolve(CreateUserWithBootstrapRole::class)->execute([
             'name' => $input['name'],
             'email' => $input['email'],
             'password' => $input['password'],
-            'role' => $role,
         ]);
     }
 }
