@@ -1,15 +1,17 @@
 <script setup lang="ts">
 import { useHttp, usePage } from '@inertiajs/vue3';
-import { Download, Search, Sparkles } from '@lucide/vue';
+import { Download, Search, Sparkles, Upload } from '@lucide/vue';
 import { computed, ref, watch } from 'vue';
 import { toast } from 'vue-sonner';
 import OperationController from '@/actions/App/Http/Controllers/Bazarr/OperationController';
 import SearchController from '@/actions/App/Http/Controllers/Bazarr/SearchController';
+import UploadController from '@/actions/App/Http/Controllers/Bazarr/UploadController';
 import CandidateTable from '@/components/bazarr/CandidateTable.vue';
 import OperationDialog from '@/components/bazarr/OperationDialog.vue';
 import SubtitleTrackList from '@/components/bazarr/SubtitleTrackList.vue';
-import type {SubtitleTrack} from '@/components/bazarr/SubtitleTrackList.vue';
+import type { SubtitleTrack } from '@/components/bazarr/SubtitleTrackList.vue';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import {
     Sheet,
     SheetContent,
@@ -63,6 +65,17 @@ interface OperationForm {
     media_action: string | null;
 }
 
+interface UploadForm {
+    connection: number | null;
+    media_type: string;
+    media_id: number | null;
+    target_fingerprint: string;
+    language: string;
+    forced: boolean;
+    hearing_impaired: boolean;
+    subtitle_file: File | null;
+}
+
 const props = defineProps<{
     open: boolean;
     item: SubtitleItemResource | null;
@@ -90,6 +103,9 @@ const selectedOperation = ref<{
     track?: SubtitleTrack;
     tool_action?: string;
 } | null>(null);
+const uploadOpen = ref(false);
+const selectedUpload = ref<File | null>(null);
+const uploadLanguage = ref('eng');
 
 const searchHttp = useHttp<
     {
@@ -121,6 +137,17 @@ const operationHttp = useHttp<OperationForm, OperationResponse>({
     media_action: null,
 });
 
+const uploadHttp = useHttp<UploadForm, OperationResponse>({
+    connection: null,
+    media_type: '',
+    media_id: null,
+    target_fingerprint: '',
+    language: 'eng',
+    forced: false,
+    hearing_impaired: false,
+    subtitle_file: null,
+});
+
 const currentItem = computed(() => inspectedItem.value ?? props.item);
 const currentTracks = computed(
     () => (currentItem.value?.subtitle_tracks ?? []) as SubtitleTrack[],
@@ -140,6 +167,9 @@ watch(
         history.value = [];
         capabilities.value = null;
         selectedOperation.value = null;
+        uploadOpen.value = false;
+        selectedUpload.value = null;
+        uploadHttp.reset();
     },
 );
 
@@ -212,6 +242,48 @@ function requestBest(): void {
 function requestCandidate(candidate: SubtitleCandidateResource): void {
     submit('download_exact', {
         candidate_fingerprint: candidate.fingerprint,
+    });
+}
+
+function openUpload(): void {
+    uploadHttp.resetAndClearErrors();
+    selectedUpload.value = null;
+    uploadLanguage.value = preferredLanguage.value;
+    uploadOpen.value = true;
+}
+
+function selectUpload(event: Event): void {
+    const input = event.target as HTMLInputElement;
+    selectedUpload.value = input.files?.[0] ?? null;
+}
+
+function submitUpload(): void {
+    const item = currentItem.value;
+
+    if (!item || !props.connectionId || !selectedUpload.value) {
+        return;
+    }
+
+    const payload: UploadForm = {
+        connection: props.connectionId,
+        media_type: item.media_type,
+        media_id: item.media_id,
+        target_fingerprint: item.target_fingerprint,
+        language: uploadLanguage.value.trim().toLowerCase(),
+        forced: false,
+        hearing_impaired: false,
+        subtitle_file: selectedUpload.value,
+    };
+    Object.assign(uploadHttp, payload);
+    uploadHttp.transform(() => payload);
+    uploadHttp.post(UploadController.url(), {
+        onSuccess: (response) => {
+            uploadOpen.value = false;
+            selectedUpload.value = null;
+            toast.success(response.message);
+        },
+        onError: () =>
+            toast.error('The subtitle upload could not be requested.'),
     });
 }
 
@@ -337,6 +409,20 @@ const dialogDescription = computed(
                             variant="outline"
                             :disabled="
                                 operationHttp.processing ||
+                                uploadHttp.processing ||
+                                capabilities?.upload === false
+                            "
+                            data-test="subtitle-upload-open"
+                            @click="openUpload"
+                        >
+                            <Upload />
+                            Upload file
+                        </Button>
+                        <Button
+                            size="sm"
+                            variant="outline"
+                            :disabled="
+                                operationHttp.processing ||
                                 capabilities?.inventory === false
                             "
                             @click="
@@ -397,4 +483,60 @@ const dialogDescription = computed(
         "
         @confirm="confirmTrackOperation"
     />
+
+    <OperationDialog
+        :open="uploadOpen"
+        title="Upload subtitle file"
+        description="The file is staged privately and sent to Bazarr only after the Action Request is approved."
+        confirm-label="Request upload"
+        :processing="uploadHttp.processing"
+        @update:open="uploadOpen = $event"
+        @confirm="submitUpload"
+    >
+        <div class="space-y-4">
+            <div class="space-y-2">
+                <label class="text-sm font-medium" for="subtitle-upload-file">
+                    Subtitle file
+                </label>
+                <Input
+                    id="subtitle-upload-file"
+                    name="subtitle_file"
+                    type="file"
+                    accept=".srt,.ass,.ssa,.vtt,.sub"
+                    data-test="subtitle-upload-file"
+                    @change="selectUpload"
+                />
+                <p
+                    v-if="uploadHttp.errors.subtitle_file"
+                    class="text-sm text-destructive"
+                >
+                    {{ uploadHttp.errors.subtitle_file }}
+                </p>
+                <p v-else class="text-xs text-muted-foreground">
+                    SRT, ASS, SSA, VTT, or SUB. Maximum 5 MB.
+                </p>
+            </div>
+            <div class="space-y-2">
+                <label
+                    class="text-sm font-medium"
+                    for="subtitle-upload-language"
+                >
+                    Language code
+                </label>
+                <Input
+                    id="subtitle-upload-language"
+                    v-model="uploadLanguage"
+                    name="language"
+                    maxlength="24"
+                    data-test="subtitle-upload-language"
+                />
+                <p
+                    v-if="uploadHttp.errors.language"
+                    class="text-sm text-destructive"
+                >
+                    {{ uploadHttp.errors.language }}
+                </p>
+            </div>
+        </div>
+    </OperationDialog>
 </template>

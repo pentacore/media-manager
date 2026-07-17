@@ -90,7 +90,7 @@ class ActionOrchestrator
         event(new ActionRequestCreated($actionRequest));
 
         if (! $requiresApproval) {
-            dispatch(new ExecuteActionRequest($actionRequest));
+            dispatch(new ExecuteActionRequest($actionRequest))->afterCommit();
         }
 
         return $actionRequest;
@@ -160,7 +160,7 @@ class ActionOrchestrator
         event(new ActionRequestCreated($actionRequest));
 
         if (! $requiresApproval) {
-            dispatch(new ExecuteActionRequest($actionRequest));
+            dispatch(new ExecuteActionRequest($actionRequest))->afterCommit();
         }
 
         return $actionRequest;

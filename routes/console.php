@@ -18,6 +18,7 @@ use App\Console\Commands\RefreshInterventionCount;
 use App\Console\Commands\RefreshSabnzbdDownloadCounts;
 use App\Console\Commands\WarmServiceCaches;
 use App\Jobs\ReconcileSearchIndex;
+use App\Jobs\PruneSubtitleUploads;
 use App\Jobs\SyncAnimeMappingJob;
 use App\Models\ActivityLog;
 use App\Models\AgentDecision;
@@ -81,6 +82,10 @@ Schedule::command(WarmServiceCaches::class)
 
 Schedule::job(new ReconcileSearchIndex)
     ->dailyAt('03:30')
+    ->withoutOverlapping();
+
+Schedule::job(new PruneSubtitleUploads)
+    ->hourly()
     ->withoutOverlapping();
 
 Schedule::job(new SyncAnimeMappingJob)

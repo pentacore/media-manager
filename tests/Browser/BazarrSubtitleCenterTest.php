@@ -7,9 +7,12 @@ use App\Models\User;
 use App\Enums\BazarrServiceRole;
 use App\Models\ActionRequest;
 use App\Models\BazarrServiceLink;
+use App\Models\SubtitleUpload;
 use Database\Seeders\ActionTypeConfigSeeder;
 use Illuminate\Http\Client\Request;
+use Illuminate\Contracts\Http\Kernel;
 use Illuminate\Support\Facades\Http;
+use Tests\Support\ParseMultipartBrowserRequests;
 
 test('viewer can browse the subtitle center', function (): void {
     $bazarr = ServiceConnection::factory()->bazarr()->create([
@@ -128,4 +131,85 @@ test('member searches and requests an exact subtitle from the item drawer', func
         ->assertNoSmoke();
 
     expect(ActionRequest::query()->where('type', 'bazarr_download_exact')->count())->toBe(1);
+});
+
+test('member uploads a subtitle from the item drawer', function (): void {
+    resolve(Kernel::class)->pushMiddleware(ParseMultipartBrowserRequests::class);
+    $this->seed(ActionTypeConfigSeeder::class);
+    $bazarr = ServiceConnection::factory()->bazarr()->create([
+        'name' => 'Primary Bazarr',
+        'url' => 'http://bazarr.test',
+        'api_key' => 'bazarr-secret',
+    ]);
+    $radarr = ServiceConnection::factory()->radarr()->create();
+    BazarrServiceLink::factory()->create([
+        'bazarr_connection_id' => $bazarr->id,
+        'related_connection_id' => $radarr->id,
+        'role' => BazarrServiceRole::Radarr,
+    ]);
+    $movie = [
+        'radarrId' => 802,
+        'title' => 'Upload Example Movie',
+        'sceneName' => 'Upload.Example.Movie.2024.1080p',
+        'path' => '/media/movies/Upload Example Movie (2024)',
+        'monitored' => true,
+        'missing_subtitles' => [[
+            'name' => 'English',
+            'code2' => 'en',
+            'code3' => 'eng',
+            'forced' => false,
+            'hi' => false,
+        ]],
+        'subtitles' => [],
+    ];
+
+    Http::fake(function (Request $request) use ($movie) {
+        $path = parse_url($request->url(), PHP_URL_PATH);
+
+        return match ($path) {
+            '/api/movies/wanted', '/api/movies' => Http::response(['data' => [$movie], 'total' => 1]),
+            '/api/movies/history' => Http::response(['data' => [], 'total' => 0]),
+            '/api/swagger.json' => Http::response([
+                'swagger' => '2.0',
+                'basePath' => '/api',
+                'info' => ['title' => 'Bazarr', 'version' => '1.6.0'],
+                'paths' => [
+                    '/movies/subtitles' => [
+                        'post' => ['responses' => ['204' => ['description' => 'OK']]],
+                    ],
+                ],
+            ]),
+            default => Http::response(['data' => []]),
+        };
+    });
+
+    $this->actingAs(User::factory()->member()->create());
+    $subtitleContents = base64_encode((string) file_get_contents(
+        base_path('tests/Fixtures/Subtitles/valid-en.srt'),
+    ));
+
+    $webpage = visit(route('bazarr.missing', ['connection' => $bazarr->id], false))
+        ->assertSee('Upload Example Movie')
+        ->click('@subtitle-item-movie-802');
+
+    $webpage->script("document.querySelector('[data-test=\"subtitle-upload-open\"]').click()");
+    $webpage->assertSee('Upload subtitle file');
+
+    $webpage->script(<<<JS
+        const bytes = Uint8Array.from(atob('{$subtitleContents}'), character => character.charCodeAt(0));
+        const file = new File([bytes], 'valid-en.srt', { type: 'application/x-subrip' });
+        const transfer = new DataTransfer();
+        transfer.items.add(file);
+        const input = document.querySelector('[name="subtitle_file"]');
+        input.files = transfer.files;
+        input.dispatchEvent(new Event('change', { bubbles: true }));
+        JS);
+
+    $webpage
+        ->click('@confirm-subtitle-operation')
+        ->assertSee('Subtitle upload added to the Action Queue.')
+        ->assertNoSmoke();
+
+    expect(ActionRequest::query()->where('type', 'bazarr_upload_subtitle')->count())->toBe(1)
+        ->and(SubtitleUpload::query()->count())->toBe(1);
 });

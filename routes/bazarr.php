@@ -8,6 +8,7 @@ use App\Http\Controllers\Bazarr\MissingController;
 use App\Http\Controllers\Bazarr\OverviewController;
 use App\Http\Controllers\Bazarr\OperationController;
 use App\Http\Controllers\Bazarr\SearchController;
+use App\Http\Controllers\Bazarr\UploadController;
 use Illuminate\Support\Facades\Route;
 
 Route::middleware(['auth', 'verified', 'password.set', 'role:viewer'])
@@ -22,5 +23,6 @@ Route::middleware(['auth', 'verified', 'password.set', 'role:viewer'])
         Route::middleware('role:member')->group(function (): void {
             Route::get('search', SearchController::class)->name('search');
             Route::post('operations', OperationController::class)->name('operations.store');
+            Route::post('uploads', UploadController::class)->name('uploads.store');
         });
     });

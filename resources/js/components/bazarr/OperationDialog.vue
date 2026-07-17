@@ -31,6 +31,7 @@ const emit = defineEmits<{
                 <DialogTitle>{{ title }}</DialogTitle>
                 <DialogDescription>{{ description }}</DialogDescription>
             </DialogHeader>
+            <slot />
             <DialogFooter>
                 <Button
                     variant="outline"
