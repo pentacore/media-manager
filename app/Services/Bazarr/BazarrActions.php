@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace App\Services\Bazarr;
 
-use Illuminate\Contracts\Database\Query\Builder;
 use App\Cache\Services\BazarrCache;
 use App\Enums\BazarrServiceRole;
 use App\Enums\ServiceType;
@@ -47,11 +46,9 @@ final readonly class BazarrActions implements ActionExecutor
         'target_fingerprint',
     ];
 
-    private const array ACTIVE_CASE_STATUSES = [
-        SubtitleCaseStatus::Observing,
+    private const array REVIEWABLE_CASE_STATUSES = [
         SubtitleCaseStatus::BazarrSearching,
         SubtitleCaseStatus::DownloadRequested,
-        SubtitleCaseStatus::ReplacementEligible,
         SubtitleCaseStatus::AdvisorRunning,
         SubtitleCaseStatus::ReplacementRequested,
     ];
@@ -59,6 +56,7 @@ final readonly class BazarrActions implements ActionExecutor
     public function __construct(
         private BazarrSubtitleFingerprint $bazarrSubtitleFingerprint,
         private BazarrMediaFingerprint $bazarrMediaFingerprint,
+        private SubtitleCaseLifecycle $subtitleCaseLifecycle,
     ) {}
 
     /**
@@ -487,24 +485,16 @@ final readonly class BazarrActions implements ActionExecutor
             : null;
         $subtitleCase = $subtitleCaseId === null
             ? SubtitleCase::query()
-                ->where(function (Builder $builder) use ($actionRequest): void {
-                    $builder->where('download_action_request_id', $actionRequest->id)
-                        ->orWhere('replacement_action_request_id', $actionRequest->id);
-                })
+                ->where('download_action_request_id', $actionRequest->id)
+                ->orWhere('replacement_action_request_id', $actionRequest->id)
                 ->first()
             : SubtitleCase::query()->find($subtitleCaseId);
 
-        if (! $subtitleCase instanceof SubtitleCase || ! in_array($subtitleCase->status, self::ACTIVE_CASE_STATUSES, true)) {
+        if (! $subtitleCase instanceof SubtitleCase || ! in_array($subtitleCase->status, self::REVIEWABLE_CASE_STATUSES, true)) {
             return;
         }
 
-        SubtitleCase::query()
-            ->whereKey($subtitleCase->id)
-            ->where('status', $subtitleCase->status->value)
-            ->update([
-                'status' => SubtitleCaseStatus::NeedsReview->value,
-                'failure_reason' => mb_substr($reason, 0, 500),
-            ]);
+        $this->subtitleCaseLifecycle->needsReview($subtitleCase, $reason);
     }
 
     /**
