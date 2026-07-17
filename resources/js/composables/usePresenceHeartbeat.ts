@@ -1,5 +1,5 @@
-import { heartbeat } from '@/routes';
 import { onMounted, onUnmounted } from 'vue';
+import { heartbeat } from '@/routes';
 
 const HEARTBEAT_INTERVAL_MS = 30_000;
 const INTERACTION_WINDOW_MS = 120_000;

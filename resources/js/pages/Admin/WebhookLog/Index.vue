@@ -2,6 +2,7 @@
 import { Head, Link, router } from '@inertiajs/vue3';
 import { Webhook } from '@lucide/vue';
 import { ref, watch } from 'vue';
+import WebhookLogController from '@/actions/App/Http/Controllers/Admin/WebhookLogController';
 import { Pill, SvcChip, Toggle } from '@/components/mm';
 import { Button } from '@/components/ui/button';
 import {
@@ -11,7 +12,6 @@ import {
     SelectTrigger,
     SelectValue,
 } from '@/components/ui/select';
-import WebhookLogController from '@/actions/App/Http/Controllers/Admin/WebhookLogController';
 import { dashboard } from '@/routes';
 
 interface WebhookEvent {

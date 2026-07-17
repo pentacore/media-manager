@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { Head } from '@inertiajs/vue3';
-import ChatPanel from '@/components/ai/ChatPanel.vue';
 import AIChatController from '@/actions/App/Http/Controllers/AI/ChatController';
+import ChatPanel from '@/components/ai/ChatPanel.vue';
 import { dashboard } from '@/routes';
 
 defineOptions({

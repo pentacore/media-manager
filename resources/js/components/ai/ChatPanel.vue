@@ -10,6 +10,7 @@ import {
     watch,
 } from 'vue';
 import { toast } from 'vue-sonner';
+import AIChatController from '@/actions/App/Http/Controllers/AI/ChatController';
 import { InitialsAvatar, Pill } from '@/components/mm';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -22,7 +23,6 @@ import type { ChannelLease } from '@/composables/useWebSocket';
 import { cn } from '@/lib/utils';
 import ConversationPicker from './ConversationPicker.vue';
 import StepLivenessBanner from './StepLivenessBanner.vue';
-import AIChatController from '@/actions/App/Http/Controllers/AI/ChatController';
 
 const props = withDefaults(
     defineProps<{

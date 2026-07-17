@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { Head, router } from '@inertiajs/vue3';
 import { computed } from 'vue';
+import StatisticsController from '@/actions/App/Http/Controllers/Admin/StatisticsController';
 import {
     BarChart,
     BreakdownMeter,
@@ -9,7 +10,6 @@ import {
 } from '@/components/mm';
 import { useStatisticsSeries } from '@/composables/useStatisticsSeries';
 import type { SeriesPoint } from '@/composables/useStatisticsSeries';
-import StatisticsController from '@/actions/App/Http/Controllers/Admin/StatisticsController';
 import { dashboard } from '@/routes';
 
 interface BreakdownRow {

@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { Form, Head } from '@inertiajs/vue3';
 import { ref } from 'vue';
+import AuthentikController from '@/actions/App/Http/Controllers/Auth/AuthentikController';
+import EmbyAuthController from '@/actions/App/Http/Controllers/Auth/EmbyAuthController';
 import InputError from '@/components/InputError.vue';
 import PasswordInput from '@/components/PasswordInput.vue';
 import TextLink from '@/components/TextLink.vue';
@@ -15,8 +17,6 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Separator } from '@/components/ui/separator';
 import { Spinner } from '@/components/ui/spinner';
-import AuthentikController from '@/actions/App/Http/Controllers/Auth/AuthentikController';
-import EmbyAuthController from '@/actions/App/Http/Controllers/Auth/EmbyAuthController';
 import { register } from '@/routes';
 import { store } from '@/routes/login';
 import { request } from '@/routes/password';

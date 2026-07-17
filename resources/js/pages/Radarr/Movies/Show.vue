@@ -2,6 +2,7 @@
 import { Head, Link, router } from '@inertiajs/vue3';
 import { ArrowLeft, Clock, ExternalLink, HardDrive, Trash2 } from '@lucide/vue';
 import { ref } from 'vue';
+import MovieController from '@/actions/App/Http/Controllers/Media/MovieController';
 import { Pill, Poster, StatusPill } from '@/components/mm';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -14,7 +15,6 @@ import {
     DialogTitle,
     DialogTrigger,
 } from '@/components/ui/dialog';
-import MovieController from '@/actions/App/Http/Controllers/Media/MovieController';
 import { dashboard } from '@/routes';
 
 interface MovieImage {

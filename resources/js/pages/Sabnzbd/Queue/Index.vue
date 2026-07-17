@@ -2,6 +2,7 @@
 import { Head, router } from '@inertiajs/vue3';
 import { Pause, Play, RefreshCw, Trash2 } from '@lucide/vue';
 import { onMounted, onUnmounted } from 'vue';
+import QueueController from '@/actions/App/Http/Controllers/Sabnzbd/QueueController';
 import { OpenInServiceButton, Pill, StatCard } from '@/components/mm';
 import { Button } from '@/components/ui/button';
 import {
@@ -11,7 +12,6 @@ import {
     SelectTrigger,
     SelectValue,
 } from '@/components/ui/select';
-import QueueController from '@/actions/App/Http/Controllers/Sabnzbd/QueueController';
 import { dashboard } from '@/routes';
 
 interface QueueSlot {

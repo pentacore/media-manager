@@ -2,6 +2,7 @@
 import { Head, router, usePage } from '@inertiajs/vue3';
 import { Download, Sparkles } from '@lucide/vue';
 import { computed, onMounted, watch } from 'vue';
+import WatchHistoryController from '@/actions/App/Http/Controllers/Emby/WatchHistoryController';
 import {
     InitialsAvatar,
     OpenInServiceButton,
@@ -20,7 +21,6 @@ import {
     SelectValue,
 } from '@/components/ui/select';
 import { useRealtimeList } from '@/composables/useRealtimeList';
-import WatchHistoryController from '@/actions/App/Http/Controllers/Emby/WatchHistoryController';
 import { dashboard } from '@/routes';
 import type { EmbyActivityResource } from '@/typefinder/resources/EmbyActivityResource';
 

@@ -8,6 +8,8 @@ import {
     Sparkles,
 } from '@lucide/vue';
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
+import ActionRequestController from '@/actions/App/Http/Controllers/Actions/ActionRequestController';
+import ActionTypeConfigController from '@/actions/App/Http/Controllers/Actions/ActionTypeConfigController';
 import {
     Field,
     InitialsAvatar,
@@ -20,8 +22,6 @@ import { useRealtimeList } from '@/composables/useRealtimeList';
 import { useWebSocket } from '@/composables/useWebSocket';
 import type { ChannelLease } from '@/composables/useWebSocket';
 import { cn } from '@/lib/utils';
-import ActionRequestController from '@/actions/App/Http/Controllers/Actions/ActionRequestController';
-import ActionTypeConfigController from '@/actions/App/Http/Controllers/Actions/ActionTypeConfigController';
 import { dashboard } from '@/routes';
 import type { ActionRequestResource } from '@/typefinder/resources/ActionRequestResource';
 

@@ -2,9 +2,9 @@
 import { Head, router } from '@inertiajs/vue3';
 import { RefreshCcw } from '@lucide/vue';
 import { ref } from 'vue';
+import JobsController from '@/actions/App/Http/Controllers/Admin/JobsController';
 import { Pill } from '@/components/mm';
 import { Button } from '@/components/ui/button';
-import JobsController from '@/actions/App/Http/Controllers/Admin/JobsController';
 import { dashboard } from '@/routes';
 
 interface QueuedJob {

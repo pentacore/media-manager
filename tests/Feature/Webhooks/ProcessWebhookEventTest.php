@@ -10,6 +10,7 @@ use App\Models\WebhookEvent;
 use App\Services\Emby\EmbyWebhookHandler;
 use App\Services\Sonarr\SonarrWebhookHandler;
 use App\Services\Webhook\WebhookHandler;
+use Illuminate\Contracts\Queue\Job;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Support\Facades\Log;
 
@@ -76,6 +77,7 @@ test('an event claimed by another worker is skipped on the first attempt', funct
 
     $mock = Mockery::mock(WebhookHandler::class);
     $mock->shouldNotReceive('handle');
+
     $this->app->bind(SonarrWebhookHandler::class, fn (): WebhookHandler => $mock);
 
     Log::shouldReceive('info')->once();
@@ -95,7 +97,7 @@ test('a retry attempt reclaims a row left in processing by a dead worker', funct
     $this->app->bind(SonarrWebhookHandler::class, fn (): WebhookHandler => $mock);
 
     $job = new ProcessWebhookEvent($event);
-    $queueJob = Mockery::mock(Illuminate\Contracts\Queue\Job::class);
+    $queueJob = Mockery::mock(Job::class);
     $queueJob->shouldReceive('attempts')->andReturn(2);
     $queueJob->shouldIgnoreMissing();
     $job->setJob($queueJob);

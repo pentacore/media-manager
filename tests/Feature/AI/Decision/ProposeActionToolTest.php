@@ -4,8 +4,12 @@ declare(strict_types=1);
 
 use App\Ai\Decision\DecisionRunContext;
 use App\Ai\Decision\ProposeActionTool;
+use App\Enums\MediaReplacementStatus;
 use App\Models\ActionRequest;
 use App\Models\ActionTypeConfig;
+use App\Models\MediaReplacementAttempt;
+use App\Models\ServiceConnection;
+use App\Models\WebhookEvent;
 use Illuminate\Support\Facades\Queue;
 use Laravel\Ai\Tools\Request;
 
@@ -77,8 +81,8 @@ test('requires a rationale', function (): void {
 
 test('seerr request mutations are forced to approval even when the type auto-executes', function (): void {
     ActionTypeConfig::factory()->create(['type' => 'approve_seerr_request', 'requires_approval' => false, 'is_enabled' => true]);
-    $connection = App\Models\ServiceConnection::factory()->seerr()->create();
-    $event = App\Models\WebhookEvent::factory()->create([
+    $connection = ServiceConnection::factory()->seerr()->create();
+    $event = WebhookEvent::factory()->create([
         'service_connection_id' => $connection->id,
         'payload' => ['notification_type' => 'MEDIA_PENDING', 'request' => ['request_id' => 42]],
     ]);
@@ -98,8 +102,8 @@ test('seerr request mutations are forced to approval even when the type auto-exe
 
 test('seerr request mutations must target the triggering request id', function (): void {
     ActionTypeConfig::factory()->create(['type' => 'decline_seerr_request', 'requires_approval' => true, 'is_enabled' => true]);
-    $connection = App\Models\ServiceConnection::factory()->seerr()->create();
-    $event = App\Models\WebhookEvent::factory()->create([
+    $connection = ServiceConnection::factory()->seerr()->create();
+    $event = WebhookEvent::factory()->create([
         'service_connection_id' => $connection->id,
         'payload' => ['notification_type' => 'MEDIA_PENDING', 'request' => ['request_id' => 42]],
     ]);
@@ -135,8 +139,8 @@ test('seerr request mutations are refused when the trigger has no request id', f
 
 test('monitor proposals are refused while a replacement is in flight for the target', function (): void {
     ActionTypeConfig::factory()->create(['type' => 'monitor_series', 'requires_approval' => false, 'is_enabled' => true]);
-    App\Models\MediaReplacementAttempt::factory()->create([
-        'status' => App\Enums\MediaReplacementStatus::Downloading,
+    MediaReplacementAttempt::factory()->create([
+        'status' => MediaReplacementStatus::Downloading,
         'target' => ['service' => 'sonarr', 'series_id' => 42, 'episode_file_ids' => [501]],
     ]);
     bindDecisionContext();
@@ -155,8 +159,8 @@ test('monitor proposals are refused while a replacement is in flight for the tar
 
 test('monitor proposals for unrelated targets pass the replacement guard', function (): void {
     ActionTypeConfig::factory()->create(['type' => 'monitor_series', 'requires_approval' => true, 'is_enabled' => true]);
-    App\Models\MediaReplacementAttempt::factory()->create([
-        'status' => App\Enums\MediaReplacementStatus::Downloading,
+    MediaReplacementAttempt::factory()->create([
+        'status' => MediaReplacementStatus::Downloading,
         'target' => ['service' => 'sonarr', 'series_id' => 42, 'episode_file_ids' => [501]],
     ]);
     bindDecisionContext();

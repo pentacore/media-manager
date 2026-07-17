@@ -197,7 +197,7 @@ class ProposeActionTool implements Tool
      * @param  array<string, mixed>  $payload
      * @return array<string, mixed>|null structured rejection, or null when OK
      */
-    private function rejectForeignSeerrSubject(string $type, array $payload, DecisionRunContext $context): ?array
+    private function rejectForeignSeerrSubject(string $type, array $payload, DecisionRunContext $decisionRunContext): ?array
     {
         if (! in_array($type, self::FORCED_APPROVAL_TYPES, true)) {
             return null;
@@ -205,9 +205,9 @@ class ProposeActionTool implements Tool
 
         $proposedId = (int) ($payload['seerr_request_id'] ?? 0);
 
-        $eventRequestId = $context->webhookEventId === null
+        $eventRequestId = $decisionRunContext->webhookEventId === null
             ? null
-            : (int) (WebhookEvent::query()->find($context->webhookEventId)?->payload['request']['request_id'] ?? 0);
+            : (int) (WebhookEvent::query()->find($decisionRunContext->webhookEventId)?->payload['request']['request_id'] ?? 0);
 
         if ($eventRequestId === null || $eventRequestId <= 0) {
             return [

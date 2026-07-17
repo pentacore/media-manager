@@ -10,6 +10,7 @@ import {
     X,
 } from '@lucide/vue';
 import { computed, onMounted, ref } from 'vue';
+import ServiceHealthController from '@/actions/App/Http/Controllers/Monitoring/ServiceHealthController';
 import {
     Pill,
     StatCard,
@@ -19,7 +20,6 @@ import {
 } from '@/components/mm';
 import { Button } from '@/components/ui/button';
 import { useServiceHealth } from '@/composables/useServiceHealth';
-import ServiceHealthController from '@/actions/App/Http/Controllers/Monitoring/ServiceHealthController';
 import { dashboard } from '@/routes';
 import type { ServiceConnectionResource } from '@/typefinder/resources/ServiceConnectionResource';
 

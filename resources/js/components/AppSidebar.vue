@@ -28,23 +28,6 @@ import {
     Webhook as WebhookIcon,
 } from '@lucide/vue';
 import { computed, onMounted, onUnmounted, ref, watchEffect } from 'vue';
-import AppLogo from '@/components/AppLogo.vue';
-import AppVersion from '@/components/AppVersion.vue';
-import NavMain from '@/components/NavMain.vue';
-import NavUser from '@/components/NavUser.vue';
-import {
-    Sidebar,
-    SidebarContent,
-    SidebarFooter,
-    SidebarHeader,
-    SidebarMenu,
-    SidebarMenuButton,
-    SidebarMenuItem,
-} from '@/components/ui/sidebar';
-import { useAiChat } from '@/composables/useAiChat';
-import { useWebSocket } from '@/composables/useWebSocket';
-import type { ChannelLease } from '@/composables/useWebSocket';
-import type { NavItem } from '@/types';
 import ActionRequestController from '@/actions/App/Http/Controllers/Actions/ActionRequestController';
 import ActionTypeConfigController from '@/actions/App/Http/Controllers/Actions/ActionTypeConfigController';
 import ActivityLogController from '@/actions/App/Http/Controllers/ActivityLogController';
@@ -70,7 +53,24 @@ import SeriesController from '@/actions/App/Http/Controllers/Media/SeriesControl
 import ServiceHealthController from '@/actions/App/Http/Controllers/Monitoring/ServiceHealthController';
 import SabnzbdQueueController from '@/actions/App/Http/Controllers/Sabnzbd/QueueController';
 import StatisticsController from '@/actions/App/Http/Controllers/StatisticsController';
+import AppLogo from '@/components/AppLogo.vue';
+import AppVersion from '@/components/AppVersion.vue';
+import NavMain from '@/components/NavMain.vue';
+import NavUser from '@/components/NavUser.vue';
+import {
+    Sidebar,
+    SidebarContent,
+    SidebarFooter,
+    SidebarHeader,
+    SidebarMenu,
+    SidebarMenuButton,
+    SidebarMenuItem,
+} from '@/components/ui/sidebar';
+import { useAiChat } from '@/composables/useAiChat';
+import type { ChannelLease } from '@/composables/useWebSocket';
+import { useWebSocket } from '@/composables/useWebSocket';
 import { dashboard } from '@/routes';
+import type { NavItem } from '@/types';
 
 const page = usePage();
 

@@ -10,6 +10,7 @@ import {
     Trash2,
 } from '@lucide/vue';
 import { ref } from 'vue';
+import SeriesController from '@/actions/App/Http/Controllers/Media/SeriesController';
 import { Pill, Poster, StatusPill } from '@/components/mm';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -29,7 +30,6 @@ import {
 } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
 import { Skeleton } from '@/components/ui/skeleton';
-import SeriesController from '@/actions/App/Http/Controllers/Media/SeriesController';
 import { dashboard } from '@/routes';
 
 interface QualityProfile {

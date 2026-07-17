@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { Form, Head } from '@inertiajs/vue3';
 import { computed, ref } from 'vue';
+import UserPreferencesController from '@/actions/App/Http/Controllers/Settings/UserPreferencesController';
 import InputError from '@/components/InputError.vue';
 import { Field } from '@/components/mm';
 import { Button } from '@/components/ui/button';
@@ -15,13 +16,12 @@ import {
     SelectValue,
 } from '@/components/ui/select';
 import { Separator } from '@/components/ui/separator';
+import { edit } from '@/routes/settings/preferences';
 import type {
     DateFormat,
     TimeFormat,
     UserPreferences,
 } from '@/types/preferences';
-import UserPreferencesController from '@/actions/App/Http/Controllers/Settings/UserPreferencesController';
-import { edit } from '@/routes/settings/preferences';
 
 interface TimezoneGroup {
     group: string;

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { Head, useForm } from '@inertiajs/vue3';
+import DecisionAgentSettingsController from '@/actions/App/Http/Controllers/Admin/DecisionAgentSettingsController';
 import InputError from '@/components/InputError.vue';
 import { Field, Toggle } from '@/components/mm';
 import { Button } from '@/components/ui/button';
@@ -14,7 +15,6 @@ import {
     SelectValue,
 } from '@/components/ui/select';
 import { Separator } from '@/components/ui/separator';
-import DecisionAgentSettingsController from '@/actions/App/Http/Controllers/Admin/DecisionAgentSettingsController';
 import { dashboard } from '@/routes';
 import type { AiReasoningLevel } from '@/typefinder';
 

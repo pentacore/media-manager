@@ -2,6 +2,7 @@
 import { Head, router } from '@inertiajs/vue3';
 import { RefreshCcw } from '@lucide/vue';
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import NowPlayingController from '@/actions/App/Http/Controllers/Emby/NowPlayingController';
 import {
     InitialsAvatar,
     LiveDot,
@@ -14,7 +15,6 @@ import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useConnectionState } from '@/composables/useConnectionState';
 import { useEmbyActivity } from '@/composables/useEmbyActivity';
-import NowPlayingController from '@/actions/App/Http/Controllers/Emby/NowPlayingController';
 import { dashboard } from '@/routes';
 
 interface NowPlayingItem {

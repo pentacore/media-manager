@@ -2,6 +2,8 @@
 import { Form, Head, Link, router, usePage } from '@inertiajs/vue3';
 import { Link2 } from '@lucide/vue';
 import { computed } from 'vue';
+import UserLinkController from '@/actions/App/Http/Controllers/Emby/UserLinkController';
+import ProfileController from '@/actions/App/Http/Controllers/Settings/ProfileController';
 import DeleteUser from '@/components/DeleteUser.vue';
 import InputError from '@/components/InputError.vue';
 import { Field, Pill, SvcChip } from '@/components/mm';
@@ -9,8 +11,6 @@ import PasswordInput from '@/components/PasswordInput.vue';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Separator } from '@/components/ui/separator';
-import UserLinkController from '@/actions/App/Http/Controllers/Emby/UserLinkController';
-import ProfileController from '@/actions/App/Http/Controllers/Settings/ProfileController';
 import { edit } from '@/routes/profile';
 import { send } from '@/routes/verification';
 

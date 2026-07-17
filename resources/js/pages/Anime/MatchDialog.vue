@@ -2,6 +2,10 @@
 import { router } from '@inertiajs/vue3';
 import { Loader2, SearchX } from '@lucide/vue';
 import { onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import {
+    confirmMatch,
+    findMatch,
+} from '@/actions/App/Http/Controllers/Media/AnimeController';
 import { Poster } from '@/components/mm';
 import { Button } from '@/components/ui/button';
 import {
@@ -14,10 +18,6 @@ import {
 } from '@/components/ui/dialog';
 import { tmdbPosterUrl } from '@/lib/tmdb';
 import { cn } from '@/lib/utils';
-import {
-    confirmMatch,
-    findMatch,
-} from '@/actions/App/Http/Controllers/Media/AnimeController';
 
 interface MatchCandidate {
     tmdbId: number;

@@ -2,11 +2,11 @@
 import { Head, router } from '@inertiajs/vue3';
 import { Calendar, Cpu, Download, Sparkles } from '@lucide/vue';
 import { computed, onMounted, ref, watch } from 'vue';
+import ActivityLogController from '@/actions/App/Http/Controllers/ActivityLogController';
 import { InitialsAvatar, Pill, SvcChip, TimeStamp } from '@/components/mm';
 import { Button } from '@/components/ui/button';
 import { useRealtimeList } from '@/composables/useRealtimeList';
 import { cn } from '@/lib/utils';
-import ActivityLogController from '@/actions/App/Http/Controllers/ActivityLogController';
 import { dashboard } from '@/routes';
 import type { ActivityLogResource } from '@/typefinder/resources/ActivityLogResource';
 

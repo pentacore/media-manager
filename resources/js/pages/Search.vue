@@ -9,12 +9,12 @@ import {
     X,
 } from '@lucide/vue';
 import { computed, onMounted, ref, useTemplateRef } from 'vue';
+import SearchController from '@/actions/App/Http/Controllers/Media/SearchController';
 import { Pill, Poster, StatusPill, SvcChip } from '@/components/mm';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Skeleton } from '@/components/ui/skeleton';
 import { tmdbPosterUrl } from '@/lib/tmdb';
 import { cn } from '@/lib/utils';
-import SearchController from '@/actions/App/Http/Controllers/Media/SearchController';
 import { dashboard } from '@/routes';
 
 interface SeriesResult {

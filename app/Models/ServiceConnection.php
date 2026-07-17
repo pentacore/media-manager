@@ -136,10 +136,10 @@ class ServiceConnection extends Model
             $connection = self::query()->find($connectionId);
 
             if ($connection === null) {
-                throw (new ModelNotFoundException(sprintf(
+                throw new ModelNotFoundException(sprintf(
                     'Service connection %d pinned to this action no longer exists; aborting instead of acting on a different instance.',
                     $connectionId,
-                )))->setModel(self::class, [$connectionId]);
+                ))->setModel(self::class, [$connectionId]);
             }
 
             if ($connection->type === $serviceType) {

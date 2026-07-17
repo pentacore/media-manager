@@ -2,6 +2,7 @@
 import { Head, router } from '@inertiajs/vue3';
 import { Archive, ArchiveRestore, Eye, Search } from '@lucide/vue';
 import { ref } from 'vue';
+import AiConversationController from '@/actions/App/Http/Controllers/Admin/AiConversationController';
 import { Pill } from '@/components/mm';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -15,7 +16,6 @@ import {
     TableRow,
 } from '@/components/ui/table';
 import { cn } from '@/lib/utils';
-import AiConversationController from '@/actions/App/Http/Controllers/Admin/AiConversationController';
 import { dashboard } from '@/routes';
 
 interface ConversationRow {

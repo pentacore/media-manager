@@ -17,15 +17,6 @@ import {
 import { useEventListener } from '@vueuse/core';
 import type { Component } from 'vue';
 import { computed, nextTick, onMounted, useTemplateRef, watch } from 'vue';
-import {
-    Dialog,
-    DialogContent,
-    DialogDescription,
-    DialogTitle,
-} from '@/components/ui/dialog';
-import { Input } from '@/components/ui/input';
-import { useCommandPalette } from '@/composables/useCommandPalette';
-import { useInstantSearch } from '@/composables/useInstantSearch';
 import ActionRequestController from '@/actions/App/Http/Controllers/Actions/ActionRequestController';
 import ActivityLogController from '@/actions/App/Http/Controllers/ActivityLogController';
 import NowPlayingController from '@/actions/App/Http/Controllers/Emby/NowPlayingController';
@@ -36,6 +27,15 @@ import SearchController from '@/actions/App/Http/Controllers/Media/SearchControl
 import SeriesController from '@/actions/App/Http/Controllers/Media/SeriesController';
 import ServiceHealthController from '@/actions/App/Http/Controllers/Monitoring/ServiceHealthController';
 import StatisticsController from '@/actions/App/Http/Controllers/StatisticsController';
+import {
+    Dialog,
+    DialogContent,
+    DialogDescription,
+    DialogTitle,
+} from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
+import { useCommandPalette } from '@/composables/useCommandPalette';
+import { useInstantSearch } from '@/composables/useInstantSearch';
 import { dashboard } from '@/routes';
 
 interface QuickLink {

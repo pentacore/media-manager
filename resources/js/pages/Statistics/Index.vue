@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { Deferred, Head, router } from '@inertiajs/vue3';
 import { computed } from 'vue';
+import StatisticsController from '@/actions/App/Http/Controllers/StatisticsController';
 import {
     BarChart,
     Heatmap,
@@ -10,7 +11,6 @@ import {
 } from '@/components/mm';
 import { useStatisticsSeries } from '@/composables/useStatisticsSeries';
 import type { SeriesPoint } from '@/composables/useStatisticsSeries';
-import StatisticsController from '@/actions/App/Http/Controllers/StatisticsController';
 import { dashboard } from '@/routes';
 
 const props = defineProps<{

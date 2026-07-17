@@ -101,7 +101,7 @@ test('refuses a redirect that leaves the allowlist without requesting the target
     );
 
     expect($result['error'])->toBe('redirected_off_allowlist');
-    Http::assertNotSent(fn ($request): bool => str_contains($request->url(), '169.254.169.254'));
+    Http::assertNotSent(fn ($request): bool => str_contains((string) $request->url(), '169.254.169.254'));
 });
 
 test('refuses a redirect to an explicit port even on an allowlisted host', function (): void {

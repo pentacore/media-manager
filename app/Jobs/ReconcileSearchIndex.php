@@ -161,14 +161,14 @@ class ReconcileSearchIndex implements ShouldBeUnique, ShouldQueue
      * @param  array<int, mixed>  $items
      * @param  array<int, int>  $presentIds
      */
-    private function pruneIsCredible(array $items, array $presentIds, ServiceConnection $connection, string $service): bool
+    private function pruneIsCredible(array $items, array $presentIds, ServiceConnection $serviceConnection, string $service): bool
     {
         if ($items === [] || $presentIds !== []) {
             return true;
         }
 
         Log::warning('ReconcileSearchIndex: skipping prune — payload had items but no usable ids', [
-            'connection_id' => $connection->id,
+            'connection_id' => $serviceConnection->id,
             'service' => $service,
             'item_count' => count($items),
         ]);

@@ -2,6 +2,8 @@
 import { Head, Link, router } from '@inertiajs/vue3';
 import { Antenna, ExternalLink, Search } from '@lucide/vue';
 import { ref } from 'vue';
+import ServiceConnectionController from '@/actions/App/Http/Controllers/Admin/ServiceConnectionController';
+import SearchIndexersController from '@/actions/App/Http/Controllers/Prowlarr/SearchIndexersController';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -13,8 +15,6 @@ import {
     TableHeader,
     TableRow,
 } from '@/components/ui/table';
-import ServiceConnectionController from '@/actions/App/Http/Controllers/Admin/ServiceConnectionController';
-import SearchIndexersController from '@/actions/App/Http/Controllers/Prowlarr/SearchIndexersController';
 import { dashboard } from '@/routes';
 
 interface IndexerRelease {

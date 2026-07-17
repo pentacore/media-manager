@@ -2,6 +2,7 @@
 import { Head, router, useForm } from '@inertiajs/vue3';
 import { Film, Search } from '@lucide/vue';
 import { ref } from 'vue';
+import MovieController from '@/actions/App/Http/Controllers/Media/MovieController';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -14,7 +15,6 @@ import {
     SelectValue,
 } from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
-import MovieController from '@/actions/App/Http/Controllers/Media/MovieController';
 import { dashboard } from '@/routes';
 
 interface QualityProfile {

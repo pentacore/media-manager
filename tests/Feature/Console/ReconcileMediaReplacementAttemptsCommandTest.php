@@ -89,12 +89,12 @@ test('the sweep restores monitoring the executor suspended', function (): void {
         ->and($fresh->monitoring_suspended)->toBeFalse();
 
     // The remonitor call actually reached the arr.
-    Http::assertSent(fn ($request): bool => str_contains($request->url(), 'episode/monitor'));
+    Http::assertSent(fn ($request): bool => str_contains((string) $request->url(), 'episode/monitor'));
 
     Notification::assertSentTo(
         User::first(),
         MediaReplacementStatusChanged::class,
-        fn (MediaReplacementStatusChanged $notification): bool => ! str_contains($notification->message, 'Monitoring could not be restored'),
+        fn (MediaReplacementStatusChanged $mediaReplacementStatusChanged): bool => ! str_contains($mediaReplacementStatusChanged->message, 'Monitoring could not be restored'),
     );
 });
 
@@ -112,7 +112,7 @@ test('the sweep notification never claims deletion that did not happen', functio
     Notification::assertSentTo(
         User::first(),
         MediaReplacementStatusChanged::class,
-        fn (MediaReplacementStatusChanged $notification): bool => str_contains($notification->message, 'the old file was not removed'),
+        fn (MediaReplacementStatusChanged $mediaReplacementStatusChanged): bool => str_contains($mediaReplacementStatusChanged->message, 'the old file was not removed'),
     );
 });
 
