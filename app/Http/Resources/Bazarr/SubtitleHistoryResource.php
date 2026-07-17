@@ -7,7 +7,18 @@ namespace App\Http\Resources\Bazarr;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 use Override;
+use Pentacore\Typefinder\Attributes\TypefinderResource;
 
+#[TypefinderResource(shape: [
+    'media_type' => "'episode' | 'movie'",
+    'media_id' => 'number',
+    'title' => 'string',
+    'language' => 'string | undefined',
+    'provider' => 'string | undefined',
+    'action' => 'string | undefined',
+    'score' => 'number | undefined',
+    'occurred_at' => 'string | undefined',
+])]
 class SubtitleHistoryResource extends JsonResource
 {
     /**

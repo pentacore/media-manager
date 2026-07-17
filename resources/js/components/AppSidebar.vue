@@ -5,6 +5,7 @@ import {
     BarChart3,
     Bot,
     Brain,
+    Captions,
     ChartLine,
     Clock,
     DollarSign,
@@ -42,6 +43,7 @@ import AdminStatisticsController from '@/actions/App/Http/Controllers/Admin/Stat
 import UserController from '@/actions/App/Http/Controllers/Admin/UserController';
 import WebhookLogController from '@/actions/App/Http/Controllers/Admin/WebhookLogController';
 import AIChatController from '@/actions/App/Http/Controllers/AI/ChatController';
+import BazarrOverviewController from '@/actions/App/Http/Controllers/Bazarr/OverviewController';
 import NowPlayingController from '@/actions/App/Http/Controllers/Emby/NowPlayingController';
 import WatchHistoryController from '@/actions/App/Http/Controllers/Emby/WatchHistoryController';
 import LibraryActivityController from '@/actions/App/Http/Controllers/Library/ActivityController';
@@ -306,6 +308,11 @@ const mediaNavItems = computed<NavItem[]>(() => [
         title: 'Seasonal Anime',
         href: AnimeController.index.url(),
         icon: Sprout,
+    },
+    {
+        title: 'Subtitles',
+        href: BazarrOverviewController.url(),
+        icon: Captions,
     },
     {
         title: 'Search',
