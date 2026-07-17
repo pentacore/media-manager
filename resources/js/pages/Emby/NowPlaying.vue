@@ -1,8 +1,7 @@
 <script setup lang="ts">
 import { Head, router } from '@inertiajs/vue3';
-import { MoreHorizontal, Pause, RefreshCcw, X } from '@lucide/vue';
-import { onBeforeUnmount, onMounted, ref, watch } from 'vue';
-import NowPlayingController from '@/actions/App/Http/Controllers/Emby/NowPlayingController';
+import { RefreshCcw } from '@lucide/vue';
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import {
     InitialsAvatar,
     LiveDot,
@@ -13,7 +12,9 @@ import {
 } from '@/components/mm';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
+import { useConnectionState } from '@/composables/useConnectionState';
 import { useEmbyActivity } from '@/composables/useEmbyActivity';
+import NowPlayingController from '@/actions/App/Http/Controllers/Emby/NowPlayingController';
 import { dashboard } from '@/routes';
 
 interface NowPlayingItem {
@@ -69,6 +70,23 @@ function manualRefresh(): void {
 }
 
 const { subscribe, nowPlaying } = useEmbyActivity();
+
+// Real socket state — the pill previously hardcoded "Reverb connected" even
+// while the websocket was down.
+const { state: connectionState } = useConnectionState();
+const connectionPill = computed(() => {
+    switch (connectionState.value) {
+        case 'connected':
+            return { variant: 'ok' as const, label: 'Reverb connected' };
+        case 'connecting':
+            return { variant: 'warn' as const, label: 'Reverb connecting…' };
+        default:
+            return {
+                variant: 'danger' as const,
+                label: 'Reverb disconnected',
+            };
+    }
+});
 
 let reloadTimer: ReturnType<typeof setTimeout> | null = null;
 let reloading = false;
@@ -167,7 +185,9 @@ function remainingTicks(session: Session): number {
                 </p>
             </div>
             <div class="flex items-center gap-2">
-                <Pill variant="ok" dot>Reverb connected</Pill>
+                <Pill :variant="connectionPill.variant" dot>{{
+                    connectionPill.label
+                }}</Pill>
                 <OpenInServiceButton
                     :href="props.connection.url"
                     label="Open Emby"
@@ -301,29 +321,6 @@ function remainingTicks(session: Session): number {
                             </div>
                         </div>
                     </div>
-                </div>
-                <div class="flex gap-2 border-t border-border px-4 py-2.5">
-                    <Button
-                        variant="ghost"
-                        size="sm"
-                        class="h-7 gap-1.5 text-xs"
-                    >
-                        <Pause class="size-3.5" />Pause
-                    </Button>
-                    <Button
-                        variant="ghost"
-                        size="sm"
-                        class="h-7 gap-1.5 text-xs"
-                    >
-                        <X class="size-3.5" />Stop
-                    </Button>
-                    <Button
-                        variant="ghost"
-                        size="sm"
-                        class="ml-auto size-7 p-0"
-                    >
-                        <MoreHorizontal class="size-3.5" />
-                    </Button>
                 </div>
             </div>
         </div>
