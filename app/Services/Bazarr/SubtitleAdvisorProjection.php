@@ -38,6 +38,23 @@ final readonly class SubtitleAdvisorProjection
      */
     public function forCase(SubtitleCase $subtitleCase): array
     {
+        return $this->replacementContextForCase($subtitleCase)['projection'];
+    }
+
+    /**
+     * Server-side replacement context. Only `projection` is safe for the model.
+     *
+     * @return array{
+     *     projection: array<string, mixed>,
+     *     target: array<string, mixed>,
+     *     automatic_candidate: array<string, mixed>|null,
+     *     effective_languages: list<string>
+     * }
+     *
+     * @throws JsonException
+     */
+    public function replacementContextForCase(SubtitleCase $subtitleCase): array
+    {
         $subtitleCase = SubtitleCase::query()
             ->with('serviceConnection')
             ->findOrFail($subtitleCase->id);
@@ -118,7 +135,14 @@ final readonly class SubtitleAdvisorProjection
             ],
         ];
 
-        return $this->fitJsonBudget($projection);
+        return [
+            'projection' => $this->fitJsonBudget($projection),
+            'target' => $target,
+            'automatic_candidate' => is_array($replacement['automatic_candidate'] ?? null)
+                ? $replacement['automatic_candidate']
+                : null,
+            'effective_languages' => $replacement['effective_languages'],
+        ];
     }
 
     private function mappedService(ServiceConnection $serviceConnection): string
