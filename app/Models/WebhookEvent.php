@@ -12,6 +12,7 @@ use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\MassPrunable;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -54,6 +55,7 @@ class WebhookEvent extends Model
 {
     /** @use HasFactory<WebhookEventFactory> */
     use HasFactory;
+    use MassPrunable;
 
     /**
      * @return array<string, string>
@@ -131,5 +133,19 @@ class WebhookEvent extends Model
         }
 
         return $value;
+    }
+
+    /**
+     * Retention window from mediamanager.retention (0 disables pruning).
+     */
+    public function prunable(): Builder
+    {
+        $days = (int) config('mediamanager.retention.webhook_events_days');
+
+        return static::query()->when(
+            $days > 0,
+            fn (Builder $builder): Builder => $builder->where('created_at', '<', now()->subDays($days)),
+            fn (Builder $builder): Builder => $builder->whereRaw('1 = 0'),
+        );
     }
 }
