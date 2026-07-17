@@ -71,6 +71,51 @@ test('terminal attempts are never touched', function (): void {
     Notification::assertNothingSent();
 });
 
+test('the sweep restores monitoring the executor suspended', function (): void {
+    Http::fake(['*' => Http::response([], 200)]);
+
+    $attempt = MediaReplacementAttempt::factory()->create([
+        'status' => MediaReplacementStatus::Downloading,
+        'started_at' => now()->subHours(9),
+        'was_monitored' => true,
+        'monitoring_suspended' => true,
+        'target' => ['service' => 'sonarr', 'series_id' => 42, 'episode_ids' => [7, 8], 'episode_file_ids' => [501]],
+    ]);
+
+    $this->artisan('media-replacement:reconcile')->assertSuccessful();
+
+    $fresh = $attempt->fresh();
+    expect($fresh->status)->toBe(MediaReplacementStatus::NeedsAttention)
+        ->and($fresh->monitoring_suspended)->toBeFalse();
+
+    // The remonitor call actually reached the arr.
+    Http::assertSent(fn ($request): bool => str_contains($request->url(), 'episode/monitor'));
+
+    Notification::assertSentTo(
+        User::first(),
+        MediaReplacementStatusChanged::class,
+        fn (MediaReplacementStatusChanged $notification): bool => ! str_contains($notification->message, 'Monitoring could not be restored'),
+    );
+});
+
+test('the sweep notification never claims deletion that did not happen', function (): void {
+    // grab never confirmed, cleanup never ran -> nothing was deleted.
+    MediaReplacementAttempt::factory()->create([
+        'status' => MediaReplacementStatus::Downloading,
+        'started_at' => now()->subHours(9),
+        'grab_accepted_at' => null,
+        'cleanup_completed_at' => null,
+    ]);
+
+    $this->artisan('media-replacement:reconcile')->assertSuccessful();
+
+    Notification::assertSentTo(
+        User::first(),
+        MediaReplacementStatusChanged::class,
+        fn (MediaReplacementStatusChanged $notification): bool => str_contains($notification->message, 'the old file was not removed'),
+    );
+});
+
 test('the custom timeout threshold is respected', function (): void {
     $attempt = MediaReplacementAttempt::factory()->create([
         'status' => MediaReplacementStatus::Downloading,
