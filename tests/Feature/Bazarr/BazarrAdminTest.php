@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use App\Settings\BazarrAutomationSettings;
 use App\Models\ActivityLog;
 use App\Models\ServiceConnection;
 use App\Models\User;
@@ -100,6 +101,45 @@ test('admin settings reject unknown keys', function (): void {
         ->assertSessionHasErrors('settings');
 
     expect(ActivityLog::query()->where('action', 'bazarr.settings.updated')->count())->toBe(0);
+});
+
+test('admin updates automation with a value-free audit record', function (): void {
+    $admin = User::factory()->admin()->create();
+    $automation = [
+        'enabled' => true,
+        'reconciliation_interval_minutes' => 30,
+        'grace_hours' => ['anime' => 12, 'tv' => 48, 'movie' => 72],
+        'probe_spacing_hours' => 12,
+        'empty_probe_threshold' => 3,
+        'max_cases_per_cycle' => 50,
+        'max_probes_per_cycle' => 5,
+        'max_advisor_escalations_per_cycle' => 2,
+        'advisor_concurrency' => 1,
+        'upload_max_kilobytes' => 4096,
+        'upload_expiry_hours' => 12,
+    ];
+
+    $this->actingAs($admin)
+        ->put(route('bazarr.admin.automation.update'), ['automation' => $automation])
+        ->assertRedirect();
+
+    $activityLog = ActivityLog::query()->where('action', 'bazarr.automation.updated')->sole();
+    $encodedLog = json_encode($activityLog->toArray(), JSON_THROW_ON_ERROR);
+
+    expect($activityLog->user_id)->toBe($admin->id)
+        ->and($activityLog->metadata['changed_keys'])->toHaveCount(11)
+        ->and($encodedLog)->not->toContain('4096')
+        ->not->toContain('reconciliation_interval_minutes":30');
+});
+
+test('automation validation rejects unknown and out of range values', function (): void {
+    $automation = resolve(BazarrAutomationSettings::class)->configuration();
+    $automation['unknown'] = 'discard';
+    $automation['advisor_concurrency'] = 6;
+
+    $this->actingAs(User::factory()->admin()->create())
+        ->put(route('bazarr.admin.automation.update'), ['automation' => $automation])
+        ->assertSessionHasErrors(['automation', 'automation.advisor_concurrency']);
 });
 
 function fakeAdminSettingsApi(): void

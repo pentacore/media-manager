@@ -72,6 +72,13 @@ test('admin manages non-secret Bazarr settings', function (): void {
                     'automatic_subtitle_synchronization' => true,
                     'use_postprocessing' => false,
                 ],
+            ]])
+            ->push(['data' => [
+                'scheduler' => ['enabled' => true, 'interval_hours' => 12],
+                'subtitle_tools' => [
+                    'automatic_subtitle_synchronization' => true,
+                    'use_postprocessing' => false,
+                ],
             ]]),
         'bazarr.test/api/system/languages/profiles' => Http::response([[
             'profileId' => 1,
@@ -110,9 +117,13 @@ test('admin manages non-secret Bazarr settings', function (): void {
         ->fill('@scheduler-interval', '12')
         ->click('@save-bazarr-settings')
         ->assertSee('Bazarr settings updated.')
+        ->fill('@automation-reconciliation_interval_minutes', '30')
+        ->click('@save-bazarr-automation')
+        ->assertSee('Bazarr automation updated.')
         ->assertNoSmoke();
 
-    expect(ActivityLog::query()->where('action', 'bazarr.settings.updated')->count())->toBe(1);
+    expect(ActivityLog::query()->where('action', 'bazarr.settings.updated')->count())->toBe(1)
+        ->and(ActivityLog::query()->where('action', 'bazarr.automation.updated')->count())->toBe(1);
 });
 
 test('member searches and requests an exact subtitle from the item drawer', function (): void {

@@ -6,11 +6,13 @@ namespace App\Http\Controllers\Bazarr;
 
 use App\Enums\ServiceType;
 use App\Http\Requests\Bazarr\AdminSettingsRequest;
+use App\Http\Requests\Bazarr\AutomationSettingsRequest;
 use App\Models\ActivityLog;
 use App\Models\BazarrServiceLink;
 use App\Models\ServiceConnection;
 use App\Services\Bazarr\BazarrClient;
 use App\Services\Bazarr\BazarrSettingsAdapter;
+use App\Settings\BazarrAutomationSettings;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -18,7 +20,11 @@ use Inertia\Response;
 
 final class AdminController extends BazarrController
 {
-    public function index(Request $request, BazarrSettingsAdapter $bazarrSettingsAdapter): Response
+    public function index(
+        Request $request,
+        BazarrSettingsAdapter $bazarrSettingsAdapter,
+        BazarrAutomationSettings $bazarrAutomationSettings,
+    ): Response
     {
         $request->validate($this->commonRules());
         $connectionProps = $this->connectionProps($request);
@@ -32,7 +38,29 @@ final class AdminController extends BazarrController
             'mappings' => $connection instanceof ServiceConnection ? $this->mappings($connection) : [],
             'bazarr_external_url' => $connection?->linkUrl(),
             'action_rules_url' => route('actions.rules.index'),
+            'automation' => $bazarrAutomationSettings->configuration(),
         ]);
+    }
+
+    public function updateAutomation(
+        AutomationSettingsRequest $automationSettingsRequest,
+        BazarrAutomationSettings $bazarrAutomationSettings,
+    ): RedirectResponse {
+        $configuration = $automationSettingsRequest->validated('automation');
+        $bazarrAutomationSettings->setConfiguration($configuration);
+        $changedKeys = array_keys($configuration);
+        sort($changedKeys);
+
+        ActivityLog::create([
+            'user_id' => $automationSettingsRequest->user()?->id,
+            'action' => 'bazarr.automation.updated',
+            'description' => 'Updated Bazarr automation settings.',
+            'metadata' => ['changed_keys' => $changedKeys],
+        ]);
+
+        Inertia::flash('toast', ['type' => 'success', 'message' => __('Bazarr automation updated.')]);
+
+        return back();
     }
 
     public function update(

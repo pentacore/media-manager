@@ -40,6 +40,19 @@ const props = defineProps<{
     }[];
     bazarr_external_url: string | null;
     action_rules_url: string;
+    automation: {
+        enabled: boolean;
+        reconciliation_interval_minutes: number;
+        grace_hours: { anime: number; tv: number; movie: number };
+        probe_spacing_hours: number;
+        empty_probe_threshold: number;
+        max_cases_per_cycle: number;
+        max_probes_per_cycle: number;
+        max_advisor_escalations_per_cycle: number;
+        advisor_concurrency: number;
+        upload_max_kilobytes: number;
+        upload_expiry_hours: number;
+    };
 }>();
 
 defineOptions({
@@ -66,8 +79,89 @@ const form = useForm({
     },
 });
 
+const automationForm = useForm({
+    automation: {
+        ...props.automation,
+        grace_hours: { ...props.automation.grace_hours },
+    },
+});
+
+type NumericAutomationKey =
+    | 'reconciliation_interval_minutes'
+    | 'probe_spacing_hours'
+    | 'empty_probe_threshold'
+    | 'max_cases_per_cycle'
+    | 'max_probes_per_cycle'
+    | 'max_advisor_escalations_per_cycle'
+    | 'advisor_concurrency'
+    | 'upload_max_kilobytes'
+    | 'upload_expiry_hours';
+
+const numericAutomationFields: {
+    key: NumericAutomationKey;
+    label: string;
+    min: number;
+    max: number;
+}[] = [
+    {
+        key: 'reconciliation_interval_minutes',
+        label: 'Interval (minutes)',
+        min: 5,
+        max: 1440,
+    },
+    {
+        key: 'probe_spacing_hours',
+        label: 'Probe spacing (hours)',
+        min: 1,
+        max: 720,
+    },
+    {
+        key: 'empty_probe_threshold',
+        label: 'Empty probe threshold',
+        min: 2,
+        max: 10,
+    },
+    { key: 'max_cases_per_cycle', label: 'Cases per cycle', min: 1, max: 1000 },
+    {
+        key: 'max_probes_per_cycle',
+        label: 'Probes per cycle',
+        min: 1,
+        max: 100,
+    },
+    {
+        key: 'max_advisor_escalations_per_cycle',
+        label: 'Advisor escalations',
+        min: 0,
+        max: 25,
+    },
+    {
+        key: 'advisor_concurrency',
+        label: 'Advisor concurrency',
+        min: 1,
+        max: 5,
+    },
+    {
+        key: 'upload_max_kilobytes',
+        label: 'Upload max (KB)',
+        min: 64,
+        max: 10240,
+    },
+    {
+        key: 'upload_expiry_hours',
+        label: 'Upload expiry (hours)',
+        min: 1,
+        max: 168,
+    },
+];
+
 function save(): void {
     form.put(AdminController.update.url(), {
+        preserveScroll: true,
+    });
+}
+
+function saveAutomation(): void {
+    automationForm.put(AdminController.updateAutomation.url(), {
         preserveScroll: true,
     });
 }
@@ -257,6 +351,68 @@ function save(): void {
                     </div>
                 </section>
             </div>
+
+            <form
+                class="space-y-4 rounded-xl border border-border bg-card p-5"
+                data-test="bazarr-automation-form"
+                @submit.prevent="saveAutomation"
+            >
+                <div>
+                    <h2 class="font-semibold">Subtitle automation</h2>
+                    <p class="text-sm text-muted-foreground">
+                        Reconciliation stays disabled until explicitly enabled.
+                    </p>
+                </div>
+                <Toggle
+                    v-model="automationForm.automation.enabled"
+                    label="Enable proactive reconciliation"
+                />
+                <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                    <label
+                        v-for="field in numericAutomationFields"
+                        :key="field.key"
+                        class="text-sm font-medium"
+                    >
+                        {{ field.label }}
+                        <input
+                            v-model.number="
+                                automationForm.automation[field.key]
+                            "
+                            :data-test="`automation-${field.key}`"
+                            type="number"
+                            :min="field.min"
+                            :max="field.max"
+                            class="mt-1 h-9 w-full rounded-md border border-input bg-background px-3"
+                        />
+                    </label>
+                </div>
+                <div class="grid gap-3 sm:grid-cols-3">
+                    <label
+                        v-for="scope in ['anime', 'tv', 'movie'] as const"
+                        :key="scope"
+                        class="text-sm font-medium capitalize"
+                    >
+                        {{ scope }} grace (hours)
+                        <input
+                            v-model.number="
+                                automationForm.automation.grace_hours[scope]
+                            "
+                            type="number"
+                            min="1"
+                            max="8760"
+                            class="mt-1 h-9 w-full rounded-md border border-input bg-background px-3"
+                        />
+                    </label>
+                </div>
+                <button
+                    data-test="save-bazarr-automation"
+                    type="submit"
+                    :disabled="automationForm.processing"
+                    class="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground disabled:opacity-50"
+                >
+                    Save automation
+                </button>
+            </form>
         </template>
     </div>
 </template>

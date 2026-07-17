@@ -24,6 +24,7 @@ Route::middleware(['auth', 'verified', 'password.set', 'role:viewer'])
         Route::middleware('role:admin')->group(function (): void {
             Route::get('admin', [AdminController::class, 'index'])->name('admin.index');
             Route::put('admin', [AdminController::class, 'update'])->name('admin.update');
+            Route::put('admin/automation', [AdminController::class, 'updateAutomation'])->name('admin.automation.update');
         });
 
         Route::middleware('role:member')->group(function (): void {
