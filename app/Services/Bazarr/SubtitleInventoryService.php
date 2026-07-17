@@ -12,6 +12,7 @@ use App\Http\Resources\Bazarr\SubtitleItemResource;
 use App\Models\ServiceConnection;
 use App\Services\MediaReplacement\LanguageNormalizer;
 use App\Services\MediaReplacement\SonarrMediaScopeResolver;
+use App\Services\Radarr\RadarrClient;
 use App\Services\ServiceClientFactory;
 use App\Services\Sonarr\SonarrClient;
 use App\Settings\MediaReplacementSettings;
@@ -37,7 +38,50 @@ final readonly class SubtitleInventoryService
         private SonarrMediaScopeResolver $sonarrMediaScopeResolver,
         private BazarrMediaFingerprint $bazarrMediaFingerprint,
         private BazarrSubtitleFingerprint $bazarrSubtitleFingerprint,
+        private SubtitleCaseFingerprint $subtitleCaseFingerprint,
     ) {}
+
+    /**
+     * Return backend-only material case identities for one bounded wanted page.
+     *
+     * @return array{data: list<array<string, mixed>>, page: int, per_page: int, total: int, partial: bool, errors: list<string>}
+     */
+    public function caseCandidates(
+        ServiceConnection $serviceConnection,
+        int $page = 1,
+        int $perPage = self::MAX_PER_PAGE,
+    ): array {
+        $wanted = $this->missing($serviceConnection, $page, $perPage);
+        $sonarr = $this->activeMappedConnection($serviceConnection, BazarrServiceRole::Sonarr);
+        $radarr = $this->activeMappedConnection($serviceConnection, BazarrServiceRole::Radarr);
+        $sonarrClient = $sonarr instanceof ServiceConnection ? $this->serviceClientFactory->make($sonarr) : null;
+        $radarrClient = $radarr instanceof ServiceConnection ? $this->serviceClientFactory->make($radarr) : null;
+        $candidates = [];
+
+        foreach ($wanted['data'] as $item) {
+            $identity = match ($item['media_type'] ?? null) {
+                'episode' => $sonarrClient instanceof SonarrClient && $sonarr instanceof ServiceConnection
+                    ? $this->episodeCaseIdentity($item, $sonarr, $sonarrClient)
+                    : null,
+                'movie' => $radarrClient instanceof RadarrClient && $radarr instanceof ServiceConnection
+                    ? $this->movieCaseIdentity($item, $radarr, $radarrClient)
+                    : null,
+                default => null,
+            };
+
+            if ($identity === null) {
+                continue;
+            }
+
+            $identity['bazarr_connection_id'] = $serviceConnection->id;
+            $candidates[$identity['file_fingerprint']] ??= $identity;
+        }
+
+        return [
+            ...$wanted,
+            'data' => array_values($candidates),
+        ];
+    }
 
     /**
      * @return array{
@@ -526,6 +570,149 @@ final readonly class SubtitleInventoryService
             'missing_languages' => $this->missingLanguages($requiredLanguages, $tracks),
             'monitored' => ($episode['monitored'] ?? true) === true,
         ];
+    }
+
+    /**
+     * @param  array<string, mixed>  $item
+     * @return array<string, mixed>|null
+     */
+    private function episodeCaseIdentity(
+        array $item,
+        ServiceConnection $serviceConnection,
+        SonarrClient $sonarrClient,
+    ): ?array {
+        $seriesId = $this->positiveInteger($item['series_id'] ?? null);
+        $episodeId = $this->positiveInteger($item['media_id'] ?? null);
+
+        if ($seriesId === null || $episodeId === null) {
+            return null;
+        }
+
+        $episodes = array_values(array_filter($sonarrClient->getEpisodesBySeries($seriesId), is_array(...)));
+        $episode = collect($episodes)->first(fn (array $candidate): bool => $this->positiveInteger($candidate['id'] ?? null) === $episodeId);
+        $fileId = is_array($episode) ? $this->positiveInteger($episode['episodeFileId'] ?? null) : null;
+
+        if ($fileId === null) {
+            return null;
+        }
+
+        $sharingEpisodeIds = array_values(array_filter(array_map(
+            fn (array $candidate): ?int => $this->positiveInteger($candidate['episodeFileId'] ?? null) === $fileId
+                ? $this->positiveInteger($candidate['id'] ?? null)
+                : null,
+            $episodes,
+        )));
+        $file = $sonarrClient->getEpisodeFileById($fileId);
+
+        return $this->caseIdentity(
+            item: $item,
+            service: 'sonarr',
+            serviceConnection: $serviceConnection,
+            fileIds: [$fileId],
+            mediaIds: $sharingEpisodeIds,
+            targetIds: [
+                'series_id' => $seriesId,
+                'episode_id' => $episodeId,
+                'episode_file_id' => $fileId,
+            ],
+            file: $file,
+        );
+    }
+
+    /**
+     * @param  array<string, mixed>  $item
+     * @return array<string, mixed>|null
+     */
+    private function movieCaseIdentity(
+        array $item,
+        ServiceConnection $serviceConnection,
+        RadarrClient $radarrClient,
+    ): ?array {
+        $movieId = $this->positiveInteger($item['media_id'] ?? null);
+
+        if ($movieId === null) {
+            return null;
+        }
+
+        $movie = $radarrClient->getMovieById($movieId);
+        $fileId = $this->positiveInteger($movie['movieFileId'] ?? null);
+
+        if ($fileId === null) {
+            return null;
+        }
+
+        return $this->caseIdentity(
+            item: $item,
+            service: 'radarr',
+            serviceConnection: $serviceConnection,
+            fileIds: [$fileId],
+            mediaIds: [$movieId],
+            targetIds: [
+                'radarr_id' => $movieId,
+                'movie_file_id' => $fileId,
+            ],
+            file: $radarrClient->getMovieFileById($fileId),
+        );
+    }
+
+    /**
+     * @param  array<string, mixed>  $item
+     * @param  list<int>  $fileIds
+     * @param  list<int>  $mediaIds
+     * @param  array<string, int|list<int>>  $targetIds
+     * @param  array<string, mixed>  $file
+     * @return array<string, mixed>
+     */
+    private function caseIdentity(
+        array $item,
+        string $service,
+        ServiceConnection $serviceConnection,
+        array $fileIds,
+        array $mediaIds,
+        array $targetIds,
+        array $file,
+    ): array {
+        $scope = (string) ($item['scope'] ?? '');
+        $requiredLanguages = is_array($item['required_languages'] ?? null) ? $item['required_languages'] : [];
+
+        return [
+            'bazarr_connection_id' => null,
+            'service' => $service,
+            'service_connection_id' => $serviceConnection->id,
+            'scope' => $scope,
+            'media_type' => $item['media_type'],
+            'target_ids' => $targetIds,
+            'display_name' => $item['title'],
+            'required_languages' => $requiredLanguages,
+            'missing_languages' => is_array($item['missing_languages'] ?? null) ? $item['missing_languages'] : [],
+            'current_subtitles' => $this->currentSubtitleLanguages($item['subtitle_tracks'] ?? []),
+            'monitored' => ($item['monitored'] ?? false) === true,
+            'file_fingerprint' => $this->subtitleCaseFingerprint->file([
+                'service' => $service,
+                'service_connection_id' => $serviceConnection->id,
+                'file_ids' => $fileIds,
+                'media_ids' => $mediaIds,
+                'size' => $file['size'] ?? null,
+                'date_added' => $file['dateAdded'] ?? null,
+                'scene_name' => $file['sceneName'] ?? $file['relativePath'] ?? null,
+            ]),
+            'requirements_fingerprint' => $this->subtitleCaseFingerprint->requirements($scope, $requiredLanguages),
+        ];
+    }
+
+    /**
+     * @return list<string>
+     */
+    private function currentSubtitleLanguages(mixed $tracks): array
+    {
+        if (! is_array($tracks)) {
+            return [];
+        }
+
+        return $this->languageNormalizer->normalizeMany(array_map(
+            static fn (mixed $track): mixed => is_array($track) ? ($track['language'] ?? null) : null,
+            $tracks,
+        ));
     }
 
     /**

@@ -285,6 +285,93 @@ test('missing inventory uses wanted feeds and MediaManager requirements', functi
     Http::assertNotSent(fn (Request $request): bool => parse_url($request->url(), PHP_URL_PATH) === '/api/episodes');
 });
 
+test('case candidates project one server-only identity for a shared episode file', function (): void {
+    Http::preventStrayRequests();
+
+    ['bazarr' => $bazarr, 'sonarr' => $sonarr] = subtitleInventoryConnections();
+
+    resolve(MediaReplacementSettings::class)->setConfiguration([
+        'global_languages' => ['English'],
+    ]);
+
+    Http::fake([
+        'sonarr.test/api/v3/series' => Http::response([
+            ['id' => 101, 'title' => 'Frieren', 'rootFolderPath' => '/anime', 'seriesType' => 'anime'],
+        ]),
+        'bazarr.test/api/episodes/wanted*' => Http::response([
+            'data' => [
+                [
+                    'sonarrSeriesId' => 101,
+                    'sonarrEpisodeId' => 701,
+                    'episodeTitle' => 'Part One',
+                    'missing_subtitles' => [['code3' => 'eng']],
+                    'subtitles' => [],
+                ],
+                [
+                    'sonarrSeriesId' => 101,
+                    'sonarrEpisodeId' => 702,
+                    'episodeTitle' => 'Part Two',
+                    'missing_subtitles' => [['code3' => 'eng']],
+                    'subtitles' => [],
+                ],
+            ],
+            'total' => 2,
+        ]),
+        'bazarr.test/api/movies/wanted*' => Http::response(['data' => [], 'total' => 0]),
+        'sonarr.test/api/v3/episode?seriesId=101' => Http::response([
+            ['id' => 701, 'seriesId' => 101, 'episodeFileId' => 501],
+            ['id' => 702, 'seriesId' => 101, 'episodeFileId' => 501],
+        ]),
+        'sonarr.test/api/v3/episodefile/501' => Http::response([
+            'id' => 501,
+            'size' => 734003200,
+            'dateAdded' => '2026-07-16T08:00:00Z',
+            'sceneName' => 'Group.Frieren.S01E01-E02',
+            'path' => '/private/anime/Frieren S01E01-E02.mkv',
+        ]),
+    ]);
+
+    $result = resolve(SubtitleInventoryService::class)->caseCandidates($bazarr, page: 1, perPage: 25);
+
+    expect($result)
+        ->toMatchArray([
+            'page' => 1,
+            'per_page' => 25,
+            'total' => 2,
+            'partial' => false,
+        ])
+        ->and($result['data'])->toHaveCount(1)
+        ->and($result['data'][0])->toMatchArray([
+            'bazarr_connection_id' => $bazarr->id,
+            'service' => 'sonarr',
+            'service_connection_id' => $sonarr->id,
+            'scope' => 'anime',
+            'media_type' => 'episode',
+            'target_ids' => [
+                'series_id' => 101,
+                'episode_id' => 701,
+                'episode_file_id' => 501,
+            ],
+            'required_languages' => ['eng'],
+            'missing_languages' => ['eng'],
+        ])
+        ->and($result['data'][0]['file_fingerprint'])->toMatch('/^[a-f0-9]{64}$/')
+        ->and($result['data'][0]['requirements_fingerprint'])->toMatch('/^[a-f0-9]{64}$/');
+
+    expect(json_encode($result, JSON_THROW_ON_ERROR))
+        ->not->toContain('/private/')
+        ->not->toContain('scene_name')
+        ->not->toContain('date_added')
+        ->not->toContain('"size"');
+
+    $browserProjection = resolve(SubtitleInventoryService::class)->missing($bazarr, page: 1, perPage: 25);
+
+    expect(json_encode($browserProjection, JSON_THROW_ON_ERROR))
+        ->not->toContain('file_fingerprint')
+        ->not->toContain('requirements_fingerprint')
+        ->not->toContain('episode_file_id');
+});
+
 test('history projection omits upstream paths and subtitle identifiers', function (): void {
     Http::preventStrayRequests();
 
