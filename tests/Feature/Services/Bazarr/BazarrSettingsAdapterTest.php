@@ -64,6 +64,20 @@ test('it writes only allowlisted settings with exact Bazarr form fields', functi
         && count($request->data()) === 2);
 });
 
+test('it provides copy paste notification setup without mutating existing providers', function (): void {
+    $connection = ServiceConnection::factory()->bazarr()->create([
+        'webhook_token' => 'notification-secret',
+    ]);
+
+    $setup = resolve(BazarrSettingsAdapter::class)->notificationSetup($connection);
+
+    expect($setup)->toBe([
+        'automatic_configuration_supported' => false,
+        'authenticated_url' => route('webhooks.bazarr', ['serviceConnection' => $connection]).'?token=notification-secret',
+        'instructions' => 'Add this URL as a Bazarr Apprise JSON notification target. Existing notification providers are not changed.',
+    ]);
+});
+
 test('it rejects unknown or invalid write values before an update', function (): void {
     $connection = ServiceConnection::factory()->bazarr()->create(['url' => 'http://bazarr.test']);
     fakeSettingsApi();

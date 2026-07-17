@@ -84,6 +84,23 @@ final class BazarrSettingsAdapter
     }
 
     /**
+     * @return array{automatic_configuration_supported: false, authenticated_url: string, instructions: string}
+     */
+    public function notificationSetup(ServiceConnection $serviceConnection): array
+    {
+        $url = route('webhooks.bazarr', ['serviceConnection' => $serviceConnection]);
+        $token = $serviceConnection->webhook_token;
+
+        return [
+            'automatic_configuration_supported' => false,
+            'authenticated_url' => is_string($token) && $token !== ''
+                ? $url.'?token='.urlencode($token)
+                : $url,
+            'instructions' => 'Add this URL as a Bazarr Apprise JSON notification target. Existing notification providers are not changed.',
+        ];
+    }
+
+    /**
      * @param  list<array<string, mixed>>  $profiles
      * @return list<array<string, mixed>>
      */

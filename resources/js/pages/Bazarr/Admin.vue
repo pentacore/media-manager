@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { Head, useForm } from '@inertiajs/vue3';
 import { ExternalLink, ShieldCheck } from '@lucide/vue';
+import { ref } from 'vue';
 import AdminController from '@/actions/App/Http/Controllers/Bazarr/AdminController';
 import SubtitleTabs from '@/components/bazarr/SubtitleTabs.vue';
 import { Toggle } from '@/components/mm';
@@ -40,6 +41,11 @@ const props = defineProps<{
     }[];
     bazarr_external_url: string | null;
     action_rules_url: string;
+    notification_setup: {
+        automatic_configuration_supported: boolean;
+        authenticated_url: string;
+        instructions: string;
+    } | null;
     automation: {
         enabled: boolean;
         reconciliation_interval_minutes: number;
@@ -54,6 +60,8 @@ const props = defineProps<{
         upload_expiry_hours: number;
     };
 }>();
+
+const showNotificationSetup = ref(false);
 
 defineOptions({
     layout: {
@@ -348,6 +356,36 @@ function saveAutomation(): void {
                         <span class="text-muted-foreground">{{
                             notification.enabled ? 'Enabled' : 'Disabled'
                         }}</span>
+                    </div>
+                    <button
+                        v-if="notification_setup"
+                        type="button"
+                        class="mt-3 text-sm font-medium text-primary hover:underline"
+                        data-test="show-bazarr-notification-hint"
+                        @click="showNotificationSetup = !showNotificationSetup"
+                    >
+                        {{
+                            showNotificationSetup
+                                ? 'Hide MediaManager notification setup'
+                                : 'Show MediaManager notification setup'
+                        }}
+                    </button>
+                    <div
+                        v-if="notification_setup && showNotificationSetup"
+                        class="mt-3 space-y-2 rounded-lg border border-border bg-muted/40 p-3 text-sm"
+                    >
+                        <p class="font-medium">
+                            Authenticated notification URL
+                        </p>
+                        <p class="text-muted-foreground">
+                            {{ notification_setup.instructions }}
+                        </p>
+                        <input
+                            class="w-full rounded-md border border-input bg-background px-3 py-2 font-mono text-xs"
+                            data-test="bazarr-notification-url"
+                            readonly
+                            :value="notification_setup.authenticated_url"
+                        />
                     </div>
                 </section>
             </div>

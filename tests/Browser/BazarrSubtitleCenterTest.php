@@ -54,6 +54,7 @@ test('admin manages non-secret Bazarr settings', function (): void {
         'name' => 'Primary Bazarr',
         'url' => 'http://bazarr.test',
         'api_key' => 'bazarr-secret',
+        'webhook_token' => 'notification-secret',
     ]);
 
     Http::fake([
@@ -114,6 +115,9 @@ test('admin manages non-secret Bazarr settings', function (): void {
         ->assertSee('Open Bazarr to edit credentials')
         ->assertSee('English')
         ->assertSee('OpenSubtitles')
+        ->click('@show-bazarr-notification-hint')
+        ->assertSee('Authenticated notification URL')
+        ->assertSee('Existing notification providers are not changed.')
         ->fill('@scheduler-interval', '12')
         ->click('@save-bazarr-settings')
         ->assertSee('Bazarr settings updated.')

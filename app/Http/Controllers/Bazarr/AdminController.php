@@ -39,6 +39,9 @@ final class AdminController extends BazarrController
             'bazarr_external_url' => $connection?->linkUrl(),
             'action_rules_url' => route('actions.rules.index'),
             'automation' => $bazarrAutomationSettings->configuration(),
+            'notification_setup' => $connection instanceof ServiceConnection
+                ? $bazarrSettingsAdapter->notificationSetup($connection)
+                : null,
         ]);
     }
 

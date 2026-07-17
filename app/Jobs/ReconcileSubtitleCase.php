@@ -40,7 +40,23 @@ final class ReconcileSubtitleCase implements ShouldQueue
     public function __construct(
         public array $candidate,
         public bool $probeAllowed = true,
+        public ?int $subtitleCaseId = null,
+        public ?int $targetBazarrConnectionId = null,
     ) {}
+
+    public static function forCase(SubtitleCase $subtitleCase): self
+    {
+        return new self(
+            candidate: [],
+            subtitleCaseId: $subtitleCase->id,
+            targetBazarrConnectionId: $subtitleCase->bazarr_connection_id,
+        );
+    }
+
+    public function bazarrConnectionId(): string
+    {
+        return (string) ($this->targetBazarrConnectionId ?? $this->candidate['bazarr_connection_id'] ?? 'unknown');
+    }
 
     /**
      * @return list<int>
@@ -66,7 +82,9 @@ final class ReconcileSubtitleCase implements ShouldQueue
         BazarrAutomationSettings $bazarrAutomationSettings,
         MediaReplacementSettings $mediaReplacementSettings,
     ): void {
-        $subtitleCase = $subtitleCaseReconciler->reconcile($this->candidate);
+        $subtitleCase = $this->subtitleCaseId === null
+            ? $subtitleCaseReconciler->reconcile($this->candidate)
+            : SubtitleCase::query()->find($this->subtitleCaseId);
 
         if (! $this->probeAllowed
             || ! $subtitleCase instanceof SubtitleCase

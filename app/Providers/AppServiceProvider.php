@@ -64,9 +64,7 @@ class AppServiceProvider extends ServiceProvider
         );
         RateLimiter::for(
             'bazarr-probes',
-            fn (ReconcileSubtitleCase $reconcileSubtitleCase): Limit => Limit::perMinute(10)->by(
-                (string) ($reconcileSubtitleCase->candidate['bazarr_connection_id'] ?? 'unknown'),
-            ),
+            fn (ReconcileSubtitleCase $reconcileSubtitleCase): Limit => Limit::perMinute(10)->by($reconcileSubtitleCase->bazarrConnectionId()),
         );
         Event::listen(SocialiteWasCalled::class, AuthentikExtendSocialite::class);
 
