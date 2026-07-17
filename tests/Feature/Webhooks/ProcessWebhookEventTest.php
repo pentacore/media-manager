@@ -67,6 +67,63 @@ test('resolves ProwlarrWebhookHandler for Prowlarr connection', function (): voi
     expect(ActivityLog::where('action', 'webhook.prowlarr.test')->count())->toBe(1);
 });
 
+test('an event claimed by another worker is skipped on the first attempt', function (): void {
+    $connection = ServiceConnection::factory()->sonarr()->create();
+    $event = WebhookEvent::factory()->create([
+        'service_connection_id' => $connection->id,
+        'handling_status' => WebhookHandlingStatus::Processing,
+    ]);
+
+    $mock = Mockery::mock(WebhookHandler::class);
+    $mock->shouldNotReceive('handle');
+    $this->app->bind(SonarrWebhookHandler::class, fn (): WebhookHandler => $mock);
+
+    Log::shouldReceive('info')->once();
+
+    new ProcessWebhookEvent($event)->handle();
+});
+
+test('a retry attempt reclaims a row left in processing by a dead worker', function (): void {
+    $connection = ServiceConnection::factory()->sonarr()->create();
+    $event = WebhookEvent::factory()->create([
+        'service_connection_id' => $connection->id,
+        'handling_status' => WebhookHandlingStatus::Processing,
+    ]);
+
+    $mock = Mockery::mock(WebhookHandler::class);
+    $mock->shouldReceive('handle')->once()->andReturn(WebhookHandlingStatus::Handled);
+    $this->app->bind(SonarrWebhookHandler::class, fn (): WebhookHandler => $mock);
+
+    $job = new ProcessWebhookEvent($event);
+    $queueJob = Mockery::mock(Illuminate\Contracts\Queue\Job::class);
+    $queueJob->shouldReceive('attempts')->andReturn(2);
+    $queueJob->shouldIgnoreMissing();
+    $job->setJob($queueJob);
+
+    $job->handle();
+
+    expect($event->fresh()->handling_status)->toBe(WebhookHandlingStatus::Handled);
+});
+
+test('the claim flips a fresh event to processing before the handler runs', function (): void {
+    $connection = ServiceConnection::factory()->sonarr()->create();
+    $event = WebhookEvent::factory()->create(['service_connection_id' => $connection->id]);
+
+    $observed = null;
+    $mock = Mockery::mock(WebhookHandler::class);
+    $mock->shouldReceive('handle')->once()->andReturnUsing(function (WebhookEvent $webhookEvent) use (&$observed): WebhookHandlingStatus {
+        $observed = $webhookEvent->fresh()->handling_status;
+
+        return WebhookHandlingStatus::Handled;
+    });
+    $this->app->bind(SonarrWebhookHandler::class, fn (): WebhookHandler => $mock);
+
+    new ProcessWebhookEvent($event)->handle();
+
+    expect($observed)->toBe(WebhookHandlingStatus::Processing)
+        ->and($event->fresh()->handling_status)->toBe(WebhookHandlingStatus::Handled);
+});
+
 test('already-processed events are skipped without invoking the handler', function (): void {
     $connection = ServiceConnection::factory()->sonarr()->create();
     $event = WebhookEvent::factory()->processed()->create(['service_connection_id' => $connection->id]);
