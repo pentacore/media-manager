@@ -35,7 +35,7 @@ test('index exposes handling status, counts and ai decision per row', function (
             ->where('events.data.0.activity_count', 1)
             ->where('events.data.0.agent_decision.status', 'completed')
             ->where('events.data.0.agent_decision.actions_count', 2)
-            ->has('filterOptions.handlingStatuses', 4)
+            ->has('filterOptions.handlingStatuses', 5)
         );
 });
 

@@ -24,10 +24,11 @@ test('a member sees a pending action request and can approve it', function (): v
         ->click('Approve & execute')
         ->assertPathIs('/actions/requests');
 
-    // Sync queue runs the dispatched action immediately. Without a real
-    // Sonarr to talk to it lands in Failed — the relevant assertion is
-    // that the click moved the request out of Pending.
-    expect($request->fresh()->status)->not->toBe(ActionRequestStatus::Pending);
+    // Sync queue runs the dispatched action immediately against the
+    // factory's loopback URL (nothing listens there), so the execution
+    // deterministically fails — assert the concrete terminal state rather
+    // than merely "not pending", which a stray 2xx would also satisfy.
+    expect($request->fresh()->status)->toBe(ActionRequestStatus::Failed);
 });
 
 test('a completed action request renders with a non-pending status', function (): void {
