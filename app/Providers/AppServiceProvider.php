@@ -11,10 +11,12 @@ use App\Events\WebhookEventProcessed;
 use App\Events\WebhookReceived;
 use App\Jobs\ReconcileBazarrConnection;
 use App\Jobs\ReconcileSubtitleCase;
+use App\Jobs\RunSubtitleAdvisor;
 use App\Listeners\RebroadcastDashboardStats;
 use App\Listeners\RunDecisionAgentForWebhook;
 use App\Settings\AiSettings;
 use App\Settings\AppSettings;
+use App\Settings\BazarrAutomationSettings;
 use App\Settings\DecisionAgentSettings;
 use Carbon\CarbonImmutable;
 use Illuminate\Cache\RateLimiting\Limit;
@@ -65,6 +67,12 @@ class AppServiceProvider extends ServiceProvider
         RateLimiter::for(
             'bazarr-probes',
             fn (ReconcileSubtitleCase $reconcileSubtitleCase): Limit => Limit::perMinute(10)->by($reconcileSubtitleCase->bazarrConnectionId()),
+        );
+        RateLimiter::for(
+            'bazarr-advisor',
+            fn (RunSubtitleAdvisor $runSubtitleAdvisor): Limit => Limit::perMinute(
+                resolve(BazarrAutomationSettings::class)->advisorConcurrency(),
+            )->by('subtitle-advisor'),
         );
         Event::listen(SocialiteWasCalled::class, AuthentikExtendSocialite::class);
 

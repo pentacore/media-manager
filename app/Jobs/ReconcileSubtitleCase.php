@@ -4,14 +4,15 @@ declare(strict_types=1);
 
 namespace App\Jobs;
 
-use App\Models\ActionRequest;
 use App\Enums\ServiceType;
 use App\Enums\SubtitleCaseAttemptOutcome;
 use App\Enums\SubtitleCaseAttemptType;
 use App\Enums\SubtitleCaseStatus;
+use App\Models\ActionRequest;
 use App\Models\ServiceConnection;
 use App\Models\SubtitleCase;
 use App\Models\SubtitleCaseAttempt;
+use App\Providers\AIServiceProvider;
 use App\Services\Bazarr\BazarrClient;
 use App\Services\Bazarr\BazarrDownloadRequestCreator;
 use App\Services\Bazarr\SubtitleCandidateEligibility;
@@ -85,6 +86,13 @@ final class ReconcileSubtitleCase implements ShouldQueue
         $subtitleCase = $this->subtitleCaseId === null
             ? $subtitleCaseReconciler->reconcile($this->candidate)
             : SubtitleCase::query()->find($this->subtitleCaseId);
+
+        if ($subtitleCase instanceof SubtitleCase
+            && $subtitleCase->status === SubtitleCaseStatus::ReplacementEligible) {
+            $this->dispatchAdvisor($subtitleCase, $bazarrAutomationSettings);
+
+            return;
+        }
 
         if (! $this->probeAllowed
             || ! $subtitleCase instanceof SubtitleCase
@@ -198,10 +206,14 @@ final class ReconcileSubtitleCase implements ShouldQueue
                     ->where('type', SubtitleCaseAttemptType::Probe)
                     ->where('outcome', SubtitleCaseAttemptOutcome::Empty)
                     ->count() >= $bazarrAutomationSettings->emptyProbeThreshold()) {
-                $subtitleCaseLifecycle->transition(
+                $transitioned = $subtitleCaseLifecycle->transition(
                     $subtitleCase->fresh(),
                     SubtitleCaseStatus::ReplacementEligible,
                 );
+
+                if ($transitioned) {
+                    $this->dispatchAdvisor($subtitleCase->fresh(), $bazarrAutomationSettings);
+                }
             }
         } catch (Throwable $throwable) {
             SubtitleCaseAttempt::query()->create([
@@ -251,6 +263,38 @@ final class ReconcileSubtitleCase implements ShouldQueue
             'malformed' => 0,
             'capability_limited' => 0,
         ];
+    }
+
+    private function dispatchAdvisor(
+        SubtitleCase $subtitleCase,
+        BazarrAutomationSettings $bazarrAutomationSettings,
+    ): void {
+        $maximum = $bazarrAutomationSettings->maxAdvisorEscalationsPerCycle();
+
+        if (! AIServiceProvider::enabled()
+            || ! $bazarrAutomationSettings->enabled()
+            || $maximum < 1) {
+            return;
+        }
+
+        Cache::lock('bazarr-advisor-cycle-lock:'.$subtitleCase->bazarr_connection_id, 10)->block(
+            5,
+            function () use ($subtitleCase, $bazarrAutomationSettings, $maximum): void {
+                $key = 'bazarr-advisor-cycle-count:'.$subtitleCase->bazarr_connection_id;
+                $used = (int) Cache::get($key, 0);
+
+                if ($used >= $maximum) {
+                    return;
+                }
+
+                Cache::put(
+                    $key,
+                    $used + 1,
+                    now()->addMinutes($bazarrAutomationSettings->reconciliationIntervalMinutes()),
+                );
+                dispatch(new RunSubtitleAdvisor($subtitleCase->id));
+            },
+        );
     }
 
     public function failed(?Throwable $throwable): void

@@ -6,6 +6,7 @@ use App\Enums\SubtitleCaseAttemptOutcome;
 use App\Enums\SubtitleCaseAttemptType;
 use App\Enums\SubtitleCaseStatus;
 use App\Jobs\ReconcileSubtitleCase;
+use App\Jobs\RunSubtitleAdvisor;
 use App\Models\ActionRequest;
 use App\Models\ActionTypeConfig;
 use App\Models\ServiceConnection;
@@ -18,7 +19,9 @@ use App\Services\Bazarr\SubtitleCaseReconciler;
 use App\Settings\BazarrAutomationSettings;
 use App\Settings\MediaReplacementSettings;
 use Illuminate\Support\Facades\Date;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Queue;
 
 /**
  * @return array<string, mixed>
@@ -43,6 +46,8 @@ function probeCandidate(SubtitleCase $subtitleCase): array
 }
 
 beforeEach(function (): void {
+    Cache::flush();
+    config(['mediamanager.ai.enabled' => false]);
     $this->bazarr = ServiceConnection::factory()->bazarr()->create([
         'url' => 'http://bazarr.test',
         'api_key' => 'secret',
@@ -65,6 +70,53 @@ beforeEach(function (): void {
         'automatic_selection_threshold' => 90,
         'global_languages' => ['eng'],
     ]);
+});
+
+test('newly eligible cases dispatch Advisor work only up to the cycle cap', function (): void {
+    Date::setTestNow('2026-07-17 10:00:00');
+    config(['mediamanager.ai.enabled' => true]);
+    resolve(BazarrAutomationSettings::class)->setConfiguration([
+        'enabled' => true,
+        'probe_spacing_hours' => 24,
+        'empty_probe_threshold' => 2,
+        'max_advisor_escalations_per_cycle' => 1,
+    ]);
+    $secondCase = $this->case->replicate()->fill([
+        'file_fingerprint' => hash('sha256', 'second-file'),
+        'requirements_fingerprint' => hash('sha256', 'second-requirements'),
+    ]);
+    $secondCase->save();
+
+    foreach ([$this->case, $secondCase] as $subtitleCase) {
+        SubtitleCaseAttempt::factory()->for($subtitleCase)->create([
+            'type' => SubtitleCaseAttemptType::Probe,
+            'outcome' => SubtitleCaseAttemptOutcome::Empty,
+            'started_at' => now()->subDays(2),
+            'completed_at' => now()->subDays(2),
+        ]);
+    }
+
+    Http::fake([
+        'bazarr.test/api/providers/episodes*' => Http::response(['data' => []]),
+        'bazarr.test/api/providers' => Http::response(['data' => []]),
+    ]);
+    Queue::fake([RunSubtitleAdvisor::class]);
+
+    runSubtitleProbe(ReconcileSubtitleCase::forCase($this->case));
+    runSubtitleProbe(ReconcileSubtitleCase::forCase($secondCase));
+
+    expect($this->case->fresh()->status)->toBe(SubtitleCaseStatus::ReplacementEligible)
+        ->and($secondCase->fresh()->status)->toBe(SubtitleCaseStatus::ReplacementEligible);
+    Queue::assertPushed(RunSubtitleAdvisor::class, 1);
+
+    Cache::forget('bazarr-advisor-cycle-count:'.$this->bazarr->id);
+    runSubtitleProbe(ReconcileSubtitleCase::forCase($secondCase));
+
+    Queue::assertPushed(RunSubtitleAdvisor::class, 2);
+    Queue::assertPushed(
+        RunSubtitleAdvisor::class,
+        fn (RunSubtitleAdvisor $runSubtitleAdvisor): bool => $runSubtitleAdvisor->subtitleCaseId === $secondCase->id,
+    );
 });
 
 test('recent probes are not repeated and disabled probe slots still reconcile only', function (bool $probeAllowed): void {
