@@ -75,6 +75,64 @@ test('requires a rationale', function (): void {
     expect($result['reason'])->toBe('missing_rationale');
 });
 
+test('seerr request mutations are forced to approval even when the type auto-executes', function (): void {
+    ActionTypeConfig::factory()->create(['type' => 'approve_seerr_request', 'requires_approval' => false, 'is_enabled' => true]);
+    $connection = App\Models\ServiceConnection::factory()->seerr()->create();
+    $event = App\Models\WebhookEvent::factory()->create([
+        'service_connection_id' => $connection->id,
+        'payload' => ['notification_type' => 'MEDIA_PENDING', 'request' => ['request_id' => 42]],
+    ]);
+    bindDecisionContext(webhookEventId: $event->id);
+
+    $result = json_decode((new ProposeActionTool)->handle(new Request([
+        'type' => 'approve_seerr_request',
+        'target_service' => 'seerr',
+        'rationale' => 'Matches auto-approve rules.',
+        'payload' => ['seerr_request_id' => 42],
+    ])), true);
+
+    expect($result['queued'])->toBeTrue()
+        ->and($result['requires_approval'])->toBeTrue()
+        ->and(ActionRequest::firstWhere('type', 'approve_seerr_request')->requires_approval)->toBeTrue();
+});
+
+test('seerr request mutations must target the triggering request id', function (): void {
+    ActionTypeConfig::factory()->create(['type' => 'decline_seerr_request', 'requires_approval' => true, 'is_enabled' => true]);
+    $connection = App\Models\ServiceConnection::factory()->seerr()->create();
+    $event = App\Models\WebhookEvent::factory()->create([
+        'service_connection_id' => $connection->id,
+        'payload' => ['notification_type' => 'MEDIA_PENDING', 'request' => ['request_id' => 42]],
+    ]);
+    bindDecisionContext(webhookEventId: $event->id);
+
+    $result = json_decode((new ProposeActionTool)->handle(new Request([
+        'type' => 'decline_seerr_request',
+        'target_service' => 'seerr',
+        'rationale' => 'Decline the other request.',
+        'payload' => ['seerr_request_id' => 999],
+    ])), true);
+
+    expect($result['queued'])->toBeFalse()
+        ->and($result['reason'])->toBe('subject_mismatch')
+        ->and(ActionRequest::count())->toBe(0);
+});
+
+test('seerr request mutations are refused when the trigger has no request id', function (): void {
+    ActionTypeConfig::factory()->create(['type' => 'cleanup_seerr_request', 'requires_approval' => true, 'is_enabled' => true]);
+    bindDecisionContext();
+
+    $result = json_decode((new ProposeActionTool)->handle(new Request([
+        'type' => 'cleanup_seerr_request',
+        'target_service' => 'seerr',
+        'rationale' => 'Cleanup.',
+        'payload' => ['seerr_request_id' => 5],
+    ])), true);
+
+    expect($result['queued'])->toBeFalse()
+        ->and($result['reason'])->toBe('subject_not_verifiable')
+        ->and(ActionRequest::count())->toBe(0);
+});
+
 test('enforces the per-run action cap', function (): void {
     ActionTypeConfig::factory()->create(['type' => 'emby_library_scan', 'requires_approval' => false, 'is_enabled' => true]);
     bindDecisionContext(maxActions: 1);

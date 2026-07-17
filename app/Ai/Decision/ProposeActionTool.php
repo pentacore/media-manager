@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Ai\Decision;
 
+use App\Models\WebhookEvent;
 use App\Services\Actions\ActionOrchestrator;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
 use Illuminate\JsonSchema\Types\Type;
@@ -43,6 +44,21 @@ class ProposeActionTool implements Tool
         'decline_seerr_request',
         'cleanup_seerr_request',
         'emby_library_scan',
+    ];
+
+    /**
+     * Types that must ALWAYS land as Pending on the agent path, regardless of
+     * ActionTypeConfig.requires_approval. The DecisionAgent's prompt embeds
+     * third-party-authored webhook text (request titles/notes, release
+     * names), so a crafted string could steer it into approving/denying
+     * Seerr requests — an approval bypass if these auto-executed. Forcing a
+     * human approval keeps prompt injection from turning into real
+     * downloads or dropped requests.
+     */
+    public const array FORCED_APPROVAL_TYPES = [
+        'approve_seerr_request',
+        'decline_seerr_request',
+        'cleanup_seerr_request',
     ];
 
     public function description(): Stringable|string
@@ -94,6 +110,11 @@ class ProposeActionTool implements Tool
             ]);
         }
 
+        $subjectMismatch = $this->rejectForeignSeerrSubject($type, $payload, $context);
+        if ($subjectMismatch !== null) {
+            return $this->encode($subjectMismatch);
+        }
+
         try {
             $actionRequest = resolve(ActionOrchestrator::class)->dispatchFromAgent(
                 type: $type,
@@ -102,6 +123,7 @@ class ProposeActionTool implements Tool
                 payload: $payload,
                 rationale: Str::limit($rationale, 1000, ''),
                 webhookEventId: $context->webhookEventId,
+                forceRequiresApproval: in_array($type, self::FORCED_APPROVAL_TYPES, true) ? true : null,
             );
         } catch (Throwable $throwable) {
             Log::warning('ProposeActionTool: dispatch failed', [
@@ -157,6 +179,50 @@ class ProposeActionTool implements Tool
             'payload' => $schema->object([])
                 ->description('Action-specific arguments (e.g. {"series_id": 42, "delete_files": true}). Use IDs from the event payload or read tools — never invent them.'),
         ];
+    }
+
+    /**
+     * A Seerr-mutating proposal may only target the request that triggered
+     * this run. Without this, injected payload text could steer the agent
+     * into approving/declining an unrelated (e.g. the attacker's own) Seerr
+     * request id.
+     *
+     * @param  array<string, mixed>  $payload
+     * @return array<string, mixed>|null structured rejection, or null when OK
+     */
+    private function rejectForeignSeerrSubject(string $type, array $payload, DecisionRunContext $context): ?array
+    {
+        if (! in_array($type, self::FORCED_APPROVAL_TYPES, true)) {
+            return null;
+        }
+
+        $proposedId = (int) ($payload['seerr_request_id'] ?? 0);
+
+        $eventRequestId = $context->webhookEventId === null
+            ? null
+            : (int) (WebhookEvent::query()->find($context->webhookEventId)?->payload['request']['request_id'] ?? 0);
+
+        if ($eventRequestId === null || $eventRequestId <= 0) {
+            return [
+                'queued' => false,
+                'reason' => 'subject_not_verifiable',
+                'message' => 'The triggering event carries no Seerr request id, so Seerr request mutations cannot be proposed from it.',
+            ];
+        }
+
+        if ($proposedId !== $eventRequestId) {
+            return [
+                'queued' => false,
+                'reason' => 'subject_mismatch',
+                'message' => sprintf(
+                    'seerr_request_id %d does not match the request that triggered this event (%d). Only the triggering request may be acted on.',
+                    $proposedId,
+                    $eventRequestId,
+                ),
+            ];
+        }
+
+        return null;
     }
 
     /**
