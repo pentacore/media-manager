@@ -28,12 +28,14 @@ abstract class BaseTool implements Tool
         try {
             $result = $this->execute($request);
         } catch (Throwable $throwable) {
+            // Argument KEYS only: tool arguments can carry user chat content
+            // (titles, notes, free text) that doesn't belong in the log.
             Log::warning('AI tool failure', [
                 'tool' => static::class,
                 'risk' => $this->risk()->value,
                 'exception' => $throwable::class,
                 'message' => $throwable->getMessage(),
-                'request' => $request->toArray(),
+                'request_keys' => array_keys($request->toArray()),
             ]);
 
             return $this->safeEncode([

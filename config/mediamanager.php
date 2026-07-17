@@ -216,6 +216,47 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Data Retention
+    |--------------------------------------------------------------------------
+    |
+    | Days to keep rows in the fastest-growing tables before the nightly
+    | model:prune removes them. 0 disables pruning for that table. AI usage
+    | records must outlive the longest budget/free-pool accounting period
+    | (calendar month), and emby activity rows feed the watch statistics
+    | that query the raw table.
+    |
+    */
+
+    'retention' => [
+        'webhook_events_days' => (int) env('MEDIAMANAGER_RETENTION_WEBHOOK_EVENTS_DAYS', 90),
+        'activity_logs_days' => (int) env('MEDIAMANAGER_RETENTION_ACTIVITY_LOGS_DAYS', 180),
+        'emby_activities_days' => (int) env('MEDIAMANAGER_RETENTION_EMBY_ACTIVITIES_DAYS', 365),
+        'notifications_days' => (int) env('MEDIAMANAGER_RETENTION_NOTIFICATIONS_DAYS', 90),
+        'ai_usage_records_days' => (int) env('MEDIAMANAGER_RETENTION_AI_USAGE_RECORDS_DAYS', 400),
+        'ai_tool_invocations_days' => (int) env('MEDIAMANAGER_RETENTION_AI_TOOL_INVOCATIONS_DAYS', 90),
+        'agent_decisions_days' => (int) env('MEDIAMANAGER_RETENTION_AGENT_DECISIONS_DAYS', 180),
+        'media_replacement_attempts_days' => (int) env('MEDIAMANAGER_RETENTION_MEDIA_REPLACEMENT_ATTEMPTS_DAYS', 90),
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Trusted Proxies
+    |--------------------------------------------------------------------------
+    |
+    | The production stack terminates TLS at a reverse proxy in front of the
+    | web and reverb containers, so Octane only ever sees the proxy's IP and
+    | plain http. Listing the proxy addresses (comma-separated IPs/CIDRs, or
+    | "*" to trust every upstream) makes Request::ip()/isSecure() honor the
+    | X-Forwarded-* headers — required for correct login throttling keys and
+    | for signed URLs (invites, email verification) to validate. Unset means
+    | no proxy is trusted.
+    |
+    */
+
+    'trusted_proxies' => env('TRUSTED_PROXIES'),
+
+    /*
+    |--------------------------------------------------------------------------
     | Statistics
     |--------------------------------------------------------------------------
     |

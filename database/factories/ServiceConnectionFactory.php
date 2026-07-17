@@ -23,7 +23,12 @@ class ServiceConnectionFactory extends Factory
         return [
             'type' => fake()->randomElement(ServiceType::cases()),
             'name' => fake()->words(2, true),
-            'url' => fake()->url(),
+            // Loopback with an unused port, never fake()->url(): Faker
+            // produces real, often-resolvable domains, so any test path that
+            // slipped past Http::fake sent real outbound HTTP from CI (and
+            // hung for the full client timeout on slow hosts). Loopback
+            // fails fast and deterministically instead.
+            'url' => sprintf('http://127.0.0.1:%d', fake()->numberBetween(20000, 64000)),
             'api_key' => Str::random(32),
             'webhook_token' => Str::random(40),
             'is_active' => true,

@@ -68,6 +68,7 @@ const {
     staleCount,
     pause,
     resume,
+    reseed,
     subscribe,
 } = useRealtimeList<ActivityLogResource>({
     channel: 'activity',
@@ -89,6 +90,14 @@ watch(
     { immediate: true },
 );
 
+// preserveState navigations and reloads replace the prop without a remount;
+// reseed the live list from every fresh payload so it never renders rows
+// from a previous filter/page.
+watch(
+    () => props.logs.data,
+    (rows) => reseed(rows),
+);
+
 onMounted(subscribe);
 
 const visibleLogs = computed(() =>
@@ -96,7 +105,9 @@ const visibleLogs = computed(() =>
 );
 
 function refresh(): void {
-    router.reload({ only: ['logs'], onSuccess: resume });
+    // The prop watcher reseeds; pause state stays governed by the merge
+    // watcher so a refresh in a filtered view does not un-pause the list.
+    router.reload({ only: ['logs'] });
 }
 
 function applyFilters(next: {

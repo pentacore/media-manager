@@ -10,6 +10,9 @@ enum WebhookHandlingStatus: string
 {
     use EnumUtils;
 
+    /** Claimed by a worker; processing is underway (or a worker died mid-run). */
+    case Processing = 'processing';
+
     /** A handler branch matched and ran. */
     case Handled = 'handled';
 
@@ -25,6 +28,7 @@ enum WebhookHandlingStatus: string
     public function label(): string
     {
         return match ($this) {
+            self::Processing => 'Processing',
             self::Handled => 'Handled',
             self::Ignored => 'Ignored',
             self::NoHandler => 'No handler',

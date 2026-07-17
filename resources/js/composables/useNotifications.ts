@@ -1,6 +1,7 @@
 import { onUnmounted } from 'vue';
 import { toast } from 'vue-sonner';
 import { useWebSocket } from '@/composables/useWebSocket';
+import type { ChannelLease } from '@/composables/useWebSocket';
 
 const CHANNEL_NAME = 'members.actions';
 
@@ -10,17 +11,15 @@ export interface UseNotifications {
 }
 
 export function useNotifications(): UseNotifications {
-    const { privateChannel, leaveChannel } = useWebSocket();
-    let subscribed = false;
+    const { acquirePrivateChannel } = useWebSocket();
+    let lease: ChannelLease | null = null;
 
     function subscribe(): void {
-        if (subscribed) {
+        if (lease) {
             return;
         }
 
-        subscribed = true;
-
-        privateChannel(CHANNEL_NAME)
+        lease = acquirePrivateChannel(CHANNEL_NAME)
             .listen(
                 '.ActionRequestCreated',
                 (event: Record<string, unknown>) => {
@@ -47,10 +46,8 @@ export function useNotifications(): UseNotifications {
     }
 
     function unsubscribe(): void {
-        if (subscribed) {
-            leaveChannel(CHANNEL_NAME);
-            subscribed = false;
-        }
+        lease?.release();
+        lease = null;
     }
 
     onUnmounted(unsubscribe);

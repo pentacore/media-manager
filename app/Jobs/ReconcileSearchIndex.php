@@ -13,6 +13,7 @@ use App\Services\Search\MovieIndexer;
 use App\Services\Search\SeriesIndexer;
 use App\Services\Sonarr\SonarrClient;
 use Illuminate\Bus\Queueable;
+use Illuminate\Contracts\Queue\ShouldBeUnique;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
@@ -20,7 +21,12 @@ use Illuminate\Queue\SerializesModels;
 use Illuminate\Support\Facades\Log;
 use Throwable;
 
-class ReconcileSearchIndex implements ShouldQueue
+/**
+ * ShouldBeUnique + a timeout below the queue `retry_after` (330s) prevent two
+ * instances interleaving upserts with each other's delete-what-wasn't-seen
+ * prunes — the schedule's withoutOverlapping() only guards the dispatch.
+ */
+class ReconcileSearchIndex implements ShouldBeUnique, ShouldQueue
 {
     use Dispatchable;
     use InteractsWithQueue;
@@ -30,6 +36,8 @@ class ReconcileSearchIndex implements ShouldQueue
     public int $tries = 3;
 
     public int $backoff = 60;
+
+    public int $timeout = 300;
 
     public function handle(SeriesIndexer $seriesIndexer, MovieIndexer $movieIndexer): void
     {
@@ -51,7 +59,10 @@ class ReconcileSearchIndex implements ShouldQueue
                 continue;
             }
 
-            $seenIds = [];
+            // Present = listed in the arr response, independent of whether
+            // its upsert succeeds: a failed upsert must never mark the row
+            // stale, or a bad sync run deletes the whole index.
+            $presentIds = [];
 
             foreach ($items as $item) {
                 if (! is_array($item)) {
@@ -64,9 +75,10 @@ class ReconcileSearchIndex implements ShouldQueue
                     continue;
                 }
 
+                $presentIds[] = $sonarrId;
+
                 try {
                     $seriesIndexer->upsert($item, $connection);
-                    $seenIds[] = $sonarrId;
                 } catch (Throwable $throwable) {
                     Log::warning('ReconcileSearchIndex: series upsert failed', [
                         'connection_id' => $connection->id,
@@ -76,9 +88,13 @@ class ReconcileSearchIndex implements ShouldQueue
                 }
             }
 
+            if (! $this->pruneIsCredible($items, $presentIds, $connection, 'sonarr')) {
+                continue;
+            }
+
             IndexedSeries::query()
                 ->where('service_connection_id', $connection->id)
-                ->when($seenIds !== [], fn ($q) => $q->whereNotIn('sonarr_id', $seenIds))
+                ->when($presentIds !== [], fn ($q) => $q->whereNotIn('sonarr_id', $presentIds))
                 ->get()
                 ->each(static fn (IndexedSeries $indexedSeries): bool => $indexedSeries->delete() !== false);
         }
@@ -98,7 +114,7 @@ class ReconcileSearchIndex implements ShouldQueue
                 continue;
             }
 
-            $seenIds = [];
+            $presentIds = [];
 
             foreach ($items as $item) {
                 if (! is_array($item)) {
@@ -111,9 +127,10 @@ class ReconcileSearchIndex implements ShouldQueue
                     continue;
                 }
 
+                $presentIds[] = $radarrId;
+
                 try {
                     $movieIndexer->upsert($item, $connection);
-                    $seenIds[] = $radarrId;
                 } catch (Throwable $throwable) {
                     Log::warning('ReconcileSearchIndex: movie upsert failed', [
                         'connection_id' => $connection->id,
@@ -123,12 +140,40 @@ class ReconcileSearchIndex implements ShouldQueue
                 }
             }
 
+            if (! $this->pruneIsCredible($items, $presentIds, $connection, 'radarr')) {
+                continue;
+            }
+
             IndexedMovie::query()
                 ->where('service_connection_id', $connection->id)
-                ->when($seenIds !== [], fn ($q) => $q->whereNotIn('radarr_id', $seenIds))
+                ->when($presentIds !== [], fn ($q) => $q->whereNotIn('radarr_id', $presentIds))
                 ->get()
                 ->each(static fn (IndexedMovie $indexedMovie): bool => $indexedMovie->delete() !== false);
         }
+    }
+
+    /**
+     * A non-empty arr payload in which not a single row carried a usable id
+     * means the response shape changed (or is garbage) — pruning against an
+     * empty "present" set would wipe the connection's entire index. A truly
+     * empty payload (`[]`) stays credible: the library really is empty.
+     *
+     * @param  array<int, mixed>  $items
+     * @param  array<int, int>  $presentIds
+     */
+    private function pruneIsCredible(array $items, array $presentIds, ServiceConnection $serviceConnection, string $service): bool
+    {
+        if ($items === [] || $presentIds !== []) {
+            return true;
+        }
+
+        Log::warning('ReconcileSearchIndex: skipping prune — payload had items but no usable ids', [
+            'connection_id' => $serviceConnection->id,
+            'service' => $service,
+            'item_count' => count($items),
+        ]);
+
+        return false;
     }
 
     /**

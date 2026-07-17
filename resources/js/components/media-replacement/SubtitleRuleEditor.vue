@@ -78,10 +78,12 @@ function setLanguagesText(rule: SubtitleRule, value: string): void {
 }
 
 function ruleError(index: number): string {
-    const prefix = `media_replacement.guidance.${props.scope}.rules.${index}`;
+    // Exact match or dot-prefixed: a bare startsWith would let `rules.1`
+    // also match `rules.10.*` and display rule 10's errors on rule 1.
+    const base = `media_replacement.guidance.${props.scope}.rules.${index}`;
 
     return Object.entries(props.errors)
-        .filter(([key]) => key.startsWith(prefix))
+        .filter(([key]) => key === base || key.startsWith(`${base}.`))
         .map(([, message]) => message)
         .join(' ');
 }

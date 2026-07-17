@@ -53,8 +53,14 @@ class GenerateConversationTitle implements ShouldQueue
             return;
         }
 
+        // Only replace the seeded fallback (the truncated first message) —
+        // if the user manually renamed the conversation while this job sat
+        // in a backed-up queue, their title wins.
+        $fallback = (string) Str::of($this->firstUserMessage)->trim()->limit(60);
+
         DB::table('agent_conversations')
             ->where('id', $this->conversationId)
+            ->where('title', $fallback)
             ->update([
                 'title' => $title,
                 'updated_at' => now(),

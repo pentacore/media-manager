@@ -8,6 +8,7 @@ use App\Ai\Agents\PriceFetcherAgent;
 use App\Events\AiPriceRefreshStateChanged;
 use App\Models\AiModelPrice;
 use App\Models\User;
+use App\Services\AiBudget\AiBudgetGuard;
 use App\Settings\AiSettings;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -56,6 +57,11 @@ class RefreshAiPricesJob implements ShouldQueue
         $prompt = 'Refresh the catalog now. Visit the canonical pricing page for OpenAI, Anthropic, Google Gemini, DeepSeek, xAI, and Mistral. Upsert one row per generally-available text/chat model with up-to-date input, output, cache, and reasoning rates. Skip image / audio / embedding products.';
 
         try {
+            // The fetch-heavy 40-step agent run must respect the monthly
+            // budget like every other AI entry point — without this, the
+            // weekly schedule kept spending after the hard cap was hit.
+            resolve(AiBudgetGuard::class)->enforce();
+
             $aiSettings = resolve(AiSettings::class);
             $chain = $aiSettings->providerChainWithModel($aiSettings->model());
             $agent = (new PriceFetcherAgent)->forUser($this->triggeredBy);

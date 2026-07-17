@@ -7,8 +7,11 @@ namespace App\Listeners\Ai;
 use App\Models\AiModelPrice;
 use App\Models\AiToolInvocation;
 use App\Models\AiUsageRecord;
+use App\Services\AiBudget\AiBudgetGuard;
 use App\Services\AiUsage\BatchPricingContext;
+use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Cache;
 use Laravel\Ai\Events\AgentPrompted;
 
 class RecordAgentUsage
@@ -18,16 +21,36 @@ class RecordAgentUsage
         // Streamed runs are registered for both AgentStreamed (explicitly,
         // AIServiceProvider) and — under the fake gateway — AgentPrompted.
         // Dedupe on invocation_id so a double dispatch never double-bills.
+        // The fast-path check avoids the insert work; the DB unique
+        // constraint (caught below) closes the concurrent window the
+        // check-then-create alone left open.
         if (AiUsageRecord::where('invocation_id', $agentPrompted->invocationId)->exists()) {
             return;
         }
 
-        $response = $agentPrompted->response;
-        $usage = $response->usage;
-        $meta = $response->meta;
+        $meta = $agentPrompted->response->meta;
 
         $isBatch = resolve(BatchPricingContext::class)->enabled;
         $snapshot = $this->priceSnapshotFor($meta->provider, $meta->model, $isBatch);
+
+        try {
+            $this->createRecord($agentPrompted, $isBatch, $snapshot);
+            // New spend invalidates the budget guard's cached month total.
+            Cache::forget(AiBudgetGuard::spendCacheKey());
+        } catch (UniqueConstraintViolationException) {
+            // A concurrent dispatch for the same invocation won the insert
+            // race — exactly the double-billing this guards against.
+        }
+    }
+
+    /**
+     * @param  array<string, mixed>|null  $snapshot
+     */
+    private function createRecord(AgentPrompted $agentPrompted, bool $isBatch, ?array $snapshot): void
+    {
+        $response = $agentPrompted->response;
+        $usage = $response->usage;
+        $meta = $response->meta;
 
         AiUsageRecord::create([
             'invocation_id' => $agentPrompted->invocationId,

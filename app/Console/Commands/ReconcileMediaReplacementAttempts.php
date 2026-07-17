@@ -9,6 +9,7 @@ use App\Enums\UserRole;
 use App\Models\MediaReplacementAttempt;
 use App\Models\User;
 use App\Notifications\MediaReplacementStatusChanged;
+use App\Services\MediaReplacement\MediaReplacementTracker;
 use Carbon\CarbonImmutable;
 use Illuminate\Console\Attributes\Description;
 use Illuminate\Console\Attributes\Signature;
@@ -38,6 +39,8 @@ class ReconcileMediaReplacementAttempts extends Command
         $admins = User::query()->where('role', UserRole::Admin)->get();
         $flagged = 0;
 
+        $mediaReplacementTracker = resolve(MediaReplacementTracker::class);
+
         foreach ($stuck as $attempt) {
             // Conditional transition: a concurrent Download webhook may have
             // moved this row to a terminal state (verified/needs_attention)
@@ -58,12 +61,20 @@ class ReconcileMediaReplacementAttempts extends Command
             }
 
             $flagged++;
+            $attempt->refresh();
+
+            // The sweep is the last actor that will ever touch this attempt on
+            // several paths (indeterminate grab, executor died mid-cleanup,
+            // lost Grab webhook) — if the executor suspended monitoring, no
+            // webhook is coming to restore it, so restore it here or the
+            // target silently stops getting upgrades forever.
+            $monitoringRestored = $mediaReplacementTracker->restoreSuspendedMonitoring($attempt);
 
             if ($admins->isNotEmpty()) {
                 Notification::send($admins, new MediaReplacementStatusChanged(
                     service: (string) ($attempt->target['service'] ?? ''),
                     title: (string) ($attempt->candidate['title'] ?? 'Media replacement'),
-                    message: sprintf('Replacement download stalled for over %d hour(s) and needs manual review; the old file was already removed.', $hours),
+                    message: $this->timeoutMessage($attempt, $hours, $monitoringRestored),
                     level: 'warning',
                 ));
             }
@@ -72,5 +83,28 @@ class ReconcileMediaReplacementAttempts extends Command
         $this->info(sprintf('Flagged %d stuck media replacement attempt(s) as needs_attention.', $flagged));
 
         return self::SUCCESS;
+    }
+
+    /**
+     * Derive the operator message from durable state instead of asserting
+     * "the old file was already removed" — false on the indeterminate-grab
+     * and died-before-cleanup paths, where nothing was ever deleted.
+     */
+    private function timeoutMessage(MediaReplacementAttempt $mediaReplacementAttempt, int $hours, bool $monitoringRestored): string
+    {
+        $fileState = match (true) {
+            $mediaReplacementAttempt->cleanup_completed_at !== null => 'the old file was removed',
+            $mediaReplacementAttempt->grab_accepted_at !== null => 'the replacement was grabbed but the old file may still be present',
+            default => 'no grab was confirmed, so the old file was not removed',
+        };
+
+        $monitoring = $monitoringRestored ? '' : ' Monitoring could not be restored and is still disabled on the target.';
+
+        return sprintf(
+            'Replacement download stalled for over %d hour(s) and needs manual review; %s.%s',
+            $hours,
+            $fileState,
+            $monitoring,
+        );
     }
 }

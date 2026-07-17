@@ -8,7 +8,9 @@ use App\Enums\MediaReplacementStatus;
 use Carbon\CarbonImmutable;
 use Database\Factories\MediaReplacementAttemptFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\MassPrunable;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Override;
@@ -24,6 +26,7 @@ use Override;
  * @property array<array-key, mixed> $candidate
  * @property array<array-key, mixed> $required_languages
  * @property string|null $download_id
+ * @property CarbonImmutable|null $grab_attempted_at
  * @property CarbonImmutable|null $grab_accepted_at
  * @property bool|null $was_monitored
  * @property bool|null $monitoring_suspended
@@ -51,6 +54,7 @@ use Override;
     'candidate',
     'required_languages',
     'download_id',
+    'grab_attempted_at',
     'grab_accepted_at',
     'was_monitored',
     'monitoring_suspended',
@@ -64,6 +68,8 @@ class MediaReplacementAttempt extends Model
 {
     /** @use HasFactory<MediaReplacementAttemptFactory> */
     use HasFactory;
+
+    use MassPrunable;
 
     /**
      * @return BelongsTo<ActionRequest, $this>
@@ -93,6 +99,7 @@ class MediaReplacementAttempt extends Model
             'candidate' => 'array',
             'required_languages' => 'array',
             'verification' => 'array',
+            'grab_attempted_at' => 'immutable_datetime',
             'grab_accepted_at' => 'immutable_datetime',
             'was_monitored' => 'boolean',
             'monitoring_suspended' => 'boolean',
@@ -100,5 +107,24 @@ class MediaReplacementAttempt extends Model
             'started_at' => 'immutable_datetime',
             'completed_at' => 'immutable_datetime',
         ];
+    }
+
+    /**
+     * Retention window from mediamanager.retention (0 disables pruning).
+     * Only terminal attempts (completed_at set) are ever pruned — an
+     * in-flight attempt carries the durable state the executor, tracker,
+     * and sweep coordinate through.
+     */
+    public function prunable(): Builder
+    {
+        $days = (int) config('mediamanager.retention.media_replacement_attempts_days');
+
+        return static::query()->when(
+            $days > 0,
+            fn (Builder $builder): Builder => $builder
+                ->whereNotNull('completed_at')
+                ->where('completed_at', '<', now()->subDays($days)),
+            fn (Builder $builder): Builder => $builder->whereRaw('1 = 0'),
+        );
     }
 }

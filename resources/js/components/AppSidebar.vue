@@ -67,6 +67,7 @@ import {
     SidebarMenuItem,
 } from '@/components/ui/sidebar';
 import { useAiChat } from '@/composables/useAiChat';
+import type { ChannelLease } from '@/composables/useWebSocket';
 import { useWebSocket } from '@/composables/useWebSocket';
 import { dashboard } from '@/routes';
 import type { NavItem } from '@/types';
@@ -107,19 +108,8 @@ const sabnzbdQueued = ref(initialNav?.sabnzbdDownloads?.queued ?? 0);
 const sabnzbdCompleted = ref(initialNav?.sabnzbdDownloads?.completed ?? 0);
 const recentSessionIds = new Set<number>();
 
-watchEffect(() => {
-    const nav = (page.props as unknown as { nav?: NavCounts }).nav;
-
-    if (nav) {
-        pendingActions.value = nav.pendingActions ?? 0;
-        activeSessions.value = nav.activeSessions ?? 0;
-        libraryIntervention.value = nav.libraryIntervention ?? 0;
-        sabnzbdQueued.value = nav.sabnzbdDownloads?.queued ?? 0;
-        sabnzbdCompleted.value = nav.sabnzbdDownloads?.completed ?? 0;
-    }
-});
-
-const { privateChannel, leaveChannel } = useWebSocket();
+const { acquirePrivateChannel } = useWebSocket();
+const channelLeases: ChannelLease[] = [];
 const { openChat } = useAiChat();
 
 let activitySessionTimer: ReturnType<typeof setInterval> | null = null;
@@ -128,15 +118,23 @@ const sessionTimestamps = new Map<number, number>();
 
 function pruneStaleSessions(): void {
     const cutoff = Date.now() - sessionExpiryMs;
+    let expired = 0;
 
     for (const [id, ts] of sessionTimestamps) {
         if (ts < cutoff) {
             sessionTimestamps.delete(id);
             recentSessionIds.delete(id);
+            expired += 1;
         }
     }
 
-    activeSessions.value = sessionTimestamps.size;
+    // Subtract only what expired locally. The counter is seeded from the
+    // server snapshot, which includes sessions this tab never saw an event
+    // for — overwriting with the locally-observed map size zeroed the badge
+    // within a minute of every page load.
+    if (expired > 0) {
+        activeSessions.value = Math.max(0, activeSessions.value - expired);
+    }
 }
 
 interface PlaybackPayload {
@@ -160,78 +158,108 @@ const TERMINAL_STATUSES = new Set(['completed', 'failed', 'rejected']);
 // out-of-order Created/StatusChanged sequence doesn't double-count.
 const pendingIds = new Set<number>();
 
+// Re-sync all counters whenever a fresh `nav` snapshot arrives (every
+// navigation / partial reload shares it). The local ID sets only track
+// deltas observed since the previous snapshot, so they are cleared here —
+// keeping them would double-count events already baked into the server
+// numbers.
+watchEffect(() => {
+    const nav = (page.props as unknown as { nav?: NavCounts }).nav;
+
+    if (nav) {
+        pendingActions.value = nav.pendingActions ?? 0;
+        activeSessions.value = nav.activeSessions ?? 0;
+        libraryIntervention.value = nav.libraryIntervention ?? 0;
+        sabnzbdQueued.value = nav.sabnzbdDownloads?.queued ?? 0;
+        sabnzbdCompleted.value = nav.sabnzbdDownloads?.completed ?? 0;
+        recentSessionIds.clear();
+        sessionTimestamps.clear();
+        pendingIds.clear();
+    }
+});
+
 onMounted(() => {
-    privateChannel('emby.activity').listen(
-        '.EmbyPlaybackUpdated',
-        (event: PlaybackPayload) => {
-            if (event.action === 'played') {
-                if (!recentSessionIds.has(event.id)) {
-                    recentSessionIds.add(event.id);
-                    activeSessions.value += 1;
-                }
+    channelLeases.push(
+        acquirePrivateChannel('emby.activity').listen(
+            '.EmbyPlaybackUpdated',
+            (event: PlaybackPayload) => {
+                if (event.action === 'played') {
+                    if (!recentSessionIds.has(event.id)) {
+                        recentSessionIds.add(event.id);
+                        activeSessions.value += 1;
+                    }
 
-                sessionTimestamps.set(event.id, Date.now());
-            } else {
-                if (recentSessionIds.has(event.id)) {
-                    recentSessionIds.delete(event.id);
-                    sessionTimestamps.delete(event.id);
-                    activeSessions.value = Math.max(
-                        0,
-                        activeSessions.value - 1,
-                    );
-                }
-            }
-        },
-    );
-
-    privateChannel('members.actions')
-        .listen(
-            '.ActionRequestCreated',
-            (event: ActionRequestCreatedPayload) => {
-                if (event.status === 'pending' && !pendingIds.has(event.id)) {
-                    pendingIds.add(event.id);
-                    pendingActions.value += 1;
-                }
-            },
-        )
-        .listen(
-            '.ActionRequestStatusChanged',
-            (event: ActionRequestStatusPayload) => {
-                if (
-                    TERMINAL_STATUSES.has(event.status) ||
-                    event.status === 'approved' ||
-                    event.status === 'executing'
-                ) {
-                    if (pendingIds.has(event.id)) {
-                        pendingIds.delete(event.id);
-                        pendingActions.value = Math.max(
+                    sessionTimestamps.set(event.id, Date.now());
+                } else {
+                    if (recentSessionIds.has(event.id)) {
+                        recentSessionIds.delete(event.id);
+                        sessionTimestamps.delete(event.id);
+                        activeSessions.value = Math.max(
                             0,
-                            pendingActions.value - 1,
+                            activeSessions.value - 1,
                         );
                     }
                 }
             },
-        );
+        ),
+    );
 
-    privateChannel('dashboard')
-        .listen('.LibraryInterventionChanged', (event: { count: number }) => {
-            libraryIntervention.value = event.count;
-        })
-        .listen(
-            '.SabnzbdDownloadCountsChanged',
-            (event: { queued: number; completed: number }) => {
-                sabnzbdQueued.value = event.queued;
-                sabnzbdCompleted.value = event.completed;
-            },
-        );
+    channelLeases.push(
+        acquirePrivateChannel('members.actions')
+            .listen(
+                '.ActionRequestCreated',
+                (event: ActionRequestCreatedPayload) => {
+                    if (
+                        event.status === 'pending' &&
+                        !pendingIds.has(event.id)
+                    ) {
+                        pendingIds.add(event.id);
+                        pendingActions.value += 1;
+                    }
+                },
+            )
+            .listen(
+                '.ActionRequestStatusChanged',
+                (event: ActionRequestStatusPayload) => {
+                    if (
+                        TERMINAL_STATUSES.has(event.status) ||
+                        event.status === 'approved' ||
+                        event.status === 'executing'
+                    ) {
+                        if (pendingIds.has(event.id)) {
+                            pendingIds.delete(event.id);
+                            pendingActions.value = Math.max(
+                                0,
+                                pendingActions.value - 1,
+                            );
+                        }
+                    }
+                },
+            ),
+    );
+
+    channelLeases.push(
+        acquirePrivateChannel('dashboard')
+            .listen(
+                '.LibraryInterventionChanged',
+                (event: { count: number }) => {
+                    libraryIntervention.value = event.count;
+                },
+            )
+            .listen(
+                '.SabnzbdDownloadCountsChanged',
+                (event: { queued: number; completed: number }) => {
+                    sabnzbdQueued.value = event.queued;
+                    sabnzbdCompleted.value = event.completed;
+                },
+            ),
+    );
 
     activitySessionTimer = setInterval(pruneStaleSessions, 60_000);
 });
 
 onUnmounted(() => {
-    leaveChannel('emby.activity');
-    leaveChannel('members.actions');
-    leaveChannel('dashboard');
+    channelLeases.splice(0).forEach((lease) => lease.release());
 
     if (activitySessionTimer) {
         clearInterval(activitySessionTimer);

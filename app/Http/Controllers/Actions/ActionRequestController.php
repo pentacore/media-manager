@@ -88,7 +88,10 @@ class ActionRequestController extends Controller
                 'status' => ActionRequestStatus::Approved,
                 'approved_by' => $request->user()->id,
             ]);
-            event(new ActionRequestStatusChanged($lockedActionRequest));
+            // Broadcast only after the transaction commits: firing inside it
+            // announced state that could still roll back, and a fast client
+            // partial-reload could read pre-commit data.
+            DB::afterCommit(static fn () => event(new ActionRequestStatusChanged($lockedActionRequest)));
             dispatch(new ExecuteActionRequest($lockedActionRequest))->afterCommit();
 
             return true;
@@ -121,7 +124,10 @@ class ActionRequestController extends Controller
                 'status' => ActionRequestStatus::Rejected,
                 'approved_by' => $request->user()->id,
             ]);
-            event(new ActionRequestStatusChanged($lockedActionRequest));
+            // Broadcast only after the transaction commits: firing inside it
+            // announced state that could still roll back, and a fast client
+            // partial-reload could read pre-commit data.
+            DB::afterCommit(static fn () => event(new ActionRequestStatusChanged($lockedActionRequest)));
 
             return true;
         });
@@ -153,7 +159,10 @@ class ActionRequestController extends Controller
                 'status' => ActionRequestStatus::Approved,
                 'result' => null,
             ]);
-            event(new ActionRequestStatusChanged($lockedActionRequest));
+            // Broadcast only after the transaction commits: firing inside it
+            // announced state that could still roll back, and a fast client
+            // partial-reload could read pre-commit data.
+            DB::afterCommit(static fn () => event(new ActionRequestStatusChanged($lockedActionRequest)));
             dispatch(new ExecuteActionRequest($lockedActionRequest))->afterCommit();
 
             return true;

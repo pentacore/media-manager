@@ -1,4 +1,5 @@
 import { onMounted, onUnmounted } from 'vue';
+import { heartbeat } from '@/routes';
 
 const HEARTBEAT_INTERVAL_MS = 30_000;
 const INTERACTION_WINDOW_MS = 120_000;
@@ -19,7 +20,7 @@ function csrfToken(): string {
 
 async function sendHeartbeat(): Promise<void> {
     try {
-        await fetch('/heartbeat', {
+        await fetch(heartbeat.url(), {
             method: 'POST',
             credentials: 'same-origin',
             headers: {
