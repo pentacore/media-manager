@@ -1,3 +1,45 @@
+# [1.12.0](https://github.com/pentacore/media-manager/compare/v1.11.1...v1.12.0) (2026-07-17)
+
+
+### Bug Fixes
+
+* **actions:** pin executors to the originating connection and sweep lost workers ([080fa1f](https://github.com/pentacore/media-manager/commit/080fa1f2bb5d810a67e66573f01890844fe6e973))
+* **actions:** retry only genuinely transient executor failures ([90e865b](https://github.com/pentacore/media-manager/commit/90e865be89073e240152a84dbcaf16fca4ea2678))
+* **ai:** atomic workflow resolution and safer pending-workflow claims ([b71371e](https://github.com/pentacore/media-manager/commit/b71371e4d503c557e5e0e8647f751bd738baa891))
+* **ai:** bound-check LLM-written model prices ([0fab668](https://github.com/pentacore/media-manager/commit/0fab668655922190d6df74cbafd5f59d4712e4a2)), closes [A-HI#2](https://github.com/A-HI/issues/2)
+* **ai:** damp DecisionAgent feedback loops ([ecef662](https://github.com/pentacore/media-manager/commit/ecef66285bd019046d710d9eb53e140fe84ae111))
+* **ai:** enforce the monthly budget cap in the price refresh job ([0d6ff09](https://github.com/pentacore/media-manager/commit/0d6ff09eb5b12954b2cd6e40afb1af08d3b7e2ab)), closes [A-HI#2](https://github.com/A-HI/issues/2)
+* **auth:** serialize first-user admin bootstrap across registration paths ([4fbd5d4](https://github.com/pentacore/media-manager/commit/4fbd5d459bc8f0d38b93addf6719de76205f2c1b))
+* **chat:** rollback failed workflow approvals, stable message keys, SSR-safe markdown ([b6f574a](https://github.com/pentacore/media-manager/commit/b6f574a3d2024ccc368e0aaf778e74b82fe1f3c9))
+* **ci:** portable migration SQL, pint style, stable tab locator ([15f934c](https://github.com/pentacore/media-manager/commit/15f934c61e8bbae18bba1a0d66636c0d67402a65))
+* **db:** close data-integrity gaps and per-request hot paths ([b463bc3](https://github.com/pentacore/media-manager/commit/b463bc36da68cd7429f41e79463da406497560f3))
+* **deployment:** give queue container a stop grace period above worker timeout ([bb4e929](https://github.com/pentacore/media-manager/commit/bb4e929596f2f39369dd512ed9946bd9f0cb854f))
+* **octane:** scope AiSettings so the per-request mode override cannot leak ([fbef029](https://github.com/pentacore/media-manager/commit/fbef0294c845ca9dec475e11574ff316db44247a))
+* **realtime:** ref-count Echo channel subscriptions and fix sidebar counters ([78c9a20](https://github.com/pentacore/media-manager/commit/78c9a20999694941b3f868b64db984fd243212e2))
+* **realtime:** reseed live lists from fresh props and never drop reload events ([147fded](https://github.com/pentacore/media-manager/commit/147fded2ade74806e25b4322a4952cf071e1939c))
+* **replacement:** close the residual duplicate-grab window ([34b5323](https://github.com/pentacore/media-manager/commit/34b5323813007fd42b65672a87f2c1cb24535ef9))
+* **replacement:** make the sweep the true finalizer and transitions conditional ([00dc344](https://github.com/pentacore/media-manager/commit/00dc344f3bfa833431a158bae84c7d595231e8ce))
+* **search:** never prune index rows because their upsert failed ([29a7319](https://github.com/pentacore/media-manager/commit/29a731939e072d425b80f9c49cdff0480b748441))
+* **security:** gate SSO auto-link on the IdP email_verified claim ([1819412](https://github.com/pentacore/media-manager/commit/18194125bcef11c823d12f7369371bf5101298b9))
+* **security:** harden the DecisionAgent against webhook prompt injection ([dfdbd0b](https://github.com/pentacore/media-manager/commit/dfdbd0bb4d51fc273df361e8f7eb90d5af4cc004))
+* **security:** redact url query strings from service failure messages ([54c6396](https://github.com/pentacore/media-manager/commit/54c639628ffb386422c44d2be403e32746700df4))
+* **security:** trust configured reverse proxies for forwarded headers ([5e9be77](https://github.com/pentacore/media-manager/commit/5e9be77a15e8f460f97eff513020a62c02a17ce9))
+* **security:** validate every redirect hop in the price-fetcher web tool ([cb94a95](https://github.com/pentacore/media-manager/commit/cb94a9570503d60480b07186955d979593dcc069))
+* **services:** honest intervention badge and resilient SAB history polling ([063e777](https://github.com/pentacore/media-manager/commit/063e7770cd67052b17ea19cfbdb4d6b4443acc7a))
+* **services:** retry hygiene for non-idempotent calls and slow searches ([5e75aa4](https://github.com/pentacore/media-manager/commit/5e75aa4ac848285ad02d116ce1012fd4cf68ae3f))
+* **ui:** remove dead Now Playing controls and scope subtitle rule errors ([6e3ecc9](https://github.com/pentacore/media-manager/commit/6e3ecc9969cedb187f34e2794319e21d451b78c9))
+* **webhooks:** atomic processing claim and race-free intake dedupe ([66cd9ad](https://github.com/pentacore/media-manager/commit/66cd9ad92b8dc9d2fa6cef2cf738f5f22aa84e8a))
+
+
+### Features
+
+* **retention:** prune the fastest-growing tables on a nightly schedule ([cf009dd](https://github.com/pentacore/media-manager/commit/cf009dde767e85fe1257a82ec70938c411a63289))
+
+
+### Performance Improvements
+
+* **db:** index unindexed foreign key columns ([95ee389](https://github.com/pentacore/media-manager/commit/95ee3893e31dae627bb4accb1a3d8a7355b39d8a))
+
 ## [1.11.1](https://github.com/pentacore/media-manager/compare/v1.11.0...v1.11.1) (2026-07-16)
 
 
