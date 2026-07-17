@@ -27,6 +27,12 @@ class VerifyWebhookToken
         // Header is preferred, but Sonarr/Radarr/Prowlarr's webhook
         // configuration only lets you append the URL — not custom
         // headers — so accept ?token=… as a fallback for those services.
+        //
+        // Deliberate exposure trade-off: query-string delivery lands the
+        // secret in reverse-proxy/access logs and APM traces on every
+        // delivery. Use header delivery wherever the sender supports it,
+        // rotate tokens if logs may have leaked, and strip query strings
+        // from access logs on /webhooks paths at the proxy.
         $token = $request->header('X-Webhook-Token');
 
         if (! is_string($token) || $token === '') {
