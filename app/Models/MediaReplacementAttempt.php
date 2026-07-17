@@ -24,6 +24,7 @@ use Override;
  * @property array<array-key, mixed> $candidate
  * @property array<array-key, mixed> $required_languages
  * @property string|null $download_id
+ * @property CarbonImmutable|null $grab_attempted_at
  * @property CarbonImmutable|null $grab_accepted_at
  * @property bool|null $was_monitored
  * @property bool|null $monitoring_suspended
@@ -51,6 +52,7 @@ use Override;
     'candidate',
     'required_languages',
     'download_id',
+    'grab_attempted_at',
     'grab_accepted_at',
     'was_monitored',
     'monitoring_suspended',
@@ -93,6 +95,7 @@ class MediaReplacementAttempt extends Model
             'candidate' => 'array',
             'required_languages' => 'array',
             'verification' => 'array',
+            'grab_attempted_at' => 'immutable_datetime',
             'grab_accepted_at' => 'immutable_datetime',
             'was_monitored' => 'boolean',
             'monitoring_suspended' => 'boolean',
