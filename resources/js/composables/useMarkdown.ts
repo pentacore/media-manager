@@ -12,6 +12,15 @@ export function renderMarkdown(source: string): string {
         return '';
     }
 
+    // DOMPurify.sanitize() returns its input UNCHANGED when no DOM is
+    // available (`isSupported` is false in the SSR Node process) — which
+    // would feed raw marked output into v-html as stored XSS the moment any
+    // page server-renders markdown. Render nothing on the server; the
+    // client re-renders with real sanitization after hydration.
+    if (!DOMPurify.isSupported) {
+        return '';
+    }
+
     const html = marked.parse(source, { async: false }) as string;
 
     return DOMPurify.sanitize(html, {

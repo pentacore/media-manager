@@ -10,7 +10,6 @@ import {
     watch,
 } from 'vue';
 import { toast } from 'vue-sonner';
-import AIChatController from '@/actions/App/Http/Controllers/AI/ChatController';
 import { InitialsAvatar, Pill } from '@/components/mm';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -19,9 +18,11 @@ import type { AgentStep, ConversationMessage } from '@/composables/useAiChat';
 import { streamChat } from '@/composables/useChatStream';
 import { useMarkdown } from '@/composables/useMarkdown';
 import { useWebSocket } from '@/composables/useWebSocket';
+import type { ChannelLease } from '@/composables/useWebSocket';
 import { cn } from '@/lib/utils';
 import ConversationPicker from './ConversationPicker.vue';
 import StepLivenessBanner from './StepLivenessBanner.vue';
+import AIChatController from '@/actions/App/Http/Controllers/AI/ChatController';
 
 const props = withDefaults(
     defineProps<{
@@ -39,6 +40,19 @@ interface WorkflowProposal {
 interface ChatMessage extends ConversationMessage {
     workflow?: WorkflowProposal | null;
     workflowResolved?: 'approved' | 'declined' | null;
+    /**
+     * Client-local monotonic key. Backend timestamps have second resolution
+     * (a user message and its reply routinely collide) and Date.now() can
+     * collide within a burst — colliding :key values make Vue's keyed diff
+     * patch the wrong bubbles.
+     */
+    uid: number;
+}
+
+let nextMessageUid = 0;
+
+function messageUid(): number {
+    return nextMessageUid++;
 }
 
 const {
@@ -59,7 +73,7 @@ const userId = computed(() => Number(page.props.auth.user?.id ?? 0));
 
 const { render: renderMarkdown } = useMarkdown();
 
-const { privateChannel, leaveChannel } = useWebSocket();
+const { acquirePrivateChannel } = useWebSocket();
 
 const messages = ref<ChatMessage[]>([]);
 const input = ref('');
@@ -86,21 +100,18 @@ const activeTitle = computed<string>(() => {
 
 const isSheet = computed(() => props.variant === 'sheet');
 
-let activeChannelKey: string | null = null;
+let activeChannelLease: ChannelLease | null = null;
 
 function subscribeToConversation(conversationId: string | null): void {
-    if (activeChannelKey) {
-        leaveChannel(activeChannelKey);
-        activeChannelKey = null;
-    }
+    activeChannelLease?.release();
+    activeChannelLease = null;
 
     if (!conversationId || userId.value === 0) {
         return;
     }
 
     const key = `ai-chat.${userId.value}.${conversationId}`;
-    activeChannelKey = key;
-    privateChannel(key).listen(
+    activeChannelLease = acquirePrivateChannel(key).listen(
         '.AgentStepUpdate',
         (event: {
             conversation_id: string;
@@ -132,10 +143,8 @@ watch(
 );
 
 onUnmounted(() => {
-    if (activeChannelKey) {
-        leaveChannel(activeChannelKey);
-        activeChannelKey = null;
-    }
+    activeChannelLease?.release();
+    activeChannelLease = null;
 });
 
 async function scrollToBottom(): Promise<void> {
@@ -168,7 +177,12 @@ async function sendMessage(continuationPayload?: {
         }
 
         bodyMessage = text;
-        messages.value.push({ role: 'user', text, ts: Date.now() });
+        messages.value.push({
+            role: 'user',
+            text,
+            ts: Date.now(),
+            uid: messageUid(),
+        });
         input.value = '';
     }
 
@@ -255,6 +269,7 @@ async function sendBlockingTurn(
         role: 'assistant',
         text: data.text,
         ts: Date.now(),
+        uid: messageUid(),
         workflow: data.workflow,
         workflowResolved: null,
     });
@@ -277,6 +292,7 @@ async function sendStreamingTurn(bodyMessage: string): Promise<void> {
             role: 'assistant',
             text: '',
             ts: Date.now(),
+            uid: messageUid(),
             workflow: null,
             workflowResolved: null,
         }) - 1;
@@ -345,29 +361,45 @@ function rememberConversation(conversationId: string): void {
 }
 
 function approveWorkflow(message: ChatMessage): void {
-    if (!message.workflow || message.workflowResolved) {
-        return;
-    }
-
-    message.workflowResolved = 'approved';
-    void sendMessage({
-        workflow_id: message.workflow.id,
-        workflow_action: 'approved',
-        syntheticUserText: 'I approve the proposed workflow.',
-    });
+    void resolveWorkflow(
+        message,
+        'approved',
+        'I approve the proposed workflow.',
+    );
 }
 
 function declineWorkflow(message: ChatMessage): void {
+    void resolveWorkflow(
+        message,
+        'declined',
+        'I decline the proposed workflow.',
+    );
+}
+
+async function resolveWorkflow(
+    message: ChatMessage,
+    action: 'approved' | 'declined',
+    syntheticUserText: string,
+): Promise<void> {
     if (!message.workflow || message.workflowResolved) {
         return;
     }
 
-    message.workflowResolved = 'declined';
-    void sendMessage({
+    // Optimistically hide the buttons so a double-click can't submit twice,
+    // but restore them if the continuation request fails — the backend
+    // workflow is still `proposed`, and without the buttons the proposal
+    // would be permanently stranded showing a false "Approved."/"Declined."
+    message.workflowResolved = action;
+
+    await sendMessage({
         workflow_id: message.workflow.id,
-        workflow_action: 'declined',
-        syntheticUserText: 'I decline the proposed workflow.',
+        workflow_action: action,
+        syntheticUserText,
     });
+
+    if (error.value !== null) {
+        message.workflowResolved = null;
+    }
 }
 
 function newConversation(): void {
@@ -389,7 +421,33 @@ async function pickConversation(id: string): Promise<void> {
 
     try {
         const data = await loadConversation(id);
-        messages.value = data.messages.map((m) => ({ ...m }));
+        messages.value = data.messages.map((m) => ({
+            ...m,
+            uid: messageUid(),
+        }));
+
+        // Persisted messages carry no workflow payload, so an unresolved
+        // proposal would lose its approve/decline buttons on reload. Reattach
+        // any still-pending workflow to the last assistant message.
+        const pending = await jsonRequest<{
+            workflow: WorkflowProposal | null;
+        }>(
+            'GET',
+            AIChatController.pendingWorkflow.url({
+                query: { conversation_id: id },
+            }),
+        );
+
+        if (pending.workflow) {
+            const lastAssistant = [...messages.value]
+                .reverse()
+                .find((m) => m.role === 'assistant');
+
+            if (lastAssistant) {
+                lastAssistant.workflow = pending.workflow;
+                lastAssistant.workflowResolved = null;
+            }
+        }
     } catch (e) {
         error.value = e instanceof Error ? e.message : 'Failed to load.';
     } finally {
@@ -574,7 +632,7 @@ function onRenameKey(event: KeyboardEvent): void {
 
             <div
                 v-for="m in messages"
-                :key="m.ts"
+                :key="m.uid"
                 :class="
                     cn(
                         'flex items-start gap-3',
