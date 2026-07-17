@@ -9,6 +9,7 @@ use App\Enums\AiMode;
 use App\Models\ActionRequest;
 use App\Services\Actions\ActionOrchestrator;
 use App\Settings\AiSettings;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Laravel\Ai\Contracts\Tool;
 use Laravel\Ai\Tools\Request;
@@ -71,14 +72,29 @@ abstract class BaseTool implements Tool
         $actionOrchestrator = resolve(ActionOrchestrator::class);
 
         $forceRequiresApproval = ($candidate['force_requires_approval'] ?? null) === true ? true : null;
-
-        $actionRequest = $actionOrchestrator->dispatch(
+        $deferExecution = ($candidate['defer_execution'] ?? false) === true;
+        $dispatch = fn (): ?ActionRequest => $actionOrchestrator->dispatch(
             type: (string) ($candidate['type'] ?? ''),
             sourceService: (string) ($candidate['source_service'] ?? 'ai'),
             targetService: (string) ($candidate['target_service'] ?? ''),
             payload: is_array($candidate['payload'] ?? null) ? $candidate['payload'] : [],
             forceRequiresApproval: $forceRequiresApproval,
+            deferExecution: $deferExecution,
         );
+
+        if ($deferExecution) {
+            $actionRequest = DB::transaction(function () use ($dispatch, $candidate): ?ActionRequest {
+                $actionRequest = $dispatch();
+
+                if ($actionRequest instanceof ActionRequest) {
+                    $this->actionRequestQueued($actionRequest, $candidate);
+                }
+
+                return $actionRequest;
+            });
+        } else {
+            $actionRequest = $dispatch();
+        }
 
         if ($actionRequest === null) {
             return $this->safeEncode([
@@ -88,7 +104,9 @@ abstract class BaseTool implements Tool
             ]);
         }
 
-        $this->actionRequestQueued($actionRequest, $candidate);
+        if (! $deferExecution) {
+            $this->actionRequestQueued($actionRequest, $candidate);
+        }
 
         return $this->safeEncode([
             'queued' => true,

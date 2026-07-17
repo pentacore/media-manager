@@ -47,7 +47,7 @@ test('it builds the existing replacement action payload with an optional subtitl
         'subtitle_case_id' => 42,
     ])
         ->and($payload['agent_rationale'])->toHaveLength(1_000)
-        ->and($payload['detail'])->toHaveLength(1_100);
+        ->and($payload['detail'])->toHaveLength(1_000);
 });
 
 test('it omits subtitle case correlation for ordinary Media Advisor chat requests', function (): void {

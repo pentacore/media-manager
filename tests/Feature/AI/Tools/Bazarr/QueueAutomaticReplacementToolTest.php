@@ -6,11 +6,15 @@ use App\Ai\Risk;
 use App\Ai\SubtitleAdvisor\SubtitleAdvisorRunContext;
 use App\Ai\Tools\Bazarr\QueueAutomaticReplacementTool;
 use App\Enums\AiMode;
+use App\Enums\SubtitleCaseAttemptOutcome;
+use App\Enums\SubtitleCaseAttemptType;
 use App\Enums\SubtitleCaseStatus;
+use App\Jobs\ExecuteActionRequest;
 use App\Models\ActionRequest;
 use App\Models\ActionTypeConfig;
 use App\Models\ServiceConnection;
 use App\Models\SubtitleCase;
+use App\Models\SubtitleCaseAttempt;
 use App\Services\Bazarr\SubtitleCaseFingerprint;
 use App\Services\MediaReplacement\ReleaseFingerprint;
 use App\Settings\AiSettings;
@@ -54,6 +58,12 @@ beforeEach(function (): void {
         'requirements_fingerprint' => resolve(SubtitleCaseFingerprint::class)
             ->requirements('movie', ['eng']),
     ]);
+    $this->attempt = SubtitleCaseAttempt::factory()->for($this->case)->create([
+        'type' => SubtitleCaseAttemptType::Advisor,
+        'outcome' => SubtitleCaseAttemptOutcome::Started,
+        'summary' => ['result' => 'started'],
+        'completed_at' => null,
+    ]);
     $this->context = new SubtitleAdvisorRunContext($this->case->id, 1);
     app()->instance(SubtitleAdvisorRunContext::class, $this->context);
     fakeQueueAutomaticReplacementApis();
@@ -69,7 +79,12 @@ test('it queues the unique automatic candidate and records the action in the run
     expect(new QueueAutomaticReplacementTool()->risk())->toBe(Risk::Destructive)
         ->and($result['queued'])->toBeTrue()
         ->and($result['requires_approval'])->toBeTrue()
-        ->and($this->context->actionRequestId())->toBe($result['action_request_id']);
+        ->and($this->context->actionRequestId())->toBe($result['action_request_id'])
+        ->and($this->attempt->fresh()->action_request_id)->toBe($result['action_request_id'])
+        ->and($this->attempt->fresh()->candidate_count)->toBe(1)
+        ->and($this->attempt->fresh()->eligible_candidate_count)->toBe(1)
+        ->and($this->case->fresh()->status)->toBe(SubtitleCaseStatus::ReplacementRequested)
+        ->and($this->case->fresh()->replacement_action_request_id)->toBe($result['action_request_id']);
 
     expect(ActionRequest::query()->findOrFail($result['action_request_id'])->payload)
         ->toMatchArray([
@@ -91,6 +106,7 @@ test('it allows Action Rules to auto-approve the replacement request', function 
     expect($result['queued'])->toBeTrue()
         ->and($result['requires_approval'])->toBeFalse()
         ->and($result['status'])->toBe('approved');
+    Queue::assertNotPushed(ExecuteActionRequest::class);
 });
 
 test('it refuses missing or mismatched run context', function (): void {

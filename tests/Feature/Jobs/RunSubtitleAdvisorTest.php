@@ -4,11 +4,14 @@ declare(strict_types=1);
 
 use App\Ai\Agents\SubtitleAdvisorAgent;
 use App\Ai\SubtitleAdvisor\SubtitleAdvisorRunContext;
+use App\Enums\ActionRequestStatus;
 use App\Enums\AiMode;
 use App\Enums\SubtitleCaseAttemptOutcome;
 use App\Enums\SubtitleCaseAttemptType;
 use App\Enums\SubtitleCaseStatus;
 use App\Enums\UserRole;
+use App\Jobs\ExecuteActionRequest;
+use App\Jobs\Middleware\LimitSubtitleAdvisorConcurrency;
 use App\Jobs\RunSubtitleAdvisor;
 use App\Models\ActionRequest;
 use App\Models\ActionTypeConfig;
@@ -26,9 +29,10 @@ use App\Settings\BazarrAutomationSettings;
 use App\Settings\MediaReplacementSettings;
 use Database\Seeders\ActionTypeConfigSeeder;
 use Illuminate\Contracts\Queue\ShouldBeUnique;
+use Illuminate\Queue\Attributes\FailOnTimeout;
+use Illuminate\Queue\Attributes\MaxExceptions;
 use Illuminate\Queue\Attributes\Timeout;
 use Illuminate\Queue\Attributes\Tries;
-use Illuminate\Queue\Middleware\RateLimited;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Notification;
@@ -62,16 +66,49 @@ afterEach(function (): void {
     app()->forgetInstance(SubtitleAdvisorRunContext::class);
 });
 
-test('the Advisor job is unique, single-attempt, and rate limited', function (): void {
+test('the Advisor job is unique and waits for concurrency without retrying exceptions', function (): void {
     $job = new RunSubtitleAdvisor(42);
     $reflection = new ReflectionClass($job);
 
     expect($job)->toBeInstanceOf(ShouldBeUnique::class)
         ->and($job->uniqueId())->toBe('subtitle-advisor:42')
-        ->and($reflection->getAttributes(Tries::class)[0]->newInstance()->tries)->toBe(1)
+        ->and($reflection->getAttributes(Tries::class)[0]->newInstance()->tries)->toBe(0)
+        ->and($reflection->getAttributes(MaxExceptions::class)[0]->newInstance()->maxExceptions)->toBe(1)
+        ->and($reflection->getAttributes(FailOnTimeout::class))->toHaveCount(1)
         ->and($reflection->getAttributes(Timeout::class)[0]->newInstance()->timeout)->toBe(180)
         ->and($job->middleware())->toHaveCount(1)
-        ->and($job->middleware()[0])->toBeInstanceOf(RateLimited::class);
+        ->and($job->middleware()[0])->toBeInstanceOf(LimitSubtitleAdvisorConcurrency::class)
+        ->and($job->retryUntil()->getTimestamp())
+        ->toBeGreaterThan(now()->addMinutes(10)->getTimestamp());
+});
+
+test('concurrency middleware releases before starting when every slot is occupied', function (): void {
+    $runSubtitleAdvisor = new RunSubtitleAdvisor($this->case->id)->withFakeQueueInteractions();
+    $ran = false;
+
+    Cache::funnel('bazarr-advisor')
+        ->limit(1)
+        ->releaseAfter(240)
+        ->block(0)
+        ->then(function () use ($runSubtitleAdvisor, &$ran): void {
+            new LimitSubtitleAdvisorConcurrency()->handle(
+                $runSubtitleAdvisor,
+                function () use (&$ran): void {
+                    $ran = true;
+                },
+            );
+        });
+
+    expect($ran)->toBeFalse();
+    $runSubtitleAdvisor->assertReleased(delay: 10);
+});
+
+test('a failure before an Advisor attempt leaves the eligible case retryable', function (): void {
+    new RunSubtitleAdvisor($this->case->id)->failed(new RuntimeException('worker stopped before start'));
+
+    expect($this->case->fresh()->status)->toBe(SubtitleCaseStatus::ReplacementEligible)
+        ->and(SubtitleCaseAttempt::query()->count())->toBe(0);
+    Notification::assertNothingSent();
 });
 
 test('disabled AI or automation skips without changing the case', function (string $disabled): void {
@@ -146,6 +183,42 @@ test('an auto-approved replacement is linked without creating a second action', 
     expect(ActionRequest::query()->count())->toBe(1)
         ->and(ActionRequest::query()->sole()->status->value)->toBe('approved')
         ->and($this->case->fresh()->status)->toBe(SubtitleCaseStatus::ReplacementRequested);
+    Queue::assertPushed(ExecuteActionRequest::class, 1);
+});
+
+test('a queued replacement is recovered when the final agent response fails', function (): void {
+    ActionTypeConfig::query()
+        ->where('type', 'replace_media_file')
+        ->update(['requires_approval' => false]);
+    SubtitleAdvisorAgent::fake([
+        new ToolCall(
+            id: 'inspect',
+            name: 'InspectSubtitleEscalationTool',
+            arguments: ['case_id' => $this->case->id],
+        ),
+        new ToolCall(
+            id: 'queue',
+            name: 'QueueAutomaticReplacementTool',
+            arguments: [
+                'case_id' => $this->case->id,
+                'candidate_fingerprint' => advisorJobReleaseFingerprint(),
+                'reason' => 'Bazarr exhausted its subtitle search without English.',
+            ],
+        ),
+        fn (): never => throw new RuntimeException('provider failed after queueing'),
+    ]);
+
+    runAdvisorJob(new RunSubtitleAdvisor($this->case->id));
+
+    $actionRequest = ActionRequest::query()->sole();
+    $subtitleCaseAttempt = SubtitleCaseAttempt::query()->sole();
+
+    expect($this->case->fresh()->status)->toBe(SubtitleCaseStatus::ReplacementRequested)
+        ->and($this->case->fresh()->replacement_action_request_id)->toBe($actionRequest->id)
+        ->and($subtitleCaseAttempt->action_request_id)->toBe($actionRequest->id)
+        ->and($subtitleCaseAttempt->outcome)->toBe(SubtitleCaseAttemptOutcome::Succeeded);
+    Queue::assertPushed(ExecuteActionRequest::class, 1);
+    Notification::assertNothingSent();
 });
 
 test('no queued action becomes durable human review with a bounded summary', function (): void {
@@ -192,6 +265,128 @@ test('the worker failed callback terminalizes a started run without retrying', f
         ->toBe(SubtitleCaseAttemptOutcome::Failed);
     Notification::assertSentTo($this->admin, SubtitleCaseNeedsReview::class);
 });
+
+test('the worker failed callback recovers a durably recorded replacement action', function (): void {
+    $this->case->update(['status' => SubtitleCaseStatus::AdvisorRunning]);
+    $actionRequest = ActionRequest::factory()->create([
+        'type' => 'replace_media_file',
+        'source_service' => 'subtitle_advisor',
+        'target_service' => 'radarr',
+        'status' => ActionRequestStatus::Approved,
+        'requires_approval' => false,
+        'payload' => ['subtitle_case_id' => $this->case->id],
+    ]);
+    $attempt = SubtitleCaseAttempt::factory()->for($this->case)->create([
+        'action_request_id' => $actionRequest->id,
+        'type' => SubtitleCaseAttemptType::Advisor,
+        'outcome' => SubtitleCaseAttemptOutcome::Started,
+        'summary' => ['result' => 'started'],
+        'completed_at' => null,
+    ]);
+
+    new RunSubtitleAdvisor($this->case->id)->failed(new RuntimeException('worker stopped after queueing'));
+
+    expect($this->case->fresh()->status)->toBe(SubtitleCaseStatus::ReplacementRequested)
+        ->and($this->case->fresh()->replacement_action_request_id)->toBe($actionRequest->id)
+        ->and($attempt->fresh()->outcome)->toBe(SubtitleCaseAttemptOutcome::Succeeded);
+    Queue::assertPushed(ExecuteActionRequest::class, 1);
+    Notification::assertNothingSent();
+});
+
+test('a redelivered job recovers a durably recorded replacement action', function (
+    SubtitleCaseStatus $subtitleCaseStatus,
+): void {
+    $actionRequest = ActionRequest::factory()->create([
+        'type' => 'replace_media_file',
+        'source_service' => 'subtitle_advisor',
+        'target_service' => 'radarr',
+        'status' => ActionRequestStatus::Approved,
+        'requires_approval' => false,
+        'payload' => ['subtitle_case_id' => $this->case->id],
+    ]);
+    $this->case->forceFill([
+        'status' => $subtitleCaseStatus,
+        'replacement_action_request_id' => $subtitleCaseStatus === SubtitleCaseStatus::ReplacementRequested
+            ? $actionRequest->id
+            : null,
+    ])->save();
+    $attempt = SubtitleCaseAttempt::factory()->for($this->case)->create([
+        'action_request_id' => $actionRequest->id,
+        'type' => SubtitleCaseAttemptType::Advisor,
+        'outcome' => SubtitleCaseAttemptOutcome::Started,
+        'summary' => ['result' => 'started'],
+        'completed_at' => null,
+    ]);
+    SubtitleAdvisorAgent::fake(['should not run']);
+
+    runAdvisorJob(new RunSubtitleAdvisor($this->case->id));
+
+    expect($this->case->fresh()->status)->toBe(SubtitleCaseStatus::ReplacementRequested)
+        ->and($this->case->fresh()->replacement_action_request_id)->toBe($actionRequest->id)
+        ->and($attempt->fresh()->outcome)->toBe(SubtitleCaseAttemptOutcome::Succeeded);
+    Queue::assertPushed(ExecuteActionRequest::class, 1);
+    SubtitleAdvisorAgent::assertNeverPrompted();
+    Notification::assertNothingSent();
+})->with([
+    SubtitleCaseStatus::AdvisorRunning,
+    SubtitleCaseStatus::ReplacementRequested,
+]);
+
+test('a redelivered started run without an action becomes review instead of retrying the agent', function (): void {
+    $this->case->update(['status' => SubtitleCaseStatus::AdvisorRunning]);
+    $attempt = SubtitleCaseAttempt::factory()->for($this->case)->create([
+        'type' => SubtitleCaseAttemptType::Advisor,
+        'outcome' => SubtitleCaseAttemptOutcome::Started,
+        'summary' => ['result' => 'started'],
+        'completed_at' => null,
+    ]);
+    SubtitleAdvisorAgent::fake(['should not run']);
+
+    runAdvisorJob(new RunSubtitleAdvisor($this->case->id));
+
+    expect($this->case->fresh()->status)->toBe(SubtitleCaseStatus::NeedsReview)
+        ->and($attempt->fresh()->outcome)->toBe(SubtitleCaseAttemptOutcome::Failed)
+        ->and($attempt->fresh()->error_category)->toBe('worker_interrupted');
+    SubtitleAdvisorAgent::assertNeverPrompted();
+    Notification::assertSentTo($this->admin, SubtitleCaseNeedsReview::class);
+});
+
+test('redelivery recovery runs before feature gates', function (string $disabled): void {
+    $actionRequest = ActionRequest::factory()->create([
+        'type' => 'replace_media_file',
+        'source_service' => 'subtitle_advisor',
+        'target_service' => 'radarr',
+        'status' => ActionRequestStatus::Approved,
+        'requires_approval' => false,
+        'payload' => ['subtitle_case_id' => $this->case->id],
+    ]);
+    $this->case->forceFill([
+        'status' => SubtitleCaseStatus::ReplacementRequested,
+        'replacement_action_request_id' => $actionRequest->id,
+    ])->save();
+    $attempt = SubtitleCaseAttempt::factory()->for($this->case)->create([
+        'action_request_id' => $actionRequest->id,
+        'type' => SubtitleCaseAttemptType::Advisor,
+        'outcome' => SubtitleCaseAttemptOutcome::Started,
+        'summary' => ['result' => 'started'],
+        'completed_at' => null,
+    ]);
+
+    if ($disabled === 'ai') {
+        config(['mediamanager.ai.enabled' => false]);
+    } else {
+        resolve(BazarrAutomationSettings::class)->setConfiguration(['enabled' => false]);
+    }
+
+    SubtitleAdvisorAgent::fake(['should not run']);
+
+    runAdvisorJob(new RunSubtitleAdvisor($this->case->id));
+
+    expect($attempt->fresh()->outcome)->toBe(SubtitleCaseAttemptOutcome::Succeeded);
+    Queue::assertPushed(ExecuteActionRequest::class, 1);
+    SubtitleAdvisorAgent::assertNeverPrompted();
+    Notification::assertNothingSent();
+})->with(['ai', 'automation']);
 
 test('two jobs for one case produce at most one run and one action request', function (): void {
     fakeSuccessfulAdvisorRun($this->case);

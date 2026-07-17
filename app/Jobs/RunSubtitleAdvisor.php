@@ -6,10 +6,12 @@ namespace App\Jobs;
 
 use App\Ai\Agents\SubtitleAdvisorAgent;
 use App\Ai\SubtitleAdvisor\SubtitleAdvisorRunContext;
+use App\Enums\ActionRequestStatus;
 use App\Enums\SubtitleCaseAttemptOutcome;
 use App\Enums\SubtitleCaseAttemptType;
 use App\Enums\SubtitleCaseStatus;
 use App\Enums\UserRole;
+use App\Jobs\Middleware\LimitSubtitleAdvisorConcurrency;
 use App\Models\ActionRequest;
 use App\Models\SubtitleCase;
 use App\Models\SubtitleCaseAttempt;
@@ -25,18 +27,23 @@ use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldBeUnique;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
+use Illuminate\Queue\Attributes\FailOnTimeout;
+use Illuminate\Queue\Attributes\MaxExceptions;
 use Illuminate\Queue\Attributes\Timeout;
 use Illuminate\Queue\Attributes\Tries;
 use Illuminate\Queue\InteractsWithQueue;
-use Illuminate\Queue\Middleware\RateLimited;
 use Illuminate\Queue\SerializesModels;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Notification;
 use Illuminate\Support\Str;
+use DateTimeInterface;
 use Throwable;
 
 #[Timeout(180)]
-#[Tries(1)]
+#[Tries(0)]
+#[MaxExceptions(1)]
+#[FailOnTimeout]
 final class RunSubtitleAdvisor implements ShouldBeUnique, ShouldQueue
 {
     use Dispatchable;
@@ -56,7 +63,12 @@ final class RunSubtitleAdvisor implements ShouldBeUnique, ShouldQueue
      */
     public function middleware(): array
     {
-        return [new RateLimited('bazarr-advisor')->releaseAfter(60)];
+        return [new LimitSubtitleAdvisorConcurrency];
+    }
+
+    public function retryUntil(): DateTimeInterface
+    {
+        return now()->addMinutes(15);
     }
 
     public function handle(
@@ -65,15 +77,28 @@ final class RunSubtitleAdvisor implements ShouldBeUnique, ShouldQueue
         AiBudgetGuard $aiBudgetGuard,
         AiSettings $aiSettings,
     ): void {
+        $subtitleCase = SubtitleCase::query()->find($this->subtitleCaseId);
+
+        if (! $subtitleCase instanceof SubtitleCase) {
+            return;
+        }
+
+        if ($subtitleCase->status !== SubtitleCaseStatus::ReplacementEligible) {
+            $this->recoverInterruptedRun(
+                $subtitleCase,
+                $subtitleCaseLifecycle,
+                'The Media Advisor worker stopped before completing the investigation.',
+                'worker_interrupted',
+            );
+
+            return;
+        }
+
         if (! AIServiceProvider::enabled() || ! $bazarrAutomationSettings->enabled()) {
             return;
         }
 
-        $subtitleCase = SubtitleCase::query()->find($this->subtitleCaseId);
-
-        if (! $subtitleCase instanceof SubtitleCase
-            || $subtitleCase->status !== SubtitleCaseStatus::ReplacementEligible
-            || ! $subtitleCaseLifecycle->transition($subtitleCase, SubtitleCaseStatus::AdvisorRunning)) {
+        if (! $subtitleCaseLifecycle->transition($subtitleCase, SubtitleCaseStatus::AdvisorRunning)) {
             return;
         }
 
@@ -119,6 +144,21 @@ final class RunSubtitleAdvisor implements ShouldBeUnique, ShouldQueue
                 'exception' => $throwable::class,
                 'message' => $throwable->getMessage(),
             ]);
+
+            $queuedActionRequestId = $subtitleAdvisorRunContext->actionRequestId();
+
+            if ($queuedActionRequestId !== null && $this->finishWithQueuedAction(
+                $subtitleCase,
+                $subtitleCaseAttempt,
+                $subtitleCaseLifecycle,
+                $queuedActionRequestId,
+                'The replacement was queued before the Advisor summary failed.',
+            )) {
+                report($throwable);
+
+                return;
+            }
+
             $this->finishWithReview(
                 $subtitleCase,
                 $subtitleCaseAttempt,
@@ -147,10 +187,13 @@ final class RunSubtitleAdvisor implements ShouldBeUnique, ShouldQueue
             return;
         }
 
-        $actionRequest = ActionRequest::query()->find($actionRequestId);
-
-        if (! $actionRequest instanceof ActionRequest
-            || (int) ($actionRequest->payload['subtitle_case_id'] ?? 0) !== $subtitleCase->id) {
+        if (! $this->finishWithQueuedAction(
+            $subtitleCase,
+            $subtitleCaseAttempt,
+            $subtitleCaseLifecycle,
+            $actionRequestId,
+            $summary,
+        )) {
             $this->finishWithReview(
                 $subtitleCase,
                 $subtitleCaseAttempt,
@@ -161,28 +204,6 @@ final class RunSubtitleAdvisor implements ShouldBeUnique, ShouldQueue
 
             return;
         }
-
-        $transitioned = $subtitleCaseLifecycle->transition(
-            $subtitleCase->fresh(),
-            SubtitleCaseStatus::ReplacementRequested,
-            ['replacement_action_request_id' => $actionRequest->id],
-        );
-
-        if (! $transitioned) {
-            return;
-        }
-
-        $subtitleCaseAttempt->forceFill([
-            'action_request_id' => $actionRequest->id,
-            'candidate_count' => 1,
-            'eligible_candidate_count' => 1,
-            'summary' => [
-                'result' => 'replacement_requested',
-                'summary' => $this->boundedSummary($summary),
-            ],
-            'outcome' => SubtitleCaseAttemptOutcome::Succeeded,
-            'completed_at' => now(),
-        ])->save();
     }
 
     public function failed(?Throwable $throwable): void
@@ -195,31 +216,8 @@ final class RunSubtitleAdvisor implements ShouldBeUnique, ShouldQueue
 
         $subtitleCaseLifecycle = resolve(SubtitleCaseLifecycle::class);
 
-        if ($subtitleCase->status === SubtitleCaseStatus::ReplacementEligible) {
-            $subtitleCaseLifecycle->transition($subtitleCase, SubtitleCaseStatus::AdvisorRunning);
-            $subtitleCase->refresh();
-        }
-
-        if ($subtitleCase->status !== SubtitleCaseStatus::AdvisorRunning) {
-            return;
-        }
-
-        $attempt = SubtitleCaseAttempt::query()
-            ->where('subtitle_case_id', $subtitleCase->id)
-            ->where('type', SubtitleCaseAttemptType::Advisor)
-            ->latest('id')
-            ->first();
-        $attempt ??= SubtitleCaseAttempt::query()->create([
-            'subtitle_case_id' => $subtitleCase->id,
-            'type' => SubtitleCaseAttemptType::Advisor,
-            'outcome' => SubtitleCaseAttemptOutcome::Started,
-            'summary' => ['result' => 'started'],
-            'started_at' => now(),
-        ]);
-
-        $this->finishWithReview(
+        $this->recoverInterruptedRun(
             $subtitleCase,
-            $attempt,
             $subtitleCaseLifecycle,
             'The Media Advisor worker stopped before completing the investigation.',
             'worker_failure',
@@ -265,6 +263,126 @@ final class RunSubtitleAdvisor implements ShouldBeUnique, ShouldQueue
         $this->notifyNeedsReview($freshCase, $summary, $errorCategory);
 
         report_if($throwable instanceof Throwable, $throwable);
+    }
+
+    private function recoverInterruptedRun(
+        SubtitleCase $subtitleCase,
+        SubtitleCaseLifecycle $subtitleCaseLifecycle,
+        string $summary,
+        string $errorCategory,
+        ?Throwable $throwable = null,
+    ): bool {
+        if (! in_array($subtitleCase->status, [
+            SubtitleCaseStatus::AdvisorRunning,
+            SubtitleCaseStatus::ReplacementRequested,
+        ], true)) {
+            return false;
+        }
+
+        $attempt = SubtitleCaseAttempt::query()
+            ->where('subtitle_case_id', $subtitleCase->id)
+            ->where('type', SubtitleCaseAttemptType::Advisor)
+            ->latest('id')
+            ->first();
+
+        if ($attempt instanceof SubtitleCaseAttempt
+            && $attempt->action_request_id !== null
+            && $this->finishWithQueuedAction(
+                $subtitleCase,
+                $attempt,
+                $subtitleCaseLifecycle,
+                $attempt->action_request_id,
+                'The replacement was recovered after the Advisor worker stopped.',
+            )) {
+            report_if($throwable instanceof Throwable, $throwable);
+
+            return true;
+        }
+
+        if ($subtitleCase->status !== SubtitleCaseStatus::AdvisorRunning) {
+            return false;
+        }
+
+        $attempt ??= SubtitleCaseAttempt::query()->create([
+            'subtitle_case_id' => $subtitleCase->id,
+            'type' => SubtitleCaseAttemptType::Advisor,
+            'outcome' => SubtitleCaseAttemptOutcome::Started,
+            'summary' => ['result' => 'started'],
+            'started_at' => now(),
+        ]);
+
+        $this->finishWithReview(
+            $subtitleCase,
+            $attempt,
+            $subtitleCaseLifecycle,
+            $summary,
+            $errorCategory,
+            $throwable,
+        );
+
+        return true;
+    }
+
+    private function finishWithQueuedAction(
+        SubtitleCase $subtitleCase,
+        SubtitleCaseAttempt $subtitleCaseAttempt,
+        SubtitleCaseLifecycle $subtitleCaseLifecycle,
+        int $actionRequestId,
+        string $summary,
+    ): bool {
+        return DB::transaction(function () use (
+            $subtitleCase,
+            $subtitleCaseAttempt,
+            $subtitleCaseLifecycle,
+            $actionRequestId,
+            $summary,
+        ): bool {
+            $lockedCase = SubtitleCase::query()->lockForUpdate()->find($subtitleCase->id);
+            $lockedAttempt = SubtitleCaseAttempt::query()->lockForUpdate()->find($subtitleCaseAttempt->id);
+            $actionRequest = ActionRequest::query()->find($actionRequestId);
+
+            if (! $lockedCase instanceof SubtitleCase
+                || ! $lockedAttempt instanceof SubtitleCaseAttempt
+                || ! $actionRequest instanceof ActionRequest
+                || $lockedAttempt->subtitle_case_id !== $lockedCase->id
+                || ($lockedAttempt->action_request_id !== null
+                    && $lockedAttempt->action_request_id !== $actionRequest->id)
+                || (int) ($actionRequest->payload['subtitle_case_id'] ?? 0) !== $lockedCase->id) {
+                return false;
+            }
+
+            if ($lockedCase->status === SubtitleCaseStatus::AdvisorRunning) {
+                if (! $subtitleCaseLifecycle->transition(
+                    $lockedCase,
+                    SubtitleCaseStatus::ReplacementRequested,
+                    ['replacement_action_request_id' => $actionRequest->id],
+                )) {
+                    return false;
+                }
+            } elseif ($lockedCase->status !== SubtitleCaseStatus::ReplacementRequested
+                || $lockedCase->replacement_action_request_id !== $actionRequest->id) {
+                return false;
+            }
+
+            $lockedAttempt->forceFill([
+                'action_request_id' => $actionRequest->id,
+                'candidate_count' => 1,
+                'eligible_candidate_count' => 1,
+                'summary' => [
+                    'result' => 'replacement_requested',
+                    'summary' => $this->boundedSummary($summary),
+                ],
+                'outcome' => SubtitleCaseAttemptOutcome::Succeeded,
+                'error_category' => null,
+                'completed_at' => now(),
+            ])->save();
+
+            if ($actionRequest->status === ActionRequestStatus::Approved) {
+                dispatch(new ExecuteActionRequest($actionRequest))->afterCommit();
+            }
+
+            return true;
+        });
     }
 
     private function notifyNeedsReview(

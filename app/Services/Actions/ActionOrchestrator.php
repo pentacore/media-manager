@@ -42,6 +42,7 @@ class ActionOrchestrator
         array $payload,
         ?WebhookEvent $webhookEvent = null,
         ?bool $forceRequiresApproval = null,
+        bool $deferExecution = false,
     ): ?ActionRequest {
         $config = ActionTypeConfig::where('type', $type)->first();
 
@@ -89,7 +90,7 @@ class ActionOrchestrator
 
         event(new ActionRequestCreated($actionRequest));
 
-        if (! $requiresApproval) {
+        if (! $requiresApproval && ! $deferExecution) {
             dispatch(new ExecuteActionRequest($actionRequest))->afterCommit();
         }
 

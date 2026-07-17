@@ -22,9 +22,11 @@ final readonly class MediaReplacementActionPayload
         string $reason,
         ?int $subtitleCaseId = null,
     ): array {
+        $boundedReason = mb_substr($reason, 0, 1_000);
+
         $payload = [
-            'title' => sprintf('Replace %s', $target['display_name'] ?? 'media file'),
-            'detail' => $reason,
+            'title' => mb_substr(sprintf('Replace %s', $target['display_name'] ?? 'media file'), 0, 300),
+            'detail' => $boundedReason,
             'service' => $target['service'] ?? null,
             'service_connection_id' => $target['service_connection_id'] ?? null,
             'scope' => $target['scope'] ?? null,
@@ -35,7 +37,7 @@ final readonly class MediaReplacementActionPayload
             'confidence' => $candidate['confidence'] ?? 0,
             'matched_rules' => $matchedRules,
             'selection_mode' => $selectionMode,
-            'agent_rationale' => mb_substr($reason, 0, 1000),
+            'agent_rationale' => $boundedReason,
             'original_history_id' => $target['original_history_id'] ?? null,
         ];
 

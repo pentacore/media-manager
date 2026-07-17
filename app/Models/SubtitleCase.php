@@ -4,16 +4,19 @@ declare(strict_types=1);
 
 namespace App\Models;
 
+use App\Enums\SubtitleCaseAttemptType;
 use App\Enums\SubtitleCaseStatus;
 use Carbon\CarbonImmutable;
 use Database\Factories\SubtitleCaseFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 use InvalidArgumentException;
 use JsonException;
 use Override;
@@ -45,6 +48,7 @@ use Override;
  * @property-read ActionRequest|null $replacementActionRequest
  * @property-read Collection<int, SubtitleCaseAttempt> $attempts
  * @property-read int|null $attempts_count
+ * @property-read SubtitleCaseAttempt|null $latestAdvisorAttempt
  * @property-read Collection<int, SubtitleUpload> $uploads
  * @property-read int|null $uploads_count
  *
@@ -122,6 +126,18 @@ class SubtitleCase extends Model
     public function attempts(): HasMany
     {
         return $this->hasMany(SubtitleCaseAttempt::class);
+    }
+
+    /**
+     * @return HasOne<SubtitleCaseAttempt, $this>
+     */
+    public function latestAdvisorAttempt(): HasOne
+    {
+        return $this->hasOne(SubtitleCaseAttempt::class)->ofMany(
+            ['id' => 'max'],
+            static fn (Builder $builder): Builder => $builder
+                ->where('type', SubtitleCaseAttemptType::Advisor->value),
+        );
     }
 
     /**

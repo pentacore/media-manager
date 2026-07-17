@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use App\Enums\SubtitleCaseAttemptType;
+use App\Enums\SubtitleCaseAttemptOutcome;
 use App\Enums\SubtitleCaseStatus;
 use App\Models\ServiceConnection;
 use App\Models\SubtitleCase;
@@ -67,6 +68,17 @@ test('member retries a review case with Media Advisor after confirmation', funct
             'missing_languages' => ['eng'],
         ],
     ]);
+    SubtitleCaseAttempt::factory()->create([
+        'subtitle_case_id' => $subtitleCase->id,
+        'type' => SubtitleCaseAttemptType::Advisor,
+        'summary' => [
+            'result' => 'needs_review',
+            'summary' => 'No safe replacement matched the required English subtitles.',
+        ],
+        'outcome' => SubtitleCaseAttemptOutcome::NeedsReview,
+        'started_at' => now()->subMinute(),
+        'completed_at' => now(),
+    ]);
 
     $this->actingAs(User::factory()->member()->create());
 
@@ -74,7 +86,7 @@ test('member retries a review case with Media Advisor after confirmation', funct
         ->assertSee('Subtitle escalations')
         ->assertSee('Frieren S01E01')
         ->assertSee('Retry with Media Advisor')
-        ->assertSee('The last investigation needs review before a manual retry.')
+        ->assertSee('No safe replacement matched the required English subtitles.')
         ->assertSee('Linked Action Request: none')
         ->assertScript(
             sprintf(
@@ -93,10 +105,12 @@ test('member retries a review case with Media Advisor after confirmation', funct
             'window.__advisorConfirmMessage.includes("already been investigated")',
         )
         ->assertSee('Media Advisor investigation queued.')
-        ->assertSee('Ready for one Media Advisor investigation.')
+        ->assertSee('No safe replacement matched the required English subtitles.')
         ->assertNoSmoke();
 
-    $subtitleCaseAttempt = SubtitleCaseAttempt::query()->sole();
+    $subtitleCaseAttempt = SubtitleCaseAttempt::query()
+        ->where('type', SubtitleCaseAttemptType::Reconciliation)
+        ->sole();
 
     expect($subtitleCase->fresh()->status)->toBe(SubtitleCaseStatus::ReplacementEligible)
         ->and($subtitleCaseAttempt->type)->toBe(SubtitleCaseAttemptType::Reconciliation)

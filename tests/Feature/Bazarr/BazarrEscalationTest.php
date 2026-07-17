@@ -48,6 +48,17 @@ test('viewer sees paginated sanitized escalation summaries', function (): void {
         'started_at' => now()->subHour(),
         'completed_at' => now()->subMinutes(59),
     ]);
+    SubtitleCaseAttempt::factory()->create([
+        'subtitle_case_id' => $case->id,
+        'type' => SubtitleCaseAttemptType::Advisor,
+        'summary' => [
+            'result' => 'needs_review',
+            'summary' => 'No safe replacement matched the required English subtitles.',
+        ],
+        'outcome' => SubtitleCaseAttemptOutcome::NeedsReview,
+        'started_at' => now()->subMinutes(30),
+        'completed_at' => now()->subMinutes(29),
+    ]);
 
     $response = $this->actingAs(User::factory()->create())
         ->get(route('bazarr.escalations', ['connection' => $bazarr->id]))
@@ -66,6 +77,7 @@ test('viewer sees paginated sanitized escalation summaries', function (): void {
                 ->where('probe_count', 2)
                 ->where('download_action_status', ActionRequestStatus::Completed->value)
                 ->where('replacement_action_status', null)
+                ->where('advisor_summary', 'No safe replacement matched the required English subtitles.')
                 ->hasAll([
                     'first_seen_at',
                     'last_probe_at',

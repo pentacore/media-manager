@@ -24,6 +24,7 @@ interface EscalationCase {
     source_connection: string;
     download_action_status: string | null;
     replacement_action_status: string | null;
+    advisor_summary: string | null;
 }
 
 interface PaginatorLink {
@@ -112,6 +113,10 @@ function actionSummary(escalationCase: EscalationCase): string {
 }
 
 function advisorSummary(escalationCase: EscalationCase): string {
+    if (escalationCase.advisor_summary) {
+        return escalationCase.advisor_summary;
+    }
+
     switch (escalationCase.status) {
         case 'replacement_eligible':
             return 'Ready for one Media Advisor investigation.';

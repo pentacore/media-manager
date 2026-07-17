@@ -11,6 +11,7 @@ use App\Models\SubtitleCase;
 use Carbon\CarbonInterface;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
+use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -92,6 +93,7 @@ final class EscalationController extends BazarrController
                 'serviceConnection:id,name,type',
                 'downloadActionRequest:id,status',
                 'replacementActionRequest:id,status',
+                'latestAdvisorAttempt',
             ])
             ->withCount([
                 'attempts as probe_count' => static fn (Builder $builder): Builder => $builder
@@ -125,7 +127,8 @@ final class EscalationController extends BazarrController
      *     bazarr_connection: string,
      *     source_connection: string,
      *     download_action_status: string|null,
-     *     replacement_action_status: string|null
+     *     replacement_action_status: string|null,
+     *     advisor_summary: string|null
      * }
      */
     private function serializeCase(SubtitleCase $subtitleCase): array
@@ -157,7 +160,23 @@ final class EscalationController extends BazarrController
             'source_connection' => $subtitleCase->serviceConnection->name,
             'download_action_status' => $subtitleCase->downloadActionRequest?->status->value,
             'replacement_action_status' => $subtitleCase->replacementActionRequest?->status->value,
+            'advisor_summary' => $this->advisorSummary($subtitleCase),
         ];
+    }
+
+    private function advisorSummary(SubtitleCase $subtitleCase): ?string
+    {
+        $attemptSummary = $subtitleCase->latestAdvisorAttempt?->summary['summary'] ?? null;
+
+        if (is_string($attemptSummary) && trim($attemptSummary) !== '') {
+            return Str::limit(trim($attemptSummary), 500, '…');
+        }
+
+        if (is_string($subtitleCase->failure_reason) && trim($subtitleCase->failure_reason) !== '') {
+            return Str::limit(trim($subtitleCase->failure_reason), 500, '…');
+        }
+
+        return null;
     }
 
     /**

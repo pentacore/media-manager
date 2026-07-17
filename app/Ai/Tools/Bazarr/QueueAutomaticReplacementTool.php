@@ -7,10 +7,15 @@ namespace App\Ai\Tools\Bazarr;
 use App\Ai\Risk;
 use App\Ai\SubtitleAdvisor\SubtitleAdvisorRunContext;
 use App\Ai\Tools\BaseTool;
+use App\Enums\SubtitleCaseAttemptOutcome;
+use App\Enums\SubtitleCaseAttemptType;
+use App\Enums\SubtitleCaseStatus;
 use App\Models\ActionRequest;
 use App\Models\SubtitleCase;
+use App\Models\SubtitleCaseAttempt;
 use App\Services\Bazarr\SubtitleAdvisorProjection;
 use App\Services\Bazarr\SubtitleCaseFingerprint;
+use App\Services\Bazarr\SubtitleCaseLifecycle;
 use App\Services\MediaReplacement\MediaReplacementActionPayload;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
 use Illuminate\JsonSchema\Types\Type;
@@ -37,6 +42,7 @@ final class QueueAutomaticReplacementTool extends BaseTool
      *     source_service: string,
      *     target_service: string,
      *     force_requires_approval: bool,
+     *     defer_execution: true,
      *     payload: array<string, mixed>
      * }
      */
@@ -98,6 +104,7 @@ final class QueueAutomaticReplacementTool extends BaseTool
             'source_service' => 'subtitle_advisor',
             'target_service' => (string) ($target['service'] ?? ''),
             'force_requires_approval' => ($automatic['requires_approval'] ?? false) === true,
+            'defer_execution' => true,
             'payload' => resolve(MediaReplacementActionPayload::class)->build(
                 target: $target,
                 candidate: $automatic,
@@ -134,7 +141,43 @@ final class QueueAutomaticReplacementTool extends BaseTool
     #[Override]
     protected function actionRequestQueued(ActionRequest $actionRequest, array $candidate): void
     {
-        $this->context()->recordQueued($actionRequest->id);
+        $context = $this->context();
+        $subtitleCase = SubtitleCase::query()->lockForUpdate()->find($context->caseId);
+        $attempt = SubtitleCaseAttempt::query()
+            ->where('subtitle_case_id', $context->caseId)
+            ->where('type', SubtitleCaseAttemptType::Advisor)
+            ->where('outcome', SubtitleCaseAttemptOutcome::Started)
+            ->whereNull('completed_at')
+            ->latest('id')
+            ->lockForUpdate()
+            ->first();
+
+        throw_unless(
+            $subtitleCase instanceof SubtitleCase
+                && $subtitleCase->status === SubtitleCaseStatus::AdvisorRunning
+                && $attempt instanceof SubtitleCaseAttempt
+                && (int) ($actionRequest->payload['subtitle_case_id'] ?? 0) === $subtitleCase->id,
+            InvalidArgumentException::class,
+            'No active subtitle Advisor attempt can own this replacement.',
+        );
+
+        throw_unless(
+            resolve(SubtitleCaseLifecycle::class)->transition(
+                $subtitleCase,
+                SubtitleCaseStatus::ReplacementRequested,
+                ['replacement_action_request_id' => $actionRequest->id],
+            ),
+            InvalidArgumentException::class,
+            'The subtitle case could not be linked to this replacement.',
+        );
+
+        $attempt->forceFill([
+            'action_request_id' => $actionRequest->id,
+            'candidate_count' => 1,
+            'eligible_candidate_count' => 1,
+        ])->save();
+
+        $context->recordQueued($actionRequest->id);
     }
 
     private function context(): SubtitleAdvisorRunContext

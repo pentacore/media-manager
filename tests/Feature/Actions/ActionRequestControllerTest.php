@@ -59,6 +59,64 @@ test('members see sanitized action results in request listings', function (): vo
         );
 });
 
+test('replacement request listings expose only bounded review fields', function (): void {
+    $member = User::factory()->member()->create();
+    ActionRequest::factory()->create([
+        'type' => 'replace_media_file',
+        'payload' => [
+            'title' => str_repeat('T', 400),
+            'detail' => str_repeat('D', 1_100),
+            'service' => 'sonarr',
+            'service_connection_id' => 37,
+            'scope' => 'anime',
+            'target' => [
+                'episode_file_ids' => [501, 502],
+                'private_path' => '/anime/private/Frieren.mkv',
+            ],
+            'candidate_fingerprint' => 'private-candidate-fingerprint',
+            'candidate' => [
+                'season_pack' => true,
+                'download_url' => 'https://indexer.test/private-download',
+            ],
+            'required_languages' => ['eng'],
+            'confidence' => 97,
+            'matched_rules' => ['Trusted English'],
+            'selection_mode' => 'automatic',
+            'agent_rationale' => str_repeat('R', 1_100),
+            'original_history_id' => 999,
+            'subtitle_case_id' => 42,
+        ],
+    ]);
+
+    $response = $this->actingAs($member)
+        ->get(route('actions.requests.index'))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->where('requests.data.0.payload', [
+                'title' => str_repeat('T', 300),
+                'detail' => str_repeat('D', 1_000),
+                'service' => 'sonarr',
+                'scope' => 'anime',
+                'required_languages' => ['eng'],
+                'confidence' => 97,
+                'matched_rules' => ['Trusted English'],
+                'selection_mode' => 'automatic',
+                'agent_rationale' => str_repeat('R', 1_000),
+                'original_history_id' => 999,
+                'subtitle_case_id' => 42,
+                'affected_file_count' => 2,
+                'season_pack' => true,
+            ])
+        );
+
+    $serializedProps = json_encode($response->viewData('page')['props'], JSON_THROW_ON_ERROR);
+
+    expect($serializedProps)
+        ->not->toContain('/anime/private/Frieren.mkv')
+        ->not->toContain('private-candidate-fingerprint')
+        ->not->toContain('https://indexer.test/private-download');
+});
+
 test('index exposes per-status counts independent of the active filter', function (): void {
     $member = User::factory()->member()->create();
     ActionRequest::factory()->count(2)->create(['status' => ActionRequestStatus::Pending]);
