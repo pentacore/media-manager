@@ -94,6 +94,11 @@ services:
     <<: *app
     environment:
       CONTAINER_ROLE: queue
+    # Docker's default 10s SIGTERM->SIGKILL window would kill workers mid-job
+    # on every deploy; some jobs run non-idempotent external calls (e.g. arr
+    # release grabs) that Redis would re-deliver after retry_after. Give the
+    # worker its full --timeout=300 (entrypoint.sh) plus margin to finish.
+    stop_grace_period: 310s
 
   scheduler:
     <<: *app
