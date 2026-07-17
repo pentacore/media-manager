@@ -10,6 +10,7 @@ use App\Models\ActivityLog;
 use App\Models\ServiceConnection;
 use App\Services\Sabnzbd\SabnzbdClient;
 use App\Services\ServiceClientFactory;
+use App\Support\UrlQueryRedactor;
 use Illuminate\Console\Attributes\Description;
 use Illuminate\Console\Attributes\Signature;
 use Illuminate\Console\Command;
@@ -51,7 +52,7 @@ class PollSabnzbdHistory extends Command
         try {
             $payload = $client->getHistory(0, 100, sinceUnix: $cursor);
         } catch (RequestException|ConnectionException|Throwable $throwable) {
-            $this->warn(sprintf('Failed to poll %s: %s', $serviceConnection->name, $throwable->getMessage()));
+            $this->warn(sprintf('Failed to poll %s: %s', $serviceConnection->name, UrlQueryRedactor::redact($throwable->getMessage())));
 
             return;
         }
