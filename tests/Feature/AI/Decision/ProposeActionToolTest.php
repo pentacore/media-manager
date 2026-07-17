@@ -133,6 +133,44 @@ test('seerr request mutations are refused when the trigger has no request id', f
         ->and(ActionRequest::count())->toBe(0);
 });
 
+test('monitor proposals are refused while a replacement is in flight for the target', function (): void {
+    ActionTypeConfig::factory()->create(['type' => 'monitor_series', 'requires_approval' => false, 'is_enabled' => true]);
+    App\Models\MediaReplacementAttempt::factory()->create([
+        'status' => App\Enums\MediaReplacementStatus::Downloading,
+        'target' => ['service' => 'sonarr', 'series_id' => 42, 'episode_file_ids' => [501]],
+    ]);
+    bindDecisionContext();
+
+    $result = json_decode((new ProposeActionTool)->handle(new Request([
+        'type' => 'monitor_series',
+        'target_service' => 'sonarr',
+        'rationale' => 'Series became unmonitored.',
+        'payload' => ['series_id' => 42, 'monitored' => true],
+    ])), true);
+
+    expect($result['queued'])->toBeFalse()
+        ->and($result['reason'])->toBe('replacement_in_flight')
+        ->and(ActionRequest::where('type', 'monitor_series')->count())->toBe(0);
+});
+
+test('monitor proposals for unrelated targets pass the replacement guard', function (): void {
+    ActionTypeConfig::factory()->create(['type' => 'monitor_series', 'requires_approval' => true, 'is_enabled' => true]);
+    App\Models\MediaReplacementAttempt::factory()->create([
+        'status' => App\Enums\MediaReplacementStatus::Downloading,
+        'target' => ['service' => 'sonarr', 'series_id' => 42, 'episode_file_ids' => [501]],
+    ]);
+    bindDecisionContext();
+
+    $result = json_decode((new ProposeActionTool)->handle(new Request([
+        'type' => 'monitor_series',
+        'target_service' => 'sonarr',
+        'rationale' => 'Different series.',
+        'payload' => ['series_id' => 7, 'monitored' => true],
+    ])), true);
+
+    expect($result['queued'])->toBeTrue();
+});
+
 test('enforces the per-run action cap', function (): void {
     ActionTypeConfig::factory()->create(['type' => 'emby_library_scan', 'requires_approval' => false, 'is_enabled' => true]);
     bindDecisionContext(maxActions: 1);

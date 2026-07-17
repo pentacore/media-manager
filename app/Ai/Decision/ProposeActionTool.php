@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Ai\Decision;
 
+use App\Enums\MediaReplacementStatus;
+use App\Models\MediaReplacementAttempt;
 use App\Models\WebhookEvent;
 use App\Services\Actions\ActionOrchestrator;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
@@ -115,6 +117,11 @@ class ProposeActionTool implements Tool
             return $this->encode($subjectMismatch);
         }
 
+        $replacementConflict = $this->rejectMonitorDuringReplacement($type, $payload);
+        if ($replacementConflict !== null) {
+            return $this->encode($replacementConflict);
+        }
+
         try {
             $actionRequest = resolve(ActionOrchestrator::class)->dispatchFromAgent(
                 type: $type,
@@ -223,6 +230,57 @@ class ProposeActionTool implements Tool
         }
 
         return null;
+    }
+
+    /**
+     * The replacement executor deliberately unmonitors its target mid-run;
+     * the resulting arr webhooks would otherwise let the agent "fix" the
+     * monitoring flag and reopen the exact race the pipeline closed. Refuse
+     * monitor proposals while a replacement attempt is in flight for the
+     * same target.
+     *
+     * @param  array<string, mixed>  $payload
+     * @return array<string, mixed>|null structured rejection, or null when OK
+     */
+    private function rejectMonitorDuringReplacement(string $type, array $payload): ?array
+    {
+        $targetKey = match ($type) {
+            'monitor_series' => 'series_id',
+            'monitor_movie' => 'movie_id',
+            default => null,
+        };
+
+        if ($targetKey === null) {
+            return null;
+        }
+
+        $targetId = (int) ($payload[$targetKey] ?? 0);
+
+        if ($targetId <= 0) {
+            return null;
+        }
+
+        $inFlight = MediaReplacementAttempt::query()
+            ->whereNotIn('status', [
+                MediaReplacementStatus::Verified->value,
+                MediaReplacementStatus::Failed->value,
+                MediaReplacementStatus::NeedsAttention->value,
+            ])
+            ->where('target->'.$targetKey, $targetId)
+            ->exists();
+
+        if (! $inFlight) {
+            return null;
+        }
+
+        return [
+            'queued' => false,
+            'reason' => 'replacement_in_flight',
+            'message' => sprintf(
+                'A media replacement is in flight for this %s; its monitoring state is managed by the replacement pipeline and will be restored when it completes. Do not propose monitoring changes for it.',
+                $targetKey === 'series_id' ? 'series' : 'movie',
+            ),
+        ];
     }
 
     /**

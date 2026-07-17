@@ -23,6 +23,7 @@ use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Notification;
 use Illuminate\Support\Str;
@@ -46,6 +47,9 @@ class RunDecisionAgent implements ShouldBeUnique, ShouldQueue
 
     /** Cap on the event payload size handed to the model, in characters. */
     private const int MAX_PAYLOAD_CHARS = 8000;
+
+    /** Minimum seconds between agent runs about the same subject. */
+    public const int SUBJECT_COOLDOWN_SECONDS = 600;
 
     /**
      * @param  array<string, mixed>  $payload
@@ -83,6 +87,23 @@ class RunDecisionAgent implements ShouldBeUnique, ShouldQueue
         // Dedupe: never decide the same processed event twice.
         if ($webhookEventId !== null
             && AgentDecision::query()->where('webhook_event_id', $webhookEventId)->exists()) {
+            return;
+        }
+
+        // Per-subject cooldown: a burst of webhooks about the same series /
+        // movie / request (including ones caused by MediaManager's own
+        // actions) must not trigger a paid agent run each — one decision per
+        // subject per window bounds feedback loops and webhook-flood cost.
+        $subjectKey = $this->subjectCooldownKey();
+
+        if ($subjectKey !== null && ! Cache::add($subjectKey, true, self::SUBJECT_COOLDOWN_SECONDS)) {
+            Log::info('RunDecisionAgent: subject in cooldown, skipping run', [
+                'webhook_event_id' => $webhookEventId,
+                'service' => $this->service,
+                'event_type' => $this->eventType,
+                'subject_key' => $subjectKey,
+            ]);
+
             return;
         }
 
@@ -126,6 +147,25 @@ class RunDecisionAgent implements ShouldBeUnique, ShouldQueue
         $status = $decisionRunContext->count() > 0 ? AgentDecisionStatus::Completed : AgentDecisionStatus::NoAction;
         $this->record($webhookEventId, $status, $summary, $decisionRunContext);
         $this->notify($decisionRunContext, $summary, $decisionAgentSettings);
+    }
+
+    /**
+     * Cache key identifying the media subject this event is about, or null
+     * when no stable subject id can be extracted (those events fall back to
+     * the per-event dedupe only).
+     */
+    private function subjectCooldownKey(): ?string
+    {
+        $subject = match (true) {
+            isset($this->payload['series']['id']) => 'series:'.(int) $this->payload['series']['id'],
+            isset($this->payload['movie']['id']) => 'movie:'.(int) $this->payload['movie']['id'],
+            isset($this->payload['request']['request_id']) => 'request:'.(int) $this->payload['request']['request_id'],
+            default => null,
+        };
+
+        return $subject === null
+            ? null
+            : sprintf('decision-agent:cooldown:%s:%s', $this->service, $subject);
     }
 
     private function buildPrompt(): string
