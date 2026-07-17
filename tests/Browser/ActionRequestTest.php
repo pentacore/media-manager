@@ -99,12 +99,14 @@ test('switching from a filtered tab back to All renders the unfiltered rows', fu
     // Land directly on the Failed filter (seeds the realtime list with
     // failed rows only), then click All: preserveState keeps the component
     // alive, so without reseeding the table would keep showing the
-    // failed-only seed labeled "All".
+    // failed-only seed labeled "All". The tab is targeted via data-test
+    // because its visible text includes the total count ("All 2"), which
+    // defeats the exact-text locator click('All') would use.
     visit('/actions/requests?status=failed')
         ->assertNoSmoke()
         ->assertSee('failed.type')
         ->assertDontSee('completed.type')
-        ->click('All')
+        ->click('@tab-all')
         ->assertSee('completed.type')
         ->assertSee('failed.type');
 });

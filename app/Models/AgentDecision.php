@@ -40,6 +40,7 @@ class AgentDecision extends Model
 {
     /** @use HasFactory<AgentDecisionFactory> */
     use HasFactory;
+
     use MassPrunable;
 
     /**

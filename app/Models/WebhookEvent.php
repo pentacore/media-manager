@@ -55,6 +55,7 @@ class WebhookEvent extends Model
 {
     /** @use HasFactory<WebhookEventFactory> */
     use HasFactory;
+
     use MassPrunable;
 
     /**

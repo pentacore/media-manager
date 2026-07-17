@@ -22,16 +22,19 @@ return new class extends Migration
         // D-MED-5: the Emby handler inserts `Item.Name ?? null`, but the
         // column was NOT NULL — a webhook without Item.Name became a
         // recurring constraint violation + failed job. Match series_title.
-        DB::statement('ALTER TABLE emby_activities ALTER COLUMN media_title DROP NOT NULL');
+        Schema::table('emby_activities', function (Blueprint $blueprint): void {
+            $blueprint->string('media_title')->nullable()->change();
+        });
 
         // Prior M3: usage dedupe relied on an exists()-then-create in
         // RecordAgentUsage with only a non-unique index — concurrent
         // delivery could double-bill an invocation. Duplicates (keep the
         // lowest id) are removed before the unique constraint lands.
         DB::statement('
-            DELETE FROM ai_usage_records a
-            USING ai_usage_records b
-            WHERE a.invocation_id = b.invocation_id AND a.id > b.id
+            DELETE FROM ai_usage_records
+            WHERE id NOT IN (
+                SELECT MIN(id) FROM ai_usage_records GROUP BY invocation_id
+            )
         ');
         Schema::table('ai_usage_records', function (Blueprint $blueprint): void {
             $blueprint->unique('invocation_id');
@@ -42,11 +45,14 @@ return new class extends Migration
         // submit created two confirmed rows and resolveMany() silently
         // picked one. Partial unique index covers exactly the lookup key.
         DB::statement('
-            DELETE FROM anime_id_maps a
-            USING anime_id_maps b
-            WHERE a.anilist_id = b.anilist_id
-              AND a.user_confirmed AND b.user_confirmed
-              AND a.id > b.id
+            DELETE FROM anime_id_maps
+            WHERE user_confirmed
+              AND anilist_id IS NOT NULL
+              AND id NOT IN (
+                  SELECT MIN(id) FROM anime_id_maps
+                  WHERE user_confirmed AND anilist_id IS NOT NULL
+                  GROUP BY anilist_id
+              )
         ');
         DB::statement('
             CREATE UNIQUE INDEX anime_id_maps_confirmed_anilist_unique
@@ -85,7 +91,9 @@ return new class extends Migration
             $blueprint->dropUnique(['invocation_id']);
         });
 
-        DB::statement('ALTER TABLE emby_activities ALTER COLUMN media_title SET NOT NULL');
+        Schema::table('emby_activities', function (Blueprint $blueprint): void {
+            $blueprint->string('media_title')->nullable(false)->change();
+        });
 
         Schema::table('emby_activities', function (Blueprint $blueprint): void {
             $blueprint->dropIndex('emby_activities_action_updated_at_index');

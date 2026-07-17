@@ -68,6 +68,7 @@ class MediaReplacementAttempt extends Model
 {
     /** @use HasFactory<MediaReplacementAttemptFactory> */
     use HasFactory;
+
     use MassPrunable;
 
     /**

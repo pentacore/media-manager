@@ -52,6 +52,7 @@ class EmbyActivity extends Model
 {
     /** @use HasFactory<EmbyActivityFactory> */
     use HasFactory;
+
     use MassPrunable;
 
     /**

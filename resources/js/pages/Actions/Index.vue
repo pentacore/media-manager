@@ -483,6 +483,7 @@ function pipelineState(
                 v-for="tab in TABS"
                 :key="tab.id"
                 type="button"
+                :data-test="`tab-${tab.id}`"
                 :class="
                     cn(
                         'inline-flex h-7 items-center gap-1.5 rounded-md px-2.5 text-xs font-medium transition-colors',

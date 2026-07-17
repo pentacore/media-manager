@@ -59,6 +59,7 @@ class ActivityLog extends Model
 {
     /** @use HasFactory<ActivityLogFactory> */
     use HasFactory;
+
     use MassPrunable;
 
     /**
