@@ -33,7 +33,7 @@
         "playwright": "^1.59.1",
         "prettier": "^3.8.4",
         "prettier-plugin-tailwindcss": "^0.8.0",
-        "semantic-release": "^25.0.5",
+        "semantic-release": "^25.0.7",
         "typescript": "^6.0.3",
         "typescript-eslint": "^8.59.1",
         "vite": "^8.1.5",
