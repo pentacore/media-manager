@@ -301,6 +301,55 @@ test('Bazarr edit form exposes safe Arr options and selected mappings', function
         );
 });
 
+test('edit form excludes the connection being edited from Arr mapping options', function (ServiceType $serviceType): void {
+    $admin = User::factory()->admin()->create();
+    $connection = ServiceConnection::factory()->create([
+        'type' => $serviceType,
+        'name' => 'Connection Being Edited',
+    ]);
+    $otherConnection = ServiceConnection::factory()->create([
+        'type' => $serviceType === ServiceType::Sonarr ? ServiceType::Radarr : ServiceType::Sonarr,
+        'name' => 'Other Arr Connection',
+    ]);
+
+    $this->actingAs($admin)
+        ->get(route('admin.connections.edit', $connection))
+        ->assertOk()
+        ->assertInertia(fn (AssertableInertia $assertableInertia): AssertableInertia => $assertableInertia
+            ->where('arrConnections', [[
+                'id' => $otherConnection->id,
+                'type' => $otherConnection->type->value,
+                'name' => 'Other Arr Connection',
+            ]]));
+})->with([
+    'Sonarr' => ServiceType::Sonarr,
+    'Radarr' => ServiceType::Radarr,
+]);
+
+test('Bazarr edit form includes only the selected inactive Arr mapping', function (): void {
+    $admin = User::factory()->admin()->create();
+    $bazarr = ServiceConnection::factory()->bazarr()->create();
+    $selectedSonarr = ServiceConnection::factory()->sonarr()->create(['name' => 'Selected Sonarr']);
+    ServiceConnection::factory()->sonarr()->inactive()->create(['name' => 'Arbitrary Inactive Sonarr']);
+    $activeRadarr = ServiceConnection::factory()->radarr()->create(['name' => 'Active Radarr']);
+    BazarrServiceLink::factory()->sonarr()->create([
+        'bazarr_connection_id' => $bazarr->id,
+        'related_connection_id' => $selectedSonarr->id,
+    ]);
+    $selectedSonarr->update(['is_active' => false]);
+
+    $this->actingAs($admin)
+        ->get(route('admin.connections.edit', $bazarr))
+        ->assertOk()
+        ->assertInertia(fn (AssertableInertia $assertableInertia): AssertableInertia => $assertableInertia
+            ->where('arrConnections', [
+                ['id' => $activeRadarr->id, 'type' => ServiceType::Radarr->value, 'name' => 'Active Radarr'],
+                ['id' => $selectedSonarr->id, 'type' => ServiceType::Sonarr->value, 'name' => 'Selected Sonarr (inactive)'],
+            ])
+            ->where('connection.sonarr_connection_id', $selectedSonarr->id)
+            ->where('connection.radarr_connection_id', null));
+});
+
 test('edit form exposes has-value booleans when secrets are empty', function (): void {
     $admin = User::factory()->admin()->create();
     $connection = ServiceConnection::factory()->sonarr()->create([
@@ -356,6 +405,55 @@ test('non-Bazarr update excludes malformed mapping fields', function (): void {
     expect($connection->refresh()->name)->toBe('Updated Emby')
         ->and($connection->bazarrServiceLinks()->doesntExist())->toBeTrue()
         ->and($connection->incomingBazarrServiceLinks()->doesntExist())->toBeTrue();
+});
+
+test('converting an Arr connection to Bazarr rejects mapping it to itself', function (
+    ServiceType $serviceType,
+    string $mappingField,
+): void {
+    $admin = User::factory()->admin()->create();
+    $connection = ServiceConnection::factory()->create(['type' => $serviceType]);
+
+    $this->actingAs($admin)
+        ->put(route('admin.connections.update', $connection), [
+            'type' => ServiceType::Bazarr->value,
+            'name' => $connection->name,
+            'url' => $connection->url,
+            $mappingField => $connection->id,
+        ])
+        ->assertSessionHasErrors([
+            $mappingField => 'A service connection cannot be mapped to itself.',
+        ]);
+
+    expect($connection->refresh()->type)->toBe($serviceType)
+        ->and($connection->bazarrServiceLinks()->doesntExist())->toBeTrue();
+})->with([
+    'Sonarr' => [ServiceType::Sonarr, 'sonarr_connection_id'],
+    'Radarr' => [ServiceType::Radarr, 'radarr_connection_id'],
+]);
+
+test('updating Bazarr preserves its selected inactive Arr mapping', function (): void {
+    $admin = User::factory()->admin()->create();
+    $bazarr = ServiceConnection::factory()->bazarr()->create();
+    $sonarr = ServiceConnection::factory()->sonarr()->create();
+    $link = BazarrServiceLink::factory()->sonarr()->create([
+        'bazarr_connection_id' => $bazarr->id,
+        'related_connection_id' => $sonarr->id,
+    ]);
+    $sonarr->update(['is_active' => false]);
+
+    $this->actingAs($admin)
+        ->put(route('admin.connections.update', $bazarr), [
+            'type' => ServiceType::Bazarr->value,
+            'name' => 'Updated Bazarr',
+            'url' => $bazarr->url,
+            'sonarr_connection_id' => $sonarr->id,
+        ])
+        ->assertRedirect(route('admin.connections.index'))
+        ->assertSessionHasNoErrors();
+
+    $this->assertModelExists($link);
+    expect($bazarr->refresh()->name)->toBe('Updated Bazarr');
 });
 
 test('admin can add replace and remove omitted Bazarr mappings', function (): void {

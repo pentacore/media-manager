@@ -62,6 +62,18 @@ trait BazarrServiceMappingValidationRules
                         continue;
                     }
 
+                    $serviceConnection = $this->route('serviceConnection');
+
+                    if ($serviceConnection instanceof ServiceConnection
+                        && $serviceConnection->getKey() === $connectionId) {
+                        $validator->errors()->add(
+                            $role->value.'_connection_id',
+                            'A service connection cannot be mapped to itself.',
+                        );
+
+                        continue;
+                    }
+
                     $hasExpectedType = ServiceConnection::query()
                         ->whereKey($connectionId)
                         ->where('type', $role->serviceType())

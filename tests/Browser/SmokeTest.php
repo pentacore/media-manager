@@ -148,9 +148,11 @@ test('admin can create a Bazarr mapping without browser errors', function (): vo
             ->where('role', 'radarr')
             ->exists())->toBeTrue();
 
+    $sonarr->update(['is_active' => false]);
+
     $webpage->navigate(route('admin.connections.edit', $serviceConnection, absolute: false))
         ->assertScript(
-            'document.querySelector("#sonarr_connection_id").textContent.includes("Main Sonarr")',
+            'document.querySelector("#sonarr_connection_id").textContent.includes("Main Sonarr (inactive)")',
         )
         ->assertScript(
             'document.querySelector("#radarr_connection_id").textContent.includes("Main Radarr")',

@@ -18,6 +18,7 @@ use App\Services\MediaReplacement\SonarrLibraryTypeSettings;
 use App\Services\MediaReplacement\SonarrRootFolderCatalog;
 use App\Services\Prowlarr\ProwlarrClient;
 use App\Services\ServiceClientFactory;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\QueryException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
@@ -79,6 +80,17 @@ class ServiceConnectionController extends Controller
     ): Response {
         $serviceConnection->load('bazarrServiceLinks');
 
+        $selectedMappingIds = [
+            BazarrServiceRole::Sonarr->value => $serviceConnection->type === ServiceType::Bazarr
+                ? $serviceConnection->bazarrServiceLinks
+                    ->firstWhere('role', BazarrServiceRole::Sonarr)?->related_connection_id
+                : null,
+            BazarrServiceRole::Radarr->value => $serviceConnection->type === ServiceType::Bazarr
+                ? $serviceConnection->bazarrServiceLinks
+                    ->firstWhere('role', BazarrServiceRole::Radarr)?->related_connection_id
+                : null,
+        ];
+
         $diskSettings = is_array($serviceConnection->settings['disk'] ?? null)
             ? $serviceConnection->settings['disk']
             : ['mode' => 'all', 'paths' => [], 'display' => []];
@@ -109,17 +121,14 @@ class ServiceConnectionController extends Controller
                     ? $this->sabnzbdNotificationScriptFor($serviceConnection)
                     : null,
                 'whisparr_version' => $serviceConnection->whisparrVersion()->value,
-                'sonarr_connection_id' => $serviceConnection->type === ServiceType::Bazarr
-                    ? $serviceConnection->bazarrServiceLinks
-                        ->firstWhere('role', BazarrServiceRole::Sonarr)?->related_connection_id
-                    : null,
-                'radarr_connection_id' => $serviceConnection->type === ServiceType::Bazarr
-                    ? $serviceConnection->bazarrServiceLinks
-                        ->firstWhere('role', BazarrServiceRole::Radarr)?->related_connection_id
-                    : null,
+                'sonarr_connection_id' => $selectedMappingIds[BazarrServiceRole::Sonarr->value],
+                'radarr_connection_id' => $selectedMappingIds[BazarrServiceRole::Radarr->value],
             ],
             'serviceTypes' => ServiceType::mapForSelect(labelKey: 'label'),
-            'arrConnections' => $this->arrConnections(),
+            'arrConnections' => $this->arrConnections(
+                $serviceConnection,
+                array_values(array_filter($selectedMappingIds)),
+            ),
             'indexers' => $serviceConnection->type === ServiceType::Prowlarr
                 ? Inertia::defer(fn (): array => $this->loadProwlarrIndexers($serviceConnection))
                 : [],
@@ -133,19 +142,35 @@ class ServiceConnectionController extends Controller
     }
 
     /**
+     * @param  list<int>  $selectedConnectionIds
      * @return list<array{id: int, type: string, name: string}>
      */
-    private function arrConnections(): array
+    private function arrConnections(
+        ?ServiceConnection $editingConnection = null,
+        array $selectedConnectionIds = [],
+    ): array
     {
-        return ServiceConnection::query()
-            ->whereIn('type', [ServiceType::Sonarr->value, ServiceType::Radarr->value])
-            ->where('is_active', true)
+        $builder = ServiceConnection::query()
+            ->whereIn('type', [ServiceType::Sonarr->value, ServiceType::Radarr->value]);
+
+        if ($editingConnection instanceof ServiceConnection) {
+            $builder->whereKeyNot($editingConnection->getKey());
+        }
+
+        return $builder
+            ->where(function (Builder $builder) use ($selectedConnectionIds): void {
+                $builder->where('is_active', true);
+
+                if ($selectedConnectionIds !== []) {
+                    $builder->orWhereIn('id', $selectedConnectionIds);
+                }
+            })
             ->orderBy('name')
-            ->get(['id', 'type', 'name'])
+            ->get(['id', 'type', 'name', 'is_active'])
             ->map(fn (ServiceConnection $serviceConnection): array => [
                 'id' => $serviceConnection->id,
                 'type' => $serviceConnection->type->value,
-                'name' => $serviceConnection->name,
+                'name' => $serviceConnection->name.($serviceConnection->is_active ? '' : ' (inactive)'),
             ])
             ->all();
     }
