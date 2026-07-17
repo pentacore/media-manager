@@ -6,6 +6,7 @@ namespace App\Ai\Tools;
 
 use App\Ai\Risk;
 use App\Enums\AiMode;
+use App\Models\ActionRequest;
 use App\Services\Actions\ActionOrchestrator;
 use App\Settings\AiSettings;
 use Illuminate\Support\Facades\Log;
@@ -87,12 +88,22 @@ abstract class BaseTool implements Tool
             ]);
         }
 
+        $this->actionRequestQueued($actionRequest, $candidate);
+
         return $this->safeEncode([
             'queued' => true,
             'action_request_id' => $actionRequest->id,
             'status' => $actionRequest->status->value,
             'requires_approval' => $actionRequest->requires_approval,
         ]);
+    }
+
+    /**
+     * @param  array<string, mixed>  $candidate
+     */
+    protected function actionRequestQueued(ActionRequest $actionRequest, array $candidate): void
+    {
+        //
     }
 
     /**
