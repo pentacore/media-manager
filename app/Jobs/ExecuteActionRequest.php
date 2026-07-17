@@ -94,6 +94,7 @@ class ExecuteActionRequest implements ShouldBeUnique, ShouldQueue
 
                 return;
             }
+
             // Transient failure: rethrow so Laravel retries per $tries + $backoff.
             // On the final attempt, persist Failed state and return without throwing
             // (preventing double-handling in failed()).
