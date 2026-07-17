@@ -3,8 +3,6 @@ import { Form, Head, router } from '@inertiajs/vue3';
 import { Plus, RefreshCcw, Trash2 } from '@lucide/vue';
 import { onMounted, onUnmounted, ref } from 'vue';
 import { toast } from 'vue-sonner';
-import AiFreeUsagePoolController from '@/actions/App/Http/Controllers/Admin/AiFreeUsagePoolController';
-import AiModelPriceController from '@/actions/App/Http/Controllers/Admin/AiModelPriceController';
 import InputError from '@/components/InputError.vue';
 import {
     Pill,
@@ -31,6 +29,9 @@ import {
     SelectValue,
 } from '@/components/ui/select';
 import { useWebSocket } from '@/composables/useWebSocket';
+import type { ChannelLease } from '@/composables/useWebSocket';
+import AiFreeUsagePoolController from '@/actions/App/Http/Controllers/Admin/AiFreeUsagePoolController';
+import AiModelPriceController from '@/actions/App/Http/Controllers/Admin/AiModelPriceController';
 import { dashboard } from '@/routes';
 
 interface PriceRow {
@@ -204,17 +205,19 @@ function handleRefreshState(payload: PriceRefreshPayload): void {
     });
 }
 
-const { privateChannel, leaveChannel } = useWebSocket();
+const { acquirePrivateChannel } = useWebSocket();
+let refreshLease: ChannelLease | null = null;
 
 onMounted(() => {
-    privateChannel(PRICE_REFRESH_CHANNEL).listen(
+    refreshLease = acquirePrivateChannel(PRICE_REFRESH_CHANNEL).listen(
         '.AiPriceRefreshStateChanged',
         (event: PriceRefreshPayload) => handleRefreshState(event),
     );
 });
 
 onUnmounted(() => {
-    leaveChannel(PRICE_REFRESH_CHANNEL);
+    refreshLease?.release();
+    refreshLease = null;
 });
 
 function startEdit(price: PriceRow) {
