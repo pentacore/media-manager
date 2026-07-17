@@ -91,3 +91,12 @@ Schedule::command(CollectServiceGauges::class)
 Schedule::command(CollectServiceGauges::class, ['--library'])
     ->dailyAt('04:00')
     ->withoutOverlapping();
+
+// Telescope is a require-dev package: the class exists on dev machines (where
+// telescope_entries otherwise grows unboundedly) and is absent from the
+// production image, where scheduling the command would fail every night.
+if (class_exists(Laravel\Telescope\Telescope::class)) {
+    Schedule::command('telescope:prune', ['--hours' => 48])
+        ->daily()
+        ->withoutOverlapping();
+}
