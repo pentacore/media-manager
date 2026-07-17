@@ -246,6 +246,7 @@ function browserSmokeMemberRouteNames(): array
         'bazarr.missing',
         'bazarr.library',
         'bazarr.history',
+        'bazarr.escalations',
         'media.library.activity.queue',
         'prowlarr.search',
         'sabnzbd.queue.index',

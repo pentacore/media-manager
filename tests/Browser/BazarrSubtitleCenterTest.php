@@ -2,7 +2,9 @@
 
 declare(strict_types=1);
 
+use App\Enums\SubtitleCaseStatus;
 use App\Models\ServiceConnection;
+use App\Models\SubtitleCase;
 use App\Models\User;
 use App\Enums\BazarrServiceRole;
 use App\Models\ActionRequest;
@@ -45,6 +47,44 @@ test('viewer can browse the subtitle center', function (): void {
         ->click('@subtitle-tab-history')
         ->assertPathIs('/subtitles/history')
         ->assertSee('No subtitle history found')
+        ->assertNoSmoke();
+});
+
+test('member reviews subtitle escalations with the phase four action disabled', function (): void {
+    $bazarr = ServiceConnection::factory()->bazarr()->create([
+        'name' => 'Primary Bazarr',
+        'url' => 'http://bazarr.test',
+        'api_key' => 'bazarr-secret',
+    ]);
+    $subtitleCase = SubtitleCase::factory()->create([
+        'bazarr_connection_id' => $bazarr->id,
+        'status' => SubtitleCaseStatus::ReplacementEligible,
+        'evidence' => [
+            'display_name' => 'Frieren S01E01',
+            'missing_languages' => ['eng'],
+        ],
+    ]);
+
+    Http::fake([
+        'bazarr.test/api/system/health' => Http::response(['data' => []]),
+        'bazarr.test/api/episodes/wanted*' => Http::response(['data' => [], 'total' => 0]),
+        'bazarr.test/api/movies/wanted*' => Http::response(['data' => [], 'total' => 0]),
+    ]);
+
+    $this->actingAs(User::factory()->member()->create());
+
+    visit(route('bazarr.overview', ['connection' => $bazarr->id], false))
+        ->click('@subtitle-tab-escalations')
+        ->assertPathIs('/subtitles/escalations')
+        ->assertSee('Subtitle escalations')
+        ->assertSee('Frieren S01E01')
+        ->assertSee('Investigate with Media Advisor')
+        ->assertScript(
+            sprintf(
+                'document.querySelector(\'[data-test="investigate-subtitle-case-%d"]\').disabled === true',
+                $subtitleCase->id,
+            ),
+        )
         ->assertNoSmoke();
 });
 

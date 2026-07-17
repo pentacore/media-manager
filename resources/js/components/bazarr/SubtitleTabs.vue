@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { Link, router, usePage } from '@inertiajs/vue3';
 import {
+    AlertTriangle,
     History,
     LayoutDashboard,
     Library,
@@ -9,12 +10,14 @@ import {
 } from '@lucide/vue';
 import { computed } from 'vue';
 import AdminController from '@/actions/App/Http/Controllers/Bazarr/AdminController';
+import EscalationController from '@/actions/App/Http/Controllers/Bazarr/EscalationController';
 import HistoryController from '@/actions/App/Http/Controllers/Bazarr/HistoryController';
 import LibraryController from '@/actions/App/Http/Controllers/Bazarr/LibraryController';
 import MissingController from '@/actions/App/Http/Controllers/Bazarr/MissingController';
 import OverviewController from '@/actions/App/Http/Controllers/Bazarr/OverviewController';
 
-type TabName = 'overview' | 'missing' | 'library' | 'history' | 'admin';
+type TabName =
+    'overview' | 'missing' | 'library' | 'history' | 'escalations' | 'admin';
 
 const props = defineProps<{
     active: TabName;
@@ -54,6 +57,12 @@ const tabs = computed(() => [
         label: 'History',
         icon: History,
         route: HistoryController,
+    },
+    {
+        name: 'escalations' as const,
+        label: 'Escalations',
+        icon: AlertTriangle,
+        route: EscalationController,
     },
     ...(isAdmin.value
         ? [

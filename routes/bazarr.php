@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use Illuminate\Foundation\Http\Middleware\PreventRequestForgery;
 use App\Http\Controllers\Bazarr\AdminController;
+use App\Http\Controllers\Bazarr\EscalationController;
 use App\Http\Controllers\Bazarr\HistoryController;
 use App\Http\Controllers\Bazarr\LibraryController;
 use App\Http\Controllers\Bazarr\MissingController;
@@ -27,6 +28,7 @@ Route::middleware(['auth', 'verified', 'password.set', 'role:viewer'])
         Route::get('missing', MissingController::class)->name('missing');
         Route::get('library', LibraryController::class)->name('library');
         Route::get('history', HistoryController::class)->name('history');
+        Route::get('escalations', EscalationController::class)->name('escalations');
 
         Route::middleware('role:admin')->group(function (): void {
             Route::get('admin', [AdminController::class, 'index'])->name('admin.index');
