@@ -80,6 +80,34 @@ test('a replacement action request shows subtitle evidence in the detail panel',
         ->assertSee('season pack');
 });
 
+test('switching from a filtered tab back to All renders the unfiltered rows', function (): void {
+    $member = User::factory()->member()->create();
+    ActionRequest::factory()->create([
+        'status' => ActionRequestStatus::Failed,
+        'type' => 'failed.type',
+        'requires_approval' => false,
+    ]);
+    ActionRequest::factory()->create([
+        'status' => ActionRequestStatus::Completed,
+        'type' => 'completed.type',
+        'requires_approval' => false,
+    ]);
+
+    $this->actingAs($member);
+
+    // Land directly on the Failed filter (seeds the realtime list with
+    // failed rows only), then click All: preserveState keeps the component
+    // alive, so without reseeding the table would keep showing the
+    // failed-only seed labeled "All".
+    visit('/actions/requests?status=failed')
+        ->assertNoSmoke()
+        ->assertSee('failed.type')
+        ->assertDontSee('completed.type')
+        ->click('All')
+        ->assertSee('completed.type')
+        ->assertSee('failed.type');
+});
+
 test('a viewer cannot reach the action requests page', function (): void {
     $viewer = User::factory()->create(); // default Viewer role
 

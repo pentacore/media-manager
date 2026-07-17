@@ -2,7 +2,6 @@
 import { Head, router, usePage } from '@inertiajs/vue3';
 import { Download, Sparkles } from '@lucide/vue';
 import { computed, onMounted, watch } from 'vue';
-import WatchHistoryController from '@/actions/App/Http/Controllers/Emby/WatchHistoryController';
 import {
     InitialsAvatar,
     OpenInServiceButton,
@@ -21,6 +20,7 @@ import {
     SelectValue,
 } from '@/components/ui/select';
 import { useRealtimeList } from '@/composables/useRealtimeList';
+import WatchHistoryController from '@/actions/App/Http/Controllers/Emby/WatchHistoryController';
 import { dashboard } from '@/routes';
 import type { EmbyActivityResource } from '@/typefinder/resources/EmbyActivityResource';
 
@@ -94,6 +94,7 @@ const {
     staleCount,
     pause,
     resume,
+    reseed,
     subscribe,
 } = useRealtimeList<Activity>({
     channel: 'emby.activity',
@@ -115,6 +116,14 @@ watch(
     { immediate: true },
 );
 
+// preserveState navigations and reloads replace the prop without a remount;
+// reseed the live list from every fresh payload so it never renders rows
+// from a previous filter/page.
+watch(
+    () => props.activities.data,
+    (rows) => reseed(rows),
+);
+
 onMounted(subscribe);
 
 const visibleActivities = computed(() =>
@@ -122,7 +131,9 @@ const visibleActivities = computed(() =>
 );
 
 function refresh(): void {
-    router.reload({ only: ['activities'], onSuccess: () => resume() });
+    // The prop watcher reseeds; pause state stays governed by the merge
+    // watcher so a refresh in a filtered view does not un-pause the list.
+    router.reload({ only: ['activities'] });
 }
 
 function ticksToHours(ticks: number | null): number {

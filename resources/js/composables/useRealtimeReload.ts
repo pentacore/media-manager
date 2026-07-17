@@ -1,6 +1,7 @@
 import { router } from '@inertiajs/vue3';
 import { onUnmounted } from 'vue';
 import { useWebSocket } from '@/composables/useWebSocket';
+import type { ChannelLease } from '@/composables/useWebSocket';
 
 export interface UseRealtimeReloadOptions<TEvent> {
     channel: string;
@@ -29,13 +30,23 @@ export function useRealtimeReload<TEvent>({
     debounceMs = 1500,
     filter,
 }: UseRealtimeReloadOptions<TEvent>): UseRealtimeReload {
-    const { privateChannel, leaveChannel } = useWebSocket();
-    let subscribed = false;
+    const { acquirePrivateChannel } = useWebSocket();
+    let lease: ChannelLease | null = null;
     let reloadTimer: ReturnType<typeof setTimeout> | null = null;
     let reloading = false;
+    let dirtyDuringReload = false;
 
     function scheduleReload(): void {
-        if (reloadTimer || reloading) {
+        // An event landing while a reload is in flight must not be dropped —
+        // the running reload's response may predate the event's write. Flag
+        // it and schedule a follow-up reload when the current one finishes.
+        if (reloading) {
+            dirtyDuringReload = true;
+
+            return;
+        }
+
+        if (reloadTimer) {
             return;
         }
 
@@ -46,25 +57,31 @@ export function useRealtimeReload<TEvent>({
                 only,
                 onFinish: () => {
                     reloading = false;
+
+                    if (dirtyDuringReload) {
+                        dirtyDuringReload = false;
+                        scheduleReload();
+                    }
                 },
             });
         }, debounceMs);
     }
 
     function subscribe(): void {
-        if (subscribed) {
+        if (lease) {
             return;
         }
 
-        privateChannel(channel).listen(`.${event}`, (payload: TEvent) => {
-            if (filter && !filter(payload)) {
-                return;
-            }
+        lease = acquirePrivateChannel(channel).listen(
+            `.${event}`,
+            (payload: TEvent) => {
+                if (filter && !filter(payload)) {
+                    return;
+                }
 
-            scheduleReload();
-        });
-
-        subscribed = true;
+                scheduleReload();
+            },
+        );
     }
 
     function unsubscribe(): void {
@@ -73,12 +90,8 @@ export function useRealtimeReload<TEvent>({
             reloadTimer = null;
         }
 
-        if (!subscribed) {
-            return;
-        }
-
-        leaveChannel(channel);
-        subscribed = false;
+        lease?.release();
+        lease = null;
     }
 
     onUnmounted(unsubscribe);

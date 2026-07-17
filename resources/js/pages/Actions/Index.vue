@@ -8,8 +8,6 @@ import {
     Sparkles,
 } from '@lucide/vue';
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
-import ActionRequestController from '@/actions/App/Http/Controllers/Actions/ActionRequestController';
-import ActionTypeConfigController from '@/actions/App/Http/Controllers/Actions/ActionTypeConfigController';
 import {
     Field,
     InitialsAvatar,
@@ -20,7 +18,10 @@ import {
 import { Button } from '@/components/ui/button';
 import { useRealtimeList } from '@/composables/useRealtimeList';
 import { useWebSocket } from '@/composables/useWebSocket';
+import type { ChannelLease } from '@/composables/useWebSocket';
 import { cn } from '@/lib/utils';
+import ActionRequestController from '@/actions/App/Http/Controllers/Actions/ActionRequestController';
+import ActionTypeConfigController from '@/actions/App/Http/Controllers/Actions/ActionTypeConfigController';
 import { dashboard } from '@/routes';
 import type { ActionRequestResource } from '@/typefinder/resources/ActionRequestResource';
 
@@ -86,6 +87,7 @@ const {
     staleCount,
     pause,
     resume,
+    reseed,
     subscribe: subscribeCreated,
 } = useRealtimeList<ActionRequestRow>({
     channel: ACTIONS_CHANNEL,
@@ -105,6 +107,15 @@ watch(
         }
     },
     { immediate: true },
+);
+
+// Filter changes navigate with preserveState (no remount) and Refresh
+// replaces the prop in place, so the realtime list must be reseeded from
+// every fresh server payload — otherwise it keeps rendering the seed from
+// whatever filter/page this component originally mounted with.
+watch(
+    () => props.requests.data,
+    (rows) => reseed(rows),
 );
 
 const visibleRequests = computed<ActionRequestRow[]>(() =>
@@ -128,7 +139,8 @@ const selected = computed<ActionRequestRow | null>(
         null,
 );
 
-const { privateChannel, leaveChannel } = useWebSocket();
+const { acquirePrivateChannel } = useWebSocket();
+let statusLease: ChannelLease | null = null;
 
 interface StatusChangePayload {
     id: number;
@@ -164,7 +176,7 @@ function scheduleStatusCountsReload(): void {
 onMounted(() => {
     subscribeCreated();
 
-    privateChannel(ACTIONS_CHANNEL)
+    statusLease = acquirePrivateChannel(ACTIONS_CHANNEL)
         .listen('.ActionRequestStatusChanged', (event: StatusChangePayload) => {
             applyStatusChange(event);
             scheduleStatusCountsReload();
@@ -173,7 +185,8 @@ onMounted(() => {
 });
 
 onUnmounted(() => {
-    leaveChannel(ACTIONS_CHANNEL);
+    statusLease?.release();
+    statusLease = null;
 
     if (statusCountsReloadTimer !== null) {
         clearTimeout(statusCountsReloadTimer);
@@ -211,9 +224,11 @@ function refresh(): void {
     }
 
     refreshing.value = true;
+    // The prop watcher reseeds the realtime list from the fresh payload;
+    // pause/resume stays governed by the merge watcher, so a refresh in a
+    // filtered view no longer un-pauses the invisible live list.
     router.reload({
         only: ['requests'],
-        onSuccess: () => resume(),
         onFinish: () => {
             refreshing.value = false;
         },
