@@ -1,10 +1,13 @@
 <script setup lang="ts">
-import { Head, Link, router } from '@inertiajs/vue3';
-import { AlertTriangle, Search, Sparkles } from '@lucide/vue';
+import { Head, Link, router, usePoll } from '@inertiajs/vue3';
+import { AlertTriangle, LoaderCircle, Search, Sparkles } from '@lucide/vue';
+import { ref } from 'vue';
+import AdvisorController from '@/actions/App/Http/Controllers/Bazarr/AdvisorController';
 import EscalationController from '@/actions/App/Http/Controllers/Bazarr/EscalationController';
 import OverviewController from '@/actions/App/Http/Controllers/Bazarr/OverviewController';
 import SubtitleTabs from '@/components/bazarr/SubtitleTabs.vue';
 import { StatusPill, TimeStamp } from '@/components/mm';
+import { Button } from '@/components/ui/button';
 import { dashboard } from '@/routes';
 
 interface EscalationCase {
@@ -65,6 +68,10 @@ defineOptions({
     },
 });
 
+const investigatingCaseId = ref<number | null>(null);
+
+usePoll(2_000, { only: ['cases'] }, { mode: 'rest' });
+
 function updateFilters(connection: number | null, status: string): void {
     router.get(
         EscalationController.url(),
@@ -94,14 +101,86 @@ function updateStatus(event: Event): void {
 
 function actionSummary(escalationCase: EscalationCase): string {
     if (escalationCase.replacement_action_status) {
-        return `Replacement ${escalationCase.replacement_action_status}`;
+        return `Linked Action Request: replacement ${escalationCase.replacement_action_status}`;
     }
 
     if (escalationCase.download_action_status) {
-        return `Download ${escalationCase.download_action_status}`;
+        return `Linked Action Request: subtitle download ${escalationCase.download_action_status}`;
     }
 
-    return 'No linked action';
+    return 'Linked Action Request: none';
+}
+
+function advisorSummary(escalationCase: EscalationCase): string {
+    switch (escalationCase.status) {
+        case 'replacement_eligible':
+            return 'Ready for one Media Advisor investigation.';
+        case 'advisor_running':
+            return 'Media Advisor is inspecting this exact subtitle case.';
+        case 'replacement_requested':
+            return 'Media Advisor queued a replacement for approval or execution.';
+        case 'needs_review':
+            return 'The last investigation needs review before a manual retry.';
+        case 'resolved':
+            return 'The required subtitles are now present.';
+        default:
+            return 'No further Media Advisor action is available.';
+    }
+}
+
+function canRequestAdvisor(escalationCase: EscalationCase): boolean {
+    return ['replacement_eligible', 'needs_review'].includes(
+        escalationCase.status,
+    );
+}
+
+function advisorButtonLabel(escalationCase: EscalationCase): string {
+    if (investigatingCaseId.value === escalationCase.id) {
+        return 'Queuing investigation…';
+    }
+
+    if (escalationCase.status === 'needs_review') {
+        return 'Retry with Media Advisor';
+    }
+
+    if (escalationCase.status === 'advisor_running') {
+        return 'Media Advisor investigating…';
+    }
+
+    return 'Investigate with Media Advisor';
+}
+
+function investigate(escalationCase: EscalationCase): void {
+    if (
+        escalationCase.status === 'needs_review' &&
+        !confirm(
+            'This case has already been investigated. Retry it manually with Media Advisor?',
+        )
+    ) {
+        return;
+    }
+
+    if (!props.selected_connection_id) {
+        return;
+    }
+
+    router.post(
+        AdvisorController.url(escalationCase.id, {
+            query: { connection: props.selected_connection_id },
+        }),
+        {
+            confirm_retry: escalationCase.status === 'needs_review',
+        },
+        {
+            preserveScroll: true,
+            onStart: () => {
+                investigatingCaseId.value = escalationCase.id;
+            },
+            onFinish: () => {
+                investigatingCaseId.value = null;
+            },
+        },
+    );
 }
 
 function paginationLabel(label: string): string {
@@ -255,22 +334,34 @@ function paginationLabel(label: string): string {
                         </div>
                     </div>
 
-                    <p class="text-xs text-muted-foreground">
-                        {{ actionSummary(escalationCase) }}
-                    </p>
+                    <div class="space-y-1 text-xs text-muted-foreground">
+                        <p :data-test="`advisor-summary-${escalationCase.id}`">
+                            {{ advisorSummary(escalationCase) }}
+                        </p>
+                        <p :data-test="`advisor-action-${escalationCase.id}`">
+                            {{ actionSummary(escalationCase) }}
+                        </p>
+                    </div>
                 </div>
 
-                <button
+                <Button
                     v-if="can_investigate"
                     type="button"
-                    disabled
-                    class="inline-flex items-center justify-center gap-2 rounded-md border border-border px-3 py-2 text-sm font-medium text-muted-foreground opacity-70"
+                    variant="outline"
+                    :disabled="
+                        !canRequestAdvisor(escalationCase) ||
+                        investigatingCaseId === escalationCase.id
+                    "
                     :data-test="`investigate-subtitle-case-${escalationCase.id}`"
-                    title="Available in Phase 4"
+                    @click="investigate(escalationCase)"
                 >
-                    <Sparkles class="size-4" />
-                    Investigate with Media Advisor
-                </button>
+                    <LoaderCircle
+                        v-if="investigatingCaseId === escalationCase.id"
+                        class="size-4 animate-spin"
+                    />
+                    <Sparkles v-else class="size-4" />
+                    {{ advisorButtonLabel(escalationCase) }}
+                </Button>
             </article>
         </div>
 

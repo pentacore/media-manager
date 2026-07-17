@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use Illuminate\Foundation\Http\Middleware\PreventRequestForgery;
 use App\Http\Controllers\Bazarr\AdminController;
+use App\Http\Controllers\Bazarr\AdvisorController;
 use App\Http\Controllers\Bazarr\EscalationController;
 use App\Http\Controllers\Bazarr\HistoryController;
 use App\Http\Controllers\Bazarr\LibraryController;
@@ -37,6 +38,8 @@ Route::middleware(['auth', 'verified', 'password.set', 'role:viewer'])
         });
 
         Route::middleware('role:member')->group(function (): void {
+            Route::post('escalations/{subtitleCase}/advisor', AdvisorController::class)
+                ->name('advisor.store');
             Route::get('search', SearchController::class)->name('search');
             Route::post('operations', OperationController::class)->name('operations.store');
             Route::post('uploads', UploadController::class)->name('uploads.store');

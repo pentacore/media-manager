@@ -2,9 +2,11 @@
 
 declare(strict_types=1);
 
+use App\Enums\SubtitleCaseAttemptType;
 use App\Enums\SubtitleCaseStatus;
 use App\Models\ServiceConnection;
 use App\Models\SubtitleCase;
+use App\Models\SubtitleCaseAttempt;
 use App\Models\User;
 use App\Enums\BazarrServiceRole;
 use App\Models\ActionRequest;
@@ -50,7 +52,8 @@ test('viewer can browse the subtitle center', function (): void {
         ->assertNoSmoke();
 });
 
-test('member reviews subtitle escalations with the phase four action disabled', function (): void {
+test('member retries a review case with Media Advisor after confirmation', function (): void {
+    config()->set('mediamanager.ai.enabled', false);
     $bazarr = ServiceConnection::factory()->bazarr()->create([
         'name' => 'Primary Bazarr',
         'url' => 'http://bazarr.test',
@@ -58,34 +61,46 @@ test('member reviews subtitle escalations with the phase four action disabled', 
     ]);
     $subtitleCase = SubtitleCase::factory()->create([
         'bazarr_connection_id' => $bazarr->id,
-        'status' => SubtitleCaseStatus::ReplacementEligible,
+        'status' => SubtitleCaseStatus::NeedsReview,
         'evidence' => [
             'display_name' => 'Frieren S01E01',
             'missing_languages' => ['eng'],
         ],
     ]);
 
-    Http::fake([
-        'bazarr.test/api/system/health' => Http::response(['data' => []]),
-        'bazarr.test/api/episodes/wanted*' => Http::response(['data' => [], 'total' => 0]),
-        'bazarr.test/api/movies/wanted*' => Http::response(['data' => [], 'total' => 0]),
-    ]);
-
     $this->actingAs(User::factory()->member()->create());
 
-    visit(route('bazarr.overview', ['connection' => $bazarr->id], false))
-        ->click('@subtitle-tab-escalations')
-        ->assertPathIs('/subtitles/escalations')
+    $webpage = visit(route('bazarr.escalations', ['connection' => $bazarr->id], false))
         ->assertSee('Subtitle escalations')
         ->assertSee('Frieren S01E01')
-        ->assertSee('Investigate with Media Advisor')
+        ->assertSee('Retry with Media Advisor')
+        ->assertSee('The last investigation needs review before a manual retry.')
+        ->assertSee('Linked Action Request: none')
         ->assertScript(
             sprintf(
-                'document.querySelector(\'[data-test="investigate-subtitle-case-%d"]\').disabled === true',
+                'document.querySelector(\'[data-test="investigate-subtitle-case-%d"]\').disabled === false',
                 $subtitleCase->id,
             ),
+        );
+
+    $webpage->script(
+        'window.__advisorConfirmMessage = ""; window.confirm = (message) => { window.__advisorConfirmMessage = message; return true; };',
+    );
+
+    $webpage
+        ->click('@investigate-subtitle-case-'.$subtitleCase->id)
+        ->assertScript(
+            'window.__advisorConfirmMessage.includes("already been investigated")',
         )
+        ->assertSee('Media Advisor investigation queued.')
+        ->assertSee('Ready for one Media Advisor investigation.')
         ->assertNoSmoke();
+
+    $subtitleCaseAttempt = SubtitleCaseAttempt::query()->sole();
+
+    expect($subtitleCase->fresh()->status)->toBe(SubtitleCaseStatus::ReplacementEligible)
+        ->and($subtitleCaseAttempt->type)->toBe(SubtitleCaseAttemptType::Reconciliation)
+        ->and($subtitleCaseAttempt->summary['requested_by_user_id'])->toBeInt();
 });
 
 test('admin manages non-secret Bazarr settings', function (): void {
