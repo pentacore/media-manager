@@ -2,9 +2,9 @@
 import { Head, Link } from '@inertiajs/vue3';
 import { ArrowLeft } from '@lucide/vue';
 import { computed } from 'vue';
-import WebhookLogController from '@/actions/App/Http/Controllers/Admin/WebhookLogController';
 import { Pill, SvcChip } from '@/components/mm';
 import { Button } from '@/components/ui/button';
+import WebhookLogController from '@/actions/App/Http/Controllers/Admin/WebhookLogController';
 import { dashboard } from '@/routes';
 
 interface ActivityEntry {

@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { Head, router } from '@inertiajs/vue3';
 import { ref, watch } from 'vue';
-import ActionTypeConfigController from '@/actions/App/Http/Controllers/Actions/ActionTypeConfigController';
 import { Toggle } from '@/components/mm';
+import ActionTypeConfigController from '@/actions/App/Http/Controllers/Actions/ActionTypeConfigController';
 import { dashboard } from '@/routes';
 import type { ActionTypeConfigResource } from '@/typefinder/resources/ActionTypeConfigResource';
 

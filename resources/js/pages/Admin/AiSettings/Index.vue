@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { Form, Head } from '@inertiajs/vue3';
 import { computed, ref } from 'vue';
-import AiSettingsController from '@/actions/App/Http/Controllers/Admin/AiSettingsController';
 import InputError from '@/components/InputError.vue';
 import MediaReplacementSettings from '@/components/media-replacement/MediaReplacementSettings.vue';
 import type { MediaReplacementConfiguration } from '@/components/media-replacement/MediaReplacementSettings.vue';
@@ -18,9 +17,10 @@ import {
     SelectValue,
 } from '@/components/ui/select';
 import { Separator } from '@/components/ui/separator';
+import type { SelectOptionGroup } from '@/types';
+import AiSettingsController from '@/actions/App/Http/Controllers/Admin/AiSettingsController';
 import { dashboard } from '@/routes';
 import type { AiReasoningLevel } from '@/typefinder';
-import type { SelectOptionGroup } from '@/types';
 
 interface ModeOption {
     value: string;

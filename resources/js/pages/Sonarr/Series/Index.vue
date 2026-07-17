@@ -9,7 +9,6 @@ import {
     Search,
 } from '@lucide/vue';
 import { computed, onMounted, ref } from 'vue';
-import SeriesController from '@/actions/App/Http/Controllers/Media/SeriesController';
 import { OpenInServiceButton, Pill, Poster, SvcChip } from '@/components/mm';
 import { Button } from '@/components/ui/button';
 import {
@@ -23,6 +22,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { useRealtimeReload } from '@/composables/useRealtimeReload';
 import { arrPosterUrl } from '@/lib/arr';
 import { cn } from '@/lib/utils';
+import SeriesController from '@/actions/App/Http/Controllers/Media/SeriesController';
 import { dashboard } from '@/routes';
 
 interface QualityProfile {

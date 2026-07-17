@@ -10,8 +10,6 @@ import {
     Wand2,
 } from '@lucide/vue';
 import { computed, reactive, ref } from 'vue';
-import ProwlarrTestIndexerController from '@/actions/App/Http/Controllers/Admin/ProwlarrTestIndexerController';
-import ServiceConnectionController from '@/actions/App/Http/Controllers/Admin/ServiceConnectionController';
 import InputError from '@/components/InputError.vue';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -46,6 +44,8 @@ import {
     TooltipTrigger,
 } from '@/components/ui/tooltip';
 import { copyToClipboard } from '@/lib/clipboard';
+import ProwlarrTestIndexerController from '@/actions/App/Http/Controllers/Admin/ProwlarrTestIndexerController';
+import ServiceConnectionController from '@/actions/App/Http/Controllers/Admin/ServiceConnectionController';
 
 interface ServiceTypeOption {
     value: string;

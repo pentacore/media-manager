@@ -3,12 +3,12 @@ import { Link } from '@inertiajs/vue3';
 import { Separator } from '@/components/ui/separator';
 import { useCurrentUrl } from '@/composables/useCurrentUrl';
 import { cn, toUrl } from '@/lib/utils';
+import type { NavItem } from '@/types';
 import { edit as editAppearance } from '@/routes/appearance';
 import { edit as editProfile } from '@/routes/profile';
 import { edit as editSecurity } from '@/routes/security';
 import { edit as editNotifications } from '@/routes/settings/notifications';
 import { edit as editPreferences } from '@/routes/settings/preferences';
-import type { NavItem } from '@/types';
 
 const sidebarNavItems: NavItem[] = [
     { title: 'Profile', href: editProfile() },

@@ -2,8 +2,6 @@
 import { Head, router } from '@inertiajs/vue3';
 import { ChevronDown, ChevronRight, Download, Sparkles } from '@lucide/vue';
 import { computed, ref } from 'vue';
-import AiModelPriceController from '@/actions/App/Http/Controllers/Admin/AiModelPriceController';
-import AiUsageController from '@/actions/App/Http/Controllers/Admin/AiUsageController';
 import {
     InitialsAvatar,
     Pill,
@@ -27,6 +25,8 @@ import {
     SelectTrigger,
     SelectValue,
 } from '@/components/ui/select';
+import AiModelPriceController from '@/actions/App/Http/Controllers/Admin/AiModelPriceController';
+import AiUsageController from '@/actions/App/Http/Controllers/Admin/AiUsageController';
 import { dashboard } from '@/routes';
 import type { QueryParams } from '@/wayfinder';
 

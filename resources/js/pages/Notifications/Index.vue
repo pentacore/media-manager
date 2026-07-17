@@ -2,10 +2,10 @@
 import { Head, router, usePage } from '@inertiajs/vue3';
 import { Bell, BellOff, CheckCheck, Trash2 } from '@lucide/vue';
 import { onMounted } from 'vue';
-import NotificationController from '@/actions/App/Http/Controllers/NotificationController';
 import { Pill, SvcChip, TimeStamp } from '@/components/mm';
 import { Button } from '@/components/ui/button';
 import { useRealtimeReload } from '@/composables/useRealtimeReload';
+import NotificationController from '@/actions/App/Http/Controllers/NotificationController';
 
 interface NotificationData {
     title?: string;

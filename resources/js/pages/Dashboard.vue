@@ -9,8 +9,6 @@ import {
     X,
 } from '@lucide/vue';
 import { computed, onMounted, ref } from 'vue';
-import ActionRequestController from '@/actions/App/Http/Controllers/Actions/ActionRequestController';
-import ActivityLogController from '@/actions/App/Http/Controllers/ActivityLogController';
 import {
     InitialsAvatar,
     LiveDot,
@@ -23,6 +21,8 @@ import {
 import { Skeleton } from '@/components/ui/skeleton';
 import { useDashboardStats } from '@/composables/useDashboardStats';
 import { useRealtimeList } from '@/composables/useRealtimeList';
+import ActionRequestController from '@/actions/App/Http/Controllers/Actions/ActionRequestController';
+import ActivityLogController from '@/actions/App/Http/Controllers/ActivityLogController';
 import { dashboard } from '@/routes';
 import type { ActivityLogResource } from '@/typefinder/resources/ActivityLogResource';
 

@@ -2,7 +2,6 @@
 import { Head, Link, router } from '@inertiajs/vue3';
 import { ExternalLink, Plus, RefreshCcw, Search } from '@lucide/vue';
 import { computed, onMounted, ref } from 'vue';
-import MovieController from '@/actions/App/Http/Controllers/Media/MovieController';
 import { OpenInServiceButton, Pill, Poster, SvcChip } from '@/components/mm';
 import { Button } from '@/components/ui/button';
 import {
@@ -15,6 +14,7 @@ import {
 import { Skeleton } from '@/components/ui/skeleton';
 import { useRealtimeReload } from '@/composables/useRealtimeReload';
 import { arrPosterUrl } from '@/lib/arr';
+import MovieController from '@/actions/App/Http/Controllers/Media/MovieController';
 import { dashboard } from '@/routes';
 
 interface QualityProfile {

@@ -2,7 +2,6 @@
 import { Head, Link, router, useForm } from '@inertiajs/vue3';
 import { Search, Plus, ArrowLeft } from '@lucide/vue';
 import { computed, ref } from 'vue';
-import SeriesController from '@/actions/App/Http/Controllers/Media/SeriesController';
 import InputError from '@/components/InputError.vue';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -16,6 +15,7 @@ import {
     SelectValue,
 } from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
+import SeriesController from '@/actions/App/Http/Controllers/Media/SeriesController';
 import { dashboard } from '@/routes';
 
 interface QualityProfile {

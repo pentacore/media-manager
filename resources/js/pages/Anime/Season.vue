@@ -8,8 +8,6 @@ import {
     Sprout,
 } from '@lucide/vue';
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
-import AnimeController from '@/actions/App/Http/Controllers/Media/AnimeController';
-import { request as requestAnime } from '@/actions/App/Http/Controllers/Media/AnimeController';
 import { Poster, StatusPill, SvcChip } from '@/components/mm';
 import { Button } from '@/components/ui/button';
 import {
@@ -21,11 +19,13 @@ import {
 } from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
+import MatchDialog from './MatchDialog.vue';
+import AnimeController from '@/actions/App/Http/Controllers/Media/AnimeController';
+import { request as requestAnime } from '@/actions/App/Http/Controllers/Media/AnimeController';
 import { dashboard } from '@/routes';
 import type { AnimeAirStatus } from '@/typefinder/enums/AnimeAirStatus';
 import type { AnimeFormat } from '@/typefinder/enums/AnimeFormat';
 import type { AnimeSeason } from '@/typefinder/enums/AnimeSeason';
-import MatchDialog from './MatchDialog.vue';
 
 type EntryStatus = 'in_library' | 'requested' | 'requestable' | 'unmapped';
 

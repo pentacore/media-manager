@@ -2,14 +2,14 @@
 import { Link, usePage } from '@inertiajs/vue3';
 import { Bell, ChevronRight, Command, Search, Sparkles } from '@lucide/vue';
 import { computed } from 'vue';
-import AIChatController from '@/actions/App/Http/Controllers/AI/ChatController';
-import NotificationController from '@/actions/App/Http/Controllers/NotificationController';
 import Breadcrumbs from '@/components/Breadcrumbs.vue';
 import ConnectionStatusIndicator from '@/components/ConnectionStatusIndicator.vue';
 import { Button } from '@/components/ui/button';
 import { SidebarTrigger } from '@/components/ui/sidebar';
 import { useCommandPalette } from '@/composables/useCommandPalette';
 import type { BreadcrumbItem } from '@/types';
+import AIChatController from '@/actions/App/Http/Controllers/AI/ChatController';
+import NotificationController from '@/actions/App/Http/Controllers/NotificationController';
 
 withDefaults(
     defineProps<{

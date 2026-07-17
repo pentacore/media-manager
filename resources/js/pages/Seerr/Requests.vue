@@ -16,7 +16,6 @@ import {
     X,
 } from '@lucide/vue';
 import { computed, onMounted, ref } from 'vue';
-import RequestController from '@/actions/App/Http/Controllers/Media/RequestController';
 import {
     InitialsAvatar,
     OpenInServiceButton,
@@ -53,6 +52,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { useRealtimeReload } from '@/composables/useRealtimeReload';
 import { tmdbPosterUrl } from '@/lib/tmdb';
 import { cn } from '@/lib/utils';
+import RequestController from '@/actions/App/Http/Controllers/Media/RequestController';
 import { dashboard } from '@/routes';
 
 interface SeerrRequest {

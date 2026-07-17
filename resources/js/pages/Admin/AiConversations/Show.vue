@@ -8,7 +8,6 @@ import {
     Trash2,
 } from '@lucide/vue';
 import { computed, ref } from 'vue';
-import AiConversationController from '@/actions/App/Http/Controllers/Admin/AiConversationController';
 import { InitialsAvatar, Pill } from '@/components/mm';
 import { Button } from '@/components/ui/button';
 import {
@@ -19,6 +18,7 @@ import {
     DialogHeader,
     DialogTitle,
 } from '@/components/ui/dialog';
+import AiConversationController from '@/actions/App/Http/Controllers/Admin/AiConversationController';
 import { dashboard } from '@/routes';
 
 interface MessageRow {

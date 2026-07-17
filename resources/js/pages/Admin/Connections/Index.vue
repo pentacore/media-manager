@@ -11,7 +11,6 @@ import {
     Trash2,
 } from '@lucide/vue';
 import { computed, onMounted } from 'vue';
-import ServiceConnectionController from '@/actions/App/Http/Controllers/Admin/ServiceConnectionController';
 import { Pill, StatusPill, SvcChip } from '@/components/mm';
 import { Button } from '@/components/ui/button';
 import {
@@ -23,6 +22,7 @@ import {
     DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { useServiceHealth } from '@/composables/useServiceHealth';
+import ServiceConnectionController from '@/actions/App/Http/Controllers/Admin/ServiceConnectionController';
 import { dashboard } from '@/routes';
 import type { ServiceConnectionResource } from '@/typefinder/resources/ServiceConnectionResource';
 

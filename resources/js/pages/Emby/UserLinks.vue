@@ -2,7 +2,6 @@
 import { Form, Head, router, usePage } from '@inertiajs/vue3';
 import { Link2, Trash2 } from '@lucide/vue';
 import { computed } from 'vue';
-import UserLinkController from '@/actions/App/Http/Controllers/Emby/UserLinkController';
 import InputError from '@/components/InputError.vue';
 import PasswordInput from '@/components/PasswordInput.vue';
 import { Badge } from '@/components/ui/badge';
@@ -24,6 +23,7 @@ import {
     TableHeader,
     TableRow,
 } from '@/components/ui/table';
+import UserLinkController from '@/actions/App/Http/Controllers/Emby/UserLinkController';
 import { dashboard } from '@/routes';
 import type { EmbyUserLinkResource } from '@/typefinder/resources/EmbyUserLinkResource';
 

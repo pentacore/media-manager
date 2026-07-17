@@ -8,7 +8,6 @@ import {
     RefreshCcw,
 } from '@lucide/vue';
 import { computed, ref } from 'vue';
-import LibraryActivityController from '@/actions/App/Http/Controllers/Library/ActivityController';
 import { Pill, SvcChip } from '@/components/mm';
 import { Button } from '@/components/ui/button';
 import {
@@ -27,6 +26,7 @@ import {
     DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Skeleton } from '@/components/ui/skeleton';
+import LibraryActivityController from '@/actions/App/Http/Controllers/Library/ActivityController';
 import { dashboard } from '@/routes';
 
 interface QueueRow {
