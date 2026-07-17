@@ -54,6 +54,7 @@ class InterventionCounter
     public function recompute(): int
     {
         $count = 0;
+        $anyFailed = false;
 
         foreach ([ServiceType::Sonarr, ServiceType::Radarr] as $type) {
             $client = $this->resolveClient($type);
@@ -61,7 +62,24 @@ class InterventionCounter
                 continue;
             }
 
-            $count += $this->countForClient($client);
+            $serviceCount = $this->countForClient($client);
+
+            if ($serviceCount === null) {
+                $anyFailed = true;
+
+                continue;
+            }
+
+            $count += $serviceCount;
+        }
+
+        // A flaky upstream must not zero out the badge: when any service
+        // failed to answer, keep the last cached total instead of
+        // overwriting it with a partial (undercounted) sum.
+        if ($anyFailed) {
+            $cached = Cache::get(self::CACHE_KEY);
+
+            return is_int($cached) ? $cached : $count;
         }
 
         Cache::put(self::CACHE_KEY, $count, self::CACHE_TTL);
@@ -83,7 +101,11 @@ class InterventionCounter
             : new RadarrClient($connection);
     }
 
-    private function countForClient(ArrClient $arrClient): int
+    /**
+     * Null = upstream didn't answer (the caller preserves the cached total
+     * rather than recording a partial sum).
+     */
+    private function countForClient(ArrClient $arrClient): ?int
     {
         try {
             $payload = $arrClient->getQueue([
@@ -93,10 +115,7 @@ class InterventionCounter
                 'includeUnknownMovieItems' => 'true',
             ]);
         } catch (RequestException|ConnectionException) {
-            // Don't let a flaky upstream zero out the badge — keep the
-            // last known value by returning 0 for this service only;
-            // total still reflects the other service if it's healthy.
-            return 0;
+            return null;
         }
 
         $records = is_array($payload['records'] ?? null) ? $payload['records'] : [];
