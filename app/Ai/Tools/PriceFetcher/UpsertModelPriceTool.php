@@ -19,6 +19,21 @@ use Stringable;
  */
 class UpsertModelPriceTool extends BaseTool
 {
+    /**
+     * USD per MTok above which a rate is assumed to be a parse error or a
+     * poisoned page rather than a real price (the priciest real tiers are
+     * two orders of magnitude below this).
+     */
+    public const float MAX_RATE_USD_PER_MTOK = 1000.0;
+
+    /**
+     * Largest believable single-refresh price *drop* factor for the primary
+     * rates. Bigger drops (including to zero) would blind AiBudgetGuard —
+     * cost snapshots taken at usage time would record ~$0 spend, so the
+     * monthly hard cap never trips.
+     */
+    private const float MAX_DROP_FACTOR = 100.0;
+
     public function description(): Stringable|string
     {
         return 'Upsert one AI model pricing row by provider + model. All rates are dollars per million tokens (per_mtok). Pass 0 for tiers a model does not support (e.g. cache_write_per_mtok for OpenAI). Returns the resulting row.';
@@ -58,6 +73,54 @@ class UpsertModelPriceTool extends BaseTool
             'batch_cache_write_per_mtok' => (float) ($args['batch_cache_write_per_mtok'] ?? 0),
             'batch_reasoning_per_mtok' => (float) ($args['batch_reasoning_per_mtok'] ?? 0),
         ];
+
+        // The rates come from an LLM reading third-party web content, and
+        // AiBudgetGuard's spend accounting is only as honest as this table —
+        // bound-check every write instead of trusting the parse.
+        foreach ($payload as $field => $rate) {
+            if ($rate < 0 || $rate > self::MAX_RATE_USD_PER_MTOK) {
+                return [
+                    'error' => 'rate_out_of_bounds',
+                    'field' => $field,
+                    'message' => sprintf(
+                        '%s must be between 0 and %.0f USD per MTok; got %s. Re-read the pricing page instead of retrying with the same value.',
+                        $field,
+                        self::MAX_RATE_USD_PER_MTOK,
+                        $rate,
+                    ),
+                ];
+            }
+        }
+
+        $existing = AiModelPrice::query()
+            ->where('provider', $provider)
+            ->where('model', $model)
+            ->first();
+
+        if ($existing !== null) {
+            foreach (['input_per_mtok', 'output_per_mtok'] as $field) {
+                $current = (float) $existing->{$field};
+                $proposed = $payload[$field];
+
+                if ($current > 0 && $proposed < $current / self::MAX_DROP_FACTOR) {
+                    return [
+                        'error' => 'implausible_price_drop',
+                        'field' => $field,
+                        'current' => $current,
+                        'proposed' => $proposed,
+                        'message' => sprintf(
+                            '%s for %s/%s would drop from %.4f to %.4f — more than %.0fx. Zeroed or near-zero rates would disable budget enforcement, so this must be changed by an admin, not the agent.',
+                            $field,
+                            $provider,
+                            $model,
+                            $current,
+                            $proposed,
+                            self::MAX_DROP_FACTOR,
+                        ),
+                    ];
+                }
+            }
+        }
 
         $row = AiModelPrice::updateOrCreate(
             ['provider' => $provider, 'model' => $model],
