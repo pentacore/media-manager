@@ -6,13 +6,14 @@ use Illuminate\Database\QueryException;
 use Laravel\Socialite\Facades\Socialite;
 use Laravel\Socialite\Two\User as SocialiteUser;
 
-function mockSocialiteUser(string $id = 'auth-123', string $email = 'sso@example.com', string $name = 'SSO User', ?string $avatar = null): void
+function mockSocialiteUser(string $id = 'auth-123', string $email = 'sso@example.com', string $name = 'SSO User', ?string $avatar = null, bool $emailVerified = true): void
 {
     $socialiteUser = new SocialiteUser;
     $socialiteUser->id = $id;
     $socialiteUser->email = $email;
     $socialiteUser->name = $name;
     $socialiteUser->avatar = $avatar;
+    $socialiteUser->user = ['email_verified' => $emailVerified];
 
     Socialite::shouldReceive('driver->user')->andReturn($socialiteUser);
 }
@@ -79,6 +80,33 @@ test('authentik callback verifies email of linked unverified user', function ():
     $existing->refresh();
     expect($existing->sso_provider)->toBe('authentik');
     expect($existing->email_verified_at)->not->toBeNull();
+});
+
+test('authentik callback refuses to link an existing account when the IdP email is unverified', function (): void {
+    $existing = User::factory()->create(['email' => 'victim@example.com']);
+
+    mockSocialiteUser(id: 'auth-takeover', email: 'victim@example.com', name: 'Attacker', emailVerified: false);
+
+    $this->get(route('auth.authentik.callback'))
+        ->assertRedirect(route('login'))
+        ->assertSessionHas('status');
+
+    $this->assertGuest();
+
+    $existing->refresh();
+    expect($existing->sso_provider)->toBeNull()
+        ->and($existing->sso_id)->toBeNull();
+});
+
+test('authentik callback creates a new user without verified email when the claim is absent', function (): void {
+    mockSocialiteUser(id: 'auth-nv', email: 'newbie@example.com', name: 'Newbie', emailVerified: false);
+
+    $this->get(route('auth.authentik.callback'))
+        ->assertRedirect(route('dashboard'));
+
+    $user = User::where('email', 'newbie@example.com')->first();
+    expect($user)->not->toBeNull()
+        ->and($user->email_verified_at)->toBeNull();
 });
 
 test('authentik callback logs in returning SSO user', function (): void {

@@ -42,6 +42,7 @@ test('SSO login links existing user by email', function (): void {
         ssoId: 'auth-789',
         email: 'match@example.com',
         name: 'Match User',
+        emailVerified: true,
     );
 
     expect($user->id)->toBe($existing->id);
