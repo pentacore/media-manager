@@ -1,24 +1,15 @@
 <script setup lang="ts">
 import { Deferred, Head } from '@inertiajs/vue3';
+import { ref } from 'vue';
 import LibraryController from '@/actions/App/Http/Controllers/Bazarr/LibraryController';
 import OverviewController from '@/actions/App/Http/Controllers/Bazarr/OverviewController';
+import SubtitleItemDrawer from '@/components/bazarr/SubtitleItemDrawer.vue';
 import SubtitleTabs from '@/components/bazarr/SubtitleTabs.vue';
+import { Button } from '@/components/ui/button';
 import { dashboard } from '@/routes';
+import type { SubtitleItemResource } from '@/typefinder/resources/SubtitleItemResource';
 
-interface SubtitleTrack {
-    language: string;
-    forced?: boolean;
-    hearing_impaired?: boolean;
-}
-
-interface SubtitleItem {
-    media_type: 'episode' | 'movie';
-    media_id: number;
-    title: string;
-    scope?: string;
-    subtitle_tracks: SubtitleTrack[];
-    missing_languages: string[];
-}
+type SubtitleItem = SubtitleItemResource;
 
 interface Inventory {
     data: SubtitleItem[];
@@ -33,6 +24,8 @@ defineProps<{
     requires_connection_selection: boolean;
     library?: Inventory | null;
 }>();
+
+const selectedItem = ref<SubtitleItem | null>(null);
 
 defineOptions({
     layout: {
@@ -118,8 +111,28 @@ defineOptions({
                             No subtitle tracks
                         </span>
                     </div>
+                    <Button
+                        class="mt-4"
+                        size="sm"
+                        variant="outline"
+                        :data-test="`subtitle-item-${item.media_type}-${item.media_id}`"
+                        @click="selectedItem = item"
+                    >
+                        Inspect
+                    </Button>
                 </article>
             </div>
         </Deferred>
+
+        <SubtitleItemDrawer
+            :open="selectedItem !== null"
+            :item="selectedItem"
+            :connection-id="selected_connection_id"
+            @update:open="
+                (open) => {
+                    if (!open) selectedItem = null;
+                }
+            "
+        />
     </div>
 </template>

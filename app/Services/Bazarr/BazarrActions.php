@@ -56,7 +56,10 @@ final readonly class BazarrActions implements ActionExecutor
         SubtitleCaseStatus::ReplacementRequested,
     ];
 
-    public function __construct(private BazarrSubtitleFingerprint $bazarrSubtitleFingerprint) {}
+    public function __construct(
+        private BazarrSubtitleFingerprint $bazarrSubtitleFingerprint,
+        private BazarrMediaFingerprint $bazarrMediaFingerprint,
+    ) {}
 
     /**
      * @return array<string, mixed>
@@ -165,6 +168,29 @@ final readonly class BazarrActions implements ActionExecutor
         );
 
         if (! isset($payload['subtitle_case_id'])) {
+            new BazarrCache($bazarr)->bustAll();
+            $targetIds = $this->targetIds($payload, $mediaType);
+            $items = $mediaType === 'episode'
+                ? new BazarrClient($bazarr)->getEpisodes(episodeIds: [$targetIds['episode_id']])['data']
+                : new BazarrClient($bazarr)->getMovies(length: 100)['data'];
+            $mediaId = $mediaType === 'episode' ? $targetIds['episode_id'] : $targetIds['radarr_id'];
+            $item = collect($items)->first(function (array $candidate) use ($mediaType, $mediaId): bool {
+                $key = $mediaType === 'episode' ? 'sonarrEpisodeId' : 'radarrId';
+
+                return ($candidate[$key] ?? null) === $mediaId;
+            });
+
+            throw_unless(
+                is_array($item)
+                    && $this->bazarrMediaFingerprint->verify(
+                        $mediaType,
+                        $item,
+                        $this->requiredFingerprint($payload, 'target_fingerprint'),
+                    ),
+                InvalidArgumentException::class,
+                'The installed media file changed after approval.',
+            );
+
             return;
         }
 

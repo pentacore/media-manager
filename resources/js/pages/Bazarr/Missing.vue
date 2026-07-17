@@ -1,18 +1,15 @@
 <script setup lang="ts">
 import { Head } from '@inertiajs/vue3';
+import { ref } from 'vue';
 import MissingController from '@/actions/App/Http/Controllers/Bazarr/MissingController';
 import OverviewController from '@/actions/App/Http/Controllers/Bazarr/OverviewController';
+import SubtitleItemDrawer from '@/components/bazarr/SubtitleItemDrawer.vue';
 import SubtitleTabs from '@/components/bazarr/SubtitleTabs.vue';
+import { Button } from '@/components/ui/button';
 import { dashboard } from '@/routes';
+import type { SubtitleItemResource } from '@/typefinder/resources/SubtitleItemResource';
 
-interface SubtitleItem {
-    media_type: 'episode' | 'movie';
-    media_id: number;
-    title: string;
-    scope?: string;
-    missing_languages: string[];
-    required_languages: string[];
-}
+type SubtitleItem = SubtitleItemResource;
 
 interface Inventory {
     data: SubtitleItem[];
@@ -29,6 +26,8 @@ defineProps<{
     requires_connection_selection: boolean;
     missing: Inventory | null;
 }>();
+
+const selectedItem = ref<SubtitleItem | null>(null);
 
 defineOptions({
     layout: {
@@ -95,8 +94,27 @@ defineOptions({
                     >
                         {{ language }}
                     </span>
+                    <Button
+                        size="sm"
+                        variant="outline"
+                        :data-test="`subtitle-item-${item.media_type}-${item.media_id}`"
+                        @click="selectedItem = item"
+                    >
+                        Inspect
+                    </Button>
                 </div>
             </div>
         </div>
+
+        <SubtitleItemDrawer
+            :open="selectedItem !== null"
+            :item="selectedItem"
+            :connection-id="selected_connection_id"
+            @update:open="
+                (open) => {
+                    if (!open) selectedItem = null;
+                }
+            "
+        />
     </div>
 </template>

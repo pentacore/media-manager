@@ -35,6 +35,8 @@ final readonly class SubtitleInventoryService
         private MediaReplacementSettings $mediaReplacementSettings,
         private LanguageNormalizer $languageNormalizer,
         private SonarrMediaScopeResolver $sonarrMediaScopeResolver,
+        private BazarrMediaFingerprint $bazarrMediaFingerprint,
+        private BazarrSubtitleFingerprint $bazarrSubtitleFingerprint,
     ) {}
 
     /**
@@ -516,6 +518,7 @@ final readonly class SubtitleInventoryService
             'media_type' => 'episode',
             'media_id' => $mediaId,
             'series_id' => $seriesId,
+            'target_fingerprint' => $this->bazarrMediaFingerprint->make('episode', $episode),
             'scope' => $scope->value,
             'title' => $this->episodeTitle($series, $episode),
             'subtitle_tracks' => $tracks,
@@ -543,6 +546,7 @@ final readonly class SubtitleInventoryService
         return [
             'media_type' => 'movie',
             'media_id' => $mediaId,
+            'target_fingerprint' => $this->bazarrMediaFingerprint->make('movie', $movie),
             'scope' => MediaReplacementScope::Movie->value,
             'title' => $this->safeText($movie['title'] ?? null, 'Movie '.$mediaId),
             'subtitle_tracks' => $tracks,
@@ -636,7 +640,7 @@ final readonly class SubtitleInventoryService
                 : Str::upper($language).' embedded track';
 
             $normalizedTracks[] = [
-                'fingerprint' => $this->trackFingerprint($mediaType, $mediaId, $track),
+                'fingerprint' => $this->trackFingerprint($mediaType, $mediaId, $track, $displayName),
                 'display_name' => $displayName,
                 'language' => $language,
                 'kind' => $kind,
@@ -802,18 +806,17 @@ final readonly class SubtitleInventoryService
      *
      * @throws JsonException
      */
-    private function trackFingerprint(string $mediaType, int $mediaId, array $track): string
+    private function trackFingerprint(string $mediaType, int $mediaId, array $track, string $displayName): string
     {
-        $payload = json_encode([
+        return $this->bazarrSubtitleFingerprint->make([
             'media_type' => $mediaType,
             'media_id' => $mediaId,
             'path' => is_string($track['path'] ?? null) ? $track['path'] : null,
             'language' => $this->firstString($track, ['code3', 'code2', 'language', 'name']),
             'forced' => ($track['forced'] ?? false) === true,
             'hearing_impaired' => ($track['hi'] ?? $track['hearing_impaired'] ?? false) === true,
-        ], JSON_THROW_ON_ERROR);
-
-        return hash_hmac('sha256', $payload, (string) config('app.key'));
+            'display_name' => $displayName,
+        ]);
     }
 
     private function positiveInteger(mixed $value): ?int
