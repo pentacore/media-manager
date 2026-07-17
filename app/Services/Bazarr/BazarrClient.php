@@ -12,6 +12,7 @@ use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\PendingRequest;
 use Illuminate\Http\Client\RequestException;
 use Illuminate\Http\Client\Response;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Http;
 use InvalidArgumentException;
 use JsonException;
@@ -20,7 +21,7 @@ use Throwable;
 use UnexpectedValueException;
 
 /**
- * Read-only client for Bazarr's authenticated HTTP API.
+ * Client for Bazarr's authenticated HTTP API.
  *
  * @see https://github.com/morpheus65535/bazarr/tree/v1.6.0/bazarr/api
  */
@@ -193,6 +194,261 @@ final class BazarrClient
     }
 
     /**
+     * @return list<array<string, mixed>>
+     */
+    public function searchEpisode(int $episodeId): array
+    {
+        $this->validatePositiveId($episodeId, 'episode ID');
+
+        return $this->sanitizedCandidates('episode', $episodeId, $this->rawEpisodeCandidates($episodeId));
+    }
+
+    /**
+     * @return list<array<string, mixed>>
+     */
+    public function searchMovie(int $radarrId): array
+    {
+        $this->validatePositiveId($radarrId, 'Radarr ID');
+
+        return $this->sanitizedCandidates('movie', $radarrId, $this->rawMovieCandidates($radarrId));
+    }
+
+    public function downloadBestEpisode(
+        int $episodeId,
+        string $language,
+        bool $forced,
+        bool $hearingImpaired,
+    ): void {
+        $this->validatePositiveId($episodeId, 'episode ID');
+        $language = $this->validateLanguage($language);
+        $episode = $this->getEpisodes(episodeIds: [$episodeId])['data'][0] ?? null;
+        $seriesId = is_array($episode) ? ($episode['sonarrSeriesId'] ?? null) : null;
+
+        throw_unless(is_int($seriesId) && $seriesId > 0, UnexpectedValueException::class, 'Bazarr episode is missing its Sonarr series ID.');
+
+        $this->write(
+            $this->buildClient(withRetry: false)
+                ->asForm()
+                ->patch('/api/episodes/subtitles', [
+                    'seriesid' => $seriesId,
+                    'episodeid' => $episodeId,
+                    'language' => $language,
+                    'forced' => $this->lowerBoolean($forced),
+                    'hi' => $this->lowerBoolean($hearingImpaired),
+                ]),
+        );
+    }
+
+    public function downloadBestMovie(
+        int $radarrId,
+        string $language,
+        bool $forced,
+        bool $hearingImpaired,
+    ): void {
+        $this->validatePositiveId($radarrId, 'Radarr ID');
+        $language = $this->validateLanguage($language);
+
+        $this->write(
+            $this->buildClient(withRetry: false)
+                ->asForm()
+                ->patch('/api/movies/subtitles', [
+                    'radarrid' => $radarrId,
+                    'language' => $language,
+                    'forced' => $this->lowerBoolean($forced),
+                    'hi' => $this->lowerBoolean($hearingImpaired),
+                ]),
+        );
+    }
+
+    /**
+     * @param  array<string, mixed>  $selection
+     */
+    public function downloadExactEpisode(array $selection): void
+    {
+        $seriesId = $this->positiveSelectionId($selection, 'series_id');
+        $episodeId = $this->positiveSelectionId($selection, 'episode_id');
+        $candidate = $this->resolveExactCandidate(
+            'episode',
+            $episodeId,
+            $this->selectionString($selection, 'fingerprint'),
+            $this->rawEpisodeCandidates($episodeId),
+        );
+
+        $this->write(
+            $this->buildClient(withRetry: false)
+                ->asForm()
+                ->post('/api/providers/episodes', [
+                    'seriesid' => $seriesId,
+                    'episodeid' => $episodeId,
+                    'hi' => $this->titleBoolean($this->candidateFlag($candidate['hearing_impaired'] ?? false)),
+                    'forced' => $this->titleBoolean($this->candidateFlag($candidate['forced'] ?? false)),
+                    'original_format' => $this->titleBoolean($this->candidateFlag($candidate['original_format'] ?? false)),
+                    'provider' => $this->candidateString($candidate, 'provider'),
+                    'subtitle' => $this->candidateString($candidate, 'subtitle'),
+                ]),
+        );
+    }
+
+    /**
+     * @param  array<string, mixed>  $selection
+     */
+    public function downloadExactMovie(array $selection): void
+    {
+        $radarrId = $this->positiveSelectionId($selection, 'radarr_id');
+        $candidate = $this->resolveExactCandidate(
+            'movie',
+            $radarrId,
+            $this->selectionString($selection, 'fingerprint'),
+            $this->rawMovieCandidates($radarrId),
+        );
+
+        $this->write(
+            $this->buildClient(withRetry: false)
+                ->asForm()
+                ->post('/api/providers/movies', [
+                    'radarrid' => $radarrId,
+                    'hi' => $this->titleBoolean($this->candidateFlag($candidate['hearing_impaired'] ?? false)),
+                    'forced' => $this->titleBoolean($this->candidateFlag($candidate['forced'] ?? false)),
+                    'original_format' => $this->titleBoolean($this->candidateFlag($candidate['original_format'] ?? false)),
+                    'provider' => $this->candidateString($candidate, 'provider'),
+                    'subtitle' => $this->candidateString($candidate, 'subtitle'),
+                ]),
+        );
+    }
+
+    public function uploadEpisode(
+        int $seriesId,
+        int $episodeId,
+        string $language,
+        bool $forced,
+        bool $hearingImpaired,
+        UploadedFile $uploadedFile,
+    ): void {
+        $this->validatePositiveId($seriesId, 'series ID');
+        $this->validatePositiveId($episodeId, 'episode ID');
+        $language = $this->validateLanguage($language);
+
+        $this->write(
+            $this->buildClient(withRetry: false)
+                ->attach('file', $uploadedFile->get(), $uploadedFile->getClientOriginalName())
+                ->post('/api/episodes/subtitles', [
+                    'seriesid' => $seriesId,
+                    'episodeid' => $episodeId,
+                    'language' => $language,
+                    'forced' => $this->lowerBoolean($forced),
+                    'hi' => $this->lowerBoolean($hearingImpaired),
+                ]),
+        );
+    }
+
+    public function uploadMovie(
+        int $radarrId,
+        string $language,
+        bool $forced,
+        bool $hearingImpaired,
+        UploadedFile $uploadedFile,
+    ): void {
+        $this->validatePositiveId($radarrId, 'Radarr ID');
+        $language = $this->validateLanguage($language);
+
+        $this->write(
+            $this->buildClient(withRetry: false)
+                ->attach('file', $uploadedFile->get(), $uploadedFile->getClientOriginalName())
+                ->post('/api/movies/subtitles', [
+                    'radarrid' => $radarrId,
+                    'language' => $language,
+                    'forced' => $this->lowerBoolean($forced),
+                    'hi' => $this->lowerBoolean($hearingImpaired),
+                ]),
+        );
+    }
+
+    /**
+     * @param  array<string, mixed>  $selection
+     */
+    public function deleteEpisodeSubtitle(array $selection): void
+    {
+        $this->deleteSubtitle('/api/episodes/subtitles', [
+            'seriesid' => $this->positiveSelectionId($selection, 'series_id'),
+            'episodeid' => $this->positiveSelectionId($selection, 'episode_id'),
+            ...$this->subtitleSelection($selection),
+        ]);
+    }
+
+    /**
+     * @param  array<string, mixed>  $selection
+     */
+    public function deleteMovieSubtitle(array $selection): void
+    {
+        $this->deleteSubtitle('/api/movies/subtitles', [
+            'radarrid' => $this->positiveSelectionId($selection, 'radarr_id'),
+            ...$this->subtitleSelection($selection),
+        ]);
+    }
+
+    /**
+     * @param  array<string, mixed>  $selection
+     */
+    public function applySubtitleTool(array $selection): void
+    {
+        $action = $this->selectionString($selection, 'action');
+        throw_unless(preg_match('/^[a-z0-9_-]{1,64}$/D', $action) === 1, InvalidArgumentException::class, 'Bazarr subtitle action is invalid.');
+
+        $mediaType = $this->selectionString($selection, 'media_type');
+        throw_unless(in_array($mediaType, ['episode', 'movie'], true), InvalidArgumentException::class, 'Bazarr media type must be episode or movie.');
+
+        $payload = [
+            'action' => $action,
+            'language' => $this->validateLanguage($this->selectionString($selection, 'language')),
+            'path' => $this->selectionString($selection, 'path'),
+            'type' => $mediaType,
+            'id' => $this->positiveSelectionId($selection, 'media_id'),
+            'forced' => $this->titleBoolean(($selection['forced'] ?? false) === true),
+            'hi' => $this->titleBoolean(($selection['hearing_impaired'] ?? false) === true),
+        ];
+
+        foreach (['reference', 'max_offset_seconds', 'no_fix_framerate', 'gss', 'original_format'] as $optionalField) {
+            if (isset($selection[$optionalField]) && is_scalar($selection[$optionalField])) {
+                $payload[$optionalField] = (string) $selection[$optionalField];
+            }
+        }
+
+        $this->write(
+            $this->buildClient(withRetry: false)
+                ->asForm()
+                ->patch('/api/subtitles', $payload),
+        );
+    }
+
+    public function runTask(string $taskId): void
+    {
+        throw_unless(preg_match('/^[a-zA-Z0-9_.:-]{1,150}$/D', $taskId) === 1, InvalidArgumentException::class, 'Bazarr task ID is invalid.');
+
+        $this->write(
+            $this->buildClient(withRetry: false)
+                ->asForm()
+                ->post('/api/system/tasks', ['taskid' => $taskId]),
+        );
+    }
+
+    public function runMediaAction(string $mediaType, int $id, string $action): void
+    {
+        throw_unless(in_array($mediaType, ['episode', 'movie'], true), InvalidArgumentException::class, 'Bazarr media type must be episode or movie.');
+        throw_unless(in_array($action, ['scan-disk', 'search-missing', 'search-wanted', 'sync'], true), InvalidArgumentException::class, 'Bazarr media action is invalid.');
+        $this->validatePositiveId($id, 'media ID');
+        $isEpisode = $mediaType === 'episode';
+
+        $this->write(
+            $this->buildClient(withRetry: false)
+                ->asForm()
+                ->patch($isEpisode ? '/api/series' : '/api/movies', [
+                    $isEpisode ? 'seriesid' : 'radarrid' => $id,
+                    'action' => $action,
+                ]),
+        );
+    }
+
+    /**
      * @return array{data: list<array<string, mixed>>}
      *
      * @throws ConnectionException|RequestException|UnexpectedValueException
@@ -269,15 +525,20 @@ final class BazarrClient
         });
     }
 
-    private function buildClient(): PendingRequest
+    private function buildClient(bool $withRetry = true): PendingRequest
     {
-        return Http::baseUrl(rtrim((string) $this->serviceConnection->url, '/'))
+        $pendingRequest = Http::baseUrl(rtrim((string) $this->serviceConnection->url, '/'))
             ->withHeaders(['X-API-KEY' => $this->serviceConnection->api_key])
             ->acceptJson()
             ->connectTimeout(3)
             ->timeout(15)
-            ->withUserAgent('MediaManager/'.config('app.version').' BazarrClient')
-            ->retry(
+            ->withUserAgent('MediaManager/'.config('app.version').' BazarrClient');
+
+        if (! $withRetry) {
+            return $pendingRequest;
+        }
+
+        return $pendingRequest->retry(
                 [250, 750],
                 when: fn (Throwable $throwable): bool => $throwable instanceof ConnectionException
                     || ($throwable instanceof RequestException && $throwable->response->serverError()),
@@ -379,6 +640,226 @@ final class BazarrClient
     private function validateOptionalId(?int $id, string $name): void
     {
         throw_if($id !== null && $id <= 0, InvalidArgumentException::class, sprintf('Bazarr %s must be positive when provided.', $name));
+    }
+
+    private function validatePositiveId(int $id, string $name): void
+    {
+        throw_if($id <= 0, InvalidArgumentException::class, sprintf('Bazarr %s must be positive.', $name));
+    }
+
+    private function validateLanguage(string $language): string
+    {
+        $language = strtolower(trim($language));
+        throw_unless(preg_match('/^[a-z]{2,3}(?:-[a-z0-9]+)?$/D', $language) === 1, InvalidArgumentException::class, 'Bazarr language is invalid.');
+
+        return $language;
+    }
+
+    /**
+     * @return list<array<string, mixed>>
+     */
+    private function rawEpisodeCandidates(int $episodeId): array
+    {
+        return $this->dataListEnvelope(
+            $this->buildClient()->get('/api/providers/episodes', ['episodeid' => $episodeId]),
+        )['data'];
+    }
+
+    /**
+     * @return list<array<string, mixed>>
+     */
+    private function rawMovieCandidates(int $radarrId): array
+    {
+        return $this->dataListEnvelope(
+            $this->buildClient()->get('/api/providers/movies', ['radarrid' => $radarrId]),
+        )['data'];
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $candidates
+     * @return list<array<string, mixed>>
+     */
+    private function sanitizedCandidates(string $mediaType, int $mediaId, array $candidates): array
+    {
+        $sanitized = [];
+
+        foreach ($candidates as $candidate) {
+            $identity = $this->candidateIdentity($mediaType, $mediaId, $candidate);
+
+            if ($identity === null) {
+                continue;
+            }
+
+            $sanitized[] = [
+                'fingerprint' => new BazarrCandidateFingerprint()->make($identity),
+                'provider' => $identity['provider'],
+                'language' => $identity['language'],
+                'forced' => $identity['forced'],
+                'hearing_impaired' => $identity['hearing_impaired'],
+                'score' => $identity['score'],
+                'release_info' => $identity['release_info'],
+                'original_format' => $this->candidateFlag($candidate['original_format'] ?? false),
+                'uploader' => $this->safeCandidateText($candidate['uploader'] ?? null),
+            ];
+
+            if (count($sanitized) === 25) {
+                break;
+            }
+        }
+
+        return $sanitized;
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $candidates
+     * @return array<string, mixed>
+     */
+    private function resolveExactCandidate(
+        string $mediaType,
+        int $mediaId,
+        string $fingerprint,
+        array $candidates,
+    ): array {
+        foreach ($candidates as $candidate) {
+            $identity = $this->candidateIdentity($mediaType, $mediaId, $candidate);
+
+            if ($identity !== null && new BazarrCandidateFingerprint()->verify($identity, $fingerprint)) {
+                return $candidate;
+            }
+        }
+
+        throw new UnexpectedValueException('The selected Bazarr subtitle candidate is no longer available.');
+    }
+
+    /**
+     * @param  array<string, mixed>  $candidate
+     * @return array<string, mixed>|null
+     */
+    private function candidateIdentity(string $mediaType, int $mediaId, array $candidate): ?array
+    {
+        $provider = $this->safeCandidateText($candidate['provider'] ?? null);
+        $subtitle = $this->safeCandidateText($candidate['subtitle'] ?? null, 2_000);
+        $language = $this->safeCandidateText($candidate['language'] ?? null, 20);
+
+        if ($provider === null || $subtitle === null || $language === null) {
+            return null;
+        }
+
+        $releaseInfo = $candidate['release_info'] ?? [];
+        if (is_string($releaseInfo)) {
+            $releaseInfo = [$releaseInfo];
+        }
+
+        $releaseInfo = is_array($releaseInfo)
+            ? array_values(array_filter(array_map(
+                fn (mixed $release): ?string => $this->safeCandidateText($release, 250),
+                array_slice($releaseInfo, 0, 10),
+            )))
+            : [];
+
+        return [
+            'media_type' => $mediaType,
+            'media_id' => $mediaId,
+            'provider' => $provider,
+            'subtitle' => $subtitle,
+            'language' => strtolower($language),
+            'forced' => $this->candidateFlag($candidate['forced'] ?? false),
+            'hearing_impaired' => $this->candidateFlag($candidate['hearing_impaired'] ?? false),
+            'score' => is_numeric($candidate['score'] ?? null) ? (float) $candidate['score'] : null,
+            'release_info' => $releaseInfo,
+        ];
+    }
+
+    private function safeCandidateText(mixed $value, int $limit = 100): ?string
+    {
+        if (! is_string($value) || ! mb_check_encoding($value, 'UTF-8')) {
+            return null;
+        }
+
+        $value = trim($value);
+
+        return $value === '' ? null : mb_substr($value, 0, $limit);
+    }
+
+    private function candidateFlag(mixed $value): bool
+    {
+        return $value === true
+            || (is_string($value) && in_array(strtolower($value), ['true', '1', 'yes'], true))
+            || (is_int($value) && $value === 1);
+    }
+
+    /**
+     * @param  array<string, mixed>  $candidate
+     */
+    private function candidateString(array $candidate, string $field): string
+    {
+        $value = $this->safeCandidateText($candidate[$field] ?? null, 2_000);
+        throw_if($value === null, UnexpectedValueException::class, sprintf('Bazarr candidate %s is missing.', $field));
+
+        return $value;
+    }
+
+    /**
+     * @param  array<string, mixed>  $selection
+     */
+    private function positiveSelectionId(array $selection, string $field): int
+    {
+        $value = $selection[$field] ?? null;
+        throw_unless(is_int($value) && $value > 0, InvalidArgumentException::class, sprintf('Bazarr selection %s must be a positive integer.', $field));
+
+        return $value;
+    }
+
+    /**
+     * @param  array<string, mixed>  $selection
+     */
+    private function selectionString(array $selection, string $field): string
+    {
+        $value = $selection[$field] ?? null;
+        throw_unless(is_string($value) && trim($value) !== '', InvalidArgumentException::class, sprintf('Bazarr selection %s must be a non-empty string.', $field));
+
+        return trim($value);
+    }
+
+    /**
+     * @param  array<string, mixed>  $selection
+     * @return array{language: string, forced: string, hi: string, path: string}
+     */
+    private function subtitleSelection(array $selection): array
+    {
+        return [
+            'language' => $this->validateLanguage($this->selectionString($selection, 'language')),
+            'forced' => $this->lowerBoolean(($selection['forced'] ?? false) === true),
+            'hi' => $this->lowerBoolean(($selection['hearing_impaired'] ?? false) === true),
+            'path' => $this->selectionString($selection, 'path'),
+        ];
+    }
+
+    /**
+     * @param  array<string, int|string>  $payload
+     */
+    private function deleteSubtitle(string $endpoint, array $payload): void
+    {
+        $this->write(
+            $this->buildClient(withRetry: false)
+                ->asForm()
+                ->delete($endpoint, $payload),
+        );
+    }
+
+    private function write(Response $response): void
+    {
+        $response->throw();
+    }
+
+    private function lowerBoolean(bool $value): string
+    {
+        return $value ? 'true' : 'false';
+    }
+
+    private function titleBoolean(bool $value): string
+    {
+        return $value ? 'True' : 'False';
     }
 
     /**
