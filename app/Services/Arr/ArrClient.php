@@ -203,9 +203,16 @@ abstract class ArrClient
      *
      * @throws RequestException|ConnectionException
      */
+    /**
+     * Interactive release search sweeps every configured indexer and
+     * routinely takes 30-60+ seconds — far past the generic 10s timeout,
+     * whose 3 transparent retries then multiplied into repeated full indexer
+     * sweeps per attempt. Dedicated long timeout, no transparent retry.
+     */
     public function getReleases(array $params): array
     {
-        return $this->buildClient()
+        return $this->buildClient(withRetry: false)
+            ->timeout(120)
             ->get(sprintf('/api/%s/release', $this->apiVersion), $params)
             ->throw()
             ->json() ?? [];

@@ -18,6 +18,22 @@ test('production queue worker timeout is lower than retry after defaults', funct
     expect(config('queue.connections.beanstalkd.retry_after'))->toBeGreaterThan($workerTimeout);
 });
 
+test('production queue container stop grace period covers the worker timeout', function (): void {
+    $entrypoint = file_get_contents(base_path('docker/production/entrypoint.sh'));
+    $compose = file_get_contents(base_path('docker/production/compose.yaml'));
+
+    preg_match('/\s+queue\)(.*?)\s+;;/s', (string) $entrypoint, $queueBlock);
+    preg_match('/--timeout=(\d+)/', $queueBlock[1] ?? '', $timeout);
+    expect($timeout)->not->toBeEmpty();
+
+    preg_match('/\n  queue:\n(.*?)(?=\n  [a-z][a-z-]+:|\nvolumes:)/s', (string) $compose, $queueServiceBlock);
+    expect($queueServiceBlock)->not->toBeEmpty();
+
+    preg_match('/stop_grace_period:\s*(\d+)s/', $queueServiceBlock[1], $gracePeriod);
+    expect($gracePeriod)->not->toBeEmpty()
+        ->and((int) $gracePeriod[1])->toBeGreaterThan((int) $timeout[1]);
+});
+
 test('production reverb healthcheck accepts http status codes without curl fail-fast', function (): void {
     $healthcheck = file_get_contents(base_path('docker/production/healthcheck.sh'));
 

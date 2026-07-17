@@ -34,6 +34,13 @@ class ExecuteActionRequest implements ShouldBeUnique, ShouldQueue
     use Queueable;
     use SerializesModels;
 
+    /**
+     * Deleting the underlying model while this job is queued must drop the
+     * job silently instead of filling failed_jobs with
+     * ModelNotFoundException noise.
+     */
+    public bool $deleteWhenMissingModels = true;
+
     public int $tries = 3;
 
     public int $backoff = 30;
@@ -59,21 +66,39 @@ class ExecuteActionRequest implements ShouldBeUnique, ShouldQueue
 
         try {
             $result = $executor->execute($this->actionRequest);
-        } catch (ConnectionException|RequestException $transient) {
+        } catch (ConnectionException|RequestException $exception) {
+            // Only genuinely transient failures retry: connection loss and
+            // upstream 5xx. A 4xx is deterministic (deleting an
+            // already-removed series will 404 on every attempt) — retrying
+            // it three times with backoff just delayed the Failed state and
+            // mislabeled it retries_exhausted.
+            $transient = $exception instanceof ConnectionException
+                || $exception->response->serverError();
+
+            if (! $transient) {
+                $this->markFailed([
+                    'reason' => 'execution_failed',
+                    'message' => $exception->getMessage(),
+                    'exception' => $exception::class,
+                ]);
+
+                return;
+            }
+
             // Transient failure: rethrow so Laravel retries per $tries + $backoff.
             // On the final attempt, persist Failed state and return without throwing
             // (preventing double-handling in failed()).
             if ($this->attempts() >= $this->tries) {
                 $this->markFailed([
                     'reason' => 'retries_exhausted',
-                    'message' => $transient->getMessage(),
-                    'exception' => $transient::class,
+                    'message' => $exception->getMessage(),
+                    'exception' => $exception::class,
                 ]);
 
                 return;
             }
 
-            throw $transient;
+            throw $exception;
         } catch (Throwable $permanent) {
             // Permanent failure: mark Failed immediately — no retry.
             $this->markFailed([

@@ -31,6 +31,13 @@ class ProcessWebhookEvent implements ShouldQueue
     use Queueable;
     use SerializesModels;
 
+    /**
+     * Deleting the underlying model while this job is queued must drop the
+     * job silently instead of filling failed_jobs with
+     * ModelNotFoundException noise.
+     */
+    public bool $deleteWhenMissingModels = true;
+
     public int $tries = 3;
 
     public int $backoff = 10;
@@ -41,9 +48,8 @@ class ProcessWebhookEvent implements ShouldQueue
     {
         $this->webhookEvent->refresh();
 
-        // Idempotency: if the handler already ran to completion, don't retry.
-        if ($this->webhookEvent->processed_at !== null) {
-            Log::info('ProcessWebhookEvent: already processed, skipping', [
+        if (! $this->claim()) {
+            Log::info('ProcessWebhookEvent: already processed or claimed by another worker, skipping', [
                 'webhook_event_id' => $this->webhookEvent->id,
             ]);
 
@@ -78,6 +84,35 @@ class ProcessWebhookEvent implements ShouldQueue
         $this->webhookEvent->update(['handling_status' => $webhookHandlingStatus]);
 
         $this->discardIfCaptureDisabled();
+    }
+
+    /**
+     * Atomically claim the event for this worker. The previous read-check on
+     * `processed_at` was not atomic: a redelivered/duplicate job could pass
+     * the check while another worker was mid-handle and run the side effects
+     * twice. Only the worker whose conditional update flips the status to
+     * Processing proceeds; a retry attempt may reclaim a row left in
+     * Processing by a worker that died mid-run.
+     */
+    private function claim(): bool
+    {
+        $claimed = WebhookEvent::query()
+            ->whereKey($this->webhookEvent->id)
+            ->whereNull('processed_at')
+            ->whereNull('handling_status')
+            ->update(['handling_status' => WebhookHandlingStatus::Processing->value]);
+
+        if ($claimed === 1) {
+            $this->webhookEvent->refresh();
+
+            return true;
+        }
+
+        $this->webhookEvent->refresh();
+
+        return $this->webhookEvent->processed_at === null
+            && $this->webhookEvent->handling_status === WebhookHandlingStatus::Processing
+            && $this->attempts() > 1;
     }
 
     /**

@@ -73,15 +73,20 @@ export function useInstantSearch(debounceMs = 200): UseInstantSearch {
             error.value = data.error ?? null;
         } catch (cause) {
             if ((cause as DOMException)?.name === 'AbortError') {
+                // A newer request superseded this one and owns the loading
+                // flag — clearing it here would hide the newer spinner.
                 return;
             }
 
             error.value = 'Search failed.';
             series.value = [];
             movies.value = [];
-        } finally {
             loading.value = false;
+
+            return;
         }
+
+        loading.value = false;
     }, debounceMs);
 
     watch(query, (next) => {

@@ -1,6 +1,7 @@
 import { onUnmounted, ref } from 'vue';
 import type { Ref } from 'vue';
 import { useWebSocket } from '@/composables/useWebSocket';
+import type { ChannelLease } from '@/composables/useWebSocket';
 
 export interface UseRealtimeListOptions<T> {
     channel: string;
@@ -17,6 +18,7 @@ export interface UseRealtimeList<T> {
     isPaused: Ref<boolean>;
     pause: () => void;
     resume: () => void;
+    reseed: (rows: T[]) => void;
     subscribe: () => void;
     unsubscribe: () => void;
 }
@@ -37,11 +39,11 @@ export function useRealtimeList<T>({
     cap,
     prepend = true,
 }: UseRealtimeListOptions<T>): UseRealtimeList<T> {
-    const { privateChannel, leaveChannel } = useWebSocket();
+    const { acquirePrivateChannel } = useWebSocket();
     const items = ref<T[]>([...initial]) as Ref<T[]>;
     const staleCount = ref(0);
     const isPaused = ref(false);
-    let subscribed = false;
+    let lease: ChannelLease | null = null;
 
     function upsert(payload: T): void {
         const key = payload[keyField];
@@ -71,30 +73,27 @@ export function useRealtimeList<T>({
     }
 
     function subscribe(): void {
-        if (subscribed) {
+        if (lease) {
             return;
         }
 
-        privateChannel(channel).listen(`.${event}`, (payload: T) => {
-            if (isPaused.value) {
-                staleCount.value += 1;
+        lease = acquirePrivateChannel(channel).listen(
+            `.${event}`,
+            (payload: T) => {
+                if (isPaused.value) {
+                    staleCount.value += 1;
 
-                return;
-            }
+                    return;
+                }
 
-            upsert(payload);
-        });
-
-        subscribed = true;
+                upsert(payload);
+            },
+        );
     }
 
     function unsubscribe(): void {
-        if (!subscribed) {
-            return;
-        }
-
-        leaveChannel(channel);
-        subscribed = false;
+        lease?.release();
+        lease = null;
     }
 
     function pause(): void {
@@ -106,6 +105,18 @@ export function useRealtimeList<T>({
         staleCount.value = 0;
     }
 
+    /**
+     * Replace the list with fresh server rows. Pages navigate with
+     * `preserveState: true`, so the once-at-setup `initial` seed goes stale
+     * the moment a filter changes or a reload replaces the prop — callers
+     * must reseed from a watcher on the prop or the realtime list renders
+     * rows from a previous filter/page.
+     */
+    function reseed(rows: T[]): void {
+        items.value = [...rows];
+        staleCount.value = 0;
+    }
+
     onUnmounted(unsubscribe);
 
     return {
@@ -114,6 +125,7 @@ export function useRealtimeList<T>({
         isPaused,
         pause,
         resume,
+        reseed,
         subscribe,
         unsubscribe,
     };

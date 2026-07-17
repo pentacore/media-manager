@@ -34,7 +34,10 @@ class AppServiceProvider extends ServiceProvider
     public function register(): void
     {
         $this->app->singleton(AppSettings::class);
-        $this->app->singleton(AiSettings::class);
+        // Scoped, not singleton: AiSettings carries a per-request AiMode
+        // override (withMode()); under Octane a singleton would leak one
+        // request's override into every later request served by the worker.
+        $this->app->scoped(AiSettings::class);
         $this->app->singleton(DecisionAgentSettings::class);
 
         // Telescope is a require-dev package; the wrapper provider extends

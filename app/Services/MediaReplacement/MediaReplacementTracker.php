@@ -35,6 +35,19 @@ final readonly class MediaReplacementTracker
         MediaReplacementStatus::NeedsAttention,
     ];
 
+    /**
+     * needs_attention reasons that a later webhook may still resolve: the
+     * sweep timed the download out, a manual import was pending, or the old
+     * file's deletion failed after an accepted grab. In each case a late
+     * Download event means the file actually imported, so the attempt must
+     * stay verifiable/remonitorable rather than permanently excluded.
+     */
+    private const array RECOVERABLE_FAILURE_REASONS = [
+        'download_timeout',
+        'manual_interaction_required',
+        'deletion_failed',
+    ];
+
     public function __construct(
         private MediaFileInspector $mediaFileInspector,
         private LanguageNormalizer $languageNormalizer,
@@ -175,12 +188,16 @@ final readonly class MediaReplacementTracker
                 $restored ? null : 'restore_monitoring_failed',
             ]));
 
-            $attempt->update([
-                'status' => $ok ? MediaReplacementStatus::Verified : MediaReplacementStatus::NeedsAttention,
-                'verification' => $verification,
-                'completed_at' => now(),
-                'failure_reason' => $ok ? null : implode(',', $reasons),
-            ]);
+            $won = $this->terminalize(
+                $attempt,
+                $ok ? MediaReplacementStatus::Verified : MediaReplacementStatus::NeedsAttention,
+                $ok ? null : implode(',', $reasons),
+                ['verification' => json_encode($verification)],
+            );
+
+            if (! $won) {
+                return;
+            }
 
             $this->notify(
                 $serviceConnection,
@@ -300,11 +317,16 @@ final readonly class MediaReplacementTracker
             }
 
             $mediaReplacementAttempt = $matches->first();
-            $mediaReplacementAttempt->update([
-                'status' => MediaReplacementStatus::NeedsAttention,
-                'failure_reason' => 'manual_interaction_required',
-                'completed_at' => now(),
-            ]);
+
+            if ($mediaReplacementAttempt->failure_reason === 'manual_interaction_required') {
+                return;
+            }
+
+            $won = $this->terminalize($mediaReplacementAttempt, MediaReplacementStatus::NeedsAttention, 'manual_interaction_required');
+
+            if (! $won) {
+                return;
+            }
 
             $this->notify(
                 $serviceConnection,
@@ -331,11 +353,8 @@ final readonly class MediaReplacementTracker
      */
     private function attemptsByDownloadId(ServiceConnection $serviceConnection, string $downloadId): Collection
     {
-        // Non-terminal attempts, plus recoverable needs_attention attempts: one
-        // the reconciliation sweep timed out (download_timeout) or one that was
-        // waiting on a manual import (manual_interaction_required). In both cases
-        // a late Download event means the file finally imported, so it must still
-        // be verifiable/remonitorable rather than permanently excluded.
+        // Non-terminal attempts, plus recoverable needs_attention attempts —
+        // see RECOVERABLE_FAILURE_REASONS.
         return MediaReplacementAttempt::query()
             ->where('service_connection_id', $serviceConnection->id)
             ->where('download_id', $downloadId)
@@ -345,10 +364,53 @@ final readonly class MediaReplacementTracker
                     self::TERMINAL_STATUSES,
                 ))->orWhere(function (Builder $builder): void {
                     $builder->where('status', MediaReplacementStatus::NeedsAttention->value)
-                        ->whereIn('failure_reason', ['download_timeout', 'manual_interaction_required']);
+                        ->whereIn('failure_reason', self::RECOVERABLE_FAILURE_REASONS);
                 });
             })
             ->get();
+    }
+
+    /**
+     * Conditionally move an attempt to a terminal status. Only the caller
+     * whose update wins may notify — concurrent webhook deliveries and the
+     * executor's own finalization would otherwise double-write terminal
+     * state, double-remonitor, or overwrite an operator-facing reason.
+     * Transitions FROM a recoverable needs_attention reason stay allowed so
+     * a late import can still resolve a timed-out/manual/deletion-failed
+     * attempt.
+     *
+     * @param  array<string, mixed>  $extra  additional column writes; array
+     *                                       values must be pre-encoded (this bypasses Eloquent casts)
+     */
+    private function terminalize(
+        MediaReplacementAttempt $mediaReplacementAttempt,
+        MediaReplacementStatus $status,
+        ?string $failureReason,
+        array $extra = [],
+    ): bool {
+        $won = MediaReplacementAttempt::query()
+            ->whereKey($mediaReplacementAttempt->id)
+            ->where(function (Builder $builder): void {
+                $builder->whereNotIn('status', array_map(
+                    static fn (MediaReplacementStatus $mediaReplacementStatus): string => $mediaReplacementStatus->value,
+                    self::TERMINAL_STATUSES,
+                ))->orWhere(function (Builder $builder): void {
+                    $builder->where('status', MediaReplacementStatus::NeedsAttention->value)
+                        ->whereIn('failure_reason', self::RECOVERABLE_FAILURE_REASONS);
+                });
+            })
+            ->update([
+                'status' => $status->value,
+                'completed_at' => now(),
+                'failure_reason' => $failureReason,
+                ...$extra,
+            ]) === 1;
+
+        if ($won) {
+            $mediaReplacementAttempt->refresh();
+        }
+
+        return $won;
     }
 
     /**
@@ -357,11 +419,15 @@ final readonly class MediaReplacementTracker
     private function flagAmbiguous(Collection $attempts, ServiceConnection $serviceConnection): void
     {
         foreach ($attempts as $attempt) {
-            $attempt->update([
-                'status' => MediaReplacementStatus::NeedsAttention,
-                'failure_reason' => 'ambiguous_webhook_correlation',
-                'completed_at' => now(),
-            ]);
+            if ($attempt->failure_reason === 'ambiguous_webhook_correlation') {
+                continue;
+            }
+
+            $won = $this->terminalize($attempt, MediaReplacementStatus::NeedsAttention, 'ambiguous_webhook_correlation');
+
+            if (! $won) {
+                continue;
+            }
 
             $this->notify(
                 $serviceConnection,
@@ -496,6 +562,45 @@ final readonly class MediaReplacementTracker
         }
 
         return sprintf('Replacement imported but needs review (%s).', implode('; ', $parts));
+    }
+
+    /**
+     * Restore monitoring suspended by the executor for an attempt that is
+     * being terminalized outside the normal webhook/executor handshake (the
+     * reconciliation sweep). Returns true when monitoring is settled — either
+     * restored now, or there was nothing to restore.
+     */
+    public function restoreSuspendedMonitoring(MediaReplacementAttempt $mediaReplacementAttempt): bool
+    {
+        if ($mediaReplacementAttempt->monitoring_suspended !== true) {
+            return true;
+        }
+
+        // Suspended but the target was never monitored to begin with: clear
+        // the flag without touching the arr — re-enabling monitoring the
+        // user had off would be wrong.
+        if ($mediaReplacementAttempt->was_monitored !== true) {
+            $mediaReplacementAttempt->forceFill(['monitoring_suspended' => false])->save();
+
+            return true;
+        }
+
+        $serviceConnection = $mediaReplacementAttempt->serviceConnection;
+
+        if (! $serviceConnection instanceof ServiceConnection) {
+            return false;
+        }
+
+        $restored = $this->remonitorTarget(
+            $serviceConnection,
+            is_array($mediaReplacementAttempt->target) ? $mediaReplacementAttempt->target : [],
+        );
+
+        if ($restored) {
+            $mediaReplacementAttempt->forceFill(['monitoring_suspended' => false])->save();
+        }
+
+        return $restored;
     }
 
     /**

@@ -26,6 +26,13 @@ class FetchLatestServiceVersion implements ShouldQueue
     use Queueable;
     use SerializesModels;
 
+    /**
+     * Deleting the underlying model while this job is queued must drop the
+     * job silently instead of filling failed_jobs with
+     * ModelNotFoundException noise.
+     */
+    public bool $deleteWhenMissingModels = true;
+
     public int $tries = 2;
 
     public int $backoff = 30;

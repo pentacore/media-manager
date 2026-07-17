@@ -13,12 +13,22 @@ use App\Console\Commands\PollSabnzbdHistory;
 use App\Console\Commands\PruneAiProposedWorkflows;
 use App\Console\Commands\PruneStatistics;
 use App\Console\Commands\ReconcileMediaReplacementAttempts;
+use App\Console\Commands\ReconcileStuckActionRequests;
 use App\Console\Commands\RefreshInterventionCount;
 use App\Console\Commands\RefreshSabnzbdDownloadCounts;
 use App\Console\Commands\WarmServiceCaches;
 use App\Jobs\ReconcileSearchIndex;
 use App\Jobs\SyncAnimeMappingJob;
+use App\Models\ActivityLog;
+use App\Models\AgentDecision;
+use App\Models\AiToolInvocation;
+use App\Models\AiUsageRecord;
+use App\Models\EmbyActivity;
+use App\Models\MediaReplacementAttempt;
+use App\Models\WebhookEvent;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schedule;
+use Laravel\Telescope\Telescope;
 
 Schedule::command(CheckServiceHealth::class)
     ->everyFiveMinutes()
@@ -41,6 +51,10 @@ Schedule::command(PruneAiProposedWorkflows::class)
     ->withoutOverlapping();
 
 Schedule::command(ReconcileMediaReplacementAttempts::class)
+    ->hourly()
+    ->withoutOverlapping();
+
+Schedule::command(ReconcileStuckActionRequests::class)
     ->hourly()
     ->withoutOverlapping();
 
@@ -91,3 +105,43 @@ Schedule::command(CollectServiceGauges::class)
 Schedule::command(CollectServiceGauges::class, ['--library'])
     ->dailyAt('04:00')
     ->withoutOverlapping();
+
+// Retention for the fastest-growing tables (config: mediamanager.retention;
+// 0 disables a table). Without this, webhook payloads, activity rows, AI
+// usage records, and notifications grow without bound.
+Schedule::command('model:prune', [
+    '--model' => [
+        WebhookEvent::class,
+        ActivityLog::class,
+        EmbyActivity::class,
+        AiUsageRecord::class,
+        AiToolInvocation::class,
+        AgentDecision::class,
+        MediaReplacementAttempt::class,
+    ],
+])
+    ->dailyAt('03:00')
+    ->withoutOverlapping();
+
+// laravel's DatabaseNotification isn't ours to make Prunable; trim directly.
+Schedule::call(function (): void {
+    $days = (int) config('mediamanager.retention.notifications_days');
+
+    if ($days > 0) {
+        DB::table('notifications')
+            ->where('created_at', '<', now()->subDays($days))
+            ->delete();
+    }
+})
+    ->name('prune-notifications')
+    ->daily()
+    ->withoutOverlapping();
+
+// Telescope is a require-dev package: the class exists on dev machines (where
+// telescope_entries otherwise grows unboundedly) and is absent from the
+// production image, where scheduling the command would fail every night.
+if (class_exists(Telescope::class)) {
+    Schedule::command('telescope:prune', ['--hours' => 48])
+        ->daily()
+        ->withoutOverlapping();
+}

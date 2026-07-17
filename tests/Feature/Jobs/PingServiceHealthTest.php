@@ -70,6 +70,27 @@ test('records connection-level failures with a connection prefix', function (): 
     expect($fresh->health_message)->toContain('Failed to connect');
 });
 
+test('redacts url query strings from persisted failure messages', function (): void {
+    $connection = ServiceConnection::factory()->sabnzbd()->create([
+        'url' => 'http://sab.local:8080',
+        'health_status' => HealthStatus::Healthy,
+    ]);
+
+    // Guzzle ConnectException messages include the full effective URI — for
+    // SABnzbd that query string carries the mandatory apikey credential.
+    Http::fake(fn () => throw new ConnectionException(
+        'cURL error 28: Operation timed out for http://sab.local:8080/api?output=json&apikey=supersecret&mode=version',
+    ));
+
+    new PingServiceHealth($connection)->handle();
+
+    $fresh = $connection->fresh();
+    expect($fresh->health_status)->toBe(HealthStatus::Unhealthy);
+    expect($fresh->health_message)->toStartWith('Connection failed:');
+    expect($fresh->health_message)->not->toContain('supersecret');
+    expect($fresh->health_message)->toContain('http://sab.local:8080/api?[redacted]');
+});
+
 test('truncates very long upstream bodies to 255 chars', function (): void {
     $connection = ServiceConnection::factory()->sonarr()->create([
         'url' => 'http://sonarr.local:8989',

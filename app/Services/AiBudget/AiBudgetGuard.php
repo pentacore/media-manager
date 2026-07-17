@@ -10,6 +10,7 @@ use App\Notifications\AiBudgetSoftLimitReached;
 use App\Services\AiUsage\AiUsageReporting;
 use App\Settings\AiSettings;
 use Carbon\CarbonImmutable;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Notification;
 use Throwable;
 
@@ -56,11 +57,29 @@ class AiBudgetGuard
         }
     }
 
+    /**
+     * Cache key for the current month's spend. Busted by RecordAgentUsage on
+     * every new usage row, so the cache only ever absorbs the repeated
+     * enforce() calls between turns — totals() replays every usage row of
+     * the period in PHP, which grew linearly all month and ran before every
+     * chat message and agent run.
+     */
+    public static function spendCacheKey(): string
+    {
+        return 'ai-budget:month-spend:'.CarbonImmutable::now()->format('Y-m');
+    }
+
     public function currentMonthSpend(): float
     {
-        $since = CarbonImmutable::now()->startOfMonth();
+        return (float) Cache::remember(
+            self::spendCacheKey(),
+            300,
+            function (): float {
+                $since = CarbonImmutable::now()->startOfMonth();
 
-        return (float) $this->aiUsageReporting->totals($since)['total_cost'];
+                return (float) $this->aiUsageReporting->totals($since)['total_cost'];
+            },
+        );
     }
 
     /**

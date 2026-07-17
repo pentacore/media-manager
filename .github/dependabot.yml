@@ -7,19 +7,16 @@
 version: 2
 updates:
   - package-ecosystem: composer
-    target-branch: develop
     directory: /
     schedule:
       interval: weekly
 
   - package-ecosystem: npm
-    target-branch: develop
     directory: /
     schedule:
       interval: weekly
 
   - package-ecosystem: github-actions
-    target-branch: develop
     directory: /
     schedule:
       interval: weekly
@@ -27,7 +24,6 @@ updates:
       prefix: 'ci(deps)'
 
   - package-ecosystem: docker
-    target-branch: develop
     directory: /docker/production
     schedule:
       interval: weekly

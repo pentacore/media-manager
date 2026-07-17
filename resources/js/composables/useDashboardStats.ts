@@ -1,6 +1,7 @@
 import { ref, onUnmounted } from 'vue';
 import type { Ref } from 'vue';
 import { useWebSocket } from '@/composables/useWebSocket';
+import type { ChannelLease } from '@/composables/useWebSocket';
 
 export interface DashboardStats {
     activeServices: number;
@@ -20,11 +21,16 @@ export interface UseDashboardStats {
 }
 
 export function useDashboardStats(): UseDashboardStats {
-    const { privateChannel, leaveChannel } = useWebSocket();
+    const { acquirePrivateChannel } = useWebSocket();
     const stats = ref<DashboardStats | null>(null);
+    let lease: ChannelLease | null = null;
 
     function subscribe(): void {
-        privateChannel('dashboard').listen(
+        if (lease) {
+            return;
+        }
+
+        lease = acquirePrivateChannel('dashboard').listen(
             '.DashboardStatsUpdated',
             (event: DashboardStats) => {
                 stats.value = event;
@@ -33,7 +39,8 @@ export function useDashboardStats(): UseDashboardStats {
     }
 
     function unsubscribe(): void {
-        leaveChannel('dashboard');
+        lease?.release();
+        lease = null;
     }
 
     onUnmounted(unsubscribe);

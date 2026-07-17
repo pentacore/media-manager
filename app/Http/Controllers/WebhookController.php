@@ -11,6 +11,7 @@ use App\Models\ServiceConnection;
 use App\Models\WebhookEvent;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 
 class WebhookController extends Controller
 {
@@ -30,23 +31,40 @@ class WebhookController extends Controller
         $eventType = $this->extractEventType($request, $connection->type);
         $payloadHash = WebhookEvent::payloadHash($payload);
 
-        $duplicate = WebhookEvent::query()
-            ->where('service_connection_id', $connection->id)
-            ->where('event_type', $eventType)
-            ->where('payload_hash', $payloadHash)
-            ->where('created_at', '>', now()->subMinutes(self::DEDUPE_WINDOW_MINUTES))
-            ->exists();
+        // The duplicate check and insert run under a payload-keyed advisory
+        // lock: two identical deliveries racing the check would otherwise
+        // both pass exists() and each spawn a processing job (the dedupe
+        // index is deliberately non-unique to allow re-occurrences outside
+        // the window). The lock releases at commit; the loser then sees the
+        // winner's row.
+        $webhookEvent = DB::transaction(function () use ($connection, $eventType, $payload, $payloadHash): ?WebhookEvent {
+            DB::select(
+                'SELECT pg_advisory_xact_lock(hashtext(?))',
+                [$connection->id.':'.$eventType.':'.$payloadHash],
+            );
 
-        if ($duplicate) {
+            $duplicate = WebhookEvent::query()
+                ->where('service_connection_id', $connection->id)
+                ->where('event_type', $eventType)
+                ->where('payload_hash', $payloadHash)
+                ->where('created_at', '>', now()->subMinutes(self::DEDUPE_WINDOW_MINUTES))
+                ->exists();
+
+            if ($duplicate) {
+                return null;
+            }
+
+            return WebhookEvent::create([
+                'service_connection_id' => $connection->id,
+                'event_type' => $eventType,
+                'payload' => $payload,
+                'payload_hash' => $payloadHash,
+            ]);
+        });
+
+        if (! $webhookEvent instanceof WebhookEvent) {
             return response()->json(['status' => 'received']);
         }
-
-        $webhookEvent = WebhookEvent::create([
-            'service_connection_id' => $connection->id,
-            'event_type' => $eventType,
-            'payload' => $payload,
-            'payload_hash' => $payloadHash,
-        ]);
 
         $webhookEvent->setRelation('serviceConnection', $connection);
 

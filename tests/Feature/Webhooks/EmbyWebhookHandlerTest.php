@@ -168,7 +168,7 @@ test('different play sessions for the same item create separate rows', function 
     expect(EmbyActivity::where('emby_item_id', 'item-1')->count())->toBe(2);
 });
 
-test('payload without PlaySessionId still produces a single legacy row', function (): void {
+test('payload without PlaySessionId dedupes onto a per-day synthesized session', function (): void {
     $payload = [
         'Event' => 'playback.start',
         'User' => ['Id' => 'emby-user-1'],
@@ -179,8 +179,19 @@ test('payload without PlaySessionId still produces a single legacy row', functio
     resolve(EmbyWebhookHandler::class)->handle(makeWebhookEvent($this->connection, $payload));
     resolve(EmbyWebhookHandler::class)->handle(makeWebhookEvent($this->connection, $payload));
 
+    // Same day -> one row; the synthesized key means a rewatch on a later
+    // day creates a NEW row (a NULL key used to collapse every future
+    // occurrence onto the first row forever, hiding rewatches from every
+    // created_at-bucketed statistic).
     expect(EmbyActivity::where('emby_item_id', 'item-1')->count())->toBe(1);
-    expect(EmbyActivity::where('emby_item_id', 'item-1')->first()->play_session_id)->toBeNull();
+    expect(EmbyActivity::where('emby_item_id', 'item-1')->first()->play_session_id)
+        ->toBe('sessionless:'.now()->toDateString());
+
+    $this->travel(1)->days();
+
+    resolve(EmbyWebhookHandler::class)->handle(makeWebhookEvent($this->connection, $payload));
+
+    expect(EmbyActivity::where('emby_item_id', 'item-1')->count())->toBe(2);
 });
 
 test('handler skips when no EmbyUserLink exists for the Emby user', function (): void {

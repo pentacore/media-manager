@@ -18,7 +18,7 @@ beforeEach(function (): void {
     $this->client = new SabnzbdClient($this->connection);
 });
 
-test('getVersion sends mode=version with X-Apikey header and output=json', function (): void {
+test('getVersion sends mode=version with the apikey parameter and output=json', function (): void {
     Http::fake([
         'sab.local:8080/api*' => Http::response(['version' => '4.2.0']),
     ]);
@@ -26,7 +26,8 @@ test('getVersion sends mode=version with X-Apikey header and output=json', funct
     $result = $this->client->getVersion();
 
     expect($result['version'])->toBe('4.2.0');
-    Http::assertSent(fn (Request $request): bool => $request->hasHeader('X-Apikey', 'test-api-key')
+    // SABnzbd reads the key from request params only — no header alternative.
+    Http::assertSent(fn (Request $request): bool => str_contains($request->url(), 'apikey=test-api-key')
         && str_contains($request->url(), 'mode=version')
         && str_contains($request->url(), 'output=json'));
 });

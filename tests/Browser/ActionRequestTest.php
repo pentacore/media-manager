@@ -24,10 +24,11 @@ test('a member sees a pending action request and can approve it', function (): v
         ->click('Approve & execute')
         ->assertPathIs('/actions/requests');
 
-    // Sync queue runs the dispatched action immediately. Without a real
-    // Sonarr to talk to it lands in Failed — the relevant assertion is
-    // that the click moved the request out of Pending.
-    expect($request->fresh()->status)->not->toBe(ActionRequestStatus::Pending);
+    // Sync queue runs the dispatched action immediately against the
+    // factory's loopback URL (nothing listens there), so the execution
+    // deterministically fails — assert the concrete terminal state rather
+    // than merely "not pending", which a stray 2xx would also satisfy.
+    expect($request->fresh()->status)->toBe(ActionRequestStatus::Failed);
 });
 
 test('a completed action request renders with a non-pending status', function (): void {
@@ -78,6 +79,36 @@ test('a replacement action request shows subtitle evidence in the detail panel',
         ->assertSee('manual')
         ->assertSee('Crunchyroll English')
         ->assertSee('season pack');
+});
+
+test('switching from a filtered tab back to All renders the unfiltered rows', function (): void {
+    $member = User::factory()->member()->create();
+    ActionRequest::factory()->create([
+        'status' => ActionRequestStatus::Failed,
+        'type' => 'failed.type',
+        'requires_approval' => false,
+    ]);
+    ActionRequest::factory()->create([
+        'status' => ActionRequestStatus::Completed,
+        'type' => 'completed.type',
+        'requires_approval' => false,
+    ]);
+
+    $this->actingAs($member);
+
+    // Land directly on the Failed filter (seeds the realtime list with
+    // failed rows only), then click All: preserveState keeps the component
+    // alive, so without reseeding the table would keep showing the
+    // failed-only seed labeled "All". The tab is targeted via data-test
+    // because its visible text includes the total count ("All 2"), which
+    // defeats the exact-text locator click('All') would use.
+    visit('/actions/requests?status=failed')
+        ->assertNoSmoke()
+        ->assertSee('failed.type')
+        ->assertDontSee('completed.type')
+        ->click('@tab-all')
+        ->assertSee('completed.type')
+        ->assertSee('failed.type');
 });
 
 test('a viewer cannot reach the action requests page', function (): void {

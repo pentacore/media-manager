@@ -8,6 +8,7 @@ use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\MassPrunable;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Override;
@@ -70,6 +71,7 @@ use Override;
 class AiUsageRecord extends Model
 {
     use HasFactory;
+    use MassPrunable;
 
     /**
      * @return array<string, string>
@@ -93,5 +95,19 @@ class AiUsageRecord extends Model
     public function user(): BelongsTo
     {
         return $this->belongsTo(User::class);
+    }
+
+    /**
+     * Retention window from mediamanager.retention (0 disables pruning).
+     */
+    public function prunable(): Builder
+    {
+        $days = (int) config('mediamanager.retention.ai_usage_records_days');
+
+        return static::query()->when(
+            $days > 0,
+            fn (Builder $builder): Builder => $builder->where('created_at', '<', now()->subDays($days)),
+            fn (Builder $builder): Builder => $builder->whereRaw('1 = 0'),
+        );
     }
 }

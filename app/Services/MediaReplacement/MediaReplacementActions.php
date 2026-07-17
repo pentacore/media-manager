@@ -83,6 +83,32 @@ final readonly class MediaReplacementActions implements ActionExecutor
             ->where('action_request_id', $actionRequest->id)
             ->first();
 
+        // A prior run persisted grab_attempted_at (pre-POST) but died before it
+        // could record the outcome (SIGKILL/OOM between arr acceptance and the
+        // grab_accepted_at save). The grab may well have been accepted, so
+        // re-entering the grab path would duplicate the download. Treat it
+        // like an indeterminate grab: hand resolution to the Grab/Download
+        // webhooks and the reconciliation sweep. Only for executor-owned
+        // states — a terminal Failed row means an operator Retry that SHOULD
+        // re-grab from scratch.
+        if ($existing instanceof MediaReplacementAttempt
+            && $existing->grab_attempted_at !== null
+            && $existing->grab_accepted_at === null
+            && in_array($existing->status, [MediaReplacementStatus::Downloading, MediaReplacementStatus::Requested], true)) {
+            if ($existing->cleanup_completed_at === null) {
+                $existing->forceFill(['cleanup_completed_at' => now()])->save();
+            }
+
+            return [
+                'attempt_id' => $existing->id,
+                'status' => MediaReplacementStatus::Downloading->value,
+                'replacement_initiated' => false,
+                'grab_outcome' => 'indeterminate',
+                'deleted_files' => 0,
+                'message' => 'A previous run attempted the grab but its outcome was never recorded; not re-grabbing. Webhooks and reconciliation will resolve it.',
+            ];
+        }
+
         if ($existing instanceof MediaReplacementAttempt && $existing->grab_accepted_at !== null) {
             // `cleanup_completed_at` is the durable evidence of whether the
             // executor finished its post-grab cleanup. If it is set, the run
@@ -138,6 +164,15 @@ final readonly class MediaReplacementActions implements ActionExecutor
             );
         }
 
+        // Bust the connection cache BEFORE the pre-grab freshness check: the
+        // abort gate below compares installed files against the approval-time
+        // snapshot, and a cached getSeries/getEpisodes/getMovie (TTL up to
+        // 10 min) could hide a file replaced after approval — the tracker's
+        // verifyDownload busts for the same reason.
+        ($serviceType === ServiceType::Sonarr
+            ? new SonarrCache($serviceConnection)
+            : new RadarrCache($serviceConnection))->bustAll();
+
         $freshTarget = $this->mediaFileInspector->inspectFromSnapshot($storedTarget, $serviceConnection);
         throw_unless(
             $this->sameFiles($storedTarget, $freshTarget),
@@ -185,6 +220,7 @@ final readonly class MediaReplacementActions implements ActionExecutor
                 'candidate' => is_array($payload['candidate'] ?? null) ? $payload['candidate'] : [],
                 'required_languages' => $requiredLanguages ?? $eligible['effective_languages'],
                 'download_id' => null,
+                'grab_attempted_at' => null,
                 'grab_accepted_at' => null,
                 // Reset the durable cleanup checkpoint too: a prior INDETERMINATE
                 // run sets cleanup_completed_at while leaving grab_accepted_at null,
@@ -220,6 +256,12 @@ final readonly class MediaReplacementActions implements ActionExecutor
         // successfully suspended it. A failed suspension of a monitored target
         // must NOT blocklist (that triggers the competing auto-search).
         $blocklistAllowed = ! $wasMonitored || $didSuspend;
+
+        // Durable pre-POST marker: if this process dies between the arr
+        // accepting the grab and the grab_accepted_at save below, the retry
+        // must find evidence that a grab was already attempted and treat it
+        // as indeterminate instead of re-issuing the non-idempotent POST.
+        $attempt->forceFill(['grab_attempted_at' => now()])->save();
 
         $grabOutcome = $this->grab($client, $rawRelease);
 

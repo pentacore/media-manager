@@ -96,6 +96,16 @@ class EmbyWebhookHandler extends AbstractWebhookHandler
         $playSessionId = $payload['PlaybackInfo']['PlaySessionId'] ?? null;
         $playSessionId = is_string($playSessionId) && $playSessionId !== '' ? $playSessionId : null;
 
+        // Sessionless events (item.markplayed) used to upsert with a NULL
+        // session key, which (a) collapsed every future occurrence for the
+        // same user+item onto one row forever — a rewatch months later was
+        // invisible to every created_at-bucketed statistic — and (b) had no
+        // unique-constraint backing (the partial unique index skips NULLs),
+        // so concurrent delivery could duplicate rows. A synthesized per-day
+        // key bounds the collapse to one row per day and restores real
+        // upsert semantics.
+        $playSessionId ??= sprintf('sessionless:%s', now()->toDateString());
+
         $attributes = [
             'media_type' => $mediaType,
             'media_title' => $payload['Item']['Name'] ?? null,

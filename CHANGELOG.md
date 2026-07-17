@@ -1,3 +1,10 @@
+## [1.11.1](https://github.com/pentacore/media-manager/compare/v1.11.0...v1.11.1) (2026-07-16)
+
+
+### Bug Fixes
+
+* **ci:** increase browser test timeout ([0d7af8e](https://github.com/pentacore/media-manager/commit/0d7af8ed7d0a6f0eab3e4f79fe6d4a0c80ba9cab))
+
 # [1.11.0](https://github.com/pentacore/media-manager/compare/v1.10.1...v1.11.0) (2026-07-16)
 
 

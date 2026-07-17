@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Http\Controllers\Auth;
 
 use App\Actions\FindOrCreateSsoUser;
+use App\Exceptions\SsoEmailCollisionException;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Support\Facades\Auth;
@@ -26,13 +27,21 @@ class AuthentikController extends Controller
             return to_route('login')->with('status', __('Authentication failed. Please try again.'));
         }
 
-        $user = $findOrCreateSsoUser->execute(
-            provider: 'authentik',
-            ssoId: (string) $socialiteUser->getId(),
-            email: $socialiteUser->getEmail(),
-            name: $socialiteUser->getName(),
-            avatarUrl: $socialiteUser->getAvatar(),
-        );
+        try {
+            $user = $findOrCreateSsoUser->execute(
+                provider: 'authentik',
+                ssoId: (string) $socialiteUser->getId(),
+                email: $socialiteUser->getEmail(),
+                name: $socialiteUser->getName(),
+                avatarUrl: $socialiteUser->getAvatar(),
+                emailVerified: (bool) ($socialiteUser->user['email_verified'] ?? false),
+            );
+        } catch (SsoEmailCollisionException) {
+            return to_route('login')->with(
+                'status',
+                __('An account with this email already exists. Sign in with your existing credentials, or verify the email address in Authentik and try again.'),
+            );
+        }
 
         Auth::login($user, remember: true);
 

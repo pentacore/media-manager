@@ -44,3 +44,25 @@ test('invalid stored mode falls back to Executive', function (): void {
 
     expect(resolve(AiSettings::class)->mode())->toBe(AiMode::Executive);
 });
+
+test('withMode override is shared within a request scope', function (): void {
+    $aiSettings = resolve(AiSettings::class);
+    $aiSettings->withMode(AiMode::Advisory);
+
+    // Later resolutions in the same scope (orchestrator, tools) must see
+    // the same instance and therefore the per-request override.
+    expect(resolve(AiSettings::class))->toBe($aiSettings)
+        ->and(resolve(AiSettings::class)->mode())->toBe(AiMode::Advisory);
+});
+
+test('withMode override does not leak across request scopes', function (): void {
+    config()->set('mediamanager.ai.mode', 'executive');
+
+    resolve(AiSettings::class)->withMode(AiMode::Advisory);
+
+    // Octane flushes scoped instances between requests; a singleton would
+    // carry one request's Advisory override into every later request.
+    app()->forgetScopedInstances();
+
+    expect(resolve(AiSettings::class)->mode())->toBe(AiMode::Executive);
+});

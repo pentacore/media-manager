@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Services\Sabnzbd;
 
 use App\Models\ServiceConnection;
+use App\Support\UrlQueryRedactor;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\PendingRequest;
 use Illuminate\Http\Client\RequestException;
@@ -13,10 +14,14 @@ use Throwable;
 
 /**
  * Wraps the SABnzbd JSON API. Every endpoint funnels through `/sabnzbd/api`
- * with a `mode` parameter; auth via the `X-Apikey` header so the key never
- * lands in URL logs.
+ * with a `mode` parameter. SABnzbd only accepts the API key as the `apikey`
+ * query parameter (its `check_apikey` reads request params exclusively — no
+ * header alternative exists), so the key unavoidably travels in the URL.
+ * Every consumer that surfaces client exception messages must therefore
+ * scrub them with {@see UrlQueryRedactor} before persisting,
+ * broadcasting, or logging.
  *
- * @see https://sabnzbd.org/wiki/advanced/api
+ * @see https://sabnzbd.org/wiki/configuration/5.0/api
  */
 class SabnzbdClient
 {
@@ -27,7 +32,6 @@ class SabnzbdClient
     protected function buildClient(): PendingRequest
     {
         return Http::baseUrl(rtrim($this->connection->url, '/'))
-            ->withHeaders(['X-Apikey' => $this->connection->api_key])
             ->timeout(10)
             ->connectTimeout(3)
             ->withUserAgent('MediaManager/'.config('app.version').' '.class_basename($this))

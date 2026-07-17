@@ -10,7 +10,6 @@ use App\Jobs\PingServiceHealth;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Queue;
-use Pest\Browser\Playwright\Playwright;
 use Tests\TestCase;
 
 /*
@@ -23,6 +22,8 @@ use Tests\TestCase;
 | need to change it using the "pest()" function to bind different classes or traits.
 |
 */
+
+pest()->browser()->timeout(30_000);
 
 pest()->extend(TestCase::class)
     ->use(RefreshDatabase::class)
@@ -66,10 +67,6 @@ pest()->extend(TestCase::class)
 
         config()->set('mediamanager.cache.store', 'array');
         Cache::store('array')->flush();
-
-        // Inertia hydration on slow CI / parallel workers can outrun the
-        // default 5s assertion wait. Bump to 15s for browser tests only.
-        Playwright::setTimeout(15_000);
     })
     ->in('Browser');
 

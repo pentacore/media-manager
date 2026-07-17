@@ -44,6 +44,30 @@ test('is idempotent — a second run for the same event does nothing', function 
     expect(AgentDecision::where('webhook_event_id', $event->id)->count())->toBe(1);
 });
 
+test('a second event about the same subject inside the cooldown is skipped', function (): void {
+    DecisionAgent::fake(['summary one', 'summary two']);
+    $first = WebhookEvent::factory()->create();
+    $second = WebhookEvent::factory()->create();
+    $payload = ['eventType' => 'Grab', 'series' => ['id' => 42]];
+
+    runJob($first->id, payload: $payload);
+    runJob($second->id, payload: $payload);
+
+    expect(AgentDecision::count())->toBe(1)
+        ->and(AgentDecision::first()->webhook_event_id)->toBe($first->id);
+});
+
+test('events about different subjects are not throttled by each other', function (): void {
+    DecisionAgent::fake(['summary one', 'summary two']);
+    $first = WebhookEvent::factory()->create();
+    $second = WebhookEvent::factory()->create();
+
+    runJob($first->id, payload: ['eventType' => 'Grab', 'series' => ['id' => 42]]);
+    runJob($second->id, payload: ['eventType' => 'Grab', 'series' => ['id' => 43]]);
+
+    expect(AgentDecision::count())->toBe(2);
+});
+
 test('does not run when the agent is disabled', function (): void {
     resolve(DecisionAgentSettings::class)->setEnabled(false);
     $event = WebhookEvent::factory()->create();

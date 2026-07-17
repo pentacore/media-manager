@@ -10,6 +10,7 @@ use App\Events\ServiceHealthChanged;
 use App\Models\ServiceConnection;
 use App\Models\ServiceMetric;
 use App\Services\ServiceClientFactory;
+use App\Support\UrlQueryRedactor;
 use Illuminate\Bus\Batchable;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -28,6 +29,13 @@ class PingServiceHealth implements ShouldQueue
     use InteractsWithQueue;
     use Queueable;
     use SerializesModels;
+
+    /**
+     * Deleting the underlying model while this job is queued must drop the
+     * job silently instead of filling failed_jobs with
+     * ModelNotFoundException noise.
+     */
+    public bool $deleteWhenMissingModels = true;
 
     public int $tries = 1;
 
@@ -90,6 +98,12 @@ class PingServiceHealth implements ShouldQueue
         }
     }
 
+    /**
+     * The result is persisted, broadcast to every member, and echoed by the
+     * scheduler — exception messages embed the full request URI, whose query
+     * string can carry credentials (SABnzbd's mandatory `apikey`), so every
+     * branch is redacted before leaving this method.
+     */
     private function formatFailureReason(Throwable $throwable): string
     {
         if ($throwable instanceof RequestException) {
@@ -100,16 +114,18 @@ class PingServiceHealth implements ShouldQueue
                 ->toString();
 
             return Str::limit(
-                sprintf('HTTP %d%s', $throwable->response->status(), $snippet === '' ? '' : ': '.$snippet),
+                UrlQueryRedactor::redact(
+                    sprintf('HTTP %d%s', $throwable->response->status(), $snippet === '' ? '' : ': '.$snippet),
+                ),
                 255,
             );
         }
 
         if ($throwable instanceof ConnectionException) {
-            return Str::limit('Connection failed: '.$throwable->getMessage(), 255);
+            return Str::limit(UrlQueryRedactor::redact('Connection failed: '.$throwable->getMessage()), 255);
         }
 
-        return Str::limit(class_basename($throwable).': '.$throwable->getMessage(), 255);
+        return Str::limit(UrlQueryRedactor::redact(class_basename($throwable).': '.$throwable->getMessage()), 255);
     }
 
     /**

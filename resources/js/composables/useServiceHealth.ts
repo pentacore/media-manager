@@ -1,5 +1,6 @@
 import { onUnmounted, reactive } from 'vue';
 import { useWebSocket } from '@/composables/useWebSocket';
+import type { ChannelLease } from '@/composables/useWebSocket';
 
 export interface ServiceStatus {
     id: number;
@@ -42,44 +43,49 @@ export interface UseServiceHealth {
 }
 
 export function useServiceHealth(): UseServiceHealth {
-    const { privateChannel, leaveChannel } = useWebSocket();
+    const { acquirePrivateChannel } = useWebSocket();
     const services = reactive<Record<number, ServiceStatus>>({});
     const versions = reactive<Record<number, ServiceVersionInfo>>({});
     const lifecycle = reactive<Record<number, ServiceLifecycleSnapshot>>({});
     const deletedIds = reactive<Set<number>>(new Set());
 
+    let lease: ChannelLease | null = null;
+
     function subscribe(): void {
-        const ch = privateChannel('services');
+        // Same guard as the sibling composables: a second call would stack
+        // duplicate listeners on the shared channel.
+        if (lease) {
+            return;
+        }
 
-        ch.listen('.ServiceHealthChanged', (event: ServiceStatus) => {
-            services[event.id] = event;
-        });
-
-        ch.listen(
-            '.ServiceLatestVersionFetched',
-            (event: ServiceVersionInfo) => {
-                versions[event.id] = event;
-            },
-        );
-
-        ch.listen(
-            '.ServiceConnectionUpserted',
-            (event: ServiceLifecycleSnapshot) => {
-                lifecycle[event.id] = event;
-                deletedIds.delete(event.id);
-            },
-        );
-
-        ch.listen('.ServiceConnectionDeleted', (event: { id: number }) => {
-            deletedIds.add(event.id);
-            delete services[event.id];
-            delete versions[event.id];
-            delete lifecycle[event.id];
-        });
+        lease = acquirePrivateChannel('services')
+            .listen('.ServiceHealthChanged', (event: ServiceStatus) => {
+                services[event.id] = event;
+            })
+            .listen(
+                '.ServiceLatestVersionFetched',
+                (event: ServiceVersionInfo) => {
+                    versions[event.id] = event;
+                },
+            )
+            .listen(
+                '.ServiceConnectionUpserted',
+                (event: ServiceLifecycleSnapshot) => {
+                    lifecycle[event.id] = event;
+                    deletedIds.delete(event.id);
+                },
+            )
+            .listen('.ServiceConnectionDeleted', (event: { id: number }) => {
+                deletedIds.add(event.id);
+                delete services[event.id];
+                delete versions[event.id];
+                delete lifecycle[event.id];
+            });
     }
 
     function unsubscribe(): void {
-        leaveChannel('services');
+        lease?.release();
+        lease = null;
     }
 
     onUnmounted(unsubscribe);

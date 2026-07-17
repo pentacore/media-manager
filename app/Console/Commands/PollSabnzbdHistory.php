@@ -10,6 +10,7 @@ use App\Models\ActivityLog;
 use App\Models\ServiceConnection;
 use App\Services\Sabnzbd\SabnzbdClient;
 use App\Services\ServiceClientFactory;
+use App\Support\UrlQueryRedactor;
 use Illuminate\Console\Attributes\Description;
 use Illuminate\Console\Attributes\Signature;
 use Illuminate\Console\Command;
@@ -51,7 +52,7 @@ class PollSabnzbdHistory extends Command
         try {
             $payload = $client->getHistory(0, 100, sinceUnix: $cursor);
         } catch (RequestException|ConnectionException|Throwable $throwable) {
-            $this->warn(sprintf('Failed to poll %s: %s', $serviceConnection->name, $throwable->getMessage()));
+            $this->warn(sprintf('Failed to poll %s: %s', $serviceConnection->name, UrlQueryRedactor::redact($throwable->getMessage())));
 
             return;
         }
@@ -66,13 +67,34 @@ class PollSabnzbdHistory extends Command
                 continue;
             }
 
-            $newest = max($newest, $completed);
-            $this->recordSlot($serviceConnection, $slot);
+            // Per-slot isolation: one malformed slot must not abort the loop
+            // after earlier slots were already recorded — the cursor would
+            // never advance and every recorded slot would duplicate (rows +
+            // broadcasts) on the next run. Skip the bad slot and keep the
+            // cursor below it so it is retried next sweep.
+            try {
+                $this->recordSlot($serviceConnection, $slot);
+                $newest = max($newest, $completed);
+            } catch (Throwable $throwable) {
+                Log::warning('PollSabnzbdHistory: failed to record history slot', [
+                    'service_connection_id' => $serviceConnection->id,
+                    'nzo_id' => $slot['nzo_id'] ?? null,
+                    'exception' => $throwable::class,
+                    'message' => $throwable->getMessage(),
+                ]);
+            }
         }
 
         if ($newest !== $cursor) {
-            $settings['last_history_unix'] = $newest;
-            $serviceConnection->settings = $settings;
+            // Targeted JSON merge onto a FRESH read: the whole-settings
+            // read-modify-write raced the admin connection form, which
+            // rewrites `settings` and could resurrect a stale cursor (or
+            // this save could drop the admin's changes).
+            $serviceConnection->refresh();
+            $serviceConnection->settings = [
+                ...($serviceConnection->settings ?? []),
+                'last_history_unix' => $newest,
+            ];
             $serviceConnection->save();
         }
     }

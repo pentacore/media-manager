@@ -205,6 +205,12 @@ class ChatController extends Controller
             'conversation_id' => ['required', 'string', 'uuid'],
         ]);
 
+        // The claim below stamps this id onto the proposal — never stamp a
+        // conversation the caller doesn't own (send() applies the same check).
+        if (! $this->conversationIsAvailable($validated['conversation_id'], $request->user())) {
+            return response()->json(['message' => 'Conversation not found.'], 404);
+        }
+
         $workflow = $this->attachFreshlyProposedWorkflow(
             $request->user(),
             CarbonImmutable::now()->subMinutes(10),
@@ -311,15 +317,24 @@ class ChatController extends Controller
             return response()->json(['message' => 'Workflow not found.'], 404);
         }
 
-        if ($workflow->status !== AiProposedWorkflowStatus::Proposed) {
-            return response()->json(['message' => 'Workflow is no longer pending.'], 422);
-        }
-
         $newStatus = $validated['workflow_action'] === 'approved'
             ? AiProposedWorkflowStatus::Approved
             : AiProposedWorkflowStatus::Declined;
 
-        $workflow->update(['status' => $newStatus]);
+        // Conditional transition: two overlapping requests (double-click,
+        // second tab) both passed the status read above and the winner's
+        // approval directed destructive execution twice. Only the request
+        // whose update flips Proposed away proceeds.
+        $won = AiProposedWorkflow::query()
+            ->whereKey($workflow->id)
+            ->where('status', AiProposedWorkflowStatus::Proposed->value)
+            ->update(['status' => $newStatus]);
+
+        if ($won !== 1) {
+            return response()->json(['message' => 'Workflow is no longer pending.'], 422);
+        }
+
+        $workflow->refresh();
 
         return $this->synthesizeWorkflowContinuation($workflow, $newStatus);
     }
@@ -337,9 +352,17 @@ class ChatController extends Controller
             return null;
         }
 
+        // Prefer a proposal already stamped with this conversation; only
+        // claim unstamped ones. Without the scoping, a sibling tab's
+        // pendingWorkflow poll could steal (re-stamp) a proposal that was
+        // already attached to another conversation.
         $proposedWorkflow = AiProposedWorkflow::where('user_id', $user->id)
             ->where('created_at', '>=', $carbonImmutable)
             ->where('status', AiProposedWorkflowStatus::Proposed)
+            ->where(function ($query) use ($conversationId): void {
+                $query->whereNull('conversation_id')
+                    ->orWhere('conversation_id', $conversationId);
+            })
             ->latest('created_at')
             ->first();
 
@@ -347,7 +370,9 @@ class ChatController extends Controller
             return null;
         }
 
-        $proposedWorkflow->update(['conversation_id' => $conversationId]);
+        if ($proposedWorkflow->conversation_id === null) {
+            $proposedWorkflow->update(['conversation_id' => $conversationId]);
+        }
 
         return [
             'id' => $proposedWorkflow->id,
