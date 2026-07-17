@@ -216,6 +216,23 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Trusted Proxies
+    |--------------------------------------------------------------------------
+    |
+    | The production stack terminates TLS at a reverse proxy in front of the
+    | web and reverb containers, so Octane only ever sees the proxy's IP and
+    | plain http. Listing the proxy addresses (comma-separated IPs/CIDRs, or
+    | "*" to trust every upstream) makes Request::ip()/isSecure() honor the
+    | X-Forwarded-* headers — required for correct login throttling keys and
+    | for signed URLs (invites, email verification) to validate. Unset means
+    | no proxy is trusted.
+    |
+    */
+
+    'trusted_proxies' => env('TRUSTED_PROXIES'),
+
+    /*
+    |--------------------------------------------------------------------------
     | Statistics
     |--------------------------------------------------------------------------
     |
