@@ -22,7 +22,7 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withMiddleware(function (Middleware $middleware): void {
-        $middleware->replace(\Illuminate\Http\Middleware\TrustProxies::class, TrustProxies::class);
+        $middleware->replace(Illuminate\Http\Middleware\TrustProxies::class, TrustProxies::class);
 
         $middleware->encryptCookies(except: ['appearance', 'sidebar_state']);
 

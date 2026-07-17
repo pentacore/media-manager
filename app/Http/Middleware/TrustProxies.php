@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Http\Middleware;
 
 use Illuminate\Http\Middleware\TrustProxies as Middleware;
+use Override;
 
 /**
  * Resolves the trusted proxy list from configuration at request time instead
@@ -18,6 +19,7 @@ class TrustProxies extends Middleware
     /**
      * @return array<int, string>|string|null
      */
+    #[Override]
     protected function proxies(): array|string|null
     {
         $proxies = config('mediamanager.trusted_proxies');

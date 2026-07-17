@@ -19,6 +19,7 @@ use App\Console\Commands\WarmServiceCaches;
 use App\Jobs\ReconcileSearchIndex;
 use App\Jobs\SyncAnimeMappingJob;
 use Illuminate\Support\Facades\Schedule;
+use Laravel\Telescope\Telescope;
 
 Schedule::command(CheckServiceHealth::class)
     ->everyFiveMinutes()
@@ -95,7 +96,7 @@ Schedule::command(CollectServiceGauges::class, ['--library'])
 // Telescope is a require-dev package: the class exists on dev machines (where
 // telescope_entries otherwise grows unboundedly) and is absent from the
 // production image, where scheduling the command would fail every night.
-if (class_exists(Laravel\Telescope\Telescope::class)) {
+if (class_exists(Telescope::class)) {
     Schedule::command('telescope:prune', ['--hours' => 48])
         ->daily()
         ->withoutOverlapping();

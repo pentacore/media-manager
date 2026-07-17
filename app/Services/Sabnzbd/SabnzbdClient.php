@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Services\Sabnzbd;
 
 use App\Models\ServiceConnection;
+use App\Support\UrlQueryRedactor;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\PendingRequest;
 use Illuminate\Http\Client\RequestException;
@@ -17,7 +18,7 @@ use Throwable;
  * query parameter (its `check_apikey` reads request params exclusively — no
  * header alternative exists), so the key unavoidably travels in the URL.
  * Every consumer that surfaces client exception messages must therefore
- * scrub them with {@see \App\Support\UrlQueryRedactor} before persisting,
+ * scrub them with {@see UrlQueryRedactor} before persisting,
  * broadcasting, or logging.
  *
  * @see https://sabnzbd.org/wiki/configuration/5.0/api

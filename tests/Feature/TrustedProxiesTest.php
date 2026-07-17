@@ -24,7 +24,7 @@ function requestThroughProxy(): array
 }
 
 it('ignores forwarded headers when no trusted proxies are configured', function (): void {
-    config()->set('mediamanager.trusted_proxies', null);
+    config()->set('mediamanager.trusted_proxies');
 
     $payload = requestThroughProxy();
 
