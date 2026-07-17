@@ -9,6 +9,7 @@ use App\Cache\Services\SonarrCache;
 use App\Enums\MediaReplacementStatus;
 use App\Enums\ServiceType;
 use App\Enums\UserRole;
+use App\Events\MediaReplacementAttemptChanged;
 use App\Models\MediaReplacementAttempt;
 use App\Models\ServiceConnection;
 use App\Models\User;
@@ -262,24 +263,13 @@ final readonly class MediaReplacementTracker
                 $restored ? null : 'restore_monitoring_failed',
             ]));
 
-            // CONDITIONAL terminal transition: another webhook (e.g.
-            // recordManualIntervention) may terminalize the attempt after the
-            // refresh/check above, so only the transition that wins the
-            // whereNotIn(terminal) race writes — never clobbering an operator-facing
-            // terminal result — and only that winner notifies.
-            $won = MediaReplacementAttempt::query()
-                ->whereKey($mediaReplacementAttempt->id)
-                ->whereNotIn('status', array_map(
-                    static fn (MediaReplacementStatus $mediaReplacementStatus): string => $mediaReplacementStatus->value,
-                    self::TERMINAL_STATUSES,
-                ))
-                ->update([
-                    'status' => $ok ? MediaReplacementStatus::Verified->value : MediaReplacementStatus::NeedsAttention->value,
-                    'completed_at' => now(),
-                    'failure_reason' => $ok ? null : implode(',', $reasons),
-                ]);
+            $won = $this->terminalize(
+                $mediaReplacementAttempt,
+                $ok ? MediaReplacementStatus::Verified : MediaReplacementStatus::NeedsAttention,
+                $ok ? null : implode(',', $reasons),
+            );
 
-            if ($won === 0) {
+            if (! $won) {
                 return;
             }
 
@@ -408,6 +398,7 @@ final readonly class MediaReplacementTracker
 
         if ($won) {
             $mediaReplacementAttempt->refresh();
+            event(new MediaReplacementAttemptChanged($mediaReplacementAttempt));
         }
 
         return $won;
