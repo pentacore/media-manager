@@ -28,6 +28,8 @@ final class BazarrCapabilityRegistry
         'translate' => [['/subtitles', 'patch']],
         'tasks' => [['/system/tasks', 'get'], ['/system/tasks', 'post']],
         'language_profiles' => [['/system/languages/profiles', 'get']],
+        'settings_adapter' => [['/system/settings', 'get'], ['/system/settings', 'post']],
+        'notification_adapter' => [['/system/notifications', 'get'], ['/system/notifications', 'post'], ['/system/notifications', 'patch']],
     ];
 
     /**

@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use App\Http\Controllers\Bazarr\AdminController;
 use App\Http\Controllers\Bazarr\HistoryController;
 use App\Http\Controllers\Bazarr\LibraryController;
 use App\Http\Controllers\Bazarr\MissingController;
@@ -19,6 +20,11 @@ Route::middleware(['auth', 'verified', 'password.set', 'role:viewer'])
         Route::get('missing', MissingController::class)->name('missing');
         Route::get('library', LibraryController::class)->name('library');
         Route::get('history', HistoryController::class)->name('history');
+
+        Route::middleware('role:admin')->group(function (): void {
+            Route::get('admin', [AdminController::class, 'index'])->name('admin.index');
+            Route::put('admin', [AdminController::class, 'update'])->name('admin.update');
+        });
 
         Route::middleware('role:member')->group(function (): void {
             Route::get('search', SearchController::class)->name('search');

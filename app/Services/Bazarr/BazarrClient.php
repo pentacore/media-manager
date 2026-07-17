@@ -492,6 +492,42 @@ final class BazarrClient
 
     /**
      * @return array<string, mixed>
+     */
+    public function getSettings(): array
+    {
+        return $this->cache()->rememberMetadata(
+            'settings',
+            fn (): array => $this->dataEnvelope($this->buildClient()->get('/api/system/settings'))['data'],
+        );
+    }
+
+    /**
+     * @return list<array<string, mixed>>
+     */
+    public function getNotifications(): array
+    {
+        return $this->cache()->rememberMetadata(
+            'notifications',
+            fn (): array => $this->dataListEnvelope($this->buildClient()->get('/api/system/notifications'))['data'],
+        );
+    }
+
+    /**
+     * @param  array<string, bool|int|string>  $settings
+     */
+    public function updateSettings(array $settings): void
+    {
+        $this->write(
+            $this->buildClient(withRetry: false)
+                ->asForm()
+                ->post('/api/system/settings', $settings),
+        );
+
+        $this->cache()->bustAll();
+    }
+
+    /**
+     * @return array<string, mixed>
      *
      * @throws ConnectionException|RequestException|UnexpectedValueException
      */

@@ -6,6 +6,7 @@ use App\Models\ServiceConnection;
 use App\Models\User;
 use App\Enums\BazarrServiceRole;
 use App\Models\ActionRequest;
+use App\Models\ActivityLog;
 use App\Models\BazarrServiceLink;
 use App\Models\SubtitleUpload;
 use Database\Seeders\ActionTypeConfigSeeder;
@@ -45,6 +46,73 @@ test('viewer can browse the subtitle center', function (): void {
         ->assertPathIs('/subtitles/history')
         ->assertSee('No subtitle history found')
         ->assertNoSmoke();
+});
+
+test('admin manages non-secret Bazarr settings', function (): void {
+    config()->set('mediamanager.cache.store', 'array');
+    $bazarr = ServiceConnection::factory()->bazarr()->create([
+        'name' => 'Primary Bazarr',
+        'url' => 'http://bazarr.test',
+        'api_key' => 'bazarr-secret',
+    ]);
+
+    Http::fake([
+        'bazarr.test/api/system/settings' => Http::sequence()
+            ->push(['data' => [
+                'scheduler' => ['enabled' => true, 'interval_hours' => 6],
+                'subtitle_tools' => [
+                    'automatic_subtitle_synchronization' => true,
+                    'use_postprocessing' => false,
+                ],
+            ]])
+            ->push([], 204)
+            ->push(['data' => [
+                'scheduler' => ['enabled' => true, 'interval_hours' => 12],
+                'subtitle_tools' => [
+                    'automatic_subtitle_synchronization' => true,
+                    'use_postprocessing' => false,
+                ],
+            ]]),
+        'bazarr.test/api/system/languages/profiles' => Http::response([[
+            'profileId' => 1,
+            'name' => 'English',
+            'items' => [['language' => 'eng']],
+        ]]),
+        'bazarr.test/api/system/tasks' => Http::response(['data' => [[
+            'taskid' => 'search_missing',
+            'name' => 'Search missing',
+            'status' => 'idle',
+        ]]]),
+        'bazarr.test/api/providers' => Http::response(['data' => [[
+            'name' => 'OpenSubtitles',
+            'status' => 'healthy',
+        ]]]),
+        'bazarr.test/api/system/notifications' => Http::response(['data' => []]),
+        'bazarr.test/api/swagger.json' => Http::response([
+            'swagger' => '2.0',
+            'basePath' => '/api',
+            'info' => ['title' => 'Bazarr', 'version' => '1.6.0'],
+            'paths' => [
+                '/system/settings' => [
+                    'get' => ['responses' => ['200' => ['description' => 'OK']]],
+                    'post' => ['responses' => ['204' => ['description' => 'OK']]],
+                ],
+            ],
+        ]),
+    ]);
+
+    $this->actingAs(User::factory()->admin()->create());
+
+    visit(route('bazarr.admin.index', ['connection' => $bazarr->id], false))
+        ->assertSee('Open Bazarr to edit credentials')
+        ->assertSee('English')
+        ->assertSee('OpenSubtitles')
+        ->fill('@scheduler-interval', '12')
+        ->click('@save-bazarr-settings')
+        ->assertSee('Bazarr settings updated.')
+        ->assertNoSmoke();
+
+    expect(ActivityLog::query()->where('action', 'bazarr.settings.updated')->count())->toBe(1);
 });
 
 test('member searches and requests an exact subtitle from the item drawer', function (): void {

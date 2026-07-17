@@ -1,12 +1,20 @@
 <script setup lang="ts">
-import { Link, router } from '@inertiajs/vue3';
-import { History, LayoutDashboard, Library, ListX } from '@lucide/vue';
+import { Link, router, usePage } from '@inertiajs/vue3';
+import {
+    History,
+    LayoutDashboard,
+    Library,
+    ListX,
+    Settings,
+} from '@lucide/vue';
+import { computed } from 'vue';
+import AdminController from '@/actions/App/Http/Controllers/Bazarr/AdminController';
 import HistoryController from '@/actions/App/Http/Controllers/Bazarr/HistoryController';
 import LibraryController from '@/actions/App/Http/Controllers/Bazarr/LibraryController';
 import MissingController from '@/actions/App/Http/Controllers/Bazarr/MissingController';
 import OverviewController from '@/actions/App/Http/Controllers/Bazarr/OverviewController';
 
-type TabName = 'overview' | 'missing' | 'library' | 'history';
+type TabName = 'overview' | 'missing' | 'library' | 'history' | 'admin';
 
 const props = defineProps<{
     active: TabName;
@@ -14,7 +22,15 @@ const props = defineProps<{
     selectedConnectionId: number | null;
 }>();
 
-const tabs = [
+const page = usePage();
+const isAdmin = computed(() => {
+    const role = page.props.auth.user?.role;
+    const value = typeof role === 'string' ? role : role?.value;
+
+    return value === 'admin';
+});
+
+const tabs = computed(() => [
     {
         name: 'overview' as const,
         label: 'Overview',
@@ -39,9 +55,19 @@ const tabs = [
         icon: History,
         route: HistoryController,
     },
-];
+    ...(isAdmin.value
+        ? [
+              {
+                  name: 'admin' as const,
+                  label: 'Admin',
+                  icon: Settings,
+                  route: AdminController.index,
+              },
+          ]
+        : []),
+]);
 
-function tabUrl(tab: (typeof tabs)[number]): string {
+function tabUrl(tab: (typeof tabs.value)[number]): string {
     return tab.route.url({
         query: props.selectedConnectionId
             ? { connection: props.selectedConnectionId }
@@ -51,7 +77,8 @@ function tabUrl(tab: (typeof tabs)[number]): string {
 
 function selectConnection(event: Event): void {
     const connection = Number((event.target as HTMLSelectElement).value);
-    const activeTab = tabs.find((tab) => tab.name === props.active) ?? tabs[0];
+    const activeTab =
+        tabs.value.find((tab) => tab.name === props.active) ?? tabs.value[0];
 
     router.visit(activeTab.route.url({ query: { connection } }));
 }

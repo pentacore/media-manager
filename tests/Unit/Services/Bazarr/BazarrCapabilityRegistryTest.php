@@ -29,6 +29,8 @@ function expectedBazarrCapabilities(
     bool $translate = true,
     bool $tasks = true,
     bool $languageProfiles = true,
+    bool $settingsAdapter = false,
+    bool $notificationAdapter = false,
 ): array {
     return [
         'inventory' => $inventory,
@@ -43,8 +45,8 @@ function expectedBazarrCapabilities(
         'translate' => $translate,
         'tasks' => $tasks,
         'language_profiles' => $languageProfiles,
-        'settings_adapter' => false,
-        'notification_adapter' => false,
+        'settings_adapter' => $settingsAdapter,
+        'notification_adapter' => $notificationAdapter,
     ];
 }
 
@@ -152,7 +154,7 @@ test('complete Swagger enables every supported capability in stable order', func
     $capabilities = $this->registry->detect(completeBazarrSwagger(includeAdapterRoutes: true));
 
     expect($capabilities)
-        ->toBe(expectedBazarrCapabilities())
+        ->toBe(expectedBazarrCapabilities(settingsAdapter: true, notificationAdapter: true))
         ->and(array_keys($capabilities))->toBe(array_keys(expectedBazarrCapabilities()));
 });
 
