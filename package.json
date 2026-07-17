@@ -47,7 +47,7 @@
         "@vueuse/core": "^14.3.0",
         "class-variance-authority": "^0.7.1",
         "clsx": "^2.1.1",
-        "dompurify": "^3.4.2",
+        "dompurify": "^3.4.12",
         "laravel-echo": "^2.3.4",
         "laravel-vite-plugin": "^3.1.0",
         "marked": "^18.0.6",
