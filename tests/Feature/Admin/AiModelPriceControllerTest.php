@@ -2,8 +2,10 @@
 
 declare(strict_types=1);
 
+use App\Enums\PricingSource;
 use App\Events\AiPriceRefreshStateChanged;
 use App\Jobs\RefreshAiPricesJob;
+use App\Models\AiFreeUsagePool;
 use App\Models\AiModelPrice;
 use App\Models\User;
 use Illuminate\Support\Facades\Bus;
@@ -297,6 +299,306 @@ test('store rejects invalid metric, period, value and duplicate combos', functio
             ],
         ])
         ->assertSessionHasErrors('rate_limits.1.metric');
+});
+
+test('manual create locks the price and marks the source manual', function (): void {
+    $admin = User::factory()->admin()->create();
+
+    $this->actingAs($admin)
+        ->post(route('admin.ai-prices.store'), [
+            'provider' => 'openai',
+            'model' => 'gpt-lock-test',
+            'input_per_mtok' => 1.23,
+            'output_per_mtok' => 4.56,
+            'cache_read_per_mtok' => 0.10,
+            'cache_write_per_mtok' => 0.50,
+            'reasoning_per_mtok' => 4.56,
+        ])
+        ->assertRedirect(route('admin.ai-prices.index'));
+
+    $aiModelPrice = AiModelPrice::query()->where('model', 'gpt-lock-test')->firstOrFail();
+
+    expect($aiModelPrice->is_price_locked)->toBeTrue();
+    expect($aiModelPrice->pricing_source)->toBe(PricingSource::Manual);
+});
+
+test('manual create with automatic updates enabled leaves the price unlocked', function (): void {
+    $admin = User::factory()->admin()->create();
+
+    $this->actingAs($admin)
+        ->post(route('admin.ai-prices.store'), [
+            'provider' => 'openai',
+            'model' => 'gpt-auto-test',
+            'input_per_mtok' => 1.23,
+            'output_per_mtok' => 4.56,
+            'cache_read_per_mtok' => 0.10,
+            'cache_write_per_mtok' => 0.50,
+            'reasoning_per_mtok' => 4.56,
+            'automatic_updates_enabled' => true,
+        ])
+        ->assertRedirect(route('admin.ai-prices.index'));
+
+    $aiModelPrice = AiModelPrice::query()->where('model', 'gpt-auto-test')->firstOrFail();
+
+    expect($aiModelPrice->is_price_locked)->toBeFalse();
+    expect($aiModelPrice->pricing_source)->toBe(PricingSource::Manual);
+});
+
+test('editing a price locks it and marks the source manual', function (): void {
+    $admin = User::factory()->admin()->create();
+    $aiModelPrice = AiModelPrice::factory()->create([
+        'input_per_mtok' => 0.40,
+        'output_per_mtok' => 1.60,
+        'cache_read_per_mtok' => 0.10,
+        'cache_write_per_mtok' => 0.40,
+        'reasoning_per_mtok' => 1.60,
+        'pricing_source' => PricingSource::ModelsDev,
+        'is_price_locked' => false,
+    ]);
+
+    $this->actingAs($admin)
+        ->put(route('admin.ai-prices.update', $aiModelPrice), [
+            'input_per_mtok' => 0.50,
+            'output_per_mtok' => 1.60,
+            'cache_read_per_mtok' => 0.10,
+            'cache_write_per_mtok' => 0.40,
+            'reasoning_per_mtok' => 1.60,
+        ])
+        ->assertRedirect(route('admin.ai-prices.index'));
+
+    $fresh = $aiModelPrice->fresh();
+    expect($fresh->is_price_locked)->toBeTrue();
+    expect($fresh->pricing_source)->toBe(PricingSource::Manual);
+});
+
+test('re-enabling automatic updates unlocks the price and leaves the source untouched', function (): void {
+    $admin = User::factory()->admin()->create();
+    $aiModelPrice = AiModelPrice::factory()->create([
+        'input_per_mtok' => 0.40,
+        'output_per_mtok' => 1.60,
+        'cache_read_per_mtok' => 0.10,
+        'cache_write_per_mtok' => 0.40,
+        'reasoning_per_mtok' => 1.60,
+        'pricing_source' => PricingSource::ModelsDev,
+        'is_price_locked' => true,
+    ]);
+
+    // Even when a price also changes, an explicit re-enable of automatic
+    // updates wins: the row unlocks and the source is left for the next sync.
+    $this->actingAs($admin)
+        ->put(route('admin.ai-prices.update', $aiModelPrice), [
+            'input_per_mtok' => 0.50,
+            'output_per_mtok' => 1.60,
+            'cache_read_per_mtok' => 0.10,
+            'cache_write_per_mtok' => 0.40,
+            'reasoning_per_mtok' => 1.60,
+            'automatic_updates_enabled' => true,
+        ])
+        ->assertRedirect(route('admin.ai-prices.index'));
+
+    $fresh = $aiModelPrice->fresh();
+    expect($fresh->is_price_locked)->toBeFalse();
+    expect($fresh->pricing_source)->toBe(PricingSource::ModelsDev);
+});
+
+test('disabling automatic updates without a price change locks the row and leaves the source untouched', function (): void {
+    $admin = User::factory()->admin()->create();
+    $aiModelPrice = AiModelPrice::factory()->create([
+        'input_per_mtok' => 0.40,
+        'output_per_mtok' => 1.60,
+        'cache_read_per_mtok' => 0.10,
+        'cache_write_per_mtok' => 0.40,
+        'reasoning_per_mtok' => 1.60,
+        'pricing_source' => PricingSource::ModelsDev,
+        'is_price_locked' => false,
+    ]);
+
+    // Explicitly turning the toggle off must lock the row even when no price
+    // field changed. The stored price's origin did not change, so the
+    // pricing_source is deliberately left untouched.
+    $this->actingAs($admin)
+        ->put(route('admin.ai-prices.update', $aiModelPrice), [
+            'input_per_mtok' => 0.40,
+            'output_per_mtok' => 1.60,
+            'cache_read_per_mtok' => 0.10,
+            'cache_write_per_mtok' => 0.40,
+            'reasoning_per_mtok' => 1.60,
+            'automatic_updates_enabled' => false,
+        ])
+        ->assertRedirect(route('admin.ai-prices.index'));
+
+    $fresh = $aiModelPrice->fresh();
+    expect($fresh->is_price_locked)->toBeTrue();
+    expect($fresh->pricing_source)->toBe(PricingSource::ModelsDev);
+});
+
+test('disabling automatic updates with a price change locks the row and marks the source manual', function (): void {
+    $admin = User::factory()->admin()->create();
+    $aiModelPrice = AiModelPrice::factory()->create([
+        'input_per_mtok' => 0.40,
+        'output_per_mtok' => 1.60,
+        'cache_read_per_mtok' => 0.10,
+        'cache_write_per_mtok' => 0.40,
+        'reasoning_per_mtok' => 1.60,
+        'pricing_source' => PricingSource::ModelsDev,
+        'is_price_locked' => false,
+    ]);
+
+    // Explicit off combined with a real price edit keeps the existing behavior:
+    // the row locks and takes manual ownership of the price.
+    $this->actingAs($admin)
+        ->put(route('admin.ai-prices.update', $aiModelPrice), [
+            'input_per_mtok' => 0.50,
+            'output_per_mtok' => 1.60,
+            'cache_read_per_mtok' => 0.10,
+            'cache_write_per_mtok' => 0.40,
+            'reasoning_per_mtok' => 1.60,
+            'automatic_updates_enabled' => false,
+        ])
+        ->assertRedirect(route('admin.ai-prices.index'));
+
+    $fresh = $aiModelPrice->fresh();
+    expect($fresh->is_price_locked)->toBeTrue();
+    expect($fresh->pricing_source)->toBe(PricingSource::Manual);
+});
+
+test('an edit with no toggle and no price change leaves the row unlocked', function (): void {
+    $admin = User::factory()->admin()->create();
+    $aiModelPrice = AiModelPrice::factory()->create([
+        'input_per_mtok' => 0.40,
+        'output_per_mtok' => 1.60,
+        'cache_read_per_mtok' => 0.10,
+        'cache_write_per_mtok' => 0.40,
+        'reasoning_per_mtok' => 1.60,
+        'pricing_source' => PricingSource::ModelsDev,
+        'is_price_locked' => false,
+    ]);
+
+    $this->actingAs($admin)
+        ->put(route('admin.ai-prices.update', $aiModelPrice), [
+            'input_per_mtok' => 0.40,
+            'output_per_mtok' => 1.60,
+            'cache_read_per_mtok' => 0.10,
+            'cache_write_per_mtok' => 0.40,
+            'reasoning_per_mtok' => 1.60,
+        ])
+        ->assertRedirect(route('admin.ai-prices.index'));
+
+    $fresh = $aiModelPrice->fresh();
+    expect($fresh->is_price_locked)->toBeFalse();
+    expect($fresh->pricing_source)->toBe(PricingSource::ModelsDev);
+});
+
+test('a free-usage-pool-only edit does not lock the price', function (): void {
+    $admin = User::factory()->admin()->create();
+    $pool = AiFreeUsagePool::factory()->create();
+    $aiModelPrice = AiModelPrice::factory()->create([
+        'input_per_mtok' => 0.40,
+        'output_per_mtok' => 1.60,
+        'cache_read_per_mtok' => 0.10,
+        'cache_write_per_mtok' => 0.40,
+        'reasoning_per_mtok' => 1.60,
+        'pricing_source' => PricingSource::ModelsDev,
+        'is_price_locked' => false,
+    ]);
+
+    $this->actingAs($admin)
+        ->put(route('admin.ai-prices.update', $aiModelPrice), [
+            'input_per_mtok' => 0.40,
+            'output_per_mtok' => 1.60,
+            'cache_read_per_mtok' => 0.10,
+            'cache_write_per_mtok' => 0.40,
+            'reasoning_per_mtok' => 1.60,
+            'free_usage_pool_id' => $pool->id,
+        ])
+        ->assertRedirect(route('admin.ai-prices.index'));
+
+    $fresh = $aiModelPrice->fresh();
+    expect($fresh->is_price_locked)->toBeFalse();
+    expect($fresh->pricing_source)->toBe(PricingSource::ModelsDev);
+    expect($fresh->free_usage_pool_id)->toBe($pool->id);
+});
+
+test('a rate-limit-only edit does not lock the price', function (): void {
+    $admin = User::factory()->admin()->create();
+    $aiModelPrice = AiModelPrice::factory()->create([
+        'input_per_mtok' => 0.40,
+        'output_per_mtok' => 1.60,
+        'cache_read_per_mtok' => 0.10,
+        'cache_write_per_mtok' => 0.40,
+        'reasoning_per_mtok' => 1.60,
+        'pricing_source' => PricingSource::ModelsDev,
+        'is_price_locked' => false,
+    ]);
+
+    $this->actingAs($admin)
+        ->put(route('admin.ai-prices.update', $aiModelPrice), [
+            'input_per_mtok' => 0.40,
+            'output_per_mtok' => 1.60,
+            'cache_read_per_mtok' => 0.10,
+            'cache_write_per_mtok' => 0.40,
+            'reasoning_per_mtok' => 1.60,
+            'rate_limits' => [
+                ['metric' => 'requests', 'period' => 'minute', 'limit_value' => 500],
+            ],
+        ])
+        ->assertRedirect(route('admin.ai-prices.index'));
+
+    $fresh = $aiModelPrice->fresh();
+    expect($fresh->is_price_locked)->toBeFalse();
+    expect($fresh->pricing_source)->toBe(PricingSource::ModelsDev);
+    expect($fresh->rateLimits()->count())->toBe(1);
+});
+
+test('a batch-price change locks the row and marks the source manual', function (): void {
+    $admin = User::factory()->admin()->create();
+    $aiModelPrice = AiModelPrice::factory()->create([
+        'input_per_mtok' => 0.40,
+        'output_per_mtok' => 1.60,
+        'cache_read_per_mtok' => 0.10,
+        'cache_write_per_mtok' => 0.40,
+        'reasoning_per_mtok' => 1.60,
+        'batch_input_per_mtok' => 0.20,
+        'pricing_source' => PricingSource::ModelsDev,
+        'is_price_locked' => false,
+    ]);
+
+    $this->actingAs($admin)
+        ->put(route('admin.ai-prices.update', $aiModelPrice), [
+            'input_per_mtok' => 0.40,
+            'output_per_mtok' => 1.60,
+            'cache_read_per_mtok' => 0.10,
+            'cache_write_per_mtok' => 0.40,
+            'reasoning_per_mtok' => 1.60,
+            'batch_input_per_mtok' => 0.99,
+        ])
+        ->assertRedirect(route('admin.ai-prices.index'));
+
+    $fresh = $aiModelPrice->fresh();
+    expect($fresh->is_price_locked)->toBeTrue();
+    expect($fresh->pricing_source)->toBe(PricingSource::Manual);
+});
+
+test('index exposes provenance, lock, and derived automatic updates fields', function (): void {
+    $admin = User::factory()->admin()->create();
+    AiModelPrice::factory()->create([
+        'pricing_source' => PricingSource::ModelsDev,
+        'pricing_source_url' => 'https://models.dev/openai',
+        'pricing_synced_at' => now(),
+        'pricing_verified_at' => now(),
+        'is_price_locked' => true,
+    ]);
+
+    $this->actingAs($admin)
+        ->get(route('admin.ai-prices.index'))
+        ->assertInertia(fn ($page) => $page
+            ->component('Admin/AiPrices/Index')
+            ->where('prices.0.pricing_source', 'models_dev')
+            ->where('prices.0.pricing_source_url', 'https://models.dev/openai')
+            ->where('prices.0.is_price_locked', true)
+            ->where('prices.0.automatic_updates_enabled', false)
+            ->has('prices.0.pricing_synced_at')
+            ->has('prices.0.pricing_verified_at'));
 });
 
 test('index exposes rate limits on price rows', function (): void {

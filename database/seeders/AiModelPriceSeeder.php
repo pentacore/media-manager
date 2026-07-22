@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Database\Seeders;
 
+use App\Enums\PricingSource;
 use App\Models\AiModelPrice;
 use Illuminate\Database\Seeder;
 
@@ -88,30 +89,37 @@ class AiModelPriceSeeder extends Seeder
             ['provider' => 'cohere', 'model' => 'command-r7b-12-2024', 'input_per_mtok' => 0.0375, 'output_per_mtok' => 0.15, 'cache_read_per_mtok' => 0, 'cache_write_per_mtok' => 0, 'reasoning_per_mtok' => 0],
         ];
 
-        // Providers offering an async/batch API at 50% of synchronous rates.
-        // OpenAI Batch API, Anthropic Message Batches, Gemini Batch Mode, Mistral Batch API.
-        $batchSupported = ['openai', 'anthropic', 'gemini', 'mistral'];
-        $batchDiscount = 0.5;
+        // Providers offering an async/batch API at 50% of synchronous rates
+        // (OpenAI Batch, Anthropic Message Batches, Gemini Batch, Mistral Batch)
+        // are billed via a documented discount rather than a stored rate. Batch
+        // columns stay null unless a verified per-model batch price is known, so
+        // the seed never fabricates a synthetic batch rate from a formula.
+        foreach ($defaults as $default) {
+            $price = AiModelPrice::query()->firstOrNew([
+                'provider' => $default['provider'],
+                'model' => $default['model'],
+            ]);
 
-        foreach ($defaults as &$row) {
-            if (! in_array($row['provider'], $batchSupported, true)) {
+            if ($price->exists && (
+                $price->is_price_locked
+                || in_array($price->pricing_source, [
+                    PricingSource::FirstParty,
+                    PricingSource::ModelsDev,
+                    PricingSource::Manual,
+                ], true)
+            )) {
                 continue;
             }
 
-            $row['batch_input_per_mtok'] = round($row['input_per_mtok'] * $batchDiscount, 4);
-            $row['batch_output_per_mtok'] = round($row['output_per_mtok'] * $batchDiscount, 4);
-            $row['batch_cache_read_per_mtok'] = round($row['cache_read_per_mtok'] * $batchDiscount, 4);
-            $row['batch_cache_write_per_mtok'] = round($row['cache_write_per_mtok'] * $batchDiscount, 4);
-            $row['batch_reasoning_per_mtok'] = round($row['reasoning_per_mtok'] * $batchDiscount, 4);
-        }
-
-        unset($row);
-
-        foreach ($defaults as $default) {
-            AiModelPrice::updateOrCreate(
-                ['provider' => $default['provider'], 'model' => $default['model']],
-                $default,
-            );
+            $price->fill([
+                'batch_input_per_mtok' => null,
+                'batch_output_per_mtok' => null,
+                'batch_cache_read_per_mtok' => null,
+                'batch_cache_write_per_mtok' => null,
+                'batch_reasoning_per_mtok' => null,
+                ...$default,
+                'pricing_source' => PricingSource::Seed->value,
+            ])->save();
         }
     }
 }

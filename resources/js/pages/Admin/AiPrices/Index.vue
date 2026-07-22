@@ -11,6 +11,8 @@ import {
     PoolFormFields,
     RateLimitEditor,
     StatCard,
+    TimeStamp,
+    Toggle,
 } from '@/components/mm';
 import { Button } from '@/components/ui/button';
 import {
@@ -49,6 +51,14 @@ interface PriceRow {
     batch_cache_write_per_mtok: string | null;
     batch_reasoning_per_mtok: string | null;
     free_usage_pool_id: number | null;
+    pricing_source:
+        'seed' | 'models_dev' | 'first_party' | 'manual' | 'legacy' | null;
+    pricing_source_url: string | null;
+    pricing_source_updated_at: string | null;
+    pricing_synced_at: string | null;
+    pricing_verified_at: string | null;
+    is_price_locked: boolean;
+    automatic_updates_enabled: boolean;
     rate_limits: {
         id: number;
         metric: 'requests' | 'tokens';
@@ -121,6 +131,73 @@ const editRateLimits = ref<RateLimitDraft[]>([]);
 const createPoolId = ref('none');
 const editPoolId = ref('none');
 
+// Whether a manually managed row opts into online refreshes. Create defaults
+// OFF so a hand-entered price stays locked; edit mirrors the row's state.
+const createAutomaticUpdates = ref(false);
+const editAutomaticUpdates = ref(false);
+
+// Tracks whether the admin actually interacted with the edit dialog's toggle
+// this session. The hidden `automatic_updates_enabled` field is submitted ONLY
+// when touched: an untouched toggle omits the field so a rate edit falls
+// through to the backend's price-change locking rule, rather than the prefilled
+// value reading as an explicit re-enable.
+const editAutomaticUpdatesTouched = ref(false);
+
+function onEditAutomaticUpdatesChange(value: boolean): void {
+    editAutomaticUpdates.value = value;
+    editAutomaticUpdatesTouched.value = true;
+}
+
+type PricingSource = NonNullable<PriceRow['pricing_source']>;
+
+const SOURCE_LABELS: Record<PricingSource, string> = {
+    seed: 'Seed data',
+    models_dev: 'Models.dev',
+    first_party: 'First-party source',
+    manual: 'Manual',
+    legacy: 'Legacy',
+};
+
+const SOURCE_VARIANTS: Record<
+    PricingSource,
+    'default' | 'ok' | 'warn' | 'info'
+> = {
+    seed: 'default',
+    models_dev: 'ok',
+    first_party: 'ok',
+    manual: 'info',
+    legacy: 'warn',
+};
+
+function sourceLabel(source: PriceRow['pricing_source']): string {
+    return source ? SOURCE_LABELS[source] : '—';
+}
+
+function sourceVariant(
+    source: PricingSource,
+): 'default' | 'ok' | 'warn' | 'info' {
+    return SOURCE_VARIANTS[source];
+}
+
+/**
+ * Guards the pricing-source pill link so only http(s) URLs ever become an
+ * anchor. Any other scheme (javascript:, data:, etc.) or an unparseable value
+ * returns null, and the template falls back to a plain, non-clickable pill.
+ */
+function safeSourceHref(url: string | null): string | null {
+    if (url === null) {
+        return null;
+    }
+
+    try {
+        const { protocol } = new URL(url);
+
+        return protocol === 'http:' || protocol === 'https:' ? url : null;
+    } catch {
+        return null;
+    }
+}
+
 function startPoolEdit(pool: PoolRow) {
     editingPool.value = { ...pool };
 }
@@ -158,6 +235,20 @@ interface PriceRefreshPayload {
     added: number | null;
     total: number | null;
     occurred_at: string;
+    run_id: number | null;
+    final_result: 'succeeded' | 'partial' | 'failed' | null;
+    models_dev_status: string | null;
+    providers_requested: number | null;
+    providers_succeeded: number | null;
+    providers_failed: number | null;
+    models_created: number | null;
+    models_updated: number | null;
+    models_unchanged: number | null;
+    models_locked: number | null;
+    models_rejected: number | null;
+    models_tiered: number | null;
+    fallback_providers: string[] | null;
+    error_message: string | null;
 }
 
 function refreshPrices() {
@@ -179,6 +270,19 @@ function refreshPrices() {
     );
 }
 
+/**
+ * Compact created/updated/locked/rejected counter string for the enriched
+ * refresh toasts.
+ */
+function refreshCounts(payload: PriceRefreshPayload): string {
+    return [
+        `${payload.models_created ?? 0} created`,
+        `${payload.models_updated ?? 0} updated`,
+        `${payload.models_locked ?? 0} locked`,
+        `${payload.models_rejected ?? 0} rejected`,
+    ].join(', ');
+}
+
 function handleRefreshState(payload: PriceRefreshPayload): void {
     if (payload.state === 'queued' || payload.state === 'running') {
         refreshing.value = true;
@@ -187,6 +291,40 @@ function handleRefreshState(payload: PriceRefreshPayload): void {
     }
 
     refreshing.value = false;
+
+    // Enriched runs carry a final_result; legacy payloads leave it null and
+    // keep the original added/total success behavior below.
+    if (payload.final_result !== null) {
+        if (payload.final_result === 'succeeded') {
+            toast.success('Price refresh complete', {
+                description: `${refreshCounts(payload)}.`,
+            });
+            router.reload({ only: ['prices'] });
+
+            return;
+        }
+
+        if (payload.final_result === 'partial') {
+            const fallback =
+                payload.fallback_providers &&
+                payload.fallback_providers.length > 0
+                    ? ` Fallback: ${payload.fallback_providers.join(', ')}.`
+                    : '';
+            toast.warning('Price refresh partially completed', {
+                description: `${refreshCounts(payload)}.${fallback}`,
+            });
+            router.reload({ only: ['prices'] });
+
+            return;
+        }
+
+        toast.error('Price refresh failed', {
+            description:
+                payload.error_message ?? payload.error ?? 'Unknown error',
+        });
+
+        return;
+    }
 
     if (payload.state === 'succeeded') {
         const triggered = payload.triggered_by
@@ -231,12 +369,15 @@ function startEdit(price: PriceRow) {
         period: limit.period,
         limit_value: limit.limit_value,
     }));
+    editAutomaticUpdates.value = price.automatic_updates_enabled;
+    editAutomaticUpdatesTouched.value = false;
 }
 
 function onCreateSuccess() {
     showCreateDialog.value = false;
     createRateLimits.value = [];
     createPoolId.value = 'none';
+    createAutomaticUpdates.value = false;
 }
 
 function cancelEdit() {
@@ -467,6 +608,36 @@ const priciest = ref(
                                     </Select>
                                     <InputError
                                         :message="errors.free_usage_pool_id"
+                                    />
+                                </div>
+                                <div class="col-span-2 space-y-2">
+                                    <Label>Automatic pricing updates</Label>
+                                    <input
+                                        type="hidden"
+                                        name="automatic_updates_enabled"
+                                        :value="
+                                            createAutomaticUpdates ? '1' : '0'
+                                        "
+                                    />
+                                    <Toggle
+                                        v-model="createAutomaticUpdates"
+                                        role="switch"
+                                        aria-label="Automatic pricing updates"
+                                        :aria-checked="createAutomaticUpdates"
+                                        :label="
+                                            createAutomaticUpdates
+                                                ? 'On — kept in sync online'
+                                                : 'Off — locked to manual price'
+                                        "
+                                    />
+                                    <p class="text-[11px] text-fg-subtle">
+                                        Off locks this row so an online refresh
+                                        never overwrites your entered price.
+                                    </p>
+                                    <InputError
+                                        :message="
+                                            errors.automatic_updates_enabled
+                                        "
                                     />
                                 </div>
                                 <RateLimitEditor
@@ -755,6 +926,9 @@ const priciest = ref(
                                     'Cache R',
                                     'Cache W',
                                     'Reasoning',
+                                    'Source',
+                                    'Synced',
+                                    'Verified',
                                     '',
                                 ]"
                                 :key="h"
@@ -843,6 +1017,75 @@ const priciest = ref(
                                     )
                                 }}
                             </td>
+                            <td class="px-3 py-2.5">
+                                <div class="flex flex-col gap-1">
+                                    <template v-if="price.pricing_source">
+                                        <a
+                                            v-if="
+                                                safeSourceHref(
+                                                    price.pricing_source_url,
+                                                )
+                                            "
+                                            :href="
+                                                safeSourceHref(
+                                                    price.pricing_source_url,
+                                                )!
+                                            "
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            class="w-fit"
+                                        >
+                                            <Pill
+                                                :variant="
+                                                    sourceVariant(
+                                                        price.pricing_source,
+                                                    )
+                                                "
+                                            >
+                                                {{
+                                                    sourceLabel(
+                                                        price.pricing_source,
+                                                    )
+                                                }}
+                                            </Pill>
+                                        </a>
+                                        <Pill
+                                            v-else
+                                            :variant="
+                                                sourceVariant(
+                                                    price.pricing_source,
+                                                )
+                                            "
+                                        >
+                                            {{
+                                                sourceLabel(
+                                                    price.pricing_source,
+                                                )
+                                            }}
+                                        </Pill>
+                                    </template>
+                                    <span v-else class="text-fg-subtle">—</span>
+                                    <span class="text-[11px] text-fg-subtle">
+                                        {{
+                                            price.automatic_updates_enabled
+                                                ? 'Auto-updates on'
+                                                : 'Locked'
+                                        }}
+                                    </span>
+                                </div>
+                            </td>
+                            <td class="px-3 py-2.5 text-muted-foreground">
+                                <TimeStamp
+                                    :iso="price.pricing_synced_at"
+                                    mode="smart"
+                                />
+                            </td>
+                            <td class="px-3 py-2.5 text-muted-foreground">
+                                <TimeStamp
+                                    :iso="price.pricing_verified_at"
+                                    mode="smart"
+                                />
+                            </td>
                             <td class="px-3 py-2.5 text-right">
                                 <div class="flex justify-end gap-1">
                                     <Button
@@ -866,7 +1109,7 @@ const priciest = ref(
                         </tr>
                         <tr v-if="prices.length === 0">
                             <td
-                                colspan="8"
+                                colspan="11"
                                 class="px-3 py-8 text-center text-sm text-fg-subtle"
                             >
                                 No models priced yet. Click "Add model price".
@@ -988,6 +1231,38 @@ const priciest = ref(
                                 </SelectContent>
                             </Select>
                             <InputError :message="errors.free_usage_pool_id" />
+                        </div>
+                        <div class="col-span-2 space-y-2">
+                            <Label>Automatic pricing updates</Label>
+                            <input
+                                v-if="editAutomaticUpdatesTouched"
+                                type="hidden"
+                                name="automatic_updates_enabled"
+                                :value="editAutomaticUpdates ? '1' : '0'"
+                            />
+                            <Toggle
+                                :model-value="editAutomaticUpdates"
+                                role="switch"
+                                aria-label="Automatic pricing updates"
+                                :aria-checked="editAutomaticUpdates"
+                                :label="
+                                    editAutomaticUpdates
+                                        ? 'On — kept in sync online'
+                                        : 'Off — locked to manual price'
+                                "
+                                @update:model-value="
+                                    onEditAutomaticUpdatesChange
+                                "
+                            />
+                            <p class="text-[11px] text-fg-subtle">
+                                Editing any rate locks this row so an online
+                                refresh won't overwrite your price. Flip this
+                                toggle to override: on keeps automatic updates,
+                                off forces it locked.
+                            </p>
+                            <InputError
+                                :message="errors.automatic_updates_enabled"
+                            />
                         </div>
                         <RateLimitEditor
                             v-model="editRateLimits"

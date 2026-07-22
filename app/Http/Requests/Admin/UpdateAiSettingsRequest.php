@@ -11,6 +11,7 @@ use App\Enums\SubtitleRuleStrength;
 use App\Settings\MediaReplacementSettings;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Validation\Rule;
 use JsonException;
 use Override;
 use Pentacore\Typefinder\Attributes\TypefinderOverrides;
@@ -34,6 +35,9 @@ class UpdateAiSettingsRequest extends FormRequest
             'hard_budget_usd' => ['nullable', 'numeric', 'min:0', 'max:100000', 'gte:soft_budget_usd'],
             'advisor_reasoning_level' => ['required', AiReasoningLevel::validationRule()],
             'failover_provider' => ['nullable', 'string', 'in:anthropic,openai,gemini,groq,mistral'],
+            'models_dev_pricing_enabled' => ['nullable', 'boolean'],
+            'ignored_pricing_providers' => ['nullable', 'array'],
+            'ignored_pricing_providers.*' => ['string', Rule::in($this->supportedPricingProviders())],
             'media_replacement' => ['required', 'array'],
             'media_replacement.automatic_selection_enabled' => ['required', 'boolean'],
             'media_replacement.automatic_selection_threshold' => ['required', 'integer', 'between:0,100'],
@@ -94,6 +98,19 @@ class UpdateAiSettingsRequest extends FormRequest
 
             $this->merge(['media_replacement' => is_array($decoded) ? $decoded : []]);
         }
+    }
+
+    /**
+     * The canonical pricing providers an admin may add to the ignore list.
+     *
+     * @return list<string>
+     */
+    private function supportedPricingProviders(): array
+    {
+        /** @var array<string, string> $map */
+        $map = config('mediamanager.ai.pricing.providers', []);
+
+        return array_values(array_unique(array_values($map)));
     }
 
     /**
