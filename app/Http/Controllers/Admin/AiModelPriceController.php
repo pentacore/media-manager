@@ -29,7 +29,7 @@ class AiModelPriceController extends Controller
      *
      * @var list<string>
      */
-    private const PRICE_FIELDS = [
+    private const array PRICE_FIELDS = [
         'input_per_mtok',
         'output_per_mtok',
         'cache_read_per_mtok',

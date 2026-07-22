@@ -65,7 +65,7 @@ return [
             // or canonical spelling. An ignored provider is skipped by every
             // automatic pricing path; its stored rows stay last-known-good.
             'ignored_providers' => array_values(array_filter(array_map(
-                'trim',
+                trim(...),
                 explode(',', (string) env('AI_PRICING_IGNORED_PROVIDERS', '')),
             ), fn (string $provider): bool => $provider !== '')),
             'providers' => [

@@ -164,7 +164,7 @@ class UpsertModelPriceTool extends BaseTool
         // match a page this run actually fetched for that provider. This is what
         // makes `pricing_verified_at` trustworthy instead of a flag the model
         // could set from an invented — or another provider's — URL.
-        if ($this->run !== null && ! $this->sourceIsVerified($sourceUrl, $canonicalProvider)) {
+        if ($this->run instanceof PriceVerificationRun && ! $this->sourceIsVerified($sourceUrl, $canonicalProvider)) {
             return [
                 'error' => 'unverified_source',
                 'message' => sprintf(
@@ -175,7 +175,7 @@ class UpsertModelPriceTool extends BaseTool
             ];
         }
 
-        $candidate = new ModelPriceCandidate(
+        $modelPriceCandidate = new ModelPriceCandidate(
             provider: $provider,
             model: $model,
             fields: $this->priceFields($args),
@@ -189,13 +189,13 @@ class UpsertModelPriceTool extends BaseTool
         // local receipt can exist, so the write proceeds as a best-effort refresh
         // (firstPartyVerified false): the anomaly guard still applies and
         // `pricing_verified_at` is never stamped.
-        $firstPartyVerified = $this->run !== null
+        $firstPartyVerified = $this->run instanceof PriceVerificationRun
             && $this->run->requiresReceipts()
             && $canonicalProvider !== null
             && $this->run->hasReceiptForProvider($sourceUrl, $canonicalProvider);
 
-        $outcome = $this->writer->write(
-            $candidate,
+        $writeOutcome = $this->writer->write(
+            $modelPriceCandidate,
             $this->scope,
             PricingSource::FirstParty,
             dryRun: $this->dryRun,
@@ -206,11 +206,11 @@ class UpsertModelPriceTool extends BaseTool
         // write only resolves a target when it also re-read both primary rates.
         // A cache-only or all-null update is recorded for audit but never counts
         // as verification-grade, so it cannot resolve its target.
-        $verificationGrade = $firstPartyVerified && $candidate->suppliesPrimaryRates();
+        $verificationGrade = $firstPartyVerified && $modelPriceCandidate->suppliesPrimaryRates();
 
-        $this->run?->recordOutcome($canonicalProvider ?? $provider, $outcome, $model, verificationGrade: $verificationGrade);
+        $this->run?->recordOutcome($canonicalProvider ?? $provider, $writeOutcome, $model, verificationGrade: $verificationGrade);
 
-        return $this->respond($outcome, $provider, $model);
+        return $this->respond($writeOutcome, $provider, $model);
     }
 
     /**
@@ -242,7 +242,7 @@ class UpsertModelPriceTool extends BaseTool
             return false;
         }
 
-        if ($this->run !== null && $this->run->requiresReceipts()) {
+        if ($this->run instanceof PriceVerificationRun && $this->run->requiresReceipts()) {
             return $this->run->hasReceiptForProvider($sourceUrl, $sourceProvider);
         }
 
@@ -332,7 +332,7 @@ class UpsertModelPriceTool extends BaseTool
             ],
             default => [
                 'error' => 'write_rejected',
-                'message' => sprintf('The write for %s/%s was rejected: it is out of this run\'s scope, an unsupported provider, missing a required input/output rate, an out-of-range value, or an implausible change from the stored price. Re-read the pricing page instead of retrying with the same values.', $provider, $model),
+                'message' => sprintf("The write for %s/%s was rejected: it is out of this run's scope, an unsupported provider, missing a required input/output rate, an out-of-range value, or an implausible change from the stored price. Re-read the pricing page instead of retrying with the same values.", $provider, $model),
             ],
         };
     }

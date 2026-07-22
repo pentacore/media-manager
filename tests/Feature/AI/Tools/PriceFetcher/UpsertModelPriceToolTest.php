@@ -18,9 +18,9 @@ use Laravel\Ai\Tools\Request;
  */
 function upsertTool(?RefreshScope $scope = null): UpsertModelPriceTool
 {
-    $tool = app(UpsertModelPriceTool::class);
+    $upsertModelPriceTool = resolve(UpsertModelPriceTool::class);
 
-    return $scope === null ? $tool : $tool->withScope($scope);
+    return $scope instanceof RefreshScope ? $upsertModelPriceTool->withScope($scope) : $upsertModelPriceTool;
 }
 
 /**
@@ -42,10 +42,10 @@ test('creates a new price row when within scope', function (): void {
 
     expect($result['upserted'])->toBeTrue();
 
-    $row = AiModelPrice::query()->where('provider', 'openai')->where('model', 'gpt-x-test')->firstOrFail();
-    expect((float) $row->input_per_mtok)->toBe(1.25)
-        ->and((float) $row->output_per_mtok)->toBe(5.0)
-        ->and($row->pricing_source)->toBe(PricingSource::FirstParty);
+    $aiModelPrice = AiModelPrice::query()->where('provider', 'openai')->where('model', 'gpt-x-test')->firstOrFail();
+    expect((float) $aiModelPrice->input_per_mtok)->toBe(1.25)
+        ->and((float) $aiModelPrice->output_per_mtok)->toBe(5.0)
+        ->and($aiModelPrice->pricing_source)->toBe(PricingSource::FirstParty);
 });
 
 test('updates the existing row in place rather than creating a duplicate', function (): void {
@@ -139,9 +139,9 @@ test('null price fields preserve existing values', function (): void {
         'cache_read_per_mtok' => null,
     ]);
 
-    $row = AiModelPrice::query()->where('provider', 'openai')->where('model', 'gpt-x')->firstOrFail();
-    expect((float) $row->input_per_mtok)->toBe(3.0)
-        ->and((float) $row->cache_read_per_mtok)->toBe(0.3);
+    $aiModelPrice = AiModelPrice::query()->where('provider', 'openai')->where('model', 'gpt-x')->firstOrFail();
+    expect((float) $aiModelPrice->input_per_mtok)->toBe(3.0)
+        ->and((float) $aiModelPrice->cache_read_per_mtok)->toBe(0.3);
 });
 
 test('an explicit zero writes a zero rate while a missing rate stays null', function (): void {
@@ -154,9 +154,9 @@ test('an explicit zero writes a zero rate while a missing rate stays null', func
         'batch_output_per_mtok' => null,
     ]);
 
-    $row = AiModelPrice::query()->where('provider', 'openai')->where('model', 'gpt-zero')->firstOrFail();
-    expect((float) $row->batch_input_per_mtok)->toBe(0.0)
-        ->and($row->batch_output_per_mtok)->toBeNull();
+    $aiModelPrice = AiModelPrice::query()->where('provider', 'openai')->where('model', 'gpt-zero')->firstOrFail();
+    expect((float) $aiModelPrice->batch_input_per_mtok)->toBe(0.0)
+        ->and($aiModelPrice->batch_output_per_mtok)->toBeNull();
 });
 
 test('rejects a new row when a primary rate is missing', function (): void {
@@ -189,9 +189,9 @@ test('skips a locked row', function (): void {
 
     expect($result['error'])->toBe('price_locked');
 
-    $row = AiModelPrice::query()->where('model', 'gpt-x')->firstOrFail();
-    expect((float) $row->input_per_mtok)->toBe(2.5)
-        ->and((float) $row->output_per_mtok)->toBe(10.0);
+    $aiModelPrice = AiModelPrice::query()->where('model', 'gpt-x')->firstOrFail();
+    expect((float) $aiModelPrice->input_per_mtok)->toBe(2.5)
+        ->and((float) $aiModelPrice->output_per_mtok)->toBe(10.0);
 });
 
 test('persists source metadata', function (): void {
@@ -204,10 +204,10 @@ test('persists source metadata', function (): void {
         'source_updated_at' => '2026-07-01',
     ]);
 
-    $row = AiModelPrice::query()->where('provider', 'openai')->where('model', 'gpt-src')->firstOrFail();
-    expect($row->pricing_source)->toBe(PricingSource::FirstParty)
-        ->and($row->pricing_source_url)->toBe('https://developers.openai.com/api/docs/pricing')
-        ->and($row->pricing_source_updated_at?->toDateString())->toBe('2026-07-01');
+    $aiModelPrice = AiModelPrice::query()->where('provider', 'openai')->where('model', 'gpt-src')->firstOrFail();
+    expect($aiModelPrice->pricing_source)->toBe(PricingSource::FirstParty)
+        ->and($aiModelPrice->pricing_source_url)->toBe('https://developers.openai.com/api/docs/pricing')
+        ->and($aiModelPrice->pricing_source_updated_at?->toDateString())->toBe('2026-07-01');
 });
 
 test('ignores a malformed or nonexistent source date without rejecting valid rates', function (string $sourceUpdatedAt): void {
@@ -224,9 +224,9 @@ test('ignores a malformed or nonexistent source date without rejecting valid rat
 
     expect($result['upserted'])->toBeTrue();
 
-    $row = AiModelPrice::query()->where('provider', 'openai')->where('model', $model)->firstOrFail();
-    expect((float) $row->input_per_mtok)->toBe(1.25)
-        ->and($row->pricing_source_updated_at)->toBeNull();
+    $aiModelPrice = AiModelPrice::query()->where('provider', 'openai')->where('model', $model)->firstOrFail();
+    expect((float) $aiModelPrice->input_per_mtok)->toBe(1.25)
+        ->and($aiModelPrice->pricing_source_updated_at)->toBeNull();
 })->with([
     'malformed date' => 'not-a-date',
     'nonexistent date' => '2026-02-30',
@@ -260,10 +260,10 @@ test('accepts an anomalous update verified against the canonical first-party sou
     expect($result['upserted'])->toBeTrue()
         ->and($result['outcome'])->toBe('updated');
 
-    $row = AiModelPrice::query()->where('provider', 'openai')->where('model', 'gpt-anomalous')->firstOrFail();
-    expect((float) $row->input_per_mtok)->toBe(10.0)
-        ->and((float) $row->output_per_mtok)->toBe(40.0)
-        ->and($row->pricing_verified_at)->not->toBeNull();
+    $aiModelPrice = AiModelPrice::query()->where('provider', 'openai')->where('model', 'gpt-anomalous')->firstOrFail();
+    expect((float) $aiModelPrice->input_per_mtok)->toBe(10.0)
+        ->and((float) $aiModelPrice->output_per_mtok)->toBe(40.0)
+        ->and($aiModelPrice->pricing_verified_at)->not->toBeNull();
 });
 
 test('stamps verification when first-party rates are unchanged', function (): void {
@@ -290,12 +290,12 @@ test('stamps verification when first-party rates are unchanged', function (): vo
     expect($result['upserted'])->toBeTrue()
         ->and($result['outcome'])->toBe('unchanged');
 
-    $row = AiModelPrice::query()->where('provider', 'openai')->where('model', 'gpt-unchanged')->firstOrFail();
-    expect($row->pricing_verified_at)->not->toBeNull();
+    $aiModelPrice = AiModelPrice::query()->where('provider', 'openai')->where('model', 'gpt-unchanged')->firstOrFail();
+    expect($aiModelPrice->pricing_verified_at)->not->toBeNull();
 });
 
 test('provider schema documents google canonicalization to gemini', function (): void {
-    $schema = app(UpsertModelPriceTool::class)->schema(new JsonSchemaTypeFactory);
+    $schema = resolve(UpsertModelPriceTool::class)->schema(new JsonSchemaTypeFactory);
 
     expect($schema['provider']->toArray()['description'])
         ->toContain('google')
@@ -324,14 +324,14 @@ test('delegates the write to the shared writer rather than a bare updateOrCreate
 
     expect($result['upserted'])->toBeTrue();
 
-    $row = AiModelPrice::query()->where('provider', 'openai')->where('model', 'gpt-x')->firstOrFail();
-    expect($row->pricing_source)->toBe(PricingSource::FirstParty)
-        ->and($row->pricing_synced_at)->not->toBeNull()
-        ->and((float) $row->input_per_mtok)->toBe(3.0);
+    $aiModelPrice = AiModelPrice::query()->where('provider', 'openai')->where('model', 'gpt-x')->firstOrFail();
+    expect($aiModelPrice->pricing_source)->toBe(PricingSource::FirstParty)
+        ->and($aiModelPrice->pricing_synced_at)->not->toBeNull()
+        ->and((float) $aiModelPrice->input_per_mtok)->toBe(3.0);
 });
 
 test('risk is SafeWrite', function (): void {
-    expect(app(UpsertModelPriceTool::class)->risk())->toBe(Risk::SafeWrite);
+    expect(resolve(UpsertModelPriceTool::class)->risk())->toBe(Risk::SafeWrite);
 });
 
 test('a receipt-gated run rejects a write with no matching fetch receipt', function (): void {
@@ -366,8 +366,8 @@ test('a receipt-gated run accepts a write backed by an exact fetch receipt', fun
     expect($result['upserted'])->toBeTrue()
         ->and($run->providerHasVerifiedWrite('openai'))->toBeTrue();
 
-    $row = AiModelPrice::query()->where('provider', 'openai')->where('model', 'gpt-x')->firstOrFail();
-    expect($row->pricing_verified_at)->not->toBeNull();
+    $aiModelPrice = AiModelPrice::query()->where('provider', 'openai')->where('model', 'gpt-x')->firstOrFail();
+    expect($aiModelPrice->pricing_verified_at)->not->toBeNull();
 });
 
 test('a run rejects a source_url whose host is off the allowlist', function (): void {
@@ -425,8 +425,8 @@ test('the provider-native path writes best-effort without stamping or resolving 
         ->and($run->providerHasVerifiedWrite('openai'))->toBeFalse()
         ->and($run->modelHasVerifiedWrite('openai', 'gpt-x'))->toBeFalse();
 
-    $row = AiModelPrice::query()->where('provider', 'openai')->where('model', 'gpt-x')->firstOrFail();
-    expect($row->pricing_verified_at)->toBeNull();
+    $aiModelPrice = AiModelPrice::query()->where('provider', 'openai')->where('model', 'gpt-x')->firstOrFail();
+    expect($aiModelPrice->pricing_verified_at)->toBeNull();
 });
 
 test('the provider-native path cannot bypass the anomaly guard', function (): void {
@@ -453,10 +453,10 @@ test('the provider-native path cannot bypass the anomaly guard', function (): vo
 
     expect($result['error'])->toBe('write_rejected');
 
-    $row = AiModelPrice::query()->where('provider', 'openai')->where('model', 'gpt-anom-native')->firstOrFail();
-    expect((float) $row->input_per_mtok)->toBe(1.0)
-        ->and((float) $row->output_per_mtok)->toBe(4.0)
-        ->and($row->pricing_verified_at)->toBeNull();
+    $aiModelPrice = AiModelPrice::query()->where('provider', 'openai')->where('model', 'gpt-anom-native')->firstOrFail();
+    expect((float) $aiModelPrice->input_per_mtok)->toBe(1.0)
+        ->and((float) $aiModelPrice->output_per_mtok)->toBe(4.0)
+        ->and($aiModelPrice->pricing_verified_at)->toBeNull();
 });
 
 test('a run records the write outcome under the canonical provider', function (): void {
@@ -513,8 +513,8 @@ test('an all-null tool call is rejected and resolves nothing', function (): void
         ->and($run->providerHasVerifiedWrite('openai'))->toBeFalse()
         ->and($run->modelHasVerifiedWrite('openai', 'gpt-null-call'))->toBeFalse();
 
-    $row = AiModelPrice::query()->where('provider', 'openai')->where('model', 'gpt-null-call')->firstOrFail();
-    expect($row->pricing_verified_at)->toBeNull();
+    $aiModelPrice = AiModelPrice::query()->where('provider', 'openai')->where('model', 'gpt-null-call')->firstOrFail();
+    expect($aiModelPrice->pricing_verified_at)->toBeNull();
 });
 
 test('a receipt-backed cache-only update persists but stamps nothing and resolves nothing', function (): void {
@@ -549,9 +549,9 @@ test('a receipt-backed cache-only update persists but stamps nothing and resolve
         ->and($run->providerHasVerifiedWrite('openai'))->toBeFalse()
         ->and($run->modelHasVerifiedWrite('openai', 'gpt-cache-only'))->toBeFalse();
 
-    $row = AiModelPrice::query()->where('provider', 'openai')->where('model', 'gpt-cache-only')->firstOrFail();
-    expect((float) $row->cache_read_per_mtok)->toBe(0.25)
-        ->and($row->pricing_verified_at)->toBeNull();
+    $aiModelPrice = AiModelPrice::query()->where('provider', 'openai')->where('model', 'gpt-cache-only')->firstOrFail();
+    expect((float) $aiModelPrice->cache_read_per_mtok)->toBe(0.25)
+        ->and($aiModelPrice->pricing_verified_at)->toBeNull();
 });
 
 test('a full-rate receipt-backed unchanged write still stamps and resolves', function (): void {
@@ -580,8 +580,8 @@ test('a full-rate receipt-backed unchanged write still stamps and resolves', fun
         ->and($run->providerHasVerifiedWrite('openai'))->toBeTrue()
         ->and($run->modelHasVerifiedWrite('openai', 'gpt-full-same'))->toBeTrue();
 
-    $row = AiModelPrice::query()->where('provider', 'openai')->where('model', 'gpt-full-same')->firstOrFail();
-    expect($row->pricing_verified_at)->not->toBeNull();
+    $aiModelPrice = AiModelPrice::query()->where('provider', 'openai')->where('model', 'gpt-full-same')->firstOrFail();
+    expect($aiModelPrice->pricing_verified_at)->not->toBeNull();
 });
 
 test('a dry-run tool writes nothing yet records a verification-grade would-create', function (): void {
@@ -633,8 +633,8 @@ test('a dry-run unchanged write computes the comparison without stamping verific
         ->and($run->modelHasVerifiedWrite('openai', 'gpt-dry-same'))->toBeTrue();
 
     // The comparison ran for real, but a dry run never stamps.
-    $row = AiModelPrice::query()->where('provider', 'openai')->where('model', 'gpt-dry-same')->firstOrFail();
-    expect($row->pricing_verified_at)->toBeNull();
+    $aiModelPrice = AiModelPrice::query()->where('provider', 'openai')->where('model', 'gpt-dry-same')->firstOrFail();
+    expect($aiModelPrice->pricing_verified_at)->toBeNull();
 });
 
 test('a rejected write never resolves its exact-model target in the ledger', function (): void {

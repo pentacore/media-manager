@@ -155,6 +155,7 @@ class AiSettingsController extends Controller
                 : null,
         );
         $aiSettings->setIgnoredPricingProviders($validated['ignored_pricing_providers'] ?? []);
+
         $mediaReplacementConfiguration = $validated['media_replacement'];
         $mediaReplacementConfiguration['sonarr_root_folders'] = $mediaReplacementSettings->sonarrRootFolders();
         $mediaReplacementSettings->setConfiguration($mediaReplacementConfiguration);

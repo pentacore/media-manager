@@ -159,10 +159,10 @@ function runCoordinator(
     return resolve(AiPriceRefreshCoordinator::class)->run(
         mode: $mode,
         source: $source,
-        trigger: $trigger,
-        dryRun: $dryRun,
         scope: $scope ?? RefreshScope::all(),
         triggeredBy: $triggeredBy,
+        trigger: $trigger,
+        dryRun: $dryRun,
     );
 }
 
@@ -191,9 +191,9 @@ test('full feed success writes the catalog without invoking the agent', function
     expect(AiModelPrice::query()->where('provider', 'gemini')->where('model', 'gemini-feed')->exists())->toBeTrue()
         ->and(AiModelPrice::query()->count())->toBe(3);
 
-    $run = AiPriceRefreshRun::query()->findOrFail($refreshReport->runId);
-    expect($run->status)->toBe(RefreshReport::RESULT_SUCCEEDED)
-        ->and($run->completed_at)->not->toBeNull();
+    $aiPriceRefreshRun = AiPriceRefreshRun::query()->findOrFail($refreshReport->runId);
+    expect($aiPriceRefreshRun->status)->toBe(RefreshReport::RESULT_SUCCEEDED)
+        ->and($aiPriceRefreshRun->completed_at)->not->toBeNull();
 });
 
 test('global transport failure falls back to the six core providers only', function (): void {
@@ -230,9 +230,9 @@ test('global transport failure falls back to the six core providers only', funct
             && ! str_contains($instructions, 'https://openrouter.ai/api/v1/models');
     });
 
-    $run = AiPriceRefreshRun::query()->findOrFail($refreshReport->runId);
-    expect($run->fallback_targets)->toBe(['openai', 'anthropic', 'gemini', 'xai', 'deepseek', 'mistral'])
-        ->and($run->models_dev_status)->toBe('server_error');
+    $aiPriceRefreshRun = AiPriceRefreshRun::query()->findOrFail($refreshReport->runId);
+    expect($aiPriceRefreshRun->fallback_targets)->toBe(['openai', 'anthropic', 'gemini', 'xai', 'deepseek', 'mistral'])
+        ->and($aiPriceRefreshRun->models_dev_status)->toBe('server_error');
 });
 
 test('invalid json feed falls back like a transport failure', function (): void {
@@ -300,11 +300,11 @@ test('the audit records real per-provider agent write tallies, not just a row de
         ->and($refreshReport->providersSucceeded)->toBe(2)
         ->and($refreshReport->modelsCreated)->toBe(3); // 1 openai feed + 2 anthropic agent
 
-    $run = AiPriceRefreshRun::query()->findOrFail($refreshReport->runId);
-    expect($run->provider_results['anthropic']['status'])->toBe('fallback')
-        ->and($run->provider_results['anthropic']['created'])->toBe(2)
-        ->and($run->provider_results['openai']['status'])->toBe('ok')
-        ->and($run->provider_results['openai']['created'])->toBe(1);
+    $aiPriceRefreshRun = AiPriceRefreshRun::query()->findOrFail($refreshReport->runId);
+    expect($aiPriceRefreshRun->provider_results['anthropic']['status'])->toBe('fallback')
+        ->and($aiPriceRefreshRun->provider_results['anthropic']['created'])->toBe(2)
+        ->and($aiPriceRefreshRun->provider_results['openai']['status'])->toBe('ok')
+        ->and($aiPriceRefreshRun->provider_results['openai']['created'])->toBe(1);
 });
 
 test('a malformed provider among valid providers falls back only for that provider', function (): void {
@@ -340,9 +340,9 @@ test('a provider-level fallback with no verified agent write stays unresolved', 
         ->and($refreshReport->providersFailed)->toBe(1)
         ->and($refreshReport->fallbackProviders)->toBe(['anthropic']);
 
-    $run = AiPriceRefreshRun::query()->findOrFail($refreshReport->runId);
-    expect($run->provider_results['anthropic']['status'])->toBe('fallback_failed')
-        ->and($run->provider_results['openai']['status'])->toBe('ok');
+    $aiPriceRefreshRun = AiPriceRefreshRun::query()->findOrFail($refreshReport->runId);
+    expect($aiPriceRefreshRun->provider_results['anthropic']['status'])->toBe('fallback_failed')
+        ->and($aiPriceRefreshRun->provider_results['openai']['status'])->toBe('ok');
 });
 
 test('a provider-native scripted write no longer resolves a provider-level fallback', function (): void {
@@ -375,11 +375,11 @@ test('a provider-native scripted write no longer resolves a provider-level fallb
         ->and($refreshReport->providersSucceeded)->toBe(1)
         ->and($refreshReport->providersFailed)->toBe(1);
 
-    $run = AiPriceRefreshRun::query()->findOrFail($refreshReport->runId);
-    expect($run->provider_results['anthropic']['status'])->toBe('fallback_failed')
+    $aiPriceRefreshRun = AiPriceRefreshRun::query()->findOrFail($refreshReport->runId);
+    expect($aiPriceRefreshRun->provider_results['anthropic']['status'])->toBe('fallback_failed')
         // The write is still tallied for audit even though it resolved nothing.
-        ->and($run->provider_results['anthropic']['created'])->toBe(1)
-        ->and($run->unverified_targets)->toBe(['anthropic:claude-native']);
+        ->and($aiPriceRefreshRun->provider_results['anthropic']['created'])->toBe(1)
+        ->and($aiPriceRefreshRun->unverified_targets)->toBe(['anthropic:claude-native']);
 });
 
 test('a wildcard verification target resolves only when every stored row is covered', function (): void {
@@ -401,9 +401,9 @@ test('a wildcard verification target resolves only when every stored row is cove
         ->and($refreshReport->providersFailed)->toBe(1)
         ->and($refreshReport->errorMessage)->toContain('openai:gpt-uncovered');
 
-    $run = AiPriceRefreshRun::query()->findOrFail($refreshReport->runId);
-    expect($run->provider_results['openai']['status'])->toBe('fallback_failed')
-        ->and($run->unverified_targets)->toBe(['openai:gpt-uncovered']);
+    $aiPriceRefreshRun = AiPriceRefreshRun::query()->findOrFail($refreshReport->runId);
+    expect($aiPriceRefreshRun->provider_results['openai']['status'])->toBe('fallback_failed')
+        ->and($aiPriceRefreshRun->unverified_targets)->toBe(['openai:gpt-uncovered']);
 });
 
 test('a wildcard verification target with every stored row covered resolves', function (): void {
@@ -420,9 +420,9 @@ test('a wildcard verification target with every stored row covered resolves', fu
         ->and($refreshReport->providersSucceeded)->toBe(2)
         ->and($refreshReport->errorMessage)->toBeNull();
 
-    $run = AiPriceRefreshRun::query()->findOrFail($refreshReport->runId);
-    expect($run->provider_results['openai']['status'])->toBe('fallback')
-        ->and($run->unverified_targets)->toBeNull();
+    $aiPriceRefreshRun = AiPriceRefreshRun::query()->findOrFail($refreshReport->runId);
+    expect($aiPriceRefreshRun->provider_results['openai']['status'])->toBe('fallback')
+        ->and($aiPriceRefreshRun->unverified_targets)->toBeNull();
 });
 
 test('a wildcard provider with zero stored rows resolves on a single verification-grade create', function (): void {
@@ -437,9 +437,9 @@ test('a wildcard provider with zero stored rows resolves on a single verificatio
     expect($refreshReport->finalResult)->toBe(RefreshReport::RESULT_SUCCEEDED)
         ->and($refreshReport->providersSucceeded)->toBe(2);
 
-    $run = AiPriceRefreshRun::query()->findOrFail($refreshReport->runId);
-    expect($run->provider_results['openai']['status'])->toBe('fallback')
-        ->and($run->unverified_targets)->toBeNull();
+    $aiPriceRefreshRun = AiPriceRefreshRun::query()->findOrFail($refreshReport->runId);
+    expect($aiPriceRefreshRun->provider_results['openai']['status'])->toBe('fallback')
+        ->and($aiPriceRefreshRun->unverified_targets)->toBeNull();
 });
 
 test('a wildcard provider renders its stored models as a prompt checklist without narrowing the scope', function (): void {
@@ -488,11 +488,11 @@ test('the unverified targets audit is capped at 25 entries with an overflow mark
 
     expect($refreshReport->finalResult)->toBe(RefreshReport::RESULT_PARTIAL);
 
-    $run = AiPriceRefreshRun::query()->findOrFail($refreshReport->runId);
-    expect($run->unverified_targets)->toHaveCount(26)
-        ->and($run->unverified_targets[0])->toBe('openai:gpt-bulk-01')
-        ->and($run->unverified_targets[24])->toBe('openai:gpt-bulk-25')
-        ->and($run->unverified_targets[25])->toBe('+5 more');
+    $aiPriceRefreshRun = AiPriceRefreshRun::query()->findOrFail($refreshReport->runId);
+    expect($aiPriceRefreshRun->unverified_targets)->toHaveCount(26)
+        ->and($aiPriceRefreshRun->unverified_targets[0])->toBe('openai:gpt-bulk-01')
+        ->and($aiPriceRefreshRun->unverified_targets[24])->toBe('openai:gpt-bulk-25')
+        ->and($aiPriceRefreshRun->unverified_targets[25])->toBe('+5 more');
 });
 
 test('a malformed model among valid models is rejected without triggering fallback', function (): void {
@@ -554,9 +554,9 @@ test('the models-dev source never falls back to the agent', function (): void {
         ->and($refreshReport->fallbackProviders)->toBe([])
         ->and($refreshReport->errorMessage)->not->toBeNull();
 
-    $run = AiPriceRefreshRun::query()->findOrFail($refreshReport->runId);
-    expect($run->status)->toBe(RefreshReport::RESULT_FAILED)
-        ->and($run->error_message)->not->toBeNull();
+    $aiPriceRefreshRun = AiPriceRefreshRun::query()->findOrFail($refreshReport->runId);
+    expect($aiPriceRefreshRun->status)->toBe(RefreshReport::RESULT_FAILED)
+        ->and($aiPriceRefreshRun->error_message)->not->toBeNull();
 });
 
 test('the agent source skips the feed entirely', function (): void {
@@ -634,8 +634,8 @@ test('a model-scoped fallback binds the exact provider models to the agent', fun
 
     expect($refreshReport->fallbackProviders)->toBe(['anthropic']);
 
-    $run = AiPriceRefreshRun::query()->findOrFail($refreshReport->runId);
-    expect($run->fallback_targets)->toBe(['anthropic:claude-target']);
+    $aiPriceRefreshRun = AiPriceRefreshRun::query()->findOrFail($refreshReport->runId);
+    expect($aiPriceRefreshRun->fallback_targets)->toBe(['anthropic:claude-target']);
 });
 
 test('an unaddressed anomaly target degrades the run to partial with an unverified_targets audit', function (): void {
@@ -665,11 +665,11 @@ test('an unaddressed anomaly target degrades the run to partial with an unverifi
         ->and($refreshReport->fallbackProviders)->toBe(['openai'])
         ->and($refreshReport->errorMessage)->toContain('openai:gpt-anom');
 
-    $run = AiPriceRefreshRun::query()->findOrFail($refreshReport->runId);
-    expect($run->fallback_targets)->toBe(['openai:gpt-anom'])
-        ->and($run->unverified_targets)->toBe(['openai:gpt-anom'])
-        ->and($run->provider_results['openai']['anomalous'])->toBe(1)
-        ->and($run->provider_results['openai']['status'])->toBe('ok');
+    $aiPriceRefreshRun = AiPriceRefreshRun::query()->findOrFail($refreshReport->runId);
+    expect($aiPriceRefreshRun->fallback_targets)->toBe(['openai:gpt-anom'])
+        ->and($aiPriceRefreshRun->unverified_targets)->toBe(['openai:gpt-anom'])
+        ->and($aiPriceRefreshRun->provider_results['openai']['anomalous'])->toBe(1)
+        ->and($aiPriceRefreshRun->provider_results['openai']['status'])->toBe('ok');
 });
 
 test('an anomaly target verified by an exact model write resolves and the run succeeds', function (): void {
@@ -690,9 +690,9 @@ test('an anomaly target verified by an exact model write resolves and the run su
         ->and($refreshReport->providersSucceeded)->toBe(1)
         ->and($refreshReport->errorMessage)->toBeNull();
 
-    $run = AiPriceRefreshRun::query()->findOrFail($refreshReport->runId);
-    expect($run->unverified_targets)->toBeNull()
-        ->and($run->provider_results['openai']['status'])->toBe('ok');
+    $aiPriceRefreshRun = AiPriceRefreshRun::query()->findOrFail($refreshReport->runId);
+    expect($aiPriceRefreshRun->unverified_targets)->toBeNull()
+        ->and($aiPriceRefreshRun->provider_results['openai']['status'])->toBe('ok');
 });
 
 test('an anomaly write that is rejected again by the verifier leaves the target unverified', function (): void {
@@ -718,8 +718,8 @@ test('an anomaly write that is rejected again by the verifier leaves the target 
     expect((string) AiModelPrice::query()->where('model', 'gpt-anom')->firstOrFail()->input_per_mtok)->toBe('1.0000')
         ->and($refreshReport->finalResult)->toBe(RefreshReport::RESULT_PARTIAL);
 
-    $run = AiPriceRefreshRun::query()->findOrFail($refreshReport->runId);
-    expect($run->unverified_targets)->toBe(['openai:gpt-anom']);
+    $aiPriceRefreshRun = AiPriceRefreshRun::query()->findOrFail($refreshReport->runId);
+    expect($aiPriceRefreshRun->unverified_targets)->toBe(['openai:gpt-anom']);
 });
 
 test('a mixed fallback keeps exact-model scope on one provider while opening another wide', function (): void {
@@ -771,13 +771,13 @@ test('a mixed fallback keeps exact-model scope on one provider while opening ano
         ->and($refreshReport->fallbackProviders)->toContain('anthropic')
         ->and($refreshReport->fallbackProviders)->toContain('openai');
 
-    $run = AiPriceRefreshRun::query()->findOrFail($refreshReport->runId);
+    $aiPriceRefreshRun = AiPriceRefreshRun::query()->findOrFail($refreshReport->runId);
     // The wildcard Anthropic target resolved through any real provider write;
     // the exact-model OpenAI target resolved through its own model write, so
     // nothing is left unverified.
-    expect($run->fallback_targets)->toContain('anthropic')
-        ->and($run->fallback_targets)->toContain('openai:gpt-anom')
-        ->and($run->unverified_targets)->toBeNull();
+    expect($aiPriceRefreshRun->fallback_targets)->toContain('anthropic')
+        ->and($aiPriceRefreshRun->fallback_targets)->toContain('openai:gpt-anom')
+        ->and($aiPriceRefreshRun->unverified_targets)->toBeNull();
 });
 
 test('a failed anomaly verification preserves the stored value and the provider stays resolved', function (): void {
@@ -798,9 +798,9 @@ test('a failed anomaly verification preserves the stored value and the provider 
         ->and($refreshReport->providersSucceeded)->toBe(1)
         ->and($refreshReport->errorMessage)->toContain('verifier exploded');
 
-    $run = AiPriceRefreshRun::query()->findOrFail($refreshReport->runId);
-    expect($run->unverified_targets)->toBe(['openai:gpt-anom'])
-        ->and($run->provider_results['openai']['status'])->toBe('ok');
+    $aiPriceRefreshRun = AiPriceRefreshRun::query()->findOrFail($refreshReport->runId);
+    expect($aiPriceRefreshRun->unverified_targets)->toBe(['openai:gpt-anom'])
+        ->and($aiPriceRefreshRun->provider_results['openai']['status'])->toBe('ok');
 });
 
 test('the models-dev source records anomaly targets without invoking the agent', function (): void {
@@ -821,9 +821,9 @@ test('the models-dev source records anomaly targets without invoking the agent',
         ->and($refreshReport->finalResult)->toBe(RefreshReport::RESULT_SUCCEEDED)
         ->and($refreshReport->fallbackProviders)->toBe(['openai']);
 
-    $run = AiPriceRefreshRun::query()->findOrFail($refreshReport->runId);
-    expect($run->fallback_targets)->toBe(['openai:gpt-anom'])
-        ->and($run->provider_results['openai']['anomalous'])->toBe(1);
+    $aiPriceRefreshRun = AiPriceRefreshRun::query()->findOrFail($refreshReport->runId);
+    expect($aiPriceRefreshRun->fallback_targets)->toBe(['openai:gpt-anom'])
+        ->and($aiPriceRefreshRun->provider_results['openai']['anomalous'])->toBe(1);
 });
 
 test('a provider with zero eligible candidates is incomplete and falls back', function (): void {
@@ -889,9 +889,9 @@ test('an isolated provider write failure escalates to the verifier instead of fa
         ->and($refreshReport->fallbackProviders)->toBe(['openai'])
         ->and($refreshReport->errorMessage)->toContain('mid-provider write exploded');
 
-    $run = AiPriceRefreshRun::query()->findOrFail($refreshReport->runId);
+    $aiPriceRefreshRun = AiPriceRefreshRun::query()->findOrFail($refreshReport->runId);
     // Unresolved because the agent produced no verified write — not terminal.
-    expect($run->provider_results['openai']['status'])->toBe('fallback_failed');
+    expect($aiPriceRefreshRun->provider_results['openai']['status'])->toBe('fallback_failed');
 });
 
 test('an isolated provider write failure resolves when the verifier writes it', function (): void {
@@ -921,8 +921,8 @@ test('an isolated provider write failure resolves when the verifier writes it', 
     // The verifier's first-party row landed even though the feed slice failed.
     expect(AiModelPrice::query()->where('provider', 'openai')->where('model', 'gpt-recovered')->exists())->toBeTrue();
 
-    $run = AiPriceRefreshRun::query()->findOrFail($refreshReport->runId);
-    expect($run->provider_results['openai']['status'])->toBe('fallback');
+    $aiPriceRefreshRun = AiPriceRefreshRun::query()->findOrFail($refreshReport->runId);
+    expect($aiPriceRefreshRun->provider_results['openai']['status'])->toBe('fallback');
 });
 
 test('a connection-level failure fails the whole run without invoking the verifier', function (): void {
@@ -965,8 +965,8 @@ test('a dry run records anomaly verification targets without invoking the agent'
         ->and($refreshReport->finalResult)->toBe(RefreshReport::RESULT_SUCCEEDED)
         ->and($refreshReport->fallbackProviders)->toBe(['openai']);
 
-    $run = AiPriceRefreshRun::query()->findOrFail($refreshReport->runId);
-    expect($run->fallback_targets)->toBe(['openai:gpt-anom']);
+    $aiPriceRefreshRun = AiPriceRefreshRun::query()->findOrFail($refreshReport->runId);
+    expect($aiPriceRefreshRun->fallback_targets)->toBe(['openai:gpt-anom']);
 });
 
 test('a dry run writes no catalog rows and never invokes the agent', function (): void {
@@ -986,8 +986,8 @@ test('a dry run writes no catalog rows and never invokes the agent', function ()
         ->and($refreshReport->fallbackProviders)->toBe(['anthropic'])
         ->and($refreshReport->finalResult)->toBe(RefreshReport::RESULT_PARTIAL);
 
-    $run = AiPriceRefreshRun::query()->findOrFail($refreshReport->runId);
-    expect($run->mode)->toBe(AiPriceRefreshCoordinator::MODE_DRY_RUN);
+    $aiPriceRefreshRun = AiPriceRefreshRun::query()->findOrFail($refreshReport->runId);
+    expect($aiPriceRefreshRun->mode)->toBe(AiPriceRefreshCoordinator::MODE_DRY_RUN);
 });
 
 test('an agent failure after a successful feed slice yields a partial run', function (): void {
@@ -1063,17 +1063,17 @@ test('run counts reflect every write outcome and tier warnings', function (): vo
         ->and($refreshReport->modelsRejected)->toBe(1)
         ->and($refreshReport->modelsTiered)->toBe(1);
 
-    $run = AiPriceRefreshRun::query()->findOrFail($refreshReport->runId);
-    expect($run->models_created)->toBe(2)
-        ->and($run->models_updated)->toBe(1)
-        ->and($run->models_unchanged)->toBe(1)
-        ->and($run->models_locked)->toBe(1)
-        ->and($run->models_rejected)->toBe(1)
-        ->and($run->models_tiered)->toBe(1)
-        ->and($run->provider_results)->toHaveKey('openai');
+    $aiPriceRefreshRun = AiPriceRefreshRun::query()->findOrFail($refreshReport->runId);
+    expect($aiPriceRefreshRun->models_created)->toBe(2)
+        ->and($aiPriceRefreshRun->models_updated)->toBe(1)
+        ->and($aiPriceRefreshRun->models_unchanged)->toBe(1)
+        ->and($aiPriceRefreshRun->models_locked)->toBe(1)
+        ->and($aiPriceRefreshRun->models_rejected)->toBe(1)
+        ->and($aiPriceRefreshRun->models_tiered)->toBe(1)
+        ->and($aiPriceRefreshRun->provider_results)->toHaveKey('openai');
 
     // The audit row stores compact counters and codes, never raw feed payloads.
-    $encoded = json_encode($run->provider_results, JSON_THROW_ON_ERROR);
+    $encoded = json_encode($aiPriceRefreshRun->provider_results, JSON_THROW_ON_ERROR);
     expect($encoded)->not->toContain('cost')
         ->and($encoded)->not->toContain('gpt-updated');
 });
@@ -1116,13 +1116,13 @@ test('the run records mode, trigger, and the triggering user', function (): void
         trigger: 'manual',
     );
 
-    $run = AiPriceRefreshRun::query()->findOrFail($refreshReport->runId);
+    $aiPriceRefreshRun = AiPriceRefreshRun::query()->findOrFail($refreshReport->runId);
 
-    expect($run->mode)->toBe(AiPriceRefreshCoordinator::MODE_APPLY)
-        ->and($run->trigger)->toBe('manual')
-        ->and($run->triggered_by_user_id)->toBe($user->id)
-        ->and($run->providers_requested)->toBe(1)
-        ->and($run->providers_succeeded)->toBe(1);
+    expect($aiPriceRefreshRun->mode)->toBe(AiPriceRefreshCoordinator::MODE_APPLY)
+        ->and($aiPriceRefreshRun->trigger)->toBe('manual')
+        ->and($aiPriceRefreshRun->triggered_by_user_id)->toBe($user->id)
+        ->and($aiPriceRefreshRun->providers_requested)->toBe(1)
+        ->and($aiPriceRefreshRun->providers_succeeded)->toBe(1);
 });
 
 test('verify mode runs the feed then verifies every scoped provider', function (): void {
@@ -1145,9 +1145,9 @@ test('verify mode runs the feed then verifies every scoped provider', function (
         ->and($refreshReport->fallbackProviders)->toContain('openai')
         ->and(AiModelPrice::query()->where('provider', 'openai')->where('model', 'gpt-feed')->exists())->toBeTrue();
 
-    $run = AiPriceRefreshRun::query()->findOrFail($refreshReport->runId);
-    expect($run->mode)->toBe(AiPriceRefreshCoordinator::MODE_VERIFY)
-        ->and($run->provider_results['openai']['status'])->toBe('fallback');
+    $aiPriceRefreshRun = AiPriceRefreshRun::query()->findOrFail($refreshReport->runId);
+    expect($aiPriceRefreshRun->mode)->toBe(AiPriceRefreshCoordinator::MODE_VERIFY)
+        ->and($aiPriceRefreshRun->provider_results['openai']['status'])->toBe('fallback');
 });
 
 test('a verify target the agent never confirms is left unresolved', function (): void {
@@ -1182,10 +1182,10 @@ test('a verify target the agent never confirms is left unresolved', function ():
         ->and($refreshReport->providersSucceeded)->toBe(1)
         ->and($refreshReport->providersFailed)->toBe(1);
 
-    $run = AiPriceRefreshRun::query()->findOrFail($refreshReport->runId);
-    expect($run->provider_results['openai']['status'])->toBe('fallback')
-        ->and($run->provider_results['anthropic']['status'])->toBe('fallback_failed')
-        ->and($run->unverified_targets)->toBe(['anthropic:claude-feed']);
+    $aiPriceRefreshRun = AiPriceRefreshRun::query()->findOrFail($refreshReport->runId);
+    expect($aiPriceRefreshRun->provider_results['openai']['status'])->toBe('fallback')
+        ->and($aiPriceRefreshRun->provider_results['anthropic']['status'])->toBe('fallback_failed')
+        ->and($aiPriceRefreshRun->unverified_targets)->toBe(['anthropic:claude-feed']);
 });
 
 test('verify mode records the first-party discrepancy count against the synced feed', function (): void {
@@ -1207,9 +1207,9 @@ test('verify mode records the first-party discrepancy count against the synced f
     // The verifier's first-party rate overwrote the feed value.
     expect((string) AiModelPrice::query()->where('model', 'gpt-x')->firstOrFail()->input_per_mtok)->toBe('1.0000');
 
-    $run = AiPriceRefreshRun::query()->findOrFail($refreshReport->runId);
-    expect($run->provider_results['openai']['discrepancies'])->toBe(1)
-        ->and($run->provider_results['openai']['status'])->toBe('fallback');
+    $aiPriceRefreshRun = AiPriceRefreshRun::query()->findOrFail($refreshReport->runId);
+    expect($aiPriceRefreshRun->provider_results['openai']['discrepancies'])->toBe(1)
+        ->and($aiPriceRefreshRun->provider_results['openai']['status'])->toBe('fallback');
 });
 
 test('a verify dry run runs the agent with dry-run persistence and resolves from the real comparison', function (): void {
@@ -1238,12 +1238,12 @@ test('a verify dry run runs the agent with dry-run persistence and resolves from
         ->and($refreshReport->finalResult)->toBe(RefreshReport::RESULT_SUCCEEDED)
         ->and($refreshReport->modelsCreated)->toBe(2); // 1 feed would-create + 1 agent would-create
 
-    $run = AiPriceRefreshRun::query()->findOrFail($refreshReport->runId);
-    expect($run->mode)->toBe(AiPriceRefreshCoordinator::MODE_VERIFY)
-        ->and($run->status)->toBe(RefreshReport::RESULT_SUCCEEDED)
-        ->and($run->fallback_targets)->toBe(['openai'])
-        ->and($run->unverified_targets)->toBeNull()
-        ->and($run->provider_results['openai']['status'])->toBe('fallback');
+    $aiPriceRefreshRun = AiPriceRefreshRun::query()->findOrFail($refreshReport->runId);
+    expect($aiPriceRefreshRun->mode)->toBe(AiPriceRefreshCoordinator::MODE_VERIFY)
+        ->and($aiPriceRefreshRun->status)->toBe(RefreshReport::RESULT_SUCCEEDED)
+        ->and($aiPriceRefreshRun->fallback_targets)->toBe(['openai'])
+        ->and($aiPriceRefreshRun->unverified_targets)->toBeNull()
+        ->and($aiPriceRefreshRun->provider_results['openai']['status'])->toBe('fallback');
 });
 
 test('a verify dry run leaves a target the agent cannot confirm unresolved', function (): void {
@@ -1266,8 +1266,8 @@ test('a verify dry run leaves a target the agent cannot confirm unresolved', fun
     expect(AiModelPrice::query()->count())->toBe(0)
         ->and($refreshReport->finalResult)->toBe(RefreshReport::RESULT_FAILED);
 
-    $run = AiPriceRefreshRun::query()->findOrFail($refreshReport->runId);
-    expect($run->provider_results['openai']['status'])->toBe('fallback_failed');
+    $aiPriceRefreshRun = AiPriceRefreshRun::query()->findOrFail($refreshReport->runId);
+    expect($aiPriceRefreshRun->provider_results['openai']['status'])->toBe('fallback_failed');
 });
 
 test('verify with the agent source verifies without running the feed', function (): void {

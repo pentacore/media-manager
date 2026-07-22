@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use App\Enums\PricingSource;
+use Illuminate\Contracts\Database\Query\Builder;
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -50,7 +51,7 @@ return new class extends Migration
             $collisionLockedIds = $this->canonicalizeGoogleProvider();
 
             $rows = DB::table('ai_model_prices')
-                ->where(function ($query): void {
+                ->where(function (Builder $query): void {
                     $query->whereNull('pricing_source')
                         ->orWhere('pricing_source', PricingSource::Legacy->value);
                 })
@@ -101,7 +102,7 @@ return new class extends Migration
 
         $googleRows = DB::table('ai_model_prices')
             ->where('provider', 'google')
-            ->where(function ($query): void {
+            ->where(function (Builder $query): void {
                 $query->whereNull('pricing_source')
                     ->orWhere('pricing_source', PricingSource::Legacy->value);
             })
@@ -220,13 +221,7 @@ return new class extends Migration
      */
     private function matchesFrozenPrices(object $row, array $frozen): bool
     {
-        foreach (self::PRICE_COLUMNS as $column) {
-            if ($this->normalize($row->{$column}) !== $frozen[$column]) {
-                return false;
-            }
-        }
-
-        return true;
+        return array_all(self::PRICE_COLUMNS, fn (string $column): bool => $this->normalize($row->{$column}) === $frozen[$column]);
     }
 
     /**
@@ -234,13 +229,7 @@ return new class extends Migration
      */
     private function pricesEqual(object $left, object $right): bool
     {
-        foreach (self::PRICE_COLUMNS as $column) {
-            if ($this->normalize($left->{$column}) !== $this->normalize($right->{$column})) {
-                return false;
-            }
-        }
-
-        return true;
+        return array_all(self::PRICE_COLUMNS, fn (string $column): bool => $this->normalize($left->{$column}) === $this->normalize($right->{$column}));
     }
 
     /**

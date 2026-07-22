@@ -25,7 +25,7 @@ function priceFetcherUpsertScope(PriceFetcherAgent $agent): RefreshScope
     expect($upsert)->toBeInstanceOf(UpsertModelPriceTool::class);
 
     /** @var RefreshScope $scope */
-    $scope = (new ReflectionProperty(UpsertModelPriceTool::class, 'scope'))->getValue($upsert);
+    $scope = new ReflectionProperty(UpsertModelPriceTool::class, 'scope')->getValue($upsert);
 
     return $scope;
 }
@@ -160,11 +160,11 @@ test('refresh leaves snapshot null when the agent model is unpriced', function (
 });
 
 test('forScope propagates the run scope into the upsert tool', function (): void {
-    $scope = RefreshScope::forProviderModels(['openai' => ['gpt-5-mini']]);
+    $refreshScope = RefreshScope::forProviderModels(['openai' => ['gpt-5-mini']]);
 
-    $agent = (new PriceFetcherAgent)->forScope($scope, ['openai']);
+    $priceFetcherAgent = (new PriceFetcherAgent)->forScope($refreshScope, ['openai']);
 
-    $toolScope = priceFetcherUpsertScope($agent);
+    $toolScope = priceFetcherUpsertScope($priceFetcherAgent);
 
     expect($toolScope->allowsWrite('openai', 'gpt-5-mini'))->toBeTrue()
         ->and($toolScope->allowsWrite('openai', 'gpt-4o'))->toBeFalse()
@@ -172,25 +172,26 @@ test('forScope propagates the run scope into the upsert tool', function (): void
 });
 
 test('unscoped agent fails closed with a deny-all write scope', function (): void {
-    $toolScope = priceFetcherUpsertScope(new PriceFetcherAgent);
+    $refreshScope = priceFetcherUpsertScope(new PriceFetcherAgent);
 
-    expect($toolScope->allowsProvider('openai'))->toBeFalse()
-        ->and($toolScope->allowsWrite('openai', 'gpt-5-mini'))->toBeFalse();
+    expect($refreshScope->allowsProvider('openai'))->toBeFalse()
+        ->and($refreshScope->allowsWrite('openai', 'gpt-5-mini'))->toBeFalse();
 });
 
 test('repeated scope assignments do not leak between tool resolutions', function (): void {
     $agent = new PriceFetcherAgent;
 
     $agent->forScope(RefreshScope::forProviderModels(['openai' => ['gpt-5-mini']]), ['openai']);
-    $first = priceFetcherUpsertScope($agent);
+
+    $refreshScope = priceFetcherUpsertScope($agent);
 
     $agent->forScope(RefreshScope::forProviderModels(['anthropic' => ['claude-sonnet-4-6']]), ['anthropic']);
     $second = priceFetcherUpsertScope($agent);
 
     // The clone handed to the first resolution keeps its own scope; the later
     // reassignment must not mutate it (Octane-shared-instance safety).
-    expect($first->allowsWrite('openai', 'gpt-5-mini'))->toBeTrue()
-        ->and($first->allowsWrite('anthropic', 'claude-sonnet-4-6'))->toBeFalse();
+    expect($refreshScope->allowsWrite('openai', 'gpt-5-mini'))->toBeTrue()
+        ->and($refreshScope->allowsWrite('anthropic', 'claude-sonnet-4-6'))->toBeFalse();
 
     // The second resolution reflects only the latest scope.
     expect($second->allowsWrite('anthropic', 'claude-sonnet-4-6'))->toBeTrue()
@@ -198,12 +199,12 @@ test('repeated scope assignments do not leak between tool resolutions', function
 });
 
 test('verifier instructions state the fetch-before-write contract', function (): void {
-    $agent = (new PriceFetcherAgent)->forScope(
+    $priceFetcherAgent = (new PriceFetcherAgent)->forScope(
         RefreshScope::forProviders(['openai', 'gemini']),
         ['openai', 'gemini'],
     );
 
-    $instructions = (string) $agent->instructions();
+    $instructions = (string) $priceFetcherAgent->instructions();
     $lower = strtolower($instructions);
 
     expect($lower)
@@ -228,21 +229,21 @@ test('unscoped instructions tell the agent to do nothing instead of listing ever
 });
 
 test('a scope resolving to zero known providers also yields the do-nothing prompt', function (): void {
-    $agent = (new PriceFetcherAgent)->forScope(
+    $priceFetcherAgent = (new PriceFetcherAgent)->forScope(
         RefreshScope::forProviders(['vertex']),
         ['vertex'],
     );
 
-    expect((string) $agent->instructions())->toContain('no providers in scope');
+    expect((string) $priceFetcherAgent->instructions())->toContain('no providers in scope');
 });
 
 test('verifier instructions target only the scoped providers and canonical urls', function (): void {
-    $agent = (new PriceFetcherAgent)->forScope(
+    $priceFetcherAgent = (new PriceFetcherAgent)->forScope(
         RefreshScope::forProviderModels(['google' => ['gemini-2.5-pro']]),
         ['google'],
     );
 
-    $instructions = (string) $agent->instructions();
+    $instructions = (string) $priceFetcherAgent->instructions();
 
     expect($instructions)
         ->toContain('gemini-2.5-pro')                                       // targeted model list
@@ -255,13 +256,13 @@ test('a wildcard provider renders its stored-model checklist without narrowing t
     // A provider-wide verification target lists the currently-stored models as
     // a re-confirmation checklist while keeping the whole-catalog focus, so new
     // models stay in play and coverage of stored rows is achievable.
-    $agent = (new PriceFetcherAgent)->forScope(
+    $priceFetcherAgent = (new PriceFetcherAgent)->forScope(
         RefreshScope::forTargets(['openai' => null]),
         ['openai'],
         ['openai' => ['gpt-5-mini', 'gpt-5-nano']],
     );
 
-    $instructions = (string) $agent->instructions();
+    $instructions = (string) $priceFetcherAgent->instructions();
 
     expect($instructions)
         ->toContain('every generally-available text/chat model it publishes')
@@ -269,13 +270,13 @@ test('a wildcard provider renders its stored-model checklist without narrowing t
 });
 
 test('an exact-model scope wins over a checklist and renders only the pinned models', function (): void {
-    $agent = (new PriceFetcherAgent)->forScope(
+    $priceFetcherAgent = (new PriceFetcherAgent)->forScope(
         RefreshScope::forProviderModels(['openai' => ['gpt-anom']]),
         ['openai'],
         ['openai' => ['gpt-5-mini', 'gpt-5-nano']],
     );
 
-    $instructions = (string) $agent->instructions();
+    $instructions = (string) $priceFetcherAgent->instructions();
 
     expect($instructions)
         ->toContain('only these models: gpt-anom')
@@ -283,7 +284,7 @@ test('an exact-model scope wins over a checklist and renders only the pinned mod
 });
 
 test('verifier keeps the 40-step ceiling', function (): void {
-    $attributes = (new ReflectionClass(PriceFetcherAgent::class))->getAttributes(MaxSteps::class);
+    $attributes = new ReflectionClass(PriceFetcherAgent::class)->getAttributes(MaxSteps::class);
 
     expect($attributes)->toHaveCount(1)
         ->and($attributes[0]->newInstance()->value)->toBe(40);

@@ -135,7 +135,7 @@ class PriceFetcherAgent implements Agent, HasMiddleware, HasTools
         // Honest fail-closed prompt: without a bound scope (or with a scope
         // that resolves to zero known providers) the write tool rejects every
         // write, so don't send the model off to fetch pages it cannot act on.
-        if ($this->scope === null || $targets === '') {
+        if (! $this->scope instanceof RefreshScope || $targets === '') {
             return <<<'PROMPT'
             You are PriceFetcherAgent, but this run has no providers in scope: every write will be rejected. Do not fetch any pages and do not call UpsertModelPriceTool. Reply with a one-line summary stating that no verification targets were provided for this run.
             PROMPT;
@@ -276,8 +276,8 @@ class PriceFetcherAgent implements Agent, HasMiddleware, HasTools
 
         $sources = [];
 
-        foreach ($this->scopedProviders as $provider) {
-            $canonical = RefreshScope::canonicalProvider($provider);
+        foreach ($this->scopedProviders as $scopedProvider) {
+            $canonical = RefreshScope::canonicalProvider($scopedProvider);
 
             if ($canonical !== null && isset(self::PROVIDER_SOURCES[$canonical])) {
                 $sources[$canonical] = self::PROVIDER_SOURCES[$canonical];

@@ -68,7 +68,7 @@ class AiPriceRefreshStateChanged implements ShouldBroadcast
             'added' => $this->added,
             'total' => $this->total,
             'occurred_at' => $this->occurredAt->toISOString(),
-            ...$this->report instanceof RefreshReport ? $this->report->toBroadcastArray() : self::emptyReportPayload(),
+            ...$this->report instanceof RefreshReport ? $this->report->toBroadcastArray() : $this->emptyReportPayload(),
         ];
     }
 
@@ -78,7 +78,7 @@ class AiPriceRefreshStateChanged implements ShouldBroadcast
      *
      * @return array<string, null>
      */
-    private static function emptyReportPayload(): array
+    private function emptyReportPayload(): array
     {
         return [
             'run_id' => null,
