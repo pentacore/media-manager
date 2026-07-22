@@ -1,3 +1,10 @@
+## [1.13.1](https://github.com/pentacore/media-manager/compare/v1.13.0...v1.13.1) (2026-07-22)
+
+
+### Bug Fixes
+
+* **security:** update vulnerable runtime dependencies ([627f1f3](https://github.com/pentacore/media-manager/commit/627f1f3bb9f3c8397f311361fb68e99705ee742e))
+
 # [1.13.0](https://github.com/pentacore/media-manager/compare/v1.12.0...v1.13.0) (2026-07-22)
 
 
