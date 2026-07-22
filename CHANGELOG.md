@@ -1,3 +1,10 @@
+## [1.13.2](https://github.com/pentacore/media-manager/compare/v1.13.1...v1.13.2) (2026-07-22)
+
+
+### Bug Fixes
+
+* **media-replacement:** supply seriesId and episodeIds on Sonarr override grabs ([0631e6f](https://github.com/pentacore/media-manager/commit/0631e6f7461c01ec5ba815c656c76feb525e3225))
+
 ## [1.13.1](https://github.com/pentacore/media-manager/compare/v1.13.0...v1.13.1) (2026-07-22)
 
 
