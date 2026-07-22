@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 use Rector\CodingStyle\Rector\PostInc\PostIncDecToPreIncDecRector;
 use Rector\Config\RectorConfig;
+use Rector\Naming\Rector\Class_\RenamePropertyToMatchTypeRector;
+use Rector\Naming\Rector\ClassMethod\RenameParamToMatchTypeRector;
 use RectorLaravel\Rector\StaticCall\RouteActionCallableRector;
 use RectorLaravel\Set\LaravelSetList;
 use RectorLaravel\Set\LaravelSetProvider;
@@ -60,4 +62,8 @@ return RectorConfig::configure()
     ->withSkipPath(__DIR__.'/bootstrap/cache')
     ->withSkip([
         PostIncDecToPreIncDecRector::class,
+        // Parameter/promoted-property renames silently break named-argument
+        // call sites (parameter names are part of the public signature in PHP 8).
+        RenameParamToMatchTypeRector::class,
+        RenamePropertyToMatchTypeRector::class,
     ]);
