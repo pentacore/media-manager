@@ -6,6 +6,8 @@ namespace App\Ai\Tools\PriceFetcher;
 
 use App\Ai\Risk;
 use App\Ai\Tools\BaseTool;
+use App\Services\AiUsage\Pricing\PriceVerificationRun;
+use App\Services\AiUsage\Pricing\PricingSourceHosts;
 use GuzzleHttp\Psr7\Uri;
 use GuzzleHttp\Psr7\UriResolver;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
@@ -30,37 +32,67 @@ class WebFetchTool extends BaseTool
     public const int MAX_REDIRECTS = 5;
 
     /**
-     * Hosts the agent is allowed to fetch from. Pricing pages only.
+     * Hosts the agent is allowed to fetch from. Pricing pages only. Sourced
+     * from the shared {@see PricingSourceHosts} map so the fetch allowlist and
+     * the write-side provider-provenance check can never drift apart.
+     *
+     * @return list<string>
      */
-    public const array ALLOWED_HOSTS = [
-        'openai.com',
-        'platform.openai.com',
-        'developers.openai.com',
-        'docs.anthropic.com',
-        'anthropic.com',
-        'www.anthropic.com',
-        'claude.com',
-        'www.claude.com',
-        'platform.claude.com',
-        'docs.claude.com',
-        'ai.google.dev',
-        'cloud.google.com',
-        'api-docs.deepseek.com',
-        'deepseek.com',
-        'x.ai',
-        'docs.x.ai',
-        'mistral.ai',
-        'docs.mistral.ai',
-        'groq.com',
-        'console.groq.com',
-        'cohere.com',
-        'docs.cohere.com',
-        'openrouter.ai',
-    ];
+    public static function allowedHosts(): array
+    {
+        return PricingSourceHosts::hosts();
+    }
+
+    /**
+     * Per-run receipt ledger. Every successful fetch records its final URL here
+     * so the write tool can prove a price came from a page this run actually
+     * read. Null until {@see withRun()} binds one (direct/unit use).
+     */
+    private ?PriceVerificationRun $run = null;
+
+    /**
+     * Bind the per-run receipt ledger. Returns a clone so per-run state never
+     * leaks between resolutions (Octane / shared-instance safety), mirroring
+     * {@see UpsertModelPriceTool::withScope()}.
+     */
+    public function withRun(PriceVerificationRun $run): static
+    {
+        $clone = clone $this;
+        $clone->run = $run;
+
+        return $clone;
+    }
+
+    /**
+     * Whether the given URL is a plain http(s) URL, without an explicit port,
+     * on the pricing-pages allowlist. Shared with {@see UpsertModelPriceTool}
+     * so the write-side source check and the fetch-side host check agree.
+     */
+    public static function allowsUrl(?string $url): bool
+    {
+        if ($url === null || $url === '') {
+            return false;
+        }
+
+        $parts = parse_url($url);
+
+        if ($parts === false) {
+            return false;
+        }
+
+        $scheme = strtolower((string) ($parts['scheme'] ?? ''));
+        $host = strtolower((string) ($parts['host'] ?? ''));
+
+        if (! in_array($scheme, ['http', 'https'], true) || isset($parts['port'])) {
+            return false;
+        }
+
+        return in_array($host, self::allowedHosts(), true);
+    }
 
     public function description(): Stringable|string
     {
-        return 'Fetch a single provider pricing page and return its text content (HTML stripped) for parsing. Allowed hosts: '.implode(', ', self::ALLOWED_HOSTS).'. Use this to read current model prices off the provider documentation.';
+        return 'Fetch a single provider pricing page and return its text content (HTML stripped) for parsing. Allowed hosts: '.implode(', ', self::allowedHosts()).'. Use this to read current model prices off the provider documentation.';
     }
 
     public function risk(): Risk
@@ -126,6 +158,11 @@ class WebFetchTool extends BaseTool
             ];
         }
 
+        // Record the FINAL fetched URL (post-redirect) as a write receipt so
+        // the upsert tool can require that any first-party price it stamps was
+        // read off a page this run genuinely fetched.
+        $this->run?->recordFetch($url);
+
         return [
             'url' => $url,
             'status' => $response->status(),
@@ -152,11 +189,11 @@ class WebFetchTool extends BaseTool
             ];
         }
 
-        if (! in_array($host, self::ALLOWED_HOSTS, true)) {
+        if (! in_array($host, self::allowedHosts(), true)) {
             return $hop === 0
                 ? [
                     'error' => 'host_not_allowed',
-                    'message' => 'Host not in pricing-pages allowlist. Pick one of: '.implode(', ', self::ALLOWED_HOSTS),
+                    'message' => 'Host not in pricing-pages allowlist. Pick one of: '.implode(', ', self::allowedHosts()),
                 ]
                 : [
                     'error' => 'redirected_off_allowlist',

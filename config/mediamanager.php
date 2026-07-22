@@ -42,6 +42,44 @@ return [
         // providers that support it (OpenAI/Anthropic); unsupported providers
         // throw a LogicException at prompt time, so this defaults OFF.
         'price_fetcher_provider_webfetch' => env('AI_PRICEFETCHER_PROVIDER_WEBFETCH', false),
+
+        // Automated model-pricing refresh. The models.dev source ships OFF:
+        // enabling it lets the price refresh coordinator pull the public
+        // models.dev catalog over HTTP. Anomaly ratios bound how far a single
+        // refresh may move a stored price (guarding against upstream typos),
+        // and the provider map canonicalizes upstream provider identifiers to
+        // the driver names used by laravel/ai (e.g. google => gemini).
+        'pricing' => [
+            'models_dev' => [
+                'enabled' => env('AI_PRICING_MODELS_DEV_ENABLED', false),
+                'url' => env('AI_PRICING_MODELS_DEV_URL', 'https://models.dev/api.json'),
+                'connect_timeout' => 10,
+                'timeout' => 30,
+                'retries' => 2,
+                'max_response_bytes' => 10_000_000,
+            ],
+            'max_increase_ratio' => 4.0,
+            'min_decrease_ratio' => 0.25,
+            // Ops-level opt-out on top of the provider map (the code-level
+            // whitelist below): comma-separated provider identifiers, upstream
+            // or canonical spelling. An ignored provider is skipped by every
+            // automatic pricing path; its stored rows stay last-known-good.
+            'ignored_providers' => array_values(array_filter(array_map(
+                'trim',
+                explode(',', (string) env('AI_PRICING_IGNORED_PROVIDERS', '')),
+            ), fn (string $provider): bool => $provider !== '')),
+            'providers' => [
+                'openai' => 'openai',
+                'anthropic' => 'anthropic',
+                'google' => 'gemini',
+                'xai' => 'xai',
+                'deepseek' => 'deepseek',
+                'mistral' => 'mistral',
+                'groq' => 'groq',
+                'cohere' => 'cohere',
+                'openrouter' => 'openrouter',
+            ],
+        ],
     ],
 
     /*

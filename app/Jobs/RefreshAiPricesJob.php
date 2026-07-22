@@ -4,12 +4,12 @@ declare(strict_types=1);
 
 namespace App\Jobs;
 
-use App\Ai\Agents\PriceFetcherAgent;
 use App\Events\AiPriceRefreshStateChanged;
 use App\Models\AiModelPrice;
 use App\Models\User;
-use App\Services\AiBudget\AiBudgetGuard;
-use App\Settings\AiSettings;
+use App\Services\AiUsage\Pricing\AiPriceRefreshCoordinator;
+use App\Services\AiUsage\Pricing\Data\RefreshReport;
+use App\Services\AiUsage\Pricing\RefreshScope;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
@@ -27,9 +27,9 @@ class RefreshAiPricesJob implements ShouldQueue
     use SerializesModels;
 
     /**
-     * Concurrency is enforced via {@see lock()} at dispatch time so the
+     * Concurrency is enforced via {@see tryLock()} at dispatch time so the
      * controller can reject overlap with a clear error. We never retry — a
-     * partial agent run leaves prices in a defined state and the user can
+     * partial refresh leaves prices in a defined state and the user can
      * trigger another refresh manually if they want.
      */
     public int $tries = 1;
@@ -38,10 +38,16 @@ class RefreshAiPricesJob implements ShouldQueue
 
     /**
      * Seconds the lock survives if a job dies without releasing it. Long
-     * enough to cover a slow agent run (40 steps, multiple WebFetch calls)
-     * but short enough that a wedged worker doesn't permanently block.
+     * enough to cover a slow hybrid run (feed fetch plus a bounded verifier
+     * agent run) but short enough that a wedged worker doesn't permanently
+     * block.
      */
     public const int LOCK_TTL = 1800;
+
+    /**
+     * Audit trigger recorded on the run for admin-initiated refreshes.
+     */
+    public const string TRIGGER = 'admin';
 
     public function __construct(public User $triggeredBy) {}
 
@@ -54,29 +60,49 @@ class RefreshAiPricesJob implements ShouldQueue
 
         $before = AiModelPrice::query()->count();
 
-        $prompt = 'Refresh the catalog now. Visit the canonical pricing page for OpenAI, Anthropic, Google Gemini, DeepSeek, xAI, and Mistral. Upsert one row per generally-available text/chat model with up-to-date input, output, cache, and reasoning rates. Skip image / audio / embedding products.';
-
         try {
-            // The fetch-heavy 40-step agent run must respect the monthly
-            // budget like every other AI entry point — without this, the
-            // weekly schedule kept spending after the hard cap was hit.
-            resolve(AiBudgetGuard::class)->enforce();
+            // The coordinator owns the whole pipeline (feed, per-provider
+            // writes, verifier fallback, and budget enforcement) and folds
+            // every source/write failure into the report rather than throwing.
+            $report = resolve(AiPriceRefreshCoordinator::class)->run(
+                mode: AiPriceRefreshCoordinator::MODE_APPLY,
+                source: AiPriceRefreshCoordinator::SOURCE_HYBRID,
+                scope: RefreshScope::all(),
+                triggeredBy: $this->triggeredBy,
+                trigger: self::TRIGGER,
+            );
 
-            $aiSettings = resolve(AiSettings::class);
-            $chain = $aiSettings->providerChainWithModel($aiSettings->model());
-            $agent = (new PriceFetcherAgent)->forUser($this->triggeredBy);
-            $response = $chain === null
-                ? $agent->prompt($prompt)
-                : $agent->prompt($prompt, provider: $chain);
+            if ($report->finalResult === RefreshReport::RESULT_FAILED) {
+                Log::error('RefreshAiPricesJob failed.', [
+                    'run_id' => $report->runId,
+                    'final_result' => $report->finalResult,
+                    'error' => $report->errorMessage,
+                    'user_id' => $this->triggeredBy->id,
+                ]);
+
+                event(new AiPriceRefreshStateChanged(
+                    state: AiPriceRefreshStateChanged::STATE_FAILED,
+                    triggeredBy: $this->triggeredBy,
+                    error: $report->errorMessage ?? 'Price refresh failed.',
+                    report: $report,
+                ));
+
+                return;
+            }
 
             $after = AiModelPrice::query()->count();
 
+            // A partial run still rides the succeeded event; the attached
+            // report carries `final_result=partial` so the UI can distinguish
+            // it. `added`/`total` stay row-count derived for payload
+            // compatibility with the existing admin toast.
             event(new AiPriceRefreshStateChanged(
                 state: AiPriceRefreshStateChanged::STATE_SUCCEEDED,
                 triggeredBy: $this->triggeredBy,
-                summary: mb_substr($response->text, 0, 500),
+                summary: mb_substr(implode(' ', $report->toConsoleLines()), 0, 500),
                 added: max(0, $after - $before),
                 total: $after,
+                report: $report,
             ));
         } catch (Throwable $throwable) {
             Log::error('RefreshAiPricesJob failed.', [
@@ -115,11 +141,13 @@ class RefreshAiPricesJob implements ShouldQueue
     /**
      * Atomically claim the global refresh slot. Returns true only for the
      * caller that successfully acquired the lock; subsequent callers see
-     * false until the running job releases it.
+     * false until the running job releases it. The owner is either a user id
+     * (admin-initiated) or a string label ('cli', 'schedule') for unattended
+     * runs, and is stored only for diagnostics.
      */
-    public static function tryLock(int $userId): bool
+    public static function tryLock(int|string $owner): bool
     {
-        return Cache::add(self::LOCK_KEY, $userId, self::LOCK_TTL);
+        return Cache::add(self::LOCK_KEY, $owner, self::LOCK_TTL);
     }
 
     public static function isRunning(): bool

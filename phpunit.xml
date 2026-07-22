@@ -43,5 +43,11 @@
         <env name="ANTHROPIC_API_KEY" value="sk-ant-test-do-not-call-real-api"/>
         <env name="SCOUT_DRIVER" value="null"/>
         <env name="SCOUT_QUEUE" value="false"/>
+        <!-- Pin pricing-sync defaults so a developer's local .env toggles
+             (e.g. enabling the Models.dev feed) never leak into tests. -->
+        <!-- "(false)" survives PHPUnit's true/false type-juggling of env
+             values and is parsed back to boolean false by Laravel's env(). -->
+        <env name="AI_PRICING_MODELS_DEV_ENABLED" value="(false)" force="true"/>
+        <env name="AI_PRICING_IGNORED_PROVIDERS" value="" force="true"/>
     </php>
 </phpunit>

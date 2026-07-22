@@ -1,0 +1,8 @@
+{
+  "openai": {
+    "id": "openai",
+    "name": "OpenAI",
+    "models": {
+      "gpt-4o": {
+        "id": "gpt-4o",
+        "cost": { "input": 2.5, "output": 10,

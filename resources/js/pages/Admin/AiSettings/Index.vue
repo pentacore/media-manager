@@ -5,7 +5,7 @@ import AiSettingsController from '@/actions/App/Http/Controllers/Admin/AiSetting
 import InputError from '@/components/InputError.vue';
 import MediaReplacementSettings from '@/components/media-replacement/MediaReplacementSettings.vue';
 import type { MediaReplacementConfiguration } from '@/components/media-replacement/MediaReplacementSettings.vue';
-import { Field, Pill } from '@/components/mm';
+import { Field, Pill, Toggle } from '@/components/mm';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import {
@@ -40,7 +40,14 @@ interface AiSettingsState {
     hard_budget_usd: number | null;
     advisor_reasoning_level: AiReasoningLevel;
     failover_provider: string;
+    models_dev_pricing_enabled: boolean;
+    ignored_pricing_providers: string[];
     media_replacement: MediaReplacementConfiguration;
+}
+
+interface IgnorableProviderOption {
+    value: string;
+    label: string;
 }
 
 interface EnumOption {
@@ -62,6 +69,7 @@ const props = defineProps<{
     models: Record<string, string[]>;
     reasoningLevels: SelectOptionGroup<AiReasoningLevel>;
     failoverProviders: FailoverProviderOption[];
+    ignorablePricingProviders: IgnorableProviderOption[];
     seasonPackPolicies: EnumOption[];
     subtitleRuleStrengths: EnumOption[];
     conditionFields: EnumOption[];
@@ -81,6 +89,10 @@ const selectedModel = ref(props.settings.model);
 const titleModel = ref(props.settings.title_model);
 const selectedReasoningLevel = ref(props.settings.advisor_reasoning_level);
 const selectedFailoverProvider = ref(props.settings.failover_provider);
+const modelsDevPricingEnabled = ref(props.settings.models_dev_pricing_enabled);
+const ignoredPricingProviders = ref<string[]>([
+    ...props.settings.ignored_pricing_providers,
+]);
 
 function formatUsd(value: number | null): string {
     if (value === null) {
@@ -434,6 +446,100 @@ const budgetState = computed<{
                         >
                             {{ budgetState.label }}
                         </Pill>
+                    </div>
+                </div>
+
+                <Separator />
+
+                <!-- Pricing sync -->
+                <div class="flex flex-col gap-5">
+                    <div>
+                        <h2
+                            class="text-[15px] leading-tight font-semibold tracking-tight"
+                        >
+                            Pricing sync
+                        </h2>
+                        <p
+                            class="mt-0.5 max-w-[560px] text-[12px] text-muted-foreground"
+                        >
+                            Controls the automatic model-pricing refresh. These
+                            override
+                            <span class="font-mono-tabular">.env</span> defaults
+                            once saved.
+                        </p>
+                    </div>
+
+                    <div
+                        class="grid items-start gap-6"
+                        style="grid-template-columns: 200px 1fr"
+                    >
+                        <Field
+                            label="Models.dev feed"
+                            hint="When enabled, the price refresh pulls the public models.dev catalog. When disabled, refreshes fall back to the first-party verifier agent only."
+                        >
+                            <span />
+                        </Field>
+                        <div>
+                            <Toggle
+                                v-model="modelsDevPricingEnabled"
+                                :label="
+                                    modelsDevPricingEnabled
+                                        ? 'Enabled'
+                                        : 'Disabled'
+                                "
+                            />
+                            <input
+                                type="hidden"
+                                name="models_dev_pricing_enabled"
+                                :value="modelsDevPricingEnabled ? '1' : '0'"
+                            />
+                            <InputError
+                                :message="errors.models_dev_pricing_enabled"
+                                class="mt-1"
+                            />
+                        </div>
+                    </div>
+
+                    <div
+                        class="grid items-start gap-6"
+                        style="grid-template-columns: 200px 1fr"
+                    >
+                        <Field
+                            label="Ignored providers"
+                            hint="Providers excluded from every automatic pricing path (feed sync, agent fallback, CLI scope). Their existing rows are kept as last-known-good."
+                        >
+                            <span />
+                        </Field>
+                        <div>
+                            <div class="flex flex-col gap-2">
+                                <label
+                                    v-for="provider in ignorablePricingProviders"
+                                    :key="provider.value"
+                                    :for="`ignore-provider-${provider.value}`"
+                                    class="flex cursor-pointer items-center gap-2 text-[13px]"
+                                >
+                                    <input
+                                        :id="`ignore-provider-${provider.value}`"
+                                        type="checkbox"
+                                        :value="provider.value"
+                                        v-model="ignoredPricingProviders"
+                                        class="size-4 rounded border-border accent-accent"
+                                    />
+                                    {{ provider.label }}
+                                </label>
+                            </div>
+                            <input
+                                v-for="provider in ignoredPricingProviders"
+                                :key="provider"
+                                type="hidden"
+                                name="ignored_pricing_providers[]"
+                                :value="provider"
+                            />
+                            <InputError
+                                :message="errors.ignored_pricing_providers"
+                                class="mt-1"
+                            />
+                        </div>
                     </div>
                 </div>
 

@@ -38,6 +38,8 @@ class AiSettingsController extends Controller
                 'hard_budget_usd' => $aiSettings->hardBudgetUsd(),
                 'advisor_reasoning_level' => $aiSettings->advisorReasoningLevel(),
                 'failover_provider' => $aiSettings->failoverProvider()?->value ?? 'none',
+                'models_dev_pricing_enabled' => $aiSettings->modelsDevPricingEnabled(),
+                'ignored_pricing_providers' => $aiSettings->ignoredPricingProviders(),
                 'media_replacement' => $mediaReplacementConfiguration,
             ],
             'budget' => [
@@ -57,6 +59,7 @@ class AiSettingsController extends Controller
                 ['value' => Lab::Groq->value, 'label' => 'Groq'],
                 ['value' => Lab::Mistral->value, 'label' => 'Mistral'],
             ],
+            'ignorablePricingProviders' => $this->ignorablePricingProviders(),
             'seasonPackPolicies' => SeasonPackPolicy::mapForSelect(labelKey: 'label'),
             'subtitleRuleStrengths' => SubtitleRuleStrength::mapForSelect(labelKey: 'label'),
             'conditionFields' => [
@@ -93,6 +96,39 @@ class AiSettingsController extends Controller
             ->all();
     }
 
+    /**
+     * Canonical pricing providers offered as ignore-list options, in configured
+     * catalog order with human-friendly labels.
+     *
+     * @return list<array{value: string, label: string}>
+     */
+    private function ignorablePricingProviders(): array
+    {
+        /** @var array<string, string> $map */
+        $map = config('mediamanager.ai.pricing.providers', []);
+
+        $labels = [
+            'openai' => 'OpenAI',
+            'anthropic' => 'Anthropic',
+            'gemini' => 'Gemini',
+            'xai' => 'xAI',
+            'deepseek' => 'DeepSeek',
+            'mistral' => 'Mistral',
+            'groq' => 'Groq',
+            'cohere' => 'Cohere',
+            'openrouter' => 'OpenRouter',
+        ];
+
+        return collect(array_values($map))
+            ->unique()
+            ->values()
+            ->map(fn (string $provider): array => [
+                'value' => $provider,
+                'label' => $labels[$provider] ?? ucfirst($provider),
+            ])
+            ->all();
+    }
+
     public function update(
         UpdateAiSettingsRequest $updateAiSettingsRequest,
         AiSettings $aiSettings,
@@ -113,6 +149,12 @@ class AiSettingsController extends Controller
         $aiSettings->setFailoverProvider(
             empty($validated['failover_provider']) ? null : Lab::tryFrom($validated['failover_provider']),
         );
+        $aiSettings->setModelsDevPricingEnabled(
+            array_key_exists('models_dev_pricing_enabled', $validated)
+                ? (bool) $validated['models_dev_pricing_enabled']
+                : null,
+        );
+        $aiSettings->setIgnoredPricingProviders($validated['ignored_pricing_providers'] ?? []);
         $mediaReplacementConfiguration = $validated['media_replacement'];
         $mediaReplacementConfiguration['sonarr_root_folders'] = $mediaReplacementSettings->sonarrRootFolders();
         $mediaReplacementSettings->setConfiguration($mediaReplacementConfiguration);
