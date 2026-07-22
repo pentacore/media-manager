@@ -1,3 +1,10 @@
+# [1.13.0](https://github.com/pentacore/media-manager/compare/v1.12.0...v1.13.0) (2026-07-22)
+
+
+### Features
+
+* **ai:** sync model prices from the Models.dev feed with verified first-party fallback ([9b543b0](https://github.com/pentacore/media-manager/commit/9b543b044451b5b2787b6b5fca4e2f831bae1541))
+
 # [1.12.0](https://github.com/pentacore/media-manager/compare/v1.11.1...v1.12.0) (2026-07-17)
 
 
