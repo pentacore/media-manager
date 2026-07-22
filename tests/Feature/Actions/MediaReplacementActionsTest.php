@@ -155,11 +155,16 @@ test('grabs the replacement before deleting the reviewed file', function (): voi
 });
 
 test('an approved rejected candidate tells Sonarr to override its release decision', function (): void {
+    // Mirror a real Sonarr search response: seriesId/episodeIds are write-only
+    // request fields Sonarr never returns — only mapped* fields come back.
     $release = sonarrReplacementRelease();
+    unset($release['episodeIds']);
     $release['rejections'] = ['Existing file on disk has a equal or higher Custom Format score: 143600'];
+    $release['mappedSeriesId'] = 42;
+    $release['mappedEpisodeInfo'] = [['id' => 101, 'seasonNumber' => 1, 'episodeNumber' => 1]];
     fakeExecutor(['releases' => [$release]]);
 
-    $fingerprint = (new ReleaseFingerprint)->make('sonarr', $release);
+    $fingerprint = (new ReleaseFingerprint)->make('sonarr', [...$release, 'episodeIds' => [101]]);
     $actionRequest = replaceActionRequest();
     $payload = $actionRequest->payload;
     $payload['candidate_fingerprint'] = $fingerprint;
@@ -174,9 +179,13 @@ test('an approved rejected candidate tells Sonarr to override its release decisi
 
     resolve(MediaReplacementActions::class)->execute($actionRequest);
 
+    // Sonarr validates seriesId + non-empty episodeIds whenever shouldOverride
+    // is set; omitting them 500s with "Value can not be null (release.SeriesId)".
     Http::assertSent(fn (Request $request): bool => $request->method() === 'POST'
         && str_contains($request->url(), '/api/v3/release')
-        && $request->data()['shouldOverride'] === true);
+        && $request->data()['shouldOverride'] === true
+        && $request->data()['seriesId'] === 42
+        && $request->data()['episodeIds'] === [101]);
 });
 
 test('unmonitors the target BEFORE the grab (before a webhook can restore it) and before blocklisting', function (): void {
