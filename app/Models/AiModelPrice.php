@@ -6,6 +6,7 @@ namespace App\Models;
 
 use App\Enums\PricingSource;
 use Carbon\CarbonImmutable;
+use Illuminate\Database\Eloquent\Attributes\Appends;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Casts\Attribute;
@@ -70,14 +71,10 @@ use Override;
     'pricing_verified_at',
     'is_price_locked',
 ])]
+#[Appends(['automatic_updates_enabled'])]
 class AiModelPrice extends Model
 {
     use HasFactory;
-
-    /**
-     * @var list<string>
-     */
-    protected $appends = ['automatic_updates_enabled'];
 
     /**
      * @return array<string, string>

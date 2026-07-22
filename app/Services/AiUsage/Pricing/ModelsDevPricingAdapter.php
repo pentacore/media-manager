@@ -73,6 +73,7 @@ final class ModelsDevPricingAdapter
             if ($canonical === null) {
                 continue;
             }
+
             if (! $refreshScope->allowsProvider($canonical)) {
                 continue;
             }

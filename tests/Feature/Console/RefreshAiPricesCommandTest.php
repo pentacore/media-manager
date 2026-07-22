@@ -257,7 +257,7 @@ test('the lock is released after a run completes', function (): void {
 });
 
 test('the weekly refresh and monthly verify schedules are both registered', function (): void {
-    $schedule = app(Schedule::class);
+    $schedule = resolve(Schedule::class);
 
     $events = collect($schedule->events())
         ->filter(fn ($event): bool => str_contains((string) $event->command, 'ai:refresh-prices'));

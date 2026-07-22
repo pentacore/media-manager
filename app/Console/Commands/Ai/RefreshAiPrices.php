@@ -70,7 +70,7 @@ class RefreshAiPrices extends Command
 
         /** @var list<string> $providers */
         $providers = array_values(array_filter(
-            array_map('trim', (array) $this->option('provider')),
+            array_map(trim(...), (array) $this->option('provider')),
             fn (string $provider): bool => $provider !== '',
         ));
 
@@ -92,7 +92,7 @@ class RefreshAiPrices extends Command
             return self::FAILURE;
         }
 
-        $scope = $this->resolveScope($verify, $providers);
+        $refreshScope = $this->resolveScope($verify, $providers);
         $mode = match (true) {
             $verify => AiPriceRefreshCoordinator::MODE_VERIFY,
             $dryRun => AiPriceRefreshCoordinator::MODE_DRY_RUN,
@@ -111,7 +111,7 @@ class RefreshAiPrices extends Command
             $report = resolve(AiPriceRefreshCoordinator::class)->run(
                 mode: $mode,
                 source: $source,
-                scope: $scope,
+                scope: $refreshScope,
                 triggeredBy: null,
                 trigger: $trigger,
                 dryRun: $dryRun,

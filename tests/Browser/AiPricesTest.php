@@ -276,8 +276,8 @@ test('a succeeded broadcast shows the success toast and reloads prices', functio
         'pricing_source' => PricingSource::ModelsDev,
     ]);
 
-    $page = visit('/admin/ai-prices');
-    $page->assertNoSmoke()->assertSee('gpt-5-mini');
+    $pendingAwaitablePage = visit('/admin/ai-prices');
+    $pendingAwaitablePage->assertNoSmoke()->assertSee('gpt-5-mini');
 
     // Created after the initial render: it only appears if the success handler
     // triggers router.reload({ only: ['prices'] }).
@@ -287,10 +287,10 @@ test('a succeeded broadcast shows the success toast and reloads prices', functio
         'pricing_source' => PricingSource::ModelsDev,
     ]);
 
-    expect($page->script(emitPriceRefreshState(enrichedRefreshPayload())))
+    expect($pendingAwaitablePage->script(emitPriceRefreshState(enrichedRefreshPayload())))
         ->toBe('EMITTED');
 
-    $page->assertSee('Price refresh complete')
+    $pendingAwaitablePage->assertSee('Price refresh complete')
         ->assertSee('3 created, 5 updated, 2 locked, 0 rejected')
         ->assertSee('reload-proof-model');
 });
@@ -311,12 +311,12 @@ test('a partial broadcast shows the warning toast with counts and fallback provi
         'models_rejected' => 1,
     ]);
 
-    $page = visit('/admin/ai-prices');
-    $page->assertNoSmoke()->assertSee('gpt-5-mini');
+    $pendingAwaitablePage = visit('/admin/ai-prices');
+    $pendingAwaitablePage->assertNoSmoke()->assertSee('gpt-5-mini');
 
-    expect($page->script(emitPriceRefreshState($payload)))->toBe('EMITTED');
+    expect($pendingAwaitablePage->script(emitPriceRefreshState($payload)))->toBe('EMITTED');
 
-    $page->assertSee('Price refresh partially completed')
+    $pendingAwaitablePage->assertSee('Price refresh partially completed')
         ->assertSee('1 created, 2 updated, 0 locked, 1 rejected')
         ->assertSee('Fallback: openai, anthropic');
 });
@@ -334,12 +334,12 @@ test('a failed broadcast shows the error toast with the error message', function
         'error_message' => 'models.dev unreachable',
     ]);
 
-    $page = visit('/admin/ai-prices');
-    $page->assertNoSmoke()->assertSee('gpt-5-mini');
+    $pendingAwaitablePage = visit('/admin/ai-prices');
+    $pendingAwaitablePage->assertNoSmoke()->assertSee('gpt-5-mini');
 
-    expect($page->script(emitPriceRefreshState($payload)))->toBe('EMITTED');
+    expect($pendingAwaitablePage->script(emitPriceRefreshState($payload)))->toBe('EMITTED');
 
-    $page->assertSee('Price refresh failed')
+    $pendingAwaitablePage->assertSee('Price refresh failed')
         ->assertSee('models.dev unreachable');
 });
 
@@ -357,11 +357,11 @@ test('a legacy broadcast (no final_result) shows the old added/total success toa
         'total' => 12,
     ]);
 
-    $page = visit('/admin/ai-prices');
-    $page->assertNoSmoke()->assertSee('gpt-5-mini');
+    $pendingAwaitablePage = visit('/admin/ai-prices');
+    $pendingAwaitablePage->assertNoSmoke()->assertSee('gpt-5-mini');
 
-    expect($page->script(emitPriceRefreshState($payload)))->toBe('EMITTED');
+    expect($pendingAwaitablePage->script(emitPriceRefreshState($payload)))->toBe('EMITTED');
 
-    $page->assertSee('Price refresh complete')
+    $pendingAwaitablePage->assertSee('Price refresh complete')
         ->assertSee('4 new, 12 total');
 });

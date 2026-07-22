@@ -157,6 +157,7 @@ final readonly class AiModelPriceWriter
             if ($field === null) {
                 continue;
             }
+
             if (! $field->supplied) {
                 continue;
             }
