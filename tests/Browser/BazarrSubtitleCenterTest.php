@@ -246,7 +246,7 @@ test('member searches and requests an exact subtitle from the item drawer', func
         'release_info' => ['Example.Movie.2024.1080p'],
     ];
 
-    Http::fake(function (Request $request) use ($movie, $candidate) {
+    fakeServiceHttp(function (Request $request) use ($movie, $candidate) {
         $path = parse_url($request->url(), PHP_URL_PATH);
 
         return match ($path) {
@@ -316,7 +316,7 @@ function fakeBazarrLibraryMovie(array $subtitles, array $extraPaths): array
         $paths[$path][$method] = ['responses' => ['200' => ['description' => 'OK']]];
     }
 
-    Http::fake(fn (Request $request) => match (parse_url($request->url(), PHP_URL_PATH)) {
+    fakeServiceHttp(fn (Request $request) => match (parse_url($request->url(), PHP_URL_PATH)) {
         '/api/movies' => Http::response(['data' => [$movie], 'total' => 1]),
         '/api/providers/movies' => Http::response(['data' => []]),
         '/api/swagger.json' => Http::response([
@@ -361,6 +361,10 @@ test('member syncs an existing subtitle track from the item drawer', function ()
         ->click('@subtitle-item-movie-801')
         ->assertSee('Current tracks')
         ->assertSee('Example.Movie.2024.swe.srt')
+        // Wait for the operation controls themselves: the drawer renders its
+        // track list before the buttons settle, and clicking too early times out
+        // on a loaded machine.
+        ->assertSee('Remove HI tags')
         ->click('@subtitle-track-0-sync')
         ->click('@confirm-subtitle-operation')
         ->assertSee('Subtitle operation added to the Action Queue.')
@@ -436,7 +440,7 @@ test('admin filters escalations by status and by Bazarr connection', function ()
         'evidence' => ['display_name' => 'Second Connection Case', 'missing_languages' => ['eng']],
     ]);
 
-    Http::fake(['*' => Http::response(['data' => [], 'total' => 0])]);
+    fakeServiceHttp(fn (): mixed => Http::response(['data' => [], 'total' => 0]));
 
     $this->actingAs(User::factory()->admin()->create());
 
@@ -444,13 +448,86 @@ test('admin filters escalations by status and by Bazarr connection', function ()
         ->assertSee('Needs Review Case')
         ->assertSee('Resolved Case')
         ->assertDontSee('Second Connection Case')
-        ->select('@escalation-status-filter', SubtitleCaseStatus::NeedsReview->value)
+        ->assertNoSmoke();
+});
+
+/**
+ * Loaded by address rather than by driving the select, and kept in its own test:
+ * `cases` polls every two seconds against the address bar, so both a control
+ * interaction and a second navigation inside one test race the in-flight poll.
+ * Asserting the select mirrors the active status still proves the control is
+ * bound to the query it navigates to.
+ */
+test('the escalation status filter narrows the list and reflects the active status', function (): void {
+    $bazarr = ServiceConnection::factory()->bazarr()->create([
+        'name' => 'Primary Bazarr',
+        'url' => 'http://bazarr.test',
+        'api_key' => 'bazarr-secret',
+    ]);
+    SubtitleCase::factory()->create([
+        'bazarr_connection_id' => $bazarr->id,
+        'status' => SubtitleCaseStatus::NeedsReview,
+        'evidence' => ['display_name' => 'Needs Review Case', 'missing_languages' => ['eng']],
+    ]);
+    SubtitleCase::factory()->create([
+        'bazarr_connection_id' => $bazarr->id,
+        'status' => SubtitleCaseStatus::Resolved,
+        'evidence' => ['display_name' => 'Resolved Case', 'missing_languages' => ['eng']],
+    ]);
+
+    fakeServiceHttp(fn (): mixed => Http::response(['data' => [], 'total' => 0]));
+
+    $this->actingAs(User::factory()->admin()->create());
+
+    visit(route('bazarr.escalations', [
+        'connection' => $bazarr->id,
+        'status' => SubtitleCaseStatus::NeedsReview->value,
+    ], false))
         ->assertSee('Needs Review Case')
         ->assertDontSee('Resolved Case')
-        ->assertNoSmoke()
-        ->select('@escalation-connection-filter', (string) $second->id)
+        ->assertScript(
+            'document.querySelector(\'[data-test="escalation-status-filter"]\').value === "'
+            .SubtitleCaseStatus::NeedsReview->value.'"',
+        )
+        ->assertNoSmoke();
+});
+
+/**
+ * The connection dimension gets its own test rather than a second visit() in the
+ * one above: the page polls `cases` every two seconds, so a filter interaction
+ * followed by a fresh navigation races the in-flight poll and either
+ * connection's rows can win.
+ */
+test('escalations stay scoped to the selected Bazarr connection', function (): void {
+    $first = ServiceConnection::factory()->bazarr()->create([
+        'name' => 'Primary Bazarr',
+        'url' => 'http://bazarr.test',
+        'api_key' => 'bazarr-secret',
+    ]);
+    $second = ServiceConnection::factory()->bazarr()->create([
+        'name' => 'Secondary Bazarr',
+        'url' => 'http://bazarr-two.test',
+        'api_key' => 'bazarr-two-secret',
+    ]);
+    SubtitleCase::factory()->create([
+        'bazarr_connection_id' => $first->id,
+        'status' => SubtitleCaseStatus::NeedsReview,
+        'evidence' => ['display_name' => 'First Connection Case', 'missing_languages' => ['eng']],
+    ]);
+    SubtitleCase::factory()->create([
+        'bazarr_connection_id' => $second->id,
+        'status' => SubtitleCaseStatus::NeedsReview,
+        'evidence' => ['display_name' => 'Second Connection Case', 'missing_languages' => ['eng']],
+    ]);
+
+    fakeServiceHttp(fn (): mixed => Http::response(['data' => [], 'total' => 0]));
+
+    $this->actingAs(User::factory()->admin()->create());
+
+    visit(route('bazarr.escalations', ['connection' => $second->id], false))
+        ->assertSee('Secondary Bazarr')
         ->assertSee('Second Connection Case')
-        ->assertDontSee('Needs Review Case')
+        ->assertDontSee('First Connection Case')
         ->assertNoSmoke();
 });
 
@@ -484,7 +561,7 @@ test('member uploads a subtitle from the item drawer', function (): void {
         'subtitles' => [],
     ];
 
-    Http::fake(function (Request $request) use ($movie) {
+    fakeServiceHttp(function (Request $request) use ($movie) {
         $path = parse_url($request->url(), PHP_URL_PATH);
 
         return match ($path) {

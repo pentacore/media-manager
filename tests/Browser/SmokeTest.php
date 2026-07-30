@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use App\Enums\BazarrServiceRole;
 use App\Models\AiModelPrice;
 use App\Models\BazarrServiceLink;
 use App\Models\ServiceConnection;
@@ -189,9 +190,37 @@ test('admin can create a Bazarr mapping without browser errors', function (): vo
             ->where('role', 'radarr')
             ->exists())->toBeTrue();
 
-    $sonarr->update(['is_active' => false]);
+    $webpage->assertNoSmoke();
+});
 
-    $webpage->navigate(route('admin.connections.edit', $serviceConnection, absolute: false))
+/**
+ * The edit half of the mapping flow is its own test: re-navigating inside the
+ * create test raced the form submit that preceded it, so the mapping selects
+ * were asserted against the page the browser had not left yet.
+ */
+test('admin can edit a Bazarr mapping without browser errors', function (): void {
+    Queue::fake();
+    $sonarr = ServiceConnection::factory()->sonarr()->create([
+        'name' => 'Main Sonarr',
+        'is_active' => false,
+    ]);
+    $radarr = ServiceConnection::factory()->radarr()->create(['name' => 'Main Radarr']);
+    $serviceConnection = ServiceConnection::factory()->bazarr()->create(['name' => 'Main Bazarr']);
+    BazarrServiceLink::factory()->create([
+        'bazarr_connection_id' => $serviceConnection->id,
+        'related_connection_id' => $sonarr->id,
+        'role' => BazarrServiceRole::Sonarr,
+    ]);
+    BazarrServiceLink::factory()->create([
+        'bazarr_connection_id' => $serviceConnection->id,
+        'related_connection_id' => $radarr->id,
+        'role' => BazarrServiceRole::Radarr,
+    ]);
+
+    $this->actingAs(User::factory()->admin()->create());
+
+    visit(route('admin.connections.edit', $serviceConnection, absolute: false))
+        ->assertSee('Sonarr connection')
         ->assertScript(
             'document.querySelector("#sonarr_connection_id").textContent.includes("Main Sonarr (inactive)")',
         )
@@ -201,7 +230,8 @@ test('admin can create a Bazarr mapping without browser errors', function (): vo
         ->click('#radarr_connection_id')
         ->click('[role="option"][aria-label="No Radarr connection"]')
         ->click('Update Connection')
-        ->assertSee('Connection updated.');
+        ->assertSee('Connection updated.')
+        ->assertNoSmoke();
 
     expect(BazarrServiceLink::query()
         ->where('bazarr_connection_id', $serviceConnection->id)
@@ -211,8 +241,6 @@ test('admin can create a Bazarr mapping without browser errors', function (): vo
             ->where('bazarr_connection_id', $serviceConnection->id)
             ->where('role', 'radarr')
             ->doesntExist())->toBeTrue();
-
-    $webpage->assertNoSmoke();
 });
 
 test('every static authenticated page route is classified for browser coverage', function (): void {
