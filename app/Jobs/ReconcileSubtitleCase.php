@@ -24,6 +24,8 @@ use App\Services\Bazarr\SubtitleInventoryService;
 use App\Settings\BazarrAutomationSettings;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
+use Illuminate\Http\Client\ConnectionException;
+use Illuminate\Http\Client\RequestException;
 use Illuminate\Queue\Attributes\Timeout;
 use Illuminate\Queue\Attributes\Tries;
 use Illuminate\Queue\Middleware\RateLimited;
@@ -46,6 +48,13 @@ final class ReconcileSubtitleCase implements ShouldQueue
         public ?int $subtitleCaseId = null,
         public ?int $targetBazarrConnectionId = null,
     ) {}
+
+    /**
+     * The case this attempt was probing, so failed() can park it once the tries
+     * are exhausted. Set during the attempt rather than constructed, because a
+     * candidate-based job only resolves its case while running.
+     */
+    private ?int $probedSubtitleCaseId = null;
 
     public static function forCase(SubtitleCase $subtitleCase): self
     {
@@ -272,9 +281,35 @@ final class ReconcileSubtitleCase implements ShouldQueue
                 'completed_at' => now(),
             ]);
 
+            // A brief Bazarr or provider outage is the most likely probe failure,
+            // and swallowing it here spent none of the configured tries while
+            // permanently removing an otherwise automatable case from probing.
+            // Retryable failures are rethrown so the backoff applies; failed()
+            // parks the case once the last attempt is exhausted.
+            if ($this->isRetryable($throwable)) {
+                $this->probedSubtitleCaseId = $subtitleCase->id;
+
+                throw $throwable;
+            }
+
             $subtitleCaseLifecycle->needsReview($subtitleCase->fresh(), 'Bazarr probe failed.');
             report($throwable);
         }
+    }
+
+    /**
+     * Upstream connectivity, server errors and throttling are expected to clear
+     * on their own; anything else (bad data, a definite 4xx) will fail the same
+     * way on every attempt and is parked immediately instead.
+     */
+    private function isRetryable(Throwable $throwable): bool
+    {
+        if ($throwable instanceof ConnectionException) {
+            return true;
+        }
+
+        return $throwable instanceof RequestException
+            && ($throwable->response->serverError() || $throwable->response->status() === 429);
     }
 
     private function verifyTargetedOutcome(
@@ -444,5 +479,20 @@ final class ReconcileSubtitleCase implements ShouldQueue
             'service_connection_id' => $this->candidate['service_connection_id'] ?? null,
             'exception' => $throwable instanceof Throwable ? $throwable::class : null,
         ]);
+
+        // The retries are spent, so the case that was probing when the last
+        // attempt failed is parked for an operator instead of silently dropping
+        // out of automation.
+        $subtitleCaseId = $this->probedSubtitleCaseId ?? $this->subtitleCaseId;
+
+        if ($subtitleCaseId === null) {
+            return;
+        }
+
+        $subtitleCase = SubtitleCase::query()->find($subtitleCaseId);
+
+        if ($subtitleCase instanceof SubtitleCase) {
+            resolve(SubtitleCaseLifecycle::class)->needsReview($subtitleCase, 'Bazarr probe failed.');
+        }
     }
 }

@@ -23,6 +23,7 @@ use App\Services\Bazarr\SubtitleInventoryService;
 use App\Settings\BazarrAutomationSettings;
 use App\Settings\MediaReplacementSettings;
 use Illuminate\Database\Eloquent\Collection;
+use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Queue\Middleware\RateLimited;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Date;
@@ -154,6 +155,55 @@ test('empty probes stay searching until the configured threshold then become rep
 
     expect($this->case->fresh()->status)->toBe(SubtitleCaseStatus::ReplacementEligible)
         ->and(SubtitleCaseAttempt::query()->where('outcome', SubtitleCaseAttemptOutcome::Empty)->count())->toBe(2);
+});
+
+test('a transient probe failure records the attempt and stays retryable', function (): void {
+    Http::fake([
+        'bazarr.test/api/providers/episodes*' => fn (): never => throw new ConnectionException('bazarr unreachable'),
+        'bazarr.test/api/providers' => Http::response(['data' => []]),
+    ]);
+    $reconcileSubtitleCase = new ReconcileSubtitleCase(probeCandidate($this->case));
+
+    // The job is configured with three tries and a 60/300 second backoff, so a
+    // brief Bazarr or provider outage must surface as a failure the queue can
+    // retry rather than permanently parking the case.
+    expect(function () use ($reconcileSubtitleCase): void {
+        runSubtitleProbe($reconcileSubtitleCase);
+    })->toThrow(ConnectionException::class);
+
+    expect($this->case->fresh()->status)->toBe(SubtitleCaseStatus::BazarrSearching)
+        ->and(SubtitleCaseAttempt::query()->where('type', SubtitleCaseAttemptType::Probe)->firstOrFail()->outcome)
+        ->toBe(SubtitleCaseAttemptOutcome::Failed);
+});
+
+test('the last probe attempt parks the case for review', function (): void {
+    Http::fake([
+        'bazarr.test/api/providers/episodes*' => fn (): never => throw new ConnectionException('bazarr unreachable'),
+        'bazarr.test/api/providers' => Http::response(['data' => []]),
+    ]);
+    $reconcileSubtitleCase = new ReconcileSubtitleCase(probeCandidate($this->case));
+
+    try {
+        runSubtitleProbe($reconcileSubtitleCase);
+    } catch (ConnectionException) {
+        // The queue would retry; this is the final attempt.
+    }
+
+    $reconcileSubtitleCase->failed(new ConnectionException('bazarr unreachable'));
+
+    expect($this->case->fresh()->status)->toBe(SubtitleCaseStatus::NeedsReview)
+        ->and($this->case->fresh()->failure_reason)->toContain('probe');
+});
+
+test('a definite upstream rejection parks the case without retrying', function (): void {
+    Http::fake([
+        'bazarr.test/api/providers/episodes*' => Http::response(['message' => 'bad request'], 422),
+        'bazarr.test/api/providers' => Http::response(['data' => []]),
+    ]);
+
+    runSubtitleProbe(new ReconcileSubtitleCase(probeCandidate($this->case)));
+
+    expect($this->case->fresh()->status)->toBe(SubtitleCaseStatus::NeedsReview);
 });
 
 test('a probe without Bazarr effective score capability creates no download request', function (): void {
