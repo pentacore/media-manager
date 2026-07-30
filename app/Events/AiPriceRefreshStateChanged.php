@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Events;
 
 use App\Models\User;
+use App\Services\AiUsage\Pricing\Data\RefreshReport;
 use Carbon\CarbonImmutable;
 use Illuminate\Broadcasting\InteractsWithSockets;
 use Illuminate\Broadcasting\PrivateChannel;
@@ -36,6 +37,7 @@ class AiPriceRefreshStateChanged implements ShouldBroadcast
         public ?string $error = null,
         public ?int $added = null,
         public ?int $total = null,
+        public ?RefreshReport $report = null,
     ) {
         $this->occurredAt = Date::now();
     }
@@ -66,6 +68,34 @@ class AiPriceRefreshStateChanged implements ShouldBroadcast
             'added' => $this->added,
             'total' => $this->total,
             'occurred_at' => $this->occurredAt->toISOString(),
+            ...$this->report instanceof RefreshReport ? $this->report->toBroadcastArray() : $this->emptyReportPayload(),
+        ];
+    }
+
+    /**
+     * Null-valued report keys so the broadcast contract is stable whether or
+     * not a {@see RefreshReport} was attached to the event.
+     *
+     * @return array<string, null>
+     */
+    private function emptyReportPayload(): array
+    {
+        return [
+            'run_id' => null,
+            'mode' => null,
+            'final_result' => null,
+            'models_dev_status' => null,
+            'providers_requested' => null,
+            'providers_succeeded' => null,
+            'providers_failed' => null,
+            'models_created' => null,
+            'models_updated' => null,
+            'models_unchanged' => null,
+            'models_locked' => null,
+            'models_rejected' => null,
+            'models_tiered' => null,
+            'fallback_providers' => null,
+            'error_message' => null,
         ];
     }
 }

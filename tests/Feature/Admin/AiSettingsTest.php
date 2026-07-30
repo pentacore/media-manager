@@ -166,6 +166,63 @@ test('update rejects an unknown failover provider', function (): void {
         ->assertSessionHasErrors('failover_provider');
 });
 
+test('index exposes pricing sync settings and ignorable providers', function (): void {
+    $admin = User::factory()->admin()->create();
+    config()->set('mediamanager.ai.pricing.models_dev.enabled', true);
+
+    $this->actingAs($admin)
+        ->get(route('admin.ai-settings.index'))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->component('Admin/AiSettings/Index')
+            ->where('settings.models_dev_pricing_enabled', true)
+            ->where('settings.ignored_pricing_providers', [])
+            ->has('ignorablePricingProviders')
+            ->where('ignorablePricingProviders.0.value', 'openai')
+        );
+});
+
+test('admin can toggle the models.dev pricing feed off, overriding the env default', function (): void {
+    $admin = User::factory()->admin()->create();
+    // Env/config default is ON; the saved setting must win.
+    config()->set('mediamanager.ai.pricing.models_dev.enabled', true);
+
+    $this->actingAs($admin)
+        ->put(route('admin.ai-settings.update'), [
+            ...baseAiSettingsPayload(),
+            'models_dev_pricing_enabled' => '0',
+        ])
+        ->assertRedirect(route('admin.ai-settings.index'))
+        ->assertSessionHasNoErrors();
+
+    expect(resolve(AiSettings::class)->modelsDevPricingEnabled())->toBeFalse();
+});
+
+test('admin can save the ignored pricing providers list', function (): void {
+    $admin = User::factory()->admin()->create();
+
+    $this->actingAs($admin)
+        ->put(route('admin.ai-settings.update'), [
+            ...baseAiSettingsPayload(),
+            'ignored_pricing_providers' => ['groq', 'cohere'],
+        ])
+        ->assertRedirect(route('admin.ai-settings.index'))
+        ->assertSessionHasNoErrors();
+
+    expect(resolve(AiSettings::class)->ignoredPricingProviders())->toBe(['groq', 'cohere']);
+});
+
+test('update rejects an unknown ignored pricing provider', function (): void {
+    $admin = User::factory()->admin()->create();
+
+    $this->actingAs($admin)
+        ->put(route('admin.ai-settings.update'), [
+            ...baseAiSettingsPayload(),
+            'ignored_pricing_providers' => ['not-a-provider'],
+        ])
+        ->assertSessionHasErrors('ignored_pricing_providers.0');
+});
+
 test('update validates mode is a known value', function (): void {
     $admin = User::factory()->admin()->create();
 

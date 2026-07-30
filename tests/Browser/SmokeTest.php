@@ -6,6 +6,7 @@ use App\Models\AiModelPrice;
 use App\Models\BazarrServiceLink;
 use App\Models\ServiceConnection;
 use App\Models\User;
+use App\Settings\AiSettings;
 use App\Settings\MediaReplacementSettings;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Queue;
@@ -72,6 +73,46 @@ test('admin can edit and save media replacement configuration without browser er
     expect(resolve(MediaReplacementSettings::class)->configuration())
         ->automatic_selection_enabled->toBeTrue()
         ->global_languages->toBe(['eng', 'swe']);
+
+    $webpage->assertNoSmoke();
+});
+
+test('admin can save the pricing sync controls without browser errors', function (): void {
+    config()->set('mediamanager.ai.enabled', true);
+    // Config default is OFF for the feed and empty for the ignore list, so the
+    // saved controls start from a clean slate and the assertions prove the
+    // runtime setting was persisted rather than reading back the env default.
+    config()->set('mediamanager.ai.pricing.models_dev.enabled', false);
+    config()->set('mediamanager.ai.pricing.ignored_providers', []);
+    // The model <Select> submits from the pricing catalog; seed one row so the
+    // required `model` field posts a value.
+    AiModelPrice::factory()->create([
+        'provider' => 'openai',
+        'model' => 'gpt-5-mini',
+    ]);
+
+    $this->actingAs(User::factory()->admin()->create());
+
+    $webpage = visit('/admin/ai-settings')
+        ->assertSee('Pricing sync')
+        ->assertSee('Models.dev feed')
+        ->assertSee('Ignored providers')
+        // Toggle the feed on (default label is "Disabled").
+        ->click('Disabled')
+        ->assertScript(
+            'document.querySelector(\'input[name="models_dev_pricing_enabled"]\').value === "1"',
+        )
+        // Add Groq to the ignore list.
+        ->check('#ignore-provider-groq')
+        ->assertScript(
+            'Array.from(document.querySelectorAll(\'input[name="ignored_pricing_providers[]"]\')).map(i => i.value).includes("groq")',
+        )
+        ->click('Save settings')
+        ->assertSee('AI settings updated.');
+
+    $aiSettings = resolve(AiSettings::class);
+    expect($aiSettings->modelsDevPricingEnabled())->toBeTrue()
+        ->and($aiSettings->ignoredPricingProviders())->toBe(['groq']);
 
     $webpage->assertNoSmoke();
 });

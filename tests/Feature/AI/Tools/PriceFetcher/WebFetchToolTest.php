@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use App\Ai\Risk;
 use App\Ai\Tools\PriceFetcher\WebFetchTool;
+use App\Services\AiUsage\Pricing\PriceVerificationRun;
 use Illuminate\Support\Facades\Http;
 use Laravel\Ai\Tools\Request;
 
@@ -132,4 +133,46 @@ test('gives up after the redirect budget is exhausted', function (): void {
 
 test('risk is Read', function (): void {
     expect((new WebFetchTool)->risk())->toBe(Risk::Read);
+});
+
+test('a successful fetch records the final url as a receipt on the bound run', function (): void {
+    Http::fake([
+        'openai.com/pricing' => Http::response('', 301, ['Location' => 'https://platform.openai.com/docs/pricing']),
+        'platform.openai.com/docs/pricing' => Http::response('<html><body>gpt-5-mini pricing</body></html>', 200),
+    ]);
+
+    $run = new PriceVerificationRun;
+
+    json_decode(
+        (new WebFetchTool)->withRun($run)->handle(new Request(['url' => 'https://openai.com/pricing'])),
+        true,
+    );
+
+    // The receipt is the FINAL (post-redirect) url, not the requested one.
+    expect($run->hasReceipt('https://platform.openai.com/docs/pricing'))->toBeTrue()
+        ->and($run->hasReceipt('https://openai.com/pricing'))->toBeFalse();
+});
+
+test('a failed fetch records no receipt', function (): void {
+    Http::fake([
+        'openai.com/*' => Http::response('forbidden', 403),
+    ]);
+
+    $run = new PriceVerificationRun;
+
+    json_decode(
+        (new WebFetchTool)->withRun($run)->handle(new Request(['url' => 'https://openai.com/pricing'])),
+        true,
+    );
+
+    expect($run->hasReceipt('https://openai.com/pricing'))->toBeFalse();
+});
+
+test('allowsUrl gates scheme, port, and host', function (): void {
+    expect(WebFetchTool::allowsUrl('https://developers.openai.com/api/docs/pricing'))->toBeTrue()
+        ->and(WebFetchTool::allowsUrl('https://evil.example.com/pricing'))->toBeFalse()
+        ->and(WebFetchTool::allowsUrl('javascript:alert(1)'))->toBeFalse()
+        ->and(WebFetchTool::allowsUrl('https://openai.com:6379/x'))->toBeFalse()
+        ->and(WebFetchTool::allowsUrl(null))->toBeFalse()
+        ->and(WebFetchTool::allowsUrl(''))->toBeFalse();
 });

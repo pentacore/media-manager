@@ -38,7 +38,7 @@ jobs:
       # merged after the triggering ci kicked off, head_sha is behind tip and
       # semantic-release refuses to publish ("local branch is behind remote").
       # Operating on the tip means we always release the latest commit.
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           fetch-depth: 0
           persist-credentials: true
@@ -88,7 +88,7 @@ jobs:
       # `develop` is protected — direct pushes are rejected by repository
       # rules, so we open a PR from a temporary sync branch and let GitHub
       # auto-merge it once required checks pass.
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           fetch-depth: 0
           persist-credentials: true

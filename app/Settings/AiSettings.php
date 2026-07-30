@@ -33,6 +33,10 @@ class AiSettings
 
     public const MEDIA_ADVISOR_REASONING_LEVEL_KEY = 'ai.advisor_reasoning_level';
 
+    public const string MODELS_DEV_PRICING_ENABLED_KEY = 'ai.pricing.models_dev_enabled';
+
+    public const string IGNORED_PRICING_PROVIDERS_KEY = 'ai.pricing.ignored_providers';
+
     /**
      * Per-request override that takes precedence over the persisted mode.
      * Used by the chat surface so a user can flip between Advisory and
@@ -154,6 +158,83 @@ class AiSettings
     public function setFailoverProvider(?Lab $lab): void
     {
         $this->appSettings->set(self::FAILOVER_PROVIDER_KEY, $lab?->value ?? '');
+    }
+
+    /**
+     * Whether the automatic Models.dev pricing feed sync is enabled. The
+     * config value (`AI_PRICING_MODELS_DEV_ENABLED`) is only the default until
+     * an admin saves an explicit value; a saved value then overrides env.
+     *
+     * The config default is read fresh on every call (never through the
+     * settings cache) so a saved `false` overrides env while an unset value
+     * still tracks config at runtime.
+     */
+    public function modelsDevPricingEnabled(): bool
+    {
+        $stored = $this->appSettings->get(self::MODELS_DEV_PRICING_ENABLED_KEY);
+
+        if ($stored === null) {
+            return (bool) config('mediamanager.ai.pricing.models_dev.enabled', false);
+        }
+
+        return (bool) $stored;
+    }
+
+    /**
+     * Persist the feed-enabled gate. A null value clears the setting so the
+     * gate falls back to the config default again.
+     */
+    public function setModelsDevPricingEnabled(?bool $enabled): void
+    {
+        $this->appSettings->set(self::MODELS_DEV_PRICING_ENABLED_KEY, $enabled);
+    }
+
+    /**
+     * Providers excluded from every automatic pricing path (feed sync, agent
+     * fallback, CLI scope). The config value (`AI_PRICING_IGNORED_PROVIDERS`)
+     * is only the default until an admin saves an explicit list; a saved list
+     * (including an empty one) then overrides env.
+     *
+     * @return list<string>
+     */
+    public function ignoredPricingProviders(): array
+    {
+        $stored = $this->appSettings->get(self::IGNORED_PRICING_PROVIDERS_KEY);
+
+        if (! is_array($stored)) {
+            /** @var list<string> $stored */
+            $stored = config('mediamanager.ai.pricing.ignored_providers', []);
+        }
+
+        return $this->normalizeProviderList($stored);
+    }
+
+    /**
+     * Persist the provider ignore list as a normalized string list.
+     *
+     * @param  list<string>  $providers
+     */
+    public function setIgnoredPricingProviders(array $providers): void
+    {
+        $this->appSettings->set(
+            self::IGNORED_PRICING_PROVIDERS_KEY,
+            $this->normalizeProviderList($providers),
+        );
+    }
+
+    /**
+     * @param  array<int, mixed>  $providers
+     * @return list<string>
+     */
+    private function normalizeProviderList(array $providers): array
+    {
+        return array_values(array_filter(
+            array_map(
+                fn (mixed $provider): string => strtolower(trim((string) $provider)),
+                $providers,
+            ),
+            fn (string $provider): bool => $provider !== '',
+        ));
     }
 
     /**

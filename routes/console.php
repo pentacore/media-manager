@@ -64,8 +64,16 @@ Schedule::command(ReconcileBazarrSubtitles::class)
     ->everyFiveMinutes()
     ->withoutOverlapping();
 
-Schedule::command(RefreshAiPrices::class)
+// The weekly run refreshes the whole catalog from the Models.dev feed with
+// verifier fallback; the monthly --verify run re-checks the core providers
+// against their first-party pricing pages. The distinct arguments give Laravel
+// distinct mutex names, so the two never share an overlap lock.
+Schedule::command(RefreshAiPrices::class, ['--scheduled'])
     ->weekly()
+    ->withoutOverlapping();
+
+Schedule::command(RefreshAiPrices::class, ['--verify', '--scheduled'])
+    ->monthly()
     ->withoutOverlapping();
 
 Schedule::command(PollSabnzbdHistory::class)

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Database\Factories;
 
+use App\Enums\PricingSource;
 use App\Models\AiModelPrice;
 use Illuminate\Database\Eloquent\Factories\Factory;
 
@@ -30,6 +31,8 @@ class AiModelPriceFactory extends Factory
             'batch_cache_read_per_mtok' => 0,
             'batch_cache_write_per_mtok' => 0,
             'batch_reasoning_per_mtok' => 0,
+            'pricing_source' => PricingSource::Legacy,
+            'is_price_locked' => false,
         ];
     }
 }

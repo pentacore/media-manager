@@ -240,7 +240,7 @@ final readonly class MediaReplacementActions implements ActionExecutor
         throw_if($rawRelease === null, InvalidArgumentException::class, 'Selected release is no longer available.');
 
         if ($serviceType === ServiceType::Sonarr && ($selectedCandidate['requires_approval'] ?? false) === true) {
-            $rawRelease['shouldOverride'] = true;
+            $rawRelease = $this->withSonarrOverride($rawRelease, $freshTarget);
         }
 
         // Preserve the ORIGINAL monitored state across retries: if a prior run
@@ -559,6 +559,44 @@ final readonly class MediaReplacementActions implements ActionExecutor
         }
 
         return $locks;
+    }
+
+    /**
+     * Flag the release so Sonarr overrides its own rejection of the grab.
+     * Sonarr's DownloadRelease validates that `seriesId` and a non-empty
+     * `episodeIds` are present on the posted resource whenever `shouldOverride`
+     * is set, but its search response only carries the mapped* variants of
+     * those fields — posting the resource back untouched 500s with
+     * "Value can not be null. (Parameter 'release.SeriesId')". Prefer Sonarr's
+     * own mapping, fall back to the replacement target.
+     *
+     * @param  array<string, mixed>  $rawRelease
+     * @param  array<string, mixed>  $freshTarget
+     * @return array<string, mixed>
+     */
+    private function withSonarrOverride(array $rawRelease, array $freshTarget): array
+    {
+        $rawRelease['shouldOverride'] = true;
+
+        $mappedSeriesId = $rawRelease['mappedSeriesId'] ?? null;
+        $rawRelease['seriesId'] = is_int($mappedSeriesId) && $mappedSeriesId > 0
+            ? $mappedSeriesId
+            : (int) ($freshTarget['series_id'] ?? 0);
+
+        $episodeIds = is_array($rawRelease['episodeIds'] ?? null)
+            ? array_values(array_filter($rawRelease['episodeIds'], static fn (mixed $episodeId): bool => is_int($episodeId) && $episodeId > 0))
+            : [];
+
+        if ($episodeIds === [] && is_array($freshTarget['episode_ids'] ?? null)) {
+            $episodeIds = array_values(array_filter(
+                array_map(intval(...), $freshTarget['episode_ids']),
+                static fn (int $episodeId): bool => $episodeId > 0,
+            ));
+        }
+
+        $rawRelease['episodeIds'] = $episodeIds;
+
+        return $rawRelease;
     }
 
     /**

@@ -58,7 +58,8 @@ ENV APP_ENV=production \
     RUN_MIGRATIONS=false \
     APP_VERSION=${APP_VERSION}
 
-RUN apk add --no-cache \
+RUN apk add --no-cache --upgrade \
+        c-ares \
         bash \
         curl \
         ca-certificates \
