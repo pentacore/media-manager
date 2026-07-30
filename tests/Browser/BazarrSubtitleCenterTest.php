@@ -185,8 +185,17 @@ test('admin manages non-secret Bazarr settings', function (): void {
         ->assertSee('English')
         ->assertSee('OpenSubtitles')
         ->click('@show-bazarr-notification-hint')
+        ->assertSee('Apprise config URI')
         ->assertSee('Authenticated notification URL')
         ->assertSee('Existing notification providers are not changed.')
+        // Bazarr validates the value as an Apprise target, so the operator must
+        // be handed a json:// URI rather than the plain webhook URL.
+        ->assertScript(
+            'document.querySelector(\'[data-test="bazarr-apprise-config-uri"]\').value.startsWith("json")',
+        )
+        ->assertScript(
+            'document.querySelector(\'[data-test="bazarr-apprise-config-uri"]\').value.includes("X-Webhook-Token=notification-secret")',
+        )
         ->fill('@scheduler-interval', '12')
         ->click('@save-bazarr-settings')
         ->assertSee('Bazarr settings updated.')
@@ -283,6 +292,168 @@ test('member searches and requests an exact subtitle from the item drawer', func
         ->assertNoSmoke();
 
     expect(ActionRequest::query()->where('type', 'bazarr_download_exact')->count())->toBe(1);
+});
+
+/**
+ * @param  list<array<string, mixed>>  $subtitles
+ * @param  list<array{0: string, 1: string}>  $extraPaths
+ * @return array<string, mixed>
+ */
+function fakeBazarrLibraryMovie(array $subtitles, array $extraPaths): array
+{
+    $movie = [
+        'radarrId' => 801,
+        'title' => 'Example Movie',
+        'sceneName' => 'Example.Movie.2024.1080p',
+        'path' => '/media/movies/Example Movie (2024)',
+        'monitored' => true,
+        'missing_subtitles' => [],
+        'subtitles' => $subtitles,
+    ];
+    $paths = ['/movies' => ['get' => ['responses' => ['200' => ['description' => 'OK']]]]];
+
+    foreach ($extraPaths as [$path, $method]) {
+        $paths[$path][$method] = ['responses' => ['200' => ['description' => 'OK']]];
+    }
+
+    Http::fake(function (Request $request) use ($movie, $paths) {
+        return match (parse_url($request->url(), PHP_URL_PATH)) {
+            '/api/movies' => Http::response(['data' => [$movie], 'total' => 1]),
+            '/api/providers/movies' => Http::response(['data' => []]),
+            '/api/swagger.json' => Http::response([
+                'swagger' => '2.0',
+                'basePath' => '/api',
+                'info' => ['title' => 'Bazarr', 'version' => '1.6.0'],
+                'paths' => $paths,
+            ]),
+            default => Http::response(['data' => [], 'total' => 0]),
+        };
+    });
+
+    return $movie;
+}
+
+test('member syncs an existing subtitle track from the item drawer', function (): void {
+    $this->seed(ActionTypeConfigSeeder::class);
+    $bazarr = ServiceConnection::factory()->bazarr()->create([
+        'name' => 'Primary Bazarr',
+        'url' => 'http://bazarr.test',
+        'api_key' => 'bazarr-secret',
+    ]);
+    $radarr = ServiceConnection::factory()->radarr()->create();
+    BazarrServiceLink::factory()->create([
+        'bazarr_connection_id' => $bazarr->id,
+        'related_connection_id' => $radarr->id,
+        'role' => BazarrServiceRole::Radarr,
+    ]);
+    fakeBazarrLibraryMovie(
+        [[
+            'code3' => 'swe',
+            'path' => '/media/movies/Example Movie (2024)/Example.Movie.2024.swe.srt',
+            'forced' => false,
+            'hi' => false,
+        ]],
+        [['/subtitles', 'patch'], ['/movies/subtitles', 'delete'], ['/providers/movies', 'get']],
+    );
+
+    $this->actingAs(User::factory()->member()->create());
+
+    visit(route('bazarr.library', ['connection' => $bazarr->id], false))
+        ->assertSee('Example Movie')
+        ->click('@subtitle-item-movie-801')
+        ->assertSee('Current tracks')
+        ->assertSee('Example.Movie.2024.swe.srt')
+        ->click('@subtitle-track-0-sync')
+        ->click('@confirm-subtitle-operation')
+        ->assertSee('Subtitle operation added to the Action Queue.')
+        ->assertNoSmoke();
+
+    expect(ActionRequest::query()->where('type', 'bazarr_sync_subtitle')->count())->toBe(1);
+});
+
+test('track operations Bazarr cannot perform are disabled once capabilities load', function (): void {
+    $this->seed(ActionTypeConfigSeeder::class);
+    $bazarr = ServiceConnection::factory()->bazarr()->create([
+        'name' => 'Primary Bazarr',
+        'url' => 'http://bazarr.test',
+        'api_key' => 'bazarr-secret',
+    ]);
+    $radarr = ServiceConnection::factory()->radarr()->create();
+    BazarrServiceLink::factory()->create([
+        'bazarr_connection_id' => $bazarr->id,
+        'related_connection_id' => $radarr->id,
+        'role' => BazarrServiceRole::Radarr,
+    ]);
+    // This Bazarr exposes manual search but neither the subtitle patch endpoint
+    // that backs sync and translate nor the delete endpoint.
+    fakeBazarrLibraryMovie(
+        [[
+            'code3' => 'swe',
+            'path' => '/media/movies/Example Movie (2024)/Example.Movie.2024.swe.srt',
+            'forced' => false,
+            'hi' => false,
+        ]],
+        [['/providers/movies', 'get']],
+    );
+
+    $this->actingAs(User::factory()->member()->create());
+
+    visit(route('bazarr.library', ['connection' => $bazarr->id], false))
+        ->click('@subtitle-item-movie-801')
+        ->assertSee('Current tracks')
+        ->click('@subtitle-search')
+        ->assertScript('document.querySelector(\'[data-test="subtitle-track-0-sync"]\').disabled === true')
+        ->assertScript('document.querySelector(\'[data-test="subtitle-track-0-translate"]\').disabled === true')
+        ->assertScript('document.querySelector(\'[data-test="subtitle-track-0-remove-hi"]\').disabled === true')
+        ->assertScript('document.querySelector(\'[data-test="subtitle-track-0-delete"]\').disabled === true')
+        ->assertNoSmoke();
+
+    expect(ActionRequest::query()->count())->toBe(0);
+});
+
+test('admin filters escalations by status and by Bazarr connection', function (): void {
+    $first = ServiceConnection::factory()->bazarr()->create([
+        'name' => 'Primary Bazarr',
+        'url' => 'http://bazarr.test',
+        'api_key' => 'bazarr-secret',
+    ]);
+    $second = ServiceConnection::factory()->bazarr()->create([
+        'name' => 'Secondary Bazarr',
+        'url' => 'http://bazarr-two.test',
+        'api_key' => 'bazarr-two-secret',
+    ]);
+    SubtitleCase::factory()->create([
+        'bazarr_connection_id' => $first->id,
+        'status' => SubtitleCaseStatus::NeedsReview,
+        'evidence' => ['display_name' => 'Needs Review Case', 'missing_languages' => ['eng']],
+    ]);
+    SubtitleCase::factory()->create([
+        'bazarr_connection_id' => $first->id,
+        'status' => SubtitleCaseStatus::Resolved,
+        'evidence' => ['display_name' => 'Resolved Case', 'missing_languages' => ['eng']],
+    ]);
+    SubtitleCase::factory()->create([
+        'bazarr_connection_id' => $second->id,
+        'status' => SubtitleCaseStatus::NeedsReview,
+        'evidence' => ['display_name' => 'Second Connection Case', 'missing_languages' => ['eng']],
+    ]);
+
+    Http::fake(['*' => Http::response(['data' => [], 'total' => 0])]);
+
+    $this->actingAs(User::factory()->admin()->create());
+
+    visit(route('bazarr.escalations', ['connection' => $first->id], false))
+        ->assertSee('Needs Review Case')
+        ->assertSee('Resolved Case')
+        ->assertDontSee('Second Connection Case')
+        ->select('@escalation-status-filter', SubtitleCaseStatus::NeedsReview->value)
+        ->assertSee('Needs Review Case')
+        ->assertDontSee('Resolved Case')
+        ->assertNoSmoke()
+        ->select('@escalation-connection-filter', (string) $second->id)
+        ->assertSee('Second Connection Case')
+        ->assertDontSee('Needs Review Case')
+        ->assertNoSmoke();
 });
 
 test('member uploads a subtitle from the item drawer', function (): void {

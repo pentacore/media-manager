@@ -38,7 +38,7 @@ const emit = defineEmits<{
             No subtitle tracks are currently attached.
         </p>
         <div
-            v-for="track in tracks"
+            v-for="(track, index) in tracks"
             v-else
             :key="track.fingerprint"
             class="rounded-lg border border-border p-3"
@@ -60,6 +60,7 @@ const emit = defineEmits<{
                 <Button
                     size="sm"
                     variant="outline"
+                    :data-test="`subtitle-track-${index}-sync`"
                     :disabled="capabilities?.sync === false"
                     @click="
                         emit('operate', {
@@ -74,6 +75,7 @@ const emit = defineEmits<{
                 <Button
                     size="sm"
                     variant="outline"
+                    :data-test="`subtitle-track-${index}-translate`"
                     :disabled="capabilities?.translate === false"
                     @click="
                         emit('operate', {
@@ -88,6 +90,7 @@ const emit = defineEmits<{
                 <Button
                     size="sm"
                     variant="outline"
+                    :data-test="`subtitle-track-${index}-remove-hi`"
                     :disabled="capabilities?.sync === false"
                     @click="
                         emit('operate', {
@@ -103,6 +106,7 @@ const emit = defineEmits<{
                 <Button
                     size="sm"
                     variant="destructive"
+                    :data-test="`subtitle-track-${index}-delete`"
                     :disabled="capabilities?.delete === false"
                     @click="
                         emit('operate', {
