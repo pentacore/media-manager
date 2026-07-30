@@ -15,11 +15,56 @@ use App\Services\Actions\SharedMediaTargetLock;
 use App\Services\Bazarr\BazarrActions;
 use App\Services\Bazarr\BazarrCandidateFingerprint;
 use App\Services\Bazarr\BazarrMediaFingerprint;
+use App\Services\Bazarr\SubtitleCaseFingerprint;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\Request;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Queue;
+
+const LINKED_TARGET_IDS = [
+    'series_id' => 101,
+    'episode_id' => 701,
+    'episode_ids' => [701],
+    'episode_file_id' => 501,
+];
+
+/**
+ * Fakes for the live linked-target read BazarrActions performs before any write:
+ * the Bazarr episode plus the Sonarr series/episode/file reads that rebuild the
+ * case's file fingerprint. Tests that install their own fakes must spread these
+ * in, otherwise the revalidation cannot see the target and aborts.
+ *
+ * @param  array<string, mixed>  $episodeFileOverrides
+ * @return array<string, mixed>
+ */
+function linkedTargetLiveFakes(ServiceConnection $sonarr, array $episodeFileOverrides = []): array
+{
+    return [
+        'bazarr.test/api/episodes?*' => Http::response(['data' => [[
+            'sonarrSeriesId' => 101,
+            'sonarrEpisodeId' => 701,
+            'title' => 'Frieren S01E01',
+            'subtitles' => [],
+        ]]]),
+        $sonarr->url.'/api/v3/series/101' => Http::response([
+            'id' => 101,
+            'title' => 'Frieren',
+            'seriesType' => 'anime',
+        ]),
+        $sonarr->url.'/api/v3/episode?seriesId=101' => Http::response([
+            ['id' => 701, 'seriesId' => 101, 'episodeFileId' => 501],
+        ]),
+        $sonarr->url.'/api/v3/episodefile/501' => Http::response([
+            'id' => 501,
+            'size' => 734_003_200,
+            'dateAdded' => '2026-07-16T08:00:00Z',
+            'sceneName' => 'Group.Frieren.S01E01',
+            'path' => '/private/anime/Frieren S01E01.mkv',
+            ...$episodeFileOverrides,
+        ]),
+    ];
+}
 
 beforeEach(function (): void {
     config()->set('app.key', 'base64:'.base64_encode(str_repeat('b', 32)));
@@ -40,17 +85,36 @@ beforeEach(function (): void {
         'bazarr_connection_id' => $this->bazarr->id,
         'service_connection_id' => $this->sonarr->id,
         'media_type' => 'episode',
-        'target_ids' => ['series_id' => 101, 'episode_id' => 701],
+        'target_ids' => LINKED_TARGET_IDS,
         'file_fingerprint' => hash('sha256', 'episode-file-v1'),
         'status' => SubtitleCaseStatus::DownloadRequested,
     ]);
+    // Align the case with the target the shared live fakes describe, so the
+    // pre-write revalidation agrees with the recorded fingerprint. Computed
+    // directly rather than through a probe: Http::fake() appends stubs instead of
+    // replacing them, so a fixture registered here would outrank the divergent
+    // one a test installs later.
+    $this->subtitleCase->forceFill([
+        'target_ids' => LINKED_TARGET_IDS,
+        'file_fingerprint' => resolve(SubtitleCaseFingerprint::class)->file([
+            'service' => 'sonarr',
+            'service_connection_id' => $this->sonarr->id,
+            'file_ids' => [501],
+            'media_ids' => [701],
+            'size' => 734_003_200,
+            'date_added' => '2026-07-16T08:00:00Z',
+            'scene_name' => 'Group.Frieren.S01E01',
+        ]),
+    ])->save();
+    $this->subtitleCase->refresh();
+
     $this->payload = [
         'title' => 'Download Swedish subtitles',
         'bazarr_connection_id' => $this->bazarr->id,
         'service_connection_id' => $this->sonarr->id,
         'subtitle_case_id' => $this->subtitleCase->id,
         'media_type' => 'episode',
-        'target_ids' => ['series_id' => 101, 'episode_id' => 701],
+        'target_ids' => LINKED_TARGET_IDS,
         'target_fingerprint' => $this->subtitleCase->file_fingerprint,
         'language' => 'swe',
         'forced' => false,
@@ -91,14 +155,36 @@ test('aborts when the linked media file fingerprint changed after approval', fun
     Http::assertNothingSent();
 });
 
+test('aborts a linked action when the live installed file no longer matches the case', function (): void {
+    // The case row is an observation from probe time. If the episode file is
+    // replaced while the approval is pending and nothing has refreshed that row,
+    // the payload still agrees with it — so the live target has to be checked
+    // before a write, exactly as the unlinked path already does.
+    // The episode file was replaced upstream after approval; the case row still
+    // carries the fingerprint the payload was approved against.
+    Http::fake([
+        ...linkedTargetLiveFakes($this->sonarr, [
+            'sceneName' => 'Other.Group.Frieren.S01E01.REPACK',
+            'size' => 999_000_000,
+        ]),
+        'bazarr.test/api/episodes/subtitles' => Http::response([], 204),
+    ]);
+
+    $request = ActionRequest::factory()->create([
+        'status' => ActionRequestStatus::Approved,
+        'type' => 'bazarr_download_best',
+        'payload' => $this->payload,
+    ]);
+
+    expect(fn (): array => resolve(BazarrActions::class)->execute($request))
+        ->toThrow(InvalidArgumentException::class, 'changed after approval');
+
+    Http::assertNotSent(fn (Request $request): bool => $request->method() === 'PATCH');
+});
+
 test('aborts an exact download when the approved candidate disappeared', function (): void {
     Http::fake([
-        'bazarr.test/api/episodes?*' => Http::response(['data' => [[
-            'sonarrSeriesId' => 101,
-            'sonarrEpisodeId' => 701,
-            'path' => '/media/show/episode.mkv',
-            'subtitles' => [],
-        ]]]),
+        ...linkedTargetLiveFakes($this->sonarr),
         'bazarr.test/api/providers/episodes*' => Http::response(['data' => []]),
     ]);
     $request = ActionRequest::factory()->create([
@@ -112,18 +198,14 @@ test('aborts an exact download when the approved candidate disappeared', functio
     expect(fn (): array => resolve(BazarrActions::class)->execute($request))
         ->toThrow(InvalidArgumentException::class, 'no longer available');
 
-    Http::assertSentCount(1);
+    Http::assertSent(fn (Request $request): bool => $request->method() === 'GET'
+        && str_contains($request->url(), '/api/providers/episodes'));
     Http::assertNotSent(fn (Request $request): bool => $request->method() === 'POST');
 });
 
 test('does not execute the same approved action twice', function (): void {
     Http::fake([
-        'bazarr.test/api/episodes?*' => Http::response(['data' => [[
-            'sonarrSeriesId' => 101,
-            'sonarrEpisodeId' => 701,
-            'path' => '/media/show/episode.mkv',
-            'subtitles' => [],
-        ]]]),
+        ...linkedTargetLiveFakes($this->sonarr),
         'bazarr.test/api/episodes/subtitles' => Http::response('', 204),
     ]);
     $request = ActionRequest::factory()->create([
@@ -136,9 +218,11 @@ test('does not execute the same approved action twice', function (): void {
     new ExecuteActionRequest($request->fresh())->handle();
 
     expect($request->fresh()->status)->toBe(ActionRequestStatus::Completed);
-    Http::assertSentCount(2);
     Http::assertSent(fn (Request $request): bool => $request->method() === 'PATCH'
         && $request->url() === 'http://bazarr.test/api/episodes/subtitles');
+    expect(Http::recorded()->filter(
+        fn (array $record): bool => $record[0]->method() === 'PATCH',
+    ))->toHaveCount(1);
 });
 
 test('rejects execution while another worker owns the target lock', function (): void {
@@ -185,17 +269,24 @@ test('rejects execution while a media replacement holds the shared installed-fil
         $lock->release();
     }
 
+    // The Bazarr-specific lock is taken before the shared one, so losing the
+    // shared lock must not leave it held for its full TTL and turn a brief
+    // collision into two minutes of rejected subtitle actions.
+    $bazarrActionLock = Cache::lock(
+        sprintf('bazarr-action:%d:%s', $this->bazarr->id, $this->payload['target_fingerprint']),
+        120,
+    );
+
+    expect($bazarrActionLock->get())->toBeTrue();
+
+    $bazarrActionLock->release();
+
     Http::assertNothingSent();
 });
 
 test('executes one successful write and returns a bounded result', function (): void {
     Http::fake([
-        'bazarr.test/api/episodes?*' => Http::response(['data' => [[
-            'sonarrSeriesId' => 101,
-            'sonarrEpisodeId' => 701,
-            'path' => '/media/show/episode.mkv',
-            'subtitles' => [],
-        ]]]),
+        ...linkedTargetLiveFakes($this->sonarr),
         'bazarr.test/api/episodes/subtitles' => Http::response('', 204),
     ]);
     $request = ActionRequest::factory()->create([
@@ -209,17 +300,14 @@ test('executes one successful write and returns a bounded result', function (): 
         'media_id' => 701,
     ]);
 
-    Http::assertSentCount(2);
+    expect(Http::recorded()->filter(
+        fn (array $record): bool => $record[0]->method() === 'PATCH',
+    ))->toHaveCount(1);
 });
 
 test('keeps a definite upstream 4xx as a permanent rejection', function (): void {
     Http::fake([
-        'bazarr.test/api/episodes?*' => Http::response(['data' => [[
-            'sonarrSeriesId' => 101,
-            'sonarrEpisodeId' => 701,
-            'path' => '/media/show/episode.mkv',
-            'subtitles' => [],
-        ]]]),
+        ...linkedTargetLiveFakes($this->sonarr),
         'bazarr.test/api/episodes/subtitles' => Http::response(['message' => 'invalid'], 409),
     ]);
     $request = ActionRequest::factory()->create([
@@ -235,7 +323,9 @@ test('keeps a definite upstream 4xx as a permanent rejection', function (): void
             'reason' => 'execution_failed',
             'indeterminate' => false,
         ]);
-    Http::assertSentCount(2);
+    expect(Http::recorded()->filter(
+        fn (array $record): bool => $record[0]->method() === 'PATCH',
+    ))->toHaveCount(1);
 });
 
 test('marks a 5xx exact download indeterminate without issuing a second POST or Laravel retry', function (): void {
@@ -253,9 +343,12 @@ test('marks a 5xx exact download indeterminate without issuing a second POST or 
         'media_id' => 701,
         ...$candidate,
     ]);
-    Http::fake(fn (Request $request) => $request->method() === 'GET'
-        ? Http::response(['data' => [$candidate]])
-        : Http::response(['message' => 'unavailable'], 503));
+    Http::fake([
+        ...linkedTargetLiveFakes($this->sonarr),
+        '*' => fn (Request $request) => $request->method() === 'GET'
+            ? Http::response(['data' => [$candidate]])
+            : Http::response(['message' => 'unavailable'], 503),
+    ]);
     Queue::fake();
     $request = ActionRequest::factory()->create([
         'status' => ActionRequestStatus::Approved,
@@ -282,7 +375,6 @@ test('marks a 5xx exact download indeterminate without issuing a second POST or 
         fn (ReconcileSubtitleCase $reconcileSubtitleCase): bool => $reconcileSubtitleCase->subtitleCaseId === $this->subtitleCase->id,
     );
 
-    Http::assertSentCount(2);
     Http::assertSent(fn (Request $request): bool => $request->method() === 'POST'
         && $request->url() === 'http://bazarr.test/api/providers/episodes');
     expect(Http::recorded()->filter(
@@ -292,18 +384,21 @@ test('marks a 5xx exact download indeterminate without issuing a second POST or 
 
 test('marks connection loss after a write indeterminate without retrying the write', function (): void {
     $writeAttempts = 0;
-    Http::fake(function (Request $request) use (&$writeAttempts) {
-        if ($request->method() === 'GET') {
-            return Http::response(['data' => [[
-                'sonarrSeriesId' => 101,
-                'sonarrEpisodeId' => 701,
-            ]]]);
-        }
+    Http::fake([
+        ...linkedTargetLiveFakes($this->sonarr),
+        '*' => function (Request $request) use (&$writeAttempts) {
+            if ($request->method() === 'GET') {
+                return Http::response(['data' => [[
+                    'sonarrSeriesId' => 101,
+                    'sonarrEpisodeId' => 701,
+                ]]]);
+            }
 
-        $writeAttempts++;
+            $writeAttempts++;
 
-        throw new ConnectionException('connection lost after submit');
-    });
+            throw new ConnectionException('connection lost after submit');
+        },
+    ]);
     Queue::fake();
     $request = ActionRequest::factory()->create([
         'status' => ActionRequestStatus::Approved,

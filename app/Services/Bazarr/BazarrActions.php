@@ -61,6 +61,7 @@ final readonly class BazarrActions implements ActionExecutor
         private BazarrSubtitleFingerprint $bazarrSubtitleFingerprint,
         private BazarrMediaFingerprint $bazarrMediaFingerprint,
         private SubtitleCaseLifecycle $subtitleCaseLifecycle,
+        private SubtitleInventoryService $subtitleInventoryService,
     ) {}
 
     /**
@@ -86,18 +87,24 @@ final readonly class BazarrActions implements ActionExecutor
 
         throw_unless($lock->get(), RuntimeException::class, 'This Bazarr target is already being modified.');
 
-        // Shared installed-file lock: excludes a concurrent media replacement
-        // for the same file. Keyed on the pinned managing arr connection plus
-        // the stable installed-file identity so both executors compute the same
-        // key. bazarr_run_task has no media target and needs no shared lock.
-        $sharedLock = $this->sharedTargetLock($payload);
-        throw_unless(
-            ! $sharedLock instanceof Lock || $sharedLock->get(),
-            RuntimeException::class,
-            'This installed media file is locked by another operation.',
-        );
+        $sharedLock = null;
 
         try {
+            // Shared installed-file lock: excludes a concurrent media replacement
+            // for the same file. Keyed on the pinned managing arr connection plus
+            // the stable installed-file identity so both executors compute the same
+            // key. bazarr_run_task has no media target and needs no shared lock.
+            // Claimed inside the try so losing it still releases the lock above,
+            // rather than holding it for the rest of its TTL. It is only assigned
+            // once acquired, so the finally never releases another owner's lock.
+            $candidateSharedLock = $this->sharedTargetLock($payload);
+            throw_unless(
+                ! $candidateSharedLock instanceof Lock || $candidateSharedLock->get(),
+                RuntimeException::class,
+                'This installed media file is locked by another operation.',
+            );
+            $sharedLock = $candidateSharedLock;
+
             $this->revalidateTarget($payload, $serviceConnection);
             $bazarrClient = new BazarrClient($serviceConnection);
 
@@ -243,6 +250,24 @@ final readonly class BazarrActions implements ActionExecutor
             'The installed media file changed after approval.',
         );
 
+        // The case row above is an observation from probe time and nothing
+        // guarantees it was refreshed before a queued approval executes, so the
+        // live target is re-read — with the Bazarr cache busted first — exactly
+        // as the unlinked path does. A manual upload creates a linked case, so
+        // without this a file replaced while the approval waited would still be
+        // written to. An unreadable target aborts; transient upstream errors
+        // surface as exceptions and stay retryable.
+        new BazarrCache($bazarr)->bustAll();
+        $liveCandidate = $this->subtitleInventoryService->caseCandidateFor($subtitleCase);
+        $liveFingerprint = is_array($liveCandidate) && is_string($liveCandidate['file_fingerprint'] ?? null)
+            ? $liveCandidate['file_fingerprint']
+            : null;
+
+        throw_unless(
+            $liveFingerprint !== null && hash_equals($liveFingerprint, $subtitleCase->file_fingerprint),
+            InvalidArgumentException::class,
+            'The installed media file changed after approval.',
+        );
     }
 
     /**
@@ -641,9 +666,31 @@ final readonly class BazarrActions implements ActionExecutor
         $targetIds = $payload['target_ids'] ?? null;
         throw_unless(is_array($targetIds), InvalidArgumentException::class, 'Bazarr target IDs must be an object.');
         $allowed = $mediaType === 'episode'
-            ? ['series_id', 'episode_id', 'episode_file_id']
+            ? ['series_id', 'episode_id', 'episode_file_id', 'episode_ids']
             : ['radarr_id', 'movie_file_id'];
         throw_if(array_diff(array_keys($targetIds), $allowed) !== [], InvalidArgumentException::class, 'Bazarr target IDs contain unexpected fields.');
+
+        // A subtitle file shared across episodes records the whole list, so
+        // episode_ids is a list rather than one id. It is validated on its own and
+        // kept out of the scalar map callers index by name.
+        $episodeIds = $targetIds['episode_ids'] ?? null;
+        unset($targetIds['episode_ids']);
+
+        if ($episodeIds !== null) {
+            throw_unless(
+                is_array($episodeIds) && $episodeIds !== [] && array_is_list($episodeIds),
+                InvalidArgumentException::class,
+                'Bazarr shared episode IDs must be a non-empty list.',
+            );
+
+            foreach ($episodeIds as $episodeId) {
+                throw_unless(
+                    is_int($episodeId) && $episodeId > 0,
+                    InvalidArgumentException::class,
+                    'Bazarr shared episode IDs must be positive integers.',
+                );
+            }
+        }
 
         foreach (array_keys($targetIds) as $key) {
             $this->requiredPositiveInteger($targetIds, $key);

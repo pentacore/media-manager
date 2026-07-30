@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Services\Bazarr;
 
+use App\Enums\ActionRequestStatus;
 use App\Enums\SubtitleCaseStatus;
 use App\Models\ActionRequest;
 use App\Models\SubtitleCase;
@@ -13,6 +14,16 @@ use InvalidArgumentException;
 
 final readonly class BazarrDownloadRequestCreator
 {
+    /**
+     * Statuses in which a recorded download request is still expected to act on
+     * the case, and may therefore be reused instead of queueing another.
+     */
+    private const array IN_FLIGHT_STATUSES = [
+        ActionRequestStatus::Pending,
+        ActionRequestStatus::Approved,
+        ActionRequestStatus::Executing,
+    ];
+
     public function __construct(
         private ActionOrchestrator $actionOrchestrator,
         private SubtitleCaseLifecycle $subtitleCaseLifecycle,
@@ -43,7 +54,21 @@ final readonly class BazarrDownloadRequestCreator
             $downloadRequests = $this->downloadRequests($lockedCase);
 
             if (isset($downloadRequests[$requestKey])) {
-                return ActionRequest::query()->find($downloadRequests[$requestKey]);
+                $recorded = ActionRequest::query()->find($downloadRequests[$requestKey]);
+
+                // Only an in-flight request may be handed back. The map survives
+                // reconciliation, so returning a request that already ran would
+                // report a fresh download to the probe: the attempt would score
+                // Succeeded, no empty probe would accumulate, and the case could
+                // never reach the replacement escalation threshold. A recorded
+                // attempt that has finished yields null instead — the requirement
+                // was already tried, and re-queueing it would only repeat a
+                // download that did not satisfy the case.
+                if ($recorded instanceof ActionRequest) {
+                    return in_array($recorded->status, self::IN_FLIGHT_STATUSES, true)
+                        ? $recorded
+                        : null;
+                }
             }
 
             // Additional languages may be requested while the case already sits in

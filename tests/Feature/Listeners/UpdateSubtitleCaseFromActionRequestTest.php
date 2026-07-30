@@ -6,11 +6,13 @@ use App\Enums\ActionRequestStatus;
 use App\Enums\SubtitleCaseStatus;
 use App\Events\ActionRequestStatusChanged;
 use App\Events\SubtitleCaseChanged;
+use App\Jobs\ReconcileSubtitleCase;
 use App\Listeners\UpdateSubtitleCaseFromActionRequest;
 use App\Models\ActionRequest;
 use App\Models\SubtitleCase;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Support\Facades\Event;
+use Illuminate\Support\Facades\Queue;
 
 /**
  * @param  array<string, mixed>  $actionOverrides
@@ -44,6 +46,10 @@ test('the Action Request correlation listener is discovered', function (): void 
 });
 
 test('a completed Bazarr download remains requested until inventory confirms the subtitle', function (): void {
+    // The listener now schedules targeted reconciliation on completion; the job
+    // itself is covered by its own suite, and under the sync queue it would
+    // probe Bazarr for real here.
+    Queue::fake([ReconcileSubtitleCase::class]);
     [$subtitleCase, $actionRequest] = actionCorrelatedSubtitleCase(
         SubtitleCaseStatus::DownloadRequested,
         'bazarr_download_best',
@@ -58,6 +64,74 @@ test('a completed Bazarr download remains requested until inventory confirms the
     );
 
     expect($subtitleCase->fresh()->status)->toBe(SubtitleCaseStatus::DownloadRequested);
+});
+
+test('a completed Bazarr download schedules targeted reconciliation for its case', function (): void {
+    Queue::fake([ReconcileSubtitleCase::class]);
+    [$subtitleCase, $actionRequest] = actionCorrelatedSubtitleCase(
+        SubtitleCaseStatus::DownloadRequested,
+        'bazarr_download_best',
+        [
+            'status' => ActionRequestStatus::Completed,
+            'result' => ['success' => true],
+        ],
+    );
+
+    resolve(UpdateSubtitleCaseFromActionRequest::class)->handle(
+        new ActionRequestStatusChanged($actionRequest),
+    );
+
+    // The case still waits for evidence rather than trusting the download, but a
+    // targeted reconciliation has to run: the bulk sweep only checks the
+    // download outcome for forCase() jobs, and a resolved target drops out of
+    // the candidate feed entirely.
+    expect($subtitleCase->fresh()->status)->toBe(SubtitleCaseStatus::DownloadRequested);
+
+    Queue::assertPushed(
+        ReconcileSubtitleCase::class,
+        fn (ReconcileSubtitleCase $job): bool => $job->subtitleCaseId === $subtitleCase->id
+            && $job->delay !== null,
+    );
+});
+
+test('a failed per-language download request correlates through the evidence map', function (): void {
+    $subtitleCase = SubtitleCase::factory()->create([
+        'status' => SubtitleCaseStatus::DownloadRequested,
+        'required_languages' => [
+            ['code' => 'eng', 'forced' => false, 'hearing_impaired' => false],
+            ['code' => 'swe', 'forced' => false, 'hearing_impaired' => false],
+        ],
+    ]);
+    $englishRequest = ActionRequest::factory()->create([
+        'type' => 'bazarr_download_best',
+        'status' => ActionRequestStatus::Failed,
+        'payload' => ['subtitle_case_id' => $subtitleCase->id, 'language' => 'eng'],
+        'result' => ['success' => false, 'reason' => 'execution_failed'],
+    ]);
+    $swedishRequest = ActionRequest::factory()->create([
+        'type' => 'bazarr_download_best',
+        'status' => ActionRequestStatus::Pending,
+        'payload' => ['subtitle_case_id' => $subtitleCase->id, 'language' => 'swe'],
+    ]);
+    // Swedish was requested last, so the scalar column points at it while the
+    // evidence map still records the English request.
+    $subtitleCase->forceFill([
+        'download_action_request_id' => $swedishRequest->id,
+        'evidence' => [
+            ...$subtitleCase->evidence,
+            'download_requests' => [
+                'eng|0|0' => $englishRequest->id,
+                'swe|0|0' => $swedishRequest->id,
+            ],
+        ],
+    ])->save();
+
+    resolve(UpdateSubtitleCaseFromActionRequest::class)->handle(
+        new ActionRequestStatusChanged($englishRequest),
+    );
+
+    expect($subtitleCase->fresh()->status)->toBe(SubtitleCaseStatus::NeedsReview)
+        ->and($subtitleCase->fresh()->failure_reason)->toContain('eng');
 });
 
 test('a failed or indeterminate Bazarr download moves the case to review only once', function (

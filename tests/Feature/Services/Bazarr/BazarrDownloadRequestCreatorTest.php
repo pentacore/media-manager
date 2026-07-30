@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use App\Enums\ActionRequestStatus;
 use App\Enums\SubtitleCaseStatus;
 use App\Models\ActionRequest;
 use App\Models\ActionTypeConfig;
@@ -65,6 +66,61 @@ test('repeated and stale workers cannot create duplicate requests', function ():
     expect($second?->is($first))->toBeTrue()
         ->and(ActionRequest::query()->where('type', 'bazarr_download_best')->count())->toBe(1);
 });
+
+test('a terminal historical request is not reported as a newly queued download', function (
+    ActionRequestStatus $actionRequestStatus,
+): void {
+    // The download_requests map survives reconciliation, so a request that has
+    // already run must not be handed back as if it were freshly queued: the
+    // probe would score Succeeded, no empty probe would accumulate, and the
+    // replacement escalation threshold could never be reached.
+    $historical = ActionRequest::factory()->create([
+        'type' => 'bazarr_download_best',
+        'status' => $actionRequestStatus,
+        'payload' => ['subtitle_case_id' => $this->case->id, 'language' => 'eng'],
+    ]);
+    $this->case->forceFill([
+        'evidence' => [
+            ...$this->case->evidence,
+            'download_requests' => ['eng|0|0' => $historical->id],
+        ],
+    ])->save();
+
+    $request = resolve(BazarrDownloadRequestCreator::class)->create($this->case->fresh(), $this->requirement);
+
+    expect($request)->toBeNull()
+        ->and($this->case->fresh()->status)->toBe(SubtitleCaseStatus::BazarrSearching)
+        ->and(ActionRequest::query()->where('type', 'bazarr_download_best')->count())->toBe(1);
+})->with([
+    'completed' => [ActionRequestStatus::Completed],
+    'failed' => [ActionRequestStatus::Failed],
+    'rejected' => [ActionRequestStatus::Rejected],
+]);
+
+test('an in-flight historical request is still reused', function (
+    ActionRequestStatus $actionRequestStatus,
+): void {
+    $historical = ActionRequest::factory()->create([
+        'type' => 'bazarr_download_best',
+        'status' => $actionRequestStatus,
+        'payload' => ['subtitle_case_id' => $this->case->id, 'language' => 'eng'],
+    ]);
+    $this->case->forceFill([
+        'evidence' => [
+            ...$this->case->evidence,
+            'download_requests' => ['eng|0|0' => $historical->id],
+        ],
+    ])->save();
+
+    $request = resolve(BazarrDownloadRequestCreator::class)->create($this->case->fresh(), $this->requirement);
+
+    expect($request?->id)->toBe($historical->id)
+        ->and(ActionRequest::query()->where('type', 'bazarr_download_best')->count())->toBe(1);
+})->with([
+    'pending' => [ActionRequestStatus::Pending],
+    'approved' => [ActionRequestStatus::Approved],
+    'executing' => [ActionRequestStatus::Executing],
+]);
 
 test('a disabled action type creates no request and leaves the case searching', function (): void {
     ActionTypeConfig::query()->where('type', 'bazarr_download_best')->update(['is_enabled' => false]);
