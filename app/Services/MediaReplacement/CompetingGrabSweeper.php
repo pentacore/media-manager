@@ -186,26 +186,40 @@ final readonly class CompetingGrabSweeper
         return array_values($episodeIds);
     }
 
+    /**
+     * Announcing a removal must never change or truncate the sweep itself.
+     * A failing notification backend would otherwise propagate to sweep()'s
+     * catch, which would report zero removals despite rows having really been
+     * removed and would skip every remaining queue record.
+     */
     private function notify(
         ServiceConnection $serviceConnection,
         MediaReplacementAttempt $mediaReplacementAttempt,
         string $removedTitle,
     ): void {
-        $admins = User::query()->where('role', UserRole::Admin)->get();
+        try {
+            $admins = User::query()->where('role', UserRole::Admin)->get();
 
-        if ($admins->isEmpty()) {
-            return;
+            if ($admins->isEmpty()) {
+                return;
+            }
+
+            Notification::send($admins, new MediaReplacementStatusChanged(
+                service: $serviceConnection->type->value,
+                title: (string) ($mediaReplacementAttempt->candidate['title'] ?? 'Media replacement'),
+                message: sprintf(
+                    'Removed a competing download the service started for this target: "%s".',
+                    $removedTitle,
+                ),
+                level: 'warning',
+            ));
+        } catch (Throwable $throwable) {
+            Log::warning('Could not notify admins about a removed competing grab.', [
+                'attempt_id' => $mediaReplacementAttempt->id,
+                'queue_item_title' => $removedTitle,
+                'exception' => $throwable::class,
+            ]);
         }
-
-        Notification::send($admins, new MediaReplacementStatusChanged(
-            service: $serviceConnection->type->value,
-            title: (string) ($mediaReplacementAttempt->candidate['title'] ?? 'Media replacement'),
-            message: sprintf(
-                'Removed a competing download the service started for this target: "%s".',
-                $removedTitle,
-            ),
-            level: 'warning',
-        ));
     }
 
     private function normalizeTitle(string $title): string

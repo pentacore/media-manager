@@ -8,6 +8,7 @@ use App\Models\ServiceConnection;
 use App\Models\User;
 use App\Notifications\MediaReplacementStatusChanged;
 use App\Services\MediaReplacement\CompetingGrabSweeper;
+use Illuminate\Contracts\Notifications\Dispatcher;
 use Illuminate\Http\Client\Request;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
@@ -145,6 +146,33 @@ test('it notifies admins about each competing grab it removed', function (): voi
             && $notification->title === 'Trusted.Anime.S01E01.CR'
             && str_contains($notification->message, 'Random.Anime.S01E01.OTHER'),
     );
+});
+
+test('a notification failure neither truncates the sweep nor distorts the removal count', function (): void {
+    User::factory()->admin()->create();
+    $mediaReplacementAttempt = sweeperAttempt($this->connection->id);
+
+    fakeSweeperQueue([
+        ['id' => 907, 'seriesId' => 42, 'episodeId' => 101, 'downloadId' => 'DL-OTHER-A', 'title' => 'Random.Anime.S01E01.A'],
+        ['id' => 908, 'seriesId' => 42, 'episodeId' => 101, 'downloadId' => 'DL-OTHER-B', 'title' => 'Random.Anime.S01E01.B'],
+    ]);
+
+    // Notification::fake() never throws, so stand in a dispatcher whose every
+    // send fails the way a broken mailer or notifications table would.
+    $dispatcher = Mockery::mock(Dispatcher::class);
+    $dispatcher->shouldReceive('send')->twice()->andThrow(new RuntimeException('notification backend unavailable'));
+    Notification::swap($dispatcher);
+
+    $removed = resolve(CompetingGrabSweeper::class)->sweep($this->connection, $mediaReplacementAttempt);
+
+    // Both rows must still be removed: the first failure must not abort the
+    // loop, and the count must reflect the queue, not the notifications.
+    expect($removed)->toBe(2);
+
+    Http::assertSent(fn (Request $request): bool => $request->method() === 'DELETE'
+        && str_contains($request->url(), '/api/v3/queue/907'));
+    Http::assertSent(fn (Request $request): bool => $request->method() === 'DELETE'
+        && str_contains($request->url(), '/api/v3/queue/908'));
 });
 
 test('a queue read failure is swallowed rather than aborting the caller', function (): void {
