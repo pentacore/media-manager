@@ -12,4 +12,15 @@ export type NavItem = {
     icon?: LucideIcon;
     isActive?: boolean;
     badge?: () => number;
+    /**
+     * Items that exist only because their hotkey is unreachable on touch.
+     * The sidebar renders them when `isMobile`; the command palette always
+     * drops them.
+     */
+    mobileOnly?: boolean;
+};
+
+export type NavGroup = {
+    label: string;
+    items: NavItem[];
 };
