@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { Head } from '@inertiajs/vue3';
+import { Head, router } from '@inertiajs/vue3';
 import { ref } from 'vue';
 import MissingController from '@/actions/App/Http/Controllers/Bazarr/MissingController';
 import OverviewController from '@/actions/App/Http/Controllers/Bazarr/OverviewController';
+import InventoryPager from '@/components/bazarr/InventoryPager.vue';
 import SubtitleItemDrawer from '@/components/bazarr/SubtitleItemDrawer.vue';
 import SubtitleTabs from '@/components/bazarr/SubtitleTabs.vue';
 import { Button } from '@/components/ui/button';
@@ -20,14 +21,52 @@ interface Inventory {
     errors: string[];
 }
 
-defineProps<{
+const props = defineProps<{
     connections: { id: number; name: string }[];
     selected_connection_id: number | null;
     requires_connection_selection: boolean;
     missing: Inventory | null;
+    filters: {
+        page: number;
+        per_page: number;
+        media_type?: string | null;
+        scope?: string | null;
+    };
 }>();
 
 const selectedItem = ref<SubtitleItem | null>(null);
+
+function navigate(overrides: Record<string, string | number | null>): void {
+    const query: Record<string, string | number> = {};
+    const next = {
+        connection: props.selected_connection_id,
+        media_type: props.filters.media_type ?? null,
+        scope: props.filters.scope ?? null,
+        page: props.filters.page,
+        ...overrides,
+    };
+
+    for (const [key, value] of Object.entries(next)) {
+        if (
+            value !== null &&
+            value !== '' &&
+            !(key === 'page' && value === 1)
+        ) {
+            query[key] = value;
+        }
+    }
+
+    router.get(MissingController.url(), query, {
+        preserveState: true,
+        preserveScroll: true,
+        replace: true,
+    });
+}
+
+function updateFilter(key: 'media_type' | 'scope', event: Event): void {
+    // Any filter change invalidates the current offset.
+    navigate({ [key]: (event.target as HTMLSelectElement).value, page: 1 });
+}
 
 defineOptions({
     layout: {
@@ -49,12 +88,47 @@ defineOptions({
             :selected-connection-id="selected_connection_id"
         />
 
+        <section
+            v-if="missing"
+            class="flex flex-wrap items-end gap-4 rounded-xl border border-border bg-card p-4"
+            data-test="missing-filters"
+        >
+            <label class="text-sm font-medium">
+                Media type
+                <select
+                    class="mt-1 h-9 min-w-40 rounded-md border border-input bg-background px-3 capitalize"
+                    data-test="missing-media-type-filter"
+                    :value="filters.media_type ?? ''"
+                    @change="updateFilter('media_type', $event)"
+                >
+                    <option value="">All media</option>
+                    <option value="episode">Episode</option>
+                    <option value="movie">Movie</option>
+                </select>
+            </label>
+            <label class="text-sm font-medium">
+                Scope
+                <select
+                    class="mt-1 h-9 min-w-40 rounded-md border border-input bg-background px-3 capitalize"
+                    data-test="missing-scope-filter"
+                    :value="filters.scope ?? ''"
+                    @change="updateFilter('scope', $event)"
+                >
+                    <option value="">All scopes</option>
+                    <option value="anime">Anime</option>
+                    <option value="tv">TV</option>
+                    <option value="movie">Movie</option>
+                </select>
+            </label>
+        </section>
+
         <div
             v-if="requires_connection_selection"
             class="rounded-lg border border-warning/40 bg-warning/10 p-4 text-sm"
         >
             Select a Bazarr connection to view wanted subtitles.
         </div>
+
         <div
             v-else-if="missing?.partial"
             class="rounded-lg border border-warning/40 bg-warning/10 p-4 text-sm"
@@ -105,6 +179,14 @@ defineOptions({
                 </div>
             </div>
         </div>
+
+        <InventoryPager
+            v-if="missing"
+            :page="missing.page"
+            :per-page="missing.per_page"
+            :total="missing.total"
+            @change="(page) => navigate({ page })"
+        />
 
         <SubtitleItemDrawer
             :open="selectedItem !== null"

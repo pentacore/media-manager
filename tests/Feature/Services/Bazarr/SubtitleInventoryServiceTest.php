@@ -474,7 +474,7 @@ test('case candidates scan the catalog once per cycle across pages', function ()
     $subtitleInventoryService->caseCandidates($bazarr, page: 2, perPage: 2);
 
     $catalogReads = Http::recorded()->filter(function (array $record): bool {
-        $path = parse_url($record[0]->url(), PHP_URL_PATH);
+        $path = parse_url((string) $record[0]->url(), PHP_URL_PATH);
 
         return in_array($path, ['/api/movies', '/api/v3/series'], true);
     })->count();
@@ -719,7 +719,7 @@ test('history reaches movie rows on later pages and scopes reads to a requested 
         ->and($secondPage['data'][0]['media_type'])->toBe('movie');
 
     $movieHistoryReads = fn (): int => Http::recorded()->filter(
-        fn (array $record): bool => parse_url($record[0]->url(), PHP_URL_PATH) === '/api/movies/history',
+        fn (array $record): bool => parse_url((string) $record[0]->url(), PHP_URL_PATH) === '/api/movies/history',
     )->count();
     $readsBeforeFilter = $movieHistoryReads();
 

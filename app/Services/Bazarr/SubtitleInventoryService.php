@@ -43,13 +43,13 @@ final class SubtitleInventoryService
     private array $discoveryFeeds = [];
 
     public function __construct(
-        private ServiceClientFactory $serviceClientFactory,
-        private MediaReplacementSettings $mediaReplacementSettings,
-        private LanguageNormalizer $languageNormalizer,
-        private SonarrMediaScopeResolver $sonarrMediaScopeResolver,
-        private BazarrMediaFingerprint $bazarrMediaFingerprint,
-        private BazarrSubtitleFingerprint $bazarrSubtitleFingerprint,
-        private SubtitleCaseFingerprint $subtitleCaseFingerprint,
+        private readonly ServiceClientFactory $serviceClientFactory,
+        private readonly MediaReplacementSettings $mediaReplacementSettings,
+        private readonly LanguageNormalizer $languageNormalizer,
+        private readonly SonarrMediaScopeResolver $sonarrMediaScopeResolver,
+        private readonly BazarrMediaFingerprint $bazarrMediaFingerprint,
+        private readonly BazarrSubtitleFingerprint $bazarrSubtitleFingerprint,
+        private readonly SubtitleCaseFingerprint $subtitleCaseFingerprint,
     ) {}
 
     /**
@@ -1263,6 +1263,7 @@ final class SubtitleInventoryService
 
     /**
      * @param  array<string, mixed>  $filters
+     * @param  array<int, array<string, mixed>>  $items
      */
     private function applyFilters(array $items, array $filters): array
     {

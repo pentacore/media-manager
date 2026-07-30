@@ -331,6 +331,111 @@ function fakeBazarrLibraryMovie(array $subtitles, array $extraPaths): array
     return $movie;
 }
 
+test('the missing list pages through wanted rows and filters by media type', function (): void {
+    $bazarr = ServiceConnection::factory()->bazarr()->create([
+        'name' => 'Primary Bazarr',
+        'url' => 'http://bazarr.test',
+        'api_key' => 'bazarr-secret',
+    ]);
+    $radarr = ServiceConnection::factory()->radarr()->create();
+    BazarrServiceLink::factory()->create([
+        'bazarr_connection_id' => $bazarr->id,
+        'related_connection_id' => $radarr->id,
+        'role' => BazarrServiceRole::Radarr,
+    ]);
+    $movies = array_map(static fn (int $index): array => [
+        'radarrId' => 800 + $index,
+        'title' => 'Example Movie '.$index,
+        'sceneName' => 'Example.Movie.'.$index,
+        'monitored' => true,
+        'missing_subtitles' => [[
+            'name' => 'Swedish',
+            'code2' => 'sv',
+            'code3' => 'swe',
+            'forced' => false,
+            'hi' => false,
+        ]],
+        'subtitles' => [],
+    ], range(1, 30));
+
+    fakeServiceHttp(function (Request $request) use ($movies) {
+        if (parse_url($request->url(), PHP_URL_PATH) !== '/api/movies/wanted') {
+            return Http::response(['data' => [], 'total' => 0]);
+        }
+
+        parse_str((string) parse_url($request->url(), PHP_URL_QUERY), $query);
+
+        return Http::response([
+            'data' => array_slice($movies, (int) ($query['start'] ?? 0), (int) ($query['length'] ?? 25)),
+            'total' => count($movies),
+        ]);
+    });
+
+    $this->actingAs(User::factory()->member()->create());
+
+    // Thirty wanted rows over a 25-row page: without navigation the last five
+    // were unreachable from the Subtitle Center.
+    visit(route('bazarr.missing', ['connection' => $bazarr->id], false))
+        ->assertSee('Example Movie 1')
+        ->assertDontSee('Example Movie 30')
+        ->assertSee('Showing 1–25 of 30')
+        ->click('@inventory-pager-next')
+        ->assertSee('Example Movie 30')
+        ->assertDontSee('Example Movie 1')
+        ->assertSee('Showing 26–30 of 30')
+        ->assertNoSmoke();
+
+});
+
+/**
+ * A separate test rather than a second visit() above: a fresh navigation after
+ * the pager interaction races the visit it replaces, so the assertions can land
+ * on the page the browser has not left yet.
+ */
+test('the missing list applies a media type filter from the address', function (): void {
+    $bazarr = ServiceConnection::factory()->bazarr()->create([
+        'name' => 'Primary Bazarr',
+        'url' => 'http://bazarr.test',
+        'api_key' => 'bazarr-secret',
+    ]);
+    $radarr = ServiceConnection::factory()->radarr()->create();
+    BazarrServiceLink::factory()->create([
+        'bazarr_connection_id' => $bazarr->id,
+        'related_connection_id' => $radarr->id,
+        'role' => BazarrServiceRole::Radarr,
+    ]);
+
+    fakeServiceHttp(fn (Request $request) => Http::response(
+        parse_url($request->url(), PHP_URL_PATH) === '/api/movies/wanted'
+            ? ['data' => [[
+                'radarrId' => 801,
+                'title' => 'Example Movie 1',
+                'sceneName' => 'Example.Movie.1',
+                'monitored' => true,
+                'missing_subtitles' => [[
+                    'name' => 'Swedish',
+                    'code2' => 'sv',
+                    'code3' => 'swe',
+                    'forced' => false,
+                    'hi' => false,
+                ]],
+                'subtitles' => [],
+            ]], 'total' => 1]
+            : ['data' => [], 'total' => 0],
+    ));
+
+    $this->actingAs(User::factory()->member()->create());
+
+    // Only movies are mapped, so filtering to episodes empties the list.
+    // Asserting the empty state first also waits for hydration, which is what
+    // puts the active filter on the select.
+    visit(route('bazarr.missing', ['connection' => $bazarr->id, 'media_type' => 'episode'], false))
+        ->assertSee('Nothing is currently missing')
+        ->assertDontSee('Example Movie 1')
+        ->assertScript('document.querySelector(\'[data-test="missing-media-type-filter"]\').value === "episode"')
+        ->assertNoSmoke();
+});
+
 test('member syncs an existing subtitle track from the item drawer', function (): void {
     $this->seed(ActionTypeConfigSeeder::class);
     $bazarr = ServiceConnection::factory()->bazarr()->create([

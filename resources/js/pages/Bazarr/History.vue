@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { Deferred, Head } from '@inertiajs/vue3';
+import { Deferred, Head, router } from '@inertiajs/vue3';
 import HistoryController from '@/actions/App/Http/Controllers/Bazarr/HistoryController';
 import OverviewController from '@/actions/App/Http/Controllers/Bazarr/OverviewController';
+import InventoryPager from '@/components/bazarr/InventoryPager.vue';
 import SubtitleTabs from '@/components/bazarr/SubtitleTabs.vue';
 import { dashboard } from '@/routes';
 
@@ -18,17 +19,64 @@ interface HistoryItem {
 
 interface HistoryInventory {
     data: HistoryItem[];
+    page: number;
+    per_page: number;
     total: number;
     partial: boolean;
     errors: string[];
 }
 
-defineProps<{
+const props = defineProps<{
     connections: { id: number; name: string }[];
     selected_connection_id: number | null;
     requires_connection_selection: boolean;
     history?: HistoryInventory | null;
+    filters: {
+        page: number;
+        per_page: number;
+        media_type?: string | null;
+        provider?: string | null;
+    };
 }>();
+
+function navigate(overrides: Record<string, string | number | null>): void {
+    const query: Record<string, string | number> = {};
+    const next = {
+        connection: props.selected_connection_id,
+        media_type: props.filters.media_type ?? null,
+        provider: props.filters.provider ?? null,
+        page: props.filters.page,
+        ...overrides,
+    };
+
+    for (const [key, value] of Object.entries(next)) {
+        if (
+            value !== null &&
+            value !== '' &&
+            !(key === 'page' && value === 1)
+        ) {
+            query[key] = value;
+        }
+    }
+
+    router.get(HistoryController.url(), query, {
+        preserveState: true,
+        preserveScroll: true,
+        replace: true,
+    });
+}
+
+function updateMediaType(event: Event): void {
+    // Any filter change invalidates the current offset.
+    navigate({
+        media_type: (event.target as HTMLSelectElement).value,
+        page: 1,
+    });
+}
+
+function updateProvider(event: Event): void {
+    navigate({ provider: (event.target as HTMLInputElement).value, page: 1 });
+}
 
 defineOptions({
     layout: {
@@ -49,6 +97,37 @@ defineOptions({
             :connections="connections"
             :selected-connection-id="selected_connection_id"
         />
+
+        <section
+            v-if="selected_connection_id"
+            class="flex flex-wrap items-end gap-4 rounded-xl border border-border bg-card p-4"
+            data-test="history-filters"
+        >
+            <label class="text-sm font-medium">
+                Media type
+                <select
+                    class="mt-1 h-9 min-w-40 rounded-md border border-input bg-background px-3 capitalize"
+                    data-test="history-media-type-filter"
+                    :value="filters.media_type ?? ''"
+                    @change="updateMediaType"
+                >
+                    <option value="">All media</option>
+                    <option value="episode">Episode</option>
+                    <option value="movie">Movie</option>
+                </select>
+            </label>
+            <label class="text-sm font-medium">
+                Provider
+                <input
+                    type="search"
+                    class="mt-1 h-9 min-w-48 rounded-md border border-input bg-background px-3"
+                    data-test="history-provider-filter"
+                    placeholder="Any provider"
+                    :value="filters.provider ?? ''"
+                    @change="updateProvider"
+                />
+            </label>
+        </section>
 
         <div
             v-if="requires_connection_selection"
@@ -110,5 +189,13 @@ defineOptions({
                 </div>
             </div>
         </Deferred>
+
+        <InventoryPager
+            v-if="history"
+            :page="history.page"
+            :per-page="history.per_page"
+            :total="history.total"
+            @change="(page) => navigate({ page })"
+        />
     </div>
 </template>

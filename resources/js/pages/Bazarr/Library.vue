@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { Deferred, Head } from '@inertiajs/vue3';
+import { Deferred, Head, router } from '@inertiajs/vue3';
 import { ref } from 'vue';
 import LibraryController from '@/actions/App/Http/Controllers/Bazarr/LibraryController';
 import OverviewController from '@/actions/App/Http/Controllers/Bazarr/OverviewController';
+import InventoryPager from '@/components/bazarr/InventoryPager.vue';
 import SubtitleItemDrawer from '@/components/bazarr/SubtitleItemDrawer.vue';
 import SubtitleTabs from '@/components/bazarr/SubtitleTabs.vue';
 import { Button } from '@/components/ui/button';
@@ -13,19 +14,71 @@ type SubtitleItem = SubtitleItemResource;
 
 interface Inventory {
     data: SubtitleItem[];
+    page: number;
+    per_page: number;
     total: number;
     partial: boolean;
     errors: string[];
 }
 
-defineProps<{
+const props = defineProps<{
     connections: { id: number; name: string }[];
     selected_connection_id: number | null;
     requires_connection_selection: boolean;
     library?: Inventory | null;
+    filters: {
+        page: number;
+        per_page: number;
+        media_type?: string | null;
+        scope?: string | null;
+        missing_only?: boolean | null;
+    };
 }>();
 
 const selectedItem = ref<SubtitleItem | null>(null);
+
+function navigate(
+    overrides: Record<string, string | number | boolean | null>,
+): void {
+    const query: Record<string, string | number | boolean> = {};
+    const next = {
+        connection: props.selected_connection_id,
+        media_type: props.filters.media_type ?? null,
+        scope: props.filters.scope ?? null,
+        missing_only: props.filters.missing_only ? true : null,
+        page: props.filters.page,
+        ...overrides,
+    };
+
+    for (const [key, value] of Object.entries(next)) {
+        if (
+            value !== null &&
+            value !== '' &&
+            value !== false &&
+            !(key === 'page' && value === 1)
+        ) {
+            query[key] = value;
+        }
+    }
+
+    router.get(LibraryController.url(), query, {
+        preserveState: true,
+        preserveScroll: true,
+        replace: true,
+    });
+}
+
+function updateFilter(key: 'media_type' | 'scope', event: Event): void {
+    // Any filter change invalidates the current offset.
+    navigate({ [key]: (event.target as HTMLSelectElement).value, page: 1 });
+}
+
+function toggleMissingOnly(event: Event): void {
+    navigate({
+        missing_only: (event.target as HTMLInputElement).checked ? true : null,
+        page: 1,
+    });
+}
 
 defineOptions({
     layout: {
@@ -46,6 +99,50 @@ defineOptions({
             :connections="connections"
             :selected-connection-id="selected_connection_id"
         />
+
+        <section
+            v-if="selected_connection_id"
+            class="flex flex-wrap items-end gap-4 rounded-xl border border-border bg-card p-4"
+            data-test="library-filters"
+        >
+            <label class="text-sm font-medium">
+                Media type
+                <select
+                    class="mt-1 h-9 min-w-40 rounded-md border border-input bg-background px-3 capitalize"
+                    data-test="library-media-type-filter"
+                    :value="filters.media_type ?? ''"
+                    @change="updateFilter('media_type', $event)"
+                >
+                    <option value="">All media</option>
+                    <option value="episode">Episode</option>
+                    <option value="movie">Movie</option>
+                </select>
+            </label>
+            <label class="text-sm font-medium">
+                Scope
+                <select
+                    class="mt-1 h-9 min-w-40 rounded-md border border-input bg-background px-3 capitalize"
+                    data-test="library-scope-filter"
+                    :value="filters.scope ?? ''"
+                    @change="updateFilter('scope', $event)"
+                >
+                    <option value="">All scopes</option>
+                    <option value="anime">Anime</option>
+                    <option value="tv">TV</option>
+                    <option value="movie">Movie</option>
+                </select>
+            </label>
+            <label class="flex items-center gap-2 text-sm font-medium">
+                <input
+                    type="checkbox"
+                    class="size-4 rounded border-input"
+                    data-test="library-missing-only-filter"
+                    :checked="filters.missing_only === true"
+                    @change="toggleMissingOnly"
+                />
+                Missing subtitles only
+            </label>
+        </section>
 
         <div
             v-if="requires_connection_selection"
@@ -123,6 +220,14 @@ defineOptions({
                 </article>
             </div>
         </Deferred>
+
+        <InventoryPager
+            v-if="library"
+            :page="library.page"
+            :per-page="library.per_page"
+            :total="library.total"
+            @change="(page) => navigate({ page })"
+        />
 
         <SubtitleItemDrawer
             :open="selectedItem !== null"
