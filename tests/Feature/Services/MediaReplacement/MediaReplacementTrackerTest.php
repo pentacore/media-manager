@@ -403,3 +403,62 @@ test('the cleanup finalizer does not clobber a terminal state another webhook se
     // Only the manual-intervention notification fired; the finalizer added none.
     Notification::assertSentTimes(MediaReplacementStatusChanged::class, 1);
 });
+
+test('finalizeAfterCleanup restores the monitoring the executor deliberately left suspended', function (): void {
+    $mediaReplacementAttempt = trackerAttempt($this->connection->id, [
+        'status' => MediaReplacementStatus::Downloading,
+        'download_id' => 'DL-3',
+        'was_monitored' => true,
+        'monitoring_suspended' => true,
+        'cleanup_completed_at' => now(),
+        'required_languages' => ['eng'],
+        'verification' => ['required' => ['eng'], 'found' => ['eng'], 'missing' => [], 'subtitles_ok' => true],
+    ]);
+
+    Http::fake(['sonarr.local:8989/api/v3/episode/monitor' => Http::response([], 202)]);
+
+    resolve(MediaReplacementTracker::class)->finalizeAfterCleanup($this->connection, $mediaReplacementAttempt);
+
+    Http::assertSent(fn (Request $request): bool => $request->method() === 'PUT'
+        && str_contains($request->url(), '/api/v3/episode/monitor')
+        && $request->data()['monitored'] === true);
+
+    $mediaReplacementAttempt->refresh();
+
+    expect($mediaReplacementAttempt->monitoring_suspended)->toBeFalse()
+        ->and($mediaReplacementAttempt->status)->toBe(MediaReplacementStatus::Verified);
+});
+
+test('finalizeAfterCleanup reports needs_attention when the restore fails', function (): void {
+    $mediaReplacementAttempt = trackerAttempt($this->connection->id, [
+        'status' => MediaReplacementStatus::Downloading,
+        'download_id' => 'DL-4',
+        'was_monitored' => true,
+        'monitoring_suspended' => true,
+        'cleanup_completed_at' => now(),
+        'required_languages' => ['eng'],
+        'verification' => ['required' => ['eng'], 'found' => ['eng'], 'missing' => [], 'subtitles_ok' => true],
+    ]);
+
+    Http::fake(['sonarr.local:8989/api/v3/episode/monitor' => Http::response([], 500)]);
+
+    resolve(MediaReplacementTracker::class)->finalizeAfterCleanup($this->connection, $mediaReplacementAttempt);
+
+    $mediaReplacementAttempt->refresh();
+
+    expect($mediaReplacementAttempt->status)->toBe(MediaReplacementStatus::NeedsAttention)
+        ->and($mediaReplacementAttempt->failure_reason)->toBe('restore_monitoring_failed');
+});
+
+test('a padded webhook download id is stored trimmed so it can be compared', function (): void {
+    // The stored id is what the competing-grab sweep is armed with and what it
+    // compares against the queue's own ids. Storing " DL-1 " would arm a sweep
+    // that can never recognise the replacement's own download.
+    $mediaReplacementAttempt = trackerAttempt($this->connection->id);
+
+    resolve(MediaReplacementTracker::class)->recordGrab($this->connection, grabPayload([
+        'downloadId' => "  DL-1\t",
+    ]));
+
+    expect($mediaReplacementAttempt->fresh()->download_id)->toBe('DL-1');
+});

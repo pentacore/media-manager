@@ -34,3 +34,19 @@ test('every status is covered by the isTerminal dataset', function (): void {
 
     expect(MediaReplacementStatus::cases())->toBe($classified);
 });
+
+/**
+ * The query-builder helper must stay derived from the predicate, so that the
+ * conditional `whereNotIn('status', ...)` transitions and the in-memory checks
+ * can never disagree about what has settled.
+ */
+test('terminalValues lists exactly the values of the terminal cases', function (): void {
+    expect(MediaReplacementStatus::terminalValues())->toBe(['verified', 'failed', 'needs_attention'])
+        ->and(MediaReplacementStatus::terminalValues())->toBe(array_values(array_map(
+            static fn (MediaReplacementStatus $mediaReplacementStatus): string => $mediaReplacementStatus->value,
+            array_filter(
+                MediaReplacementStatus::cases(),
+                static fn (MediaReplacementStatus $mediaReplacementStatus): bool => $mediaReplacementStatus->isTerminal(),
+            ),
+        )));
+});

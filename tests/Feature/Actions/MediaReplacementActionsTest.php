@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use App\Enums\MediaReplacementStatus;
+use App\Jobs\SweepCompetingGrabs;
 use App\Models\ActionRequest;
 use App\Models\MediaReplacementAttempt;
 use App\Models\ServiceConnection;
@@ -14,6 +15,7 @@ use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\Request;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Queue;
 
 beforeEach(function (): void {
     Cache::flush();
@@ -60,7 +62,7 @@ function sonarrReplacementRelease(): array
  * Method-aware fake so a GET and DELETE on the same /episodefile/{id} URL can
  * return different statuses.
  *
- * @param  array{grabOk?: bool, grabConnection?: bool, grabStatus?: int, deleteOk?: bool, monitorOk?: bool, monitored?: bool, currentFileId?: int, subtitles?: string, releases?: list<array<string, mixed>>, onDelete?: callable}  $opts
+ * @param  array{grabOk?: bool, grabConnection?: bool, grabStatus?: int, deleteOk?: bool, monitorOk?: bool, monitored?: bool, currentFileId?: int, subtitles?: string, releases?: list<array<string, mixed>>, queueRecords?: list<array<string, mixed>>, onDelete?: callable}  $opts
  */
 function fakeExecutor(array $opts = []): void
 {
@@ -74,9 +76,10 @@ function fakeExecutor(array $opts = []): void
     $currentFileId = $opts['currentFileId'] ?? 501;
     $subtitles = $opts['subtitles'] ?? 'Japanese';
     $releases = $opts['releases'] ?? [sonarrReplacementRelease()];
+    $queueRecords = $opts['queueRecords'] ?? [];
     $onDelete = $opts['onDelete'] ?? null;
 
-    Http::fake(function (Request $request) use ($grabConnection, $grabStatus, $deleteStatus, $monitorOk, $monitored, $currentFileId, $subtitles, $releases, $onDelete) {
+    Http::fake(function (Request $request) use ($grabConnection, $grabStatus, $deleteStatus, $monitorOk, $monitored, $currentFileId, $subtitles, $releases, $queueRecords, $onDelete) {
         $method = $request->method();
         $url = $request->url();
 
@@ -104,6 +107,8 @@ function fakeExecutor(array $opts = []): void
             str_contains($url, '/api/v3/history') => Http::response(['records' => [
                 ['id' => 999, 'eventType' => 'grabbed', 'episodeId' => 101],
             ]]),
+            $method === 'GET' && str_contains($url, '/api/v3/queue') => Http::response(['records' => $queueRecords]),
+            $method === 'DELETE' && str_contains($url, '/api/v3/queue/') => Http::response([], 200),
             default => Http::response([], 200),
         };
     });
@@ -576,9 +581,9 @@ test('does not regress a terminal state the real tracker set during execution', 
 
     resolve(MediaReplacementActions::class)->execute(replaceActionRequest());
 
-    // The executor finalized the pending verification to needs_attention: the
-    // fixture file still has only Japanese subtitles vs required English. Monitoring
-    // was restored by the executor (not the tracker, which deferred it), so the sole
+    // The executor's finalizeAfterCleanup call terminalized the pending verification
+    // as needs_attention: the fixture file still has only Japanese subtitles vs
+    // required English. The finalizer restored monitoring successfully, so the sole
     // failure reason is the missing subtitles, not a false restore failure.
     expect(MediaReplacementAttempt::first()->status)->toBe(MediaReplacementStatus::NeedsAttention)
         ->and(MediaReplacementAttempt::first()->failure_reason)->toBe('imported_subtitles_missing_required_language');
@@ -643,8 +648,9 @@ test('a retry after an indeterminate grab resets the stale cleanup checkpoint so
     $remonitorIndex = $requests->search(fn (string $value): bool => str_contains($value, 'PUT http://sonarr.local:8989/api/v3/episode/monitor')
         && str_contains($value, '"monitored":true'));
 
-    // The only remonitor is the executor's own, AFTER blocklisting; the fast
-    // webhook did not remonitor because the stale checkpoint was reset.
+    // The only remonitor is the one finalizeAfterCleanup performs at the end of the
+    // run, AFTER blocklisting; the fast webhook did not remonitor because the stale
+    // checkpoint was reset.
     expect($blocklistIndex)->not->toBeFalse()
         ->and($remonitorIndex)->not->toBeFalse()
         ->and($blocklistIndex)->toBeLessThan($remonitorIndex);
@@ -669,12 +675,88 @@ test('a clean-subtitles Download arriving during cleanup stays pending, then the
 
     $result = resolve(MediaReplacementActions::class)->execute(replaceActionRequest());
 
-    // Once cleanup completed and monitoring was restored, the executor finalized the
-    // pending verification to Verified with no false restore-failure reason.
+    // Once cleanup closed, finalizeAfterCleanup restored monitoring and terminalized
+    // the pending verification as Verified, with no false restore-failure reason.
     expect(MediaReplacementAttempt::first()->status)->toBe(MediaReplacementStatus::Verified)
         ->and(MediaReplacementAttempt::first()->failure_reason)->toBeNull()
         ->and($result['status'])->toBe('verified');
 
     // The blocklist ran (target stayed suspended through cleanup) and was safe.
     Http::assertSent(fn (Request $request): bool => $request->method() === 'POST' && str_contains($request->url(), '/api/v3/history/failed/'));
+});
+
+test('the executor does not restore monitoring after blocklisting, so the queued re-search cannot grab', function (): void {
+    fakeExecutor(['monitored' => true]);
+
+    $actionRequest = replaceActionRequest();
+
+    resolve(MediaReplacementActions::class)->execute($actionRequest);
+
+    // Monitoring is suspended before the grab and must STAY suspended: the arr
+    // queues its re-search asynchronously and runs it seconds later.
+    Http::assertSent(fn (Request $request): bool => $request->method() === 'PUT'
+        && str_contains($request->url(), '/api/v3/episode/monitor')
+        && $request->data()['monitored'] === false);
+
+    Http::assertNotSent(fn (Request $request): bool => $request->method() === 'PUT'
+        && str_contains($request->url(), '/api/v3/episode/monitor')
+        && $request->data()['monitored'] === true);
+
+    $attempt = MediaReplacementAttempt::query()->where('action_request_id', $actionRequest->id)->sole();
+
+    expect($attempt->monitoring_suspended)->toBeTrue()
+        ->and($attempt->cleanup_completed_at)->not->toBeNull();
+});
+
+test('the executor reports the sweep result and does not remove anything before the grab webhook lands', function (): void {
+    // The attempt's download_id is still null during the executor's own cleanup,
+    // so the sweeper must refuse to remove anything here — it cannot yet tell the
+    // replacement's own download apart from a competing one.
+    fakeExecutor([
+        'queueRecords' => [
+            ['id' => 910, 'seriesId' => 42, 'episodeId' => 101, 'downloadId' => 'DL-RACE', 'title' => 'Competing.Release'],
+        ],
+    ]);
+
+    $actionRequest = replaceActionRequest();
+
+    $result = resolve(MediaReplacementActions::class)->execute($actionRequest);
+
+    expect($result['competing_grabs_removed'])->toBe(0);
+
+    Http::assertNotSent(fn (Request $request): bool => $request->method() === 'DELETE'
+        && str_contains($request->url(), '/api/v3/queue/'));
+});
+
+test('the executor arms the delayed sweep passes as the backstop for the queued re-search', function (): void {
+    // The synchronous sweep above cannot see a grab that has not happened yet, so
+    // the delayed passes are the actor that actually cleans one up.
+    Queue::fake([SweepCompetingGrabs::class]);
+
+    fakeExecutor();
+
+    $actionRequest = replaceActionRequest();
+
+    resolve(MediaReplacementActions::class)->execute($actionRequest);
+
+    $attempt = MediaReplacementAttempt::query()->where('action_request_id', $actionRequest->id)->sole();
+
+    Queue::assertPushed(
+        SweepCompetingGrabs::class,
+        fn (SweepCompetingGrabs $sweepCompetingGrabs): bool => $sweepCompetingGrabs->attemptId === $attempt->id
+            && $sweepCompetingGrabs->pass === 0,
+    );
+});
+
+test('a rejected grab still restores monitoring immediately because no blocklist ran', function (): void {
+    fakeExecutor(['grabOk' => false, 'grabStatus' => 400, 'monitored' => true]);
+
+    $actionRequest = replaceActionRequest();
+
+    expect(fn (): array => resolve(MediaReplacementActions::class)->execute($actionRequest))
+        ->toThrow(RuntimeException::class);
+
+    Http::assertSent(fn (Request $request): bool => $request->method() === 'PUT'
+        && str_contains($request->url(), '/api/v3/episode/monitor')
+        && $request->data()['monitored'] === true);
 });

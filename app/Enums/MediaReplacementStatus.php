@@ -34,4 +34,21 @@ enum MediaReplacementStatus: string
             self::Requested, self::Downloading, self::Imported => false,
         };
     }
+
+    /**
+     * The terminal statuses as column values, for the conditional
+     * `whereNotIn('status', ...)` transitions that keep one actor from
+     * clobbering another's terminal result. Derived from isTerminal() so the
+     * rule has exactly one definition — a hand-maintained copy of this list is
+     * how a new terminal case ends up silently treated as still in flight.
+     *
+     * @return list<string>
+     */
+    public static function terminalValues(): array
+    {
+        return array_values(array_map(
+            static fn (self $mediaReplacementStatus): string => $mediaReplacementStatus->value,
+            array_filter(self::cases(), static fn (self $mediaReplacementStatus): bool => $mediaReplacementStatus->isTerminal()),
+        ));
+    }
 }
