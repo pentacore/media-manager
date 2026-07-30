@@ -10,6 +10,7 @@ use App\Services\Bazarr\SubtitleInventoryService;
 use App\Settings\BazarrAutomationSettings;
 use App\Settings\MediaReplacementSettings;
 use Illuminate\Contracts\Queue\ShouldBeUnique;
+use Illuminate\Http\Client\Request;
 use Illuminate\Queue\Attributes\Timeout;
 use Illuminate\Queue\Attributes\Tries;
 use Illuminate\Queue\Attributes\UniqueFor;
@@ -214,7 +215,7 @@ test('a discovery failure retries without silencing the reconciliation interval'
     // The series-list read fails while discovery is incomplete, then succeeds on
     // the job retry. A boolean toggle survives the HTTP client's own retry loop.
     $seriesFails = true;
-    Http::fake(function (\Illuminate\Http\Client\Request $request) use (&$seriesFails) {
+    Http::fake(function (Request $request) use (&$seriesFails) {
         $url = $request->url();
 
         if (str_contains($url, '/api/v3/series') && ! str_contains($url, '/series/')) {

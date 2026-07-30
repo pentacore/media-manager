@@ -70,12 +70,27 @@ test('it provides copy paste notification setup without mutating existing provid
     ]);
 
     $setup = resolve(BazarrSettingsAdapter::class)->notificationSetup($connection);
+    $url = route('webhooks.bazarr', ['serviceConnection' => $connection]);
 
-    expect($setup)->toBe([
-        'automatic_configuration_supported' => false,
-        'authenticated_url' => route('webhooks.bazarr', ['serviceConnection' => $connection]).'?token=notification-secret',
-        'instructions' => 'Add this URL as a Bazarr Apprise JSON notification target. Existing notification providers are not changed.',
+    expect($setup['automatic_configuration_supported'])->toBeFalse()
+        ->and($setup['authenticated_url'])->toBe($url.'?token=notification-secret')
+        ->and($setup['instructions'])->toContain('Apprise');
+});
+
+test('notification setup exposes an Apprise config URI Bazarr accepts', function (): void {
+    $connection = ServiceConnection::factory()->bazarr()->create([
+        'webhook_token' => 'notification-secret',
     ]);
+
+    $setup = resolve(BazarrSettingsAdapter::class)->notificationSetup($connection);
+    $url = route('webhooks.bazarr', ['serviceConnection' => $connection]);
+    $expectedScheme = str_starts_with($url, 'https://') ? 'jsons://' : 'json://';
+
+    expect($setup['apprise_config_uri'])->toStartWith($expectedScheme)
+        ->and($setup['apprise_config_uri'])->toContain('/webhooks/bazarr/'.$connection->id)
+        ->and($setup['apprise_config_uri'])->toContain('+X-Webhook-Token=notification-secret')
+        ->and($setup['apprise_config_uri'])->not->toContain('http://')
+        ->and($setup['apprise_config_uri'])->not->toContain('https://');
 });
 
 test('it rejects unknown or invalid write values before an update', function (): void {

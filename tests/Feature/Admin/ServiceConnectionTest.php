@@ -2,11 +2,11 @@
 
 use App\Enums\BazarrServiceRole;
 use App\Enums\ServiceType;
+use App\Enums\SubtitleCaseStatus;
 use App\Jobs\FetchLatestServiceVersion;
 use App\Jobs\PingServiceHealth;
 use App\Models\BazarrServiceLink;
 use App\Models\ServiceConnection;
-use App\Enums\SubtitleCaseStatus;
 use App\Models\SubtitleCase;
 use App\Models\User;
 use Illuminate\Support\Facades\Http;

@@ -14,6 +14,7 @@ use App\Models\SubtitleCase;
 use App\Services\Actions\SharedMediaTargetLock;
 use App\Services\Bazarr\BazarrActions;
 use App\Services\Bazarr\BazarrCandidateFingerprint;
+use App\Services\Bazarr\BazarrMediaFingerprint;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\Request;
 use Illuminate\Support\Facades\Cache;
@@ -321,6 +322,75 @@ test('marks connection loss after a write indeterminate without retrying the wri
         ReconcileSubtitleCase::class,
         fn (ReconcileSubtitleCase $reconcileSubtitleCase): bool => $reconcileSubtitleCase->subtitleCaseId === $this->subtitleCase->id,
     );
+});
+
+/**
+ * An unlinked payload (no `subtitle_case_id`) is the path that escalates the
+ * correlated case straight to needs_review, so the reason it stores is the one
+ * an operator reads.
+ *
+ * @return array{0: ActionRequest, 1: array<string, mixed>}
+ */
+function unlinkedIndeterminateRequest(SubtitleCase $subtitleCase, array $payload): array
+{
+    $item = [
+        'sonarrSeriesId' => 101,
+        'sonarrEpisodeId' => 701,
+        'sceneName' => 'Frieren.S01E01.1080p.WEB',
+    ];
+    $fingerprint = new BazarrMediaFingerprint()->make('episode', $item);
+    $subtitleCase->update(['file_fingerprint' => $fingerprint]);
+
+    $actionRequest = ActionRequest::factory()->create([
+        'status' => ActionRequestStatus::Approved,
+        'type' => 'bazarr_download_best',
+        'payload' => [
+            ...array_diff_key($payload, array_flip(['subtitle_case_id'])),
+            'target_fingerprint' => $fingerprint,
+        ],
+    ]);
+    $subtitleCase->update(['download_action_request_id' => $actionRequest->id]);
+
+    return [$actionRequest, $item];
+}
+
+test('an indeterminate server error never persists raw upstream text on the case', function (): void {
+    [$request, $item] = unlinkedIndeterminateRequest($this->subtitleCase, $this->payload);
+    Http::fake(fn (Request $request) => $request->method() === 'GET'
+        ? Http::response(['data' => [$item]])
+        : Http::response(['error' => 'failed writing /mnt/private/anime/Frieren.S01E01.srt'], 500));
+    Queue::fake();
+
+    new ExecuteActionRequest($request)->handle();
+
+    $failureReason = (string) $this->subtitleCase->fresh()->failure_reason;
+
+    expect($this->subtitleCase->fresh()->status)->toBe(SubtitleCaseStatus::NeedsReview)
+        ->and($failureReason)->not->toBe('')
+        ->and($failureReason)->not->toContain('/mnt/private')
+        ->and($failureReason)->not->toContain('Frieren.S01E01.srt');
+});
+
+test('an indeterminate connection loss never persists credentials from the upstream message', function (): void {
+    [$request, $item] = unlinkedIndeterminateRequest($this->subtitleCase, $this->payload);
+    Http::fake(function (Request $httpRequest) use ($item) {
+        if ($httpRequest->method() === 'GET') {
+            return Http::response(['data' => [$item]]);
+        }
+
+        throw new ConnectionException(
+            'cURL error 7: Failed to connect to bazarr.test port 80 for http://bazarr.test/api/providers/episodes?apikey=bazarr-secret',
+        );
+    });
+    Queue::fake();
+
+    new ExecuteActionRequest($request)->handle();
+
+    $failureReason = (string) $this->subtitleCase->fresh()->failure_reason;
+
+    expect($this->subtitleCase->fresh()->status)->toBe(SubtitleCaseStatus::NeedsReview)
+        ->and($failureReason)->not->toBe('')
+        ->and($failureReason)->not->toContain('bazarr-secret');
 });
 
 test('does not overwrite a terminal subtitle case after an indeterminate outcome', function (): void {

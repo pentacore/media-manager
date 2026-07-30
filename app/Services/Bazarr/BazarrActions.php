@@ -15,6 +15,7 @@ use App\Models\SubtitleCase;
 use App\Models\SubtitleUpload;
 use App\Services\Actions\ActionExecutor;
 use App\Services\Actions\SharedMediaTargetLock;
+use App\Support\UpstreamErrorText;
 use Illuminate\Contracts\Cache\Lock;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\RequestException;
@@ -103,7 +104,7 @@ final readonly class BazarrActions implements ActionExecutor
             try {
                 $result = $this->write($actionRequest->type, $payload, $bazarrClient);
             } catch (ConnectionException $connectionException) {
-                $this->reconcileIndeterminateOutcome($actionRequest, $payload, $serviceConnection, $connectionException->getMessage());
+                $this->reconcileIndeterminateOutcome($actionRequest, $payload, $serviceConnection, UpstreamErrorText::sanitize($connectionException->getMessage()));
 
                 throw new BazarrIndeterminateOutcomeException('Bazarr may have accepted the operation before the connection was lost.', $connectionException->getCode(), previous: $connectionException);
             } catch (RequestException $requestException) {
@@ -111,7 +112,7 @@ final readonly class BazarrActions implements ActionExecutor
                     throw new InvalidArgumentException('Bazarr rejected the approved operation.', $requestException->getCode(), previous: $requestException);
                 }
 
-                $this->reconcileIndeterminateOutcome($actionRequest, $payload, $serviceConnection, $requestException->getMessage());
+                $this->reconcileIndeterminateOutcome($actionRequest, $payload, $serviceConnection, UpstreamErrorText::sanitize($requestException->getMessage()));
 
                 throw new BazarrIndeterminateOutcomeException('Bazarr returned a server error after the operation was submitted; its outcome requires reconciliation.', $requestException->getCode(), previous: $requestException);
             }

@@ -14,8 +14,10 @@ use App\Jobs\ReconcileSubtitleCase;
 use App\Models\ServiceConnection;
 use App\Models\SubtitleCase;
 use App\Models\WebhookEvent;
+use Illuminate\Contracts\Database\Query\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\Cache;
+use Throwable;
 
 final class BazarrNotificationController extends Controller
 {
@@ -26,35 +28,67 @@ final class BazarrNotificationController extends Controller
         abort_unless($serviceConnection->type === ServiceType::Bazarr && $serviceConnection->is_active, 404);
         $this->authenticate($bazarrNotificationRequest, $serviceConnection);
         $validated = $bazarrNotificationRequest->validated();
-        $eventType = mb_substr((string) $validated['eventType'], 0, 100);
+        $eventType = $this->eventType($validated);
         $payload = $this->sanitizedPayload($validated);
-        $payloadHash = WebhookEvent::payloadHash(['event_type' => $eventType, ...$payload]);
 
-        if (! Cache::add(
-            sprintf('bazarr-notification:%d:%s', $serviceConnection->id, $payloadHash),
-            true,
-            now()->addMinutes(5),
-        )) {
+        // Hash the whole posted body, not just the sanitized projection: two
+        // different notifications about the same target inside the dedup window
+        // would otherwise collapse into one hint.
+        $payloadHash = WebhookEvent::payloadHash([
+            'event_type' => $eventType,
+            ...$bazarrNotificationRequest->json()->all(),
+        ]);
+        $dedupKey = sprintf('bazarr-notification:%d:%s', $serviceConnection->id, $payloadHash);
+
+        if (! Cache::add($dedupKey, true, now()->addMinutes(5))) {
             return response()->json(['status' => 'received']);
         }
 
-        WebhookEvent::query()->create([
-            'service_connection_id' => $serviceConnection->id,
-            'event_type' => $eventType,
-            'payload' => $payload,
-            'payload_hash' => $payloadHash,
-        ]);
-        new BazarrCache($serviceConnection)->bustAll();
+        // The marker is claimed atomically to keep concurrent duplicates out,
+        // but it must not outlive a failed hand-off: releasing it lets Bazarr's
+        // retry be accepted instead of answered as a duplicate of nothing.
+        try {
+            WebhookEvent::query()->create([
+                'service_connection_id' => $serviceConnection->id,
+                'event_type' => $eventType,
+                'payload' => $payload,
+                'payload_hash' => $payloadHash,
+            ]);
+            new BazarrCache($serviceConnection)->bustAll();
 
-        $subtitleCase = $this->targetCase($serviceConnection, $payload);
+            $subtitleCase = $this->targetCase($serviceConnection, $payload);
 
-        if ($subtitleCase instanceof SubtitleCase) {
-            dispatch(ReconcileSubtitleCase::forCase($subtitleCase));
-        } else {
-            dispatch(new ReconcileBazarrConnection($serviceConnection->id));
+            if ($subtitleCase instanceof SubtitleCase) {
+                dispatch(ReconcileSubtitleCase::forCase($subtitleCase));
+            } else {
+                dispatch(new ReconcileBazarrConnection($serviceConnection->id));
+            }
+        } catch (Throwable $throwable) {
+            Cache::forget($dedupKey);
+
+            throw $throwable;
         }
 
         return response()->json(['status' => 'received']);
+    }
+
+    /**
+     * Apprise payloads carry `type` (info/success/warning/failure) rather than
+     * an arr-style `eventType`; either identifies the hint well enough to store.
+     *
+     * @param  array<string, mixed>  $validated
+     */
+    private function eventType(array $validated): string
+    {
+        foreach (['eventType', 'type'] as $key) {
+            $value = $validated[$key] ?? null;
+
+            if (is_string($value) && trim($value) !== '') {
+                return mb_substr(trim($value), 0, 100);
+            }
+        }
+
+        return 'notification';
     }
 
     private function authenticate(BazarrNotificationRequest $bazarrNotificationRequest, ServiceConnection $serviceConnection): void
@@ -110,6 +144,9 @@ final class BazarrNotificationController extends Controller
             return null;
         }
 
+        // Match in SQL rather than filtering a recent window in PHP: a unique
+        // older case would otherwise be missed and demoted to a connection-wide
+        // sweep. Two rows are enough to tell unique from ambiguous.
         $matches = SubtitleCase::query()
             ->where('bazarr_connection_id', $serviceConnection->id)
             ->where('media_type', $mediaType)
@@ -122,13 +159,21 @@ final class BazarrNotificationController extends Controller
                 SubtitleCaseStatus::ReplacementRequested,
                 SubtitleCaseStatus::NeedsReview,
             ])
+            ->where(static function (Builder $builder) use ($mediaType, $mediaId): void {
+                if ($mediaType !== 'episode') {
+                    $builder->where('target_ids->radarr_id', (string) $mediaId);
+
+                    return;
+                }
+
+                // A shared subtitle file covers several episodes, so the case
+                // records the whole list alongside its primary episode id.
+                $builder->where('target_ids->episode_id', (string) $mediaId)
+                    ->orWhereJsonContains('target_ids->episode_ids', $mediaId);
+            })
             ->latest('id')
-            ->limit(100)
-            ->get()
-            ->filter(static fn (SubtitleCase $subtitleCase): bool => $mediaType === 'episode'
-                ? ($subtitleCase->target_ids['episode_id'] ?? null) === $mediaId
-                : ($subtitleCase->target_ids['radarr_id'] ?? null) === $mediaId)
-            ->values();
+            ->limit(2)
+            ->get();
 
         return $matches->count() === 1 ? $matches->first() : null;
     }

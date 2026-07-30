@@ -101,20 +101,41 @@ final class BazarrSettingsAdapter
     }
 
     /**
-     * @return array{automatic_configuration_supported: false, authenticated_url: string, instructions: string}
+     * @return array{automatic_configuration_supported: false, authenticated_url: string, apprise_config_uri: string, instructions: string}
      */
     public function notificationSetup(ServiceConnection $serviceConnection): array
     {
         $url = route('webhooks.bazarr', ['serviceConnection' => $serviceConnection]);
         $token = $serviceConnection->webhook_token;
+        $token = is_string($token) && $token !== '' ? $token : null;
 
         return [
             'automatic_configuration_supported' => false,
-            'authenticated_url' => is_string($token) && $token !== ''
-                ? $url.'?token='.urlencode($token)
-                : $url,
-            'instructions' => 'Add this URL as a Bazarr Apprise JSON notification target. Existing notification providers are not changed.',
+            'authenticated_url' => $token === null ? $url : $url.'?token='.urlencode($token),
+            'apprise_config_uri' => $this->appriseConfigUri($url, $token),
+            'instructions' => 'Paste the Apprise config URI into Bazarr under Settings → Notifications → Apprise. Bazarr validates the value as an Apprise target, so a plain https URL is rejected; the authenticated URL below is for manual or custom clients only. Existing notification providers are not changed.',
         ];
+    }
+
+    /**
+     * Bazarr notifies through Apprise, which needs its own `json://`/`jsons://`
+     * config URI rather than an https URL. Query arguments prefixed with `+` are
+     * forwarded as HTTP headers, which keeps the webhook token out of the
+     * request URL that intermediaries log.
+     */
+    private function appriseConfigUri(string $url, ?string $token): string
+    {
+        $parts = parse_url($url);
+        $scheme = ($parts['scheme'] ?? 'http') === 'https' ? 'jsons' : 'json';
+        $authority = $parts['host'] ?? 'localhost';
+
+        if (isset($parts['port'])) {
+            $authority .= ':'.$parts['port'];
+        }
+
+        $uri = $scheme.'://'.$authority.($parts['path'] ?? '');
+
+        return $token === null ? $uri : $uri.'?+X-Webhook-Token='.urlencode($token);
     }
 
     /**

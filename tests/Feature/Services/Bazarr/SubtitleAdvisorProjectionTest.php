@@ -175,16 +175,39 @@ test('it rejects a changed installed file before searching releases', function (
     ));
 });
 
-function fakeSubtitleAdvisorProjectionApis(int $releaseCount, int $size = 1_500_000_000): void
-{
+test('it drops scheme-only URIs that carry no slash past the text sanitizer', function (): void {
+    fakeSubtitleAdvisorProjectionApis(
+        releaseCount: 3,
+        releaseTitle: 'Trusted.Anime.CR.magnet:?xt=urn:btih:private-hash',
+        releaseGroup: 'file:private-group',
+    );
+
+    $projection = resolve(SubtitleAdvisorProjection::class)->forCase($this->case);
+
+    // Guard the assertions below against passing because nothing was projected.
+    expect($projection['replacement']['candidate_count'])->toBeGreaterThan(0);
+
+    expect(json_encode($projection, JSON_THROW_ON_ERROR))
+        ->not->toContain('magnet:')
+        ->not->toContain('file:')
+        ->not->toContain('private-hash')
+        ->not->toContain('private-group');
+});
+
+function fakeSubtitleAdvisorProjectionApis(
+    int $releaseCount,
+    int $size = 1_500_000_000,
+    ?string $releaseTitle = null,
+    ?string $releaseGroup = null,
+): void {
     $releases = [];
 
     foreach (range(1, $releaseCount) as $index) {
         $releases[] = [
             'guid' => 'guid-'.$index,
             'indexerId' => 10,
-            'title' => str_repeat('Trusted.Anime.CR.', 20).$index,
-            'releaseGroup' => 'Trusted',
+            'title' => $releaseTitle ?? str_repeat('Trusted.Anime.CR.', 20).$index,
+            'releaseGroup' => $releaseGroup ?? 'Trusted',
             'episodeIds' => [701],
             'downloadAllowed' => true,
             'rejections' => [],

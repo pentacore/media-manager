@@ -15,6 +15,7 @@ use App\Models\ServiceConnection;
 use App\Models\SubtitleCase;
 use App\Models\SubtitleCaseAttempt;
 use App\Services\Bazarr\BazarrDownloadRequestCreator;
+use App\Services\Bazarr\BazarrSettingsAdapter;
 use App\Services\Bazarr\SubtitleCandidateEligibility;
 use App\Services\Bazarr\SubtitleCaseLifecycle;
 use App\Services\Bazarr\SubtitleCaseReconciler;
@@ -513,7 +514,7 @@ function runSubtitleProbe(ReconcileSubtitleCase $reconcileSubtitleCase): void
         resolve(BazarrDownloadRequestCreator::class),
         resolve(SubtitleCaseLifecycle::class),
         resolve(BazarrAutomationSettings::class),
-        resolve(\App\Services\Bazarr\BazarrSettingsAdapter::class),
-        resolve(\App\Services\Bazarr\SubtitleInventoryService::class),
+        resolve(BazarrSettingsAdapter::class),
+        resolve(SubtitleInventoryService::class),
     );
 }

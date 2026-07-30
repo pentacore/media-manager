@@ -23,6 +23,7 @@ use App\Services\AiBudget\AiBudgetGuard;
 use App\Services\Bazarr\SubtitleCaseLifecycle;
 use App\Settings\AiSettings;
 use App\Settings\BazarrAutomationSettings;
+use App\Support\UpstreamErrorText;
 use DateTimeInterface;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldBeUnique;
@@ -142,7 +143,7 @@ final class RunSubtitleAdvisor implements ShouldBeUnique, ShouldQueue
             Log::warning('Subtitle Advisor run failed.', [
                 'subtitle_case_id' => $subtitleCase->id,
                 'exception' => $throwable::class,
-                'message' => $throwable->getMessage(),
+                'message' => UpstreamErrorText::sanitize($throwable->getMessage()),
             ]);
 
             $queuedActionRequestId = $subtitleAdvisorRunContext->actionRequestId();

@@ -15,6 +15,7 @@ use App\Models\SubtitleUpload;
 use App\Models\User;
 use App\Services\Bazarr\BazarrActions;
 use App\Services\Bazarr\BazarrMediaFingerprint;
+use App\Settings\BazarrAutomationSettings;
 use Database\Seeders\ActionTypeConfigSeeder;
 use Illuminate\Http\Client\Request;
 use Illuminate\Http\UploadedFile;
@@ -118,7 +119,7 @@ test('members privately stage a validated upload and approval-gated action atomi
 });
 
 test('subtitle uploads honor the configured size limit and staging expiry', function (): void {
-    resolve(App\Settings\BazarrAutomationSettings::class)->setConfiguration([
+    resolve(BazarrAutomationSettings::class)->setConfiguration([
         'upload_max_kilobytes' => 64,
         'upload_expiry_hours' => 12,
     ]);

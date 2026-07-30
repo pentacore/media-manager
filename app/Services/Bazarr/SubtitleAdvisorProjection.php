@@ -24,6 +24,12 @@ final readonly class SubtitleAdvisorProjection
 
     private const int MAX_CANDIDATES = 5;
 
+    /**
+     * Schemes whose URIs need no slash to address a resource, so a plain
+     * slash check cannot catch them.
+     */
+    private const string SCHEME_ONLY_URI_PATTERN = '/\b(?:magnet|file|data|blob|javascript|vbscript|mailto|ftp|ftps|sftp|ws|wss|view-source):/i';
+
     public function __construct(
         private MediaFileInspector $mediaFileInspector,
         private ReplacementCandidateFinder $replacementCandidateFinder,
@@ -345,10 +351,14 @@ final readonly class SubtitleAdvisorProjection
 
         $value = trim($value);
 
+        // Slashes catch conventional URLs and paths, but a scheme-only URI —
+        // magnet:, file:, data: — carries none, so it would otherwise reach the
+        // Advisor prompt intact.
         if ($value === ''
             || str_contains($value, '://')
             || str_contains($value, '/')
-            || str_contains($value, '\\')) {
+            || str_contains($value, '\\')
+            || preg_match(self::SCHEME_ONLY_URI_PATTERN, $value) === 1) {
             return $fallback;
         }
 

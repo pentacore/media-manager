@@ -44,6 +44,7 @@ const props = defineProps<{
     notification_setup: {
         automatic_configuration_supported: boolean;
         authenticated_url: string;
+        apprise_config_uri: string;
         instructions: string;
     } | null;
     automation: {
@@ -374,11 +375,18 @@ function saveAutomation(): void {
                         v-if="notification_setup && showNotificationSetup"
                         class="mt-3 space-y-2 rounded-lg border border-border bg-muted/40 p-3 text-sm"
                     >
-                        <p class="font-medium">
-                            Authenticated notification URL
-                        </p>
+                        <p class="font-medium">Apprise config URI</p>
                         <p class="text-muted-foreground">
                             {{ notification_setup.instructions }}
+                        </p>
+                        <input
+                            class="w-full rounded-md border border-input bg-background px-3 py-2 font-mono text-xs"
+                            data-test="bazarr-apprise-config-uri"
+                            readonly
+                            :value="notification_setup.apprise_config_uri"
+                        />
+                        <p class="font-medium">
+                            Authenticated notification URL
                         </p>
                         <input
                             class="w-full rounded-md border border-input bg-background px-3 py-2 font-mono text-xs"
