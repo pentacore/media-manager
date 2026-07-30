@@ -95,8 +95,10 @@ final readonly class CompetingGrabSweeper
                 continue;
             }
 
-            // Our own download, positively identified.
-            if ((string) ($record['downloadId'] ?? '') === $ourDownloadId) {
+            // Our own download, positively identified. Both sides are trimmed:
+            // an accidental difference in padding must not be the reason we
+            // delete the replacement's own download.
+            if (trim((string) ($record['downloadId'] ?? '')) === $ourDownloadId) {
                 continue;
             }
 
@@ -243,6 +245,13 @@ final readonly class CompetingGrabSweeper
      * Our own download id, or null when the Grab webhook has not recorded one
      * yet. A blank value counts as unknown: it would otherwise match every
      * queue row that reports no download id of its own.
+     *
+     * The value is returned trimmed, because it is the value the keep-guard
+     * compares. Deciding emptiness on the trimmed form while arming the sweep
+     * with the padded one would let a stored " DL-X " arm a sweep that can
+     * never match the queue's "DL-X", leaving our own download protected by
+     * nothing but the title — the single point of failure requiring a download
+     * id was meant to remove.
      */
     private function downloadId(MediaReplacementAttempt $mediaReplacementAttempt): ?string
     {
@@ -252,7 +261,7 @@ final readonly class CompetingGrabSweeper
             return null;
         }
 
-        return $downloadId;
+        return trim($downloadId);
     }
 
     private function normalizeTitle(string $title): string

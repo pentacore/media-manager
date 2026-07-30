@@ -125,6 +125,26 @@ test('it ignores queue items for other targets', function (): void {
     Http::assertNotSent(fn (Request $request): bool => $request->method() === 'DELETE');
 });
 
+test('a whitespace-padded stored download id still identifies our own row', function (): void {
+    $mediaReplacementAttempt = sweeperAttempt($this->connection->id, ['download_id' => ' DL-OURS ']);
+
+    // Our row's title deliberately does not resemble the candidate title, so
+    // the download-id keep-guard is the only thing that can spare it.
+    fakeSweeperQueue([
+        ['id' => 910, 'seriesId' => 42, 'episodeId' => 101, 'downloadId' => 'DL-OURS', 'title' => 'Client.Renamed.Job'],
+        ['id' => 911, 'seriesId' => 42, 'episodeId' => 101, 'downloadId' => 'DL-OTHER', 'title' => 'Random.Anime.S01E01.OTHER'],
+    ]);
+
+    $removed = resolve(CompetingGrabSweeper::class)->sweep($this->connection, $mediaReplacementAttempt);
+
+    expect($removed)->toBe(1);
+
+    Http::assertSent(fn (Request $request): bool => $request->method() === 'DELETE'
+        && str_contains($request->url(), '/api/v3/queue/911'));
+    Http::assertNotSent(fn (Request $request): bool => $request->method() === 'DELETE'
+        && str_contains($request->url(), '/api/v3/queue/910'));
+});
+
 test('it ignores a queue item for a different episode of the same series', function (): void {
     $mediaReplacementAttempt = sweeperAttempt($this->connection->id);
 
