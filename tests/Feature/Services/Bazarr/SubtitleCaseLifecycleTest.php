@@ -16,7 +16,7 @@ function subtitleCaseTransitions(): array
     return [
         'observing' => ['bazarr_searching', 'resolved', 'dismissed', 'superseded'],
         'bazarr_searching' => ['download_requested', 'replacement_eligible', 'resolved', 'needs_review', 'superseded'],
-        'download_requested' => ['resolved', 'replacement_eligible', 'needs_review', 'handled', 'superseded'],
+        'download_requested' => ['bazarr_searching', 'resolved', 'replacement_eligible', 'needs_review', 'handled', 'superseded'],
         'replacement_eligible' => ['advisor_running', 'resolved', 'dismissed', 'superseded'],
         'advisor_running' => ['replacement_requested', 'needs_review', 'handled', 'superseded'],
         'replacement_requested' => ['resolved', 'needs_review', 'handled', 'superseded'],

@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers\Bazarr;
 
-use finfo;
 use App\Enums\BazarrServiceRole;
 use App\Enums\ServiceType;
 use App\Enums\SubtitleCaseStatus;
@@ -16,6 +15,8 @@ use App\Models\SubtitleCase;
 use App\Models\SubtitleUpload;
 use App\Services\Actions\ActionOrchestrator;
 use App\Services\Bazarr\SubtitleInventoryService;
+use App\Settings\BazarrAutomationSettings;
+use finfo;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
@@ -30,6 +31,7 @@ final class UploadController extends Controller
         UploadRequest $uploadRequest,
         SubtitleInventoryService $subtitleInventoryService,
         ActionOrchestrator $actionOrchestrator,
+        BazarrAutomationSettings $bazarrAutomationSettings,
     ): JsonResponse {
         $validated = $uploadRequest->validated();
         $connection = $this->connection((int) $validated['connection']);
@@ -72,6 +74,7 @@ final class UploadController extends Controller
         try {
             [$upload, $actionRequest] = DB::transaction(function () use (
                 $actionOrchestrator,
+                $bazarrAutomationSettings,
                 $connection,
                 $contents,
                 $extension,
@@ -98,7 +101,7 @@ final class UploadController extends Controller
                     'mime_type' => $mimeType,
                     'format' => $extension,
                     'size_bytes' => strlen($contents),
-                    'expires_at' => now()->addHour(),
+                    'expires_at' => now()->addHours($bazarrAutomationSettings->uploadExpiryHours()),
                 ]);
                 $actionRequest = $actionOrchestrator->dispatch(
                     type: 'bazarr_upload_subtitle',

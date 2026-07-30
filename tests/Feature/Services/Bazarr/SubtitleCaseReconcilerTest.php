@@ -2,12 +2,12 @@
 
 declare(strict_types=1);
 
-use Illuminate\Support\Facades\Date;
 use App\Enums\SubtitleCaseStatus;
 use App\Models\ServiceConnection;
 use App\Models\SubtitleCase;
 use App\Services\Bazarr\SubtitleCaseReconciler;
 use App\Settings\BazarrAutomationSettings;
+use Illuminate\Support\Facades\Date;
 
 /**
  * @return array<string, mixed>

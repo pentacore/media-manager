@@ -24,8 +24,7 @@ final class AdminController extends BazarrController
         Request $request,
         BazarrSettingsAdapter $bazarrSettingsAdapter,
         BazarrAutomationSettings $bazarrAutomationSettings,
-    ): Response
-    {
+    ): Response {
         $request->validate($this->commonRules());
         $connectionProps = $this->connectionProps($request);
         $connection = $this->selectedConnection($connectionProps);
@@ -50,8 +49,14 @@ final class AdminController extends BazarrController
         BazarrAutomationSettings $bazarrAutomationSettings,
     ): RedirectResponse {
         $configuration = $automationSettingsRequest->validated('automation');
+        $previous = $bazarrAutomationSettings->configuration();
         $bazarrAutomationSettings->setConfiguration($configuration);
-        $changedKeys = array_keys($configuration);
+        $current = $bazarrAutomationSettings->configuration();
+        $changedKeys = array_keys(array_filter(
+            $current,
+            static fn (mixed $value, string $key): bool => ($previous[$key] ?? null) !== $value,
+            ARRAY_FILTER_USE_BOTH,
+        ));
         sort($changedKeys);
 
         ActivityLog::create([

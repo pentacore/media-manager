@@ -13,10 +13,12 @@ use App\Models\ServiceConnection;
 use App\Models\SubtitleCase;
 use App\Models\SubtitleUpload;
 use App\Models\User;
+use App\Services\Bazarr\BazarrActions;
 use App\Services\Bazarr\BazarrMediaFingerprint;
 use Database\Seeders\ActionTypeConfigSeeder;
 use Illuminate\Http\Client\Request;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Facades\Storage;
@@ -115,6 +117,36 @@ test('members privately stage a validated upload and approval-gated action atomi
     Storage::disk('local')->assertExists($subtitleUpload->path);
 });
 
+test('subtitle uploads honor the configured size limit and staging expiry', function (): void {
+    resolve(App\Settings\BazarrAutomationSettings::class)->setConfiguration([
+        'upload_max_kilobytes' => 64,
+        'upload_expiry_hours' => 12,
+    ]);
+
+    $this->actingAs(User::factory()->member()->create())
+        ->withHeader('Accept', 'application/json')
+        ->post(route('bazarr.uploads.store'), [
+            ...uploadPayload($this),
+            'subtitle_file' => UploadedFile::fake()->createWithContent(
+                'too-large.srt',
+                "1\n00:00:01,000 --> 00:00:02,000\nHello\n".str_repeat('a', 70 * 1024),
+            ),
+        ])
+        ->assertUnprocessable()
+        ->assertJsonValidationErrors('subtitle_file');
+
+    $this->actingAs(User::factory()->member()->create())
+        ->withHeader('Accept', 'application/json')
+        ->post(route('bazarr.uploads.store'), [
+            ...uploadPayload($this),
+            'subtitle_file' => validSubtitleUpload(),
+        ])
+        ->assertCreated();
+
+    expect(SubtitleUpload::query()->sole()->expires_at->diffInHours(now(), true))
+        ->toEqualWithDelta(12, 0.1);
+});
+
 test('subtitle uploads enforce extension mime size and text content validation', function (UploadedFile $uploadedFile): void {
     $this->actingAs(User::factory()->member()->create())
         ->withHeader('Accept', 'application/json')
@@ -197,7 +229,7 @@ test('pruning idempotently cleans expired consumed cancelled and denied uploads'
         Storage::disk('local')->put($subtitleUpload->path, 'subtitle');
     });
 
-    $job = new PruneSubtitleUploads();
+    $job = new PruneSubtitleUploads;
     $job->handle();
     $job->handle();
 
@@ -210,6 +242,67 @@ test('pruning idempotently cleans expired consumed cancelled and denied uploads'
 
     expect($uploads['active']->refresh()->cleaned_up_at)->toBeNull();
     Storage::disk('local')->assertExists($uploads['active']->path);
+});
+
+test('pruning skips an upload whose execution claim lock is held so a mid-write file survives', function (): void {
+    config()->set('cache.default', 'array');
+    Cache::store('array')->flush();
+
+    $case = SubtitleCase::factory()->create();
+    $upload = SubtitleUpload::factory()->for($case)->create(['expires_at' => now()->subMinute()]);
+    Storage::disk('local')->put($upload->path, 'subtitle');
+
+    // The executor is mid-write and holds the per-upload claim lock. Even though
+    // the upload has expired, prune must not delete the staged file under it.
+    $lock = Cache::lock('subtitle-upload:'.$upload->id, 120);
+    expect($lock->get())->toBeTrue();
+
+    try {
+        new PruneSubtitleUploads()->handle();
+    } finally {
+        $lock->release();
+    }
+
+    expect($upload->refresh()->cleaned_up_at)->toBeNull();
+    Storage::disk('local')->assertExists($upload->path);
+
+    // Once the executor releases the lock, a later prune cycle cleans it up.
+    new PruneSubtitleUploads()->handle();
+
+    expect($upload->refresh()->cleaned_up_at)->not->toBeNull();
+    Storage::disk('local')->assertMissing($upload->path);
+});
+
+test('an upload action already pruned by the cleanup job aborts cleanly without a remote call', function (): void {
+    config()->set('cache.default', 'array');
+    Cache::store('array')->flush();
+
+    // Prune already ran: the row is marked cleaned and its staged file is gone.
+    $upload = SubtitleUpload::factory()->create([
+        'consumed_at' => now(),
+        'cleaned_up_at' => now(),
+    ]);
+
+    $request = ActionRequest::factory()->create([
+        'type' => 'bazarr_upload_subtitle',
+        'payload' => [
+            'title' => 'Upload subtitle',
+            'bazarr_connection_id' => $this->bazarr->id,
+            'service_connection_id' => $this->radarr->id,
+            'media_type' => 'movie',
+            'target_ids' => ['radarr_id' => 801, 'movie_file_id' => 5],
+            'target_fingerprint' => $this->targetFingerprint,
+            'subtitle_upload_id' => $upload->id,
+            'language' => 'eng',
+            'forced' => false,
+            'hearing_impaired' => false,
+        ],
+    ]);
+
+    expect(fn (): array => resolve(BazarrActions::class)->execute($request))
+        ->toThrow(InvalidArgumentException::class, 'unavailable');
+
+    Http::assertNotSent(fn (Request $request): bool => in_array($request->method(), ['POST', 'PATCH', 'DELETE'], true));
 });
 
 /**

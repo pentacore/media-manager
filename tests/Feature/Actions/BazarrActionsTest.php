@@ -6,16 +6,19 @@ use App\Enums\ActionRequestStatus;
 use App\Enums\BazarrServiceRole;
 use App\Enums\SubtitleCaseStatus;
 use App\Jobs\ExecuteActionRequest;
+use App\Jobs\ReconcileSubtitleCase;
 use App\Models\ActionRequest;
 use App\Models\BazarrServiceLink;
 use App\Models\ServiceConnection;
 use App\Models\SubtitleCase;
+use App\Services\Actions\SharedMediaTargetLock;
 use App\Services\Bazarr\BazarrActions;
 use App\Services\Bazarr\BazarrCandidateFingerprint;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\Request;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Queue;
 
 beforeEach(function (): void {
     config()->set('app.key', 'base64:'.base64_encode(str_repeat('b', 32)));
@@ -159,6 +162,31 @@ test('rejects execution while another worker owns the target lock', function ():
     Http::assertNothingSent();
 });
 
+test('rejects execution while a media replacement holds the shared installed-file lock', function (): void {
+    // A media replacement executor has claimed the same installed episode file
+    // (managing Sonarr connection + episode id). The Bazarr subtitle operation
+    // must not run concurrently against it.
+    $lock = Cache::lock(
+        SharedMediaTargetLock::key($this->sonarr->id, 'episode', 701),
+        120,
+    );
+    expect($lock->get())->toBeTrue();
+
+    try {
+        $request = ActionRequest::factory()->create([
+            'type' => 'bazarr_download_best',
+            'payload' => $this->payload,
+        ]);
+
+        expect(fn (): array => resolve(BazarrActions::class)->execute($request))
+            ->toThrow(RuntimeException::class, 'locked by another operation');
+    } finally {
+        $lock->release();
+    }
+
+    Http::assertNothingSent();
+});
+
 test('executes one successful write and returns a bounded result', function (): void {
     Http::fake([
         'bazarr.test/api/episodes?*' => Http::response(['data' => [[
@@ -227,6 +255,7 @@ test('marks a 5xx exact download indeterminate without issuing a second POST or 
     Http::fake(fn (Request $request) => $request->method() === 'GET'
         ? Http::response(['data' => [$candidate]])
         : Http::response(['message' => 'unavailable'], 503));
+    Queue::fake();
     $request = ActionRequest::factory()->create([
         'status' => ActionRequestStatus::Approved,
         'type' => 'bazarr_download_exact',
@@ -243,7 +272,14 @@ test('marks a 5xx exact download indeterminate without issuing a second POST or 
             'reason' => 'needs_reconciliation',
             'indeterminate' => true,
         ])
-        ->and($this->subtitleCase->fresh()->status)->toBe(SubtitleCaseStatus::NeedsReview);
+        // The uncertain outcome schedules targeted reconciliation for the linked
+        // case instead of escalating it to needs_review immediately.
+        ->and($this->subtitleCase->fresh()->status)->toBe(SubtitleCaseStatus::DownloadRequested);
+
+    Queue::assertPushed(
+        ReconcileSubtitleCase::class,
+        fn (ReconcileSubtitleCase $reconcileSubtitleCase): bool => $reconcileSubtitleCase->subtitleCaseId === $this->subtitleCase->id,
+    );
 
     Http::assertSentCount(2);
     Http::assertSent(fn (Request $request): bool => $request->method() === 'POST'
@@ -267,6 +303,7 @@ test('marks connection loss after a write indeterminate without retrying the wri
 
         throw new ConnectionException('connection lost after submit');
     });
+    Queue::fake();
     $request = ActionRequest::factory()->create([
         'status' => ActionRequestStatus::Approved,
         'type' => 'bazarr_download_best',
@@ -279,6 +316,11 @@ test('marks connection loss after a write indeterminate without retrying the wri
         'reason' => 'needs_reconciliation',
         'indeterminate' => true,
     ])->and($writeAttempts)->toBe(1);
+
+    Queue::assertPushed(
+        ReconcileSubtitleCase::class,
+        fn (ReconcileSubtitleCase $reconcileSubtitleCase): bool => $reconcileSubtitleCase->subtitleCaseId === $this->subtitleCase->id,
+    );
 });
 
 test('does not overwrite a terminal subtitle case after an indeterminate outcome', function (): void {
@@ -290,6 +332,7 @@ test('does not overwrite a terminal subtitle case after an indeterminate outcome
         ]]]),
         'bazarr.test/api/episodes/subtitles' => Http::response([], 503),
     ]);
+    Queue::fake();
     $request = ActionRequest::factory()->create([
         'status' => ActionRequestStatus::Approved,
         'type' => 'bazarr_download_best',
@@ -299,4 +342,5 @@ test('does not overwrite a terminal subtitle case after an indeterminate outcome
     new ExecuteActionRequest($request)->handle();
 
     expect($this->subtitleCase->fresh()->status)->toBe(SubtitleCaseStatus::Resolved);
+    Queue::assertNotPushed(ReconcileSubtitleCase::class);
 });

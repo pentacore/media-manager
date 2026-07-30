@@ -4,10 +4,10 @@ declare(strict_types=1);
 
 namespace App\Services\Bazarr;
 
-use Illuminate\Database\Eloquent\Collection;
 use App\Enums\SubtitleCaseStatus;
 use App\Models\SubtitleCase;
 use App\Settings\BazarrAutomationSettings;
+use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use InvalidArgumentException;
@@ -68,7 +68,7 @@ final readonly class SubtitleCaseReconciler
         if ($existing instanceof SubtitleCase) {
             if ($isComplete && in_array($existing->status, self::ACTIVE_STATUSES, true)) {
                 $this->subtitleCaseLifecycle->resolve($existing, [
-                    'evidence' => $this->evidence($candidate),
+                    'evidence' => $this->evidence($candidate, $existing),
                     'observed_at' => now(),
                 ]);
 
@@ -77,7 +77,7 @@ final readonly class SubtitleCaseReconciler
 
             if (! $isComplete) {
                 $existing->forceFill([
-                    'evidence' => $this->evidence($candidate),
+                    'evidence' => $this->evidence($candidate, $existing),
                     'observed_at' => now(),
                 ])->save();
                 $this->advanceElapsedGrace($existing);
@@ -91,7 +91,7 @@ final readonly class SubtitleCaseReconciler
         if ($isComplete) {
             foreach ($activeTargetCases as $activeTargetCase) {
                 $this->subtitleCaseLifecycle->resolve($activeTargetCase, [
-                    'evidence' => $this->evidence($candidate),
+                    'evidence' => $this->evidence($candidate, $activeTargetCase),
                     'observed_at' => now(),
                 ]);
             }
@@ -192,16 +192,26 @@ final readonly class SubtitleCaseReconciler
 
     /**
      * @param  array<string, mixed>  $candidate
-     * @return array{display_name: string, missing_languages: list<string>, current_subtitles: list<string>, monitored: bool}
+     * @return array<string, mixed>
      */
-    private function evidence(array $candidate): array
+    private function evidence(array $candidate, ?SubtitleCase $existing = null): array
     {
-        return [
+        $evidence = [
             'display_name' => $candidate['display_name'],
             'missing_languages' => $candidate['missing_languages'],
             'current_subtitles' => $candidate['current_subtitles'],
             'monitored' => $candidate['monitored'],
         ];
+
+        // Preserve the per-language download request map that the download
+        // request creator writes; a fresh projection must never clobber it.
+        $downloadRequests = $existing?->evidence['download_requests'] ?? null;
+
+        if (is_array($downloadRequests) && $downloadRequests !== []) {
+            $evidence['download_requests'] = $downloadRequests;
+        }
+
+        return $evidence;
     }
 
     /**

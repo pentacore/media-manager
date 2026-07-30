@@ -58,7 +58,7 @@ abstract class BazarrController extends Controller
     }
 
     /**
-     * @param array<string, mixed> $connectionProps
+     * @param  array<string, mixed>  $connectionProps
      */
     protected function selectedConnection(array $connectionProps): ?ServiceConnection
     {

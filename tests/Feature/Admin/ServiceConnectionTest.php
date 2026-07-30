@@ -6,6 +6,7 @@ use App\Jobs\FetchLatestServiceVersion;
 use App\Jobs\PingServiceHealth;
 use App\Models\BazarrServiceLink;
 use App\Models\ServiceConnection;
+use App\Enums\SubtitleCaseStatus;
 use App\Models\SubtitleCase;
 use App\Models\User;
 use Illuminate\Support\Facades\Http;
@@ -758,6 +759,115 @@ test('admin can toggle connection active status', function (): void {
 
     $connection->refresh();
     expect($connection->is_active)->toBeFalse();
+});
+
+test('removing a Bazarr mapping supersedes the active cases for that pairing', function (): void {
+    $admin = User::factory()->admin()->create();
+    $bazarr = ServiceConnection::factory()->bazarr()->create();
+    $sonarr = ServiceConnection::factory()->sonarr()->create();
+    $radarr = ServiceConnection::factory()->radarr()->create();
+    BazarrServiceLink::factory()->sonarr()->create([
+        'bazarr_connection_id' => $bazarr->id,
+        'related_connection_id' => $sonarr->id,
+    ]);
+    BazarrServiceLink::factory()->radarr()->create([
+        'bazarr_connection_id' => $bazarr->id,
+        'related_connection_id' => $radarr->id,
+    ]);
+    $case = SubtitleCase::factory()->create([
+        'bazarr_connection_id' => $bazarr->id,
+        'service_connection_id' => $sonarr->id,
+        'status' => SubtitleCaseStatus::BazarrSearching,
+    ]);
+
+    $this->actingAs($admin)
+        ->put(route('admin.connections.update', $bazarr), [
+            'type' => 'bazarr',
+            'name' => $bazarr->name,
+            'url' => $bazarr->url,
+            'radarr_connection_id' => $radarr->id,
+        ])
+        ->assertRedirect(route('admin.connections.index'))
+        ->assertSessionHasNoErrors();
+
+    expect($bazarr->mappedConnection(BazarrServiceRole::Sonarr))->toBeNull()
+        ->and($case->fresh()->status)->toBe(SubtitleCaseStatus::Superseded);
+});
+
+test('deactivating a Bazarr connection supersedes its active cases', function (): void {
+    $admin = User::factory()->admin()->create();
+    $bazarr = ServiceConnection::factory()->bazarr()->create(['is_active' => true]);
+    $sonarr = ServiceConnection::factory()->sonarr()->create();
+    $case = SubtitleCase::factory()->create([
+        'bazarr_connection_id' => $bazarr->id,
+        'service_connection_id' => $sonarr->id,
+        'status' => SubtitleCaseStatus::DownloadRequested,
+    ]);
+
+    $this->actingAs($admin)
+        ->patch(route('admin.connections.toggle', $bazarr))
+        ->assertRedirect(route('admin.connections.index'));
+
+    expect($bazarr->fresh()->is_active)->toBeFalse()
+        ->and($case->fresh()->status)->toBe(SubtitleCaseStatus::Superseded);
+});
+
+test('deactivating a mapped Sonarr connection supersedes the cases it manages', function (): void {
+    $admin = User::factory()->admin()->create();
+    $bazarr = ServiceConnection::factory()->bazarr()->create();
+    $sonarr = ServiceConnection::factory()->sonarr()->create(['is_active' => true]);
+    BazarrServiceLink::factory()->sonarr()->create([
+        'bazarr_connection_id' => $bazarr->id,
+        'related_connection_id' => $sonarr->id,
+    ]);
+    $case = SubtitleCase::factory()->create([
+        'bazarr_connection_id' => $bazarr->id,
+        'service_connection_id' => $sonarr->id,
+        'status' => SubtitleCaseStatus::BazarrSearching,
+    ]);
+
+    $this->actingAs($admin)
+        ->patch(route('admin.connections.toggle', $sonarr))
+        ->assertRedirect(route('admin.connections.index'));
+
+    expect($case->fresh()->status)->toBe(SubtitleCaseStatus::Superseded);
+});
+
+test('supersession never regresses terminal cases and never touches unrelated cases', function (): void {
+    $admin = User::factory()->admin()->create();
+    $bazarr = ServiceConnection::factory()->bazarr()->create(['is_active' => true]);
+    $sonarr = ServiceConnection::factory()->sonarr()->create();
+
+    $resolved = SubtitleCase::factory()->create([
+        'bazarr_connection_id' => $bazarr->id,
+        'service_connection_id' => $sonarr->id,
+        'status' => SubtitleCaseStatus::Resolved,
+    ]);
+    $dismissed = SubtitleCase::factory()->create([
+        'bazarr_connection_id' => $bazarr->id,
+        'service_connection_id' => $sonarr->id,
+        'status' => SubtitleCaseStatus::Dismissed,
+    ]);
+    $handled = SubtitleCase::factory()->create([
+        'bazarr_connection_id' => $bazarr->id,
+        'service_connection_id' => $sonarr->id,
+        'status' => SubtitleCaseStatus::Handled,
+    ]);
+
+    $otherBazarr = ServiceConnection::factory()->bazarr()->create();
+    $unrelated = SubtitleCase::factory()->create([
+        'bazarr_connection_id' => $otherBazarr->id,
+        'status' => SubtitleCaseStatus::BazarrSearching,
+    ]);
+
+    $this->actingAs($admin)
+        ->patch(route('admin.connections.toggle', $bazarr))
+        ->assertRedirect(route('admin.connections.index'));
+
+    expect($resolved->fresh()->status)->toBe(SubtitleCaseStatus::Resolved)
+        ->and($dismissed->fresh()->status)->toBe(SubtitleCaseStatus::Dismissed)
+        ->and($handled->fresh()->status)->toBe(SubtitleCaseStatus::Handled)
+        ->and($unrelated->fresh()->status)->toBe(SubtitleCaseStatus::BazarrSearching);
 });
 
 test('admin can test a sonarr connection successfully', function (): void {

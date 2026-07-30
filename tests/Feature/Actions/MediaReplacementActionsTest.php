@@ -3,9 +3,11 @@
 declare(strict_types=1);
 
 use App\Enums\MediaReplacementStatus;
+use App\Events\MediaReplacementAttemptChanged;
 use App\Models\ActionRequest;
 use App\Models\MediaReplacementAttempt;
 use App\Models\ServiceConnection;
+use App\Services\Actions\SharedMediaTargetLock;
 use App\Services\MediaReplacement\MediaReplacementActions;
 use App\Services\MediaReplacement\MediaReplacementTracker;
 use App\Services\MediaReplacement\ReleaseFingerprint;
@@ -13,6 +15,7 @@ use App\Settings\MediaReplacementSettings;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\Request;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Http;
 
 beforeEach(function (): void {
@@ -271,6 +274,55 @@ test('pins execution to the approved connection when multiple are active', funct
     Http::assertNotSent(fn (Request $request): bool => str_contains($request->url(), 'sonarr.local:8989'));
 
     expect(MediaReplacementAttempt::first()->service_connection_id)->toBe($pinned->id);
+});
+
+test('rejects execution while a Bazarr subtitle operation holds the shared installed-file lock', function (): void {
+    fakeExecutor();
+    $connectionId = ServiceConnection::query()->firstOrFail()->id;
+
+    // A Bazarr subtitle download/delete/sync executor has claimed the same
+    // installed episode file. The destructive replacement must refuse to run.
+    $lock = Cache::lock(SharedMediaTargetLock::key($connectionId, 'episode', 101), 120);
+    expect($lock->get())->toBeTrue();
+
+    try {
+        expect(fn (): array => resolve(MediaReplacementActions::class)->execute(replaceActionRequest()))
+            ->toThrow(RuntimeException::class, 'locked by another operation');
+
+        Http::assertNotSent(fn (Request $request): bool => $request->method() === 'POST' && str_contains($request->url(), '/api/v3/release'));
+        Http::assertNotSent(fn (Request $request): bool => $request->method() === 'DELETE');
+    } finally {
+        $lock->release();
+    }
+});
+
+test('aborts a destructive replacement when the pinned connection was deactivated after approval', function (): void {
+    fakeExecutor();
+    $connection = ServiceConnection::query()->firstOrFail();
+    $connection->update(['is_active' => false]);
+
+    $fingerprint = (new ReleaseFingerprint)->make('sonarr', sonarrReplacementRelease());
+    $actionRequest = ActionRequest::factory()->create([
+        'type' => 'replace_media_file', 'source_service' => 'ai', 'target_service' => 'sonarr',
+        'payload' => [
+            'service' => 'sonarr',
+            'service_connection_id' => $connection->id,
+            'scope' => 'anime',
+            'target' => [
+                'service' => 'sonarr', 'service_connection_id' => $connection->id, 'scope' => 'anime',
+                'series_id' => 42, 'episode_ids' => [101], 'episode_file_ids' => [501],
+            ],
+            'candidate_fingerprint' => $fingerprint,
+            'candidate' => ['fingerprint' => $fingerprint], 'required_languages' => ['eng'], 'selection_mode' => 'manual',
+        ],
+    ]);
+
+    expect(fn (): array => resolve(MediaReplacementActions::class)->execute($actionRequest))
+        ->toThrow(InvalidArgumentException::class);
+
+    // A deactivated connection must abort BEFORE any destructive write.
+    Http::assertNotSent(fn (Request $request): bool => $request->method() === 'DELETE');
+    Http::assertNotSent(fn (Request $request): bool => $request->method() === 'POST' && str_contains($request->url(), '/api/v3/release'));
 });
 
 test('aborts without grabbing or deleting when the installed file changed after approval', function (): void {
@@ -581,6 +633,7 @@ test('does not regress a terminal state the real tracker set during execution', 
 });
 
 test('marks the attempt needs_attention when deletion fails after a successful grab', function (): void {
+    Event::fake([MediaReplacementAttemptChanged::class]);
     fakeExecutor(['deleteOk' => false]);
 
     expect(fn (): array => resolve(MediaReplacementActions::class)->execute(replaceActionRequest()))
@@ -589,6 +642,9 @@ test('marks the attempt needs_attention when deletion fails after a successful g
     Http::assertSent(fn (Request $request): bool => $request->method() === 'POST' && str_contains($request->url(), '/api/v3/release'));
 
     expect(MediaReplacementAttempt::first()->status)->toBe(MediaReplacementStatus::NeedsAttention);
+    // The terminal transition announces itself exactly once so a correlated
+    // subtitle case can react.
+    Event::assertDispatchedTimes(MediaReplacementAttemptChanged::class, 1);
 });
 
 test('a retry after an indeterminate grab resets the stale cleanup checkpoint so a fast webhook cannot remonitor before blocklisting', function (): void {

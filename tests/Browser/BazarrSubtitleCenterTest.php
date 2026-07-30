@@ -2,21 +2,21 @@
 
 declare(strict_types=1);
 
-use App\Enums\SubtitleCaseAttemptType;
-use App\Enums\SubtitleCaseAttemptOutcome;
-use App\Enums\SubtitleCaseStatus;
-use App\Models\ServiceConnection;
-use App\Models\SubtitleCase;
-use App\Models\SubtitleCaseAttempt;
-use App\Models\User;
 use App\Enums\BazarrServiceRole;
+use App\Enums\SubtitleCaseAttemptOutcome;
+use App\Enums\SubtitleCaseAttemptType;
+use App\Enums\SubtitleCaseStatus;
 use App\Models\ActionRequest;
 use App\Models\ActivityLog;
 use App\Models\BazarrServiceLink;
+use App\Models\ServiceConnection;
+use App\Models\SubtitleCase;
+use App\Models\SubtitleCaseAttempt;
 use App\Models\SubtitleUpload;
+use App\Models\User;
 use Database\Seeders\ActionTypeConfigSeeder;
-use Illuminate\Http\Client\Request;
 use Illuminate\Contracts\Http\Kernel;
+use Illuminate\Http\Client\Request;
 use Illuminate\Support\Facades\Http;
 use Tests\Support\ParseMultipartBrowserRequests;
 

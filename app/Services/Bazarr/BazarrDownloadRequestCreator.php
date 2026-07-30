@@ -36,11 +36,19 @@ final readonly class BazarrDownloadRequestCreator
                 return null;
             }
 
-            if ($lockedCase->download_action_request_id !== null) {
-                return ActionRequest::query()->find($lockedCase->download_action_request_id);
+            // Per-language uniqueness: a case missing several languages needs one
+            // request per language, so the linked request is keyed by language and
+            // qualifiers in evidence rather than the single scalar column.
+            $requestKey = $this->requestKey($language, $forced, $hearingImpaired);
+            $downloadRequests = $this->downloadRequests($lockedCase);
+
+            if (isset($downloadRequests[$requestKey])) {
+                return ActionRequest::query()->find($downloadRequests[$requestKey]);
             }
 
-            if ($lockedCase->status !== SubtitleCaseStatus::BazarrSearching) {
+            // Additional languages may be requested while the case already sits in
+            // download_requested from an earlier language in the same probe.
+            if (! in_array($lockedCase->status, [SubtitleCaseStatus::BazarrSearching, SubtitleCaseStatus::DownloadRequested], true)) {
                 return null;
             }
 
@@ -69,13 +77,48 @@ final readonly class BazarrDownloadRequestCreator
                 return null;
             }
 
-            $this->subtitleCaseLifecycle->transition(
-                $lockedCase,
-                SubtitleCaseStatus::DownloadRequested,
-                ['download_action_request_id' => $actionRequest->id],
-            );
+            $downloadRequests[$requestKey] = $actionRequest->id;
+            $evidence = is_array($lockedCase->evidence) ? $lockedCase->evidence : [];
+            $evidence['download_requests'] = $downloadRequests;
+
+            // The scalar column keeps the most-recent request for existing
+            // correlation; the evidence map records every per-language request.
+            if ($lockedCase->status === SubtitleCaseStatus::BazarrSearching) {
+                $this->subtitleCaseLifecycle->transition(
+                    $lockedCase,
+                    SubtitleCaseStatus::DownloadRequested,
+                    [
+                        'download_action_request_id' => $actionRequest->id,
+                        'evidence' => $evidence,
+                    ],
+                );
+            } else {
+                $lockedCase->forceFill([
+                    'download_action_request_id' => $actionRequest->id,
+                    'evidence' => $evidence,
+                ])->save();
+            }
 
             return $actionRequest;
         }, attempts: 3);
+    }
+
+    private function requestKey(string $language, bool $forced, bool $hearingImpaired): string
+    {
+        return sprintf('%s|%d|%d', $language, (int) $forced, (int) $hearingImpaired);
+    }
+
+    /**
+     * @return array<string, int>
+     */
+    private function downloadRequests(SubtitleCase $subtitleCase): array
+    {
+        $downloadRequests = $subtitleCase->evidence['download_requests'] ?? null;
+
+        if (! is_array($downloadRequests)) {
+            return [];
+        }
+
+        return array_filter($downloadRequests, static fn (mixed $value): bool => is_int($value));
     }
 }

@@ -2,7 +2,6 @@
 
 declare(strict_types=1);
 
-use Illuminate\Http\Client\Request;
 use App\Enums\SubtitleCaseAttemptOutcome;
 use App\Enums\SubtitleCaseAttemptType;
 use App\Enums\SubtitleCaseStatus;
@@ -12,6 +11,7 @@ use App\Models\SubtitleCaseAttempt;
 use App\Services\Bazarr\SubtitleAdvisorProjection;
 use App\Services\Bazarr\SubtitleCaseFingerprint;
 use App\Settings\MediaReplacementSettings;
+use Illuminate\Http\Client\Request;
 use Illuminate\Support\Facades\Date;
 use Illuminate\Support\Facades\Http;
 

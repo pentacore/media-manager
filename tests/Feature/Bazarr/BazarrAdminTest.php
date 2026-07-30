@@ -2,10 +2,10 @@
 
 declare(strict_types=1);
 
-use App\Settings\BazarrAutomationSettings;
 use App\Models\ActivityLog;
 use App\Models\ServiceConnection;
 use App\Models\User;
+use App\Settings\BazarrAutomationSettings;
 use Illuminate\Http\Client\Request;
 use Illuminate\Support\Facades\Http;
 use Inertia\Testing\AssertableInertia;
@@ -127,7 +127,18 @@ test('admin updates automation with a value-free audit record', function (): voi
     $encodedLog = json_encode($activityLog->toArray(), JSON_THROW_ON_ERROR);
 
     expect($activityLog->user_id)->toBe($admin->id)
-        ->and($activityLog->metadata['changed_keys'])->toHaveCount(11)
+        ->and($activityLog->metadata['changed_keys'])->toBe([
+            'empty_probe_threshold',
+            'enabled',
+            'grace_hours',
+            'max_advisor_escalations_per_cycle',
+            'max_cases_per_cycle',
+            'max_probes_per_cycle',
+            'probe_spacing_hours',
+            'reconciliation_interval_minutes',
+            'upload_expiry_hours',
+            'upload_max_kilobytes',
+        ])
         ->and($encodedLog)->not->toContain('4096')
         ->not->toContain('reconciliation_interval_minutes":30');
 });

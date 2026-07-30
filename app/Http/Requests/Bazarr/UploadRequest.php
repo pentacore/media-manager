@@ -4,8 +4,9 @@ declare(strict_types=1);
 
 namespace App\Http\Requests\Bazarr;
 
-use finfo;
+use App\Settings\BazarrAutomationSettings;
 use Closure;
+use finfo;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Http\UploadedFile;
 use Override;
@@ -46,7 +47,7 @@ final class UploadRequest extends FormRequest
             'subtitle_file' => [
                 'required',
                 'file',
-                'max:5120',
+                'max:'.resolve(BazarrAutomationSettings::class)->uploadMaxKilobytes(),
                 'extensions:srt,ass,ssa,vtt,sub',
                 $this->validSubtitleContent(...),
             ],

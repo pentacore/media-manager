@@ -14,6 +14,7 @@ use App\Jobs\FetchLatestServiceVersion;
 use App\Jobs\PingServiceHealth;
 use App\Models\ServiceConnection;
 use App\Services\Arr\ArrClient;
+use App\Services\Bazarr\SubtitleCaseSupersession;
 use App\Services\MediaReplacement\SonarrLibraryTypeSettings;
 use App\Services\MediaReplacement\SonarrRootFolderCatalog;
 use App\Services\Prowlarr\ProwlarrClient;
@@ -148,8 +149,7 @@ class ServiceConnectionController extends Controller
     private function arrConnections(
         ?ServiceConnection $editingConnection = null,
         array $selectedConnectionIds = [],
-    ): array
-    {
+    ): array {
         $builder = ServiceConnection::query()
             ->whereIn('type', [ServiceType::Sonarr->value, ServiceType::Radarr->value]);
 
@@ -256,10 +256,14 @@ class ServiceConnectionController extends Controller
      */
     private function webhookUrlFor(ServiceConnection $serviceConnection): string
     {
-        $base = route('webhooks.handle', [
-            'service' => $serviceConnection->type->value,
-            'connection' => $serviceConnection->id,
-        ]);
+        // Bazarr notifications use their own dedicated intake route; the
+        // generic webhook controller has no Bazarr handler arm.
+        $base = $serviceConnection->type === ServiceType::Bazarr
+            ? route('webhooks.bazarr', ['serviceConnection' => $serviceConnection])
+            : route('webhooks.handle', [
+                'service' => $serviceConnection->type->value,
+                'connection' => $serviceConnection->id,
+            ]);
 
         $token = $serviceConnection->webhook_token;
 
@@ -328,6 +332,7 @@ class ServiceConnectionController extends Controller
         ServiceConnectionUpdateRequest $serviceConnectionUpdateRequest,
         ServiceConnection $serviceConnection,
         SonarrLibraryTypeSettings $sonarrLibraryTypeSettings,
+        SubtitleCaseSupersession $subtitleCaseSupersession,
     ): RedirectResponse {
         $validated = $serviceConnectionUpdateRequest->validated();
         $mappingIds = [
@@ -395,14 +400,45 @@ class ServiceConnectionController extends Controller
 
         $validated = $this->mergeWhisparrVersion($validated, $serviceConnection);
 
-        DB::transaction(function () use ($serviceConnection, $validated, $mappingIds): void {
+        DB::transaction(function () use ($serviceConnection, $validated, $mappingIds, $subtitleCaseSupersession): void {
+            $wasActive = $serviceConnection->is_active;
+
+            // Capture the Bazarr connection's existing pairings before the sync
+            // so we can supersede cases for any mapping that is removed or
+            // repointed at a different managing connection.
+            $existingPairings = $serviceConnection->type === ServiceType::Bazarr
+                ? $serviceConnection->bazarrServiceLinks()->get()
+                    ->mapWithKeys(fn ($link): array => [$link->role->value => $link->related_connection_id])
+                    ->all()
+                : [];
+
             $serviceConnection->update($validated);
 
-            if ($serviceConnection->wasChanged('type')) {
+            $retyped = $serviceConnection->wasChanged('type');
+
+            if ($retyped) {
                 $serviceConnection->incomingBazarrServiceLinks()->delete();
             }
 
             $this->syncBazarrLinks($serviceConnection, $mappingIds);
+
+            // A deactivated or retyped connection can no longer reconcile any of
+            // its cases (as Bazarr or as the managing arr), so supersede them.
+            if (($wasActive && ! $serviceConnection->is_active) || $retyped) {
+                $subtitleCaseSupersession->forConnection($serviceConnection);
+            }
+
+            // A removed or repointed mapping supersedes the cases that belonged to
+            // the old Bazarr-to-managing pairing.
+            foreach ($existingPairings as $role => $previousRelatedId) {
+                if ($previousRelatedId === null) {
+                    continue;
+                }
+
+                if (($mappingIds[$role] ?? null) !== $previousRelatedId) {
+                    $subtitleCaseSupersession->forPairing($serviceConnection->id, (int) $previousRelatedId);
+                }
+            }
         });
 
         Inertia::flash('toast', ['type' => 'success', 'message' => __('Connection updated.')]);
@@ -477,9 +513,20 @@ class ServiceConnectionController extends Controller
             || str_contains($queryException->getMessage(), 'subtitle_cases_service_connection_id_foreign');
     }
 
-    public function toggle(ServiceConnection $serviceConnection): RedirectResponse
-    {
-        $serviceConnection->update(['is_active' => ! $serviceConnection->is_active]);
+    public function toggle(
+        ServiceConnection $serviceConnection,
+        SubtitleCaseSupersession $subtitleCaseSupersession,
+    ): RedirectResponse {
+        DB::transaction(function () use ($serviceConnection, $subtitleCaseSupersession): void {
+            $wasActive = $serviceConnection->is_active;
+            $serviceConnection->update(['is_active' => ! $serviceConnection->is_active]);
+
+            // Deactivating a connection disables new reconciliation for its cases,
+            // so supersede the active ones (as Bazarr or as the managing arr).
+            if ($wasActive) {
+                $subtitleCaseSupersession->forConnection($serviceConnection);
+            }
+        });
 
         $status = $serviceConnection->is_active ? 'enabled' : 'disabled';
         Inertia::flash('toast', ['type' => 'success', 'message' => __(sprintf('Connection %s.', $status))]);

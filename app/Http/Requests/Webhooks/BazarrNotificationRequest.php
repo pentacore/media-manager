@@ -4,8 +4,8 @@ declare(strict_types=1);
 
 namespace App\Http\Requests\Webhooks;
 
-use Override;
 use Illuminate\Foundation\Http\FormRequest;
+use Override;
 
 final class BazarrNotificationRequest extends FormRequest
 {

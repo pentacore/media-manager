@@ -6,7 +6,10 @@ namespace App\Services\Bazarr;
 
 use App\Models\ServiceConnection;
 use DomainException;
+use Illuminate\Http\Client\ConnectionException;
+use Illuminate\Http\Client\RequestException;
 use InvalidArgumentException;
+use UnexpectedValueException;
 
 final class BazarrSettingsAdapter
 {
@@ -81,6 +84,20 @@ final class BazarrSettingsAdapter
     public static function writableKeys(): array
     {
         return array_keys(self::WRITE_MAP);
+    }
+
+    /**
+     * A null result means the installed Bazarr version cannot expose the
+     * threshold reliably; callers must treat that as a capability limitation
+     * rather than an empty probe or a hard failure.
+     */
+    public function effectiveMinimumScore(ServiceConnection $serviceConnection, string $mediaType): ?int
+    {
+        try {
+            return (new BazarrClient($serviceConnection))->effectiveMinimumScore($mediaType);
+        } catch (ConnectionException|RequestException|UnexpectedValueException) {
+            return null;
+        }
     }
 
     /**

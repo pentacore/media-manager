@@ -6,6 +6,7 @@ namespace App\Console\Commands;
 
 use App\Enums\MediaReplacementStatus;
 use App\Enums\UserRole;
+use App\Events\MediaReplacementAttemptChanged;
 use App\Models\MediaReplacementAttempt;
 use App\Models\User;
 use App\Notifications\MediaReplacementStatusChanged;
@@ -62,6 +63,10 @@ class ReconcileMediaReplacementAttempts extends Command
 
             $flagged++;
             $attempt->refresh();
+
+            // Announce the terminal state this sweep won so a correlated subtitle
+            // case can move to needs_review.
+            event(new MediaReplacementAttemptChanged($attempt));
 
             // The sweep is the last actor that will ever touch this attempt on
             // several paths (indeterminate grab, executor died mid-cleanup,

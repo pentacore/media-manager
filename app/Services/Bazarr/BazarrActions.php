@@ -8,11 +8,14 @@ use App\Cache\Services\BazarrCache;
 use App\Enums\BazarrServiceRole;
 use App\Enums\ServiceType;
 use App\Enums\SubtitleCaseStatus;
+use App\Jobs\ReconcileSubtitleCase;
 use App\Models\ActionRequest;
 use App\Models\ServiceConnection;
 use App\Models\SubtitleCase;
 use App\Models\SubtitleUpload;
 use App\Services\Actions\ActionExecutor;
+use App\Services\Actions\SharedMediaTargetLock;
+use Illuminate\Contracts\Cache\Lock;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\RequestException;
 use Illuminate\Http\UploadedFile;
@@ -82,6 +85,17 @@ final readonly class BazarrActions implements ActionExecutor
 
         throw_unless($lock->get(), RuntimeException::class, 'This Bazarr target is already being modified.');
 
+        // Shared installed-file lock: excludes a concurrent media replacement
+        // for the same file. Keyed on the pinned managing arr connection plus
+        // the stable installed-file identity so both executors compute the same
+        // key. bazarr_run_task has no media target and needs no shared lock.
+        $sharedLock = $this->sharedTargetLock($payload);
+        throw_unless(
+            $sharedLock === null || $sharedLock->get(),
+            RuntimeException::class,
+            'This installed media file is locked by another operation.',
+        );
+
         try {
             $this->revalidateTarget($payload, $serviceConnection);
             $bazarrClient = new BazarrClient($serviceConnection);
@@ -89,7 +103,7 @@ final readonly class BazarrActions implements ActionExecutor
             try {
                 $result = $this->write($actionRequest->type, $payload, $bazarrClient);
             } catch (ConnectionException $connectionException) {
-                $this->markCaseNeedsReview($actionRequest, $payload, $connectionException->getMessage());
+                $this->reconcileIndeterminateOutcome($actionRequest, $payload, $serviceConnection, $connectionException->getMessage());
 
                 throw new BazarrIndeterminateOutcomeException('Bazarr may have accepted the operation before the connection was lost.', $connectionException->getCode(), previous: $connectionException);
             } catch (RequestException $requestException) {
@@ -97,7 +111,7 @@ final readonly class BazarrActions implements ActionExecutor
                     throw new InvalidArgumentException('Bazarr rejected the approved operation.', $requestException->getCode(), previous: $requestException);
                 }
 
-                $this->markCaseNeedsReview($actionRequest, $payload, $requestException->getMessage());
+                $this->reconcileIndeterminateOutcome($actionRequest, $payload, $serviceConnection, $requestException->getMessage());
 
                 throw new BazarrIndeterminateOutcomeException('Bazarr returned a server error after the operation was submitted; its outcome requires reconciliation.', $requestException->getCode(), previous: $requestException);
             }
@@ -106,8 +120,32 @@ final readonly class BazarrActions implements ActionExecutor
 
             return $result;
         } finally {
+            $sharedLock?->release();
             $lock->release();
         }
+    }
+
+    /**
+     * Resolve the shared installed-file lock for file-affecting actions, or null
+     * for task execution (no media target).
+     *
+     * @param  array<string, mixed>  $payload
+     */
+    private function sharedTargetLock(array $payload): ?Lock
+    {
+        if (isset($payload['task_id']) || ! isset($payload['media_type'])) {
+            return null;
+        }
+
+        $mediaType = $this->requiredMediaType($payload);
+        $connectionId = $this->requiredPositiveInteger($payload, 'service_connection_id');
+        $targetIds = $this->targetIds($payload, $mediaType);
+        $mediaId = $mediaType === 'episode' ? $targetIds['episode_id'] : $targetIds['radarr_id'];
+
+        return Cache::lock(
+            SharedMediaTargetLock::key($connectionId, $mediaType, $mediaId),
+            SharedMediaTargetLock::TTL_SECONDS,
+        );
     }
 
     /**
@@ -168,15 +206,11 @@ final readonly class BazarrActions implements ActionExecutor
         if (! isset($payload['subtitle_case_id'])) {
             new BazarrCache($bazarr)->bustAll();
             $targetIds = $this->targetIds($payload, $mediaType);
-            $items = $mediaType === 'episode'
-                ? new BazarrClient($bazarr)->getEpisodes(episodeIds: [$targetIds['episode_id']])['data']
-                : new BazarrClient($bazarr)->getMovies(length: 100)['data'];
-            $mediaId = $mediaType === 'episode' ? $targetIds['episode_id'] : $targetIds['radarr_id'];
-            $item = collect($items)->first(function (array $candidate) use ($mediaType, $mediaId): bool {
-                $key = $mediaType === 'episode' ? 'sonarrEpisodeId' : 'radarrId';
-
-                return ($candidate[$key] ?? null) === $mediaId;
-            });
+            $bazarrClient = new BazarrClient($bazarr);
+            $item = $mediaType === 'episode'
+                ? collect($bazarrClient->getEpisodes(episodeIds: [$targetIds['episode_id']])['data'])
+                    ->first(fn (array $candidate): bool => ($candidate['sonarrEpisodeId'] ?? null) === $targetIds['episode_id'])
+                : $bazarrClient->findMovieByRadarrId($targetIds['radarr_id']);
 
             throw_unless(
                 is_array($item)
@@ -296,46 +330,63 @@ final readonly class BazarrActions implements ActionExecutor
      */
     private function upload(BazarrClient $bazarrClient, array $payload, ?string $mediaType): void
     {
-        $upload = SubtitleUpload::query()->find($this->requiredPositiveInteger($payload, 'subtitle_upload_id'));
+        $uploadId = $this->requiredPositiveInteger($payload, 'subtitle_upload_id');
+
+        // Claim the staged upload before reading it so the prune job cannot
+        // delete or mark the file cleaned mid-write. Prune takes the same lock
+        // (non-blocking) and skips a held row, so an expired-but-mid-execution
+        // upload survives, while an already-pruned one aborts cleanly below.
+        $uploadLock = Cache::lock('subtitle-upload:'.$uploadId, 120);
         throw_unless(
-            $upload instanceof SubtitleUpload
-                && $upload->consumed_at === null
-                && $upload->cancelled_at === null
-                && $upload->cleaned_up_at === null
-                && $upload->expires_at->isFuture()
-                && Storage::disk('local')->exists($upload->path),
-            InvalidArgumentException::class,
-            'The staged subtitle upload is unavailable.',
+            $uploadLock->get(),
+            RuntimeException::class,
+            'The staged subtitle upload is currently being cleaned up.',
         );
 
-        $contents = Storage::disk('local')->get($upload->path);
-        throw_unless(hash_equals($upload->checksum, hash('sha256', (string) $contents)), InvalidArgumentException::class, 'The staged subtitle upload checksum changed.');
+        try {
+            $upload = SubtitleUpload::query()->find($uploadId);
+            throw_unless(
+                $upload instanceof SubtitleUpload
+                    && $upload->consumed_at === null
+                    && $upload->cancelled_at === null
+                    && $upload->cleaned_up_at === null
+                    && $upload->expires_at->isFuture()
+                    && Storage::disk('local')->exists($upload->path),
+                InvalidArgumentException::class,
+                'The staged subtitle upload is unavailable.',
+            );
 
-        $uploadedFile = new UploadedFile(
-            Storage::disk('local')->path($upload->path),
-            $upload->display_name,
-            $upload->mime_type,
-            test: true,
-        );
-        $targetIds = $this->targetIds($payload, (string) $mediaType);
-        $arguments = [
-            $this->requiredLanguage($payload),
-            $this->requiredBoolean($payload, 'forced'),
-            $this->requiredBoolean($payload, 'hearing_impaired'),
-            $uploadedFile,
-        ];
+            $contents = Storage::disk('local')->get($upload->path);
+            throw_unless(hash_equals($upload->checksum, hash('sha256', (string) $contents)), InvalidArgumentException::class, 'The staged subtitle upload checksum changed.');
 
-        if ($mediaType === 'episode') {
-            $bazarrClient->uploadEpisode($targetIds['series_id'], $targetIds['episode_id'], ...$arguments);
-        } else {
-            $bazarrClient->uploadMovie($targetIds['radarr_id'], ...$arguments);
+            $uploadedFile = new UploadedFile(
+                Storage::disk('local')->path($upload->path),
+                $upload->display_name,
+                $upload->mime_type,
+                test: true,
+            );
+            $targetIds = $this->targetIds($payload, (string) $mediaType);
+            $arguments = [
+                $this->requiredLanguage($payload),
+                $this->requiredBoolean($payload, 'forced'),
+                $this->requiredBoolean($payload, 'hearing_impaired'),
+                $uploadedFile,
+            ];
+
+            if ($mediaType === 'episode') {
+                $bazarrClient->uploadEpisode($targetIds['series_id'], $targetIds['episode_id'], ...$arguments);
+            } else {
+                $bazarrClient->uploadMovie($targetIds['radarr_id'], ...$arguments);
+            }
+
+            Storage::disk('local')->delete($upload->path);
+            $upload->update([
+                'consumed_at' => now(),
+                'cleaned_up_at' => now(),
+            ]);
+        } finally {
+            $uploadLock->release();
         }
-
-        Storage::disk('local')->delete($upload->path);
-        $upload->update([
-            'consumed_at' => now(),
-            'cleaned_up_at' => now(),
-        ]);
     }
 
     /**
@@ -404,15 +455,11 @@ final readonly class BazarrActions implements ActionExecutor
         string $fingerprint,
     ): array {
         $targetIds = $this->targetIds($payload, $mediaType);
-        $items = $mediaType === 'episode'
-            ? $bazarrClient->getEpisodes(episodeIds: [$targetIds['episode_id']])['data']
-            : $bazarrClient->getMovies(length: 100)['data'];
         $mediaId = $mediaType === 'episode' ? $targetIds['episode_id'] : $targetIds['radarr_id'];
-        $item = collect($items)->first(function (array $candidate) use ($mediaType, $mediaId): bool {
-            $key = $mediaType === 'episode' ? 'sonarrEpisodeId' : 'radarrId';
-
-            return ($candidate[$key] ?? null) === $mediaId;
-        });
+        $item = $mediaType === 'episode'
+            ? collect($bazarrClient->getEpisodes(episodeIds: [$targetIds['episode_id']])['data'])
+                ->first(fn (array $candidate): bool => ($candidate['sonarrEpisodeId'] ?? null) === $mediaId)
+            : $bazarrClient->findMovieByRadarrId($mediaId);
 
         throw_unless(is_array($item), InvalidArgumentException::class, 'The Bazarr media target is no longer available.');
         $tracks = is_array($item['subtitles'] ?? null) ? $item['subtitles'] : [];
@@ -476,21 +523,37 @@ final readonly class BazarrActions implements ActionExecutor
     }
 
     /**
+     * An uncertain write (connection loss or 5xx after submit) must not be
+     * declared failed. For a case the action explicitly links, schedule targeted
+     * reconciliation — after busting the cache so it reads fresh upstream state —
+     * so reconciliation determines the true outcome before any escalation. When
+     * there is no linked case, fall back to marking the loosely-correlated case
+     * needs_review. A terminal case is never touched.
+     *
      * @param  array<string, mixed>  $payload
      */
-    private function markCaseNeedsReview(ActionRequest $actionRequest, array $payload, string $reason): void
-    {
-        $subtitleCaseId = isset($payload['subtitle_case_id'])
-            ? $this->requiredPositiveInteger($payload, 'subtitle_case_id')
-            : null;
-        $subtitleCase = $subtitleCaseId === null
-            ? SubtitleCase::query()
+    private function reconcileIndeterminateOutcome(
+        ActionRequest $actionRequest,
+        array $payload,
+        ServiceConnection $bazarr,
+        string $reason,
+    ): void {
+        $hasLinkedCase = isset($payload['subtitle_case_id']);
+        $subtitleCase = $hasLinkedCase
+            ? SubtitleCase::query()->find($this->requiredPositiveInteger($payload, 'subtitle_case_id'))
+            : SubtitleCase::query()
                 ->where('download_action_request_id', $actionRequest->id)
                 ->orWhere('replacement_action_request_id', $actionRequest->id)
-                ->first()
-            : SubtitleCase::query()->find($subtitleCaseId);
+                ->first();
 
         if (! $subtitleCase instanceof SubtitleCase || ! in_array($subtitleCase->status, self::REVIEWABLE_CASE_STATUSES, true)) {
+            return;
+        }
+
+        if ($hasLinkedCase) {
+            new BazarrCache($bazarr)->bustAll();
+            dispatch(ReconcileSubtitleCase::forCase($subtitleCase)->delay(now()->addMinute()));
+
             return;
         }
 

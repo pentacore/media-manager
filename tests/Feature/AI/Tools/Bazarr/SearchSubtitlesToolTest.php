@@ -82,7 +82,7 @@ function fakeSearchToolMovie(): void
         'release_info' => ['Example.Movie.2024.1080p'],
     ], range(1, 15));
 
-    Http::fake(fn(HttpRequest $httpRequest) => match (parse_url($httpRequest->url(), PHP_URL_PATH)) {
+    Http::fake(fn (HttpRequest $httpRequest) => match (parse_url($httpRequest->url(), PHP_URL_PATH)) {
         '/api/movies' => Http::response(['data' => [[
             'radarrId' => 801,
             'title' => 'Example Movie',

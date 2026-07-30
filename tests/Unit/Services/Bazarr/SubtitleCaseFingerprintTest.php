@@ -23,6 +23,7 @@ test('file identities are deterministic and ignore non-material raw fields', fun
     $reordered['file_ids'] = [501, 501];
     $reordered['media_ids'] = [102, 101];
     $reordered['path'] = '/private/media/show.mkv';
+    $reordered['relative_path'] = 'media/show.mkv';
     $reordered['title'] = 'Mutable title';
     $reordered['status'] = 'searching';
 

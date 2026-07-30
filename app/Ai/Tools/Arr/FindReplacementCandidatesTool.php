@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace App\Ai\Tools\Arr;
 
-use InvalidArgumentException;
 use App\Ai\Risk;
 use App\Ai\Tools\BaseTool;
 use App\Enums\ServiceType;
@@ -13,6 +12,7 @@ use App\Services\MediaReplacement\MediaFileInspector;
 use App\Services\MediaReplacement\ReplacementCandidateFinder;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
 use Illuminate\JsonSchema\Types\Type;
+use InvalidArgumentException;
 use Laravel\Ai\Tools\Request;
 use Stringable;
 

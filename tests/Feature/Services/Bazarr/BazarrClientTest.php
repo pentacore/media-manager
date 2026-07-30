@@ -83,7 +83,7 @@ test('system status preserves the data envelope and exposes the Bazarr version a
 
 test('data envelope methods preserve their upstream response', function (string $method, string $path, string $fixture): void {
     Http::fake([
-        'bazarr.local:6767' . $path => Http::response(bazarrFixture($fixture)),
+        'bazarr.local:6767'.$path => Http::response(bazarrFixture($fixture)),
     ]);
 
     $result = $this->client->{$method}();
@@ -109,7 +109,7 @@ test('episodes accept one normalized identifier set and preserve the data envelo
     $result = $this->client->getEpisodes($seriesIds, $episodeIds);
 
     expect($result)->toBe(bazarrFixture('episodes'));
-    Http::assertSent(fn(Request $request): bool => parse_url($request->url(), PHP_URL_PATH) === '/api/episodes'
+    Http::assertSent(fn (Request $request): bool => parse_url($request->url(), PHP_URL_PATH) === '/api/episodes'
         && bazarrRequestQuery($request) === [$queryKey => ['2', '7']]);
 })->with([
     'series IDs' => [[7, 2, 7, 0, -4], [], 'seriesid'],
@@ -359,6 +359,46 @@ test('the cache independently rejects unpersisted service connections', function
     'null ID' => null,
     'zero ID' => 0,
 ]);
+
+test('finds a movie past the first Bazarr page by walking paginated results', function (): void {
+    // Radarr movie 942 sits on the second Bazarr page (offset 100). A single
+    // length-100 lookup would miss it and treat it as permanently not-found.
+    Http::fake([
+        'bazarr.local:6767/api/movies*' => Http::sequence()
+            ->push([
+                'data' => array_map(
+                    static fn (int $index): array => ['radarrId' => $index + 1, 'title' => 'Movie '.($index + 1)],
+                    range(0, 99),
+                ),
+                'total' => 150,
+            ])
+            ->push([
+                'data' => [
+                    ['radarrId' => 942, 'title' => 'Deep Catalogue Movie'],
+                    ['radarrId' => 943, 'title' => 'Another'],
+                ],
+                'total' => 150,
+            ]),
+    ]);
+
+    $movie = $this->client->findMovieByRadarrId(942);
+
+    expect($movie)->toBeArray()
+        ->and($movie['radarrId'])->toBe(942)
+        ->and($movie['title'])->toBe('Deep Catalogue Movie');
+    Http::assertSentCount(2);
+});
+
+test('returns null for a Radarr movie absent from every paginated page', function (): void {
+    Http::fake([
+        'bazarr.local:6767/api/movies*' => Http::response([
+            'data' => [['radarrId' => 1, 'title' => 'Only Movie']],
+            'total' => 1,
+        ]),
+    ]);
+
+    expect($this->client->findMovieByRadarrId(999))->toBeNull();
+});
 
 test('identical reads use the cache without a second HTTP request', function (): void {
     Http::fake([

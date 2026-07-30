@@ -142,7 +142,7 @@ final class BazarrCapabilityRegistry
             return false;
         }
 
-        return array_any($responses, fn($response, int|string $status): bool => $this->isResponseStatus($status) && $this->isResponseDefinition($response));
+        return array_any($responses, fn ($response, int|string $status): bool => $this->isResponseStatus($status) && $this->isResponseDefinition($response));
     }
 
     private function isResponseStatus(int|string $status): bool

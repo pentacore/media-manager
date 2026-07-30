@@ -112,6 +112,38 @@ final class BazarrClient
     }
 
     /**
+     * Locate a single movie by its Radarr ID, walking the paginated movie
+     * library ({data, total} envelope, length 100) until it is found or the
+     * catalogue is exhausted. A bounded single-page lookup would make any movie
+     * past offset 99 permanently un-actionable.
+     *
+     * @return array<string, mixed>|null
+     *
+     * @throws ConnectionException|RequestException|UnexpectedValueException
+     */
+    public function findMovieByRadarrId(int $radarrId): ?array
+    {
+        $this->validatePositiveId($radarrId, 'Radarr ID');
+
+        $start = 0;
+
+        do {
+            $page = $this->getMovies(start: $start, length: 100);
+            $batch = $page['data'];
+
+            foreach ($batch as $movie) {
+                if (($movie['radarrId'] ?? null) === $radarrId) {
+                    return $movie;
+                }
+            }
+
+            $start += count($batch);
+        } while ($batch !== [] && $start < $page['total']);
+
+        return null;
+    }
+
+    /**
      * @return array{data: list<array<string, mixed>>, total: int}
      *
      * @throws ConnectionException|RequestException|UnexpectedValueException
@@ -501,6 +533,15 @@ final class BazarrClient
         );
     }
 
+    public function effectiveMinimumScore(string $mediaType): ?int
+    {
+        throw_unless(in_array($mediaType, ['episode', 'movie'], true), InvalidArgumentException::class, 'Bazarr score media type is invalid.');
+
+        $value = $this->getSettings()[$mediaType === 'episode' ? 'minimum_score' : 'minimum_score_movie'] ?? null;
+
+        return is_int($value) && $value >= 0 && $value <= 100 ? $value : null;
+    }
+
     /**
      * @return list<array<string, mixed>>
      */
@@ -575,11 +616,11 @@ final class BazarrClient
         }
 
         return $pendingRequest->retry(
-                [250, 750],
-                when: fn (Throwable $throwable): bool => $throwable instanceof ConnectionException
-                    || ($throwable instanceof RequestException && $throwable->response->serverError()),
-                throw: false,
-            );
+            [250, 750],
+            when: fn (Throwable $throwable): bool => $throwable instanceof ConnectionException
+                || ($throwable instanceof RequestException && $throwable->response->serverError()),
+            throw: false,
+        );
     }
 
     /**

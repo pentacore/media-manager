@@ -2,18 +2,18 @@
 
 declare(strict_types=1);
 
-use Illuminate\Foundation\Http\Middleware\PreventRequestForgery;
 use App\Http\Controllers\Bazarr\AdminController;
 use App\Http\Controllers\Bazarr\AdvisorController;
 use App\Http\Controllers\Bazarr\EscalationController;
 use App\Http\Controllers\Bazarr\HistoryController;
 use App\Http\Controllers\Bazarr\LibraryController;
 use App\Http\Controllers\Bazarr\MissingController;
-use App\Http\Controllers\Bazarr\OverviewController;
 use App\Http\Controllers\Bazarr\OperationController;
+use App\Http\Controllers\Bazarr\OverviewController;
 use App\Http\Controllers\Bazarr\SearchController;
 use App\Http\Controllers\Bazarr\UploadController;
 use App\Http\Controllers\Webhooks\BazarrNotificationController;
+use Illuminate\Foundation\Http\Middleware\PreventRequestForgery;
 use Illuminate\Support\Facades\Route;
 
 Route::post('webhooks/bazarr/{serviceConnection}', BazarrNotificationController::class)

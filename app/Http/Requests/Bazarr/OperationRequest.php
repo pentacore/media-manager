@@ -4,9 +4,9 @@ declare(strict_types=1);
 
 namespace App\Http\Requests\Bazarr;
 
-use Override;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
+use Override;
 
 final class OperationRequest extends FormRequest
 {

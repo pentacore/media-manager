@@ -39,7 +39,7 @@ final class SubtitleCaseNeedsReview extends Notification
             'service' => 'bazarr',
             'title' => 'Subtitle case needs review',
             'message' => sprintf('%s: %s', $this->displayName, $this->summary),
-            'link' => '/bazarr/escalations',
+            'link' => route('bazarr.escalations', absolute: false),
             'subtitle_case_id' => $this->subtitleCaseId,
             'category' => $this->category,
         ];
@@ -59,7 +59,7 @@ final class SubtitleCaseNeedsReview extends Notification
             'warning',
             '[Bazarr] Subtitle case needs review',
             sprintf('%s: %s', $this->displayName, $this->summary),
-            url('/bazarr/escalations'),
+            route('bazarr.escalations'),
         );
     }
 }

@@ -298,26 +298,23 @@ test('case candidates project one server-only identity for a shared episode file
         'sonarr.test/api/v3/series' => Http::response([
             ['id' => 101, 'title' => 'Frieren', 'rootFolderPath' => '/anime', 'seriesType' => 'anime'],
         ]),
-        'bazarr.test/api/episodes/wanted*' => Http::response([
+        'bazarr.test/api/episodes*' => Http::response([
             'data' => [
                 [
                     'sonarrSeriesId' => 101,
                     'sonarrEpisodeId' => 701,
-                    'episodeTitle' => 'Part One',
-                    'missing_subtitles' => [['code3' => 'eng']],
+                    'title' => 'Part One',
                     'subtitles' => [],
                 ],
                 [
                     'sonarrSeriesId' => 101,
                     'sonarrEpisodeId' => 702,
-                    'episodeTitle' => 'Part Two',
-                    'missing_subtitles' => [['code3' => 'eng']],
+                    'title' => 'Part Two',
                     'subtitles' => [],
                 ],
             ],
-            'total' => 2,
         ]),
-        'bazarr.test/api/movies/wanted*' => Http::response(['data' => [], 'total' => 0]),
+        'bazarr.test/api/movies*' => Http::response(['data' => [], 'total' => 0]),
         'sonarr.test/api/v3/episode?seriesId=101' => Http::response([
             ['id' => 701, 'seriesId' => 101, 'episodeFileId' => 501],
             ['id' => 702, 'seriesId' => 101, 'episodeFileId' => 501],
@@ -350,6 +347,7 @@ test('case candidates project one server-only identity for a shared episode file
             'target_ids' => [
                 'series_id' => 101,
                 'episode_id' => 701,
+                'episode_ids' => [701, 702],
                 'episode_file_id' => 501,
             ],
             'required_languages' => ['eng'],
@@ -364,12 +362,65 @@ test('case candidates project one server-only identity for a shared episode file
         ->not->toContain('date_added')
         ->not->toContain('"size"');
 
-    $browserProjection = resolve(SubtitleInventoryService::class)->missing($bazarr, page: 1, perPage: 25);
+    Http::assertNotSent(fn (Request $request): bool => str_contains($request->url(), '/wanted'));
+});
 
-    expect(json_encode($browserProjection, JSON_THROW_ON_ERROR))
-        ->not->toContain('file_fingerprint')
-        ->not->toContain('requirements_fingerprint')
-        ->not->toContain('episode_file_id');
+test('case candidates deterministically page full mapped episode and movie libraries without skipping either type', function (): void {
+    Http::preventStrayRequests();
+
+    ['bazarr' => $bazarr] = subtitleInventoryConnections();
+
+    resolve(MediaReplacementSettings::class)->setConfiguration([
+        'global_languages' => ['English'],
+    ]);
+
+    Http::fake([
+        'sonarr.test/api/v3/series' => Http::response([
+            ['id' => 101, 'title' => 'Frieren', 'rootFolderPath' => '/anime', 'seriesType' => 'anime'],
+        ]),
+        'bazarr.test/api/episodes*' => Http::response([
+            'data' => [
+                ['sonarrSeriesId' => 101, 'sonarrEpisodeId' => 701, 'title' => 'One', 'subtitles' => []],
+                ['sonarrSeriesId' => 101, 'sonarrEpisodeId' => 702, 'title' => 'Two', 'subtitles' => []],
+            ],
+        ]),
+        'bazarr.test/api/movies*' => Http::response([
+            'data' => [
+                ['radarrId' => 801, 'title' => 'Movie One', 'subtitles' => []],
+                ['radarrId' => 802, 'title' => 'Movie Two', 'subtitles' => []],
+            ],
+            'total' => 2,
+        ]),
+        'sonarr.test/api/v3/episode?seriesId=101' => Http::response([
+            ['id' => 701, 'seriesId' => 101, 'episodeFileId' => 501],
+            ['id' => 702, 'seriesId' => 101, 'episodeFileId' => 502],
+        ]),
+        'sonarr.test/api/v3/episodefile/*' => Http::response([
+            'size' => 1000,
+            'dateAdded' => '2026-07-16T08:00:00Z',
+            'sceneName' => 'Episode.Release',
+        ]),
+        'radarr.test/api/v3/movie/801' => Http::response(['id' => 801, 'movieFileId' => 901]),
+        'radarr.test/api/v3/movie/802' => Http::response(['id' => 802, 'movieFileId' => 902]),
+        'radarr.test/api/v3/moviefile/*' => Http::response([
+            'size' => 2000,
+            'dateAdded' => '2026-07-16T08:00:00Z',
+            'sceneName' => 'Movie.Release',
+        ]),
+    ]);
+
+    $firstPage = resolve(SubtitleInventoryService::class)->caseCandidates($bazarr, page: 1, perPage: 3);
+    $secondPage = resolve(SubtitleInventoryService::class)->caseCandidates($bazarr, page: 2, perPage: 3);
+
+    $candidates = [...$firstPage['data'], ...$secondPage['data']];
+
+    expect($firstPage['data'])->toHaveCount(3)
+        ->and($secondPage['data'])->toHaveCount(1)
+        ->and(array_column($candidates, 'media_type'))->toBe(['episode', 'episode', 'movie', 'movie'])
+        ->and(array_map(
+            static fn (array $candidate): int => (int) ($candidate['target_ids']['episode_id'] ?? $candidate['target_ids']['radarr_id']),
+            $candidates,
+        ))->toBe([701, 702, 801, 802]);
 });
 
 test('history projection omits upstream paths and subtitle identifiers', function (): void {

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Jobs;
 
+use App\Enums\ActionRequestStatus;
 use App\Enums\ServiceType;
 use App\Enums\SubtitleCaseAttemptOutcome;
 use App\Enums\SubtitleCaseAttemptType;
@@ -15,11 +16,12 @@ use App\Models\SubtitleCaseAttempt;
 use App\Providers\AIServiceProvider;
 use App\Services\Bazarr\BazarrClient;
 use App\Services\Bazarr\BazarrDownloadRequestCreator;
+use App\Services\Bazarr\BazarrSettingsAdapter;
 use App\Services\Bazarr\SubtitleCandidateEligibility;
 use App\Services\Bazarr\SubtitleCaseLifecycle;
 use App\Services\Bazarr\SubtitleCaseReconciler;
+use App\Services\Bazarr\SubtitleInventoryService;
 use App\Settings\BazarrAutomationSettings;
-use App\Settings\MediaReplacementSettings;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
 use Illuminate\Queue\Attributes\Timeout;
@@ -72,6 +74,12 @@ final class ReconcileSubtitleCase implements ShouldQueue
      */
     public function middleware(): array
     {
+        // Only a probing run touches provider endpoints, so the probe rate limiter
+        // must not throttle reconcile-only (probeAllowed = false) work.
+        if (! $this->probeAllowed) {
+            return [];
+        }
+
         return [new RateLimited('bazarr-probes')->releaseAfter(60)];
     }
 
@@ -81,11 +89,31 @@ final class ReconcileSubtitleCase implements ShouldQueue
         BazarrDownloadRequestCreator $bazarrDownloadRequestCreator,
         SubtitleCaseLifecycle $subtitleCaseLifecycle,
         BazarrAutomationSettings $bazarrAutomationSettings,
-        MediaReplacementSettings $mediaReplacementSettings,
+        BazarrSettingsAdapter $bazarrSettingsAdapter,
+        SubtitleInventoryService $subtitleInventoryService,
     ): void {
         $subtitleCase = $this->subtitleCaseId === null
             ? $subtitleCaseReconciler->reconcile($this->candidate)
             : SubtitleCase::query()->find($this->subtitleCaseId);
+
+        // Targeted reconciliation must verify the real outcome of a case that is
+        // waiting on Bazarr: refresh the actual installed file so a satisfied
+        // requirement resolves, and a completed-but-ineffective download re-enters
+        // probing to reach the replacement path.
+        if ($this->subtitleCaseId !== null
+            && $subtitleCase instanceof SubtitleCase
+            && in_array($subtitleCase->status, [
+                SubtitleCaseStatus::DownloadRequested,
+                SubtitleCaseStatus::BazarrSearching,
+            ], true)) {
+            $subtitleCase = $this->verifyTargetedOutcome(
+                $subtitleCase,
+                $subtitleCaseReconciler,
+                $subtitleCaseLifecycle,
+                $bazarrAutomationSettings,
+                $subtitleInventoryService,
+            );
+        }
 
         if ($subtitleCase instanceof SubtitleCase
             && $subtitleCase->status === SubtitleCaseStatus::ReplacementEligible) {
@@ -108,7 +136,7 @@ final class ReconcileSubtitleCase implements ShouldQueue
                 $bazarrDownloadRequestCreator,
                 $subtitleCaseLifecycle,
                 $bazarrAutomationSettings,
-                $mediaReplacementSettings,
+                $bazarrSettingsAdapter,
             ),
         );
     }
@@ -119,7 +147,7 @@ final class ReconcileSubtitleCase implements ShouldQueue
         BazarrDownloadRequestCreator $bazarrDownloadRequestCreator,
         SubtitleCaseLifecycle $subtitleCaseLifecycle,
         BazarrAutomationSettings $bazarrAutomationSettings,
-        MediaReplacementSettings $mediaReplacementSettings,
+        BazarrSettingsAdapter $bazarrSettingsAdapter,
     ): void {
         $subtitleCase->refresh();
 
@@ -129,6 +157,15 @@ final class ReconcileSubtitleCase implements ShouldQueue
                 ->where('type', SubtitleCaseAttemptType::Probe)
                 ->where('started_at', '>', now()->subHours($bazarrAutomationSettings->probeSpacingHours()))
                 ->exists()) {
+            return;
+        }
+
+        // Consume a shared per-connection cycle probe slot immediately before any
+        // provider search, regardless of origin (scheduled sweep or webhook forCase),
+        // so notification-triggered probes cannot exceed the per-cycle budget. With
+        // no slot left, deterministic reconciliation (already done) stands and the
+        // provider search is skipped until the next cycle.
+        if (! $this->reserveProbeSlot($subtitleCase->bazarr_connection_id, $bazarrAutomationSettings)) {
             return;
         }
 
@@ -159,31 +196,38 @@ final class ReconcileSubtitleCase implements ShouldQueue
                         : null,
                 $providers,
             )));
+            $minimumScore = $candidates === []
+                ? null
+                : $bazarrSettingsAdapter->effectiveMinimumScore($bazarrConnection, $subtitleCase->media_type);
             $context = [
-                'minimum_score' => $mediaReplacementSettings->automaticSelectionThreshold(),
+                'minimum_score' => $minimumScore,
                 'available_providers' => $availableProviders,
-                'threshold_available' => $candidates === [] || collect($candidates)->every(
-                    static fn (array $candidate): bool => is_numeric($candidate['score'] ?? null),
-                ),
+                'threshold_available' => $minimumScore !== null,
             ];
             $requirements = $this->missingRequirements($subtitleCase);
             $counts = $this->emptyClassificationCounts();
-            $eligibleRequirement = null;
+            $eligibleRequirements = [];
 
             foreach ($candidates as $candidate) {
                 foreach ($requirements as $requirement) {
                     $classification = $subtitleCandidateEligibility->classify($candidate, $requirement, $context);
                     $counts[$classification]++;
 
-                    if ($classification === 'eligible' && $eligibleRequirement === null) {
-                        $eligibleRequirement = $requirement;
+                    if ($classification === 'eligible') {
+                        $eligibleRequirements[$this->requirementKey($requirement)] ??= $requirement;
                     }
                 }
             }
 
-            $actionRequest = $eligibleRequirement === null
-                ? null
-                : $bazarrDownloadRequestCreator->create($subtitleCase, $eligibleRequirement);
+            // Every eligible missing language gets its own download request; the
+            // creator enforces per-case/language uniqueness under its own lock.
+            $actionRequest = null;
+
+            foreach ($eligibleRequirements as $eligibleRequirement) {
+                $created = $bazarrDownloadRequestCreator->create($subtitleCase, $eligibleRequirement);
+                $actionRequest ??= $created;
+            }
+
             $outcome = $actionRequest instanceof ActionRequest
                 ? (SubtitleCaseAttemptOutcome::Succeeded)
                 : ($counts['capability_limited'] > 0 ? SubtitleCaseAttemptOutcome::Indeterminate : SubtitleCaseAttemptOutcome::Empty);
@@ -233,6 +277,64 @@ final class ReconcileSubtitleCase implements ShouldQueue
         }
     }
 
+    private function verifyTargetedOutcome(
+        SubtitleCase $subtitleCase,
+        SubtitleCaseReconciler $subtitleCaseReconciler,
+        SubtitleCaseLifecycle $subtitleCaseLifecycle,
+        BazarrAutomationSettings $bazarrAutomationSettings,
+        SubtitleInventoryService $subtitleInventoryService,
+    ): SubtitleCase {
+        try {
+            $candidate = $subtitleInventoryService->caseCandidateFor($subtitleCase);
+        } catch (Throwable $throwable) {
+            report($throwable);
+            $candidate = null;
+        }
+
+        if ($candidate !== null) {
+            $reconciled = $subtitleCaseReconciler->reconcile($candidate);
+            $subtitleCase = $reconciled instanceof SubtitleCase
+                ? $reconciled
+                : ($subtitleCase->fresh() ?? $subtitleCase);
+        } else {
+            $subtitleCase = $subtitleCase->fresh() ?? $subtitleCase;
+        }
+
+        // A completed download that left the requirement unmet re-enters probing
+        // so the normal empty-probe path can escalate the case to replacement.
+        if ($subtitleCase->status === SubtitleCaseStatus::DownloadRequested
+            && $this->downloadCompleted($subtitleCase)
+            && $this->probeSpacingElapsed($subtitleCase, $bazarrAutomationSettings)
+            && $subtitleCaseLifecycle->transition($subtitleCase, SubtitleCaseStatus::BazarrSearching)) {
+            $subtitleCase = $subtitleCase->fresh() ?? $subtitleCase;
+        }
+
+        return $subtitleCase;
+    }
+
+    private function downloadCompleted(SubtitleCase $subtitleCase): bool
+    {
+        if ($subtitleCase->download_action_request_id === null) {
+            return false;
+        }
+
+        return ActionRequest::query()
+            ->whereKey($subtitleCase->download_action_request_id)
+            ->where('status', ActionRequestStatus::Completed->value)
+            ->exists();
+    }
+
+    private function probeSpacingElapsed(
+        SubtitleCase $subtitleCase,
+        BazarrAutomationSettings $bazarrAutomationSettings,
+    ): bool {
+        return ! SubtitleCaseAttempt::query()
+            ->where('subtitle_case_id', $subtitleCase->id)
+            ->where('type', SubtitleCaseAttemptType::Probe)
+            ->where('started_at', '>', now()->subHours($bazarrAutomationSettings->probeSpacingHours()))
+            ->exists();
+    }
+
     /**
      * @return list<array{code: string, forced: bool, hearing_impaired: bool}>
      */
@@ -247,6 +349,14 @@ final class ReconcileSubtitleCase implements ShouldQueue
             static fn (mixed $requirement): bool => is_array($requirement)
                 && in_array($requirement['code'] ?? null, $missingLanguages, true),
         ));
+    }
+
+    /**
+     * @param  array{code: string, forced: bool, hearing_impaired: bool}  $requirement
+     */
+    private function requirementKey(array $requirement): string
+    {
+        return sprintf('%s|%d|%d', $requirement['code'], (int) $requirement['forced'], (int) $requirement['hearing_impaired']);
     }
 
     /**
@@ -280,6 +390,16 @@ final class ReconcileSubtitleCase implements ShouldQueue
         Cache::lock('bazarr-advisor-cycle-lock:'.$subtitleCase->bazarr_connection_id, 10)->block(
             5,
             function () use ($subtitleCase, $bazarrAutomationSettings, $maximum): void {
+                $ttl = now()->addMinutes($bazarrAutomationSettings->reconciliationIntervalMinutes());
+                $slotKey = sprintf('bazarr-advisor-cycle-slot:%d:%d', $subtitleCase->bazarr_connection_id, $subtitleCase->id);
+
+                // One escalation per case per cycle. A case already escalated this
+                // cycle must not consume another slot, so repeated reconciliation of
+                // the same eligible case cannot starve other cases of the cap.
+                if (Cache::get($slotKey) !== null) {
+                    return;
+                }
+
                 $key = 'bazarr-advisor-cycle-count:'.$subtitleCase->bazarr_connection_id;
                 $used = (int) Cache::get($key, 0);
 
@@ -287,12 +407,32 @@ final class ReconcileSubtitleCase implements ShouldQueue
                     return;
                 }
 
+                Cache::put($slotKey, true, $ttl);
+                Cache::put($key, $used + 1, $ttl);
+                dispatch(new RunSubtitleAdvisor($subtitleCase->id));
+            },
+        );
+    }
+
+    private function reserveProbeSlot(int $connectionId, BazarrAutomationSettings $bazarrAutomationSettings): bool
+    {
+        return (bool) Cache::lock('bazarr-probe-cycle-lock:'.$connectionId, 10)->block(
+            5,
+            function () use ($connectionId, $bazarrAutomationSettings): bool {
+                $key = 'bazarr-probe-cycle-count:'.$connectionId;
+                $used = (int) Cache::get($key, 0);
+
+                if ($used >= $bazarrAutomationSettings->maxProbesPerCycle()) {
+                    return false;
+                }
+
                 Cache::put(
                     $key,
                     $used + 1,
                     now()->addMinutes($bazarrAutomationSettings->reconciliationIntervalMinutes()),
                 );
-                dispatch(new RunSubtitleAdvisor($subtitleCase->id));
+
+                return true;
             },
         );
     }

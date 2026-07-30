@@ -96,7 +96,7 @@ test('subtitle workflow records cast their durable state', function (): void {
 });
 
 test('attempt count defaults are available before persistence', function (): void {
-    $attempt = new SubtitleCaseAttempt();
+    $attempt = new SubtitleCaseAttempt;
 
     expect($attempt->candidate_count)->toBe(0)
         ->and($attempt->eligible_candidate_count)->toBe(0);
