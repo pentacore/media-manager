@@ -17,7 +17,7 @@ test('subtitle advisor is a focused non-conversational agent', function (): void
 });
 
 test('subtitle advisor instructions enforce the automatic-only one-case boundary', function (): void {
-    $instructions = (string) (new SubtitleAdvisorAgent)->instructions();
+    $instructions = (new SubtitleAdvisorAgent)->instructions();
 
     expect($instructions)
         ->toContain('exactly one subtitle replacement escalation')

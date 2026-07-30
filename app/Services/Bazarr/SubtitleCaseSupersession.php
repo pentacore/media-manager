@@ -74,8 +74,8 @@ final readonly class SubtitleCaseSupersession
 
         $superseded = 0;
 
-        foreach ($cases as $subtitleCase) {
-            if ($this->subtitleCaseLifecycle->supersede($subtitleCase)) {
+        foreach ($cases as $case) {
+            if ($this->subtitleCaseLifecycle->supersede($case)) {
                 $superseded++;
             }
         }

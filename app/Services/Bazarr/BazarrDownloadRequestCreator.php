@@ -119,6 +119,6 @@ final readonly class BazarrDownloadRequestCreator
             return [];
         }
 
-        return array_filter($downloadRequests, static fn (mixed $value): bool => is_int($value));
+        return array_filter($downloadRequests, is_int(...));
     }
 }

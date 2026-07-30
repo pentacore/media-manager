@@ -22,6 +22,7 @@ use App\Services\Bazarr\SubtitleCaseReconciler;
 use App\Services\Bazarr\SubtitleInventoryService;
 use App\Settings\BazarrAutomationSettings;
 use App\Settings\MediaReplacementSettings;
+use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Queue\Middleware\RateLimited;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Date;
@@ -278,6 +279,7 @@ test('an eligible probe creates one download request and compact attempt summary
  * path performs. The installed subtitle languages are supplied by the caller.
  *
  * @param  list<array<string, mixed>>  $subtitleTracks
+ * @return array<string, ServiceConnection|Collection<int, ServiceConnection>|SubtitleCase|Collection<int, SubtitleCase>|null>
  */
 function targetedEpisodeCaseSetup(array $subtitleTracks): array
 {
@@ -462,6 +464,7 @@ test('advisor escalation reserves one cycle slot per case so repeats do not star
     foreach ([1, 2, 3] as $ignored) {
         runSubtitleProbe(ReconcileSubtitleCase::forCase($this->case->fresh()));
     }
+
     runSubtitleProbe(ReconcileSubtitleCase::forCase($secondCase->fresh()));
 
     Queue::assertPushed(RunSubtitleAdvisor::class, 2);

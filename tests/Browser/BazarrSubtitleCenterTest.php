@@ -316,18 +316,16 @@ function fakeBazarrLibraryMovie(array $subtitles, array $extraPaths): array
         $paths[$path][$method] = ['responses' => ['200' => ['description' => 'OK']]];
     }
 
-    Http::fake(function (Request $request) use ($movie, $paths) {
-        return match (parse_url($request->url(), PHP_URL_PATH)) {
-            '/api/movies' => Http::response(['data' => [$movie], 'total' => 1]),
-            '/api/providers/movies' => Http::response(['data' => []]),
-            '/api/swagger.json' => Http::response([
-                'swagger' => '2.0',
-                'basePath' => '/api',
-                'info' => ['title' => 'Bazarr', 'version' => '1.6.0'],
-                'paths' => $paths,
-            ]),
-            default => Http::response(['data' => [], 'total' => 0]),
-        };
+    Http::fake(fn (Request $request) => match (parse_url($request->url(), PHP_URL_PATH)) {
+        '/api/movies' => Http::response(['data' => [$movie], 'total' => 1]),
+        '/api/providers/movies' => Http::response(['data' => []]),
+        '/api/swagger.json' => Http::response([
+            'swagger' => '2.0',
+            'basePath' => '/api',
+            'info' => ['title' => 'Bazarr', 'version' => '1.6.0'],
+            'paths' => $paths,
+        ]),
+        default => Http::response(['data' => [], 'total' => 0]),
     });
 
     return $movie;

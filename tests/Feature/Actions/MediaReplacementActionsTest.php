@@ -307,18 +307,18 @@ test('rejects execution while a Bazarr subtitle operation holds the shared insta
 
 test('aborts a destructive replacement when the pinned connection was deactivated after approval', function (): void {
     fakeExecutor();
-    $connection = ServiceConnection::query()->firstOrFail();
-    $connection->update(['is_active' => false]);
+    $serviceConnection = ServiceConnection::query()->firstOrFail();
+    $serviceConnection->update(['is_active' => false]);
 
     $fingerprint = (new ReleaseFingerprint)->make('sonarr', sonarrReplacementRelease());
     $actionRequest = ActionRequest::factory()->create([
         'type' => 'replace_media_file', 'source_service' => 'ai', 'target_service' => 'sonarr',
         'payload' => [
             'service' => 'sonarr',
-            'service_connection_id' => $connection->id,
+            'service_connection_id' => $serviceConnection->id,
             'scope' => 'anime',
             'target' => [
-                'service' => 'sonarr', 'service_connection_id' => $connection->id, 'scope' => 'anime',
+                'service' => 'sonarr', 'service_connection_id' => $serviceConnection->id, 'scope' => 'anime',
                 'series_id' => 42, 'episode_ids' => [101], 'episode_file_ids' => [501],
             ],
             'candidate_fingerprint' => $fingerprint,

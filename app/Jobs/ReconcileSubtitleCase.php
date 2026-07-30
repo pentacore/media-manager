@@ -306,7 +306,7 @@ final class ReconcileSubtitleCase implements ShouldQueue
             && $this->downloadCompleted($subtitleCase)
             && $this->probeSpacingElapsed($subtitleCase, $bazarrAutomationSettings)
             && $subtitleCaseLifecycle->transition($subtitleCase, SubtitleCaseStatus::BazarrSearching)) {
-            $subtitleCase = $subtitleCase->fresh() ?? $subtitleCase;
+            return $subtitleCase->fresh() ?? $subtitleCase;
         }
 
         return $subtitleCase;

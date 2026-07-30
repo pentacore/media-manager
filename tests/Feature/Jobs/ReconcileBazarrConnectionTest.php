@@ -209,7 +209,7 @@ test('a reconciliation cycle dispatches no more than the configured case cap', f
 
 test('a discovery failure retries without silencing the reconciliation interval', function (): void {
     Cache::flush();
-    $bazarr = reconcileConnectionMappedLibrary();
+    $serviceConnection = reconcileConnectionMappedLibrary();
     resolve(BazarrAutomationSettings::class)->setConfiguration(['enabled' => true]);
     Http::preventStrayRequests();
     // The series-list read fails while discovery is incomplete, then succeeds on
@@ -246,28 +246,28 @@ test('a discovery failure retries without silencing the reconciliation interval'
     });
     Queue::fake([ReconcileSubtitleCase::class]);
 
-    expect(fn (): mixed => new ReconcileBazarrConnection($bazarr->id)->handle(
+    expect(fn (): mixed => new ReconcileBazarrConnection($serviceConnection->id)->handle(
         resolve(SubtitleInventoryService::class),
         resolve(BazarrAutomationSettings::class),
     ))->toThrow(RuntimeException::class);
 
-    expect(Cache::has('bazarr-reconciliation-interval:'.$bazarr->id))->toBeFalse();
+    expect(Cache::has('bazarr-reconciliation-interval:'.$serviceConnection->id))->toBeFalse();
     Queue::assertNothingPushed();
 
     $seriesFails = false;
 
-    new ReconcileBazarrConnection($bazarr->id)->handle(
+    new ReconcileBazarrConnection($serviceConnection->id)->handle(
         resolve(SubtitleInventoryService::class),
         resolve(BazarrAutomationSettings::class),
     );
 
     Queue::assertPushed(ReconcileSubtitleCase::class, 2);
-    expect(Cache::has('bazarr-reconciliation-interval:'.$bazarr->id))->toBeTrue();
+    expect(Cache::has('bazarr-reconciliation-interval:'.$serviceConnection->id))->toBeTrue();
 });
 
 test('a bounded cycle resumes from a continuation cursor and wraps at the stream end', function (): void {
     Cache::flush();
-    $bazarr = reconcileConnectionMappedLibrary();
+    $serviceConnection = reconcileConnectionMappedLibrary();
     resolve(BazarrAutomationSettings::class)->setConfiguration([
         'enabled' => true,
         'max_cases_per_cycle' => 1,
@@ -277,9 +277,9 @@ test('a bounded cycle resumes from a continuation cursor and wraps at the stream
     Queue::fake([ReconcileSubtitleCase::class]);
 
     $episodeIdOf = static fn (ReconcileSubtitleCase $job): mixed => $job->candidate['target_ids']['episode_id'] ?? null;
-    $runCycle = function () use ($bazarr): void {
-        Cache::forget('bazarr-reconciliation-interval:'.$bazarr->id);
-        new ReconcileBazarrConnection($bazarr->id)->handle(
+    $runCycle = function () use ($serviceConnection): void {
+        Cache::forget('bazarr-reconciliation-interval:'.$serviceConnection->id);
+        new ReconcileBazarrConnection($serviceConnection->id)->handle(
             resolve(SubtitleInventoryService::class),
             resolve(BazarrAutomationSettings::class),
         );

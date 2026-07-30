@@ -92,7 +92,7 @@ final readonly class BazarrActions implements ActionExecutor
         // key. bazarr_run_task has no media target and needs no shared lock.
         $sharedLock = $this->sharedTargetLock($payload);
         throw_unless(
-            $sharedLock === null || $sharedLock->get(),
+            ! $sharedLock instanceof Lock || $sharedLock->get(),
             RuntimeException::class,
             'This installed media file is locked by another operation.',
         );

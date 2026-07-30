@@ -94,7 +94,7 @@ final class BazarrSettingsAdapter
     public function effectiveMinimumScore(ServiceConnection $serviceConnection, string $mediaType): ?int
     {
         try {
-            return (new BazarrClient($serviceConnection))->effectiveMinimumScore($mediaType);
+            return new BazarrClient($serviceConnection)->effectiveMinimumScore($mediaType);
         } catch (ConnectionException|RequestException|UnexpectedValueException) {
             return null;
         }

@@ -541,9 +541,9 @@ final readonly class MediaReplacementActions implements ActionExecutor
 
         $locks = [];
 
-        foreach ($mediaIds as $mediaId) {
+        foreach ($mediaIds as $mediumId) {
             $lock = Cache::lock(
-                SharedMediaTargetLock::key($serviceConnection->id, $mediaType, $mediaId),
+                SharedMediaTargetLock::key($serviceConnection->id, $mediaType, $mediumId),
                 SharedMediaTargetLock::TTL_SECONDS,
             );
 
