@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace App\Jobs;
 
-use App\Enums\MediaReplacementStatus;
 use App\Models\MediaReplacementAttempt;
 use App\Models\ServiceConnection;
 use App\Services\MediaReplacement\CompetingGrabSweeper;
@@ -30,13 +29,11 @@ class SweepCompetingGrabs implements ShouldQueue
     public const array PASS_DELAY_SECONDS = [60, 180, 600];
 
     /**
-     * @var list<MediaReplacementStatus>
+     * The attempt lookup and relation load happen before the successor is
+     * queued, so a transient database failure at one pass would otherwise drop
+     * every remaining pass rather than retry.
      */
-    private const array TERMINAL_STATUSES = [
-        MediaReplacementStatus::Verified,
-        MediaReplacementStatus::Failed,
-        MediaReplacementStatus::NeedsAttention,
-    ];
+    public int $tries = 2;
 
     public function __construct(
         public int $attemptId,
@@ -62,7 +59,7 @@ class SweepCompetingGrabs implements ShouldQueue
 
         // A terminal attempt has either imported or been given up on; sweeping
         // the queue on its behalf could only remove someone else's download.
-        if (in_array($mediaReplacementAttempt->status, self::TERMINAL_STATUSES, true)) {
+        if ($mediaReplacementAttempt->status->isTerminal()) {
             return;
         }
 

@@ -7,12 +7,14 @@ use App\Jobs\SweepCompetingGrabs;
 use App\Models\MediaReplacementAttempt;
 use App\Models\ServiceConnection;
 use App\Services\MediaReplacement\CompetingGrabSweeper;
+use Carbon\CarbonImmutable;
 use Illuminate\Http\Client\Request;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Notification;
 use Illuminate\Support\Facades\Queue;
 
 beforeEach(function (): void {
+    CarbonImmutable::setTestNow();
     Http::preventStrayRequests();
     Notification::fake();
 
@@ -26,6 +28,10 @@ beforeEach(function (): void {
     // which the sweeper's blanket catch cannot swallow the way it would a
     // stray-request or mock-expectation failure.
     $this->competingGrabSweeper = resolve(CompetingGrabSweeper::class);
+});
+
+afterEach(function (): void {
+    CarbonImmutable::setTestNow();
 });
 
 /**
@@ -52,11 +58,13 @@ function sweepJobAttempt(int $connectionId, array $overrides = []): MediaReplace
  */
 function fakeSweepJobQueue(): void
 {
+    // The removal pattern comes first: Laravel returns the first matching stub,
+    // and the broader 'queue*' would otherwise answer the DELETE too.
     Http::fake([
+        'sonarr.local:8989/api/v3/queue/*' => Http::response([], 200),
         'sonarr.local:8989/api/v3/queue*' => Http::response(['records' => [
             ['id' => 900, 'seriesId' => 42, 'episodeId' => 101, 'downloadId' => 'DL-OTHER', 'title' => 'Random.Anime.S01E01.OTHER'],
         ]]),
-        'sonarr.local:8989/api/v3/queue/*' => Http::response([], 200),
     ]);
 }
 
@@ -66,7 +74,23 @@ function assertSweptTheQueue(): void
         && str_contains($request->url(), '/api/v3/queue/900'));
 }
 
+/**
+ * The scheduled delay for a pass, as a wall-clock instant, or null when the job
+ * was queued without one. Time is frozen by the callers that assert on this.
+ */
+function sweepJobDelayTimestamp(SweepCompetingGrabs $sweepCompetingGrabs): ?int
+{
+    return $sweepCompetingGrabs->delay instanceof DateTimeInterface
+        ? $sweepCompetingGrabs->delay->getTimestamp()
+        : null;
+}
+
+test('the pass delays are the values the spec pins', function (): void {
+    expect(SweepCompetingGrabs::PASS_DELAY_SECONDS)->toBe([60, 180, 600]);
+});
+
 test('it sweeps and schedules the next pass while the attempt is still in flight', function (): void {
+    CarbonImmutable::setTestNow(CarbonImmutable::parse('2026-07-30 12:00:00', 'UTC'));
     Queue::fake();
     fakeSweepJobQueue();
 
@@ -78,7 +102,7 @@ test('it sweeps and schedules the next pass while the attempt is still in flight
 
     Queue::assertPushed(SweepCompetingGrabs::class, fn (SweepCompetingGrabs $job): bool => $job->attemptId === $mediaReplacementAttempt->id
         && $job->pass === 1
-        && $job->delay !== null);
+        && sweepJobDelayTimestamp($job) === now()->addSeconds(180)->getTimestamp());
 });
 
 test('it stops after the final pass', function (): void {
@@ -136,13 +160,14 @@ test('it does nothing when the attempt lost its service connection', function ()
 });
 
 test('queueFor dispatches the first pass with its delay', function (): void {
+    CarbonImmutable::setTestNow(CarbonImmutable::parse('2026-07-30 12:00:00', 'UTC'));
     Queue::fake();
 
     SweepCompetingGrabs::queueFor(17);
 
     Queue::assertPushed(SweepCompetingGrabs::class, fn (SweepCompetingGrabs $job): bool => $job->attemptId === 17
         && $job->pass === 0
-        && $job->delay !== null);
+        && sweepJobDelayTimestamp($job) === now()->addSeconds(60)->getTimestamp());
 });
 
 test('queueFor ignores a pass beyond the configured delays', function (): void {
