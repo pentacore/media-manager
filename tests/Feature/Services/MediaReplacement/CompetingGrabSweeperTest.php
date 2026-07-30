@@ -25,6 +25,10 @@ beforeEach(function (): void {
 });
 
 /**
+ * An attempt whose Grab webhook has already landed, so the sweep is armed. The
+ * download id is what arms it — tests covering the unarmed state override it
+ * back to null explicitly.
+ *
  * @param  array<string, mixed>  $overrides
  */
 function sweeperAttempt(int $connectionId, array $overrides = []): MediaReplacementAttempt
@@ -38,7 +42,7 @@ function sweeperAttempt(int $connectionId, array $overrides = []): MediaReplacem
             'episode_ids' => [101], 'episode_file_ids' => [501],
         ],
         'candidate' => ['title' => 'Trusted.Anime.S01E01.CR', 'fingerprint' => 'fp'],
-        'download_id' => null,
+        'download_id' => 'DL-OURS',
     ], $overrides));
 }
 
@@ -69,13 +73,21 @@ test('it removes a queue item on the target whose title is not the vetted releas
         && str_contains($request->url(), 'removeFromClient=true')
         && str_contains($request->url(), 'blocklist=false')
         && str_contains($request->url(), 'skipRedownload=true'));
+
+    // The sweeper reads only episodeId/episodeIds, which the queue returns
+    // anyway, so it must not ask Sonarr to inline whole episode objects.
+    Http::assertSent(fn (Request $request): bool => $request->method() === 'GET'
+        && str_contains($request->url(), '/api/v3/queue?')
+        && str_contains($request->url(), 'pageSize=200')
+        && ! str_contains($request->url(), 'includeEpisode'));
 });
 
-test('it leaves the vetted release alone when matched by title', function (): void {
+test('it leaves a row carrying the vetted release title alone even under a different download id', function (): void {
     $mediaReplacementAttempt = sweeperAttempt($this->connection->id);
 
+    // A different download id, so only the title keep-guard can spare this row.
     fakeSweeperQueue([
-        ['id' => 901, 'seriesId' => 42, 'episodeId' => 101, 'downloadId' => 'DL-OURS', 'title' => 'trusted.anime.s01e01.cr'],
+        ['id' => 901, 'seriesId' => 42, 'episodeId' => 101, 'downloadId' => 'DL-CLIENT-RENAMED', 'title' => 'trusted.anime.s01e01.cr'],
     ]);
 
     $removed = resolve(CompetingGrabSweeper::class)->sweep($this->connection, $mediaReplacementAttempt);
@@ -113,7 +125,35 @@ test('it ignores queue items for other targets', function (): void {
     Http::assertNotSent(fn (Request $request): bool => $request->method() === 'DELETE');
 });
 
-test('it refuses to sweep when neither a title nor a download id can identify our own grab', function (): void {
+test('it ignores a queue item for a different episode of the same series', function (): void {
+    $mediaReplacementAttempt = sweeperAttempt($this->connection->id);
+
+    fakeSweeperQueue([
+        ['id' => 909, 'seriesId' => 42, 'episodeId' => 999, 'downloadId' => 'DL-OTHER', 'title' => 'Trusted.Anime.S01E09.OTHER'],
+    ]);
+
+    $removed = resolve(CompetingGrabSweeper::class)->sweep($this->connection, $mediaReplacementAttempt);
+
+    expect($removed)->toBe(0);
+    Http::assertNotSent(fn (Request $request): bool => $request->method() === 'DELETE');
+});
+
+test('it stays unarmed until the grab webhook records our download id, making no request at all', function (): void {
+    // The candidate title is present and would match nothing in the queue: it
+    // must still not be enough to arm a removal on its own.
+    $mediaReplacementAttempt = sweeperAttempt($this->connection->id, ['download_id' => null]);
+
+    fakeSweeperQueue([
+        ['id' => 904, 'seriesId' => 42, 'episodeId' => 101, 'downloadId' => 'DL-ANY', 'title' => 'Anything'],
+    ]);
+
+    $removed = resolve(CompetingGrabSweeper::class)->sweep($this->connection, $mediaReplacementAttempt);
+
+    expect($removed)->toBe(0);
+    Http::assertNothingSent();
+});
+
+test('it stays unarmed when the attempt has neither a candidate title nor a download id', function (): void {
     $mediaReplacementAttempt = sweeperAttempt($this->connection->id, [
         'candidate' => [], 'download_id' => null,
     ]);
@@ -125,7 +165,7 @@ test('it refuses to sweep when neither a title nor a download id can identify ou
     $removed = resolve(CompetingGrabSweeper::class)->sweep($this->connection, $mediaReplacementAttempt);
 
     expect($removed)->toBe(0);
-    Http::assertNotSent(fn (Request $request): bool => $request->method() === 'DELETE');
+    Http::assertNothingSent();
 });
 
 test('it notifies admins about each competing grab it removed', function (): void {
@@ -196,7 +236,7 @@ test('it matches a radarr queue item by movie id', function (): void {
         'scope' => 'movie',
         'target' => ['service' => 'radarr', 'scope' => 'movie', 'movie_id' => 7, 'movie_file_ids' => [70]],
         'candidate' => ['title' => 'Movie.2020.GOOD', 'fingerprint' => 'fp'],
-        'download_id' => null,
+        'download_id' => 'DL-OURS',
     ]);
 
     Http::fake([

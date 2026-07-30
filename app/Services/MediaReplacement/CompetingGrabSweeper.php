@@ -24,6 +24,11 @@ use Throwable;
  * asynchronously; suspending monitoring suppresses the resulting grab, but any
  * grab that still slips through would download in parallel with the
  * replacement. This sweeper is the outcome-based cleanup for that case.
+ *
+ * The sweep is armed only once the attempt knows its own download id, which the
+ * Grab webhook records. Identity may never rest on the release title alone: see
+ * the guard in run() for why. A missing download id therefore means no sweep at
+ * all, and the competing download is left for a later pass to clean up.
  */
 final readonly class CompetingGrabSweeper
 {
@@ -51,21 +56,26 @@ final readonly class CompetingGrabSweeper
     {
         $target = is_array($mediaReplacementAttempt->target) ? $mediaReplacementAttempt->target : [];
         $vettedTitle = $this->normalizeTitle((string) ($mediaReplacementAttempt->candidate['title'] ?? ''));
-        $ourDownloadId = is_string($mediaReplacementAttempt->download_id) ? $mediaReplacementAttempt->download_id : null;
+        $ourDownloadId = $this->downloadId($mediaReplacementAttempt);
 
-        // Without either identifier we cannot tell our own download apart from
-        // a competing one, and removing the wrong item would cancel the
-        // replacement itself. Refusing to act is the only safe answer.
-        if ($vettedTitle === '' && $ourDownloadId === null) {
+        // Only our own download id may arm the sweep. The title cannot: a queue
+        // row's title is the download client's name for the job, not the
+        // indexer release title the candidate was built from, so a client-side
+        // rename or a mere separator difference would break the equality that
+        // is supposed to protect us and we would DELETE the replacement we just
+        // grabbed — with removeFromClient: true, destroying it. Failing safe
+        // means a lost Grab webhook produces no sweep rather than a deleted
+        // replacement; the Grab-webhook and delayed passes both run later, once
+        // the download id exists. The title stays a keep-guard below, where it
+        // can only ever spare a row, never select one for removal.
+        if ($ourDownloadId === null) {
             return 0;
         }
 
         $isRadarr = $serviceConnection->type === ServiceType::Radarr;
         $client = $isRadarr ? new RadarrClient($serviceConnection) : new SonarrClient($serviceConnection);
 
-        $queue = $client->getQueue($isRadarr
-            ? ['pageSize' => 200]
-            : ['pageSize' => 200, 'includeEpisode' => 'true']);
+        $queue = $client->getQueue(['pageSize' => 200]);
         $records = is_array($queue['records'] ?? null) ? $queue['records'] : [];
 
         $removed = 0;
@@ -85,10 +95,14 @@ final readonly class CompetingGrabSweeper
                 continue;
             }
 
-            if ($ourDownloadId !== null && (string) ($record['downloadId'] ?? '') === $ourDownloadId) {
+            // Our own download, positively identified.
+            if ((string) ($record['downloadId'] ?? '') === $ourDownloadId) {
                 continue;
             }
 
+            // Belt and braces: a row the client renamed away from our download
+            // id but that still carries the vetted release title is spared. A
+            // title can only keep a row here, never condemn one.
             if ($vettedTitle !== '' && $this->normalizeTitle((string) ($record['title'] ?? '')) === $vettedTitle) {
                 continue;
             }
@@ -150,13 +164,16 @@ final readonly class CompetingGrabSweeper
 
         $targetEpisodeIds = $this->episodeIds($target['episode_ids'] ?? null);
 
-        // A season-pack or series-level queue row carries no episode id. It
-        // still competes for the same series, so treat it as a match.
         $recordEpisodeIds = $this->episodeIds([
             $record['episodeId'] ?? null,
             ...(is_array($record['episodeIds'] ?? null) ? $record['episodeIds'] : []),
         ]);
 
+        // Sonarr's queue does carry a top-level episodeId per row, season packs
+        // included, so this is the degenerate case: a target stored without
+        // episode ids, or a row whose episode mapping is missing or unresolved.
+        // Series identity is then all we have, and a competing download for the
+        // series we are replacing into is worth removing.
         if ($targetEpisodeIds === [] || $recordEpisodeIds === []) {
             return true;
         }
@@ -220,6 +237,22 @@ final readonly class CompetingGrabSweeper
                 'exception' => $throwable::class,
             ]);
         }
+    }
+
+    /**
+     * Our own download id, or null when the Grab webhook has not recorded one
+     * yet. A blank value counts as unknown: it would otherwise match every
+     * queue row that reports no download id of its own.
+     */
+    private function downloadId(MediaReplacementAttempt $mediaReplacementAttempt): ?string
+    {
+        $downloadId = $mediaReplacementAttempt->download_id;
+
+        if (! is_string($downloadId) || trim($downloadId) === '') {
+            return null;
+        }
+
+        return $downloadId;
     }
 
     private function normalizeTitle(string $title): string
