@@ -111,13 +111,17 @@ class ReconcileMediaReplacementAttempts extends Command
      * did. This pass settles monitoring and nothing else — no status, no
      * failure_reason, no completed_at, no notification.
      *
-     * The `--hours` cutoff applies. An attempt younger than it may still have a
-     * live executor mid-cleanup, and remonitoring the target between that
-     * executor's delete and its blocklist would re-open the competing-grab race
-     * the suspension exists to close. No executor run outlives the cutoff, so
-     * honouring it makes that interleaving impossible rather than merely
-     * unlikely, at the cost of a bounded delay in a repair that is otherwise
-     * indefinitely overdue.
+     * The `--hours` cutoff applies, as a conservatism bound rather than a safety
+     * proof: it keeps the pass off a suspension that has only just been taken out,
+     * reusing the one patience threshold this command already has instead of
+     * inventing a second. It is NOT what makes the pass safe. The age basis is the
+     * attempt's ORIGINAL start, and a resume never rewrites it
+     * (MediaReplacementActions only sets started_at on the fresh path), so an
+     * operator Retry of a days-old attempt runs a live executor on a row this pass
+     * already considers ancient — no cutoff can exclude that. Two things protect it
+     * instead: the re-read below drops any row a resume has reopened to
+     * `downloading`, and the resume path re-asserts the suspension itself before
+     * blocklisting rather than trusting the flag this pass clears.
      */
     private function restoreSettledMonitoring(CarbonImmutable $cutoff, MediaReplacementTracker $mediaReplacementTracker): void
     {
@@ -132,8 +136,23 @@ class ReconcileMediaReplacementAttempts extends Command
         }
 
         $restored = 0;
+        $reopened = 0;
 
         foreach ($settled as $attempt) {
+            // Re-read immediately before acting. An operator Retry between the query
+            // above and here reopens the row to `downloading` and re-suspends
+            // monitoring for its own resumed cleanup; restoring it now would strip
+            // that live run's protection and let its blocklist trigger the competing
+            // auto-search. A row that is no longer both settled and suspended is not
+            // ours to touch.
+            $attempt->refresh();
+
+            if (! $attempt->status->isTerminal() || $attempt->monitoring_suspended !== true) {
+                $reopened++;
+
+                continue;
+            }
+
             // One attempt's failure must not abort the rest. restoreSuspendedMonitoring
             // already swallows arr-API errors and returns false, so this catch is for
             // the unexpected (a write failure); either way the suspension flag stays
@@ -169,9 +188,10 @@ class ReconcileMediaReplacementAttempts extends Command
         }
 
         $this->info(sprintf(
-            'Restored monitoring on %d of %d settled media replacement attempt(s) whose suspension was never lifted.',
+            'Restored monitoring on %d of %d settled media replacement attempt(s) whose suspension was never lifted (%d skipped as reopened).',
             $restored,
             $settled->count(),
+            $reopened,
         ));
     }
 

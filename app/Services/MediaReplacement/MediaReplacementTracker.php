@@ -564,10 +564,19 @@ final readonly class MediaReplacementTracker
     }
 
     /**
-     * Restore monitoring suspended by the executor for an attempt that is
-     * being terminalized outside the normal webhook/executor handshake (the
-     * reconciliation sweep). Returns true when monitoring is settled — either
-     * restored now, or there was nothing to restore.
+     * Restore monitoring the executor suspended. Returns true when monitoring is
+     * SETTLED — restored now, or there was nothing to restore — which is what lets
+     * callers fold it straight into a success predicate.
+     *
+     * This is the primary restore for the executor/webhook handshake:
+     * finalizeAfterCleanup() calls it as the first safe moment to put monitoring
+     * back once the cleanup phase closes. The reconciliation command also calls it
+     * for attempts that settle without any import event, where no webhook is coming.
+     *
+     * Both no-op paths matter and are deliberate: an attempt that never had
+     * monitoring suspended returns true untouched, and one suspended on a target the
+     * user had already unmonitored has the flag cleared WITHOUT an arr call, because
+     * re-enabling monitoring nobody asked for would be wrong.
      */
     public function restoreSuspendedMonitoring(MediaReplacementAttempt $mediaReplacementAttempt): bool
     {

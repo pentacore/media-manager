@@ -5,6 +5,7 @@ declare(strict_types=1);
 use App\Enums\MediaReplacementStatus;
 use App\Enums\UserRole;
 use App\Models\MediaReplacementAttempt;
+use App\Models\ServiceConnection;
 use App\Models\User;
 use App\Notifications\MediaReplacementStatusChanged;
 use Illuminate\Support\Facades\Notification;
@@ -240,46 +241,79 @@ test('a failed restore on one settled attempt does not abort the others', functi
 
     $this->artisan('media-replacement:reconcile')->assertSuccessful();
 
-    // Both were attempted rather than the run stopping at the first failure. Each
-    // attempt has its own service connection, so counting DISTINCT monitor URLs
-    // proves two separate targets were tried — a raw request count would instead
-    // measure the client's retry policy.
+    // Both were attempted rather than the run stopping at the first failure. Each is
+    // asserted by its OWN connection url: counting requests would instead measure the
+    // client's retry policy, and counting distinct urls would silently collapse on the
+    // rare occasion the two factory connections draw the same random port.
     expect($first->fresh()->monitoring_suspended)->toBeTrue()
         ->and($second->fresh()->monitoring_suspended)->toBeTrue();
 
-    $monitorTargets = Http::recorded()
-        ->map(fn ($pair): string => (string) $pair[0]->url())
-        ->filter(fn (string $url): bool => str_contains($url, 'episode/monitor'))
-        ->unique()
-        ->values();
+    foreach ([$first, $second] as $attempt) {
+        $url = rtrim((string) $attempt->serviceConnection->url, '/').'/api/v3/episode/monitor';
 
-    expect($monitorTargets)->toHaveCount(2);
+        Http::assertSent(fn ($request): bool => $request->method() === 'PUT' && (string) $request->url() === $url);
+    }
 });
 
-test('a recently settled attempt waits for the cutoff before its monitoring is repaired', function (): void {
+test('a settled attempt reopened while the pass is running is skipped by the re-read', function (): void {
+    // An operator Retry reopens the row to `downloading` and re-asserts the
+    // suspension for its own resumed cleanup. Restoring monitoring then would strip
+    // that live run's protection and let its blocklist trigger the competing
+    // auto-search. The row's age is no defence: a resume inherits the original
+    // attempt's started_at, so no cutoff can exclude it.
+    $connection = ServiceConnection::factory()->sonarr()->create([
+        'url' => 'http://sonarr.local:8989', 'api_key' => 'test', 'is_active' => true,
+    ]);
+
+    $first = settledSuspendedAttempt(['service_connection_id' => $connection->id]);
+    $second = settledSuspendedAttempt(['service_connection_id' => $connection->id]);
+
+    // The Retry lands AFTER the query that selected both rows, while the pass is
+    // mid-loop restoring the first. Only a re-read immediately before acting can see
+    // that — the selecting query has already run.
+    Http::fake(function () use ($first, $second) {
+        MediaReplacementAttempt::query()
+            ->whereKey([$first->id, $second->id])
+            ->update([
+                'status' => MediaReplacementStatus::Downloading->value,
+                'failure_reason' => null,
+                'completed_at' => null,
+            ]);
+
+        return Http::response([], 200);
+    });
+
+    // Asserted on the pass's own reported skip count. Whichever row the loop reached
+    // first was already committed to; the other is reopened by the time the loop
+    // re-reads it and is left to that live run. Final flag state cannot be asserted
+    // here because the timeout pass legitimately picks the reopened rows up
+    // afterwards — and the skip count is what isolates this guard from it.
+    $this->artisan('media-replacement:reconcile', ['--hours' => 1])
+        ->expectsOutputToContain('(1 skipped as reopened)')
+        ->assertSuccessful();
+});
+
+test('the repair pass honours the --hours option rather than a hardcoded cutoff', function (): void {
     Http::fake(['*' => Http::response([], 200)]);
 
-    // Younger than the cutoff, so an executor could still be mid-cleanup for it;
-    // remonitoring between its delete and its blocklist would re-open the
-    // competing-grab race the suspension exists to close.
+    // Two hours old: inside the default 6h cutoff, outside an explicit 1h one. The
+    // cutoff is conservatism, not safety (a resume inherits the original attempt's
+    // age, so no cutoff can exclude a live executor) — but it must still be the
+    // option's value that decides, not a constant.
     $attempt = settledSuspendedAttempt([
-        'started_at' => now()->subMinutes(2),
-        'completed_at' => now()->subMinute(),
+        'started_at' => now()->subHours(2),
+        'completed_at' => now()->subHours(2),
     ]);
 
     $this->artisan('media-replacement:reconcile')->assertSuccessful();
 
+    // Too young for the 6h default: untouched.
     expect($attempt->fresh()->monitoring_suspended)->toBeTrue();
     Http::assertNothingSent();
 
-    // Past the cutoff it is repaired.
     $this->artisan('media-replacement:reconcile', ['--hours' => 1])->assertSuccessful();
 
-    expect($attempt->fresh()->monitoring_suspended)->toBeTrue();
-
-    $attempt->forceFill(['started_at' => now()->subHours(9)])->save();
-
-    $this->artisan('media-replacement:reconcile')->assertSuccessful();
-
+    // Old enough for a 1h cutoff: repaired.
     expect($attempt->fresh()->monitoring_suspended)->toBeFalse();
+    Http::assertSent(fn ($request): bool => str_contains((string) $request->url(), 'episode/monitor'));
 });

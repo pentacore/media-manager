@@ -472,14 +472,18 @@ test('resume finishes cleanup without clobbering a webhook terminal outcome', fu
     Http::assertSent(fn (Request $request): bool => $request->method() === 'POST' && str_contains($request->url(), '/api/v3/history/failed/'));
 });
 
-test('a resume with a durably-failed suspension does not blocklist (independent of failure_reason)', function (): void {
+test('a resume re-asserts the suspension before blocklisting instead of trusting the stored flag', function (): void {
     fakeExecutor();
     $actionRequest = replaceActionRequest();
 
-    // Prior run: monitoring suspension FAILED (monitoring_suspended=false) AND
-    // then deletion failed (failure_reason='deletion_failed', the resumable
-    // marker). The resume must still skip the blocklist — driven by the durable
-    // monitoring_suspended=false, NOT by parsing the failure_reason.
+    // Prior run left monitoring_suspended=false on a monitored target. That flag is
+    // NOT trustworthy at resume time: the reconciliation repair pass restores
+    // monitoring on settled attempts, keyed on the attempt's original start time,
+    // which a resume never rewrites — so a days-old row can be repaired while its
+    // retry is live. Blocklisting on the strength of the stored flag would either
+    // needlessly decline (as it used to) or, worse, blocklist a target something
+    // else has remonitored. The resume re-issues the unmonitor and decides from
+    // that, so failure_reason plays no part in the decision at all.
     MediaReplacementAttempt::factory()->create([
         'action_request_id' => $actionRequest->id,
         'status' => MediaReplacementStatus::NeedsAttention,
@@ -496,7 +500,54 @@ test('a resume with a durably-failed suspension does not blocklist (independent 
 
     resolve(MediaReplacementActions::class)->execute($actionRequest);
 
+    $requests = Http::recorded()
+        ->map(fn (array $pair): string => $pair[0]->method().' '.$pair[0]->url().' '.json_encode($pair[0]->data()))
+        ->values();
+    $unmonitorIndex = $requests->search(fn (string $value): bool => str_contains($value, 'PUT http://sonarr.local:8989/api/v3/episode/monitor')
+        && str_contains($value, '"monitored":false'));
+    $blocklistIndex = $requests->search(fn (string $value): bool => str_contains($value, 'POST http://sonarr.local:8989/api/v3/history/failed/'));
+
+    // Suspension re-asserted FIRST, then the blocklist.
+    expect($unmonitorIndex)->not->toBeFalse()
+        ->and($blocklistIndex)->not->toBeFalse()
+        ->and($unmonitorIndex)->toBeLessThan($blocklistIndex);
+
+    // And the re-asserted suspension is persisted, so it is the import event that
+    // lifts it rather than a flag that was already stale.
+    expect(MediaReplacementAttempt::query()->where('action_request_id', $actionRequest->id)->sole()->monitoring_suspended)
+        ->toBeTrue();
+});
+
+test('a resume that cannot re-assert the suspension declines to blocklist', function (): void {
+    // The unmonitor PUT fails, so the target is monitored and markHistoryFailed
+    // would launch the competing auto-search. The rule is unchanged: a monitored
+    // target that cannot be suspended must not be blocklisted.
+    fakeExecutor(['monitorOk' => false]);
+    $actionRequest = replaceActionRequest();
+
+    MediaReplacementAttempt::factory()->create([
+        'action_request_id' => $actionRequest->id,
+        'status' => MediaReplacementStatus::NeedsAttention,
+        'grab_accepted_at' => now(),
+        'was_monitored' => true,
+        'monitoring_suspended' => true,
+        'failure_reason' => 'deletion_failed',
+        'target' => [
+            'service' => 'sonarr', 'scope' => 'anime', 'series_id' => 42,
+            'episode_ids' => [101], 'episode_file_ids' => [501],
+            'installed_release' => 'Trusted.Anime.S01E01.OLD', 'original_history_id' => 999,
+        ],
+    ]);
+
+    $result = resolve(MediaReplacementActions::class)->execute($actionRequest);
+
     Http::assertNotSent(fn (Request $request): bool => $request->method() === 'POST' && str_contains($request->url(), '/api/v3/history/failed/'));
+
+    expect($result['blocklist_warning'])->toContain('monitoring could not be suspended')
+        // The stored true is overwritten by the live result: nothing may go on
+        // believing this target is suspended when it is not.
+        ->and(MediaReplacementAttempt::query()->where('action_request_id', $actionRequest->id)->sole()->monitoring_suspended)
+        ->toBeFalse();
 });
 
 test('preserves the original was_monitored across a retry', function (): void {
@@ -709,9 +760,12 @@ test('the executor does not restore monitoring after blocklisting, so the queued
 });
 
 test('the executor reports the sweep result and does not remove anything before the grab webhook lands', function (): void {
-    // The attempt's download_id is still null during the executor's own cleanup,
-    // so the sweeper must refuse to remove anything here — it cannot yet tell the
-    // replacement's own download apart from a competing one.
+    // The attempt's download_id is still null during the executor's own cleanup, so
+    // the sweeper cannot tell the replacement's own download apart from a competing
+    // one. It refuses at the arming gate, which short-circuits BEFORE it reads the
+    // queue at all — so these rows are never even fetched. They are here as a
+    // negative control: had the gate not short-circuited, this is a row it would
+    // have deleted.
     fakeExecutor([
         'queueRecords' => [
             ['id' => 910, 'seriesId' => 42, 'episodeId' => 101, 'downloadId' => 'DL-RACE', 'title' => 'Competing.Release'],
@@ -724,8 +778,8 @@ test('the executor reports the sweep result and does not remove anything before 
 
     expect($result['competing_grabs_removed'])->toBe(0);
 
-    Http::assertNotSent(fn (Request $request): bool => $request->method() === 'DELETE'
-        && str_contains($request->url(), '/api/v3/queue/'));
+    // No read, therefore no removal.
+    Http::assertNotSent(fn (Request $request): bool => str_contains($request->url(), '/api/v3/queue'));
 });
 
 test('the executor arms the delayed sweep passes as the backstop for the queued re-search', function (): void {
@@ -748,6 +802,20 @@ test('the executor arms the delayed sweep passes as the backstop for the queued 
     );
 });
 
+test('no sweep passes are armed when no blocklist ran, since nothing queued a re-search', function (): void {
+    Queue::fake([SweepCompetingGrabs::class]);
+
+    // Suspension failed, so the blocklist is skipped. With no queued re-search there
+    // is no competing grab to expect, and the passes could then only remove a
+    // same-target download that simply is not ours — with removeFromClient: true.
+    fakeExecutor(['monitorOk' => false]);
+
+    resolve(MediaReplacementActions::class)->execute(replaceActionRequest());
+
+    Http::assertNotSent(fn (Request $request): bool => str_contains($request->url(), '/api/v3/history/failed/'));
+    Queue::assertNotPushed(SweepCompetingGrabs::class);
+});
+
 test('a rejected grab still restores monitoring immediately because no blocklist ran', function (): void {
     fakeExecutor(['grabOk' => false, 'grabStatus' => 400, 'monitored' => true]);
 
@@ -759,4 +827,9 @@ test('a rejected grab still restores monitoring immediately because no blocklist
     Http::assertSent(fn (Request $request): bool => $request->method() === 'PUT'
         && str_contains($request->url(), '/api/v3/episode/monitor')
         && $request->data()['monitored'] === true);
+
+    // The restore is recorded, so the reconciliation repair pass does not later
+    // re-issue a monitor PUT for a suspension that no longer exists.
+    expect(MediaReplacementAttempt::query()->where('action_request_id', $actionRequest->id)->sole()->monitoring_suspended)
+        ->toBeFalse();
 });
