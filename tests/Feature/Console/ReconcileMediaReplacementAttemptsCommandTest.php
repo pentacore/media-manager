@@ -126,3 +126,160 @@ test('the custom timeout threshold is respected', function (): void {
 
     expect($attempt->fresh()->status)->toBe(MediaReplacementStatus::NeedsAttention);
 });
+
+/**
+ * A settled attempt whose monitoring suspension was never lifted. This happens
+ * whenever an attempt terminalizes before the executor's finalizeAfterCleanup can
+ * restore monitoring — a webhook flagging it mid-cleanup, or a deletion failure
+ * that throws first. No import event is coming for a settled attempt, so this
+ * command is the only actor left that can put monitoring back.
+ *
+ * @param  array<string, mixed>  $overrides
+ */
+function settledSuspendedAttempt(array $overrides = []): MediaReplacementAttempt
+{
+    return MediaReplacementAttempt::factory()->create(array_replace([
+        'status' => MediaReplacementStatus::NeedsAttention,
+        'failure_reason' => 'manual_interaction_required',
+        'started_at' => now()->subHours(9),
+        'completed_at' => now()->subHours(8),
+        'was_monitored' => true,
+        'monitoring_suspended' => true,
+        'target' => ['service' => 'sonarr', 'series_id' => 42, 'episode_ids' => [7, 8], 'episode_file_ids' => [501]],
+    ], $overrides));
+}
+
+test('a settled attempt keeps its terminal result but has its monitoring restored', function (): void {
+    Http::fake(['*' => Http::response([], 200)]);
+
+    $attempt = settledSuspendedAttempt();
+    $completedAt = $attempt->completed_at;
+
+    $this->artisan('media-replacement:reconcile')->assertSuccessful();
+
+    $fresh = $attempt->fresh();
+
+    // Monitoring settled...
+    expect($fresh->monitoring_suspended)->toBeFalse();
+    Http::assertSent(fn ($request): bool => $request->method() === 'PUT'
+        && str_contains((string) $request->url(), 'episode/monitor')
+        && $request->data()['monitored'] === true);
+
+    // ...and nothing else touched. The attempt reached needs_attention
+    // legitimately and the operator was already told when it did, so this pass
+    // must not re-flag, re-terminalize or re-notify it as a timeout.
+    expect($fresh->status)->toBe(MediaReplacementStatus::NeedsAttention)
+        ->and($fresh->failure_reason)->toBe('manual_interaction_required')
+        ->and($fresh->completed_at->equalTo($completedAt))->toBeTrue();
+    Notification::assertNothingSent();
+});
+
+test('an interrupted cleanup that left deletion_failed also gets its monitoring repaired', function (): void {
+    // Pre-existing shape: deleteAfterGrab() marks needs_attention/deletion_failed
+    // and then throws, so the executor never reaches the restore at all.
+    Http::fake(['*' => Http::response([], 200)]);
+
+    $attempt = settledSuspendedAttempt([
+        'failure_reason' => 'deletion_failed',
+        'grab_accepted_at' => now()->subHours(9),
+        'cleanup_completed_at' => null,
+    ]);
+
+    $this->artisan('media-replacement:reconcile')->assertSuccessful();
+
+    expect($attempt->fresh()->monitoring_suspended)->toBeFalse()
+        ->and($attempt->fresh()->failure_reason)->toBe('deletion_failed');
+    Http::assertSent(fn ($request): bool => str_contains((string) $request->url(), 'episode/monitor'));
+});
+
+test('a settled attempt whose monitoring is already restored is left alone', function (): void {
+    Http::fake(['*' => Http::response([], 200)]);
+
+    $attempt = settledSuspendedAttempt(['monitoring_suspended' => false]);
+
+    $this->artisan('media-replacement:reconcile')->assertSuccessful();
+
+    expect($attempt->fresh()->monitoring_suspended)->toBeFalse();
+    // Nothing to settle, so the service is never called.
+    Http::assertNothingSent();
+});
+
+test('a settled attempt that was never monitored clears the flag without calling the service', function (): void {
+    Http::fake(['*' => Http::response([], 200)]);
+
+    $attempt = settledSuspendedAttempt(['was_monitored' => false]);
+
+    $this->artisan('media-replacement:reconcile')->assertSuccessful();
+
+    // Re-enabling monitoring the user had switched off would be wrong; the stale
+    // flag is simply cleared.
+    expect($attempt->fresh()->monitoring_suspended)->toBeFalse();
+    Http::assertNothingSent();
+});
+
+test('a failed restore leaves the settled attempt suspended for the next run', function (): void {
+    Http::fake(['*' => Http::response([], 500)]);
+
+    $attempt = settledSuspendedAttempt();
+
+    // The arr is unreachable, but the command must still finish and must not
+    // pretend the target is monitored again.
+    $this->artisan('media-replacement:reconcile')->assertSuccessful();
+
+    expect($attempt->fresh()->monitoring_suspended)->toBeTrue()
+        ->and($attempt->fresh()->status)->toBe(MediaReplacementStatus::NeedsAttention);
+    // Hourly schedule: a permanently-unreachable arr must not notify every run.
+    Notification::assertNothingSent();
+});
+
+test('a failed restore on one settled attempt does not abort the others', function (): void {
+    Http::fake(['*' => Http::response([], 500)]);
+
+    $first = settledSuspendedAttempt();
+    $second = settledSuspendedAttempt();
+
+    $this->artisan('media-replacement:reconcile')->assertSuccessful();
+
+    // Both were attempted rather than the run stopping at the first failure. Each
+    // attempt has its own service connection, so counting DISTINCT monitor URLs
+    // proves two separate targets were tried — a raw request count would instead
+    // measure the client's retry policy.
+    expect($first->fresh()->monitoring_suspended)->toBeTrue()
+        ->and($second->fresh()->monitoring_suspended)->toBeTrue();
+
+    $monitorTargets = Http::recorded()
+        ->map(fn ($pair): string => (string) $pair[0]->url())
+        ->filter(fn (string $url): bool => str_contains($url, 'episode/monitor'))
+        ->unique()
+        ->values();
+
+    expect($monitorTargets)->toHaveCount(2);
+});
+
+test('a recently settled attempt waits for the cutoff before its monitoring is repaired', function (): void {
+    Http::fake(['*' => Http::response([], 200)]);
+
+    // Younger than the cutoff, so an executor could still be mid-cleanup for it;
+    // remonitoring between its delete and its blocklist would re-open the
+    // competing-grab race the suspension exists to close.
+    $attempt = settledSuspendedAttempt([
+        'started_at' => now()->subMinutes(2),
+        'completed_at' => now()->subMinute(),
+    ]);
+
+    $this->artisan('media-replacement:reconcile')->assertSuccessful();
+
+    expect($attempt->fresh()->monitoring_suspended)->toBeTrue();
+    Http::assertNothingSent();
+
+    // Past the cutoff it is repaired.
+    $this->artisan('media-replacement:reconcile', ['--hours' => 1])->assertSuccessful();
+
+    expect($attempt->fresh()->monitoring_suspended)->toBeTrue();
+
+    $attempt->forceFill(['started_at' => now()->subHours(9)])->save();
+
+    $this->artisan('media-replacement:reconcile')->assertSuccessful();
+
+    expect($attempt->fresh()->monitoring_suspended)->toBeFalse();
+});
