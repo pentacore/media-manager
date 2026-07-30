@@ -253,6 +253,16 @@ final readonly class MediaReplacementActions implements ActionExecutor
         $wasMonitored = $existing?->was_monitored === true
             || ($freshTarget['monitored'] ?? null) === true;
 
+        // Carry forward a restore a prior run still OWES, for the same reason
+        // was_monitored is preserved above and the resume path re-asserts it: a
+        // rejected grab whose restore PUT failed leaves the target genuinely
+        // unmonitored with the flag set, and the reset below would erase the only
+        // durable record of that. Nothing would then put monitoring back —
+        // restoreSuspendedMonitoring() reports success without an arr call,
+        // verifyDownload() sees nothing to restore, and both reconciliation passes
+        // select on monitoring_suspended = true.
+        $owedRestore = $wasMonitored && $existing?->monitoring_suspended === true;
+
         // Claim the attempt as `downloading` BEFORE the grab. Keying updateOrCreate
         // on the unique action_request_id makes Action-Queue Retry idempotent — a
         // prior failed attempt row is reset and reused instead of hitting a
@@ -280,7 +290,9 @@ final readonly class MediaReplacementActions implements ActionExecutor
                 // the executor blocklists — reopening the competing auto-search race.
                 'cleanup_completed_at' => null,
                 'was_monitored' => $wasMonitored,
-                'monitoring_suspended' => null,
+                // Not blindly null: an unlifted suspension a prior run left behind is
+                // an obligation, not stale state (see $owedRestore above).
+                'monitoring_suspended' => $owedRestore ? true : null,
                 'verification' => null,
                 'failure_reason' => null,
                 'started_at' => now(),
@@ -294,13 +306,17 @@ final readonly class MediaReplacementActions implements ActionExecutor
         // AutoRedownloadFailed search that markHistoryFailed() would otherwise
         // trigger from grabbing a competing, non-rule-vetted release.
         //
-        // `didSuspend` = we actually suspended monitoring and therefore own its
-        // restoration; false for an already-unmonitored target (nothing to
-        // restore) OR when suspension failed. It is persisted so the blocklist
-        // decision and the restore decision (this run and any Retry) are driven
-        // by durable state, never inferred from the mutable failure_reason.
+        // `didSuspend` = THIS run suspended monitoring; false for an
+        // already-unmonitored target (nothing to suppress) OR when the PUT failed. It
+        // drives the blocklist decision below, which must depend on what is true now.
+        //
+        // The persisted flag answers the different question of whether a remonitor is
+        // still owed, so it is the union of this run's suspension and one inherited
+        // from a prior run. A failed PUT is not evidence that the target is monitored,
+        // and writing $didSuspend alone would drop an inherited obligation with no
+        // actor left to discharge it.
         $didSuspend = $wasMonitored && $this->unmonitorTarget($client, $serviceType, $freshTarget, $actionRequest);
-        $attempt->forceFill(['monitoring_suspended' => $didSuspend])->save();
+        $attempt->forceFill(['monitoring_suspended' => $didSuspend || $owedRestore])->save();
 
         // Blocklisting is safe when the target was never monitored, or when we
         // successfully suspended it. A failed suspension of a monitored target
@@ -322,7 +338,11 @@ final readonly class MediaReplacementActions implements ActionExecutor
             // stuck `downloading` (which would make the job retry the whole grab).
             $restoreFailed = false;
 
-            if ($didSuspend) {
+            // Attempt the restore whenever one is OWED, not only when this run is what
+            // took monitoring away: an inherited suspension is just as real, and
+            // skipping it here was how a Retry could turn a recoverable state into a
+            // permanent one.
+            if ($didSuspend || $owedRestore) {
                 try {
                     $this->setMonitored($client, $serviceType, $freshTarget, true);
                     // Record the restore. Leaving the flag set would advertise a

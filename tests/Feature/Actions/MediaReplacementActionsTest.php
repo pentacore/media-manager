@@ -616,6 +616,80 @@ test('a resume whose unmonitor fails keeps the restore obligation a later actor 
     expect($attempt->fresh()->monitoring_suspended)->toBeFalse();
 });
 
+/**
+ * Run 1 suspended the target, its grab was rejected, and its restore PUT then failed —
+ * so the target is genuinely unmonitored and the row records that with
+ * monitoring_suspended = true. A Retry lands on the FRESH path (no accepted grab to
+ * resume), which resets the row.
+ *
+ * @param  array<string, mixed>  $overrides
+ */
+function attemptOwedARestore(int $actionRequestId, array $overrides = []): MediaReplacementAttempt
+{
+    return MediaReplacementAttempt::factory()->create(array_replace([
+        'action_request_id' => $actionRequestId,
+        'service_connection_id' => ServiceConnection::query()->firstOrFail()->id,
+        'status' => MediaReplacementStatus::Failed,
+        'failure_reason' => 'Replacement grab was rejected and monitoring could not be restored; needs manual review.',
+        'grab_attempted_at' => null,
+        'grab_accepted_at' => null,
+        'was_monitored' => true,
+        'monitoring_suspended' => true,
+        'target' => [
+            'service' => 'sonarr', 'scope' => 'anime', 'series_id' => 42,
+            'episode_ids' => [101], 'episode_file_ids' => [501],
+            'installed_release' => 'Trusted.Anime.S01E01.OLD', 'original_history_id' => 999,
+        ],
+    ], $overrides));
+}
+
+test('a retry does not discard a suspension an earlier run failed to restore', function (): void {
+    // The retry's own unmonitor PUT fails too — the correlated case, since arr trouble
+    // is what left the restore undone in the first place. Resetting the flag and then
+    // writing the fresh (false) result would discard the only durable record that a
+    // restore is owed, and strand the row outside the reconciliation repair pass,
+    // which selects on monitoring_suspended = true. A failed PUT is evidence of
+    // nothing; it certainly is not evidence that the target is monitored.
+    fakeExecutor(['monitorOk' => false]);
+    $actionRequest = replaceActionRequest();
+
+    attemptOwedARestore($actionRequest->id);
+
+    $result = resolve(MediaReplacementActions::class)->execute($actionRequest);
+
+    // The blocklist decision is unchanged and still driven by the FRESH attempt: a
+    // target we could not suspend now must not be blocklisted.
+    expect($result['blocklist_warning'])->toContain('monitoring could not be suspended')
+        ->and(MediaReplacementAttempt::query()->where('action_request_id', $actionRequest->id)->sole()->monitoring_suspended)
+        ->toBeTrue();
+});
+
+test('a retry whose grab is rejected still tries to discharge an inherited restore', function (): void {
+    // Same inherited obligation, but this grab is rejected too. The restore branch used
+    // to run only when THIS run suspended monitoring, so an inherited suspension was
+    // silently skipped: no restore attempted, and the operator message did not mention
+    // monitoring either.
+    fakeExecutor(['monitorOk' => false, 'grabStatus' => 400]);
+    $actionRequest = replaceActionRequest();
+
+    attemptOwedARestore($actionRequest->id);
+
+    expect(fn (): array => resolve(MediaReplacementActions::class)->execute($actionRequest))
+        ->toThrow(RuntimeException::class);
+
+    Http::assertSent(fn (Request $request): bool => $request->method() === 'PUT'
+        && str_contains($request->url(), '/api/v3/episode/monitor')
+        && $request->data()['monitored'] === true);
+
+    $attempt = MediaReplacementAttempt::query()->where('action_request_id', $actionRequest->id)->sole();
+
+    // It failed, so the obligation survives for the repair pass and the operator is
+    // told monitoring is the outstanding problem.
+    expect($attempt->monitoring_suspended)->toBeTrue()
+        ->and($attempt->status)->toBe(MediaReplacementStatus::Failed)
+        ->and($attempt->failure_reason)->toContain('monitoring could not be restored');
+});
+
 test('preserves the original was_monitored across a retry', function (): void {
     // ARR is currently unmonitored (a prior rejected-grab left it so), but the
     // original attempt recorded was_monitored=true. Re-inspection sees false;
