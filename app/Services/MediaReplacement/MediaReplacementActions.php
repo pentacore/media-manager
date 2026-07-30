@@ -127,6 +127,25 @@ final readonly class MediaReplacementActions implements ActionExecutor
                 ];
             }
 
+            // Rewrite started_at BEFORE anything else this run does. It is the age
+            // basis media-replacement:reconcile filters both of its passes on, and
+            // until now it recorded the ORIGINAL attempt — so an operator Retry of a
+            // days-old row ran a live executor that the hourly reconcile treated as
+            // ancient and fair game. The damaging order is: this run reads the target
+            // as suspended, reconcile restores monitoring and clears the flag,
+            // blocklistAfterGrab then blocklists a MONITORED target, and the arr's
+            // queued re-search grabs a competitor. A resumed attempt genuinely is a
+            // download attempt starting now, so this is the honest value as well as
+            // the safe one — and it applies whether or not the conditional reopen
+            // below matches, which is what covers a row that stays terminal.
+            //
+            // It only helps because both reconcile passes re-evaluate the age against
+            // current state rather than trusting their selecting query: the timeout
+            // pass inside its conditional update (atomic, so this write fully excludes
+            // it), the repair pass on a fresh read (which leaves the interval between
+            // that read and its own monitor PUT).
+            $existing->forceFill(['started_at' => now()])->save();
+
             // Cleanup is unfinished (a worker crash after the grab, or a deletion
             // failure). Resume the remaining destructive steps idempotently. Reopen
             // the status to `downloading` ONLY when it is still an executor-owned
@@ -153,19 +172,32 @@ final readonly class MediaReplacementActions implements ActionExecutor
 
             $resumeTarget = is_array($existing->target) ? $existing->target : $storedTarget;
 
-            // RE-ASSERT the suspension instead of trusting the persisted flag. This
-            // row has been sitting in the database since the run that died, and the
-            // reconciliation repair pass restores monitoring on settled attempts —
-            // keyed on the attempt's ORIGINAL start time, which a resume never
-            // rewrites, so even a days-old row is fair game to it. Trusting a flag
-            // another process may have cleared is a time-of-check/time-of-use bug:
-            // it would blocklist against a target that is monitored again, and the
-            // arr's queued re-search would then grab a competitor. The unmonitor PUT
-            // is idempotent, so re-issuing it is cheap and makes the blocklist
-            // decision depend on what is true NOW rather than on durable history.
+            // RE-ASSERT the suspension instead of trusting the persisted flag for the
+            // BLOCKLIST DECISION. This row has been sitting in the database since the
+            // run that died, and other actors can have remonitored the target since
+            // (the reconciliation repair pass does exactly that on settled attempts).
+            // Trusting a flag another process may have cleared is a
+            // time-of-check/time-of-use bug: it would blocklist a target that is
+            // monitored again, and the arr's queued re-search would then grab a
+            // competitor. The unmonitor PUT is idempotent, so re-issuing it is cheap
+            // and makes the blocklist decision depend on what is true NOW.
             $wasMonitored = $existing->was_monitored === true;
             $didSuspend = $wasMonitored && $this->unmonitorTarget($client, $serviceType, $resumeTarget, $actionRequest);
-            $existing->forceFill(['monitoring_suspended' => $didSuspend])->save();
+
+            // The PERSISTED flag answers a different question — "does someone still
+            // owe this target a remonitor?" — and must never lose a `true` an earlier
+            // run earned. A failed unmonitor PUT is not evidence that the target is
+            // monitored; it is evidence of nothing, and arr trouble is a likely reason
+            // the earlier run died in the first place. Writing $didSuspend here would
+            // therefore clear the obligation precisely when it is most likely still
+            // outstanding, and every actor that could discharge it stands down on a
+            // false flag: restoreSuspendedMonitoring() returns success without an arr
+            // call, verifyDownload() sees nothing to restore, and both reconciliation
+            // passes select on monitoring_suspended = true. The target would stop
+            // receiving upgrades permanently.
+            $existing->forceFill([
+                'monitoring_suspended' => $didSuspend || ($wasMonitored && $existing->monitoring_suspended === true),
+            ])->save();
 
             return $this->completePostGrab(
                 $client,
@@ -394,12 +426,19 @@ final readonly class MediaReplacementActions implements ActionExecutor
         // state a webhook set in the meantime survives.
         $mediaReplacementAttempt->forceFill(['cleanup_completed_at' => now()])->save();
 
-        // Backstop for a search that lands after the synchronous sweep above and for
-        // a lost Grab webhook — but ONLY when a blocklist actually ran. The queued
-        // re-search is the sole reason a competing grab is expected; without it the
-        // passes could only ever remove a same-target download that simply is not
-        // ours, with removeFromClient: true. That is destructive risk with no upside.
-        if ($blocklistAllowed) {
+        // Backstop for a re-search that lands after the synchronous sweep above, and
+        // for a lost Grab webhook. Armed only when the blocklist actually SUCCEEDED,
+        // which is exactly when blocklistAfterGrab returns null. $blocklistAllowed is
+        // the wrong gate: it also holds on the two paths where no blocklist ran at all
+        // — a non-int original_history_id, and markHistoryFailed throwing.
+        //
+        // A queued re-search is not the only way a competitor can appear: where the
+        // blocklist was declined, monitoring is still ON and the old file has just been
+        // deleted, so an RSS sync can grab one. These passes are not a defence against
+        // that and never were — they span 600s while RSS sync runs on a ~15 minute
+        // interval — so arming them there would buy nothing and risk removing, with
+        // removeFromClient: true, a same-target download that simply is not ours.
+        if ($blocklistWarning === null) {
             SweepCompetingGrabs::queueFor($mediaReplacementAttempt->id);
         }
 
@@ -443,12 +482,19 @@ final readonly class MediaReplacementActions implements ActionExecutor
      * open (cleanup_completed_at still null) does keep the webhook tracker from
      * remonitoring, but it does not bind everyone: media-replacement:reconcile
      * restores monitoring on a `downloading` row it times out regardless of the
-     * cleanup phase, and on a settled row with no import event at all. Both are
-     * bounded by its --hours cutoff, so they cannot touch a fresh run — but a RESUME
-     * inherits the original attempt's age, so a retried attempt can be old enough to
-     * qualify while its executor is live. That is exactly why the resume path
-     * re-asserts the suspension before getting here instead of trusting the
-     * persisted flag.
+     * cleanup phase, and on a settled row with no import event at all. Both of its
+     * passes are bounded by the --hours cutoff, and because the resume path rewrites
+     * started_at to now, both re-evaluate that cutoff against current state rather than
+     * against their selecting query: the timeout pass atomically, inside its
+     * conditional update, and the repair pass on a fresh read. The timeout pass is
+     * therefore fully excluded once a resume has written started_at. The repair pass
+     * leaves one window — it can have decided on a read taken before that write and
+     * still issue its monitor PUT afterwards.
+     *
+     * So do not claim the target is guaranteed unmonitored here. What is true is that
+     * this run suspended it itself, with only the file delete in between, and that no
+     * actor other than a repair pass in that one window is in a position to have
+     * undone it.
      */
     private function blocklistAfterGrab(
         SonarrClient|RadarrClient $client,

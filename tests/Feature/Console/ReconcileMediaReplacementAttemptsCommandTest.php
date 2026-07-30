@@ -117,6 +117,61 @@ test('the sweep notification never claims deletion that did not happen', functio
     );
 });
 
+test('a stale downloading attempt an operator retried mid-pass is not flagged as timed out', function (): void {
+    // The resume path rewrites started_at to now as its first act — a resumed attempt
+    // is a download starting now — but leaves the row `downloading`, so status alone
+    // cannot tell a stalled attempt from one that just restarted. Flagging it would
+    // regress the live run AND restore monitoring while it is mid-cleanup, so its
+    // blocklist would fire the arr's queued re-search against a monitored target.
+    // SweepCompetingGrabs cannot catch that: the flagging just made the row terminal.
+    $connection = ServiceConnection::factory()->sonarr()->create([
+        'url' => 'http://sonarr.local:8989', 'api_key' => 'test', 'is_active' => true,
+    ]);
+
+    $target = ['service' => 'sonarr', 'series_id' => 42, 'episode_ids' => [7, 8], 'episode_file_ids' => [501]];
+
+    // Created first, so its own restore is what fires the fake below and the Retry
+    // therefore lands after the selecting query, while the loop is still running.
+    $trigger = MediaReplacementAttempt::factory()->create([
+        'service_connection_id' => $connection->id,
+        'status' => MediaReplacementStatus::Downloading,
+        'started_at' => now()->subHours(9),
+        'was_monitored' => true,
+        'monitoring_suspended' => true,
+        'target' => $target,
+    ]);
+
+    $retried = MediaReplacementAttempt::factory()->create([
+        'service_connection_id' => $connection->id,
+        'status' => MediaReplacementStatus::Downloading,
+        'started_at' => now()->subHours(9),
+        'grab_accepted_at' => now()->subHours(9),
+        'cleanup_completed_at' => null,
+        'was_monitored' => true,
+        'monitoring_suspended' => true,
+        'target' => $target,
+    ]);
+
+    expect($trigger->id)->toBeLessThan($retried->id);
+
+    Http::fake(function () use ($retried) {
+        MediaReplacementAttempt::query()->whereKey($retried->id)->update(['started_at' => now()]);
+
+        return Http::response([], 200);
+    });
+
+    $this->artisan('media-replacement:reconcile')
+        ->expectsOutputToContain('Flagged 1 stuck')
+        ->assertSuccessful();
+
+    // The live run keeps its status AND its suspension: nothing remonitored the target
+    // out from under it.
+    expect($retried->fresh()->status)->toBe(MediaReplacementStatus::Downloading)
+        ->and($retried->fresh()->failure_reason)->toBeNull()
+        ->and($retried->fresh()->monitoring_suspended)->toBeTrue()
+        ->and($trigger->fresh()->status)->toBe(MediaReplacementStatus::NeedsAttention);
+});
+
 test('the custom timeout threshold is respected', function (): void {
     $attempt = MediaReplacementAttempt::factory()->create([
         'status' => MediaReplacementStatus::Downloading,
@@ -289,8 +344,96 @@ test('a settled attempt reopened while the pass is running is skipped by the re-
     // here because the timeout pass legitimately picks the reopened rows up
     // afterwards — and the skip count is what isolates this guard from it.
     $this->artisan('media-replacement:reconcile', ['--hours' => 1])
-        ->expectsOutputToContain('(1 skipped as reopened)')
+        ->expectsOutputToContain('skipped: 1 claimed by a live retry')
         ->assertSuccessful();
+});
+
+test('the repair pass reports nothing about skips when there were none', function (): void {
+    Http::fake(['*' => Http::response([], 200)]);
+
+    settledSuspendedAttempt();
+
+    // The old wording printed "(0 skipped as reopened)" on every normal run, which
+    // reads as though something was skipped. A cause with a zero count is omitted.
+    $this->artisan('media-replacement:reconcile')
+        ->doesntExpectOutputToContain('skipped')
+        ->assertSuccessful();
+});
+
+test('the repair pass distinguishes a row another actor restored from one a retry claimed', function (): void {
+    // Two different reasons the re-read declines to act, which the old counter lumped
+    // together as "reopened": the first row is still settled but someone else lifted
+    // its suspension, the second was reopened by an operator Retry. Reporting both as
+    // the same cause would send an operator looking for a retry that never happened.
+    $connection = ServiceConnection::factory()->sonarr()->create([
+        'url' => 'http://sonarr.local:8989', 'api_key' => 'test', 'is_active' => true,
+    ]);
+
+    // Created FIRST so the loop reaches it first: its restore is what fires the fake
+    // below, and both mutations therefore land while the pass is mid-loop, after the
+    // query that already selected all three rows.
+    $trigger = settledSuspendedAttempt(['service_connection_id' => $connection->id]);
+    $restoredElsewhere = settledSuspendedAttempt(['service_connection_id' => $connection->id]);
+    $reopened = settledSuspendedAttempt(['service_connection_id' => $connection->id]);
+
+    expect($trigger->id)->toBeLessThan($restoredElsewhere->id)
+        ->and($restoredElsewhere->id)->toBeLessThan($reopened->id);
+
+    Http::fake(function () use ($restoredElsewhere, $reopened) {
+        MediaReplacementAttempt::query()->whereKey($restoredElsewhere->id)->update(['monitoring_suspended' => false]);
+        MediaReplacementAttempt::query()->whereKey($reopened->id)->update([
+            'status' => MediaReplacementStatus::Downloading->value,
+            'failure_reason' => null,
+            'completed_at' => null,
+        ]);
+
+        return Http::response([], 200);
+    });
+
+    // One substring, because each expectsOutputToContain() consumes a separate write
+    // and both causes are reported on the same line.
+    $this->artisan('media-replacement:reconcile', ['--hours' => 1])
+        ->expectsOutputToContain('(skipped: 1 claimed by a live retry; 1 already restored by another actor)')
+        ->assertSuccessful();
+});
+
+test('a settled attempt pruned mid-pass does not abort the remaining reconciliation', function (): void {
+    // MediaReplacementAttempt is MassPrunable and model:prune is scheduled, so a
+    // long-settled row is simultaneously prunable and selectable by this pass and can
+    // be deleted between the selecting query and the loop. refresh() resolves through
+    // findOrFail, and that ModelNotFoundException was raised OUTSIDE the per-attempt
+    // try — it aborted handle() and took the remaining repairs and the whole timeout
+    // pass with it.
+    $connection = ServiceConnection::factory()->sonarr()->create([
+        'url' => 'http://sonarr.local:8989', 'api_key' => 'test', 'is_active' => true,
+    ]);
+
+    // Created first so its restore is what fires the fake, deleting the second row
+    // while the pass is already mid-loop.
+    $trigger = settledSuspendedAttempt(['service_connection_id' => $connection->id]);
+    $pruned = settledSuspendedAttempt(['service_connection_id' => $connection->id]);
+
+    expect($trigger->id)->toBeLessThan($pruned->id);
+
+    $stuck = MediaReplacementAttempt::factory()->create([
+        'status' => MediaReplacementStatus::Downloading,
+        'started_at' => now()->subHours(9),
+    ]);
+
+    Http::fake(function () use ($pruned) {
+        MediaReplacementAttempt::query()->whereKey($pruned->id)->delete();
+
+        return Http::response([], 200);
+    });
+
+    $this->artisan('media-replacement:reconcile')
+        ->expectsOutputToContain('1 pruned mid-pass')
+        ->assertSuccessful();
+
+    // The pass that runs AFTER the repair still ran, which is what the abort used to
+    // swallow.
+    expect($trigger->fresh()->monitoring_suspended)->toBeFalse()
+        ->and($stuck->fresh()->status)->toBe(MediaReplacementStatus::NeedsAttention);
 });
 
 test('the repair pass honours the --hours option rather than a hardcoded cutoff', function (): void {

@@ -11,6 +11,7 @@ use App\Services\MediaReplacement\MediaReplacementActions;
 use App\Services\MediaReplacement\MediaReplacementTracker;
 use App\Services\MediaReplacement\ReleaseFingerprint;
 use App\Settings\MediaReplacementSettings;
+use GuzzleHttp\Promise\PromiseInterface;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\Request;
 use Illuminate\Support\Facades\Cache;
@@ -544,10 +545,75 @@ test('a resume that cannot re-assert the suspension declines to blocklist', func
     Http::assertNotSent(fn (Request $request): bool => $request->method() === 'POST' && str_contains($request->url(), '/api/v3/history/failed/'));
 
     expect($result['blocklist_warning'])->toContain('monitoring could not be suspended')
-        // The stored true is overwritten by the live result: nothing may go on
-        // believing this target is suspended when it is not.
+        // The stored true SURVIVES. A failed unmonitor PUT is not evidence that the
+        // target is monitored — it is evidence of nothing — and this row already
+        // records that an earlier run suspended it successfully. Clearing the flag
+        // would discard the only durable record of that outstanding restore.
         ->and(MediaReplacementAttempt::query()->where('action_request_id', $actionRequest->id)->sole()->monitoring_suspended)
-        ->toBeFalse();
+        ->toBeTrue();
+});
+
+test('a resume whose unmonitor fails keeps the restore obligation a later actor can act on', function (): void {
+    // The correlated failure: arr trouble is WHY run 1 died, so the retry hits the
+    // same flaky arr. Run 1 unmonitored the target (monitoring_suspended = true) and
+    // died mid-cleanup; the resume's fresh unmonitor PUT now fails.
+    //
+    // If that failure cleared the flag, every actor that could ever put monitoring
+    // back would stand down: restoreSuspendedMonitoring() returns true without an
+    // arr call, verifyDownload() computes needsRestore = false and terminalizes
+    // Verified, and both reconciliation passes filter on monitoring_suspended = true
+    // so neither would ever select the row. The target would silently stop receiving
+    // upgrades forever. That is the defect class, so the flag must survive.
+    // The arr rejects monitor writes for the resumed run and recovers afterwards.
+    // Registered BEFORE fakeExecutor() because merged stubs are tried in order and
+    // the first non-null response wins; returning null defers to fakeExecutor().
+    $arrAcceptsMonitorWrites = false;
+
+    Http::fake(function (Request $request) use (&$arrAcceptsMonitorWrites): ?PromiseInterface {
+        if ($request->method() !== 'PUT' || ! str_contains($request->url(), '/api/v3/episode/monitor')) {
+            return null;
+        }
+
+        return Http::response([], $arrAcceptsMonitorWrites ? 200 : 500);
+    });
+
+    fakeExecutor();
+    $actionRequest = replaceActionRequest();
+
+    MediaReplacementAttempt::factory()->create([
+        'action_request_id' => $actionRequest->id,
+        'service_connection_id' => ServiceConnection::query()->firstOrFail()->id,
+        'status' => MediaReplacementStatus::Downloading,
+        'grab_accepted_at' => now(),
+        'cleanup_completed_at' => null,
+        'was_monitored' => true,
+        'monitoring_suspended' => true,
+        'target' => [
+            'service' => 'sonarr', 'scope' => 'anime', 'series_id' => 42,
+            'episode_ids' => [101], 'episode_file_ids' => [501],
+            'installed_release' => 'Trusted.Anime.S01E01.OLD', 'original_history_id' => 999,
+        ],
+    ]);
+
+    resolve(MediaReplacementActions::class)->execute($actionRequest);
+
+    $attempt = MediaReplacementAttempt::query()->where('action_request_id', $actionRequest->id)->sole();
+
+    expect($attempt->monitoring_suspended)->toBeTrue();
+
+    // And the obligation is genuinely actionable rather than a flag nobody reads:
+    // once the arr recovers the restore actually reaches it, instead of being
+    // short-circuited as "there is nothing to restore". The resumed run itself only
+    // ever sent monitored: false, so a monitored: true PUT can only be this restore.
+    $arrAcceptsMonitorWrites = true;
+
+    expect(resolve(MediaReplacementTracker::class)->restoreSuspendedMonitoring($attempt))->toBeTrue();
+
+    Http::assertSent(fn (Request $request): bool => $request->method() === 'PUT'
+        && str_contains($request->url(), '/api/v3/episode/monitor')
+        && $request->data()['monitored'] === true);
+
+    expect($attempt->fresh()->monitoring_suspended)->toBeFalse();
 });
 
 test('preserves the original was_monitored across a retry', function (): void {
@@ -814,6 +880,76 @@ test('no sweep passes are armed when no blocklist ran, since nothing queued a re
 
     Http::assertNotSent(fn (Request $request): bool => str_contains($request->url(), '/api/v3/history/failed/'));
     Queue::assertNotPushed(SweepCompetingGrabs::class);
+});
+
+test('no sweep passes are armed when the blocklist could not identify the history record', function (): void {
+    Queue::fake([SweepCompetingGrabs::class]);
+
+    fakeExecutor();
+
+    // Monitoring WAS suspended, so blocklisting was allowed — but the approval never
+    // pinned a unique history record, so blocklistOriginal returns early and no
+    // blocklist runs. Gating the passes on the allowance rather than on the blocklist
+    // actually succeeding would arm them here, with no queued re-search to defend
+    // against. (markHistoryFailed throwing is the other such path.)
+    $actionRequest = replaceActionRequest();
+    $actionRequest->forceFill(['payload' => [...$actionRequest->payload, 'original_history_id' => null]])->save();
+
+    resolve(MediaReplacementActions::class)->execute($actionRequest);
+
+    Http::assertNotSent(fn (Request $request): bool => str_contains($request->url(), '/api/v3/history/failed/'));
+    Queue::assertNotPushed(SweepCompetingGrabs::class);
+});
+
+test('a resumed attempt is not repaired by a reconciliation pass running in the same window', function (): void {
+    fakeExecutor();
+    $actionRequest = replaceActionRequest();
+
+    // Days old, terminal with a NON-recoverable reason, monitoring still suspended,
+    // cleanup never closed. The resume's conditional reopen deliberately does not
+    // match this status, so the row stays terminal for the whole run — which is
+    // exactly the shape the reconciliation repair pass selects on. Its age is the
+    // ORIGINAL attempt's, so unless the resume rewrites started_at an hourly repair
+    // pass treats a live executor's row as fair game: it remonitors the target
+    // mid-cleanup and the blocklist that follows fires the arr's queued re-search
+    // against a monitored target. SweepCompetingGrabs cannot catch that — it bails on
+    // a terminal attempt.
+    $attempt = MediaReplacementAttempt::factory()->create([
+        'action_request_id' => $actionRequest->id,
+        'service_connection_id' => ServiceConnection::query()->firstOrFail()->id,
+        'status' => MediaReplacementStatus::NeedsAttention,
+        'failure_reason' => 'restore_monitoring_failed',
+        'grab_accepted_at' => now()->subDays(3),
+        'cleanup_completed_at' => null,
+        'started_at' => now()->subDays(3),
+        'completed_at' => now()->subDays(3),
+        'was_monitored' => true,
+        'monitoring_suspended' => true,
+        'target' => [
+            'service' => 'sonarr', 'scope' => 'anime', 'series_id' => 42,
+            'episode_ids' => [101], 'episode_file_ids' => [501],
+            'installed_release' => 'Trusted.Anime.S01E01.OLD', 'original_history_id' => 999,
+        ],
+    ]);
+
+    resolve(MediaReplacementActions::class)->execute($actionRequest);
+
+    // Still terminal, so the row still matches the repair pass's status predicate.
+    expect($attempt->fresh()->status->isTerminal())->toBeTrue();
+
+    // Re-faking resets the recorded requests, so the assertions below see only what
+    // the reconciliation run itself sent.
+    fakeExecutor();
+
+    $this->artisan('media-replacement:reconcile')->assertSuccessful();
+
+    Http::assertNotSent(fn (Request $request): bool => $request->method() === 'PUT'
+        && str_contains($request->url(), '/api/v3/episode/monitor')
+        && $request->data()['monitored'] === true);
+
+    // The suspension is still owed, and still durable: the repair pass picks it up
+    // once the resumed run's own window has elapsed.
+    expect($attempt->fresh()->monitoring_suspended)->toBeTrue();
 });
 
 test('a rejected grab still restores monitoring immediately because no blocklist ran', function (): void {
