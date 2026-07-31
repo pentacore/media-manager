@@ -1,3 +1,10 @@
+## [1.14.1](https://github.com/pentacore/media-manager/compare/v1.14.0...v1.14.1) (2026-07-31)
+
+
+### Bug Fixes
+
+* **ai:** raise the chat timeout and make it configurable ([d0d567b](https://github.com/pentacore/media-manager/commit/d0d567b19bfb20c5b74123c280952479c1097427))
+
 # [1.14.0](https://github.com/pentacore/media-manager/compare/v1.13.2...v1.14.0) (2026-07-31)
 
 
