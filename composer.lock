@@ -13180,16 +13180,16 @@
         },
         {
             "name": "laravel/telescope",
-            "version": "v5.20.0",
+            "version": "v5.21.0",
             "source": {
                 "type": "git",
                 "url": "https://github.com/laravel/telescope.git",
-                "reference": "38ec6e6006a67e05e0c476c5f8ef3550b72e43d8"
+                "reference": "f00f45a59843329b97aa238f28da594f3b7d4aa7"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/laravel/telescope/zipball/38ec6e6006a67e05e0c476c5f8ef3550b72e43d8",
-                "reference": "38ec6e6006a67e05e0c476c5f8ef3550b72e43d8",
+                "url": "https://api.github.com/repos/laravel/telescope/zipball/f00f45a59843329b97aa238f28da594f3b7d4aa7",
+                "reference": "f00f45a59843329b97aa238f28da594f3b7d4aa7",
                 "shasum": ""
             },
             "require": {
@@ -13243,9 +13243,9 @@
             ],
             "support": {
                 "issues": "https://github.com/laravel/telescope/issues",
-                "source": "https://github.com/laravel/telescope/tree/v5.20.0"
+                "source": "https://github.com/laravel/telescope/tree/v5.21.0"
             },
-            "time": "2026-04-06T12:52:26+00:00"
+            "time": "2026-07-20T19:44:45+00:00"
         },
         {
             "name": "league/uri-components",
