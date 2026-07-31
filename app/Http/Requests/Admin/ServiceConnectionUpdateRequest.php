@@ -51,8 +51,18 @@ class ServiceConnectionUpdateRequest extends FormRequest
             // Sonarr/Radarr-only: arr tag labels that opt a series or movie into
             // the automatic subtitle check on import. Labels rather than ids, so
             // the configuration survives a tag being recreated upstream.
+            //
+            // Entries are `nullable`, not `required`, so the picker can keep the
+            // field present with a single empty value when every checkbox is
+            // unticked. An unticked checkbox group submits nothing at all, and
+            // an absent field means "preserve" — so without that empty entry the
+            // selection could never be cleared.
+            //
+            // ConvertEmptyStringsToNull turns that entry into null before
+            // validation, which `required` would reject; SubtitleCheckTagSettings
+            // then drops it because it is not a string, leaving an empty list.
             'subtitle_check_tags' => ['nullable', 'array', 'max:50'],
-            'subtitle_check_tags.*' => ['required', 'string', 'max:100'],
+            'subtitle_check_tags.*' => ['nullable', 'string', 'max:100'],
             // Whisparr-only: which API generation this connection speaks.
             'whisparr_version' => ['nullable', 'string', 'in:v2,v3'],
         ];

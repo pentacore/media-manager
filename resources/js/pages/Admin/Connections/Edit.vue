@@ -893,7 +893,13 @@ function testIndexer(indexerId: number): void {
                         </div>
 
                         <div
-                            v-if="!arrTags"
+                            v-if="arrTags === undefined"
+                            class="rounded-md border border-border bg-bg-elev px-3 py-2 text-sm text-muted-foreground"
+                        >
+                            Loading tags…
+                        </div>
+                        <div
+                            v-else-if="arrTags === null"
                             class="rounded-md border border-border bg-bg-elev px-3 py-2 text-sm text-muted-foreground"
                             data-testid="subtitle-check-tags-unavailable"
                         >
@@ -907,6 +913,25 @@ function testIndexer(indexerId: number): void {
                             No tags are defined on this instance yet.
                         </div>
                         <div v-else class="space-y-2">
+                            <!--
+                                Keeps the field present when every box is
+                                unticked: an unticked checkbox group submits
+                                nothing, and an absent field means "keep the
+                                stored tags", so without this the selection
+                                could never be cleared. The backend receives
+                                it as null and drops it, leaving an empty
+                                list.
+
+                                Deliberately inside this branch only — while
+                                tags are loading or unavailable the form must
+                                not claim an empty selection and wipe the
+                                stored one.
+                            -->
+                            <input
+                                type="hidden"
+                                name="subtitle_check_tags[]"
+                                value=""
+                            />
                             <label
                                 v-for="tag in arrTags"
                                 :key="tag.id"
