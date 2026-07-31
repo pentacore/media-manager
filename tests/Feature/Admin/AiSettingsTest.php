@@ -4,7 +4,10 @@ declare(strict_types=1);
 
 use App\Enums\AiMode;
 use App\Enums\MediaReplacementScope;
+use App\Enums\ServiceType;
+use App\Models\ServiceConnection;
 use App\Models\User;
+use App\Services\MediaReplacement\SubtitleCheckTagSettings;
 use App\Settings\AiSettings;
 use App\Settings\MediaReplacementSettings;
 use Illuminate\Support\Facades\Cache;
@@ -28,6 +31,11 @@ function validMediaReplacementConfiguration(array $overrides = []): array
         'global_languages' => ['English'],
         'scoped_languages' => ['anime' => ['Japanese'], 'tv' => null, 'movie' => null],
         'season_pack_policy' => 'approval_required',
+        'subtitle_check' => [
+            'enabled' => false,
+            'max_attempts_per_target' => 1,
+            'cooldown_hours' => 24,
+        ],
         'guidance' => [
             'anime' => [
                 'notes' => 'CR-tagged releases are trusted.',
@@ -254,6 +262,11 @@ test('index exposes media replacement configuration and enum options', function 
             ->where('settings.media_replacement.automatic_selection_threshold', 90)
             ->where('settings.media_replacement.season_pack_policy', 'approval_required')
             ->where('settings.media_replacement.global_languages', ['eng'])
+            ->where('settings.media_replacement.subtitle_check', [
+                'enabled' => false,
+                'max_attempts_per_target' => 1,
+                'cooldown_hours' => 24,
+            ])
             ->has('seasonPackPolicies')
             ->has('subtitleRuleStrengths')
             ->has('conditionFields')
@@ -421,7 +434,109 @@ test('update rejects invalid media replacement configuration', function (array $
         ]],
         'media_replacement.guidance.anime.rules.0.languages',
     ],
+    'missing subtitle check block' => [
+        ['subtitle_check' => null],
+        'media_replacement.subtitle_check',
+    ],
+    'unknown subtitle check key' => [
+        ['subtitle_check' => [
+            'enabled' => false,
+            'max_attempts_per_target' => 1,
+            'cooldown_hours' => 24,
+            'tags' => ['subtitle-check'],
+        ]],
+        'media_replacement.subtitle_check',
+    ],
+    'non-boolean subtitle check toggle' => [
+        ['subtitle_check' => [
+            'enabled' => 'nope',
+            'max_attempts_per_target' => 1,
+            'cooldown_hours' => 24,
+        ]],
+        'media_replacement.subtitle_check.enabled',
+    ],
+    'subtitle check attempts below one' => [
+        ['subtitle_check' => [
+            'enabled' => true,
+            'max_attempts_per_target' => 0,
+            'cooldown_hours' => 24,
+        ]],
+        'media_replacement.subtitle_check.max_attempts_per_target',
+    ],
+    'subtitle check attempts above ten' => [
+        ['subtitle_check' => [
+            'enabled' => true,
+            'max_attempts_per_target' => 11,
+            'cooldown_hours' => 24,
+        ]],
+        'media_replacement.subtitle_check.max_attempts_per_target',
+    ],
+    'subtitle check cooldown below one hour' => [
+        ['subtitle_check' => [
+            'enabled' => true,
+            'max_attempts_per_target' => 1,
+            'cooldown_hours' => 0,
+        ]],
+        'media_replacement.subtitle_check.cooldown_hours',
+    ],
+    'subtitle check cooldown above 720 hours' => [
+        ['subtitle_check' => [
+            'enabled' => true,
+            'max_attempts_per_target' => 1,
+            'cooldown_hours' => 721,
+        ]],
+        'media_replacement.subtitle_check.cooldown_hours',
+    ],
 ]);
+
+test('the subtitle check settings round-trip through the AI settings form', function (): void {
+    $admin = User::factory()->admin()->create();
+
+    $this->actingAs($admin)
+        ->put(route('admin.ai-settings.update'), [
+            ...baseAiSettingsPayload(),
+            'media_replacement' => json_encode(validMediaReplacementConfiguration([
+                'subtitle_check' => [
+                    'enabled' => true,
+                    'max_attempts_per_target' => 2,
+                    'cooldown_hours' => 12,
+                ],
+            ]), JSON_THROW_ON_ERROR),
+        ])
+        ->assertRedirect(route('admin.ai-settings.index'))
+        ->assertSessionHasNoErrors();
+
+    $mediaReplacementSettings = resolve(MediaReplacementSettings::class);
+
+    expect($mediaReplacementSettings->subtitleCheckEnabled())->toBeTrue()
+        ->and($mediaReplacementSettings->subtitleCheckMaxAttempts())->toBe(2)
+        ->and($mediaReplacementSettings->subtitleCheckCooldownHours())->toBe(12);
+});
+
+test('saving the AI settings form leaves per-connection subtitle-check tags alone', function (): void {
+    $admin = User::factory()->admin()->create();
+    $subtitleCheckTagSettings = resolve(SubtitleCheckTagSettings::class);
+    $serviceConnection = ServiceConnection::factory()->create([
+        'type' => ServiceType::Sonarr,
+        'settings' => $subtitleCheckTagSettings->mergeInto([], ['subtitle-check']),
+    ]);
+
+    $this->actingAs($admin)
+        ->put(route('admin.ai-settings.update'), [
+            ...baseAiSettingsPayload(),
+            'media_replacement' => json_encode(validMediaReplacementConfiguration([
+                'subtitle_check' => [
+                    'enabled' => true,
+                    'max_attempts_per_target' => 2,
+                    'cooldown_hours' => 12,
+                ],
+            ]), JSON_THROW_ON_ERROR),
+        ])
+        ->assertRedirect(route('admin.ai-settings.index'))
+        ->assertSessionHasNoErrors();
+
+    expect($subtitleCheckTagSettings->forConnection($serviceConnection->refresh()))->toBe(['subtitle-check']);
+});
 
 test('update rejects malformed media replacement json', function (): void {
     $admin = User::factory()->admin()->create();
