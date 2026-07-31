@@ -676,3 +676,53 @@ test('a padded webhook download id is stored trimmed so it can be compared', fun
 
     expect($mediaReplacementAttempt->fresh()->download_id)->toBe('DL-1');
 });
+
+test('an import belonging to a tracked attempt is recognised', function (): void {
+    trackerAttempt($this->connection->id, [
+        'status' => MediaReplacementStatus::Downloading,
+        'download_id' => 'DL-TRACKED',
+    ]);
+
+    expect(resolve(MediaReplacementTracker::class)->hasAttemptForDownload($this->connection, 'DL-TRACKED'))
+        ->toBeTrue();
+});
+
+test('an unrelated import is not recognised', function (): void {
+    // Two ways this could wrongly claim an organic import, so both are present:
+    // an attempt on THIS connection carrying a different download id, and an
+    // attempt carrying THIS download id on a different connection. Arr download
+    // ids are only unique within their own arr, so a lookup that ignores the
+    // connection would let one instance's replacement silence another's import.
+    trackerAttempt($this->connection->id, [
+        'status' => MediaReplacementStatus::Downloading,
+        'download_id' => 'DL-TRACKED',
+    ]);
+
+    $otherConnection = ServiceConnection::factory()->sonarr()->create([
+        'url' => 'http://sonarr-two.local:8989', 'api_key' => 'test', 'is_active' => true,
+    ]);
+
+    trackerAttempt($otherConnection->id, [
+        'status' => MediaReplacementStatus::Downloading,
+        'download_id' => 'DL-ORGANIC',
+    ]);
+
+    expect(resolve(MediaReplacementTracker::class)->hasAttemptForDownload($this->connection, 'DL-ORGANIC'))
+        ->toBeFalse();
+});
+
+test('a terminalized attempt still claims its own import', function (): void {
+    // The Download webhook that terminalizes an attempt and the auditor both
+    // see the same event; the auditor must not act on it in either ordering.
+    // Were terminal attempts excluded, whichever ordering ran the auditor after
+    // verifyDownload() would have it audit the file the replacement just
+    // imported and request yet another replacement — an intermittent loop.
+    trackerAttempt($this->connection->id, [
+        'status' => MediaReplacementStatus::Verified,
+        'completed_at' => now(),
+        'download_id' => 'DL-DONE',
+    ]);
+
+    expect(resolve(MediaReplacementTracker::class)->hasAttemptForDownload($this->connection, 'DL-DONE'))
+        ->toBeTrue();
+});

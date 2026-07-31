@@ -674,6 +674,25 @@ final readonly class MediaReplacementTracker
     }
 
     /**
+     * Whether a replacement attempt on this connection owns the given download.
+     *
+     * The automatic subtitle check uses this to stay off its own replacements:
+     * a replacement's import is verified by verifyDownload(), which already
+     * flags a still-missing language as imported_subtitles_missing_required_language.
+     * Terminal attempts count too — the webhook that terminalizes an attempt and
+     * the auditor observe the same event, and the auditor must not act on it in
+     * either ordering. Deliberately broader than attemptsByDownloadId(), which
+     * narrows to the attempts that may still be advanced.
+     */
+    public function hasAttemptForDownload(ServiceConnection $serviceConnection, string $downloadId): bool
+    {
+        return MediaReplacementAttempt::query()
+            ->where('service_connection_id', $serviceConnection->id)
+            ->where('download_id', $downloadId)
+            ->exists();
+    }
+
+    /**
      * Restore monitoring on the target after the replacement imported. The
      * executor unmonitors it before blocklisting to suppress the arr's
      * auto-redownload search; this puts it back.
