@@ -405,11 +405,15 @@ final readonly class BazarrActions implements ActionExecutor
                 $bazarrClient->uploadMovie($targetIds['radarr_id'], ...$arguments);
             }
 
-            Storage::disk('local')->delete($upload->path);
-            $upload->update([
+            // Bazarr already accepted the subtitle, so the upload is consumed either
+            // way — but cleanup is only recorded when the staged file really went
+            // away. A failed unlink leaves cleaned_up_at null so the prune job
+            // retries it instead of orphaning the file outside every future cycle.
+            $deleted = Storage::disk('local')->delete($upload->path);
+            $upload->update(array_filter([
                 'consumed_at' => now(),
-                'cleaned_up_at' => now(),
-            ]);
+                'cleaned_up_at' => $deleted ? now() : null,
+            ], static fn (mixed $value): bool => $value !== null));
         } finally {
             $uploadLock->release();
         }

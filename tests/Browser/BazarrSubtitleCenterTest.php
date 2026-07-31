@@ -6,6 +6,7 @@ use App\Enums\BazarrServiceRole;
 use App\Enums\SubtitleCaseAttemptOutcome;
 use App\Enums\SubtitleCaseAttemptType;
 use App\Enums\SubtitleCaseStatus;
+use App\Jobs\RunSubtitleAdvisor;
 use App\Models\ActionRequest;
 use App\Models\ActivityLog;
 use App\Models\BazarrServiceLink;
@@ -14,10 +15,12 @@ use App\Models\SubtitleCase;
 use App\Models\SubtitleCaseAttempt;
 use App\Models\SubtitleUpload;
 use App\Models\User;
+use App\Settings\BazarrAutomationSettings;
 use Database\Seeders\ActionTypeConfigSeeder;
 use Illuminate\Contracts\Http\Kernel;
 use Illuminate\Http\Client\Request;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Queue;
 use Tests\Support\ParseMultipartBrowserRequests;
 
 test('viewer can browse the subtitle center', function (): void {
@@ -54,7 +57,11 @@ test('viewer can browse the subtitle center', function (): void {
 });
 
 test('member retries a review case with Media Advisor after confirmation', function (): void {
-    config()->set('mediamanager.ai.enabled', false);
+    // The retry is only offered — and only accepted — while the Advisor could
+    // actually run, so both gates are open here and the queued job is faked.
+    config()->set('mediamanager.ai.enabled', true);
+    resolve(BazarrAutomationSettings::class)->setConfiguration(['enabled' => true]);
+    Queue::fake([RunSubtitleAdvisor::class]);
     $bazarr = ServiceConnection::factory()->bazarr()->create([
         'name' => 'Primary Bazarr',
         'url' => 'http://bazarr.test',

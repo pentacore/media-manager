@@ -14,6 +14,7 @@ use App\Models\ServiceConnection;
 use App\Models\SubtitleCase;
 use App\Models\SubtitleUpload;
 use App\Services\Actions\ActionOrchestrator;
+use App\Services\Bazarr\SubtitleCaseFingerprint;
 use App\Services\Bazarr\SubtitleInventoryService;
 use App\Settings\BazarrAutomationSettings;
 use finfo;
@@ -27,6 +28,10 @@ use Throwable;
 
 final class UploadController extends Controller
 {
+    public function __construct(
+        private readonly SubtitleCaseFingerprint $subtitleCaseFingerprint,
+    ) {}
+
     public function __invoke(
         UploadRequest $uploadRequest,
         SubtitleInventoryService $subtitleInventoryService,
@@ -46,6 +51,21 @@ final class UploadController extends Controller
         if (($item['target_fingerprint'] ?? null) !== $validated['target_fingerprint']) {
             throw ValidationException::withMessages([
                 'target_fingerprint' => 'The media file changed. Refresh the Subtitle Center before uploading.',
+            ]);
+        }
+
+        // The linked case has to carry the Arr file identity that
+        // BazarrActions::revalidateTarget recomputes before every write; the Bazarr
+        // media fingerprint above only proves the browser's view is current.
+        $candidate = $subtitleInventoryService->caseCandidateForMedia(
+            $connection,
+            $mediaType,
+            (int) $validated['media_id'],
+        );
+
+        if ($candidate === null) {
+            throw ValidationException::withMessages([
+                'connection' => 'The managing service could not identify this media file.',
             ]);
         }
 
@@ -75,6 +95,7 @@ final class UploadController extends Controller
             [$upload, $actionRequest] = DB::transaction(function () use (
                 $actionOrchestrator,
                 $bazarrAutomationSettings,
+                $candidate,
                 $connection,
                 $contents,
                 $extension,
@@ -89,7 +110,7 @@ final class UploadController extends Controller
                 $subtitleCase = $this->subtitleCase(
                     $connection,
                     $managingConnection,
-                    $item,
+                    $candidate,
                     $validated,
                 );
                 $subtitleUpload = SubtitleUpload::query()->create([
@@ -147,30 +168,38 @@ final class UploadController extends Controller
     }
 
     /**
-     * @param  array<string, mixed>  $item
+     * The identity columns come from the reconciliation projection, not from the
+     * Bazarr media fingerprint: an approved upload is revalidated against the live
+     * Arr file identity, so a case keyed any other way could never execute. An
+     * upload for the media's own required languages therefore lands on the case
+     * reconciliation already tracks.
+     *
+     * @param  array<string, mixed>  $candidate
      * @param  array<string, mixed>  $validated
      */
     private function subtitleCase(
         ServiceConnection $bazarr,
         ServiceConnection $managingConnection,
-        array $item,
+        array $candidate,
         array $validated,
     ): SubtitleCase {
+        $language = (string) $validated['language'];
         $requirements = [[
-            'code' => $validated['language'],
+            'code' => $language,
             'forced' => (bool) $validated['forced'],
             'hearing_impaired' => (bool) $validated['hearing_impaired'],
         ]];
+        $scope = (string) $candidate['scope'];
 
         return SubtitleCase::query()->firstOrCreate([
             'bazarr_connection_id' => $bazarr->id,
             'service_connection_id' => $managingConnection->id,
-            'file_fingerprint' => $item['target_fingerprint'],
-            'requirements_fingerprint' => hash('sha256', (string) json_encode($requirements)),
+            'file_fingerprint' => $candidate['file_fingerprint'],
+            'requirements_fingerprint' => $this->subtitleCaseFingerprint->requirements($scope, [$language]),
         ], [
-            'media_type' => $item['media_type'],
-            'scope' => $item['scope'] ?? $item['media_type'],
-            'target_ids' => $this->targetIds($item),
+            'media_type' => $candidate['media_type'],
+            'scope' => $scope,
+            'target_ids' => $candidate['target_ids'],
             'required_languages' => $requirements,
             'status' => SubtitleCaseStatus::Observing,
             'evidence' => ['source' => 'manual_upload'],
@@ -193,21 +222,12 @@ final class UploadController extends Controller
             'bazarr_connection_id' => $bazarr->id,
             'service_connection_id' => $managingConnection->id,
             'subtitle_case_id' => $subtitleCase->id,
-            'media_type' => $item['media_type'],
-            'target_ids' => $this->targetIds($item),
-            'target_fingerprint' => $item['target_fingerprint'],
+            'media_type' => $subtitleCase->media_type,
+            // A linked action is revalidated against its case, so both the target
+            // IDs and the fingerprint must be the case's own values.
+            'target_ids' => $subtitleCase->target_ids,
+            'target_fingerprint' => $subtitleCase->file_fingerprint,
         ];
-    }
-
-    /**
-     * @param  array<string, mixed>  $item
-     * @return array<string, int>
-     */
-    private function targetIds(array $item): array
-    {
-        return $item['media_type'] === 'episode'
-            ? ['series_id' => (int) $item['series_id'], 'episode_id' => (int) $item['media_id']]
-            : ['radarr_id' => (int) $item['media_id']];
     }
 
     private function connection(int $connectionId): ServiceConnection

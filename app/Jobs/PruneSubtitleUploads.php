@@ -42,7 +42,13 @@ final class PruneSubtitleUploads implements ShouldQueue
                     }
 
                     try {
-                        Storage::disk('local')->delete($upload->path);
+                        // Only a real deletion may record cleanup. Marking the row
+                        // cleaned after a failed unlink would drop it out of every
+                        // later prune cycle (they filter on cleaned_up_at) and leave
+                        // user-uploaded subtitle data on disk as an untracked orphan.
+                        if (! Storage::disk('local')->delete($upload->path)) {
+                            continue;
+                        }
 
                         SubtitleUpload::query()
                             ->whereKey($upload->id)

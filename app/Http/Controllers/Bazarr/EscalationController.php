@@ -8,6 +8,8 @@ use App\Enums\SubtitleCaseAttemptType;
 use App\Enums\SubtitleCaseStatus;
 use App\Models\ServiceConnection;
 use App\Models\SubtitleCase;
+use App\Providers\AIServiceProvider;
+use App\Settings\BazarrAutomationSettings;
 use Carbon\CarbonInterface;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
@@ -32,8 +34,10 @@ final class EscalationController extends BazarrController
         SubtitleCaseStatus::Superseded,
     ];
 
-    public function __invoke(Request $request): Response
-    {
+    public function __invoke(
+        Request $request,
+        BazarrAutomationSettings $bazarrAutomationSettings,
+    ): Response {
         $validated = $request->validate([
             ...$this->commonRules(),
             'status' => ['nullable', 'string', Rule::in($this->statusValues())],
@@ -78,7 +82,12 @@ final class EscalationController extends BazarrController
                     : [],
             ],
             'can_filter' => $isAdmin,
-            'can_investigate' => $request->user()?->isMember() === true,
+            // A manual investigation is only offered when the worker would actually
+            // run one: RunSubtitleAdvisor returns immediately with AI or Bazarr
+            // automation disabled, which is also the default state.
+            'can_investigate' => $request->user()?->isMember() === true
+                && AIServiceProvider::enabled()
+                && $bazarrAutomationSettings->enabled(),
         ]);
     }
 

@@ -81,8 +81,63 @@ test('the same material identity is idempotent and terminal identities stay clos
     SubtitleCaseStatus::NeedsReview,
     SubtitleCaseStatus::Dismissed,
     SubtitleCaseStatus::Handled,
-    SubtitleCaseStatus::Superseded,
 ]);
+
+test('a superseded identity is observed again when it reappears missing', function (): void {
+    $candidate = subtitleCaseCandidate($this->bazarr, $this->sonarr);
+    $subtitleCaseReconciler = resolve(SubtitleCaseReconciler::class);
+    $case = $subtitleCaseReconciler->reconcile($candidate);
+    $case->forceFill(['status' => SubtitleCaseStatus::Superseded, 'superseded_at' => now()])->save();
+
+    $reopened = $subtitleCaseReconciler->reconcile($candidate);
+
+    expect($reopened?->is($case))->toBeFalse()
+        ->and($reopened?->status)->toBe(SubtitleCaseStatus::Observing)
+        ->and($subtitleCaseReconciler->reconcile($candidate)?->is($reopened))->toBeTrue()
+        ->and(SubtitleCase::query()->count())->toBe(2);
+});
+
+test('a resolved identity that goes missing again is superseded and observed afresh', function (): void {
+    $candidate = subtitleCaseCandidate($this->bazarr, $this->sonarr);
+    $subtitleCaseReconciler = resolve(SubtitleCaseReconciler::class);
+    $case = $subtitleCaseReconciler->reconcile($candidate);
+    $subtitleCaseReconciler->reconcile([
+        ...$candidate,
+        'missing_languages' => [],
+        'current_subtitles' => ['eng', 'jpn'],
+    ]);
+
+    expect($case->fresh()->status)->toBe(SubtitleCaseStatus::Resolved);
+
+    // The subtitle was deleted again while the media file and language profile
+    // stayed put. A resolved row cannot re-enter an active state, so leaving it in
+    // place would keep this file out of subtitle automation forever.
+    $reopened = $subtitleCaseReconciler->reconcile($candidate);
+
+    expect($case->fresh()->status)->toBe(SubtitleCaseStatus::Superseded)
+        ->and($case->fresh()->superseded_at)->not->toBeNull()
+        ->and($reopened?->is($case))->toBeFalse()
+        ->and($reopened?->status)->toBe(SubtitleCaseStatus::Observing)
+        ->and(SubtitleCase::query()->count())->toBe(2);
+});
+
+test('a reopened identity starts a clean round without the earlier download requests', function (): void {
+    $candidate = subtitleCaseCandidate($this->bazarr, $this->sonarr);
+    $subtitleCaseReconciler = resolve(SubtitleCaseReconciler::class);
+    $case = $subtitleCaseReconciler->reconcile($candidate);
+    $case->forceFill([
+        'evidence' => [...$case->evidence, 'download_requests' => ['eng|0|0' => 42]],
+    ])->save();
+    $subtitleCaseReconciler->reconcile([
+        ...$candidate,
+        'missing_languages' => [],
+        'current_subtitles' => ['eng', 'jpn'],
+    ]);
+
+    $reopened = $subtitleCaseReconciler->reconcile($candidate);
+
+    expect($reopened?->evidence)->not->toHaveKey('download_requests');
+});
 
 test('changed material identity supersedes the active case and creates a new case', function (string $field): void {
     $candidate = subtitleCaseCandidate($this->bazarr, $this->sonarr);

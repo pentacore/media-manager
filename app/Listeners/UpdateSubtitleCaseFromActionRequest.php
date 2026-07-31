@@ -5,11 +5,14 @@ declare(strict_types=1);
 namespace App\Listeners;
 
 use App\Enums\ActionRequestStatus;
+use App\Enums\SubtitleCaseAttemptOutcome;
+use App\Enums\SubtitleCaseAttemptType;
 use App\Enums\SubtitleCaseStatus;
 use App\Events\ActionRequestStatusChanged;
 use App\Jobs\ReconcileSubtitleCase;
 use App\Models\ActionRequest;
 use App\Models\SubtitleCase;
+use App\Models\SubtitleCaseAttempt;
 use App\Services\Bazarr\SubtitleCaseLifecycle;
 
 final readonly class UpdateSubtitleCaseFromActionRequest
@@ -98,16 +101,52 @@ final readonly class UpdateSubtitleCaseFromActionRequest
             return;
         }
 
-        $reason = ($actionRequest->result['indeterminate'] ?? false) === true
-            ? 'bazarr_download_indeterminate'
-            : 'bazarr_download_failed';
         $language = $actionRequest->payload['language'] ?? null;
+        $language = is_string($language) && $language !== '' ? mb_substr($language, 0, 20) : null;
+
+        if (($actionRequest->result['indeterminate'] ?? false) === true) {
+            $this->recordIndeterminateDownload($subtitleCase, $actionRequest, $language);
+
+            return;
+        }
 
         $this->subtitleCaseLifecycle->needsReview(
             $subtitleCase,
-            is_string($language) && $language !== ''
-                ? $reason.':'.mb_substr($language, 0, 20)
-                : $reason,
+            $language === null
+                ? 'bazarr_download_failed'
+                : 'bazarr_download_failed:'.$language,
+        );
+    }
+
+    /**
+     * An uncertain write may still have landed in Bazarr, and only a live read can
+     * tell. BazarrActions already scheduled targeted reconciliation, which verifies
+     * download_requested and bazarr_searching cases only — parking the case here
+     * would turn that read into a no-op and leave a satisfied requirement stranded
+     * outside the missing feed forever. The case keeps waiting and the uncertainty
+     * is recorded as its own attempt instead.
+     */
+    private function recordIndeterminateDownload(
+        SubtitleCase $subtitleCase,
+        ActionRequest $actionRequest,
+        ?string $language,
+    ): void {
+        SubtitleCaseAttempt::query()->firstOrCreate(
+            [
+                'subtitle_case_id' => $subtitleCase->id,
+                'action_request_id' => $actionRequest->id,
+                'type' => SubtitleCaseAttemptType::Download,
+                'outcome' => SubtitleCaseAttemptOutcome::Indeterminate,
+            ],
+            [
+                'summary' => array_filter([
+                    'result' => 'bazarr_download_indeterminate',
+                    'language' => $language,
+                ], static fn (mixed $value): bool => $value !== null),
+                'error_category' => 'needs_reconciliation',
+                'started_at' => now(),
+                'completed_at' => now(),
+            ],
         );
     }
 

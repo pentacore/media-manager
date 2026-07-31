@@ -161,11 +161,7 @@ final class ReconcileSubtitleCase implements ShouldQueue
         $subtitleCase->refresh();
 
         if ($subtitleCase->status !== SubtitleCaseStatus::BazarrSearching
-            || SubtitleCaseAttempt::query()
-                ->where('subtitle_case_id', $subtitleCase->id)
-                ->where('type', SubtitleCaseAttemptType::Probe)
-                ->where('started_at', '>', now()->subHours($bazarrAutomationSettings->probeSpacingHours()))
-                ->exists()) {
+            || $this->recentProbeExists($subtitleCase, $bazarrAutomationSettings)) {
             return;
         }
 
@@ -335,11 +331,14 @@ final class ReconcileSubtitleCase implements ShouldQueue
             $subtitleCase = $subtitleCase->fresh() ?? $subtitleCase;
         }
 
-        // A completed download that left the requirement unmet re-enters probing
-        // so the normal empty-probe path can escalate the case to replacement.
+        // A settled download that left the requirement unmet re-enters probing so
+        // the normal empty-probe path can escalate the case to replacement. Probe
+        // spacing is not consulted here: the download was requested moments after a
+        // probe, so with a 24-hour window this verification could never advance the
+        // case. probe() enforces the spacing itself, so the case simply waits in
+        // bazarr_searching until the window elapses.
         if ($subtitleCase->status === SubtitleCaseStatus::DownloadRequested
-            && $this->downloadCompleted($subtitleCase)
-            && $this->probeSpacingElapsed($subtitleCase, $bazarrAutomationSettings)
+            && $this->downloadSettled($subtitleCase)
             && $subtitleCaseLifecycle->transition($subtitleCase, SubtitleCaseStatus::BazarrSearching)) {
             return $subtitleCase->fresh() ?? $subtitleCase;
         }
@@ -347,25 +346,43 @@ final class ReconcileSubtitleCase implements ShouldQueue
         return $subtitleCase;
     }
 
-    private function downloadCompleted(SubtitleCase $subtitleCase): bool
+    /**
+     * The linked download is no longer expected to act: it either completed, or it
+     * failed with an uncertain outcome that this live read has now verified. Both
+     * mean the case must stop waiting on it.
+     */
+    private function downloadSettled(SubtitleCase $subtitleCase): bool
     {
         if ($subtitleCase->download_action_request_id === null) {
             return false;
         }
 
-        return ActionRequest::query()
-            ->whereKey($subtitleCase->download_action_request_id)
-            ->where('status', ActionRequestStatus::Completed->value)
-            ->exists();
+        $actionRequest = ActionRequest::query()->find($subtitleCase->download_action_request_id);
+
+        if (! $actionRequest instanceof ActionRequest) {
+            return false;
+        }
+
+        return $actionRequest->status === ActionRequestStatus::Completed
+            || ($actionRequest->status === ActionRequestStatus::Failed
+                && ($actionRequest->result['indeterminate'] ?? false) === true);
     }
 
-    private function probeSpacingElapsed(
+    /**
+     * Probe spacing counts attempts that actually reached the providers. A failed
+     * attempt is recorded before the exception is rethrown, so counting it would
+     * make the queued retry return without contacting Bazarr: the remaining tries
+     * would go unspent, failed() would never park the case, and the case would
+     * wait out the whole spacing window instead.
+     */
+    private function recentProbeExists(
         SubtitleCase $subtitleCase,
         BazarrAutomationSettings $bazarrAutomationSettings,
     ): bool {
-        return ! SubtitleCaseAttempt::query()
+        return SubtitleCaseAttempt::query()
             ->where('subtitle_case_id', $subtitleCase->id)
             ->where('type', SubtitleCaseAttemptType::Probe)
+            ->whereNot('outcome', SubtitleCaseAttemptOutcome::Failed)
             ->where('started_at', '>', now()->subHours($bazarrAutomationSettings->probeSpacingHours()))
             ->exists();
     }

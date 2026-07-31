@@ -176,6 +176,37 @@ test('a transient probe failure records the attempt and stays retryable', functi
         ->toBe(SubtitleCaseAttemptOutcome::Failed);
 });
 
+test('a queue retry after a transient probe failure searches Bazarr again', function (): void {
+    $searches = 0;
+    Http::fake([
+        'bazarr.test/api/providers/episodes*' => function () use (&$searches): never {
+            $searches++;
+
+            throw new ConnectionException('bazarr unreachable');
+        },
+        'bazarr.test/api/providers' => Http::response(['data' => []]),
+    ]);
+    $reconcileSubtitleCase = new ReconcileSubtitleCase(probeCandidate($this->case));
+
+    // The recorded failure must not satisfy the probe-spacing guard, or the
+    // queued retry returns without contacting Bazarr: the remaining tries are
+    // never spent, failed() never runs, and the case waits out the whole
+    // spacing window in bazarr_searching.
+    foreach (range(1, 2) as $ignored) {
+        try {
+            runSubtitleProbe($reconcileSubtitleCase);
+        } catch (ConnectionException) {
+            // The queue would retry after the configured backoff.
+        }
+    }
+
+    // The client retries a connection failure internally, so the second run is
+    // only proven by searches beyond the first run's exhausted attempts.
+    expect($searches)->toBeGreaterThan(3)
+        ->and(SubtitleCaseAttempt::query()->where('outcome', SubtitleCaseAttemptOutcome::Failed)->count())->toBe(2)
+        ->and($this->case->fresh()->status)->toBe(SubtitleCaseStatus::BazarrSearching);
+});
+
 test('the last probe attempt parks the case for review', function (): void {
     Http::fake([
         'bazarr.test/api/providers/episodes*' => fn (): never => throw new ConnectionException('bazarr unreachable'),
@@ -412,6 +443,44 @@ test('a completed download that did not satisfy the requirement re-enters probin
     runSubtitleProbe(ReconcileSubtitleCase::forCase($case->fresh()));
 
     expect($case->fresh()->status)->toBe(SubtitleCaseStatus::BazarrSearching);
+});
+
+test('an indeterminate download re-enters probing once the live read finds the track still missing', function (): void {
+    ['case' => $case] = targetedEpisodeCaseSetup([]);
+    $actionRequest = ActionRequest::factory()->create([
+        'type' => 'bazarr_download_best',
+        'status' => ActionRequestStatus::Failed,
+        'result' => ['success' => false, 'reason' => 'needs_reconciliation', 'indeterminate' => true],
+    ]);
+    $case->forceFill(['download_action_request_id' => $actionRequest->id])->save();
+
+    runSubtitleProbe(ReconcileSubtitleCase::forCase($case->fresh()));
+
+    expect($case->fresh()->status)->toBe(SubtitleCaseStatus::BazarrSearching);
+});
+
+test('a settled download re-enters probing even inside the probe spacing window', function (): void {
+    ['case' => $case] = targetedEpisodeCaseSetup([]);
+    $actionRequest = ActionRequest::factory()->create([
+        'type' => 'bazarr_download_best',
+        'status' => ActionRequestStatus::Completed,
+    ]);
+    $case->forceFill(['download_action_request_id' => $actionRequest->id])->save();
+
+    // The probe that queued the download is minutes old and the spacing window is
+    // 24 hours, so gating this verification on spacing would strand the case in
+    // download_requested forever. probe() below still honours the window.
+    SubtitleCaseAttempt::factory()->for($case)->create([
+        'type' => SubtitleCaseAttemptType::Probe,
+        'outcome' => SubtitleCaseAttemptOutcome::Succeeded,
+        'started_at' => now()->subMinutes(2),
+        'completed_at' => now()->subMinutes(2),
+    ]);
+
+    runSubtitleProbe(ReconcileSubtitleCase::forCase($case->fresh()));
+
+    expect($case->fresh()->status)->toBe(SubtitleCaseStatus::BazarrSearching)
+        ->and(SubtitleCaseAttempt::query()->where('subtitle_case_id', $case->id)->count())->toBe(1);
 });
 
 test('a pending download leaves a still-missing case in download_requested', function (): void {

@@ -34,7 +34,10 @@ beforeEach(function (): void {
         'url' => 'http://bazarr.test',
         'api_key' => 'bazarr-secret',
     ]);
-    $this->radarr = ServiceConnection::factory()->radarr()->create();
+    $this->radarr = ServiceConnection::factory()->radarr()->create([
+        'url' => 'http://radarr.test',
+        'api_key' => 'radarr-secret',
+    ]);
     BazarrServiceLink::factory()->create([
         'bazarr_connection_id' => $this->bazarr->id,
         'related_connection_id' => $this->radarr->id,
@@ -56,6 +59,16 @@ beforeEach(function (): void {
         return match ($path) {
             '/api/movies' => Http::response(['data' => [$this->movie], 'total' => 1]),
             '/api/movies/history' => Http::response(['data' => [], 'total' => 0]),
+            // The linked case is keyed by the live Radarr file identity, exactly as
+            // reconciliation keys its own cases.
+            '/api/v3/movie/801' => Http::response(['id' => 801, 'title' => 'Example Movie', 'movieFileId' => 91]),
+            '/api/v3/moviefile/91' => Http::response([
+                'id' => 91,
+                'size' => 8_589_934_592,
+                'dateAdded' => '2026-07-20T08:00:00Z',
+                'sceneName' => 'Example.Movie.2024.1080p',
+                'path' => '/media/movies/Example Movie (2024)/movie.mkv',
+            ]),
             '/api/swagger.json' => Http::response([
                 'swagger' => '2.0',
                 'basePath' => '/api',
@@ -105,13 +118,16 @@ test('members privately stage a validated upload and approval-gated action atomi
         ->and($subtitleUpload->checksum)->toBe(hash('sha256', (string) $contents))
         ->and($subtitleUpload->size_bytes)->toBe(strlen((string) $contents))
         ->and($subtitleUpload->action_request_id)->toBe($actionRequest->id)
+        // The linked payload carries the case's own Arr file identity — the Bazarr
+        // media fingerprint the browser sent only gates staleness at request time.
         ->and($actionRequest->payload)->toMatchArray([
             'subtitle_upload_id' => $subtitleUpload->id,
             'language' => 'eng',
             'forced' => false,
             'hearing_impaired' => false,
-            'target_fingerprint' => $this->targetFingerprint,
+            'target_fingerprint' => SubtitleCase::query()->sole()->file_fingerprint,
         ])
+        ->and($actionRequest->payload['target_fingerprint'])->not->toBe($this->targetFingerprint)
         ->and($actionRequest->payload)->not->toHaveKey('path')
         ->and($actionRequest->payload)->not->toHaveKey('subtitle_file');
 
@@ -210,6 +226,34 @@ test('auto approved upload execution is deferred until its transaction commits',
     );
 });
 
+test('a staged upload executes end to end once its action is approved', function (): void {
+    ActionTypeConfig::query()
+        ->where('type', 'bazarr_upload_subtitle')
+        ->update(['requires_approval' => false]);
+
+    $this->actingAs(User::factory()->member()->create())
+        ->withHeader('Accept', 'application/json')
+        ->post(route('bazarr.uploads.store'), [
+            ...uploadPayload($this),
+            'subtitle_file' => validSubtitleUpload(),
+        ])
+        ->assertCreated();
+
+    $actionRequest = ActionRequest::query()->sole();
+    $upload = SubtitleUpload::query()->sole();
+
+    // The executor revalidates a linked case against the live Arr file identity
+    // before writing, so a case keyed any other way would be rejected here and the
+    // subtitle would never reach Bazarr.
+    new ExecuteActionRequest($actionRequest)->handle();
+
+    expect($actionRequest->fresh()->status)->toBe(ActionRequestStatus::Completed)
+        ->and($upload->refresh()->consumed_at)->not->toBeNull();
+
+    Http::assertSent(fn (Request $request): bool => $request->method() === 'POST'
+        && $request->url() === 'http://bazarr.test/api/movies/subtitles');
+});
+
 test('pruning idempotently cleans expired consumed cancelled and denied uploads', function (): void {
     $case = SubtitleCase::factory()->create();
     $deniedAction = ActionRequest::factory()->create(['status' => ActionRequestStatus::Rejected]);
@@ -304,6 +348,63 @@ test('an upload action already pruned by the cleanup job aborts cleanly without 
         ->toThrow(InvalidArgumentException::class, 'unavailable');
 
     Http::assertNotSent(fn (Request $request): bool => in_array($request->method(), ['POST', 'PATCH', 'DELETE'], true));
+});
+
+test('pruning leaves an upload uncleaned when its staged file could not be deleted', function (): void {
+    config()->set('cache.default', 'array');
+    Cache::store('array')->flush();
+
+    $upload = SubtitleUpload::factory()->create(['expires_at' => now()->subMinute()]);
+    Storage::disk('local')->put($upload->path, 'subtitle');
+
+    // A transient filesystem failure must not record cleanup: prune only revisits
+    // rows with a null cleaned_up_at, so the staged subtitle would otherwise stay
+    // on disk as an untracked orphan forever.
+    $failingDisk = Mockery::mock(Storage::disk('local'))->makePartial();
+    $failingDisk->shouldReceive('delete')->once()->andReturnFalse();
+    Storage::set('local', $failingDisk);
+
+    new PruneSubtitleUploads()->handle();
+
+    expect($upload->refresh()->cleaned_up_at)->toBeNull();
+});
+
+test('an executed upload whose staged file could not be deleted stays claimable for prune', function (): void {
+    config()->set('cache.default', 'array');
+    Cache::store('array')->flush();
+
+    $upload = SubtitleUpload::factory()->create([
+        'checksum' => hash('sha256', 'subtitle'),
+        'expires_at' => now()->addHour(),
+    ]);
+    Storage::disk('local')->put($upload->path, 'subtitle');
+
+    $failingDisk = Mockery::mock(Storage::disk('local'))->makePartial();
+    $failingDisk->shouldReceive('delete')->once()->andReturnFalse();
+    Storage::set('local', $failingDisk);
+
+    $request = ActionRequest::factory()->create([
+        'type' => 'bazarr_upload_subtitle',
+        'payload' => [
+            'title' => 'Upload subtitle',
+            'bazarr_connection_id' => $this->bazarr->id,
+            'service_connection_id' => $this->radarr->id,
+            'media_type' => 'movie',
+            'target_ids' => ['radarr_id' => 801],
+            'target_fingerprint' => $this->targetFingerprint,
+            'subtitle_upload_id' => $upload->id,
+            'language' => 'eng',
+            'forced' => false,
+            'hearing_impaired' => false,
+        ],
+    ]);
+
+    resolve(BazarrActions::class)->execute($request);
+
+    // Bazarr accepted the subtitle, so the upload is consumed — but cleanup is
+    // only recorded once the file really went away.
+    expect($upload->refresh()->consumed_at)->not->toBeNull()
+        ->and($upload->refresh()->cleaned_up_at)->toBeNull();
 });
 
 /**

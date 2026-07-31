@@ -7,6 +7,7 @@ namespace App\Services\Bazarr;
 use App\Enums\SubtitleCaseStatus;
 use App\Models\SubtitleCase;
 use App\Settings\BazarrAutomationSettings;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
@@ -56,13 +57,7 @@ final readonly class SubtitleCaseReconciler
      */
     private function reconcileLocked(array $candidate): ?SubtitleCase
     {
-        $existing = SubtitleCase::query()
-            ->where('bazarr_connection_id', $candidate['bazarr_connection_id'])
-            ->where('service_connection_id', $candidate['service_connection_id'])
-            ->where('file_fingerprint', $candidate['file_fingerprint'])
-            ->where('requirements_fingerprint', $candidate['requirements_fingerprint'])
-            ->lockForUpdate()
-            ->first();
+        $existing = $this->identityQuery($candidate)->lockForUpdate()->first();
         $isComplete = $candidate['missing_languages'] === [] || ! $candidate['monitored'];
 
         if ($existing instanceof SubtitleCase) {
@@ -75,15 +70,24 @@ final readonly class SubtitleCaseReconciler
                 return $existing;
             }
 
-            if (! $isComplete) {
+            // A resolved requirement can go missing again — the subtitle is deleted
+            // while the file and language profile stay put. The resolved row cannot
+            // re-enter an active state and its identity blocks a replacement, so it
+            // is superseded here and a fresh case observes the identity below.
+            // Explicitly closed identities (dismissed, handled) stay closed.
+            if (! $isComplete && $existing->status === SubtitleCaseStatus::Resolved) {
+                $this->subtitleCaseLifecycle->supersede($existing);
+            } elseif (! $isComplete) {
                 $existing->forceFill([
                     'evidence' => $this->evidence($candidate, $existing),
                     'observed_at' => now(),
                 ])->save();
                 $this->advanceElapsedGrace($existing);
-            }
 
-            return $existing;
+                return $existing;
+            } else {
+                return $existing;
+            }
         }
 
         $activeTargetCases = $this->activeTargetCases($candidate);
@@ -103,14 +107,15 @@ final readonly class SubtitleCaseReconciler
             $this->subtitleCaseLifecycle->supersede($activeTargetCase);
         }
 
-        $subtitleCase = SubtitleCase::query()->firstOrCreate(
-            [
+        // Superseded rows keep their identity columns but are out of the partial
+        // unique index, so the lookup — like the index — only considers cases still
+        // on the record and a fresh case can observe a reopened identity.
+        $subtitleCase = $this->identityQuery($candidate)->lockForUpdate()->first()
+            ?? SubtitleCase::query()->create([
                 'bazarr_connection_id' => $candidate['bazarr_connection_id'],
                 'service_connection_id' => $candidate['service_connection_id'],
                 'file_fingerprint' => $candidate['file_fingerprint'],
                 'requirements_fingerprint' => $candidate['requirements_fingerprint'],
-            ],
-            [
                 'media_type' => $candidate['media_type'],
                 'scope' => $candidate['scope'],
                 'target_ids' => $candidate['target_ids'],
@@ -119,12 +124,25 @@ final readonly class SubtitleCaseReconciler
                 'evidence' => $this->evidence($candidate),
                 'grace_until' => now()->addHours($this->bazarrAutomationSettings->graceHours($candidate['scope'])),
                 'observed_at' => now(),
-            ],
-        );
+            ]);
 
         $this->advanceElapsedGrace($subtitleCase);
 
         return $subtitleCase;
+    }
+
+    /**
+     * @param  array<string, mixed>  $candidate
+     * @return Builder<SubtitleCase>
+     */
+    private function identityQuery(array $candidate): Builder
+    {
+        return SubtitleCase::query()
+            ->where('bazarr_connection_id', $candidate['bazarr_connection_id'])
+            ->where('service_connection_id', $candidate['service_connection_id'])
+            ->where('file_fingerprint', $candidate['file_fingerprint'])
+            ->where('requirements_fingerprint', $candidate['requirements_fingerprint'])
+            ->whereNot('status', SubtitleCaseStatus::Superseded);
     }
 
     /**

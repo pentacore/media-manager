@@ -11,6 +11,7 @@ use App\Models\ServiceConnection;
 use App\Models\SubtitleCase;
 use App\Models\SubtitleCaseAttempt;
 use App\Models\User;
+use App\Settings\BazarrAutomationSettings;
 use Inertia\Testing\AssertableInertia;
 
 beforeEach(function (): void {
@@ -98,6 +99,8 @@ test('viewer sees paginated sanitized escalation summaries', function (): void {
 });
 
 test('member sees the phase four investigation affordance', function (): void {
+    config(['mediamanager.ai.enabled' => true]);
+    resolve(BazarrAutomationSettings::class)->setConfiguration(['enabled' => true]);
     $bazarr = ServiceConnection::factory()->bazarr()->create();
     SubtitleCase::factory()->create([
         'bazarr_connection_id' => $bazarr->id,
@@ -112,6 +115,26 @@ test('member sees the phase four investigation affordance', function (): void {
             ->where('can_investigate', true)
         );
 });
+
+test('the investigation affordance is hidden while the Advisor cannot run', function (array $configuration): void {
+    config(['mediamanager.ai.enabled' => $configuration['ai']]);
+    resolve(BazarrAutomationSettings::class)->setConfiguration(['enabled' => $configuration['automation']]);
+    $bazarr = ServiceConnection::factory()->bazarr()->create();
+    SubtitleCase::factory()->create([
+        'bazarr_connection_id' => $bazarr->id,
+        'status' => SubtitleCaseStatus::NeedsReview,
+    ]);
+
+    $this->actingAs(User::factory()->member()->create())
+        ->get(route('bazarr.escalations', ['connection' => $bazarr->id]))
+        ->assertOk()
+        ->assertInertia(fn (AssertableInertia $assertableInertia): AssertableInertia => $assertableInertia
+            ->where('can_investigate', false)
+        );
+})->with([
+    'ai disabled' => [['ai' => false, 'automation' => true]],
+    'automation disabled' => [['ai' => true, 'automation' => false]],
+]);
 
 test('administrator filters escalation status and connection with bounded pagination', function (): void {
     $primaryBazarr = ServiceConnection::factory()->bazarr()->create(['name' => 'Primary Bazarr']);

@@ -10,11 +10,41 @@ use App\Models\ServiceConnection;
 use App\Models\SubtitleCase;
 use App\Models\SubtitleCaseAttempt;
 use App\Models\User;
+use App\Settings\BazarrAutomationSettings;
 use Illuminate\Support\Facades\Queue;
 
 beforeEach(function (): void {
     Queue::fake();
+    config(['mediamanager.ai.enabled' => true]);
+    resolve(BazarrAutomationSettings::class)->setConfiguration(['enabled' => true]);
 });
+
+test('a manual investigation is refused while the Advisor cannot run', function (array $configuration): void {
+    config(['mediamanager.ai.enabled' => $configuration['ai']]);
+    resolve(BazarrAutomationSettings::class)->setConfiguration(['enabled' => $configuration['automation']]);
+
+    $bazarr = ServiceConnection::factory()->bazarr()->create();
+    $subtitleCase = SubtitleCase::factory()->create([
+        'bazarr_connection_id' => $bazarr->id,
+        'status' => SubtitleCaseStatus::NeedsReview,
+    ]);
+
+    $this->actingAs(User::factory()->member()->create())
+        ->post(route('bazarr.advisor.store', [
+            'subtitleCase' => $subtitleCase,
+            'connection' => $bazarr->id,
+        ]), ['confirm_retry' => true])
+        ->assertRedirect();
+
+    // The worker would return immediately, so the case must stay parked instead of
+    // being reopened against a queued job that does nothing.
+    expect($subtitleCase->fresh()->status)->toBe(SubtitleCaseStatus::NeedsReview)
+        ->and(SubtitleCaseAttempt::query()->count())->toBe(0);
+    Queue::assertNotPushed(RunSubtitleAdvisor::class);
+})->with([
+    'ai disabled' => [['ai' => false, 'automation' => true]],
+    'automation disabled' => [['ai' => true, 'automation' => false]],
+]);
 
 test('viewer cannot request a Media Advisor investigation', function (): void {
     $bazarr = ServiceConnection::factory()->bazarr()->create();

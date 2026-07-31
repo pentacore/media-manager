@@ -169,23 +169,51 @@ final class SubtitleInventoryService
     {
         $bazarr = ServiceConnection::query()->find($subtitleCase->bazarr_connection_id);
 
-        if (! $bazarr instanceof ServiceConnection
-            || $bazarr->type !== ServiceType::Bazarr
-            || ! $bazarr->is_active) {
+        if (! $bazarr instanceof ServiceConnection) {
             return null;
         }
 
-        $bazarrClient = $this->bazarrClient($bazarr);
+        $mediaId = $this->positiveInteger($subtitleCase->media_type === 'episode'
+            ? ($subtitleCase->target_ids['episode_id'] ?? null)
+            : ($subtitleCase->target_ids['radarr_id'] ?? null));
 
-        $identity = $subtitleCase->media_type === 'episode'
-            ? $this->episodeCandidateFor($subtitleCase, $bazarr, $bazarrClient)
-            : $this->movieCandidateFor($subtitleCase, $bazarr, $bazarrClient);
+        if ($mediaId === null) {
+            return null;
+        }
+
+        return $this->caseCandidateForMedia($bazarr, $subtitleCase->media_type, $mediaId);
+    }
+
+    /**
+     * The same projection keyed by the Bazarr media ID rather than an existing case,
+     * so a case created outside reconciliation (a manual upload) carries the
+     * identity the executor's live revalidation recomputes.
+     *
+     * @return array<string, mixed>|null
+     */
+    public function caseCandidateForMedia(
+        ServiceConnection $serviceConnection,
+        string $mediaType,
+        int $mediaId,
+    ): ?array {
+        if ($serviceConnection->type !== ServiceType::Bazarr
+            || ! $serviceConnection->is_active
+            || ! in_array($mediaType, ['episode', 'movie'], true)
+            || $mediaId < 1) {
+            return null;
+        }
+
+        $bazarrClient = $this->bazarrClient($serviceConnection);
+
+        $identity = $mediaType === 'episode'
+            ? $this->episodeCandidateFor($mediaId, $serviceConnection, $bazarrClient)
+            : $this->movieCandidateFor($mediaId, $serviceConnection, $bazarrClient);
 
         if ($identity === null) {
             return null;
         }
 
-        $identity['bazarr_connection_id'] = $bazarr->id;
+        $identity['bazarr_connection_id'] = $serviceConnection->id;
 
         return $identity;
     }
@@ -194,19 +222,13 @@ final class SubtitleInventoryService
      * @return array<string, mixed>|null
      */
     private function episodeCandidateFor(
-        SubtitleCase $subtitleCase,
+        int $episodeId,
         ServiceConnection $bazarr,
         BazarrClient $bazarrClient,
     ): ?array {
         $sonarr = $this->activeMappedConnection($bazarr, BazarrServiceRole::Sonarr);
 
         if (! $sonarr instanceof ServiceConnection) {
-            return null;
-        }
-
-        $episodeId = $this->positiveInteger($subtitleCase->target_ids['episode_id'] ?? null);
-
-        if ($episodeId === null) {
             return null;
         }
 
@@ -242,19 +264,13 @@ final class SubtitleInventoryService
      * @return array<string, mixed>|null
      */
     private function movieCandidateFor(
-        SubtitleCase $subtitleCase,
+        int $radarrId,
         ServiceConnection $bazarr,
         BazarrClient $bazarrClient,
     ): ?array {
         $radarr = $this->activeMappedConnection($bazarr, BazarrServiceRole::Radarr);
 
         if (! $radarr instanceof ServiceConnection) {
-            return null;
-        }
-
-        $radarrId = $this->positiveInteger($subtitleCase->target_ids['radarr_id'] ?? null);
-
-        if ($radarrId === null) {
             return null;
         }
 
