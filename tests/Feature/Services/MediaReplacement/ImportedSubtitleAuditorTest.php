@@ -443,7 +443,10 @@ test('the inspection sees the library after the import, not a warm pre-import ca
     expect(ActionRequest::query()->where('payload->auto_check_key', sprintf('sonarr:%d:42-101', $this->connection->id))->count())->toBe(1);
 });
 
-test('a payload that does not name a single episode is skipped, not reported as unidentifiable', function (): void {
+test('a payload that does not name a single episode is skipped rather than widened', function (): void {
+    // Without the guard the null episode number reaches inspect() as "no episode
+    // filter", so the whole season matches and this one-episode fixture would be
+    // replaced on the strength of a payload that never identified it.
     fakeAuditArr();
 
     resolve(ImportedSubtitleAuditor::class)->audit(

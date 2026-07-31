@@ -121,10 +121,11 @@ final readonly class ImportedSubtitleAuditor
             $episodeNumber = $this->positiveInt($payload['episodes'][0]['episodeNumber'] ?? null);
 
             // Both are required to name one episode. A missing season matches no
-            // episode and a missing episode number matches the whole season, so
-            // either way inspect() would report an ambiguity the operator can do
-            // nothing about. Skipping is quieter and more honest than notifying
-            // that a payload we never understood could not be identified.
+            // episode, and a missing episode number widens the match to the whole
+            // season — which either reports an ambiguity the operator can do
+            // nothing about or, for a one-episode season, quietly replaces a file
+            // the payload never named. Skipping is the honest outcome for a
+            // payload this class could not read.
             if ($seasonNumber === null || $episodeNumber === null) {
                 $this->skip($serviceConnection, 'no_episode_reference');
 
