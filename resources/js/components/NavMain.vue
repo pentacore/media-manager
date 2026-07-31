@@ -32,7 +32,7 @@ withDefaults(
     },
 );
 
-const { isCurrentUrl } = useCurrentUrl();
+const { isCurrentOrParentUrl } = useCurrentUrl();
 const { state, setOpen } = useSidebar();
 
 const STORAGE_PREFIX = 'sidebar:nav:';
@@ -68,12 +68,26 @@ function resolveHref(item: NavItem): NonNullable<NavItem['href']> {
     return item.href;
 }
 
-function isCurrentItem(item: NavItem): boolean {
-    return item.href !== undefined && isCurrentUrl(item.href);
+/**
+ * Prefix-matched, not exact: several leaves own descendant pages
+ * (`/admin/connections/create`, `/admin/webhook-log/{event}`,
+ * `/media/series/{id}`, …), and on those an exact match makes the nav claim
+ * nothing is selected — which also shuts the parent group, contradicting
+ * isOpen() below. Matches the settings sidebar, which highlights with
+ * isCurrentOrParentUrl() for the same reason.
+ *
+ * Two rows can only light up at once if one leaf href is a prefix of another;
+ * no two are, across every group (`/admin/ai-settings`, `/admin/ai-usage`,
+ * `/admin/ai-prices` and `/admin/ai/conversations` all diverge after
+ * `/admin/ai`; `/actions/requests` vs `/actions/rules` after `/actions/r`;
+ * `/statistics` vs `/admin/statistics` share no prefix at all).
+ */
+function isActiveItem(item: NavItem): boolean {
+    return item.href !== undefined && isCurrentOrParentUrl(item.href);
 }
 
 function hasActiveChild(item: NavItem): boolean {
-    return (item.children ?? []).some(isCurrentItem);
+    return (item.children ?? []).some(isActiveItem);
 }
 
 /**
@@ -170,7 +184,7 @@ function rollupBadge(item: NavItem): number {
                                 >
                                     <SidebarMenuSubButton
                                         as-child
-                                        :is-active="isCurrentItem(child)"
+                                        :is-active="isActiveItem(child)"
                                     >
                                         <Link :href="resolveHref(child)">
                                             <component :is="child.icon" />
@@ -185,7 +199,7 @@ function rollupBadge(item: NavItem): number {
                 <SidebarMenuItem v-else>
                     <SidebarMenuButton
                         as-child
-                        :is-active="isCurrentItem(item)"
+                        :is-active="isActiveItem(item)"
                         :tooltip="item.title"
                         class="text-[13px] font-medium data-[active=true]:bg-accent/15 data-[active=true]:text-accent"
                     >
@@ -198,7 +212,7 @@ function rollupBadge(item: NavItem): number {
                         v-if="item.badge && item.badge() > 0"
                         class="font-mono-tabular text-[10.5px]"
                         :class="[
-                            isCurrentItem(item)
+                            isActiveItem(item)
                                 ? 'border-transparent bg-accent/20 text-accent'
                                 : 'border border-border bg-card text-muted-foreground',
                         ]"

@@ -180,6 +180,43 @@ test('the parent group auto-opens when a child page is current', function (): vo
         ->assertSeeIn('[data-sidebar="content"]', 'Connections');
 });
 
+test('the parent group auto-opens on a page nested under a child', function (): void {
+    $this->actingAs(User::factory()->admin()->create());
+
+    // /admin/connections/create is a *descendant* of the `Connections` leaf
+    // rather than the leaf itself, which the test above cannot distinguish.
+    // While the nav matched URLs exactly, hasActiveChild() was false here and
+    // `Configuration` stayed shut — so deep-linking landed on a page whose nav
+    // parent was closed, the opposite of what isOpen() documents. It is the
+    // cheapest real case: a plain GET with no model binding and no service
+    // connection required, so nothing redirects away.
+    //
+    // `[data-sidebar="menu-sub-button"]` exists only inside CollapsibleContent,
+    // which is out of the DOM while the group is closed, so the count is a
+    // direct read of "the group is open" — no click, and nothing that could be
+    // satisfied by page body text. The `[data-active="true"]` filter pins the
+    // highlight onto the right row at the same time (the attribute is emitted
+    // for every row, `false` included, so the filter discriminates instead of
+    // just counting rows), and asserting exactly 1 fails loudly if a future
+    // leaf href ever prefix-matches the same URL and two rows light up.
+    //
+    // assertSeeIn() rather than a bare count for the title: `Connections`
+    // unscoped is satisfied by this page's own heading, and scoped to the
+    // active sub-button it resolves to the single `<span>` inside it, which is
+    // what assertSeeIn()'s strict locator requires.
+    visit('/admin/connections/create')
+        ->assertNoSmoke()
+        ->assertCount('[data-sidebar="menu-sub-button"][data-active="true"]', 1)
+        ->assertSeeIn(
+            '[data-sidebar="menu-sub-button"][data-active="true"]',
+            'Connections',
+        )
+        // A sibling child, so this reads the whole sub-group rendering rather
+        // than the one active row. Scoped: the create form has no such field,
+        // but the sidebar is the only place this may be read from.
+        ->assertSeeIn('[data-sidebar="content"]', 'Approval Rules');
+});
+
 test('an opened sub-group stays open across a navigation', function (): void {
     $this->actingAs(User::factory()->admin()->create());
 
