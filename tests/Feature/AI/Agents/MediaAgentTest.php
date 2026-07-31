@@ -95,6 +95,22 @@ test('tool list includes the subtitle replacement tools', function (): void {
         ->toContain('ReplaceMediaFileTool');
 });
 
+test('the replacement instructions keep Bazarr out of the replacement flow', function (): void {
+    $instructions = (string) (new MediaAgent)->instructions();
+
+    [, $replacementSection] = explode('**Replacing imported media with missing/incorrect subtitles:**', $instructions, 2);
+    [$replacementSection] = explode('**Bazarr subtitles:**', $replacementSection, 2);
+
+    // The replacement flow must not route through Bazarr: it exists precisely
+    // because Bazarr already failed to supply the subtitle. Without this the
+    // agent re-checks Bazarr, finds nothing, and never reaches the arr grab.
+    expect($replacementSection)->toContain('Bazarr plays NO part in this flow')
+        ->and($replacementSection)->toContain('InspectSubtitleTool')
+        ->and($replacementSection)->toContain('SearchSubtitlesTool')
+        ->and($replacementSection)->toContain('RequestSubtitleOperationTool')
+        ->and($replacementSection)->toContain('Do not re-check Bazarr first');
+});
+
 test('tool list has the 31 core tools when no optional integration is configured', function (): void {
     $tools = collect(iterator_to_array((new MediaAgent)->tools(), false));
 

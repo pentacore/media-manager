@@ -285,21 +285,29 @@ test('pins execution to the approved connection when multiple are active', funct
     expect(MediaReplacementAttempt::first()->service_connection_id)->toBe($pinned->id);
 });
 
-test('rejects execution while a Bazarr subtitle operation holds the shared installed-file lock', function (): void {
+test('a held Bazarr subtitle lock does not block a media replacement', function (): void {
     fakeExecutor();
     $connectionId = ServiceConnection::query()->firstOrFail()->id;
 
-    // A Bazarr subtitle download/delete/sync executor has claimed the same
-    // installed episode file. The destructive replacement must refuse to run.
+    // A Bazarr subtitle operation holds the shared installed-file lock for the
+    // same episode. Replacement no longer coordinates with Bazarr: by the time a
+    // replacement is queued Bazarr has already failed to supply the subtitle, so
+    // the replacement proceeds regardless of what Bazarr is doing.
     $lock = Cache::lock(SharedMediaTargetLock::key($connectionId, 'episode', 101), 120);
     expect($lock->get())->toBeTrue();
 
     try {
-        expect(fn (): array => resolve(MediaReplacementActions::class)->execute(replaceActionRequest()))
-            ->toThrow(RuntimeException::class, 'locked by another operation');
+        $result = resolve(MediaReplacementActions::class)->execute(replaceActionRequest());
 
-        Http::assertNotSent(fn (Request $request): bool => $request->method() === 'POST' && str_contains($request->url(), '/api/v3/release'));
-        Http::assertNotSent(fn (Request $request): bool => $request->method() === 'DELETE');
+        expect($result['replacement_initiated'])->toBeTrue();
+
+        $requests = Http::recorded()->map(fn (array $pair): string => $pair[0]->method().' '.$pair[0]->url())->values();
+        $grabIndex = $requests->search(fn (string $value): bool => $value === 'POST http://sonarr.local:8989/api/v3/release');
+        $deleteIndex = $requests->search(fn (string $value): bool => $value === 'DELETE http://sonarr.local:8989/api/v3/episodefile/501');
+
+        expect($grabIndex)->not->toBeFalse()
+            ->and($deleteIndex)->not->toBeFalse()
+            ->and($grabIndex)->toBeLessThan($deleteIndex);
     } finally {
         $lock->release();
     }
