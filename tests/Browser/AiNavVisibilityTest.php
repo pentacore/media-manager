@@ -11,7 +11,10 @@ test('the AI admin sub-group is hidden when AI is disabled', function (): void {
 
     visit('/dashboard')
         ->assertNoSmoke()
-        ->assertSee('Configuration')
+        // Scoped positive anchor: assertDontSeeIn() asserts count() === 0, which
+        // passes vacuously if `[data-sidebar="content"]` ever stops matching, so
+        // the anchor has to be scoped to the same selector to be worth anything.
+        ->assertSeeIn('[data-sidebar="content"]', 'Configuration')
         ->assertDontSeeIn('[data-sidebar="content"]', 'AI Settings')
         ->assertDontSeeIn('[data-sidebar="content"]', 'Decision Agent')
         ->assertDontSeeIn('[data-sidebar="content"]', 'AI Usage')
@@ -37,9 +40,9 @@ test('the AI admin sub-group holds every AI page when AI is enabled', function (
         // child matches the same text, so the trigger's inner `<span>AI</span>`
         // shadows the button. `[data-sidebar="content"]` excludes the footer.
         ->click('[data-sidebar="content"] button:has-text("AI")')
-        ->assertSee('AI Settings')
-        ->assertSee('Decision Agent')
-        ->assertSee('AI Usage')
-        ->assertSee('AI Conversations')
-        ->assertSee('AI Prices');
+        ->assertSeeIn('[data-sidebar="content"]', 'AI Settings')
+        ->assertSeeIn('[data-sidebar="content"]', 'Decision Agent')
+        ->assertSeeIn('[data-sidebar="content"]', 'AI Usage')
+        ->assertSeeIn('[data-sidebar="content"]', 'AI Conversations')
+        ->assertSeeIn('[data-sidebar="content"]', 'AI Prices');
 });
