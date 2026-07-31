@@ -427,13 +427,27 @@ final class ReconcileSubtitleCase implements ShouldQueue
         return $subtitleCase;
     }
 
+    /**
+     * Ownership of a waiting case is claimed only by the job that failed reading it
+     * *while it was waiting*. A read that failed during bazarr_searching says nothing
+     * about a download another dispatch queued afterwards, so no marker is written for
+     * that phase. The marker carries this queue message's identity, so one job's
+     * outage cannot be read as another job's claim.
+     */
     private function recordFailedVerification(SubtitleCase $subtitleCase): void
     {
+        if ($subtitleCase->status !== SubtitleCaseStatus::DownloadRequested) {
+            return;
+        }
+
         SubtitleCaseAttempt::query()->create([
             'subtitle_case_id' => $subtitleCase->id,
             'type' => SubtitleCaseAttemptType::Reconciliation,
             'outcome' => SubtitleCaseAttemptOutcome::Failed,
-            'summary' => ['result' => 'verification_read_failed'],
+            'summary' => [
+                'result' => 'verification_read_failed',
+                'reservation' => $this->reservationIdentity(),
+            ],
             'error_category' => self::VERIFICATION_ERROR_CATEGORY,
             'started_at' => now(),
             'completed_at' => now(),
@@ -441,11 +455,11 @@ final class ReconcileSubtitleCase implements ShouldQueue
     }
 
     /**
-     * Did this job die while reading a live target rather than while searching
-     * providers? Only then may failed() park a case waiting on a download: a job that
-     * was probing must leave such a case alone, because another dispatch queued that
-     * download and its completion listener still expects to verify it. The window
-     * stops an old outage from parking a case much later.
+     * Did *this* queue message die while reading the live target of a case that was
+     * already waiting on a download? Only then may failed() park that waiting case:
+     * a job that died searching providers, or a different dispatch's outage, must
+     * leave it alone, because the download's completion listener still expects to
+     * verify it. The window stops an old outage from parking a case much later.
      */
     private function failedVerificationExists(int $subtitleCaseId): bool
     {
@@ -454,6 +468,7 @@ final class ReconcileSubtitleCase implements ShouldQueue
             ->where('type', SubtitleCaseAttemptType::Reconciliation)
             ->where('outcome', SubtitleCaseAttemptOutcome::Failed)
             ->where('error_category', self::VERIFICATION_ERROR_CATEGORY)
+            ->where('summary->reservation', $this->reservationIdentity())
             ->where('started_at', '>', now()->subMinutes(self::RETRY_WINDOW_MINUTES * 2))
             ->exists();
     }
