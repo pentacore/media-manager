@@ -225,6 +225,11 @@ test('it emits only the canonical known configuration schema', function (): void
         'scoped_languages' => [
             'documentary' => ['eng'],
         ],
+        'subtitle_check' => [
+            'enabled' => true,
+            'cooldown_hours' => 6,
+            'tags' => ['discard me'],
+        ],
         'guidance' => [
             'anime' => [
                 'rules' => 'invalid',
@@ -251,9 +256,9 @@ test('it emits only the canonical known configuration schema', function (): void
         ],
         'season_pack_policy' => 'approval_required',
         'subtitle_check' => [
-            'enabled' => false,
+            'enabled' => true,
             'max_attempts_per_target' => 1,
-            'cooldown_hours' => 24,
+            'cooldown_hours' => 6,
         ],
         'sonarr_root_folders' => [],
         'guidance' => [
