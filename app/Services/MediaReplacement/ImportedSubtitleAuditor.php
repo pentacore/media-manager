@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Services\MediaReplacement;
 
+use App\Cache\Services\RadarrCache;
+use App\Cache\Services\SonarrCache;
 use App\Enums\MediaReplacementScope;
 use App\Enums\ServiceType;
 use App\Enums\UserRole;
@@ -111,11 +113,53 @@ final readonly class ImportedSubtitleAuditor
             return;
         }
 
+        $seasonNumber = null;
+        $episodeNumber = null;
+
+        if (! $isRadarr) {
+            $seasonNumber = $this->wholeNumber($payload['episodes'][0]['seasonNumber'] ?? null);
+            $episodeNumber = $this->positiveInt($payload['episodes'][0]['episodeNumber'] ?? null);
+
+            // Both are required to name one episode. A missing season matches no
+            // episode and a missing episode number matches the whole season, so
+            // either way inspect() would report an ambiguity the operator can do
+            // nothing about. Skipping is quieter and more honest than notifying
+            // that a payload we never understood could not be identified.
+            if ($seasonNumber === null || $episodeNumber === null) {
+                $this->skip($serviceConnection, 'no_episode_reference');
+
+                return;
+            }
+        }
+
+        // Bust the connection's ARR cache BEFORE inspecting: the webhook handler
+        // only busts it after the per-event handlers run, and the tracker's own
+        // bust sits inside its matched-attempt branch, so it never fires for the
+        // organic import this class exists for. A cached getSeriesById /
+        // getEpisodesBySeries (600s / 300s) still describes the library as it was
+        // before this import: on a first import the episode has no file id yet
+        // (inspect() returns ambiguous `no_file` and the operator is told a
+        // perfectly identifiable import could not be identified), and on an
+        // upgrade it names the file this import just replaced (getEpisodeFileById
+        // 404s and the RequestException is swallowed into a bare log line).
+        //
+        // Busting is the whole fix; the payload's authoritative
+        // `episodeFile.id` is deliberately not used instead. inspect() derives
+        // the file from the episode list because that same list is what detects
+        // the ambiguity cases (`shared_multi_episode_file`, `multiple_episodes`)
+        // that are this feature's safety boundary — so the list has to be fresh
+        // either way, and once it is, the derived id and the payload's id agree
+        // by construction. Trusting the payload would also need a new
+        // MediaFileInspector entry point, and the snapshot shape it returns is
+        // what ReplacementRequestBuilder, ReplacementCandidateFinder and the
+        // executor's post-approval sameFiles() re-inspection all consume.
+        $this->bustConnectionCache($serviceConnection);
+
         $snapshot = $this->mediaFileInspector->inspect(
             service: $isRadarr ? 'radarr' : 'sonarr',
             itemId: $itemId,
-            seasonNumber: $isRadarr ? null : $this->wholeNumber($payload['episodes'][0]['seasonNumber'] ?? null),
-            episodeNumber: $isRadarr ? null : $this->positiveInt($payload['episodes'][0]['episodeNumber'] ?? null),
+            seasonNumber: $seasonNumber,
+            episodeNumber: $episodeNumber,
             serviceConnection: $serviceConnection,
         );
 
@@ -201,6 +245,11 @@ final readonly class ImportedSubtitleAuditor
             autoCheckKey: $autoCheckKey,
         );
 
+        // dispatch() rather than dispatchFromAgent(): this is a deterministic,
+        // AI-free trigger. One consequence worth knowing is that dispatch() also
+        // forces Pending whenever the AI chat mode is Advisory, so an AI setting
+        // gates this non-AI feature. That only ever tightens the gate, so it is
+        // left as-is rather than worked around.
         $this->actionOrchestrator->dispatch(
             type: 'replace_media_file',
             sourceService: $isRadarr ? 'radarr' : 'sonarr',
@@ -211,6 +260,14 @@ final readonly class ImportedSubtitleAuditor
             // human, so the operator must approve even if the action type is
             // otherwise configured to run unattended. ActionOrchestrator still
             // owns the gate; this flag can only tighten it.
+            //
+            // The right-hand operand cannot currently decide the result on its
+            // own: everything that makes the builder set force_requires_approval
+            // (a rejected release, an approval-gated season pack) also makes
+            // ReplacementCandidateFinder::automaticCandidate() return null, so
+            // the left operand is already true. It is kept because it mirrors
+            // ReplaceMediaFileTool and becomes load-bearing the moment the
+            // finder's constraints loosen.
             forceRequiresApproval: $automaticCandidate === null || $built['force_requires_approval'],
         );
 
@@ -223,6 +280,18 @@ final readonly class ImportedSubtitleAuditor
                 $automaticCandidate === null ? 'operator' : 'automatic',
             ),
         );
+    }
+
+    /**
+     * Drop the connection's cached arr reads so the inspection sees the library
+     * as it is after the import. Mirrors MediaReplacementTracker::verifyDownload
+     * and MediaReplacementActions, which bust for the same reason.
+     */
+    private function bustConnectionCache(ServiceConnection $serviceConnection): void
+    {
+        $serviceConnection->type === ServiceType::Radarr
+            ? new RadarrCache($serviceConnection)->bustAll()
+            : new SonarrCache($serviceConnection)->bustAll();
     }
 
     /**
@@ -300,6 +369,10 @@ final readonly class ImportedSubtitleAuditor
      * the sort is currently a no-op; it is kept because the key is a loop guard
      * and a widened snapshot must not silently produce two keys for one target.
      *
+     * An episode id list that is somehow empty yields a trailing-dash key shared
+     * by every such episode of the series. That over-blocks rather than
+     * under-blocks — the cap fires sooner, never later — so it is left alone.
+     *
      * @param  array<string, mixed>  $snapshot
      */
     private function autoCheckKey(ServiceConnection $serviceConnection, array $snapshot, bool $isRadarr): string
@@ -369,6 +442,15 @@ final readonly class ImportedSubtitleAuditor
         ));
     }
 
+    /**
+     * Coerce a positive identifier. Also used for the webhook's episode number,
+     * which is deliberately *not* widened the way the season number is: Sonarr
+     * numbers episodes from 1, so 0 is not a real episode. A 0 or absent episode
+     * number therefore lands here as null — and because inspect() reads null as
+     * "no episode filter" and would then match the whole season, run() rejects a
+     * null episode number outright rather than passing it on. Season 0 is real
+     * (Specials), which is why the season number gets wholeNumber() instead.
+     */
     private function positiveInt(mixed $value): ?int
     {
         if (is_int($value)) {

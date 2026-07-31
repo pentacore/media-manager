@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use App\Cache\Services\SonarrCache;
 use App\Enums\MediaReplacementStatus;
 use App\Enums\UserRole;
 use App\Models\ActionRequest;
@@ -13,6 +14,7 @@ use App\Notifications\MediaReplacementStatusChanged;
 use App\Services\MediaReplacement\ImportedSubtitleAuditor;
 use App\Settings\MediaReplacementSettings;
 use Illuminate\Http\Client\Request;
+use Illuminate\Http\Client\RequestException;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
@@ -279,6 +281,15 @@ test('the cap reads back the auto_check_key the builder wrote', function (): voi
     $auditor->audit($this->connection, importPayload(['downloadId' => 'DL-ORGANIC-2']), null);
 
     expect(ActionRequest::query()->where('type', 'replace_media_file')->count())->toBe(1);
+
+    // Without this, `count === 1` would also hold if the second call had simply
+    // thrown and been swallowed by audit()'s guard — and this is the test that
+    // carries the builder/consumer agreement, so it must say why it stopped.
+    Notification::assertSentTo(
+        $this->admin,
+        MediaReplacementStatusChanged::class,
+        fn (MediaReplacementStatusChanged $notification): bool => str_contains($notification->message, 'already requested 1 replacement(s)'),
+    );
 });
 
 test('a low-confidence shortlist dispatches the top candidate with approval forced', function (): void {
@@ -344,7 +355,6 @@ test('an upstream tag label is folded and trimmed before it is compared', functi
 
     expect(ActionRequest::query()->where('type', 'replace_media_file')->count())->toBe(1);
 });
-
 
 test('a tagged Radarr import keys the cap by movie id', function (): void {
     $radarr = ServiceConnection::factory()->radarr()->create([
@@ -412,4 +422,55 @@ test('a specials import is inspected rather than reported as unidentifiable', fu
     );
 
     expect(ActionRequest::query()->where('type', 'replace_media_file')->count())->toBe(1);
+});
+
+test('the inspection sees the library after the import, not a warm pre-import cache', function (): void {
+    fakeAuditArr(['subtitles' => 'Japanese']);
+
+    // The webhook handler busts the arr cache only after the per-event handlers
+    // run, so on the real path the auditor inherits a pre-import cache. Seed the
+    // episode list as it looked before the file landed. Seeded through the cache
+    // rather than through a warming HTTP call because Http::fake() merges stubs
+    // and an earlier `episode*` stub would keep winning after the bust, which
+    // would make this test pass whether or not the bust happened.
+    new SonarrCache($this->connection)->rememberList('episodes:42', fn (): array => [[
+        'id' => 101, 'seriesId' => 42, 'seasonNumber' => 1, 'episodeNumber' => 1,
+        'episodeFileId' => 0, 'monitored' => true, 'hasFile' => false, 'title' => 'Ep 1',
+    ]]);
+
+    resolve(ImportedSubtitleAuditor::class)->audit($this->connection, importPayload(), null);
+
+    expect(ActionRequest::query()->where('payload->auto_check_key', sprintf('sonarr:%d:42-101', $this->connection->id))->count())->toBe(1);
+});
+
+test('a payload that does not name a single episode is skipped, not reported as unidentifiable', function (): void {
+    fakeAuditArr();
+
+    resolve(ImportedSubtitleAuditor::class)->audit(
+        $this->connection,
+        importPayload(['episodes' => [['id' => 101, 'seasonNumber' => 1]]]),
+        null,
+    );
+
+    expect(ActionRequest::query()->where('type', 'replace_media_file')->count())->toBe(0);
+
+    Http::assertNotSent(fn (Request $request): bool => str_contains($request->url(), '/api/v3/episodefile'));
+    Notification::assertNothingSent();
+});
+
+test('a failure inside the audit is logged rather than escaping to the webhook handler', function (): void {
+    Http::fake([
+        'sonarr.local:8989/api/v3/tag' => Http::response([['id' => 1, 'label' => 'sub-check']]),
+        'sonarr.local:8989/api/v3/series/42' => Http::response(status: 500),
+    ]);
+
+    Log::shouldReceive('debug')->zeroOrMoreTimes();
+    Log::shouldReceive('error')
+        ->once()
+        ->withArgs(fn (string $message, array $context): bool => $message === 'Automatic subtitle check failed.'
+            && $context['exception'] === RequestException::class);
+
+    resolve(ImportedSubtitleAuditor::class)->audit($this->connection, importPayload(), null);
+
+    expect(ActionRequest::query()->where('type', 'replace_media_file')->count())->toBe(0);
 });
