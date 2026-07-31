@@ -16,7 +16,18 @@ use InvalidArgumentException;
  */
 final readonly class SharedMediaTargetLock
 {
-    public const int TTL_SECONDS = 120;
+    /**
+     * The lease has to outlive the whole operation it guards, not just its first
+     * upstream call: `ArrClient::getReleases()` alone may take 120 seconds, and a
+     * replacement still has revalidation, the grab, deletion, blocklisting and
+     * monitoring restoration after that. A cache lock expires on its own schedule,
+     * so a shorter lease would let a second worker mutate the same installed file
+     * while the first is still writing.
+     *
+     * Bounded above `ExecuteActionRequest`'s timeout (300 seconds), which is what
+     * caps the work; the margin covers the queue's own retry_after handover.
+     */
+    public const int TTL_SECONDS = 900;
 
     public static function key(int $connectionId, string $mediaType, int $mediaId): string
     {

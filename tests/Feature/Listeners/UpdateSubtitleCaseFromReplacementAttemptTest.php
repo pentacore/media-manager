@@ -87,6 +87,45 @@ test('a failed or needs-attention replacement moves its case to review only once
     MediaReplacementStatus::NeedsAttention,
 ]);
 
+test('a late verified import resolves a case an earlier needs-attention parked', function (): void {
+    [$subtitleCase, , $mediaReplacementAttempt] = replacementCorrelatedSubtitleCase(
+        MediaReplacementStatus::NeedsAttention,
+    );
+    $updateSubtitleCaseFromReplacementAttempt = resolve(UpdateSubtitleCaseFromReplacementAttempt::class);
+
+    $updateSubtitleCaseFromReplacementAttempt->handle(replacementAttemptChangedEvent($mediaReplacementAttempt));
+
+    expect($subtitleCase->fresh()->status)->toBe(SubtitleCaseStatus::NeedsReview);
+
+    // The tracker allows this recovery for download_timeout,
+    // manual_interaction_required and deletion_failed; the correlated case must
+    // follow instead of staying flagged forever.
+    $mediaReplacementAttempt->forceFill(['status' => MediaReplacementStatus::Verified])->save();
+    $updateSubtitleCaseFromReplacementAttempt->handle(replacementAttemptChangedEvent($mediaReplacementAttempt));
+
+    expect($subtitleCase->fresh()->status)->toBe(SubtitleCaseStatus::Resolved)
+        ->and($subtitleCase->fresh()->resolved_at)->not->toBeNull()
+        ->and($subtitleCase->fresh()->failure_reason)->toBeNull();
+});
+
+test('a late verified import does not reopen an explicitly closed case', function (
+    SubtitleCaseStatus $subtitleCaseStatus,
+): void {
+    [$subtitleCase, , $mediaReplacementAttempt] = replacementCorrelatedSubtitleCase(
+        MediaReplacementStatus::Verified,
+        $subtitleCaseStatus,
+    );
+
+    resolve(UpdateSubtitleCaseFromReplacementAttempt::class)->handle(
+        replacementAttemptChangedEvent($mediaReplacementAttempt),
+    );
+
+    expect($subtitleCase->fresh()->status)->toBe($subtitleCaseStatus);
+})->with([
+    SubtitleCaseStatus::Dismissed,
+    SubtitleCaseStatus::Handled,
+]);
+
 test('a replacement attempt cannot update a case linked to another action request', function (): void {
     [$subtitleCase, , $mediaReplacementAttempt] = replacementCorrelatedSubtitleCase(
         MediaReplacementStatus::Verified,

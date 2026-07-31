@@ -22,24 +22,38 @@ use App\Services\Bazarr\SubtitleCaseLifecycle;
 use App\Services\Bazarr\SubtitleCaseReconciler;
 use App\Services\Bazarr\SubtitleInventoryService;
 use App\Settings\BazarrAutomationSettings;
+use DateTimeInterface;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Foundation\Queue\Queueable;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\RequestException;
 use Illuminate\Queue\Attributes\Timeout;
-use Illuminate\Queue\Attributes\Tries;
 use Illuminate\Queue\Middleware\RateLimited;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 use Throwable;
 
+/**
+ * Deliberately without a try cap: the queue counts a RateLimited release as an
+ * attempt even though handle() never ran, and a full sweep enqueues far more
+ * probe-capable jobs than the 10-per-minute limiter admits. A fixed try count
+ * therefore burned itself out on releases alone — jobs failed with
+ * MaxAttemptsExceededException without ever contacting Bazarr, and failed() then
+ * parked healthy searching cases as "Bazarr probe failed". retryUntil() bounds the
+ * work by time instead, so a job survives the queue it is waiting in.
+ */
 #[Timeout(60)]
-#[Tries(3)]
 final class ReconcileSubtitleCase implements ShouldQueue
 {
     use Queueable;
+
+    /**
+     * Comfortably longer than draining one full cycle through the probe limiter
+     * (max_cases_per_cycle 100 at 10 per minute) plus the retry backoff.
+     */
+    private const int RETRY_WINDOW_MINUTES = 60;
 
     /**
      * Identifies this queue message, so only its own retries can reuse the cycle
@@ -85,6 +99,11 @@ final class ReconcileSubtitleCase implements ShouldQueue
     public function backoff(): array
     {
         return [60, 300];
+    }
+
+    public function retryUntil(): DateTimeInterface
+    {
+        return now()->addMinutes(self::RETRY_WINDOW_MINUTES);
     }
 
     /**
@@ -330,18 +349,28 @@ final class ReconcileSubtitleCase implements ShouldQueue
         try {
             $candidate = $subtitleInventoryService->caseCandidateFor($subtitleCase);
         } catch (Throwable $throwable) {
+            // A failed read says nothing about the subtitle. Treating it as "still
+            // missing" would move a possibly satisfied case out of the only state
+            // this verification looks at, and a satisfied target has also left the
+            // bulk missing feed — so nothing would ever look again. Transient
+            // failures retry; anything else leaves the case exactly as it was.
+            throw_if($this->isRetryable($throwable), $throwable);
+
             report($throwable);
-            $candidate = null;
+
+            return $subtitleCase->fresh() ?? $subtitleCase;
         }
 
-        if ($candidate !== null) {
-            $reconciled = $subtitleCaseReconciler->reconcile($candidate);
-            $subtitleCase = $reconciled instanceof SubtitleCase
-                ? $reconciled
-                : ($subtitleCase->fresh() ?? $subtitleCase);
-        } else {
-            $subtitleCase = $subtitleCase->fresh() ?? $subtitleCase;
+        // An unreadable target (missing mapping, vanished media) is not an
+        // authoritative "still missing" either.
+        if ($candidate === null) {
+            return $subtitleCase->fresh() ?? $subtitleCase;
         }
+
+        $reconciled = $subtitleCaseReconciler->reconcile($candidate);
+        $subtitleCase = $reconciled instanceof SubtitleCase
+            ? $reconciled
+            : ($subtitleCase->fresh() ?? $subtitleCase);
 
         // A settled download that left the requirement unmet re-enters probing so
         // the normal empty-probe path can escalate the case to replacement. Probe

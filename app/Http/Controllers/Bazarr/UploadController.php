@@ -22,7 +22,6 @@ use finfo;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
@@ -93,61 +92,58 @@ final class UploadController extends Controller
         $contents = file_get_contents($subtitleFile->getRealPath());
         $mimeType = new finfo(FILEINFO_MIME_TYPE)->file($subtitleFile->getRealPath());
 
-        if (! is_string($contents)
-            || ! is_string($mimeType)
-            || ! Storage::disk('local')->put($path, $contents)) {
+        if (! is_string($contents) || ! is_string($mimeType)) {
             throw ValidationException::withMessages([
                 'subtitle_file' => 'The subtitle file could not be staged.',
             ]);
         }
 
-        // The case and the staged row are committed before the action is created, so
-        // a refused or failing dispatch cannot roll the row away and leave the
-        // user-supplied file on disk with nothing left to prune it. Nothing is
-        // committed yet if this stage itself fails, so the file is removed directly —
-        // there is no row for a later prune cycle to work from.
-        try {
-            [$subtitleCase, $subtitleUpload] = DB::transaction(function () use (
-                $bazarrAutomationSettings,
-                $candidate,
+        // The case and the staged row are committed *before* the file is written, so
+        // a file can never exist on disk without a row that PruneSubtitleUploads can
+        // find. Every later failure — a write failure, a refused dispatch, even a
+        // compensating unlink that itself fails — therefore leaves the upload
+        // discoverable and retryable rather than an untracked orphan.
+        [$subtitleCase, $subtitleUpload] = DB::transaction(function () use (
+            $bazarrAutomationSettings,
+            $candidate,
+            $connection,
+            $contents,
+            $extension,
+            $managingConnection,
+            $mimeType,
+            $path,
+            $uploadRequest,
+            $subtitleFile,
+            $validated,
+        ): array {
+            $subtitleCase = $this->subtitleCase(
                 $connection,
-                $contents,
-                $extension,
                 $managingConnection,
-                $mimeType,
-                $path,
-                $uploadRequest,
-                $subtitleFile,
+                $candidate,
                 $validated,
-            ): array {
-                $subtitleCase = $this->subtitleCase(
-                    $connection,
-                    $managingConnection,
-                    $candidate,
-                    $validated,
-                    $bazarrAutomationSettings,
-                );
+                $bazarrAutomationSettings,
+            );
 
-                return [$subtitleCase, SubtitleUpload::query()->create([
-                    'user_id' => $uploadRequest->user()?->id,
-                    'subtitle_case_id' => $subtitleCase->id,
-                    'path' => $path,
-                    'display_name' => Str::limit($subtitleFile->getClientOriginalName(), 255, ''),
-                    'checksum' => hash('sha256', $contents),
-                    'mime_type' => $mimeType,
-                    'format' => $extension,
-                    'size_bytes' => strlen($contents),
-                    'expires_at' => now()->addHours($bazarrAutomationSettings->uploadExpiryHours()),
-                ])];
-            });
-        } catch (Throwable $throwable) {
-            if (! Storage::disk('local')->delete($path)) {
-                Log::warning('A staged subtitle upload could not be removed after its persistence failed.', [
-                    'path' => $path,
-                ]);
-            }
+            return [$subtitleCase, SubtitleUpload::query()->create([
+                'user_id' => $uploadRequest->user()?->id,
+                'subtitle_case_id' => $subtitleCase->id,
+                'path' => $path,
+                'display_name' => Str::limit($subtitleFile->getClientOriginalName(), 255, ''),
+                'checksum' => hash('sha256', $contents),
+                'mime_type' => $mimeType,
+                'format' => $extension,
+                'size_bytes' => strlen($contents),
+                'expires_at' => now()->addHours($bazarrAutomationSettings->uploadExpiryHours()),
+            ])];
+        });
 
-            throw $throwable;
+        if (! Storage::disk('local')->put($path, $contents)) {
+            // Nothing reached the disk, so the row is closed out immediately.
+            $subtitleUpload->update(['cancelled_at' => now(), 'cleaned_up_at' => now()]);
+
+            throw ValidationException::withMessages([
+                'subtitle_file' => 'The subtitle file could not be staged.',
+            ]);
         }
 
         try {

@@ -43,8 +43,18 @@ final readonly class UpdateSubtitleCaseFromReplacementAttempt
 
         $subtitleCase = SubtitleCase::query()->find($subtitleCaseId);
 
+        // A replacement attempt may recover: MediaReplacementTracker deliberately
+        // lets download_timeout, manual_interaction_required and deletion_failed go
+        // from NeedsAttention to Verified when a late import lands. The first
+        // NeedsAttention already parked the case, so a later Verified for the same
+        // request has to be able to resolve it — an explicitly closed case
+        // (dismissed, handled) still stays closed.
+        $acceptedStatuses = $mediaReplacementAttempt->status === MediaReplacementStatus::Verified
+            ? [SubtitleCaseStatus::ReplacementRequested, SubtitleCaseStatus::NeedsReview]
+            : [SubtitleCaseStatus::ReplacementRequested];
+
         if (! $subtitleCase instanceof SubtitleCase
-            || $subtitleCase->status !== SubtitleCaseStatus::ReplacementRequested
+            || ! in_array($subtitleCase->status, $acceptedStatuses, true)
             || $subtitleCase->replacement_action_request_id !== $actionRequest->id) {
             return;
         }

@@ -19,6 +19,7 @@ use App\Services\Bazarr\BazarrSubtitleFingerprint;
 use App\Services\Bazarr\SubtitleCaseFingerprint;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\Request;
+use Illuminate\Queue\Attributes\Timeout;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Queue;
@@ -292,6 +293,22 @@ test('rejects execution while another worker owns the target lock', function ():
     }
 
     Http::assertNothingSent();
+});
+
+test('the shared installed-file lease outlives the executor that holds it', function (): void {
+    $timeouts = array_map(
+        static fn (ReflectionAttribute $reflectionAttribute): int => $reflectionAttribute->newInstance()->timeout,
+        new ReflectionClass(ExecuteActionRequest::class)->getAttributes(Timeout::class),
+    );
+
+    // A cache lock expires on its own schedule, so the lease has to cover the whole
+    // job. Anything shorter lets a second worker acquire the key and write to the
+    // same installed file while the first is still working.
+    expect($timeouts)->toHaveCount(1)
+        ->and(SharedMediaTargetLock::TTL_SECONDS)->toBeGreaterThan($timeouts[0])
+        // The worker's own ceiling (docker/production/entrypoint.sh --timeout=300)
+        // must stay inside the lease too.
+        ->and(SharedMediaTargetLock::TTL_SECONDS)->toBeGreaterThan(300);
 });
 
 test('rejects execution while a media replacement holds the shared installed-file lock', function (): void {

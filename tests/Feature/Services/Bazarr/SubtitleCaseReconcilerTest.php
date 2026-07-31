@@ -7,7 +7,9 @@ use App\Models\ServiceConnection;
 use App\Models\SubtitleCase;
 use App\Services\Bazarr\SubtitleCaseReconciler;
 use App\Settings\BazarrAutomationSettings;
+use Illuminate\Database\Events\QueryExecuted;
 use Illuminate\Support\Facades\Date;
+use Illuminate\Support\Facades\DB;
 
 /**
  * @return array<string, mixed>
@@ -126,6 +128,44 @@ test('a complete requirement resolves the stale active case of a closed identity
     expect($result?->is($handled))->toBeTrue()
         ->and($handled->fresh()->status)->toBe(SubtitleCaseStatus::Handled)
         ->and($active->fresh()->status)->toBe(SubtitleCaseStatus::Resolved);
+});
+
+test('reconciling one target neither reads nor locks another target rows', function (): void {
+    $firstCandidate = subtitleCaseCandidate($this->bazarr, $this->sonarr);
+    $secondCandidate = [
+        ...$firstCandidate,
+        'target_ids' => ['series_id' => 101, 'episode_id' => 702, 'episode_file_id' => 502],
+        'file_fingerprint' => hash('sha256', 'second-episode-file'),
+    ];
+    $subtitleCaseReconciler = resolve(SubtitleCaseReconciler::class);
+    $firstCase = $subtitleCaseReconciler->reconcile($firstCandidate);
+    $statements = [];
+    DB::listen(function (QueryExecuted $queryExecuted) use (&$statements): void {
+        $statements[] = $queryExecuted->sql;
+    });
+
+    $secondCase = $subtitleCaseReconciler->reconcile($secondCandidate);
+
+    // Both cases survive: the second reconciliation must not treat the first
+    // episode's case as a stale target of its own.
+    expect($firstCase->fresh()->status)->toBe(SubtitleCaseStatus::Observing)
+        ->and($secondCase?->status)->toBe(SubtitleCaseStatus::Observing);
+
+    // The target-wide lock is scoped in SQL rather than by filtering afterwards —
+    // that is what stops two workers on different titles from locking each other's
+    // rows. (The identity lookup locks its single row by fingerprint instead.)
+    $targetLockStatements = array_values(array_filter(
+        $statements,
+        static fn (string $sql): bool => str_contains($sql, 'for update')
+            && str_contains($sql, 'subtitle_cases')
+            && str_contains($sql, 'media_type'),
+    ));
+
+    expect($targetLockStatements)->not->toBeEmpty();
+
+    foreach ($targetLockStatements as $targetLockStatement) {
+        expect($targetLockStatement)->toContain('target_ids');
+    }
 });
 
 test('a superseded identity is observed again when it reappears missing', function (): void {

@@ -157,8 +157,30 @@ final readonly class SubtitleCaseReconciler
      * @param  array<string, mixed>  $candidate
      * @return Collection<int, SubtitleCase>
      */
+    /**
+     * The target predicates belong in SQL. Locking every active case for the whole
+     * connection pairing and filtering afterwards made two workers reconciling
+     * different titles lock each other's rows in opposite order — an ordinary
+     * multi-case sweep then deadlocked — and hydrated the entire active backlog once
+     * per candidate.
+     *
+     * @param  array<string, mixed>  $candidate
+     * @return Collection<int, SubtitleCase>
+     */
     private function activeTargetCases(array $candidate): Collection
     {
+        $isEpisode = $candidate['media_type'] === 'episode';
+        $targetIds = $candidate['target_ids'];
+        $requiredKeys = $isEpisode ? ['series_id', 'episode_id'] : ['radarr_id'];
+
+        foreach ($requiredKeys as $requiredKey) {
+            // Without a concrete target there is nothing to scope the lock to, and
+            // locking the whole pairing is exactly what this avoids.
+            if (! is_int($targetIds[$requiredKey] ?? null)) {
+                return new Collection;
+            }
+        }
+
         return SubtitleCase::query()
             ->where('bazarr_connection_id', $candidate['bazarr_connection_id'])
             ->where('service_connection_id', $candidate['service_connection_id'])
@@ -167,14 +189,16 @@ final readonly class SubtitleCaseReconciler
                 static fn (SubtitleCaseStatus $subtitleCaseStatus): string => $subtitleCaseStatus->value,
                 self::ACTIVE_STATUSES,
             ))
+            ->when(
+                $isEpisode,
+                fn (Builder $builder): Builder => $builder
+                    ->where('target_ids->series_id', $targetIds['series_id'])
+                    ->where('target_ids->episode_id', $targetIds['episode_id']),
+                fn (Builder $builder): Builder => $builder
+                    ->where('target_ids->radarr_id', $targetIds['radarr_id']),
+            )
             ->lockForUpdate()
-            ->get()
-            ->filter(fn (SubtitleCase $subtitleCase): bool => $this->sameTarget(
-                $subtitleCase->target_ids,
-                $candidate['target_ids'],
-                $candidate['media_type'],
-            ))
-            ->values();
+            ->get();
     }
 
     private function advanceElapsedGrace(SubtitleCase $subtitleCase): void
@@ -186,18 +210,6 @@ final readonly class SubtitleCaseReconciler
         }
 
         $this->subtitleCaseLifecycle->transition($subtitleCase, SubtitleCaseStatus::BazarrSearching);
-    }
-
-    /**
-     * @param  array<string, mixed>  $left
-     * @param  array<string, mixed>  $right
-     */
-    private function sameTarget(array $left, array $right, string $mediaType): bool
-    {
-        return $mediaType === 'episode'
-            ? ($left['series_id'] ?? null) === ($right['series_id'] ?? null)
-                && ($left['episode_id'] ?? null) === ($right['episode_id'] ?? null)
-            : ($left['radarr_id'] ?? null) === ($right['radarr_id'] ?? null);
     }
 
     /**

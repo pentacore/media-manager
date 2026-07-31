@@ -257,9 +257,9 @@ test('a refused upload leaves a case reconciliation can eventually advance', fun
     expect($subtitleCase->fresh()->status)->toBe(SubtitleCaseStatus::BazarrSearching);
 });
 
-test('a failure staging the durable rows removes the staged file', function (): void {
-    // The case row cannot be written, so nothing commits — and with no row for the
-    // prune sweep to find, the file has to go now.
+test('a failure persisting the durable rows never writes the staged file', function (): void {
+    // The row is committed before the file is written, so a persistence failure
+    // cannot leave a file behind that no prune cycle could ever discover.
     Schema::drop('subtitle_uploads');
 
     $this->actingAs(User::factory()->member()->create())
@@ -271,6 +271,29 @@ test('a failure staging the durable rows removes the staged file', function (): 
         ->assertStatus(500);
 
     Storage::disk('local')->assertDirectoryEmpty('bazarr-subtitle-uploads');
+});
+
+test('a staged upload whose file cannot be written closes its own row', function (): void {
+    $legacyMock = Mockery::mock(Storage::disk('local'))->makePartial();
+    $legacyMock->shouldReceive('put')->once()->andReturnFalse();
+    Storage::set('local', $legacyMock);
+
+    $this->actingAs(User::factory()->member()->create())
+        ->withHeader('Accept', 'application/json')
+        ->post(route('bazarr.uploads.store'), [
+            ...uploadPayload($this),
+            'subtitle_file' => validSubtitleUpload(),
+        ])
+        ->assertUnprocessable()
+        ->assertJsonValidationErrors('subtitle_file');
+
+    // Nothing reached the disk, so the committed row is closed out rather than left
+    // for a prune cycle that has nothing to delete.
+    $subtitleUpload = SubtitleUpload::query()->sole();
+
+    expect($subtitleUpload->cancelled_at)->not->toBeNull()
+        ->and($subtitleUpload->cleaned_up_at)->not->toBeNull()
+        ->and(ActionRequest::query()->count())->toBe(0);
 });
 
 test('a staged upload whose rollback cannot delete the file stays prunable', function (): void {
