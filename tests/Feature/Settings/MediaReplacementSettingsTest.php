@@ -250,6 +250,11 @@ test('it emits only the canonical known configuration schema', function (): void
             'movie' => null,
         ],
         'season_pack_policy' => 'approval_required',
+        'subtitle_check' => [
+            'enabled' => false,
+            'max_attempts_per_target' => 1,
+            'cooldown_hours' => 24,
+        ],
         'sonarr_root_folders' => [],
         'guidance' => [
             'anime' => [
@@ -266,6 +271,109 @@ test('it emits only the canonical known configuration schema', function (): void
             ],
         ],
     ]);
+});
+
+test('subtitle check defaults to off with a single attempt per day', function (): void {
+    $mediaReplacementSettings = resolve(MediaReplacementSettings::class);
+
+    expect($mediaReplacementSettings->subtitleCheckEnabled())->toBeFalse()
+        ->and($mediaReplacementSettings->subtitleCheckMaxAttempts())->toBe(1)
+        ->and($mediaReplacementSettings->subtitleCheckCooldownHours())->toBe(24);
+});
+
+test('subtitle check values round-trip', function (): void {
+    $mediaReplacementSettings = resolve(MediaReplacementSettings::class);
+
+    $mediaReplacementSettings->setConfiguration([
+        'subtitle_check' => [
+            'enabled' => true,
+            'max_attempts_per_target' => 3,
+            'cooldown_hours' => 6,
+        ],
+    ]);
+
+    expect($mediaReplacementSettings->subtitleCheckEnabled())->toBeTrue()
+        ->and($mediaReplacementSettings->subtitleCheckMaxAttempts())->toBe(3)
+        ->and($mediaReplacementSettings->subtitleCheckCooldownHours())->toBe(6)
+        ->and(AppSetting::find('ai.media_replacement')?->value['subtitle_check'])->toBe([
+            'enabled' => true,
+            'max_attempts_per_target' => 3,
+            'cooldown_hours' => 6,
+        ]);
+});
+
+test('out-of-range subtitle check values fall back to defaults', function (): void {
+    $mediaReplacementSettings = resolve(MediaReplacementSettings::class);
+
+    $mediaReplacementSettings->setConfiguration([
+        'subtitle_check' => [
+            'enabled' => 'yes',
+            'max_attempts_per_target' => 0,
+            'cooldown_hours' => -5,
+        ],
+    ]);
+
+    expect($mediaReplacementSettings->subtitleCheckEnabled())->toBeFalse()
+        ->and($mediaReplacementSettings->subtitleCheckMaxAttempts())->toBe(1)
+        ->and($mediaReplacementSettings->subtitleCheckCooldownHours())->toBe(24);
+});
+
+test('it restores invalid stored subtitle check values to safe defaults', function (mixed $invalidSubtitleCheck): void {
+    resolve(AppSettings::class)->set('ai.media_replacement', [
+        'subtitle_check' => $invalidSubtitleCheck,
+    ]);
+
+    $mediaReplacementSettings = resolve(MediaReplacementSettings::class);
+
+    expect($mediaReplacementSettings->subtitleCheckEnabled())->toBeFalse()
+        ->and($mediaReplacementSettings->subtitleCheckMaxAttempts())->toBe(1)
+        ->and($mediaReplacementSettings->subtitleCheckCooldownHours())->toBe(24);
+})->with([
+    'malformed container' => ['invalid'],
+    'string values' => [[
+        'enabled' => 'true',
+        'max_attempts_per_target' => '5',
+        'cooldown_hours' => '48',
+    ]],
+    // Integral floats survive JSON storage as ints, so only a fractional float
+    // proves the type guard rather than the storage layer's own coercion.
+    'float values' => [[
+        'enabled' => 1,
+        'max_attempts_per_target' => 5.5,
+        'cooldown_hours' => 48.5,
+    ]],
+    'null values' => [[
+        'enabled' => null,
+        'max_attempts_per_target' => null,
+        'cooldown_hours' => null,
+    ]],
+    'missing keys' => [[]],
+]);
+
+test('it preserves valid non-default subtitle check bounds', function (): void {
+    $mediaReplacementSettings = resolve(MediaReplacementSettings::class);
+
+    $mediaReplacementSettings->setConfiguration([
+        'subtitle_check' => [
+            'enabled' => true,
+            'max_attempts_per_target' => 1,
+            'cooldown_hours' => 1,
+        ],
+    ]);
+
+    expect($mediaReplacementSettings->subtitleCheckMaxAttempts())->toBe(1)
+        ->and($mediaReplacementSettings->subtitleCheckCooldownHours())->toBe(1);
+
+    $mediaReplacementSettings->setConfiguration([
+        'subtitle_check' => [
+            'enabled' => true,
+            'max_attempts_per_target' => 10,
+            'cooldown_hours' => 720,
+        ],
+    ]);
+
+    expect($mediaReplacementSettings->subtitleCheckMaxAttempts())->toBe(10)
+        ->and($mediaReplacementSettings->subtitleCheckCooldownHours())->toBe(720);
 });
 
 test('it safely filters mixed configured and request language lists', function (): void {
