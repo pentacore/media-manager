@@ -138,8 +138,10 @@ final class UploadController extends Controller
         });
 
         if (! Storage::disk('local')->put($path, $contents)) {
-            // Nothing reached the disk, so the row is closed out immediately.
-            $subtitleUpload->update(['cancelled_at' => now(), 'cleaned_up_at' => now()]);
+            // A failed write may still have truncated or partially written the file,
+            // so the row is only recorded as cleaned once the path is really gone —
+            // otherwise it would drop out of the prune sweep with a file behind it.
+            $this->cancelStagedUpload($subtitleUpload);
 
             throw ValidationException::withMessages([
                 'subtitle_file' => 'The subtitle file could not be staged.',
@@ -204,11 +206,14 @@ final class UploadController extends Controller
      */
     private function cancelStagedUpload(SubtitleUpload $subtitleUpload): void
     {
-        $deleted = Storage::disk('local')->delete($subtitleUpload->path);
+        $disk = Storage::disk('local');
+        // Cleanup is recorded only when the path is authoritatively gone: a partial
+        // write or a failed unlink has to stay in the prune sweep.
+        $removed = $disk->delete($subtitleUpload->path) || ! $disk->exists($subtitleUpload->path);
 
         $subtitleUpload->update(array_filter([
             'cancelled_at' => now(),
-            'cleaned_up_at' => $deleted ? now() : null,
+            'cleaned_up_at' => $removed ? now() : null,
         ], static fn (mixed $value): bool => $value !== null));
     }
 

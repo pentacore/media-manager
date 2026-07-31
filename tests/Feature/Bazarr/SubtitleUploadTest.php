@@ -287,13 +287,37 @@ test('a staged upload whose file cannot be written closes its own row', function
         ->assertUnprocessable()
         ->assertJsonValidationErrors('subtitle_file');
 
-    // Nothing reached the disk, so the committed row is closed out rather than left
+    // The path really is gone, so the committed row is closed out rather than left
     // for a prune cycle that has nothing to delete.
     $subtitleUpload = SubtitleUpload::query()->sole();
 
     expect($subtitleUpload->cancelled_at)->not->toBeNull()
         ->and($subtitleUpload->cleaned_up_at)->not->toBeNull()
         ->and(ActionRequest::query()->count())->toBe(0);
+});
+
+test('a partially written staged file that cannot be deleted stays prunable', function (): void {
+    // put() failing does not mean nothing reached the disk: the local adapter
+    // truncates the destination before the write can fail. With the leftover path
+    // still present and the unlink failing too, the row must stay claimable.
+    $legacyMock = Mockery::mock(Storage::disk('local'))->makePartial();
+    $legacyMock->shouldReceive('put')->once()->andReturnFalse();
+    $legacyMock->shouldReceive('delete')->once()->andReturnFalse();
+    $legacyMock->shouldReceive('exists')->andReturnTrue();
+    Storage::set('local', $legacyMock);
+
+    $this->actingAs(User::factory()->member()->create())
+        ->withHeader('Accept', 'application/json')
+        ->post(route('bazarr.uploads.store'), [
+            ...uploadPayload($this),
+            'subtitle_file' => validSubtitleUpload(),
+        ])
+        ->assertUnprocessable();
+
+    $subtitleUpload = SubtitleUpload::query()->sole();
+
+    expect($subtitleUpload->cancelled_at)->not->toBeNull()
+        ->and($subtitleUpload->cleaned_up_at)->toBeNull();
 });
 
 test('a staged upload whose rollback cannot delete the file stays prunable', function (): void {

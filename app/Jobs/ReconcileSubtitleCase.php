@@ -29,20 +29,19 @@ use Illuminate\Foundation\Queue\Queueable;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\RequestException;
 use Illuminate\Queue\Attributes\Timeout;
-use Illuminate\Queue\Middleware\RateLimited;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\Str;
 use Throwable;
 
 /**
- * Deliberately without a try cap: the queue counts a RateLimited release as an
- * attempt even though handle() never ran, and a full sweep enqueues far more
- * probe-capable jobs than the 10-per-minute limiter admits. A fixed try count
- * therefore burned itself out on releases alone — jobs failed with
- * MaxAttemptsExceededException without ever contacting Bazarr, and failed() then
- * parked healthy searching cases as "Bazarr probe failed". retryUntil() bounds the
- * work by time instead, so a job survives the queue it is waiting in.
+ * Deliberately without a try cap, and without queue-level rate limiting. A release
+ * counts as an attempt even though handle() never ran, so a large cycle
+ * (max_cases_per_cycle accepts 1000) behind a per-minute limiter burned every job's
+ * attempts without contacting Bazarr, and failed() then parked healthy searching
+ * cases as "Bazarr probe failed". Throttling now sits at the provider search, and
+ * retryUntil() bounds only genuine retries.
  */
 #[Timeout(60)]
 final class ReconcileSubtitleCase implements ShouldQueue
@@ -50,10 +49,18 @@ final class ReconcileSubtitleCase implements ShouldQueue
     use Queueable;
 
     /**
-     * Comfortably longer than draining one full cycle through the probe limiter
-     * (max_cases_per_cycle 100 at 10 per minute) plus the retry backoff.
+     * Bounds genuine retries only: admission no longer waits in the queue, so this
+     * window covers the 60/300-second backoff of an upstream outage rather than the
+     * time a cycle takes to drain.
      */
     private const int RETRY_WINDOW_MINUTES = 60;
+
+    /**
+     * Provider searches allowed per connection per minute. The per-cycle slot budget
+     * bounds how many probes a cycle performs; this bounds the burst rate, including
+     * webhook-triggered probes that arrive outside a cycle.
+     */
+    private const int PROVIDER_SEARCHES_PER_MINUTE = 10;
 
     /**
      * Identifies this queue message, so only its own retries can reuse the cycle
@@ -107,17 +114,18 @@ final class ReconcileSubtitleCase implements ShouldQueue
     }
 
     /**
+     * No queue-level rate limiting. A RateLimited release counts as an attempt even
+     * though handle() never ran, so a large cycle (max_cases_per_cycle accepts 1000)
+     * queued behind a per-minute limiter burned every job's attempts and deadline
+     * without a single provider call — and most of those jobs only needed the
+     * deterministic reconciliation that runs before any search anyway. The provider
+     * search throttles itself instead, in probe().
+     *
      * @return list<object>
      */
     public function middleware(): array
     {
-        // Only a probing run touches provider endpoints, so the probe rate limiter
-        // must not throttle reconcile-only (probeAllowed = false) work.
-        if (! $this->probeAllowed) {
-            return [];
-        }
-
-        return [new RateLimited('bazarr-probes')->releaseAfter(60)];
+        return [];
     }
 
     public function handle(
@@ -207,6 +215,19 @@ final class ReconcileSubtitleCase implements ShouldQueue
         // action listener — call itself a retry and bypass the cycle budget.
         if (! $this->reservationHeld($subtitleCase->bazarr_connection_id)
             && ! $this->reserveProbeSlot($subtitleCase->bazarr_connection_id, $bazarrAutomationSettings)) {
+            return;
+        }
+
+        // Per-minute provider throttle, applied here rather than as queue middleware:
+        // a release would spend the job's attempts and deadline on work it had not
+        // started, while every case that reaches this line has already had its
+        // deterministic reconciliation. Over budget, the search waits for the next
+        // cycle instead of occupying the queue.
+        if (! RateLimiter::attempt(
+            'bazarr-probe-searches:'.$subtitleCase->bazarr_connection_id,
+            self::PROVIDER_SEARCHES_PER_MINUTE,
+            static fn (): bool => true,
+        )) {
             return;
         }
 
@@ -349,22 +370,31 @@ final class ReconcileSubtitleCase implements ShouldQueue
         try {
             $candidate = $subtitleInventoryService->caseCandidateFor($subtitleCase);
         } catch (Throwable $throwable) {
-            // A failed read says nothing about the subtitle. Treating it as "still
-            // missing" would move a possibly satisfied case out of the only state
-            // this verification looks at, and a satisfied target has also left the
-            // bulk missing feed — so nothing would ever look again. Transient
-            // failures retry; anything else leaves the case exactly as it was.
+            // A failed read says nothing about the subtitle, so it must never be
+            // treated as "still missing". Transient failures retry; a definite one
+            // (4xx, malformed payload) will fail the same way forever, and this job
+            // is the only thing still looking at the case — a waiting case is not in
+            // the bulk candidate feed and the completion listener has already fired.
+            // So it goes to an operator instead of waiting silently.
             throw_if($this->isRetryable($throwable), $throwable);
 
             report($throwable);
 
-            return $subtitleCase->fresh() ?? $subtitleCase;
+            return $this->parkUnverifiableCase(
+                $subtitleCase,
+                $subtitleCaseLifecycle,
+                'bazarr_verification_failed',
+            );
         }
 
-        // An unreadable target (missing mapping, vanished media) is not an
-        // authoritative "still missing" either.
+        // An unreadable target — vanished media, unmapped Arr connection — is not an
+        // authoritative "still missing" either, and nothing will read it later.
         if ($candidate === null) {
-            return $subtitleCase->fresh() ?? $subtitleCase;
+            return $this->parkUnverifiableCase(
+                $subtitleCase,
+                $subtitleCaseLifecycle,
+                'bazarr_target_unreadable',
+            );
         }
 
         $reconciled = $subtitleCaseReconciler->reconcile($candidate);
@@ -385,6 +415,38 @@ final class ReconcileSubtitleCase implements ShouldQueue
         }
 
         return $subtitleCase;
+    }
+
+    /**
+     * Only a case waiting on a download is handed to an operator here, because that
+     * is the state with no other observer: it has left the bulk candidate feed and
+     * its completion listener has already fired. A bazarr_searching case is still
+     * swept every cycle, so it keeps waiting rather than adding review noise — and so
+     * does any case whose Bazarr connection is currently inactive or unmapped, which
+     * is a configuration state automation is paused for anyway.
+     */
+    private function parkUnverifiableCase(
+        SubtitleCase $subtitleCase,
+        SubtitleCaseLifecycle $subtitleCaseLifecycle,
+        string $reason,
+    ): SubtitleCase {
+        $subtitleCase = $subtitleCase->fresh() ?? $subtitleCase;
+
+        if ($subtitleCase->status !== SubtitleCaseStatus::DownloadRequested) {
+            return $subtitleCase;
+        }
+
+        $bazarrConnection = ServiceConnection::query()->find($subtitleCase->bazarr_connection_id);
+
+        if (! $bazarrConnection instanceof ServiceConnection
+            || $bazarrConnection->type !== ServiceType::Bazarr
+            || ! $bazarrConnection->is_active) {
+            return $subtitleCase;
+        }
+
+        $subtitleCaseLifecycle->needsReview($subtitleCase, $reason);
+
+        return $subtitleCase->fresh() ?? $subtitleCase;
     }
 
     /**

@@ -10,7 +10,6 @@ use App\Events\ServiceHealthChanged;
 use App\Events\WebhookEventProcessed;
 use App\Events\WebhookReceived;
 use App\Jobs\ReconcileBazarrConnection;
-use App\Jobs\ReconcileSubtitleCase;
 use App\Listeners\RebroadcastDashboardStats;
 use App\Listeners\RunDecisionAgentForWebhook;
 use App\Settings\AiSettings;
@@ -61,10 +60,6 @@ class AppServiceProvider extends ServiceProvider
         RateLimiter::for(
             'bazarr-reconciliation',
             fn (ReconcileBazarrConnection $reconcileBazarrConnection): Limit => Limit::perMinute(30)->by((string) $reconcileBazarrConnection->connectionId),
-        );
-        RateLimiter::for(
-            'bazarr-probes',
-            fn (ReconcileSubtitleCase $reconcileSubtitleCase): Limit => Limit::perMinute(10)->by($reconcileSubtitleCase->bazarrConnectionId()),
         );
         Event::listen(SocialiteWasCalled::class, AuthentikExtendSocialite::class);
 

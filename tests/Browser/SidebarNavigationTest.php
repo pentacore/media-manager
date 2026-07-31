@@ -136,19 +136,20 @@ test('the Search link is hidden on desktop and shown on mobile', function (): vo
     // AppSidebarHeader's "Search media, requests, actions…" placeholder whether
     // the mobile-only nav entry rendered or not.
     //
-    // The link counts pin the whole visible taxonomy in one number — 13 leaf
-    // links at desktop (3 Overview + 4 Media + 6 Activity) and 14 at mobile
-    // where `Search` joins them. Admin sub-group children are not counted at
-    // either width: their parents are CollapsibleTrigger buttons and the closed
-    // CollapsibleContent is out of the DOM, so an admin also sees 13.
+    // The link counts pin the whole visible taxonomy in one number — 14 leaf
+    // links at desktop (3 Overview + 5 Media, including Subtitles + 6 Activity)
+    // and 15 at mobile where `Search` joins them. Admin sub-group children are not
+    // counted at either width: their parents are CollapsibleTrigger buttons and the
+    // closed CollapsibleContent is out of the DOM, so an admin also sees 14.
     visit('/dashboard')
         ->assertNoSmoke()
         ->assertDontSeeIn('[data-sidebar="content"]', 'Search')
-        ->assertCount('[data-sidebar="content"] a', 13)
+        ->assertSeeIn('[data-sidebar="content"]', 'Subtitles')
+        ->assertCount('[data-sidebar="content"] a', 14)
         ->resize(390, 844)
         ->click('[data-sidebar="trigger"]')
         ->assertSeeIn('[data-sidebar="content"]', 'Search')
-        ->assertCount('[data-sidebar="content"] a', 14);
+        ->assertCount('[data-sidebar="content"] a', 15);
 });
 
 test('admin sub-groups start collapsed and reveal children on click', function (): void {

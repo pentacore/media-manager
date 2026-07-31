@@ -26,11 +26,11 @@ use App\Settings\MediaReplacementSettings;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Queue\Attributes\Tries;
-use Illuminate\Queue\Middleware\RateLimited;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Date;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Queue;
+use Illuminate\Support\Facades\RateLimiter;
 
 /**
  * @return array<string, mixed>
@@ -637,6 +637,99 @@ test('a failed verification read keeps the case waiting and retries', function (
     expect($case->fresh()->status)->toBe(SubtitleCaseStatus::Resolved);
 });
 
+test('a definitive verification failure parks the case for an operator', function (): void {
+    $failReads = false;
+    ['case' => $case, 'bazarr' => $bazarr] = targetedEpisodeCaseSetup([], function () use (&$failReads): mixed {
+        if ($failReads) {
+            return Http::response(['message' => 'bad request'], 422);
+        }
+
+        return Http::response(['data' => [[
+            'sonarrSeriesId' => 101,
+            'sonarrEpisodeId' => 701,
+            'title' => 'Frieren S01E01',
+            'subtitles' => [],
+        ]]]);
+    });
+    $actionRequest = ActionRequest::factory()->create([
+        'type' => 'bazarr_download_best',
+        'status' => ActionRequestStatus::Completed,
+    ]);
+    $case->forceFill(['download_action_request_id' => $actionRequest->id])->save();
+
+    $failReads = true;
+    new BazarrCache($bazarr)->bustAll();
+
+    // A 422 fails the same way on every attempt, and this job is the last thing
+    // looking: a waiting case is not in the bulk candidate feed and the completion
+    // listener has already fired. Leaving it download_requested strands it silently.
+    runSubtitleProbe(ReconcileSubtitleCase::forCase($case->fresh()));
+
+    expect($case->fresh()->status)->toBe(SubtitleCaseStatus::NeedsReview)
+        ->and($case->fresh()->failure_reason)->toBe('bazarr_verification_failed');
+});
+
+test('an unreadable target parks the case for an operator', function (): void {
+    $vanished = false;
+    ['case' => $case, 'bazarr' => $bazarr] = targetedEpisodeCaseSetup([], function () use (&$vanished): mixed {
+        if ($vanished) {
+            return Http::response(['data' => []]);
+        }
+
+        return Http::response(['data' => [[
+            'sonarrSeriesId' => 101,
+            'sonarrEpisodeId' => 701,
+            'title' => 'Frieren S01E01',
+            'subtitles' => [],
+        ]]]);
+    });
+    $actionRequest = ActionRequest::factory()->create([
+        'type' => 'bazarr_download_best',
+        'status' => ActionRequestStatus::Completed,
+    ]);
+    $case->forceFill(['download_action_request_id' => $actionRequest->id])->save();
+
+    // The episode is gone from Bazarr, so the projection returns null — authoritative
+    // about nothing, and nothing else will read this case again.
+    $vanished = true;
+    new BazarrCache($bazarr)->bustAll();
+
+    runSubtitleProbe(ReconcileSubtitleCase::forCase($case->fresh()));
+
+    expect($case->fresh()->status)->toBe(SubtitleCaseStatus::NeedsReview)
+        ->and($case->fresh()->failure_reason)->toBe('bazarr_target_unreadable');
+});
+
+test('an unverifiable case is left alone while its Bazarr connection is inactive', function (): void {
+    $vanished = false;
+    ['case' => $case, 'bazarr' => $bazarr] = targetedEpisodeCaseSetup([], function () use (&$vanished): mixed {
+        if ($vanished) {
+            return Http::response(['data' => []]);
+        }
+
+        return Http::response(['data' => [[
+            'sonarrSeriesId' => 101,
+            'sonarrEpisodeId' => 701,
+            'title' => 'Frieren S01E01',
+            'subtitles' => [],
+        ]]]);
+    });
+    $case->forceFill(['download_action_request_id' => ActionRequest::factory()->create([
+        'type' => 'bazarr_download_best',
+        'status' => ActionRequestStatus::Completed,
+    ])->id])->save();
+
+    // Deactivating a connection pauses automation; it must not bury every waiting
+    // case of that connection in review noise.
+    $vanished = true;
+    $bazarr->forceFill(['is_active' => false])->save();
+    new BazarrCache($bazarr)->bustAll();
+
+    runSubtitleProbe(ReconcileSubtitleCase::forCase($case->fresh()));
+
+    expect($case->fresh()->status)->toBe(SubtitleCaseStatus::DownloadRequested);
+});
+
 test('an indeterminate download re-enters probing once the live read finds the track still missing', function (): void {
     ['case' => $case] = targetedEpisodeCaseSetup([]);
     $actionRequest = ActionRequest::factory()->create([
@@ -845,31 +938,81 @@ test('probe searches honour a shared per-cycle probe budget regardless of origin
     Http::assertSentCount(2); // one provider search (episodes + providers) for the first case only
 });
 
-test('the probe rate limiter applies only when probing is allowed', function (): void {
-    $allowed = new ReconcileSubtitleCase([], probeAllowed: true);
-    $suppressed = new ReconcileSubtitleCase([], probeAllowed: false);
+test('the provider search is throttled in the job rather than in the queue', function (): void {
+    Http::fake([
+        'bazarr.test/api/providers/episodes*' => Http::response(['data' => []]),
+        'bazarr.test/api/providers' => Http::response(['data' => []]),
+    ]);
+    // No queue middleware: a release counts as an attempt even though handle() never
+    // ran, so a cycle larger than the per-minute budget used to burn every job's
+    // attempts and deadline before reaching Bazarr.
+    expect(new ReconcileSubtitleCase([], probeAllowed: true)->middleware())->toBe([])
+        ->and(new ReconcileSubtitleCase([], probeAllowed: false)->middleware())->toBe([]);
 
-    expect($allowed->middleware())->toHaveCount(1)
-        ->and($allowed->middleware()[0])->toBeInstanceOf(RateLimited::class)
-        ->and($suppressed->middleware())->toBe([]);
+    // The throttle now guards the search itself: with the minute's budget spent, the
+    // job completes without contacting the providers instead of being released.
+    RateLimiter::clear('bazarr-probe-searches:'.$this->bazarr->id);
+
+    foreach (range(1, 10) as $ignored) {
+        RateLimiter::hit('bazarr-probe-searches:'.$this->bazarr->id);
+    }
+
+    runSubtitleProbe(new ReconcileSubtitleCase(probeCandidate($this->case)));
+
+    Http::assertNothingSent();
+    expect(SubtitleCaseAttempt::query()->count())->toBe(0)
+        ->and($this->case->fresh()->status)->toBe(SubtitleCaseStatus::BazarrSearching);
 });
 
-test('rate-limit releases cannot exhaust a probe job before it reaches Bazarr', function (): void {
+test('a cycle far larger than the throttle budget still probes what it admits', function (): void {
+    // max_cases_per_cycle accepts 1000. Queue-level limiting made the tail of such a
+    // cycle expire without a single provider call; in-job throttling admits the
+    // budget and leaves the rest for the next cycle, with no attempts consumed.
+    resolve(BazarrAutomationSettings::class)->setConfiguration([
+        'enabled' => true,
+        'probe_spacing_hours' => 24,
+        'empty_probe_threshold' => 2,
+        'max_cases_per_cycle' => 1000,
+        'max_probes_per_cycle' => 100,
+    ]);
+    Http::fake([
+        'bazarr.test/api/providers/episodes*' => Http::response(['data' => []]),
+        'bazarr.test/api/providers' => Http::response(['data' => []]),
+    ]);
+    RateLimiter::clear('bazarr-probe-searches:'.$this->bazarr->id);
+    $cases = Collection::make(range(1, 12))->map(fn (int $index): SubtitleCase => SubtitleCase::factory()->create([
+        'bazarr_connection_id' => $this->bazarr->id,
+        'service_connection_id' => $this->sonarr->id,
+        'status' => SubtitleCaseStatus::BazarrSearching,
+        'target_ids' => ['series_id' => 101, 'episode_id' => 700 + $index, 'episode_file_id' => 500 + $index],
+        'required_languages' => [['code' => 'eng', 'forced' => false, 'hearing_impaired' => false]],
+        'evidence' => ['display_name' => 'Episode '.$index, 'missing_languages' => ['eng']],
+    ]));
+
+    foreach ($cases as $case) {
+        runSubtitleProbe(ReconcileSubtitleCase::forCase($case));
+    }
+
+    // Exactly the minute's budget searched; the rest are untouched and still
+    // searching, so the next cycle picks them up.
+    expect(SubtitleCaseAttempt::query()->where('type', SubtitleCaseAttemptType::Probe)->count())->toBe(10)
+        ->and($cases->last()->fresh()->status)->toBe(SubtitleCaseStatus::BazarrSearching);
+});
+
+test("admission never consumes a probe job's attempts or deadline", function (): void {
     Date::setTestNow('2026-07-17 10:00:00');
     $reconcileSubtitleCase = new ReconcileSubtitleCase(probeCandidate($this->case));
-
-    // The queue counts a RateLimited release as an attempt even though handle() never
-    // ran. With a fixed try cap, a sweep that enqueues more jobs than the limiter
-    // admits (max_probes_per_cycle work behind Limit::perMinute(10)) failed jobs with
-    // MaxAttemptsExceededException without a single provider call, and failed() then
-    // parked healthy searching cases. The lifetime is bounded by time instead.
     $triesAttributes = new ReflectionClass(ReconcileSubtitleCase::class)->getAttributes(Tries::class);
-    $maximumCases = resolve(BazarrAutomationSettings::class)->maxCasesPerCycle();
-    $drainMinutes = (int) ceil($maximumCases / 10);
 
+    // Nothing releases this job for admission any more, so no attempt or deadline is
+    // spent waiting: the deadline only has to outlast the 60/300-second backoff of a
+    // genuine upstream outage, whatever max_cases_per_cycle is set to.
     expect($triesAttributes)->toBe([])
         ->and($reconcileSubtitleCase->tries ?? null)->toBeNull()
-        ->and($reconcileSubtitleCase->retryUntil())->toBeGreaterThan(now()->addMinutes($drainMinutes));
+        ->and($reconcileSubtitleCase->middleware())->toBe([])
+        ->and($reconcileSubtitleCase->retryUntil())->toBeGreaterThan(
+            now()->addSeconds(array_sum($reconcileSubtitleCase->backoff()) * 2),
+        );
 });
 
 function runSubtitleProbe(ReconcileSubtitleCase $reconcileSubtitleCase): void
