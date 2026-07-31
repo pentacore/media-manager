@@ -245,6 +245,108 @@ test('a queue read failure is swallowed rather than aborting the caller', functi
     expect($removed)->toBe(0);
 });
 
+test("it spares another in-flight attempt's download on the same target", function (): void {
+    $mediaReplacementAttempt = sweeperAttempt($this->connection->id, ['download_id' => 'DL-OURS']);
+
+    sweeperAttempt($this->connection->id, [
+        'download_id' => 'DL-SIBLING',
+        'candidate' => ['title' => 'Other.Trusted.Release', 'fingerprint' => 'fp2'],
+    ]);
+
+    // Both replacement rows are titled the way a download client renamed them,
+    // so neither the vetted-title keep-guard nor our own download id can spare
+    // the sibling's row — only knowing it belongs to another live attempt can.
+    fakeSweeperQueue([
+        ['id' => 930, 'seriesId' => 42, 'episodeId' => 101, 'downloadId' => 'DL-OURS', 'title' => 'Client.Renamed.Ours'],
+        ['id' => 931, 'seriesId' => 42, 'episodeId' => 101, 'downloadId' => 'DL-SIBLING', 'title' => 'Client.Renamed.Sibling'],
+        ['id' => 932, 'seriesId' => 42, 'episodeId' => 101, 'downloadId' => 'DL-RACE', 'title' => 'Competing.Release'],
+    ]);
+
+    $removed = resolve(CompetingGrabSweeper::class)->sweep($this->connection, $mediaReplacementAttempt);
+
+    expect($removed)->toBe(1);
+
+    Http::assertSent(fn (Request $request): bool => $request->method() === 'DELETE'
+        && str_contains($request->url(), '/api/v3/queue/932'));
+    Http::assertNotSent(fn (Request $request): bool => $request->method() === 'DELETE'
+        && str_contains($request->url(), '/api/v3/queue/931'));
+    Http::assertNotSent(fn (Request $request): bool => $request->method() === 'DELETE'
+        && str_contains($request->url(), '/api/v3/queue/930'));
+});
+
+test("it does not spare a settled attempt's download", function (): void {
+    $mediaReplacementAttempt = sweeperAttempt($this->connection->id, ['download_id' => 'DL-OURS']);
+
+    // Verified is terminal: that attempt is finished and nothing is waiting on
+    // its download, so it earns no protection from this sweep.
+    sweeperAttempt($this->connection->id, [
+        'status' => MediaReplacementStatus::Verified,
+        'download_id' => 'DL-SETTLED',
+        'candidate' => ['title' => 'Settled.Release', 'fingerprint' => 'fp2'],
+    ]);
+
+    fakeSweeperQueue([
+        ['id' => 933, 'seriesId' => 42, 'episodeId' => 101, 'downloadId' => 'DL-SETTLED', 'title' => 'Client.Renamed.Settled'],
+    ]);
+
+    $removed = resolve(CompetingGrabSweeper::class)->sweep($this->connection, $mediaReplacementAttempt);
+
+    expect($removed)->toBe(1);
+    Http::assertSent(fn (Request $request): bool => $request->method() === 'DELETE'
+        && str_contains($request->url(), '/api/v3/queue/933'));
+});
+
+test('a sibling attempt with a blank download id spares nothing', function (): void {
+    $mediaReplacementAttempt = sweeperAttempt($this->connection->id, ['download_id' => 'DL-OURS']);
+
+    // In flight but its Grab webhook has not landed, so it has no id to protect.
+    sweeperAttempt($this->connection->id, [
+        'download_id' => '   ',
+        'candidate' => ['title' => 'Unstarted.Sibling', 'fingerprint' => 'fp2'],
+    ]);
+
+    // A row reporting no download id of its own. A blank sibling id must not
+    // become a wildcard that matches it — that is how a missing identifier
+    // turns into a match-all and disarms the sweep.
+    fakeSweeperQueue([
+        ['id' => 934, 'seriesId' => 42, 'episodeId' => 101, 'downloadId' => '', 'title' => 'Competing.Release'],
+    ]);
+
+    $removed = resolve(CompetingGrabSweeper::class)->sweep($this->connection, $mediaReplacementAttempt);
+
+    expect($removed)->toBe(1);
+    Http::assertSent(fn (Request $request): bool => $request->method() === 'DELETE'
+        && str_contains($request->url(), '/api/v3/queue/934'));
+});
+
+test('a sibling attempt on a different episode of the same series spares nothing', function (): void {
+    $mediaReplacementAttempt = sweeperAttempt($this->connection->id, ['download_id' => 'DL-OURS']);
+
+    sweeperAttempt($this->connection->id, [
+        'target' => [
+            'service' => 'sonarr', 'scope' => 'anime', 'series_id' => 42,
+            'episode_ids' => [999], 'episode_file_ids' => [599],
+        ],
+        'download_id' => 'DL-EP9',
+        'candidate' => ['title' => 'Trusted.Anime.S01E09.CR', 'fingerprint' => 'fp2'],
+    ]);
+
+    // The id collision is constructed: it puts the other attempt's download id
+    // on a row for OUR episode, which is the only way to tell an episode-precise
+    // keep set apart from a series-wide one. A series-wide set would spare this
+    // row even though the attempt vouching for it is replacing a different
+    // episode entirely.
+    fakeSweeperQueue([
+        ['id' => 935, 'seriesId' => 42, 'episodeId' => 101, 'downloadId' => 'DL-EP9', 'title' => 'Competing.Release'],
+    ]);
+
+    $removed = resolve(CompetingGrabSweeper::class)->sweep($this->connection, $mediaReplacementAttempt);
+
+    expect($removed)->toBe(1);
+    Http::assertSent(fn (Request $request): bool => $request->method() === 'DELETE'
+        && str_contains($request->url(), '/api/v3/queue/935'));
+});
+
 test('it matches a radarr queue item by movie id', function (): void {
     $radarrConnection = ServiceConnection::factory()->radarr()->create([
         'url' => 'http://radarr.local:7878', 'api_key' => 'test', 'is_active' => true,

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Services\MediaReplacement;
 
+use App\Enums\MediaReplacementStatus;
 use App\Enums\ServiceType;
 use App\Enums\UserRole;
 use App\Models\MediaReplacementAttempt;
@@ -29,6 +30,12 @@ use Throwable;
  * Grab webhook records. Identity may never rest on the release title alone: see
  * the guard in run() for why. A missing download id therefore means no sweep at
  * all, and the competing download is left for a later pass to clean up.
+ *
+ * "Not the release this attempt vetted" is not the same as "not ours". A second
+ * replacement attempt can be in flight on an overlapping target, and its
+ * download is another vetted release, not a competitor — see
+ * siblingDownloadIds() for the keep set that protects it and for the limits of
+ * what that set can know.
  */
 final readonly class CompetingGrabSweeper
 {
@@ -75,6 +82,8 @@ final readonly class CompetingGrabSweeper
         $isRadarr = $serviceConnection->type === ServiceType::Radarr;
         $client = $isRadarr ? new RadarrClient($serviceConnection) : new SonarrClient($serviceConnection);
 
+        $siblingDownloadIds = $this->siblingDownloadIds($serviceConnection, $mediaReplacementAttempt, $target, $isRadarr);
+
         $queue = $client->getQueue(['pageSize' => 200]);
         $records = is_array($queue['records'] ?? null) ? $queue['records'] : [];
 
@@ -95,10 +104,20 @@ final readonly class CompetingGrabSweeper
                 continue;
             }
 
+            $recordDownloadId = trim((string) ($record['downloadId'] ?? ''));
+
             // Our own download, positively identified. Both sides are trimmed:
             // an accidental difference in padding must not be the reason we
             // delete the replacement's own download.
-            if (trim((string) ($record['downloadId'] ?? '')) === $ourDownloadId) {
+            if ($recordDownloadId === $ourDownloadId) {
+                continue;
+            }
+
+            // Another live replacement's own download. It is not a competitor,
+            // and removing it would strand that attempt waiting for an import
+            // that can no longer arrive. $siblingDownloadIds never contains a
+            // blank, so a row reporting no download id is not spared here.
+            if ($recordDownloadId !== '' && in_array($recordDownloadId, $siblingDownloadIds, true)) {
                 continue;
             }
 
@@ -152,35 +171,148 @@ final readonly class CompetingGrabSweeper
      */
     private function matchesTarget(array $record, array $target, bool $isRadarr): bool
     {
-        if ($isRadarr) {
-            $movieId = $this->positiveInt($target['movie_id'] ?? null);
+        return $this->overlaps(
+            $this->targetIdentity($target, $isRadarr),
+            $this->recordIdentity($record, $isRadarr),
+        );
+    }
 
-            return $movieId !== null && $this->positiveInt($record['movieId'] ?? null) === $movieId;
+    /**
+     * Reduce a stored attempt target to the pair the overlap rule compares: the
+     * parent media id, and the episode ids it covers (always empty for Radarr,
+     * which has no episode dimension).
+     *
+     * @param  array<string, mixed>  $target
+     * @return array{parentId: ?int, episodeIds: list<int>}
+     */
+    private function targetIdentity(array $target, bool $isRadarr): array
+    {
+        if ($isRadarr) {
+            return ['parentId' => $this->positiveInt($target['movie_id'] ?? null), 'episodeIds' => []];
         }
 
-        $seriesId = $this->positiveInt($target['series_id'] ?? null);
+        return [
+            'parentId' => $this->positiveInt($target['series_id'] ?? null),
+            'episodeIds' => $this->episodeIds($target['episode_ids'] ?? null),
+        ];
+    }
 
-        if ($seriesId === null || $this->positiveInt($record['seriesId'] ?? null) !== $seriesId) {
+    /**
+     * The same reduction for a download-queue row, whose field names and shape
+     * differ from a stored target's.
+     *
+     * @param  array<string, mixed>  $record
+     * @return array{parentId: ?int, episodeIds: list<int>}
+     */
+    private function recordIdentity(array $record, bool $isRadarr): array
+    {
+        if ($isRadarr) {
+            return ['parentId' => $this->positiveInt($record['movieId'] ?? null), 'episodeIds' => []];
+        }
+
+        return [
+            'parentId' => $this->positiveInt($record['seriesId'] ?? null),
+            'episodeIds' => $this->episodeIds([
+                $record['episodeId'] ?? null,
+                ...(is_array($record['episodeIds'] ?? null) ? $record['episodeIds'] : []),
+            ]),
+        ];
+    }
+
+    /**
+     * Whether two reduced identities refer to media this sweep should treat as
+     * the same thing. The single definition of that rule, shared by the
+     * queue-row match and the sibling-attempt keep set so the two can never
+     * drift apart.
+     *
+     * @param  array{parentId: ?int, episodeIds: list<int>}  $left
+     * @param  array{parentId: ?int, episodeIds: list<int>}  $right
+     */
+    private function overlaps(array $left, array $right): bool
+    {
+        if ($left['parentId'] === null || $left['parentId'] !== $right['parentId']) {
             return false;
         }
-
-        $targetEpisodeIds = $this->episodeIds($target['episode_ids'] ?? null);
-
-        $recordEpisodeIds = $this->episodeIds([
-            $record['episodeId'] ?? null,
-            ...(is_array($record['episodeIds'] ?? null) ? $record['episodeIds'] : []),
-        ]);
 
         // Sonarr's queue does carry a top-level episodeId per row, season packs
         // included, so this is the degenerate case: a target stored without
         // episode ids, or a row whose episode mapping is missing or unresolved.
-        // Series identity is then all we have, and a competing download for the
-        // series we are replacing into is worth removing.
-        if ($targetEpisodeIds === [] || $recordEpisodeIds === []) {
+        // Series identity is then all we have. Radarr always lands here, having
+        // no episode dimension at all.
+        if ($left['episodeIds'] === [] || $right['episodeIds'] === []) {
             return true;
         }
 
-        return array_intersect($targetEpisodeIds, $recordEpisodeIds) !== [];
+        return array_intersect($left['episodeIds'], $right['episodeIds']) !== [];
+    }
+
+    /**
+     * The download ids of every OTHER in-flight replacement attempt on this
+     * connection whose target overlaps ours. A queue row carrying one of these
+     * is another attempt's vetted release: it is not a competitor, and removing
+     * it — with removeFromClient: true — would strand that attempt waiting for
+     * an import that can no longer arrive.
+     *
+     * What the set covers and what it does not:
+     * - Only non-terminal siblings. A settled attempt is finished and nothing is
+     *   waiting on its download, so it earns no protection.
+     * - Only siblings that have actually recorded a download id. A blank one
+     *   contributes NOTHING rather than widening the set, which would otherwise
+     *   spare every row that reports no download id of its own and disarm the
+     *   sweep — the same match-all-on-a-missing-identifier failure the arming
+     *   invariant in run() exists to prevent.
+     * - Overlap uses overlaps(), the same rule the queue-row match uses, so a
+     *   sibling replacing a different episode of the same series does not spare
+     *   rows on ours.
+     * - It covers downloads THIS application started and recorded. It says
+     *   nothing about a download a user or another tool queued by hand: such a
+     *   row is indistinguishable from an arr auto-redownload here and is still
+     *   removed.
+     *
+     * @param  array<string, mixed>  $target
+     * @return list<string>
+     */
+    private function siblingDownloadIds(
+        ServiceConnection $serviceConnection,
+        MediaReplacementAttempt $mediaReplacementAttempt,
+        array $target,
+        bool $isRadarr,
+    ): array {
+        $identity = $this->targetIdentity($target, $isRadarr);
+
+        if ($identity['parentId'] === null) {
+            return [];
+        }
+
+        $siblings = MediaReplacementAttempt::query()
+            ->where('service_connection_id', $serviceConnection->id)
+            ->whereKeyNot($mediaReplacementAttempt->id)
+            ->whereNotIn('status', MediaReplacementStatus::terminalValues())
+            ->whereNotNull('download_id')
+            ->get();
+
+        $downloadIds = [];
+
+        foreach ($siblings as $sibling) {
+            $downloadId = $this->downloadId($sibling);
+
+            if ($downloadId === null) {
+                continue;
+            }
+
+            $siblingIdentity = $this->targetIdentity(
+                is_array($sibling->target) ? $sibling->target : [],
+                $isRadarr,
+            );
+
+            if (! $this->overlaps($identity, $siblingIdentity)) {
+                continue;
+            }
+
+            $downloadIds[$downloadId] = $downloadId;
+        }
+
+        return array_values($downloadIds);
     }
 
     /**
