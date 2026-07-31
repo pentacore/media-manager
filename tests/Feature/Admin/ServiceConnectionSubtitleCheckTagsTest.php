@@ -5,8 +5,10 @@ declare(strict_types=1);
 use App\Enums\UserRole;
 use App\Models\ServiceConnection;
 use App\Models\User;
+use Illuminate\Http\Client\RequestException;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
 use Inertia\Testing\AssertableInertia;
 
 beforeEach(function (): void {
@@ -28,6 +30,7 @@ test('the edit page exposes the arr tags and the configured selection', function
 
     // The junk rows are deliberate: the arr response is untrusted, and without
     // them a well-formed fixture would let the row filter be deleted unnoticed.
+    // The padded label is equally deliberate — see the trimming test below.
     Http::fake([
         'sonarr.local:8989/api/v3/tag' => Http::response([
             ['id' => 1, 'label' => 'sub-check'],
@@ -36,6 +39,7 @@ test('the edit page exposes the arr tags and the configured selection', function
             ['id' => 3, 'label' => '   '],
             ['id' => 4],
             ['id' => 2, 'label' => 'anime'],
+            ['id' => 5, 'label' => '  padded  '],
         ]),
         'sonarr.local:8989/api/v3/rootfolder' => Http::response([]),
     ]);
@@ -52,7 +56,35 @@ test('the edit page exposes the arr tags and the configured selection', function
                 ->where('arrTags', [
                     ['id' => 1, 'label' => 'sub-check'],
                     ['id' => 2, 'label' => 'anime'],
+                    ['id' => 5, 'label' => 'padded'],
                 ])));
+});
+
+// Labels are trimmed where they enter the app, not where they are compared. The
+// stored side is always trimmed (SubtitleCheckTagSettings, plus the framework's
+// TrimStrings on the posted value), so an untrimmed arrTags label would compare
+// unequal to its own stored form: the checkbox for a configured tag would render
+// unchecked, and the next save of any field on the page would drop it.
+test('an upstream label is trimmed before it reaches the picker', function (): void {
+    $connection = ServiceConnection::factory()->sonarr()->create([
+        'url' => 'http://sonarr.local:8989', 'api_key' => 'test', 'is_active' => true,
+        'settings' => ['subtitle_check_tags' => ['anime']],
+    ]);
+
+    Http::fake([
+        'sonarr.local:8989/api/v3/tag' => Http::response([
+            ['id' => 1, 'label' => "  anime\t"],
+        ]),
+        'sonarr.local:8989/api/v3/rootfolder' => Http::response([]),
+    ]);
+
+    $this->actingAs($this->admin)
+        ->get(route('admin.connections.edit', $connection))
+        ->assertInertia(fn (AssertableInertia $page): AssertableInertia => $page
+            // Same string on both sides, so `includes()` in the picker matches.
+            ->where('subtitleCheckTags', ['anime'])
+            ->loadDeferredProps(fn (AssertableInertia $page): AssertableInertia => $page
+                ->where('arrTags', [['id' => 1, 'label' => 'anime']])));
 });
 
 test('the arr tags prop is deferred rather than resolved during the initial render', function (): void {
@@ -109,6 +141,33 @@ test('the edit page reports tags as unavailable for an inactive arr connection',
                 ->where('arrTags', null)));
 
     Http::assertNothingSent();
+});
+
+// Without this the null return is the only trace of a failure anywhere, and the
+// UI's "check the URL and API key" copy is left naming the wrong two causes for
+// a 401, a 500 or a TLS error. The sibling loaders on this page log identically.
+test('a failed tag lookup leaves a warning in the log', function (): void {
+    Log::spy();
+
+    $connection = ServiceConnection::factory()->sonarr()->create([
+        'url' => 'http://sonarr.local:8989', 'api_key' => 'test', 'is_active' => true,
+    ]);
+
+    Http::fake([
+        'sonarr.local:8989/api/v3/tag' => Http::response(status: 500),
+        'sonarr.local:8989/api/v3/rootfolder' => Http::response([]),
+    ]);
+
+    $this->actingAs($this->admin)
+        ->get(route('admin.connections.edit', $connection))
+        ->assertInertia(fn (AssertableInertia $page): AssertableInertia => $page
+            ->loadDeferredProps(fn (AssertableInertia $page): AssertableInertia => $page
+                ->where('arrTags', null)));
+
+    Log::shouldHaveReceived('warning')
+        ->withArgs(fn (string $message, array $context): bool => $message === 'Failed to load arr tags for connection edit page'
+            && $context['connection_id'] === $connection->id
+            && $context['exception'] === RequestException::class);
 });
 
 test('updating a connection persists the selected tags', function (): void {

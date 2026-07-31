@@ -119,6 +119,11 @@ class ServiceConnectionController extends Controller
      * apart from "unavailable" (null). Rows the instance reports without a
      * usable int id and a non-blank label are dropped.
      *
+     * Labels are trimmed here, where they enter the app. The stored side is
+     * always trimmed, so an untrimmed label would compare unequal to its own
+     * stored form and render a configured tag as unchecked — which the next
+     * save would then persist as a deselection.
+     *
      * Caller must restrict this to Sonarr and Radarr connections; edit() owns
      * that check, because it also decides whether to defer the prop at all.
      *
@@ -134,21 +139,22 @@ class ServiceConnectionController extends Controller
             $tags = $serviceConnection->type === ServiceType::Sonarr
                 ? new SonarrClient($serviceConnection)->getTags()
                 : new RadarrClient($serviceConnection)->getTags();
-        } catch (Throwable) {
+        } catch (Throwable $throwable) {
+            Log::warning('Failed to load arr tags for connection edit page', [
+                'connection_id' => $serviceConnection->id,
+                'exception' => $throwable::class,
+            ]);
+
             return null;
         }
 
         $labels = [];
 
         foreach ($tags as $tag) {
-            if (! is_array($tag)) {
-                continue;
-            }
-
             $id = $tag['id'] ?? null;
-            $label = $tag['label'] ?? null;
+            $label = is_string($tag['label'] ?? null) ? trim($tag['label']) : null;
 
-            if (! is_int($id) || ! is_string($label) || trim($label) === '') {
+            if (! is_int($id) || $label === null || $label === '') {
                 continue;
             }
 
@@ -371,9 +377,7 @@ class ServiceConnectionController extends Controller
         }
 
         if (is_array($subtitleCheckTags) && in_array($serviceConnection->type, [ServiceType::Sonarr, ServiceType::Radarr], true)) {
-            $existingSettings = is_array($validated['settings'] ?? null)
-                ? $validated['settings']
-                : (is_array($serviceConnection->settings) ? $serviceConnection->settings : []);
+            $existingSettings = $validated['settings'] ?? $serviceConnection->settings ?? [];
             $validated['settings'] = $subtitleCheckTagSettings->mergeInto($existingSettings, $subtitleCheckTags);
         }
 

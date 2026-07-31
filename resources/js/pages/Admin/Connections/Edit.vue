@@ -903,8 +903,9 @@ function testIndexer(indexerId: number): void {
                             class="rounded-md border border-border bg-bg-elev px-3 py-2 text-sm text-muted-foreground"
                             data-testid="subtitle-check-tags-unavailable"
                         >
-                            Tags could not be loaded. Save a working URL and API
-                            key, then revisit this connection.
+                            Tags could not be loaded. Check that this connection
+                            is enabled and that its URL and API key are correct,
+                            then revisit this page.
                         </div>
                         <div
                             v-else-if="arrTags.length === 0"
