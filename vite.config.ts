@@ -41,4 +41,12 @@ export default defineConfig({
         }),
         typefinder(skipTypeGeneration ? { buildCommand: false } : {}),
     ],
+    // Vite externalises every runtime dependency from the SSR build by default, leaving bare
+    // `import ... from "vue"` specifiers that need node_modules on disk to resolve. The production
+    // image deletes node_modules after `npm run build` and ships only the `node` binary, so those
+    // imports would fail at boot with ERR_MODULE_NOT_FOUND. Inline them to keep bootstrap/ssr
+    // self-contained.
+    ssr: {
+        noExternal: true,
+    },
 });
