@@ -45,6 +45,7 @@ final readonly class MediaReplacementTracker
     public function __construct(
         private MediaFileInspector $mediaFileInspector,
         private LanguageNormalizer $languageNormalizer,
+        private CompetingGrabSweeper $competingGrabSweeper,
     ) {}
 
     /**
@@ -60,13 +61,31 @@ final readonly class MediaReplacementTracker
                 return;
             }
 
-            $matches = $this->nonTerminalAttempts($serviceConnection)->filter(
-                fn (MediaReplacementAttempt $mediaReplacementAttempt): bool => $this->attemptTargetId($mediaReplacementAttempt) === $targetId
-                    && $this->normalizeTitle((string) ($mediaReplacementAttempt->candidate['title'] ?? '')) === $this->normalizeTitle($title),
+            $onTarget = $this->nonTerminalAttempts($serviceConnection)->filter(
+                fn (MediaReplacementAttempt $mediaReplacementAttempt): bool => $this->attemptTargetId($mediaReplacementAttempt) === $targetId,
+            );
+
+            $matches = $onTarget->filter(
+                fn (MediaReplacementAttempt $mediaReplacementAttempt): bool => $this->normalizeTitle((string) ($mediaReplacementAttempt->candidate['title'] ?? '')) === $this->normalizeTitle($title),
             );
 
             if ($matches->count() === 1) {
-                $matches->first()->update(['download_id' => $this->downloadId($payload)]);
+                $downloadId = $this->downloadId($payload);
+
+                // Never write a null over an id an earlier delivery recorded.
+                // The stored id is the only thing that arms
+                // CompetingGrabSweeper, so clearing it would silently disarm
+                // this attempt's remaining sweeps — including the delayed
+                // passes — for the rest of its life.
+                if ($downloadId !== null) {
+                    $matches->first()->update(['download_id' => $downloadId]);
+                }
+
+                return;
+            }
+
+            if ($matches->isEmpty()) {
+                $this->sweepCompetingGrab($serviceConnection, $onTarget);
 
                 return;
             }
@@ -423,6 +442,38 @@ final readonly class MediaReplacementTracker
                 'warning',
                 'Replacement webhook correlation was ambiguous and needs manual review.',
             );
+        }
+    }
+
+    /**
+     * A grab landed on a target we are actively replacing, for a release that no
+     * attempt on that target vetted. The expected source is the arr's own
+     * auto-redownload search — blocklisting the old release makes the arr queue
+     * one — but the webhook does not say who asked for the grab, so this claims
+     * nothing about the requester. What it acts on is narrower and observable: a
+     * second download for this target is starting while a vetted replacement is
+     * still in flight, and the two would run in parallel.
+     *
+     * Only attempts whose own grab the arr has already accepted (grab_accepted_at)
+     * may sweep. Before that, a title mismatch could still be our own release
+     * under a name the indexer reported differently.
+     *
+     * The sweep is additionally armed only by the attempt's recorded download_id
+     * — see CompetingGrabSweeper — so a competitor grabbed before our own Grab
+     * webhook landed removes nothing here and is left to SweepCompetingGrabs'
+     * delayed passes. sweep() never throws and logs its own failures, so there is
+     * no result to inspect.
+     *
+     * @param  Collection<int, MediaReplacementAttempt>  $onTarget
+     */
+    private function sweepCompetingGrab(ServiceConnection $serviceConnection, Collection $onTarget): void
+    {
+        $accepted = $onTarget->filter(
+            static fn (MediaReplacementAttempt $mediaReplacementAttempt): bool => $mediaReplacementAttempt->grab_accepted_at !== null,
+        );
+
+        foreach ($accepted as $attempt) {
+            $this->competingGrabSweeper->sweep($serviceConnection, $attempt);
         }
     }
 

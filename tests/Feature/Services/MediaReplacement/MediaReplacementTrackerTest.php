@@ -450,6 +450,161 @@ test('finalizeAfterCleanup reports needs_attention when the restore fails', func
         ->and($mediaReplacementAttempt->failure_reason)->toBe('restore_monitoring_failed');
 });
 
+/**
+ * A queue holding one competing row on our target. Every competing-grab test
+ * below fakes it — including the negatives: CompetingGrabSweeper::sweep()
+ * swallows Throwable, so an unfaked negative would turn a wrongly-run sweep
+ * into a silent stray-request no-op and assert nothing.
+ */
+function fakeTrackerCompetingQueue(): void
+{
+    Http::fake([
+        'sonarr.local:8989/api/v3/queue*' => Http::response(['records' => [
+            ['id' => 920, 'seriesId' => 42, 'episodeId' => 101, 'downloadId' => 'DL-RACE', 'title' => 'Competing.Release'],
+        ]]),
+        'sonarr.local:8989/api/v3/queue/*' => Http::response([], 200),
+    ]);
+}
+
+test('a grab for our target with a different release is swept as a competing grab', function (): void {
+    $mediaReplacementAttempt = trackerAttempt($this->connection->id, [
+        'status' => MediaReplacementStatus::Downloading,
+        'grab_accepted_at' => now(),
+        'download_id' => 'DL-OURS',
+    ]);
+
+    fakeTrackerCompetingQueue();
+
+    resolve(MediaReplacementTracker::class)->recordGrab($this->connection, grabPayload([
+        'release' => ['releaseTitle' => 'Competing.Release'],
+        'downloadId' => 'DL-RACE',
+    ]));
+
+    Http::assertSent(fn (Request $request): bool => $request->method() === 'DELETE'
+        && str_contains($request->url(), '/api/v3/queue/920')
+        && str_contains($request->url(), 'skipRedownload=true'));
+
+    // The attempt itself is untouched: its own download is still in flight.
+    $mediaReplacementAttempt->refresh();
+
+    expect($mediaReplacementAttempt->status)->toBe(MediaReplacementStatus::Downloading)
+        ->and($mediaReplacementAttempt->download_id)->toBe('DL-OURS');
+});
+
+test('a matching grab still correlates and records the download id', function (): void {
+    $mediaReplacementAttempt = trackerAttempt($this->connection->id, [
+        'status' => MediaReplacementStatus::Downloading,
+    ]);
+
+    fakeTrackerCompetingQueue();
+
+    resolve(MediaReplacementTracker::class)->recordGrab($this->connection, grabPayload());
+
+    $mediaReplacementAttempt->refresh();
+
+    expect($mediaReplacementAttempt->download_id)->toBe('DL-1');
+    Http::assertNotSent(fn (Request $request): bool => $request->method() === 'DELETE');
+});
+
+test('a grab for an unrelated target is ignored without sweeping', function (): void {
+    // Armed (download_id + grab_accepted_at) and a competing row is in the
+    // queue, so only the target filter stands between this grab and a DELETE.
+    trackerAttempt($this->connection->id, [
+        'status' => MediaReplacementStatus::Downloading,
+        'grab_accepted_at' => now(),
+        'download_id' => 'DL-OURS',
+    ]);
+
+    fakeTrackerCompetingQueue();
+
+    resolve(MediaReplacementTracker::class)->recordGrab($this->connection, grabPayload([
+        'series' => ['id' => 99, 'title' => 'Unrelated'],
+        'release' => ['releaseTitle' => 'Unrelated.S01E01'],
+    ]));
+
+    Http::assertNotSent(fn (Request $request): bool => $request->method() === 'DELETE');
+});
+
+test('a grab before our own is accepted is not treated as competing', function (): void {
+    // grab_accepted_at null means we have not yet confirmed our own grab, so a
+    // title mismatch here could be our own release under a different name.
+    // download_id IS set: the Grab webhook records it, and it can land before
+    // the executor writes grab_accepted_at — the exact window this gate covers,
+    // and the one in which the sweeper would otherwise already be armed.
+    trackerAttempt($this->connection->id, [
+        'status' => MediaReplacementStatus::Downloading,
+        'grab_accepted_at' => null,
+        'download_id' => 'DL-OURS',
+    ]);
+
+    fakeTrackerCompetingQueue();
+
+    resolve(MediaReplacementTracker::class)->recordGrab($this->connection, grabPayload([
+        'release' => ['releaseTitle' => 'Something.Else'],
+    ]));
+
+    Http::assertNotSent(fn (Request $request): bool => $request->method() === 'DELETE');
+});
+
+test('a grab with no download id still sweeps a competing release off our target', function (): void {
+    // downloadId is absent, so there is nothing to correlate or record — but the
+    // release title still says this grab is not ours, and the attempt's own
+    // recorded download id is what arms the sweep, not the payload's.
+    $mediaReplacementAttempt = trackerAttempt($this->connection->id, [
+        'status' => MediaReplacementStatus::Downloading,
+        'grab_accepted_at' => now(),
+        'download_id' => 'DL-OURS',
+    ]);
+
+    fakeTrackerCompetingQueue();
+
+    $payload = grabPayload(['release' => ['releaseTitle' => 'Competing.Release']]);
+    unset($payload['downloadId']);
+
+    resolve(MediaReplacementTracker::class)->recordGrab($this->connection, $payload);
+
+    Http::assertSent(fn (Request $request): bool => $request->method() === 'DELETE'
+        && str_contains($request->url(), '/api/v3/queue/920'));
+
+    expect($mediaReplacementAttempt->fresh()->download_id)->toBe('DL-OURS');
+});
+
+test('a matching grab without a download id does not clear the id already recorded', function (): void {
+    // The stored download id is the only thing that arms the competing-grab
+    // sweep. A redelivered/malformed Grab webhook must not disarm every later
+    // pass by blanking it.
+    $mediaReplacementAttempt = trackerAttempt($this->connection->id, [
+        'status' => MediaReplacementStatus::Downloading,
+        'download_id' => 'DL-OURS',
+    ]);
+
+    $payload = grabPayload();
+    unset($payload['downloadId']);
+
+    resolve(MediaReplacementTracker::class)->recordGrab($this->connection, $payload);
+
+    expect($mediaReplacementAttempt->fresh()->download_id)->toBe('DL-OURS');
+});
+
+test('a grab with no release title is a no-op rather than a sweep', function (): void {
+    // Without a title there is no evidence the grab is not ours, and the sweep
+    // removes what it cannot identify — so an untitled payload must do nothing.
+    trackerAttempt($this->connection->id, [
+        'status' => MediaReplacementStatus::Downloading,
+        'grab_accepted_at' => now(),
+        'download_id' => 'DL-OURS',
+    ]);
+
+    fakeTrackerCompetingQueue();
+
+    resolve(MediaReplacementTracker::class)->recordGrab($this->connection, grabPayload([
+        'release' => [],
+        'downloadId' => 'DL-RACE',
+    ]));
+
+    Http::assertNotSent(fn (Request $request): bool => $request->method() === 'DELETE');
+});
+
 test('a padded webhook download id is stored trimmed so it can be compared', function (): void {
     // The stored id is what the competing-grab sweep is armed with and what it
     // compares against the queue's own ids. Storing " DL-1 " would arm a sweep
