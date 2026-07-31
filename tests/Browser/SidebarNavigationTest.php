@@ -141,22 +141,16 @@ test('an opened sub-group stays open across a navigation', function (): void {
         // configured, so nothing was ever navigated. `Activity log` needs no
         // connection.
         //
-        // The hover() is the synchronisation point, and it is load-bearing.
-        // Nothing else in this plugin's fluent API polls: assertSee() is
-        // getByText()->all() plus an isVisible() loop over whatever exists at
-        // that instant, assertPathIs() reads page->url() once, and
-        // waitForEvent('networkidle') is a no-op for an Inertia visit — it
-        // forwards to Playwright's waitForLoadState(), and `networkidle` is
-        // never un-fired for a same-document pushState navigation (measured:
-        // returns in 0.0ms with the URL still /dashboard). hover() routes to
-        // Locator::hover(), which does use Playwright's actionability waiter,
-        // and `h1:has-text("Activity log")` exists only on the destination page.
-        // Measured: click() returns with the URL still /dashboard, then hover()
-        // blocks ~135ms and the URL is /activity-log once it returns.
+        // No explicit wait is needed after the click even though click() returns
+        // before the Inertia visit lands. visit() hands back an
+        // AwaitableWebpage, whose __call wraps every method in
+        // Execution::waitForExpectation() — a retry loop budgeted by
+        // Playwright::timeout(), which tests/Pest.php sets to 30_000ms. So the
+        // assertions below poll rather than sampling once, and
+        // `Append-only audit feed` exists only on the destination page.
         ->click('[data-sidebar="content"] a:has-text("Activity log")')
-        ->hover('h1:has-text("Activity log")')
-        ->assertPathIs('/activity-log')
         ->assertSee('Append-only audit feed')
+        ->assertPathIs('/activity-log')
         // Scoped: the activity-log page renders webhook-derived rows, so an
         // unscoped assertion here would not be reading the sidebar.
         ->assertSeeIn('[data-sidebar="content"]', 'Webhook Log');
