@@ -460,9 +460,12 @@ final readonly class MediaReplacementTracker
      *
      * The sweep is additionally armed only by the attempt's recorded download_id
      * — see CompetingGrabSweeper — so a competitor grabbed before our own Grab
-     * webhook landed removes nothing here and is left to SweepCompetingGrabs'
-     * delayed passes. sweep() never throws and logs its own failures, so there is
-     * no result to inspect.
+     * webhook landed removes nothing here. SweepCompetingGrabs' delayed passes
+     * cover that gap only where the executor armed them, which is where the
+     * blocklist succeeded (MediaReplacementActions guards queueFor on it): where
+     * it was declined, nothing cleans such a competitor up and the reconciliation
+     * command is the only remaining backstop for the attempt itself. sweep()
+     * never throws and logs its own failures, so there is no result to inspect.
      *
      * @param  Collection<int, MediaReplacementAttempt>  $onTarget
      */

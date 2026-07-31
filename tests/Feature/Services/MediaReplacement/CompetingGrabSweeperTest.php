@@ -319,32 +319,113 @@ test('a sibling attempt with a blank download id spares nothing', function (): v
         && str_contains($request->url(), '/api/v3/queue/934'));
 });
 
-test('a sibling attempt on a different episode of the same series spares nothing', function (): void {
+test("it spares a sibling's batch pack even on the row sonarr attributes to our episode", function (): void {
     $mediaReplacementAttempt = sweeperAttempt($this->connection->id, ['download_id' => 'DL-OURS']);
 
+    // A live sibling replacing episode 9 of the same series, which grabbed a
+    // batch/season pack.
     sweeperAttempt($this->connection->id, [
         'target' => [
             'service' => 'sonarr', 'scope' => 'anime', 'series_id' => 42,
             'episode_ids' => [999], 'episode_file_ids' => [599],
         ],
-        'download_id' => 'DL-EP9',
-        'candidate' => ['title' => 'Trusted.Anime.S01E09.CR', 'fingerprint' => 'fp2'],
+        'download_id' => 'DL-PACK',
+        'candidate' => ['title' => 'Trusted.Anime.S01.Batch.CR', 'fingerprint' => 'fp2'],
     ]);
 
-    // The id collision is constructed: it puts the other attempt's download id
-    // on a row for OUR episode, which is the only way to tell an episode-precise
-    // keep set apart from a series-wide one. A series-wide set would spare this
-    // row even though the attempt vouching for it is replacing a different
-    // episode entirely.
+    // How Sonarr actually represents that pack: ONE row per contained episode,
+    // every row sharing the pack's single downloadId. The row below is the one
+    // Sonarr attributes to OUR episode — it matches our target, is not our
+    // download id, and does not carry our vetted title, so nothing but the
+    // sibling keep set can save it. Removing it takes the whole pack with it
+    // (removeFromClient: true) and strands the sibling.
     fakeSweeperQueue([
-        ['id' => 935, 'seriesId' => 42, 'episodeId' => 101, 'downloadId' => 'DL-EP9', 'title' => 'Competing.Release'],
+        ['id' => 935, 'seriesId' => 42, 'episodeId' => 101, 'downloadId' => 'DL-PACK', 'title' => 'Trusted.Anime.S01.Batch.CR'],
+    ]);
+
+    $removed = resolve(CompetingGrabSweeper::class)->sweep($this->connection, $mediaReplacementAttempt);
+
+    expect($removed)->toBe(0);
+    Http::assertNotSent(fn (Request $request): bool => $request->method() === 'DELETE');
+});
+
+test('it falls back to series identity when the target stored no episode ids', function (): void {
+    // Degenerate branch of the shared overlap rule: with no episode ids on our
+    // side, series identity is all there is to go on, and a competing download
+    // for the series we are replacing into is worth removing.
+    $mediaReplacementAttempt = sweeperAttempt($this->connection->id, [
+        'target' => ['service' => 'sonarr', 'scope' => 'anime', 'series_id' => 42, 'episode_file_ids' => [501]],
+        'download_id' => 'DL-OURS',
+    ]);
+
+    fakeSweeperQueue([
+        ['id' => 940, 'seriesId' => 42, 'episodeId' => 777, 'downloadId' => 'DL-OTHER', 'title' => 'Random.Anime.S01E07.OTHER'],
     ]);
 
     $removed = resolve(CompetingGrabSweeper::class)->sweep($this->connection, $mediaReplacementAttempt);
 
     expect($removed)->toBe(1);
     Http::assertSent(fn (Request $request): bool => $request->method() === 'DELETE'
-        && str_contains($request->url(), '/api/v3/queue/935'));
+        && str_contains($request->url(), '/api/v3/queue/940'));
+});
+
+test('it falls back to series identity when a queue row has no resolvable episode', function (): void {
+    // The other side of the same degenerate branch: a row whose episode mapping
+    // is missing or unresolved (episodeId 0 is Sonarr's unmapped value).
+    $mediaReplacementAttempt = sweeperAttempt($this->connection->id, ['download_id' => 'DL-OURS']);
+
+    fakeSweeperQueue([
+        ['id' => 941, 'seriesId' => 42, 'episodeId' => 0, 'downloadId' => 'DL-OTHER', 'title' => 'Random.Anime.Unmapped'],
+    ]);
+
+    $removed = resolve(CompetingGrabSweeper::class)->sweep($this->connection, $mediaReplacementAttempt);
+
+    expect($removed)->toBe(1);
+    Http::assertSent(fn (Request $request): bool => $request->method() === 'DELETE'
+        && str_contains($request->url(), '/api/v3/queue/941'));
+});
+
+test('a target with no series id matches nothing and removes nothing', function (): void {
+    // The null-parent bail in the shared rule. Without a parent id there is no
+    // identity to match on, and matching everything would be catastrophic.
+    $mediaReplacementAttempt = sweeperAttempt($this->connection->id, [
+        'target' => ['service' => 'sonarr', 'scope' => 'anime', 'episode_ids' => [101]],
+        'download_id' => 'DL-OURS',
+    ]);
+
+    // Row 943 is the one that actually needs the null bail: an unidentifiable
+    // row against an unidentifiable target compares null to null, so only the
+    // explicit bail stops "neither has an id" from reading as a match. Row 942
+    // would be spared by the id comparison alone.
+    fakeSweeperQueue([
+        ['id' => 942, 'seriesId' => 42, 'episodeId' => 101, 'downloadId' => 'DL-OTHER', 'title' => 'Random.Anime.S01E01.OTHER'],
+        ['id' => 943, 'downloadId' => 'DL-NO-SERIES', 'title' => 'Unidentifiable.Row'],
+    ]);
+
+    $removed = resolve(CompetingGrabSweeper::class)->sweep($this->connection, $mediaReplacementAttempt);
+
+    expect($removed)->toBe(0);
+    Http::assertNotSent(fn (Request $request): bool => $request->method() === 'DELETE');
+});
+
+test('a legacy target with no service field is read using the connection type', function (): void {
+    // The fallback in targetIdentity(). Rows still have to match, so the target
+    // must be reduced to the sonarr shape on the strength of the connection
+    // alone.
+    $mediaReplacementAttempt = sweeperAttempt($this->connection->id, [
+        'target' => ['scope' => 'anime', 'series_id' => 42, 'episode_ids' => [101]],
+        'download_id' => 'DL-OURS',
+    ]);
+
+    fakeSweeperQueue([
+        ['id' => 944, 'seriesId' => 42, 'episodeId' => 101, 'downloadId' => 'DL-OTHER', 'title' => 'Random.Anime.S01E01.OTHER'],
+    ]);
+
+    $removed = resolve(CompetingGrabSweeper::class)->sweep($this->connection, $mediaReplacementAttempt);
+
+    expect($removed)->toBe(1);
+    Http::assertSent(fn (Request $request): bool => $request->method() === 'DELETE'
+        && str_contains($request->url(), '/api/v3/queue/944'));
 });
 
 test('it matches a radarr queue item by movie id', function (): void {

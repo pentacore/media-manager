@@ -31,11 +31,10 @@ use Throwable;
  * the guard in run() for why. A missing download id therefore means no sweep at
  * all, and the competing download is left for a later pass to clean up.
  *
- * "Not the release this attempt vetted" is not the same as "not ours". A second
- * replacement attempt can be in flight on an overlapping target, and its
- * download is another vetted release, not a competitor — see
- * siblingDownloadIds() for the keep set that protects it and for the limits of
- * what that set can know.
+ * "Not the release this attempt vetted" is not the same as "not ours". Another
+ * replacement can be in flight on the same connection, and its download is
+ * another vetted release, not a competitor — see siblingDownloadIds() for the
+ * keep set that protects it and for the limits of what that set can know.
  */
 final readonly class CompetingGrabSweeper
 {
@@ -82,7 +81,9 @@ final readonly class CompetingGrabSweeper
         $isRadarr = $serviceConnection->type === ServiceType::Radarr;
         $client = $isRadarr ? new RadarrClient($serviceConnection) : new SonarrClient($serviceConnection);
 
-        $siblingDownloadIds = $this->siblingDownloadIds($serviceConnection, $mediaReplacementAttempt, $target, $isRadarr);
+        // Reduce our target once, not once per queue row.
+        $targetIdentity = $this->targetIdentity($target, $isRadarr);
+        $siblingDownloadIds = $this->siblingDownloadIds($serviceConnection, $mediaReplacementAttempt);
 
         $queue = $client->getQueue(['pageSize' => 200]);
         $records = is_array($queue['records'] ?? null) ? $queue['records'] : [];
@@ -100,7 +101,7 @@ final readonly class CompetingGrabSweeper
                 continue;
             }
 
-            if (! $this->matchesTarget($record, $target, $isRadarr)) {
+            if (! $this->overlaps($targetIdentity, $this->recordIdentity($record, $isRadarr))) {
                 continue;
             }
 
@@ -166,27 +167,24 @@ final readonly class CompetingGrabSweeper
     }
 
     /**
-     * @param  array<string, mixed>  $record
-     * @param  array<string, mixed>  $target
-     */
-    private function matchesTarget(array $record, array $target, bool $isRadarr): bool
-    {
-        return $this->overlaps(
-            $this->targetIdentity($target, $isRadarr),
-            $this->recordIdentity($record, $isRadarr),
-        );
-    }
-
-    /**
      * Reduce a stored attempt target to the pair the overlap rule compares: the
      * parent media id, and the episode ids it covers (always empty for Radarr,
      * which has no episode dimension).
      *
+     * Which shape to read is decided from the target's OWN `service` field, the
+     * way MediaReplacementTracker::attemptTargetId() decides it, so the two rules
+     * can never disagree about the same stored target. The connection's type is
+     * the fallback, because it is the only signal a legacy target without a
+     * `service` field carries.
+     *
      * @param  array<string, mixed>  $target
      * @return array{parentId: ?int, episodeIds: list<int>}
      */
-    private function targetIdentity(array $target, bool $isRadarr): array
+    private function targetIdentity(array $target, bool $connectionIsRadarr): array
     {
+        $service = mb_strtolower(trim((string) ($target['service'] ?? '')));
+        $isRadarr = $service === '' ? $connectionIsRadarr : $service === 'radarr';
+
         if ($isRadarr) {
             return ['parentId' => $this->positiveInt($target['movie_id'] ?? null), 'episodeIds' => []];
         }
@@ -221,9 +219,9 @@ final readonly class CompetingGrabSweeper
 
     /**
      * Whether two reduced identities refer to media this sweep should treat as
-     * the same thing. The single definition of that rule, shared by the
-     * queue-row match and the sibling-attempt keep set so the two can never
-     * drift apart.
+     * the same thing. The single definition of that rule; `left` is our target
+     * and `right` a queue row, and the null-parent bail is asymmetric because a
+     * target we cannot identify must match nothing rather than everything.
      *
      * @param  array{parentId: ?int, episodeIds: list<int>}  $left
      * @param  array{parentId: ?int, episodeIds: list<int>}  $right
@@ -248,10 +246,20 @@ final readonly class CompetingGrabSweeper
 
     /**
      * The download ids of every OTHER in-flight replacement attempt on this
-     * connection whose target overlaps ours. A queue row carrying one of these
-     * is another attempt's vetted release: it is not a competitor, and removing
-     * it — with removeFromClient: true — would strand that attempt waiting for
-     * an import that can no longer arrive.
+     * connection. A queue row carrying one of these is another attempt's vetted
+     * release: it is not a competitor, and removing it — with
+     * removeFromClient: true — would strand that attempt waiting for an import
+     * that can no longer arrive.
+     *
+     * Deliberately NOT narrowed by target overlap, and that is safe in one
+     * direction only. The set holds download IDS, and a download id names one
+     * download in the client, so only the sibling's own queue rows can ever
+     * carry it — a genuine competitor cannot match this set however wide it
+     * gets. Narrowing, by contrast, strands siblings: a batch/season pack shows
+     * up as one row per contained episode all sharing the pack's single
+     * download id, so an episode-precise set would fail to protect the row
+     * Sonarr attributes to OUR episode and removing it would take the whole
+     * pack. There is no over-spare risk to trade against.
      *
      * What the set covers and what it does not:
      * - Only non-terminal siblings. A settled attempt is finished and nothing is
@@ -261,29 +269,17 @@ final readonly class CompetingGrabSweeper
      *   spare every row that reports no download id of its own and disarm the
      *   sweep — the same match-all-on-a-missing-identifier failure the arming
      *   invariant in run() exists to prevent.
-     * - Overlap uses overlaps(), the same rule the queue-row match uses, so a
-     *   sibling replacing a different episode of the same series does not spare
-     *   rows on ours.
      * - It covers downloads THIS application started and recorded. It says
      *   nothing about a download a user or another tool queued by hand: such a
      *   row is indistinguishable from an arr auto-redownload here and is still
      *   removed.
      *
-     * @param  array<string, mixed>  $target
      * @return list<string>
      */
     private function siblingDownloadIds(
         ServiceConnection $serviceConnection,
         MediaReplacementAttempt $mediaReplacementAttempt,
-        array $target,
-        bool $isRadarr,
     ): array {
-        $identity = $this->targetIdentity($target, $isRadarr);
-
-        if ($identity['parentId'] === null) {
-            return [];
-        }
-
         $siblings = MediaReplacementAttempt::query()
             ->where('service_connection_id', $serviceConnection->id)
             ->whereKeyNot($mediaReplacementAttempt->id)
@@ -294,18 +290,11 @@ final readonly class CompetingGrabSweeper
         $downloadIds = [];
 
         foreach ($siblings as $sibling) {
+            // Reuses the one definition of "a blank download id is unknown",
+            // rather than trusting whereNotNull to have caught every empty form.
             $downloadId = $this->downloadId($sibling);
 
             if ($downloadId === null) {
-                continue;
-            }
-
-            $siblingIdentity = $this->targetIdentity(
-                is_array($sibling->target) ? $sibling->target : [],
-                $isRadarr,
-            );
-
-            if (! $this->overlaps($identity, $siblingIdentity)) {
                 continue;
             }
 

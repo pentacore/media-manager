@@ -569,6 +569,35 @@ test('a grab with no download id still sweeps a competing release off our target
     expect($mediaReplacementAttempt->fresh()->download_id)->toBe('DL-OURS');
 });
 
+test('a grab elsewhere in the same series sweeps but removes nothing off our episode', function (): void {
+    // targetId() is series-level, so a grab anywhere in series 42 correlates to
+    // our attempt and fires the sweep. That is deliberate — the sweep, not the
+    // correlation, is what decides which rows belong to our target — so this
+    // pins both halves: the sweep really runs, and it spares the other episode.
+    trackerAttempt($this->connection->id, [
+        'status' => MediaReplacementStatus::Downloading,
+        'grab_accepted_at' => now(),
+        'download_id' => 'DL-OURS',
+    ]);
+
+    Http::fake([
+        'sonarr.local:8989/api/v3/queue*' => Http::response(['records' => [
+            ['id' => 950, 'seriesId' => 42, 'episodeId' => 999, 'downloadId' => 'DL-EP9', 'title' => 'Trusted.Anime.S01E09.OTHER'],
+        ]]),
+        'sonarr.local:8989/api/v3/queue/*' => Http::response([], 200),
+    ]);
+
+    resolve(MediaReplacementTracker::class)->recordGrab($this->connection, grabPayload([
+        'episodes' => [['seasonNumber' => 1, 'episodeNumber' => 9]],
+        'release' => ['releaseTitle' => 'Trusted.Anime.S01E09.OTHER'],
+        'downloadId' => 'DL-EP9',
+    ]));
+
+    Http::assertSent(fn (Request $request): bool => $request->method() === 'GET'
+        && str_contains($request->url(), '/api/v3/queue?'));
+    Http::assertNotSent(fn (Request $request): bool => $request->method() === 'DELETE');
+});
+
 test('a matching grab without a download id does not clear the id already recorded', function (): void {
     // The stored download id is the only thing that arms the competing-grab
     // sweep. A redelivered/malformed Grab webhook must not disarm every later
