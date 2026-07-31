@@ -478,10 +478,12 @@ test('a resume re-asserts the suspension before blocklisting instead of trusting
     $actionRequest = replaceActionRequest();
 
     // Prior run left monitoring_suspended=false on a monitored target. That flag is
-    // NOT trustworthy at resume time: the reconciliation repair pass restores
-    // monitoring on settled attempts, keyed on the attempt's original start time,
-    // which a resume never rewrites — so a days-old row can be repaired while its
-    // retry is live. Blocklisting on the strength of the stored flag would either
+    // NOT trustworthy at resume time: it has been sitting in the database since the run
+    // that died, and the reconciliation repair pass restores monitoring on settled
+    // attempts. A resume does rewrite started_at to now, which excludes a repair pass
+    // that reads the row after that write — but one already holding an earlier read can
+    // still issue its monitor PUT afterwards, so the flag can be stale in either
+    // direction. Blocklisting on the strength of the stored flag would either
     // needlessly decline (as it used to) or, worse, blocklist a target something
     // else has remonitored. The resume re-issues the unmonitor and decides from
     // that, so failure_reason plays no part in the decision at all.
@@ -662,6 +664,54 @@ test('a retry does not discard a suspension an earlier run failed to restore', f
     expect($result['blocklist_warning'])->toContain('monitoring could not be suspended')
         ->and(MediaReplacementAttempt::query()->where('action_request_id', $actionRequest->id)->sole()->monitoring_suspended)
         ->toBeTrue();
+});
+
+test('the retry reset itself writes the inherited suspension, before any unmonitor result exists', function (): void {
+    // The reset inside updateOrCreate is load-bearing on its own: it protects a crash
+    // BETWEEN that write and the unmonitor PUT that follows it. In that interval the
+    // persisted row is the ONLY record of the obligation — $owedRestore lives in a
+    // dead process's memory, and nothing has written monitoring_suspended a second
+    // time yet.
+    //
+    // The sibling test above cannot pin this. It only inspects the row after the run,
+    // by which point the post-unmonitor write has recomputed the flag from
+    // $owedRestore — read off the pre-reset row, so it survives the reset regressing
+    // to an unconditional null. So observe the row at exactly the vulnerable instant
+    // instead: from inside the fake serving the unmonitor PUT, which runs after
+    // updateOrCreate has committed and before anything else touches the flag.
+    $actionRequest = replaceActionRequest();
+
+    attemptOwedARestore($actionRequest->id);
+
+    $observed = false;
+    $flagAtUnmonitor = null;
+
+    // Registered BEFORE fakeExecutor(): merged stubs are tried in order and the first
+    // non-null response wins, so returning null defers the actual response to it.
+    Http::fake(function (Request $request) use (&$observed, &$flagAtUnmonitor, $actionRequest): ?PromiseInterface {
+        if ($observed || $request->method() !== 'PUT' || ! str_contains($request->url(), '/api/v3/episode/monitor')) {
+            return null;
+        }
+
+        $observed = true;
+        $flagAtUnmonitor = MediaReplacementAttempt::query()
+            ->where('action_request_id', $actionRequest->id)
+            ->sole()
+            ->monitoring_suspended;
+
+        return null;
+    });
+
+    fakeExecutor(['monitorOk' => false]);
+
+    resolve(MediaReplacementActions::class)->execute($actionRequest);
+
+    // $observed guards against a vacuous pass: the unmonitor PUT must actually have
+    // been issued for the observation to mean anything. The flag must then be true —
+    // an unconditional null would mean a crash one statement later left no record that
+    // a restore was owed, and every actor that could discharge it selects on true.
+    expect($observed)->toBeTrue()
+        ->and($flagAtUnmonitor)->toBeTrue();
 });
 
 test('a retry whose grab is rejected still tries to discharge an inherited restore', function (): void {

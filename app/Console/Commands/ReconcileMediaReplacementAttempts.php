@@ -50,6 +50,7 @@ class ReconcileMediaReplacementAttempts extends Command
 
         $admins = User::query()->where('role', UserRole::Admin)->get();
         $flagged = 0;
+        $superseded = 0;
 
         foreach ($stuck as $attempt) {
             // Conditional transition: a concurrent Download webhook may have
@@ -65,10 +66,26 @@ class ReconcileMediaReplacementAttempts extends Command
             // that just restarted. Flagging a live run would regress its status and —
             // worse — restore monitoring below while it is mid-cleanup, so the
             // blocklist that follows would fire the arr's queued re-search against a
-            // monitored target. Re-evaluating the age inside the update makes that
-            // atomic: either the resume's timestamp write lands first and this matches
-            // nothing, or it lands after and the resume re-asserts its own suspension
-            // afterwards anyway.
+            // monitored target.
+            //
+            // What re-evaluating the age INSIDE the update can speak for: the read and
+            // the write are one statement, so once the resume's started_at write has
+            // committed this matches nothing at all. The selecting query's snapshot,
+            // which cannot be retracted, is no longer what decides.
+            //
+            // What it cannot speak for — the reverse order, and it is the same residual
+            // the repair pass discloses. For this update to match, it must commit
+            // BEFORE the resume's started_at write (MediaReplacementActions::execute()).
+            // So on every path where a row IS flagged here, the resume is still ahead of
+            // us, and restoreSuspendedMonitoring() below can land after the resume
+            // re-asserts its own suspension — leaving the target monitored when the
+            // resume blocklists. The window is this update to that monitor PUT: one arr
+            // round trip, and the harmful ordering additionally needs the resume to get
+            // through its own unmonitor inside it. Closing it would need an atomic claim
+            // on the row, and there is nothing safe to claim with — writing
+            // monitoring_suspended = false before the PUT succeeds would destroy the
+            // restore obligation itself. The resume's re-assert is the mitigation, not a
+            // guarantee.
             $affected = MediaReplacementAttempt::query()
                 ->whereKey($attempt->id)
                 ->where('status', MediaReplacementStatus::Downloading->value)
@@ -85,6 +102,20 @@ class ReconcileMediaReplacementAttempts extends Command
                 ]);
 
             if ($affected !== 1) {
+                // Counted, never silent. Both clauses of the conditional update can be
+                // what declined the row — a webhook terminalized it, or a resume moved
+                // started_at back inside the cutoff — and the age clause in particular
+                // must not be able to skip a selected row with nothing in the output.
+                //
+                // Reported as one figure because the two causes are genuinely
+                // indistinguishable from here: the update reports a count, not a reason,
+                // and re-reading the row to attribute one would be a second read of a
+                // row that is by definition being changed underneath us — it could name
+                // a cause that was not the one that actually declined the update. One
+                // honest number with both causes named beats a precise-looking
+                // attribution that can be wrong.
+                $superseded++;
+
                 continue;
             }
 
@@ -108,7 +139,18 @@ class ReconcileMediaReplacementAttempts extends Command
             }
         }
 
-        $this->info(sprintf('Flagged %d stuck media replacement attempt(s) as needs_attention.', $flagged));
+        // Same shape as the repair pass's reporting: the cause is named, and the whole
+        // fragment is omitted at zero rather than printing "(0 skipped)" on every
+        // ordinary run.
+        $summary = sprintf('Flagged %d stuck media replacement attempt(s) as needs_attention', $flagged);
+
+        $this->info($superseded === 0
+            ? $summary.'.'
+            : sprintf(
+                '%s (skipped: %d settled or restarted between selection and update).',
+                $summary,
+                $superseded,
+            ));
 
         return self::SUCCESS;
     }

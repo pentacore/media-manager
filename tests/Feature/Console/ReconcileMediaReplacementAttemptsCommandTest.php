@@ -160,8 +160,12 @@ test('a stale downloading attempt an operator retried mid-pass is not flagged as
         return Http::response([], 200);
     });
 
+    // One combined substring, because each expectsOutputToContain() consumes a separate
+    // write and the count and the skip are reported on the same line. The skip half is
+    // the point: the age clause declining a row must leave a trace, or this pass could
+    // silently drop a selected attempt and nobody would know which clause did it.
     $this->artisan('media-replacement:reconcile')
-        ->expectsOutputToContain('Flagged 1 stuck')
+        ->expectsOutputToContain('Flagged 1 stuck media replacement attempt(s) as needs_attention (skipped: 1 settled or restarted between selection and update).')
         ->assertSuccessful();
 
     // The live run keeps its status AND its suspension: nothing remonitored the target
@@ -314,8 +318,10 @@ test('a settled attempt reopened while the pass is running is skipped by the re-
     // An operator Retry reopens the row to `downloading` and re-asserts the
     // suspension for its own resumed cleanup. Restoring monitoring then would strip
     // that live run's protection and let its blocklist trigger the competing
-    // auto-search. The row's age is no defence: a resume inherits the original
-    // attempt's started_at, so no cutoff can exclude it.
+    // auto-search. The age cutoff alone cannot catch this one: the resume DOES rewrite
+    // started_at to now, but this pass already selected the row before that write, and
+    // a snapshot cannot be retracted. Only re-checking the age against a CURRENT read,
+    // immediately before acting, sees it.
     $connection = ServiceConnection::factory()->sonarr()->create([
         'url' => 'http://sonarr.local:8989', 'api_key' => 'test', 'is_active' => true,
     ]);
@@ -440,9 +446,11 @@ test('the repair pass honours the --hours option rather than a hardcoded cutoff'
     Http::fake(['*' => Http::response([], 200)]);
 
     // Two hours old: inside the default 6h cutoff, outside an explicit 1h one. The
-    // cutoff is conservatism, not safety (a resume inherits the original attempt's
-    // age, so no cutoff can exclude a live executor) — but it must still be the
-    // option's value that decides, not a constant.
+    // cutoff does real work now that a resume rewrites started_at to now — a live
+    // executor's row is young again by this measure, so the cutoff keeps this pass off
+    // it. What THIS test pins is narrower: that the option's value is what decides,
+    // not a hardcoded constant. The mid-pass race the cutoff cannot cover is a
+    // different test's job (`reopened while the pass is running`).
     $attempt = settledSuspendedAttempt([
         'started_at' => now()->subHours(2),
         'completed_at' => now()->subHours(2),

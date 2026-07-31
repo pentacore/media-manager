@@ -141,9 +141,12 @@ final readonly class MediaReplacementActions implements ActionExecutor
             //
             // It only helps because both reconcile passes re-evaluate the age against
             // current state rather than trusting their selecting query: the timeout
-            // pass inside its conditional update (atomic, so this write fully excludes
-            // it), the repair pass on a fresh read (which leaves the interval between
-            // that read and its own monitor PUT).
+            // pass inside its conditional update, the repair pass on a fresh read. What
+            // it buys in each case is exclusion from the moment this write commits, not
+            // exclusion outright — a timeout update or a repair read that got in first
+            // is still ahead of us and can issue its monitor PUT afterwards. Doing this
+            // write FIRST is what makes that window as narrow as it can be made without
+            // an atomic claim on the row; see blocklistAfterGrab()'s docblock.
             $existing->forceFill(['started_at' => now()])->save();
 
             // Cleanup is unfinished (a worker crash after the grab, or a deletion
@@ -506,15 +509,19 @@ final readonly class MediaReplacementActions implements ActionExecutor
      * passes are bounded by the --hours cutoff, and because the resume path rewrites
      * started_at to now, both re-evaluate that cutoff against current state rather than
      * against their selecting query: the timeout pass atomically, inside its
-     * conditional update, and the repair pass on a fresh read. The timeout pass is
-     * therefore fully excluded once a resume has written started_at. The repair pass
-     * leaves one window — it can have decided on a read taken before that write and
-     * still issue its monitor PUT afterwards.
+     * conditional update, and the repair pass on a fresh read.
+     *
+     * Neither is closed, and both windows open BEFORE this run's started_at write
+     * commits. The timeout pass is excluded only from the moment that write lands — an
+     * update of its that commits earlier still flags the row and still runs its own
+     * restore afterwards, which is the residual spelled out inline in
+     * ReconcileMediaReplacementAttempts::handle(). The repair pass is the same shape: it
+     * can decide on a read taken before that write and issue its monitor PUT after it.
      *
      * So do not claim the target is guaranteed unmonitored here. What is true is that
-     * this run suspended it itself, with only the file delete in between, and that no
-     * actor other than a repair pass in that one window is in a position to have
-     * undone it.
+     * this run suspended it itself, with only the file delete in between, and that the
+     * only actors in a position to have undone it are those two passes, each acting on
+     * a decision it took before this run's started_at write landed.
      */
     private function blocklistAfterGrab(
         SonarrClient|RadarrClient $client,
