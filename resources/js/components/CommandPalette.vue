@@ -1,32 +1,12 @@
 <script setup lang="ts">
 import { router } from '@inertiajs/vue3';
-import {
-    Activity as ActivityIcon,
-    ChartLine,
-    Film,
-    HeartPulse,
-    History,
-    Inbox,
-    LayoutGrid,
-    Loader2,
-    ScrollText,
-    Search as SearchIcon,
-    Tv,
-    Zap,
-} from '@lucide/vue';
+import { Film, Loader2, Search as SearchIcon, Tv } from '@lucide/vue';
 import { useEventListener } from '@vueuse/core';
 import type { Component } from 'vue';
 import { computed, nextTick, onMounted, useTemplateRef, watch } from 'vue';
-import ActionRequestController from '@/actions/App/Http/Controllers/Actions/ActionRequestController';
-import ActivityLogController from '@/actions/App/Http/Controllers/ActivityLogController';
-import NowPlayingController from '@/actions/App/Http/Controllers/Emby/NowPlayingController';
-import WatchHistoryController from '@/actions/App/Http/Controllers/Emby/WatchHistoryController';
 import MovieController from '@/actions/App/Http/Controllers/Media/MovieController';
-import RequestController from '@/actions/App/Http/Controllers/Media/RequestController';
 import SearchController from '@/actions/App/Http/Controllers/Media/SearchController';
 import SeriesController from '@/actions/App/Http/Controllers/Media/SeriesController';
-import ServiceHealthController from '@/actions/App/Http/Controllers/Monitoring/ServiceHealthController';
-import StatisticsController from '@/actions/App/Http/Controllers/StatisticsController';
 import {
     Dialog,
     DialogContent,
@@ -36,13 +16,16 @@ import {
 import { Input } from '@/components/ui/input';
 import { useCommandPalette } from '@/composables/useCommandPalette';
 import { useInstantSearch } from '@/composables/useInstantSearch';
-import { dashboard } from '@/routes';
+import { useNavItems } from '@/composables/useNavItems';
+import { toUrl } from '@/lib/utils';
+import type { NavItem } from '@/types';
 
-interface QuickLink {
+type PaletteLink = {
+    section: string;
     title: string;
     href: string;
-    icon: Component;
-}
+    icon: Component | undefined;
+};
 
 const { open } = useCommandPalette();
 const {
@@ -53,53 +36,81 @@ const {
 } = useInstantSearch();
 const inputEl = useTemplateRef<HTMLInputElement>('inputEl');
 
-const quickLinks = computed<QuickLink[]>(() => [
-    { title: 'Dashboard', href: dashboard().url, icon: LayoutGrid },
-    {
-        title: 'Activity Log',
-        href: ActivityLogController.index.url(),
-        icon: ScrollText,
-    },
-    { title: 'Series', href: SeriesController.index.url(), icon: Tv },
-    { title: 'Movies', href: MovieController.index.url(), icon: Film },
-    { title: 'Requests', href: RequestController.index.url(), icon: Inbox },
-    {
-        title: 'Now Playing',
-        href: NowPlayingController().url,
-        icon: ActivityIcon,
-    },
-    {
-        title: 'Watch History',
-        href: WatchHistoryController.index.url(),
-        icon: History,
-    },
-    {
-        title: 'Service Health',
-        href: ServiceHealthController.index.url(),
-        icon: HeartPulse,
-    },
-    {
-        title: 'Action Requests',
-        href: ActionRequestController.index.url(),
-        icon: Zap,
-    },
-    {
-        title: 'Statistics',
-        href: StatisticsController().url,
-        icon: ChartLine,
-    },
-]);
+// No counts argument: the palette renders no badges, so it must not open the
+// three websocket channels useNavCounts subscribes to.
+const navGroups = useNavItems();
+
+/**
+ * The sidebar's tree flattened into destinations. Parent rows carry no `href`
+ * and only exist to hold children, so they contribute a section heading rather
+ * than a row of their own. Badges are deliberately dropped — the palette is a
+ * navigation surface, not a status surface.
+ */
+const paletteLinks = computed<PaletteLink[]>(() => {
+    const links: PaletteLink[] = [];
+
+    const push = (section: string, item: NavItem): void => {
+        if (item.mobileOnly || item.href === undefined) {
+            return;
+        }
+
+        links.push({
+            section,
+            title: item.title,
+            href: toUrl(item.href),
+            icon: item.icon,
+        });
+    };
+
+    for (const group of navGroups.value) {
+        for (const item of group.items) {
+            // Nesting is exactly one level deep, so a single pass suffices.
+            if (item.children) {
+                for (const child of item.children) {
+                    push(`${group.label} · ${item.title}`, child);
+                }
+
+                continue;
+            }
+
+            push(group.label, item);
+        }
+    }
+
+    return links;
+});
 
 const filteredLinks = computed(() => {
     const q = query.value.trim().toLowerCase();
 
     if (!q) {
-        return quickLinks.value;
+        return paletteLinks.value;
     }
 
-    return quickLinks.value.filter((link) =>
+    return paletteLinks.value.filter((link) =>
         link.title.toLowerCase().includes(q),
     );
+});
+
+/** Grouped for rendering, preserving `paletteLinks` order. */
+const filteredSections = computed<
+    Array<{ section: string; links: PaletteLink[] }>
+>(() => {
+    const sections: Array<{ section: string; links: PaletteLink[] }> = [];
+
+    for (const link of filteredLinks.value) {
+        const last = sections.at(-1);
+
+        if (last?.section === link.section) {
+            last.links.push(link);
+
+            continue;
+        }
+
+        sections.push({ section: link.section, links: [link] });
+    }
+
+    return sections;
 });
 
 const hasMediaResults = computed(
@@ -301,28 +312,43 @@ function onInputKey(event: KeyboardEvent): void {
                 >
                     No matching pages — press Enter to search your library.
                 </p>
-                <ul v-if="filteredLinks.length > 0" class="space-y-1">
-                    <li
-                        v-if="hasMediaResults"
-                        class="px-3 pb-1 text-[11px] font-medium tracking-wider text-muted-foreground uppercase"
-                    >
-                        Pages
-                    </li>
-                    <li v-for="link in filteredLinks" :key="link.href">
-                        <button
-                            type="button"
-                            data-palette-link
-                            class="flex w-full items-center gap-2 rounded-sm px-3 py-2 text-left text-sm hover:bg-accent focus:bg-accent focus:outline-none"
-                            @click="navigate(link.href)"
+                <!--
+                    `data-palette-sections` is the assertion hook for the
+                    browser tests: it wraps only the section headings and the
+                    link titles, so a negative assertion scoped to it cannot be
+                    satisfied by the sidebar (same labels), the dialog's own
+                    description, the search placeholder, or the instant-result
+                    rows above.
+                -->
+                <div
+                    v-if="filteredLinks.length > 0"
+                    data-palette-sections
+                    class="space-y-2"
+                >
+                    <div v-for="group in filteredSections" :key="group.section">
+                        <p
+                            class="px-3 pb-1 text-[11px] font-medium tracking-wider text-muted-foreground uppercase"
                         >
-                            <component
-                                :is="link.icon"
-                                class="size-4 shrink-0 text-muted-foreground"
-                            />
-                            <span>{{ link.title }}</span>
-                        </button>
-                    </li>
-                </ul>
+                            {{ group.section }}
+                        </p>
+                        <ul class="space-y-1">
+                            <li v-for="link in group.links" :key="link.href">
+                                <button
+                                    type="button"
+                                    data-palette-link
+                                    class="flex w-full items-center gap-2 rounded-sm px-3 py-2 text-left text-sm hover:bg-accent focus:bg-accent focus:outline-none"
+                                    @click="navigate(link.href)"
+                                >
+                                    <component
+                                        :is="link.icon"
+                                        class="size-4 shrink-0 text-muted-foreground"
+                                    />
+                                    <span>{{ link.title }}</span>
+                                </button>
+                            </li>
+                        </ul>
+                    </div>
+                </div>
             </div>
         </DialogContent>
     </Dialog>
