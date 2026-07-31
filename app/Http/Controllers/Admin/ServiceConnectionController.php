@@ -112,8 +112,10 @@ class ServiceConnectionController extends Controller
 
     /**
      * Tag labels defined on a Sonarr/Radarr instance, for the subtitle-check
-     * picker. Returns null for other service types and when the instance cannot
-     * be reached, so the form can tell "none defined" apart from "unavailable".
+     * picker. Returns null for other service types, for a disabled connection,
+     * and when the instance cannot be reached — so the form can tell "none
+     * defined" (an empty list) apart from "unavailable" (null). Rows the
+     * instance reports without a usable int id and non-blank label are dropped.
      *
      * @return list<array{id: int, label: string}>|null
      */
