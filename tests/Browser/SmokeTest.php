@@ -60,18 +60,29 @@ test('admin can edit and save media replacement configuration without browser er
         ->assertSee('Approval required')
         ->check('Enable automatic candidate selection')
         ->fill('input[placeholder="English, Swedish"]', 'English, Swedish')
+        ->check('Check tagged imports for missing subtitles')
+        ->fill('input[max="10"]', '3')
+        ->fill('input[max="720"]', '6')
         ->assertScript(
             'JSON.parse(document.querySelector(\'input[name="media_replacement"]\').value).automatic_selection_enabled === true',
         )
         ->assertScript(
             'JSON.parse(document.querySelector(\'input[name="media_replacement"]\').value).global_languages.join(\',\') === \'English,Swedish\'',
         )
+        ->assertScript(
+            'JSON.stringify(JSON.parse(document.querySelector(\'input[name="media_replacement"]\').value).subtitle_check) === \'{"enabled":true,"max_attempts_per_target":3,"cooldown_hours":6}\'',
+        )
         ->click('Save settings')
         ->assertSee('AI settings updated.');
 
     expect(resolve(MediaReplacementSettings::class)->configuration())
         ->automatic_selection_enabled->toBeTrue()
-        ->global_languages->toBe(['eng', 'swe']);
+        ->global_languages->toBe(['eng', 'swe'])
+        ->subtitle_check->toBe([
+            'enabled' => true,
+            'max_attempts_per_target' => 3,
+            'cooldown_hours' => 6,
+        ]);
 
     $webpage->assertNoSmoke();
 });
