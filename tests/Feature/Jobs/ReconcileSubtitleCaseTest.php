@@ -240,6 +240,40 @@ test('a retry does not need a second cycle slot to reach Bazarr', function (): v
         ->and(SubtitleCaseAttempt::query()->where('outcome', SubtitleCaseAttemptOutcome::Failed)->count())->toBe(2);
 });
 
+test('an independently dispatched job cannot reuse another job&apos;s cycle reservation', function (): void {
+    // One probe per cycle, already spent by the first job's failed attempt. A second
+    // job — the sweep, a webhook, an action listener — must not read that failure as
+    // its own retry and search anyway.
+    resolve(BazarrAutomationSettings::class)->setConfiguration([
+        'enabled' => true,
+        'probe_spacing_hours' => 24,
+        'empty_probe_threshold' => 2,
+        'max_probes_per_cycle' => 1,
+    ]);
+    $searches = 0;
+    Http::fake([
+        'bazarr.test/api/providers/episodes*' => function () use (&$searches): never {
+            $searches++;
+
+            throw new ConnectionException('bazarr unreachable');
+        },
+        'bazarr.test/api/providers' => Http::response(['data' => []]),
+    ]);
+
+    try {
+        runSubtitleProbe(new ReconcileSubtitleCase(probeCandidate($this->case)));
+    } catch (ConnectionException) {
+        // The first job keeps its reservation for its own retries.
+    }
+
+    $searchesAfterFirstJob = $searches;
+
+    runSubtitleProbe(new ReconcileSubtitleCase(probeCandidate($this->case)));
+
+    expect($searches)->toBe($searchesAfterFirstJob)
+        ->and(SubtitleCaseAttempt::query()->where('outcome', SubtitleCaseAttemptOutcome::Failed)->count())->toBe(1);
+});
+
 test('the last probe attempt parks the case for review', function (): void {
     Http::fake([
         'bazarr.test/api/providers/episodes*' => fn (): never => throw new ConnectionException('bazarr unreachable'),
@@ -269,6 +303,27 @@ test('failure handling leaves a case that already moved on alone', function (): 
     unserialize($payload)->failed(new ConnectionException('bazarr unreachable'));
 
     expect($this->case->fresh()->status)->toBe(SubtitleCaseStatus::Resolved);
+});
+
+test('a stale targeted job does not park a case that has queued a download', function (): void {
+    $payload = serialize(ReconcileSubtitleCase::forCase($this->case));
+
+    // While this job sat in backoff, another dispatch queued a download for the same
+    // case. Parking it now would strand that download: the completion listener only
+    // verifies a case that is still download_requested.
+    resolve(SubtitleCaseLifecycle::class)->transition($this->case, SubtitleCaseStatus::DownloadRequested);
+
+    unserialize($payload)->failed(new ConnectionException('bazarr unreachable'));
+
+    expect($this->case->fresh()->status)->toBe(SubtitleCaseStatus::DownloadRequested);
+});
+
+test('a targeted job still parks its case while it is searching', function (): void {
+    $payload = serialize(ReconcileSubtitleCase::forCase($this->case));
+
+    unserialize($payload)->failed(new ConnectionException('bazarr unreachable'));
+
+    expect($this->case->fresh()->status)->toBe(SubtitleCaseStatus::NeedsReview);
 });
 
 test('a definite upstream rejection parks the case without retrying', function (): void {

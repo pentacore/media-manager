@@ -32,6 +32,7 @@ use Illuminate\Queue\Attributes\Tries;
 use Illuminate\Queue\Middleware\RateLimited;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Str;
 use Throwable;
 
 #[Timeout(60)]
@@ -41,6 +42,15 @@ final class ReconcileSubtitleCase implements ShouldQueue
     use Queueable;
 
     /**
+     * Identifies this queue message, so only its own retries can reuse the cycle
+     * probe slot it consumed. It is serialized with the payload, which makes it
+     * stable across retries and distinct from every other dispatch — the sweep,
+     * webhooks and action listeners all dispatch this job independently for the
+     * same case.
+     */
+    public readonly string $reservationId;
+
+    /**
      * @param  array<string, mixed>  $candidate
      */
     public function __construct(
@@ -48,7 +58,9 @@ final class ReconcileSubtitleCase implements ShouldQueue
         public bool $probeAllowed = true,
         public ?int $subtitleCaseId = null,
         public ?int $targetBazarrConnectionId = null,
-    ) {}
+    ) {
+        $this->reservationId = (string) Str::uuid();
+    }
 
     public static function forCase(SubtitleCase $subtitleCase): self
     {
@@ -164,12 +176,14 @@ final class ReconcileSubtitleCase implements ShouldQueue
         // no slot left, deterministic reconciliation (already done) stands and the
         // provider search is skipped until the next cycle.
         //
-        // A retry reuses the reservation its first attempt already consumed. Asking
-        // for a second one lets a small budget (max_probes_per_cycle = 1, or a
-        // budget other cases have spent) turn the retry into a silent success: the
-        // queue would delete the job with tries left and failed() would never park
-        // the case.
-        if (! $this->retryingFailedProbe($subtitleCase, $bazarrAutomationSettings)
+        // A retry reuses the reservation its own first attempt consumed, keyed by
+        // this queue message. Asking for a second one lets a small budget
+        // (max_probes_per_cycle = 1, or a budget other cases have spent) turn the
+        // retry into a silent success: the queue would delete the job with tries
+        // left and failed() would never park the case. Keying the reuse on the case
+        // instead would let every other job dispatched for it — sweep, webhook,
+        // action listener — call itself a retry and bypass the cycle budget.
+        if (! $this->reservationHeld($subtitleCase->bazarr_connection_id)
             && ! $this->reserveProbeSlot($subtitleCase->bazarr_connection_id, $bazarrAutomationSettings)) {
             return;
         }
@@ -408,20 +422,6 @@ final class ReconcileSubtitleCase implements ShouldQueue
     }
 
     /**
-     * A failed probe attempt inside the spacing window is this job's own earlier
-     * try: the record is persisted, so it survives the queue's serialization
-     * boundary where an in-memory retry counter would not.
-     */
-    private function retryingFailedProbe(
-        SubtitleCase $subtitleCase,
-        BazarrAutomationSettings $bazarrAutomationSettings,
-    ): bool {
-        return $this->probeAttemptsWithinSpacing($subtitleCase, $bazarrAutomationSettings)
-            ->where('outcome', SubtitleCaseAttemptOutcome::Failed)
-            ->exists();
-    }
-
-    /**
      * @return Builder<SubtitleCaseAttempt>
      */
     private function probeAttemptsWithinSpacing(
@@ -525,15 +525,26 @@ final class ReconcileSubtitleCase implements ShouldQueue
                     return false;
                 }
 
-                Cache::put(
-                    $key,
-                    $used + 1,
-                    now()->addMinutes($bazarrAutomationSettings->reconciliationIntervalMinutes()),
-                );
+                $ttl = now()->addMinutes($bazarrAutomationSettings->reconciliationIntervalMinutes());
+                Cache::put($key, $used + 1, $ttl);
+                // Records that this queue message owns one of the cycle's slots. It
+                // expires with the cycle, so a retry landing in the next cycle asks
+                // for admission again against that cycle's fresh budget.
+                Cache::put($this->reservationKey($connectionId), true, $ttl);
 
                 return true;
             },
         );
+    }
+
+    private function reservationHeld(int $connectionId): bool
+    {
+        return Cache::get($this->reservationKey($connectionId)) !== null;
+    }
+
+    private function reservationKey(int $connectionId): string
+    {
+        return sprintf('bazarr-probe-cycle-reservation:%d:%s', $connectionId, $this->reservationId);
     }
 
     public function failed(?Throwable $throwable): void
@@ -556,10 +567,20 @@ final class ReconcileSubtitleCase implements ShouldQueue
         }
     }
 
+    /**
+     * Only a case still searching was the one this job probed. A case that moved on
+     * — a concurrently dispatched reconciliation can queue a download while this job
+     * sits in backoff — must not be dragged into review: the completion listener
+     * only verifies a case that is still download_requested, so parking it here
+     * would strand the download result. The guard applies to targeted jobs too,
+     * which are exactly the ones another dispatch can overtake.
+     */
     private function probedSubtitleCase(): ?SubtitleCase
     {
+        $builder = SubtitleCase::query()->where('status', SubtitleCaseStatus::BazarrSearching);
+
         if ($this->subtitleCaseId !== null) {
-            return SubtitleCase::query()->find($this->subtitleCaseId);
+            return $builder->whereKey($this->subtitleCaseId)->first();
         }
 
         foreach (['bazarr_connection_id', 'service_connection_id', 'file_fingerprint', 'requirements_fingerprint'] as $key) {
@@ -568,14 +589,11 @@ final class ReconcileSubtitleCase implements ShouldQueue
             }
         }
 
-        // Only a case that is still searching was the one this job probed; a case
-        // that has since moved on must not be dragged into review.
-        return SubtitleCase::query()
+        return $builder
             ->where('bazarr_connection_id', $this->candidate['bazarr_connection_id'])
             ->where('service_connection_id', $this->candidate['service_connection_id'])
             ->where('file_fingerprint', $this->candidate['file_fingerprint'])
             ->where('requirements_fingerprint', $this->candidate['requirements_fingerprint'])
-            ->where('status', SubtitleCaseStatus::BazarrSearching)
             ->first();
     }
 }

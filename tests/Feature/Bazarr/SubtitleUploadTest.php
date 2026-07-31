@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use App\Enums\ActionRequestStatus;
 use App\Enums\BazarrServiceRole;
+use App\Enums\SubtitleCaseStatus;
 use App\Jobs\ExecuteActionRequest;
 use App\Jobs\PruneSubtitleUploads;
 use App\Models\ActionRequest;
@@ -15,13 +16,16 @@ use App\Models\SubtitleUpload;
 use App\Models\User;
 use App\Services\Bazarr\BazarrActions;
 use App\Services\Bazarr\BazarrMediaFingerprint;
+use App\Services\Bazarr\SubtitleCaseReconciler;
 use App\Settings\BazarrAutomationSettings;
 use Database\Seeders\ActionTypeConfigSeeder;
 use Illuminate\Http\Client\Request;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Date;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Queue;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Storage;
 
 beforeEach(function (): void {
@@ -210,6 +214,62 @@ test('failed action creation cancels the staged upload and deletes the staged fi
         ->and($subtitleUpload->cancelled_at)->not->toBeNull()
         ->and($subtitleUpload->cleaned_up_at)->not->toBeNull()
         ->and(ActionRequest::query()->count())->toBe(0);
+    Storage::disk('local')->assertDirectoryEmpty('bazarr-subtitle-uploads');
+});
+
+test('a refused upload leaves a case reconciliation can eventually advance', function (): void {
+    ActionTypeConfig::query()
+        ->where('type', 'bazarr_upload_subtitle')
+        ->update(['is_enabled' => false]);
+
+    $this->actingAs(User::factory()->member()->create())
+        ->withHeader('Accept', 'application/json')
+        ->post(route('bazarr.uploads.store'), [
+            ...uploadPayload($this),
+            'subtitle_file' => validSubtitleUpload(),
+        ])
+        ->assertUnprocessable();
+
+    // Without a grace deadline advanceElapsedGrace() never moves an observing case
+    // on, so this row would sit here forever while the subtitle stays missing.
+    $subtitleCase = SubtitleCase::query()->sole();
+
+    expect($subtitleCase->status)->toBe(SubtitleCaseStatus::Observing)
+        ->and($subtitleCase->grace_until)->not->toBeNull();
+
+    Date::setTestNow($subtitleCase->grace_until->addMinute());
+    resolve(SubtitleCaseReconciler::class)->reconcile([
+        'bazarr_connection_id' => $this->bazarr->id,
+        'service_connection_id' => $this->radarr->id,
+        'service' => 'radarr',
+        'media_type' => 'movie',
+        'scope' => $subtitleCase->scope,
+        'target_ids' => $subtitleCase->target_ids,
+        'display_name' => 'Example Movie',
+        'required_languages' => ['eng'],
+        'missing_languages' => ['eng'],
+        'current_subtitles' => [],
+        'monitored' => true,
+        'file_fingerprint' => $subtitleCase->file_fingerprint,
+        'requirements_fingerprint' => $subtitleCase->requirements_fingerprint,
+    ]);
+
+    expect($subtitleCase->fresh()->status)->toBe(SubtitleCaseStatus::BazarrSearching);
+});
+
+test('a failure staging the durable rows removes the staged file', function (): void {
+    // The case row cannot be written, so nothing commits — and with no row for the
+    // prune sweep to find, the file has to go now.
+    Schema::drop('subtitle_uploads');
+
+    $this->actingAs(User::factory()->member()->create())
+        ->withHeader('Accept', 'application/json')
+        ->post(route('bazarr.uploads.store'), [
+            ...uploadPayload($this),
+            'subtitle_file' => validSubtitleUpload(),
+        ])
+        ->assertStatus(500);
+
     Storage::disk('local')->assertDirectoryEmpty('bazarr-subtitle-uploads');
 });
 

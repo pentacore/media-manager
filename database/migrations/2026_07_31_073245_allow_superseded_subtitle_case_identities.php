@@ -45,10 +45,17 @@ return new class extends Migration
      */
     public function down(): void
     {
-        $duplicateIdentities = DB::table('subtitle_cases')
-            ->selectRaw('bazarr_connection_id, service_connection_id, file_fingerprint, requirements_fingerprint, count(*) as total')
-            ->groupBy('bazarr_connection_id', 'service_connection_id', 'file_fingerprint', 'requirements_fingerprint')
-            ->havingRaw('count(*) > 1')
+        // Counted through a subquery: count() on the grouped query is an aggregate
+        // over the first group, which would report a row count as if it were the
+        // number of affected identities.
+        $duplicateIdentities = DB::query()
+            ->fromSub(
+                DB::table('subtitle_cases')
+                    ->select('bazarr_connection_id', 'service_connection_id', 'file_fingerprint', 'requirements_fingerprint')
+                    ->groupBy('bazarr_connection_id', 'service_connection_id', 'file_fingerprint', 'requirements_fingerprint')
+                    ->havingRaw('count(*) > 1'),
+                'duplicate_identities',
+            )
             ->count();
 
         throw_if($duplicateIdentities > 0, RuntimeException::class, sprintf(
