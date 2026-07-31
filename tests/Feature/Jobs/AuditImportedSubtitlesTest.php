@@ -152,10 +152,10 @@ test('it delegates a tagged import to the auditor', function (): void {
     // replace_media_file ActionRequest. Asserting the effect rather than a mock
     // call is forced here — ImportedSubtitleAuditor is final readonly — and is
     // the stronger assertion anyway.
-    $connection = taggedSonarrConnection();
+    $serviceConnection = taggedSonarrConnection();
     fakeAuditArrForJob(['subtitles' => 'Japanese']);
 
-    $webhookEvent = importedDownloadEvent($connection);
+    $webhookEvent = importedDownloadEvent($serviceConnection);
 
     auditJobFor($webhookEvent)->handle(resolve(ImportedSubtitleAuditor::class));
 
@@ -164,7 +164,7 @@ test('it delegates a tagged import to the auditor', function (): void {
     // The event is asserted too: the job must pass it through so the request is
     // traceable back to the import that caused it.
     expect($actionRequest->webhook_event_id)->toBe($webhookEvent->id)
-        ->and($actionRequest->payload['auto_check_key'])->toBe(sprintf('sonarr:%d:42-101', $connection->id));
+        ->and($actionRequest->payload['auto_check_key'])->toBe(sprintf('sonarr:%d:42-101', $serviceConnection->id));
 });
 
 test('it audits from the carried state when the event row has been pruned', function (): void {
@@ -172,15 +172,15 @@ test('it audits from the carried state when the event row has been pruned', func
     // carries the connection id and payload rather than re-reading them. This is
     // the case that makes it necessary; the capture-off test below is the same
     // thing through the real code path that deletes the row.
-    $connection = taggedSonarrConnection();
+    $serviceConnection = taggedSonarrConnection();
     fakeAuditArrForJob(['subtitles' => 'Japanese']);
 
-    $webhookEvent = importedDownloadEvent($connection);
-    $job = auditJobFor($webhookEvent);
+    $webhookEvent = importedDownloadEvent($serviceConnection);
+    $auditImportedSubtitles = auditJobFor($webhookEvent);
 
     $webhookEvent->delete();
 
-    $job->handle(resolve(ImportedSubtitleAuditor::class));
+    $auditImportedSubtitles->handle(resolve(ImportedSubtitleAuditor::class));
 
     $actionRequest = ActionRequest::query()->where('type', 'replace_media_file')->sole();
 
@@ -188,7 +188,7 @@ test('it audits from the carried state when the event row has been pruned', func
     // nullable and the database nulls it on delete anyway. The connection stays
     // pinned in the payload, so the executor still acts on the right instance.
     expect($actionRequest->webhook_event_id)->toBeNull()
-        ->and($actionRequest->payload['service_connection_id'])->toBe($connection->id);
+        ->and($actionRequest->payload['service_connection_id'])->toBe($serviceConnection->id);
 });
 
 test('it drops the audit with a warning when the connection is gone', function (): void {
@@ -196,14 +196,14 @@ test('it drops the audit with a warning when the connection is gone', function (
     // cascades its webhook events away, so neither the carried id nor the event
     // resolves. It must not be silent — a dropped check that logged nothing is
     // exactly what made the capture-off case invisible.
-    $connection = taggedSonarrConnection();
+    $serviceConnection = taggedSonarrConnection();
     fakeAuditArrForJob(['subtitles' => 'Japanese']);
 
-    $webhookEvent = importedDownloadEvent($connection);
-    $job = auditJobFor($webhookEvent);
-    $connectionId = $connection->id;
+    $webhookEvent = importedDownloadEvent($serviceConnection);
+    $auditImportedSubtitles = auditJobFor($webhookEvent);
+    $connectionId = $serviceConnection->id;
 
-    $connection->delete();
+    $serviceConnection->delete();
 
     Log::shouldReceive('debug')->zeroOrMoreTimes();
     Log::shouldReceive('info')->zeroOrMoreTimes();
@@ -212,7 +212,7 @@ test('it drops the audit with a warning when the connection is gone', function (
         ->withArgs(fn (string $message, array $context): bool => $message === 'Automatic subtitle check dropped: the service connection no longer exists.'
             && $context['service_connection_id'] === $connectionId);
 
-    $job->handle(resolve(ImportedSubtitleAuditor::class));
+    $auditImportedSubtitles->handle(resolve(ImportedSubtitleAuditor::class));
 
     // The arr surface is faked, so nothing happening can only be the guard: an
     // unguarded run would reach the inspection and dispatch a request.
@@ -226,7 +226,7 @@ test('the audit still runs when webhook capture is off', function (): void {
     // of a WebhookEvent runs inline, before that delete, so nothing caught this:
     // re-reading the event here made the whole feature a silent no-op for any
     // operator with capture turned off.
-    $connection = taggedSonarrConnection();
+    $serviceConnection = taggedSonarrConnection();
     fakeAuditArrForJob(['subtitles' => 'Japanese']);
     resolve(WebhookSettings::class)->setCaptureEnabled(false);
 
@@ -236,7 +236,7 @@ test('the audit still runs when webhook capture is off', function (): void {
         'is_enabled' => true,
     ]);
 
-    $webhookEvent = importedDownloadEvent($connection);
+    $webhookEvent = importedDownloadEvent($serviceConnection);
 
     new ProcessWebhookEvent($webhookEvent)->handle();
 

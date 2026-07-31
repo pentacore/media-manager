@@ -34,13 +34,13 @@ function makeSonarrConnectionWithStoredTag(): ServiceConnection
 }
 
 test('an admin can see and toggle subtitle-check tags on a sonarr connection', function (): void {
-    $connection = makeSonarrConnectionWithStoredTag();
+    $serviceConnection = makeSonarrConnectionWithStoredTag();
 
     fakeSonarrSubtitleCheckTagEndpoints();
 
     $this->actingAs(User::factory()->admin()->create());
 
-    visit(route('admin.connections.edit', $connection, absolute: false))
+    visit(route('admin.connections.edit', $serviceConnection, absolute: false))
         ->assertSee('Automatic subtitle check')
         // arrTags is deferred now, so the labels only appear once the follow-up
         // request resolves — which also proves the deferred prop reaches the
@@ -63,13 +63,13 @@ test('an admin can see and toggle subtitle-check tags on a sonarr connection', f
 });
 
 test('an admin can untick every tag and have the cleared selection persist', function (): void {
-    $connection = makeSonarrConnectionWithStoredTag();
+    $serviceConnection = makeSonarrConnectionWithStoredTag();
 
     fakeSonarrSubtitleCheckTagEndpoints();
 
     $this->actingAs(User::factory()->admin()->create());
 
-    visit(route('admin.connections.edit', $connection, absolute: false))
+    visit(route('admin.connections.edit', $serviceConnection, absolute: false))
         ->assertSee('sub-check')
         // Untick the only selected tag, so the checkbox group contributes
         // nothing to the payload. Only the empty hidden input keeps the field
@@ -80,7 +80,7 @@ test('an admin can untick every tag and have the cleared selection persist', fun
         ->assertPathIs('/admin/connections')
         ->assertNoJavascriptErrors();
 
-    expect($connection->fresh()->settings['subtitle_check_tags'])->toBe([]);
+    expect($serviceConnection->fresh()->settings['subtitle_check_tags'])->toBe([]);
 });
 
 /*
@@ -93,12 +93,12 @@ test('an admin can untick every tag and have the cleared selection persist', fun
  * `artisan inertia:start-ssr`.
  */
 test('the server-rendered first paint says tags are loading, not that they failed', function (): void {
-    $connection = makeSonarrConnectionWithStoredTag();
+    $serviceConnection = makeSonarrConnectionWithStoredTag();
 
     fakeSonarrSubtitleCheckTagEndpoints();
 
     $html = (string) $this->actingAs(User::factory()->admin()->create())
-        ->get(route('admin.connections.edit', $connection))
+        ->get(route('admin.connections.edit', $serviceConnection))
         ->getContent();
 
     expect($html)->toContain('Automatic subtitle check')
@@ -171,7 +171,7 @@ test('an instance with no tags says so instead of reporting a failure', function
 });
 
 test('an unreachable instance submits no tag field, so a save preserves the stored tags', function (): void {
-    $connection = makeSonarrConnectionWithStoredTag();
+    $serviceConnection = makeSonarrConnectionWithStoredTag();
 
     Http::fake([
         'sonarr.local:8989/api/v3/tag' => Http::response(status: 500),
@@ -181,7 +181,7 @@ test('an unreachable instance submits no tag field, so a save preserves the stor
 
     $this->actingAs(User::factory()->admin()->create());
 
-    visit(route('admin.connections.edit', $connection, absolute: false))
+    visit(route('admin.connections.edit', $serviceConnection, absolute: false))
         ->assertSee('Tags could not be loaded')
         // No inputs at all, not even the presence-keeping hidden one: claiming
         // an empty selection here would wipe the stored tags on any unrelated
@@ -194,5 +194,5 @@ test('an unreachable instance submits no tag field, so a save preserves the stor
         ->assertPathIs('/admin/connections')
         ->assertNoJavascriptErrors();
 
-    expect($connection->fresh()->settings['subtitle_check_tags'])->toBe(['sub-check']);
+    expect($serviceConnection->fresh()->settings['subtitle_check_tags'])->toBe(['sub-check']);
 });

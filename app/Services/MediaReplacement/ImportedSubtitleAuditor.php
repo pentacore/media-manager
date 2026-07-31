@@ -216,7 +216,6 @@ final readonly class ImportedSubtitleAuditor
 
         $result = $this->replacementCandidateFinder->find(
             target: $snapshot,
-            languageOverride: null,
             limit: 10,
             serviceConnection: $serviceConnection,
         );

@@ -53,11 +53,11 @@ class AuditImportedSubtitles implements ShouldQueue
 
     public static function queueFor(WebhookEvent $webhookEvent): void
     {
-        self::dispatch(
+        dispatch(new self(
             $webhookEvent->id,
             $webhookEvent->service_connection_id,
             is_array($webhookEvent->payload) ? $webhookEvent->payload : [],
-        )->delay(now()->addSeconds(self::DELAY_SECONDS));
+        ))->delay(now()->addSeconds(self::DELAY_SECONDS));
     }
 
     public function handle(ImportedSubtitleAuditor $importedSubtitleAuditor): void

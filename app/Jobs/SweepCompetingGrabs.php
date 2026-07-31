@@ -46,7 +46,7 @@ class SweepCompetingGrabs implements ShouldQueue
             return;
         }
 
-        self::dispatch($attemptId, $pass)->delay(now()->addSeconds(self::PASS_DELAY_SECONDS[$pass]));
+        dispatch(new self($attemptId, $pass))->delay(now()->addSeconds(self::PASS_DELAY_SECONDS[$pass]));
     }
 
     public function handle(CompetingGrabSweeper $competingGrabSweeper): void

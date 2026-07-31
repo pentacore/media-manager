@@ -275,10 +275,10 @@ test('an attempt older than the cooldown does not block a new one', function ():
 test('the cap reads back the auto_check_key the builder wrote', function (): void {
     fakeAuditArr(['subtitles' => 'Japanese']);
 
-    $auditor = resolve(ImportedSubtitleAuditor::class);
+    $importedSubtitleAuditor = resolve(ImportedSubtitleAuditor::class);
 
-    $auditor->audit($this->connection, importPayload(), null);
-    $auditor->audit($this->connection, importPayload(['downloadId' => 'DL-ORGANIC-2']), null);
+    $importedSubtitleAuditor->audit($this->connection, importPayload(), null);
+    $importedSubtitleAuditor->audit($this->connection, importPayload(['downloadId' => 'DL-ORGANIC-2']), null);
 
     expect(ActionRequest::query()->where('type', 'replace_media_file')->count())->toBe(1);
 
@@ -362,13 +362,13 @@ test('a tagged Radarr import keys the cap by movie id', function (): void {
         'settings' => ['subtitle_check_tags' => ['sub-check']],
     ]);
 
-    $settings = resolve(MediaReplacementSettings::class);
-    $configuration = $settings->configuration();
+    $mediaReplacementSettings = resolve(MediaReplacementSettings::class);
+    $configuration = $mediaReplacementSettings->configuration();
     $configuration['guidance']['movie']['rules'] = [[
         'name' => 'CR', 'enabled' => true, 'strength' => 'guarantee', 'languages' => ['English'],
         'conditions' => [['field' => 'title', 'value' => 'CR']],
     ]];
-    $settings->setConfiguration($configuration);
+    $mediaReplacementSettings->setConfiguration($configuration);
 
     Http::fake([
         'radarr.local:7878/api/v3/tag' => Http::response([['id' => 1, 'label' => 'sub-check']]),

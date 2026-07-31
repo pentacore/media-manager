@@ -219,9 +219,9 @@ test('a notification failure neither truncates the sweep nor distorts the remova
 
     // Notification::fake() never throws, so stand in a dispatcher whose every
     // send fails the way a broken mailer or notifications table would.
-    $dispatcher = Mockery::mock(Dispatcher::class);
-    $dispatcher->shouldReceive('send')->twice()->andThrow(new RuntimeException('notification backend unavailable'));
-    Notification::swap($dispatcher);
+    $mock = Mockery::mock(Dispatcher::class);
+    $mock->shouldReceive('send')->twice()->andThrow(new RuntimeException('notification backend unavailable'));
+    Notification::swap($mock);
 
     $removed = resolve(CompetingGrabSweeper::class)->sweep($this->connection, $mediaReplacementAttempt);
 

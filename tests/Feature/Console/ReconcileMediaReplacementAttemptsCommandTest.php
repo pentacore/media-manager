@@ -212,12 +212,12 @@ function settledSuspendedAttempt(array $overrides = []): MediaReplacementAttempt
 test('a settled attempt keeps its terminal result but has its monitoring restored', function (): void {
     Http::fake(['*' => Http::response([], 200)]);
 
-    $attempt = settledSuspendedAttempt();
-    $completedAt = $attempt->completed_at;
+    $mediaReplacementAttempt = settledSuspendedAttempt();
+    $completedAt = $mediaReplacementAttempt->completed_at;
 
     $this->artisan('media-replacement:reconcile')->assertSuccessful();
 
-    $fresh = $attempt->fresh();
+    $fresh = $mediaReplacementAttempt->fresh();
 
     // Monitoring settled...
     expect($fresh->monitoring_suspended)->toBeFalse();
@@ -239,7 +239,7 @@ test('an interrupted cleanup that left deletion_failed also gets its monitoring 
     // and then throws, so the executor never reaches the restore at all.
     Http::fake(['*' => Http::response([], 200)]);
 
-    $attempt = settledSuspendedAttempt([
+    $mediaReplacementAttempt = settledSuspendedAttempt([
         'failure_reason' => 'deletion_failed',
         'grab_accepted_at' => now()->subHours(9),
         'cleanup_completed_at' => null,
@@ -247,19 +247,19 @@ test('an interrupted cleanup that left deletion_failed also gets its monitoring 
 
     $this->artisan('media-replacement:reconcile')->assertSuccessful();
 
-    expect($attempt->fresh()->monitoring_suspended)->toBeFalse()
-        ->and($attempt->fresh()->failure_reason)->toBe('deletion_failed');
+    expect($mediaReplacementAttempt->fresh()->monitoring_suspended)->toBeFalse()
+        ->and($mediaReplacementAttempt->fresh()->failure_reason)->toBe('deletion_failed');
     Http::assertSent(fn ($request): bool => str_contains((string) $request->url(), 'episode/monitor'));
 });
 
 test('a settled attempt whose monitoring is already restored is left alone', function (): void {
     Http::fake(['*' => Http::response([], 200)]);
 
-    $attempt = settledSuspendedAttempt(['monitoring_suspended' => false]);
+    $mediaReplacementAttempt = settledSuspendedAttempt(['monitoring_suspended' => false]);
 
     $this->artisan('media-replacement:reconcile')->assertSuccessful();
 
-    expect($attempt->fresh()->monitoring_suspended)->toBeFalse();
+    expect($mediaReplacementAttempt->fresh()->monitoring_suspended)->toBeFalse();
     // Nothing to settle, so the service is never called.
     Http::assertNothingSent();
 });
@@ -267,27 +267,27 @@ test('a settled attempt whose monitoring is already restored is left alone', fun
 test('a settled attempt that was never monitored clears the flag without calling the service', function (): void {
     Http::fake(['*' => Http::response([], 200)]);
 
-    $attempt = settledSuspendedAttempt(['was_monitored' => false]);
+    $mediaReplacementAttempt = settledSuspendedAttempt(['was_monitored' => false]);
 
     $this->artisan('media-replacement:reconcile')->assertSuccessful();
 
     // Re-enabling monitoring the user had switched off would be wrong; the stale
     // flag is simply cleared.
-    expect($attempt->fresh()->monitoring_suspended)->toBeFalse();
+    expect($mediaReplacementAttempt->fresh()->monitoring_suspended)->toBeFalse();
     Http::assertNothingSent();
 });
 
 test('a failed restore leaves the settled attempt suspended for the next run', function (): void {
     Http::fake(['*' => Http::response([], 500)]);
 
-    $attempt = settledSuspendedAttempt();
+    $mediaReplacementAttempt = settledSuspendedAttempt();
 
     // The arr is unreachable, but the command must still finish and must not
     // pretend the target is monitored again.
     $this->artisan('media-replacement:reconcile')->assertSuccessful();
 
-    expect($attempt->fresh()->monitoring_suspended)->toBeTrue()
-        ->and($attempt->fresh()->status)->toBe(MediaReplacementStatus::NeedsAttention);
+    expect($mediaReplacementAttempt->fresh()->monitoring_suspended)->toBeTrue()
+        ->and($mediaReplacementAttempt->fresh()->status)->toBe(MediaReplacementStatus::NeedsAttention);
     // Hourly schedule: a permanently-unreachable arr must not notify every run.
     Notification::assertNothingSent();
 });
@@ -295,7 +295,7 @@ test('a failed restore leaves the settled attempt suspended for the next run', f
 test('a failed restore on one settled attempt does not abort the others', function (): void {
     Http::fake(['*' => Http::response([], 500)]);
 
-    $first = settledSuspendedAttempt();
+    $mediaReplacementAttempt = settledSuspendedAttempt();
     $second = settledSuspendedAttempt();
 
     $this->artisan('media-replacement:reconcile')->assertSuccessful();
@@ -304,10 +304,10 @@ test('a failed restore on one settled attempt does not abort the others', functi
     // asserted by its OWN connection url: counting requests would instead measure the
     // client's retry policy, and counting distinct urls would silently collapse on the
     // rare occasion the two factory connections draw the same random port.
-    expect($first->fresh()->monitoring_suspended)->toBeTrue()
+    expect($mediaReplacementAttempt->fresh()->monitoring_suspended)->toBeTrue()
         ->and($second->fresh()->monitoring_suspended)->toBeTrue();
 
-    foreach ([$first, $second] as $attempt) {
+    foreach ([$mediaReplacementAttempt, $second] as $attempt) {
         $url = rtrim((string) $attempt->serviceConnection->url, '/').'/api/v3/episode/monitor';
 
         Http::assertSent(fn ($request): bool => $request->method() === 'PUT' && (string) $request->url() === $url);
@@ -326,15 +326,15 @@ test('a settled attempt reopened while the pass is running is skipped by the re-
         'url' => 'http://sonarr.local:8989', 'api_key' => 'test', 'is_active' => true,
     ]);
 
-    $first = settledSuspendedAttempt(['service_connection_id' => $connection->id]);
+    $mediaReplacementAttempt = settledSuspendedAttempt(['service_connection_id' => $connection->id]);
     $second = settledSuspendedAttempt(['service_connection_id' => $connection->id]);
 
     // The Retry lands AFTER the query that selected both rows, while the pass is
     // mid-loop restoring the first. Only a re-read immediately before acting can see
     // that — the selecting query has already run.
-    Http::fake(function () use ($first, $second) {
+    Http::fake(function () use ($mediaReplacementAttempt, $second) {
         MediaReplacementAttempt::query()
-            ->whereKey([$first->id, $second->id])
+            ->whereKey([$mediaReplacementAttempt->id, $second->id])
             ->update([
                 'status' => MediaReplacementStatus::Downloading->value,
                 'failure_reason' => null,
@@ -378,11 +378,11 @@ test('the repair pass distinguishes a row another actor restored from one a retr
     // Created FIRST so the loop reaches it first: its restore is what fires the fake
     // below, and both mutations therefore land while the pass is mid-loop, after the
     // query that already selected all three rows.
-    $trigger = settledSuspendedAttempt(['service_connection_id' => $connection->id]);
+    $mediaReplacementAttempt = settledSuspendedAttempt(['service_connection_id' => $connection->id]);
     $restoredElsewhere = settledSuspendedAttempt(['service_connection_id' => $connection->id]);
     $reopened = settledSuspendedAttempt(['service_connection_id' => $connection->id]);
 
-    expect($trigger->id)->toBeLessThan($restoredElsewhere->id)
+    expect($mediaReplacementAttempt->id)->toBeLessThan($restoredElsewhere->id)
         ->and($restoredElsewhere->id)->toBeLessThan($reopened->id);
 
     Http::fake(function () use ($restoredElsewhere, $reopened) {
@@ -416,10 +416,10 @@ test('a settled attempt pruned mid-pass does not abort the remaining reconciliat
 
     // Created first so its restore is what fires the fake, deleting the second row
     // while the pass is already mid-loop.
-    $trigger = settledSuspendedAttempt(['service_connection_id' => $connection->id]);
+    $mediaReplacementAttempt = settledSuspendedAttempt(['service_connection_id' => $connection->id]);
     $pruned = settledSuspendedAttempt(['service_connection_id' => $connection->id]);
 
-    expect($trigger->id)->toBeLessThan($pruned->id);
+    expect($mediaReplacementAttempt->id)->toBeLessThan($pruned->id);
 
     $stuck = MediaReplacementAttempt::factory()->create([
         'status' => MediaReplacementStatus::Downloading,
@@ -438,7 +438,7 @@ test('a settled attempt pruned mid-pass does not abort the remaining reconciliat
 
     // The pass that runs AFTER the repair still ran, which is what the abort used to
     // swallow.
-    expect($trigger->fresh()->monitoring_suspended)->toBeFalse()
+    expect($mediaReplacementAttempt->fresh()->monitoring_suspended)->toBeFalse()
         ->and($stuck->fresh()->status)->toBe(MediaReplacementStatus::NeedsAttention);
 });
 
@@ -451,7 +451,7 @@ test('the repair pass honours the --hours option rather than a hardcoded cutoff'
     // it. What THIS test pins is narrower: that the option's value is what decides,
     // not a hardcoded constant. The mid-pass race the cutoff cannot cover is a
     // different test's job (`reopened while the pass is running`).
-    $attempt = settledSuspendedAttempt([
+    $mediaReplacementAttempt = settledSuspendedAttempt([
         'started_at' => now()->subHours(2),
         'completed_at' => now()->subHours(2),
     ]);
@@ -459,12 +459,12 @@ test('the repair pass honours the --hours option rather than a hardcoded cutoff'
     $this->artisan('media-replacement:reconcile')->assertSuccessful();
 
     // Too young for the 6h default: untouched.
-    expect($attempt->fresh()->monitoring_suspended)->toBeTrue();
+    expect($mediaReplacementAttempt->fresh()->monitoring_suspended)->toBeTrue();
     Http::assertNothingSent();
 
     $this->artisan('media-replacement:reconcile', ['--hours' => 1])->assertSuccessful();
 
     // Old enough for a 1h cutoff: repaired.
-    expect($attempt->fresh()->monitoring_suspended)->toBeFalse();
+    expect($mediaReplacementAttempt->fresh()->monitoring_suspended)->toBeFalse();
     Http::assertSent(fn ($request): bool => str_contains((string) $request->url(), 'episode/monitor'));
 });

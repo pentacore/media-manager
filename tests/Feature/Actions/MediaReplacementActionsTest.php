@@ -599,9 +599,9 @@ test('a resume whose unmonitor fails keeps the restore obligation a later actor 
 
     resolve(MediaReplacementActions::class)->execute($actionRequest);
 
-    $attempt = MediaReplacementAttempt::query()->where('action_request_id', $actionRequest->id)->sole();
+    $mediaReplacementAttempt = MediaReplacementAttempt::query()->where('action_request_id', $actionRequest->id)->sole();
 
-    expect($attempt->monitoring_suspended)->toBeTrue();
+    expect($mediaReplacementAttempt->monitoring_suspended)->toBeTrue();
 
     // And the obligation is genuinely actionable rather than a flag nobody reads:
     // once the arr recovers the restore actually reaches it, instead of being
@@ -609,13 +609,13 @@ test('a resume whose unmonitor fails keeps the restore obligation a later actor 
     // ever sent monitored: false, so a monitored: true PUT can only be this restore.
     $arrAcceptsMonitorWrites = true;
 
-    expect(resolve(MediaReplacementTracker::class)->restoreSuspendedMonitoring($attempt))->toBeTrue();
+    expect(resolve(MediaReplacementTracker::class)->restoreSuspendedMonitoring($mediaReplacementAttempt))->toBeTrue();
 
     Http::assertSent(fn (Request $request): bool => $request->method() === 'PUT'
         && str_contains($request->url(), '/api/v3/episode/monitor')
         && $request->data()['monitored'] === true);
 
-    expect($attempt->fresh()->monitoring_suspended)->toBeFalse();
+    expect($mediaReplacementAttempt->fresh()->monitoring_suspended)->toBeFalse();
 });
 
 /**
@@ -731,13 +731,13 @@ test('a retry whose grab is rejected still tries to discharge an inherited resto
         && str_contains($request->url(), '/api/v3/episode/monitor')
         && $request->data()['monitored'] === true);
 
-    $attempt = MediaReplacementAttempt::query()->where('action_request_id', $actionRequest->id)->sole();
+    $mediaReplacementAttempt = MediaReplacementAttempt::query()->where('action_request_id', $actionRequest->id)->sole();
 
     // It failed, so the obligation survives for the repair pass and the operator is
     // told monitoring is the outstanding problem.
-    expect($attempt->monitoring_suspended)->toBeTrue()
-        ->and($attempt->status)->toBe(MediaReplacementStatus::Failed)
-        ->and($attempt->failure_reason)->toContain('monitoring could not be restored');
+    expect($mediaReplacementAttempt->monitoring_suspended)->toBeTrue()
+        ->and($mediaReplacementAttempt->status)->toBe(MediaReplacementStatus::Failed)
+        ->and($mediaReplacementAttempt->failure_reason)->toContain('monitoring could not be restored');
 });
 
 test('preserves the original was_monitored across a retry', function (): void {
@@ -943,10 +943,10 @@ test('the executor does not restore monitoring after blocklisting, so the queued
         && str_contains($request->url(), '/api/v3/episode/monitor')
         && $request->data()['monitored'] === true);
 
-    $attempt = MediaReplacementAttempt::query()->where('action_request_id', $actionRequest->id)->sole();
+    $mediaReplacementAttempt = MediaReplacementAttempt::query()->where('action_request_id', $actionRequest->id)->sole();
 
-    expect($attempt->monitoring_suspended)->toBeTrue()
-        ->and($attempt->cleanup_completed_at)->not->toBeNull();
+    expect($mediaReplacementAttempt->monitoring_suspended)->toBeTrue()
+        ->and($mediaReplacementAttempt->cleanup_completed_at)->not->toBeNull();
 });
 
 test('the executor reports the sweep result and does not remove anything before the grab webhook lands', function (): void {
@@ -983,11 +983,11 @@ test('the executor arms the delayed sweep passes as the backstop for the queued 
 
     resolve(MediaReplacementActions::class)->execute($actionRequest);
 
-    $attempt = MediaReplacementAttempt::query()->where('action_request_id', $actionRequest->id)->sole();
+    $mediaReplacementAttempt = MediaReplacementAttempt::query()->where('action_request_id', $actionRequest->id)->sole();
 
     Queue::assertPushed(
         SweepCompetingGrabs::class,
-        fn (SweepCompetingGrabs $sweepCompetingGrabs): bool => $sweepCompetingGrabs->attemptId === $attempt->id
+        fn (SweepCompetingGrabs $sweepCompetingGrabs): bool => $sweepCompetingGrabs->attemptId === $mediaReplacementAttempt->id
             && $sweepCompetingGrabs->pass === 0,
     );
 });

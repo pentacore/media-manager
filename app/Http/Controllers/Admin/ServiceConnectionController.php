@@ -153,8 +153,13 @@ class ServiceConnectionController extends Controller
         foreach ($tags as $tag) {
             $id = $tag['id'] ?? null;
             $label = is_string($tag['label'] ?? null) ? trim($tag['label']) : null;
-
-            if (! is_int($id) || $label === null || $label === '') {
+            if (! is_int($id)) {
+                continue;
+            }
+            if ($label === null) {
+                continue;
+            }
+            if ($label === '') {
                 continue;
             }
 
