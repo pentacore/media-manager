@@ -382,6 +382,7 @@ test('Unknown eventType is logged and skipped (no ActivityLog)', function (): vo
 
 test('Download event queues the automatic subtitle check', function (): void {
     Queue::fake();
+    $this->freezeSecond();
 
     $webhookEvent = WebhookEvent::factory()->create([
         'service_connection_id' => $this->connection->id,
@@ -396,7 +397,15 @@ test('Download event queues the automatic subtitle check', function (): void {
 
     resolve(SonarrWebhookHandler::class)->handle($webhookEvent);
 
-    Queue::assertPushed(AuditImportedSubtitles::class, fn (AuditImportedSubtitles $job): bool => $job->webhookEventId === $webhookEvent->id);
+    // The delay is load-bearing, not cosmetic: it gives Sonarr's mediainfo scan
+    // time to finish so the imported file's subtitle list is populated when the
+    // audit reads it. queueFor() is shared with the Radarr handler, so this is
+    // the one place it is pinned.
+    Queue::assertPushed(
+        AuditImportedSubtitles::class,
+        fn (AuditImportedSubtitles $job): bool => $job->webhookEventId === $webhookEvent->id
+            && $job->delay?->getTimestamp() === now()->addSeconds(AuditImportedSubtitles::DELAY_SECONDS)->getTimestamp(),
+    );
 });
 
 test('a non-import event does not queue the automatic subtitle check', function (): void {
