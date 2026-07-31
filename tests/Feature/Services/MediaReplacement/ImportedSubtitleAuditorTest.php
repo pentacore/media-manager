@@ -173,6 +173,18 @@ test('an untagged series is skipped before any inspection', function (): void {
     Http::assertNotSent(fn (Request $request): bool => str_contains($request->url(), '/api/v3/episodefile'));
 });
 
+test('a connection with no configured tags is skipped without touching the arr', function (): void {
+    fakeAuditArr();
+
+    $this->connection->update(['settings' => ['sonarr_root_folders' => [['root_folder_id' => 1, 'path' => '/tv', 'scope' => 'tv']]]]);
+
+    resolve(ImportedSubtitleAuditor::class)->audit($this->connection, importPayload(), null);
+
+    expect(ActionRequest::query()->where('type', 'replace_media_file')->count())->toBe(0);
+
+    Http::assertNothingSent();
+});
+
 test('a skipped import is logged so the no-op is distinguishable from a broken feature', function (): void {
     fakeAuditArr(['tagIds' => [2]]);
 
@@ -188,6 +200,11 @@ test('a skipped import is logged so the no-op is distinguishable from a broken f
 });
 
 test('the check is skipped entirely when disabled', function (): void {
+    // The arr surface is faked even though nothing should reach it: without a
+    // fake, a stray request throws and audit()'s guard swallows it, so
+    // assertNothingSent would pass with the enabled guard deleted.
+    fakeAuditArr();
+
     resolve(MediaReplacementSettings::class)->setConfiguration([
         'subtitle_check' => ['enabled' => false, 'max_attempts_per_target' => 1, 'cooldown_hours' => 24],
     ]);

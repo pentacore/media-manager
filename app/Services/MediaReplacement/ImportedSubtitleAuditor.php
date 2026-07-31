@@ -295,8 +295,10 @@ final readonly class ImportedSubtitleAuditor
     /**
      * Stable per-target key for the attempt cap, written into the request
      * payload by ReplacementRequestBuilder and read back by capReached().
-     * Episode ids are sorted so a multi-episode file yields the same key
-     * regardless of the order the arr listed them.
+     *
+     * A non-ambiguous Sonarr snapshot carries exactly one episode id today, so
+     * the sort is currently a no-op; it is kept because the key is a loop guard
+     * and a widened snapshot must not silently produce two keys for one target.
      *
      * @param  array<string, mixed>  $snapshot
      */
