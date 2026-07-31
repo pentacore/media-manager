@@ -176,10 +176,23 @@ test('admin manages non-secret Bazarr settings', function (): void {
             'swagger' => '2.0',
             'basePath' => '/api',
             'info' => ['title' => 'Bazarr', 'version' => '1.6.0'],
+            // Everything this fake serves is advertised, since the adapter reads a
+            // group only when its endpoint is discovered.
             'paths' => [
                 '/system/settings' => [
                     'get' => ['responses' => ['200' => ['description' => 'OK']]],
                     'post' => ['responses' => ['204' => ['description' => 'OK']]],
+                ],
+                '/system/languages/profiles' => ['get' => ['responses' => ['200' => ['description' => 'OK']]]],
+                '/system/tasks' => [
+                    'get' => ['responses' => ['200' => ['description' => 'OK']]],
+                    'post' => ['responses' => ['204' => ['description' => 'OK']]],
+                ],
+                '/providers' => ['get' => ['responses' => ['200' => ['description' => 'OK']]]],
+                '/system/notifications' => [
+                    'get' => ['responses' => ['200' => ['description' => 'OK']]],
+                    'post' => ['responses' => ['204' => ['description' => 'OK']]],
+                    'patch' => ['responses' => ['204' => ['description' => 'OK']]],
                 ],
             ],
         ]),
@@ -213,6 +226,48 @@ test('admin manages non-secret Bazarr settings', function (): void {
 
     expect(ActivityLog::query()->where('action', 'bazarr.settings.updated')->count())->toBe(1)
         ->and(ActivityLog::query()->where('action', 'bazarr.automation.updated')->count())->toBe(1);
+});
+
+test('the admin page reports groups this Bazarr does not expose', function (): void {
+    config()->set('mediamanager.cache.store', 'array');
+    $bazarr = ServiceConnection::factory()->bazarr()->create([
+        'name' => 'Primary Bazarr',
+        'url' => 'http://bazarr.test',
+        'api_key' => 'bazarr-secret',
+    ]);
+
+    // Only the settings endpoint is advertised. Reading the rest anyway used to 404
+    // and fail the whole page instead of reporting the missing groups.
+    Http::fake([
+        'bazarr.test/api/system/settings' => Http::response(['data' => [
+            'scheduler' => ['enabled' => true, 'interval_hours' => 6],
+            'subtitle_tools' => [
+                'automatic_subtitle_synchronization' => true,
+                'use_postprocessing' => false,
+            ],
+        ]]),
+        'bazarr.test/api/swagger.json' => Http::response([
+            'swagger' => '2.0',
+            'basePath' => '/api',
+            'info' => ['title' => 'Bazarr', 'version' => '1.6.0'],
+            'paths' => [
+                '/system/settings' => [
+                    'get' => ['responses' => ['200' => ['description' => 'OK']]],
+                    'post' => ['responses' => ['204' => ['description' => 'OK']]],
+                ],
+            ],
+        ]),
+    ]);
+
+    $this->actingAs(User::factory()->admin()->create());
+
+    visit(route('bazarr.admin.index', ['connection' => $bazarr->id], false))
+        ->assertSee('Language profiles')
+        ->assertSee('does not expose language profiles')
+        ->assertSee('does not expose tasks')
+        ->assertSee('does not expose provider status')
+        ->assertSee('does not expose notifications')
+        ->assertNoSmoke();
 });
 
 test('member searches and requests an exact subtitle from the item drawer', function (): void {

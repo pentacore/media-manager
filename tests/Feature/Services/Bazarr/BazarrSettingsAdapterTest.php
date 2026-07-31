@@ -29,6 +29,13 @@ test('it projects only explicitly safe non-secret settings', function (): void {
         'subtitle_tools',
         'provider_status',
         'notifications',
+        'available_groups',
+    ])->and($settings['available_groups'])->toBe([
+        'settings' => true,
+        'language_profiles' => true,
+        'tasks' => true,
+        'provider_status' => true,
+        'notifications' => true,
     ])->and(arrayKeysForBazarrSettings($settings))
         ->each->not->toMatch('/(?:password|token|api_?key|apikey|secret|username|url)/i')
         ->and(json_encode($settings, JSON_THROW_ON_ERROR))
@@ -41,6 +48,52 @@ test('it projects only explicitly safe non-secret settings', function (): void {
             'status' => 'healthy',
             'throttled_until' => null,
         ]);
+});
+
+test('an unadvertised optional endpoint is reported unavailable instead of failing the read', function (
+    string $omittedPath,
+    string $group,
+): void {
+    $connection = ServiceConnection::factory()->bazarr()->create([
+        'url' => 'http://bazarr.test',
+        'api_key' => 'connection-secret',
+    ]);
+    fakeSettingsApi(omitPaths: [$omittedPath]);
+
+    // Calling an endpoint this Bazarr does not advertise 404s, and that used to take
+    // the whole Admin page down instead of reporting one unavailable group.
+    $settings = resolve(BazarrSettingsAdapter::class)->read($connection);
+
+    expect($settings[$group])->toBe([])
+        ->and($settings['available_groups'][$group])->toBeFalse()
+        ->and($settings['scheduler']['interval_hours'])->toBe(6);
+
+    Http::assertNotSent(fn (Request $request): bool => str_ends_with(
+        (string) parse_url($request->url(), PHP_URL_PATH),
+        $omittedPath,
+    ));
+})->with([
+    'language profiles' => ['/system/languages/profiles', 'language_profiles'],
+    'tasks' => ['/system/tasks', 'tasks'],
+    'providers' => ['/providers', 'provider_status'],
+    'notifications' => ['/system/notifications', 'notifications'],
+]);
+
+test('a Bazarr without the settings endpoint still reports the other groups', function (): void {
+    $connection = ServiceConnection::factory()->bazarr()->create([
+        'url' => 'http://bazarr.test',
+        'api_key' => 'connection-secret',
+    ]);
+    fakeSettingsApi(settingsCapability: false);
+
+    $settings = resolve(BazarrSettingsAdapter::class)->read($connection);
+
+    expect($settings['available_groups']['settings'])->toBeFalse()
+        ->and($settings['scheduler'])->toBe(['enabled' => false, 'interval_hours' => 24])
+        ->and($settings['profile_assignments'])->toBe([])
+        ->and($settings['tasks'])->not->toBe([]);
+
+    Http::assertNotSent(fn (Request $request): bool => parse_url($request->url(), PHP_URL_PATH) === '/api/system/settings');
 });
 
 test('it writes only allowlisted settings with exact Bazarr form fields', function (): void {
@@ -115,8 +168,33 @@ test('it blocks writes when the Bazarr settings adapter capability is unavailabl
         ->toThrow(DomainException::class, 'does not support');
 });
 
-function fakeSettingsApi(bool $settingsCapability = true): void
+/**
+ * @param  list<string>  $omitPaths  Swagger paths this Bazarr does not advertise.
+ */
+function fakeSettingsApi(bool $settingsCapability = true, array $omitPaths = []): void
 {
+    $paths = [
+        '/system/settings' => [
+            'get' => ['responses' => ['200' => ['description' => 'OK']]],
+            'post' => ['responses' => ['204' => ['description' => 'OK']]],
+        ],
+        '/system/languages/profiles' => ['get' => ['responses' => ['200' => ['description' => 'OK']]]],
+        '/system/tasks' => [
+            'get' => ['responses' => ['200' => ['description' => 'OK']]],
+            'post' => ['responses' => ['204' => ['description' => 'OK']]],
+        ],
+        '/providers' => ['get' => ['responses' => ['200' => ['description' => 'OK']]]],
+        '/system/notifications' => [
+            'get' => ['responses' => ['200' => ['description' => 'OK']]],
+            'post' => ['responses' => ['204' => ['description' => 'OK']]],
+            'patch' => ['responses' => ['204' => ['description' => 'OK']]],
+        ],
+    ];
+
+    foreach ($omitPaths as $omitPath) {
+        unset($paths[$omitPath]);
+    }
+
     Http::fake([
         'bazarr.test/api/system/settings' => Http::sequence()
             ->push(['data' => [
@@ -159,16 +237,7 @@ function fakeSettingsApi(bool $settingsCapability = true): void
             'swagger' => '2.0',
             'basePath' => '/api',
             'info' => ['title' => 'Bazarr', 'version' => '1.6.0'],
-            'paths' => $settingsCapability ? [
-                '/system/settings' => [
-                    'get' => ['responses' => ['200' => ['description' => 'OK']]],
-                    'post' => ['responses' => ['204' => ['description' => 'OK']]],
-                ],
-            ] : [
-                '/unsupported' => [
-                    'get' => ['responses' => ['200' => ['description' => 'OK']]],
-                ],
-            ],
+            'paths' => $settingsCapability ? $paths : array_diff_key($paths, ['/system/settings' => true]),
         ]),
     ]);
 }

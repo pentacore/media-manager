@@ -47,6 +47,9 @@ final class ReconcileSubtitleCase implements ShouldQueue
      * stable across retries and distinct from every other dispatch — the sweep,
      * webhooks and action listeners all dispatch this job independently for the
      * same case.
+     *
+     * Read through reservationIdentity(): a payload queued before this property
+     * existed is restored without the constructor and leaves it uninitialized.
      */
     public readonly string $reservationId;
 
@@ -544,7 +547,27 @@ final class ReconcileSubtitleCase implements ShouldQueue
 
     private function reservationKey(int $connectionId): string
     {
-        return sprintf('bazarr-probe-cycle-reservation:%d:%s', $connectionId, $this->reservationId);
+        return sprintf('bazarr-probe-cycle-reservation:%d:%s', $connectionId, $this->reservationIdentity());
+    }
+
+    /**
+     * A payload queued by the previous release restores the four properties it knew
+     * about and never runs the constructor, so the identity is derived from the
+     * payload itself: stable across that message's own retries, without reading an
+     * uninitialized typed property and failing every attempt.
+     */
+    private function reservationIdentity(): string
+    {
+        if (! isset($this->reservationId)) {
+            $this->reservationId = 'payload:'.hash('sha256', json_encode([
+                $this->candidate,
+                $this->probeAllowed,
+                $this->subtitleCaseId,
+                $this->targetBazarrConnectionId,
+            ], JSON_THROW_ON_ERROR));
+        }
+
+        return $this->reservationId;
     }
 
     public function failed(?Throwable $throwable): void

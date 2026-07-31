@@ -26,6 +26,13 @@ interface Settings {
         throttled_until: string | null;
     }[];
     notifications: { id: number | string; name: string; enabled: boolean }[];
+    available_groups: {
+        settings: boolean;
+        language_profiles: boolean;
+        tasks: boolean;
+        provider_status: boolean;
+        notifications: boolean;
+    };
 }
 
 const props = defineProps<{
@@ -304,6 +311,13 @@ function saveAutomation(): void {
                         Read-only reference. MediaManager requirements remain
                         authoritative.
                     </p>
+                    <p
+                        v-if="!settings.available_groups.language_profiles"
+                        class="text-sm text-muted-foreground"
+                        data-test="bazarr-language-profiles-unavailable"
+                    >
+                        This Bazarr version does not expose language profiles.
+                    </p>
                     <div
                         v-for="profile in settings.language_profiles"
                         :key="profile.id"
@@ -318,6 +332,13 @@ function saveAutomation(): void {
 
                 <section class="rounded-xl border border-border bg-card p-5">
                     <h2 class="font-semibold">Provider status</h2>
+                    <p
+                        v-if="!settings.available_groups.provider_status"
+                        class="text-sm text-muted-foreground"
+                        data-test="bazarr-provider-status-unavailable"
+                    >
+                        This Bazarr version does not expose provider status.
+                    </p>
                     <div
                         v-for="provider in settings.provider_status"
                         :key="provider.name"
@@ -334,6 +355,13 @@ function saveAutomation(): void {
 
                 <section class="rounded-xl border border-border bg-card p-5">
                     <h2 class="font-semibold">Tasks</h2>
+                    <p
+                        v-if="!settings.available_groups.tasks"
+                        class="text-sm text-muted-foreground"
+                        data-test="bazarr-tasks-unavailable"
+                    >
+                        This Bazarr version does not expose tasks.
+                    </p>
                     <div
                         v-for="task in settings.tasks"
                         :key="task.id"
@@ -348,6 +376,13 @@ function saveAutomation(): void {
 
                 <section class="rounded-xl border border-border bg-card p-5">
                     <h2 class="font-semibold">Notifications</h2>
+                    <p
+                        v-if="!settings.available_groups.notifications"
+                        class="text-sm text-muted-foreground"
+                        data-test="bazarr-notifications-unavailable"
+                    >
+                        This Bazarr version does not expose notifications.
+                    </p>
                     <div
                         v-for="notification in settings.notifications"
                         :key="notification.id"

@@ -31,10 +31,44 @@ final class BazarrCapabilityRegistry
         'episode_media_action' => [['/series', 'patch']],
         'movie_media_action' => [['/movies', 'patch']],
         'tasks' => [['/system/tasks', 'get'], ['/system/tasks', 'post']],
+        'provider_status' => [['/providers', 'get']],
         'language_profiles' => [['/system/languages/profiles', 'get']],
         'settings_adapter' => [['/system/settings', 'get'], ['/system/settings', 'post']],
         'notification_adapter' => [['/system/notifications', 'get'], ['/system/notifications', 'post'], ['/system/notifications', 'patch']],
     ];
+
+    /**
+     * The single mapping from a requested subtitle operation to the capability that
+     * has to be advertised for it. Every entry point that can queue an operation —
+     * the HTTP controller and the AI tool — gates on this, because an Action Rule
+     * may auto-execute what they create.
+     *
+     * @var array<string, string>
+     */
+    private const array OPERATION_CAPABILITIES = [
+        'download_best' => 'best_download',
+        'download_exact' => 'exact_download',
+        'delete_subtitle' => 'delete',
+        // The subtitle tools all ride the same upstream endpoint.
+        'sync_subtitle' => 'sync',
+        'modify_subtitle' => 'sync',
+        'translate_subtitle' => 'translate',
+    ];
+
+    /**
+     * Null for an operation that has no mapping, which callers must treat as
+     * unsupported rather than as an ungated write.
+     */
+    public static function capabilityForOperation(string $operation, string $mediaType): ?string
+    {
+        // A media action is a write on the media collection itself, advertised per
+        // media type and independently of the inventory reads.
+        if ($operation === 'scan_media') {
+            return $mediaType === 'episode' ? 'episode_media_action' : 'movie_media_action';
+        }
+
+        return self::OPERATION_CAPABILITIES[$operation] ?? null;
+    }
 
     /**
      * @param  array<string, mixed>  $swagger
@@ -76,6 +110,7 @@ final class BazarrCapabilityRegistry
             'episode_media_action' => false,
             'movie_media_action' => false,
             'tasks' => false,
+            'provider_status' => false,
             'language_profiles' => false,
             'settings_adapter' => false,
             'notification_adapter' => false,

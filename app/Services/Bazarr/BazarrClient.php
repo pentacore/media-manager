@@ -27,6 +27,40 @@ use UnexpectedValueException;
  */
 final class BazarrClient
 {
+    /**
+     * Every subtitle-tool action MediaManager submits, spelled exactly as Bazarr
+     * expects it. The user-selectable ones are validated against this list by
+     * OperationRequest and BazarrActions, so a payload that passed approval can
+     * never be rejected here.
+     *
+     * @var list<string>
+     */
+    public const array SUBTITLE_TOOL_ACTIONS = [
+        'sync',
+        'translate',
+        'remove_HI',
+        'remove_tags',
+        'OCR_fixes',
+        'common',
+        'fix_uppercase',
+        'reverse_rtl',
+    ];
+
+    /**
+     * The subset an operator can pick for a modify_subtitle action; sync and
+     * translate have their own action types.
+     *
+     * @var list<string>
+     */
+    public const array SUBTITLE_MODIFY_ACTIONS = [
+        'remove_HI',
+        'remove_tags',
+        'OCR_fixes',
+        'common',
+        'fix_uppercase',
+        'reverse_rtl',
+    ];
+
     private ?BazarrCache $bazarrCache = null;
 
     public function __construct(private readonly ServiceConnection $serviceConnection)
@@ -424,7 +458,10 @@ final class BazarrClient
     public function applySubtitleTool(array $selection): void
     {
         $action = $this->selectionString($selection, 'action');
-        throw_unless(preg_match('/^[a-z0-9_-]{1,64}$/D', $action) === 1, InvalidArgumentException::class, 'Bazarr subtitle action is invalid.');
+        // Membership in the shared allowlist, not a character class: Bazarr's own
+        // action names are case-sensitive (remove_HI, OCR_fixes), so a lowercase-only
+        // pattern rejected approved operations the UI offers.
+        throw_unless(in_array($action, self::SUBTITLE_TOOL_ACTIONS, true), InvalidArgumentException::class, 'Bazarr subtitle action is invalid.');
 
         $mediaType = $this->selectionString($selection, 'media_type');
         throw_unless(in_array($mediaType, ['episode', 'movie'], true), InvalidArgumentException::class, 'Bazarr media type must be episode or movie.');

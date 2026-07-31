@@ -293,7 +293,7 @@ final readonly class BazarrActions implements ActionExecutor
                 $bazarrClient,
                 $payload,
                 $mediaType,
-                $this->requiredString($payload, 'tool_action', '/^[a-zA-Z0-9_-]{1,64}$/D'),
+                $this->requiredToolAction($payload),
             ),
             'bazarr_scan_media' => $this->scanMedia($bazarrClient, $payload, $mediaType),
             'bazarr_run_task' => $bazarrClient->runTask($this->requiredString($payload, 'task_id', '/^[a-zA-Z0-9_.:-]{1,150}$/D')),
@@ -657,7 +657,7 @@ final readonly class BazarrActions implements ActionExecutor
         }
 
         if ($type === 'bazarr_modify_subtitle') {
-            $this->requiredString($payload, 'tool_action', '/^[a-zA-Z0-9_-]{1,64}$/D');
+            $this->requiredToolAction($payload);
         }
     }
 
@@ -760,6 +760,27 @@ final readonly class BazarrActions implements ActionExecutor
     private function requiredFingerprint(array $payload, string $key): string
     {
         return $this->requiredString($payload, $key, '/^[a-f0-9]{64}$/D');
+    }
+
+    /**
+     * @param  array<string, mixed>  $payload
+     */
+    /**
+     * Validated against the shared allowlist so the executor accepts exactly the
+     * case-sensitive action names Bazarr expects and the UI offers.
+     *
+     * @param  array<string, mixed>  $payload
+     */
+    private function requiredToolAction(array $payload): string
+    {
+        $action = $payload['tool_action'] ?? null;
+        throw_unless(
+            is_string($action) && in_array($action, BazarrClient::SUBTITLE_MODIFY_ACTIONS, true),
+            InvalidArgumentException::class,
+            'Bazarr action field "tool_action" is invalid.',
+        );
+
+        return $action;
     }
 
     /**

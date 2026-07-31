@@ -24,17 +24,28 @@ final class BazarrSettingsAdapter
     ];
 
     /**
+     * Every endpoint here is optional and discovered independently, so each group is
+     * read only when this Bazarr advertises it. Calling them unconditionally made a
+     * single unsupported endpoint 404 and take the whole Admin page down with it,
+     * before it could report that the group is simply unavailable.
+     *
      * @return array<string, mixed>
      */
     public function read(ServiceConnection $serviceConnection): array
     {
         $bazarrClient = new BazarrClient($serviceConnection);
-        $settings = $bazarrClient->getSettings();
+        $capabilities = $bazarrClient->getCapabilities();
+        $settingsAvailable = ($capabilities['settings_adapter'] ?? false) === true;
+        $settings = $settingsAvailable ? $bazarrClient->getSettings() : [];
 
         return [
-            'language_profiles' => $this->languageProfiles($bazarrClient->getLanguageProfiles()),
+            'language_profiles' => ($capabilities['language_profiles'] ?? false) === true
+                ? $this->languageProfiles($bazarrClient->getLanguageProfiles())
+                : [],
             'profile_assignments' => $this->profileAssignments($settings['profile_assignments'] ?? []),
-            'tasks' => $this->tasks($bazarrClient->getTasks()['data']),
+            'tasks' => ($capabilities['tasks'] ?? false) === true
+                ? $this->tasks($bazarrClient->getTasks()['data'])
+                : [],
             'scheduler' => [
                 'enabled' => ($settings['scheduler']['enabled'] ?? false) === true,
                 'interval_hours' => $this->boundedInteger($settings['scheduler']['interval_hours'] ?? 24, 1, 168, 24),
@@ -43,8 +54,21 @@ final class BazarrSettingsAdapter
                 'automatic_subtitle_synchronization' => ($settings['subtitle_tools']['automatic_subtitle_synchronization'] ?? false) === true,
                 'use_postprocessing' => ($settings['subtitle_tools']['use_postprocessing'] ?? false) === true,
             ],
-            'provider_status' => $this->providers($bazarrClient->getProviders()['data']),
-            'notifications' => $this->notifications($bazarrClient->getNotifications()),
+            'provider_status' => ($capabilities['provider_status'] ?? false) === true
+                ? $this->providers($bazarrClient->getProviders()['data'])
+                : [],
+            'notifications' => ($capabilities['notification_adapter'] ?? false) === true
+                ? $this->notifications($bazarrClient->getNotifications())
+                : [],
+            // Lets the page say "unavailable on this Bazarr" instead of rendering an
+            // empty group as if it were genuinely empty.
+            'available_groups' => [
+                'settings' => $settingsAvailable,
+                'language_profiles' => ($capabilities['language_profiles'] ?? false) === true,
+                'tasks' => ($capabilities['tasks'] ?? false) === true,
+                'provider_status' => ($capabilities['provider_status'] ?? false) === true,
+                'notifications' => ($capabilities['notification_adapter'] ?? false) === true,
+            ],
         ];
     }
 

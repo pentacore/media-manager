@@ -11,6 +11,7 @@ use App\Http\Requests\Bazarr\OperationRequest;
 use App\Models\ActionRequest;
 use App\Models\ServiceConnection;
 use App\Services\Actions\ActionOrchestrator;
+use App\Services\Bazarr\BazarrCapabilityRegistry;
 use App\Services\Bazarr\BazarrClient;
 use App\Services\Bazarr\SubtitleInventoryService;
 use Illuminate\Http\JsonResponse;
@@ -73,18 +74,11 @@ final class OperationController extends Controller
      */
     private function validateCapability(string $operation, string $mediaType, BazarrClient $bazarrClient): void
     {
-        $capability = match ($operation) {
-            'download_best' => 'best_download',
-            'download_exact' => 'exact_download',
-            'delete_subtitle' => 'delete',
-            // The subtitle tools all ride the same upstream endpoint.
-            'sync_subtitle', 'modify_subtitle' => 'sync',
-            'translate_subtitle' => 'translate',
-            // A media action is a PATCH on the media collection itself, advertised
-            // per media type and independently of the inventory reads.
-            'scan_media' => $mediaType === 'episode' ? 'episode_media_action' : 'movie_media_action',
-            default => throw ValidationException::withMessages(['operation' => 'Unsupported Bazarr operation.']),
-        };
+        $capability = BazarrCapabilityRegistry::capabilityForOperation($operation, $mediaType);
+
+        if ($capability === null) {
+            throw ValidationException::withMessages(['operation' => 'Unsupported Bazarr operation.']);
+        }
 
         if (($bazarrClient->getCapabilities()[$capability] ?? false) !== true) {
             throw ValidationException::withMessages([

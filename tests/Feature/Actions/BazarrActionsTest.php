@@ -15,6 +15,7 @@ use App\Services\Actions\SharedMediaTargetLock;
 use App\Services\Bazarr\BazarrActions;
 use App\Services\Bazarr\BazarrCandidateFingerprint;
 use App\Services\Bazarr\BazarrMediaFingerprint;
+use App\Services\Bazarr\BazarrSubtitleFingerprint;
 use App\Services\Bazarr\SubtitleCaseFingerprint;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\Request;
@@ -120,6 +121,52 @@ beforeEach(function (): void {
         'forced' => false,
         'hearing_impaired' => false,
     ];
+});
+
+test('an approved remove_HI modification executes against Bazarr', function (): void {
+    Http::fake([
+        ...linkedTargetLiveFakes($this->sonarr),
+        'bazarr.test/api/episodes?*' => Http::response(['data' => [[
+            'sonarrSeriesId' => 101,
+            'sonarrEpisodeId' => 701,
+            'title' => 'Frieren S01E01',
+            'subtitles' => [[
+                'code3' => 'swe',
+                'path' => '/private/anime/Frieren S01E01.sv.srt',
+                'forced' => false,
+                'hi' => true,
+            ]],
+        ]]]),
+        'bazarr.test/api/subtitles' => Http::response('', 204),
+    ]);
+    $subtitleFingerprint = resolve(BazarrSubtitleFingerprint::class)->make([
+        ...LINKED_TARGET_IDS,
+        'media_type' => 'episode',
+        'media_id' => 701,
+        'path' => '/private/anime/Frieren S01E01.sv.srt',
+        'language' => 'swe',
+        'forced' => false,
+        'hearing_impaired' => true,
+        'display_name' => 'Frieren S01E01.sv.srt',
+    ]);
+
+    $request = ActionRequest::factory()->create([
+        'status' => ActionRequestStatus::Approved,
+        'type' => 'bazarr_modify_subtitle',
+        'payload' => [
+            ...array_diff_key($this->payload, array_flip(['language', 'forced', 'hearing_impaired'])),
+            'subtitle_fingerprint' => $subtitleFingerprint,
+            'tool_action' => 'remove_HI',
+        ],
+    ]);
+
+    resolve(BazarrActions::class)->execute($request);
+
+    // The action name Bazarr publishes is case-sensitive, and it is the value the
+    // drawer submits — validation must not reject it after approval.
+    Http::assertSent(fn (Request $request): bool => $request->method() === 'PATCH'
+        && $request->url() === 'http://bazarr.test/api/subtitles'
+        && $request->data()['action'] === 'remove_HI');
 });
 
 test('rejects action types outside the Bazarr allowlist', function (): void {

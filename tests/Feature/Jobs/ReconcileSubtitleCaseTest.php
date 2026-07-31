@@ -274,6 +274,44 @@ test('an independently dispatched job cannot reuse another job&apos;s cycle rese
         ->and(SubtitleCaseAttempt::query()->where('outcome', SubtitleCaseAttemptOutcome::Failed)->count())->toBe(1);
 });
 
+test('a job payload queued before the reservation identity existed still probes', function (): void {
+    Http::fake([
+        'bazarr.test/api/providers/episodes*' => Http::response(['data' => []]),
+        'bazarr.test/api/providers' => Http::response(['data' => []]),
+    ]);
+
+    // Exactly how PHP restores a payload written by the previous release: the four
+    // properties it knew about are set and the constructor never runs, so the typed
+    // reservationId stays uninitialized.
+    $legacyJob = new ReflectionClass(ReconcileSubtitleCase::class)->newInstanceWithoutConstructor();
+    $legacyJob->candidate = probeCandidate($this->case);
+    $legacyJob->probeAllowed = true;
+    $legacyJob->subtitleCaseId = null;
+    $legacyJob->targetBazarrConnectionId = null;
+
+    runSubtitleProbe($legacyJob);
+
+    // The probe ran instead of dying on an uninitialized property, and the derived
+    // identity is stable, so this message's own retries share one reservation.
+    $secondRestore = new ReflectionClass(ReconcileSubtitleCase::class)->newInstanceWithoutConstructor();
+    $secondRestore->candidate = probeCandidate($this->case);
+    $secondRestore->probeAllowed = true;
+    $secondRestore->subtitleCaseId = null;
+    $secondRestore->targetBazarrConnectionId = null;
+
+    expect(SubtitleCaseAttempt::query()->where('type', SubtitleCaseAttemptType::Probe)->count())->toBe(1)
+        ->and($legacyJob->reservationId)->toStartWith('payload:')
+        ->and(Cache::get('bazarr-probe-cycle-reservation:'.$this->bazarr->id.':'.$legacyJob->reservationId))->not->toBeNull();
+
+    // Probe again from a second restore of the same payload — the spacing record and
+    // the cycle counter are cleared so the run reaches the reservation.
+    SubtitleCaseAttempt::query()->delete();
+    Cache::forget('bazarr-probe-cycle-count:'.$this->bazarr->id);
+    runSubtitleProbe($secondRestore);
+
+    expect($secondRestore->reservationId)->toBe($legacyJob->reservationId);
+});
+
 test('the last probe attempt parks the case for review', function (): void {
     Http::fake([
         'bazarr.test/api/providers/episodes*' => fn (): never => throw new ConnectionException('bazarr unreachable'),

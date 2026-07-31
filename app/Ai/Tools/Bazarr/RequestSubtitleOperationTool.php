@@ -9,6 +9,7 @@ use App\Ai\Tools\BaseTool;
 use App\Enums\BazarrServiceRole;
 use App\Enums\ServiceType;
 use App\Models\ServiceConnection;
+use App\Services\Bazarr\BazarrCapabilityRegistry;
 use App\Services\Bazarr\BazarrClient;
 use App\Services\Bazarr\SubtitleInventoryService;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
@@ -54,6 +55,16 @@ final class RequestSubtitleOperationTool extends BaseTool
         $inspection = resolve(SubtitleInventoryService::class)->inspect($connection, $mediaType, $mediaId);
         $item = $inspection['item'];
         $bazarrClient = new BazarrClient($connection);
+        // The same gate the HTTP controller applies: an Action Rule may auto-execute
+        // what this tool queues, so an operation this Bazarr does not advertise must
+        // never become an Action Request.
+        $capability = BazarrCapabilityRegistry::capabilityForOperation($operation, $mediaType);
+        throw_unless(
+            $capability !== null && ($bazarrClient->getCapabilities()[$capability] ?? false) === true,
+            InvalidArgumentException::class,
+            'This Bazarr version does not support that subtitle operation.',
+        );
+
         $operationPayload = $this->operationPayload($operation, $arguments, $item, $bazarrClient, $mediaType, $mediaId);
         $managingConnection = $this->managingConnection($connection, $mediaType);
 

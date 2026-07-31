@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Http\Requests\Bazarr;
 
+use App\Services\Bazarr\BazarrClient;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 use Override;
@@ -46,14 +47,7 @@ final class OperationRequest extends FormRequest
                 'string',
                 'regex:/^[a-f0-9]{64}$/D',
             ],
-            'tool_action' => ['required_if:operation,modify_subtitle', 'nullable', 'string', Rule::in([
-                'remove_HI',
-                'remove_tags',
-                'OCR_fixes',
-                'common',
-                'fix_uppercase',
-                'reverse_rtl',
-            ])],
+            'tool_action' => ['required_if:operation,modify_subtitle', 'nullable', 'string', Rule::in(BazarrClient::SUBTITLE_MODIFY_ACTIONS)],
             'media_action' => ['required_if:operation,scan_media', 'nullable', 'string', Rule::in([
                 'scan-disk',
                 'search-missing',

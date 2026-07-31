@@ -187,10 +187,23 @@ function fakeAdminSettingsApi(): void
             'swagger' => '2.0',
             'basePath' => '/api',
             'info' => ['title' => 'Bazarr', 'version' => '1.6.0'],
+            // Everything this fake serves is advertised, since the adapter reads a
+            // group only when its endpoint is discovered.
             'paths' => [
                 '/system/settings' => [
                     'get' => ['responses' => ['200' => ['description' => 'OK']]],
                     'post' => ['responses' => ['204' => ['description' => 'OK']]],
+                ],
+                '/system/languages/profiles' => ['get' => ['responses' => ['200' => ['description' => 'OK']]]],
+                '/system/tasks' => [
+                    'get' => ['responses' => ['200' => ['description' => 'OK']]],
+                    'post' => ['responses' => ['204' => ['description' => 'OK']]],
+                ],
+                '/providers' => ['get' => ['responses' => ['200' => ['description' => 'OK']]]],
+                '/system/notifications' => [
+                    'get' => ['responses' => ['200' => ['description' => 'OK']]],
+                    'post' => ['responses' => ['204' => ['description' => 'OK']]],
+                    'patch' => ['responses' => ['204' => ['description' => 'OK']]],
                 ],
             ],
         ]),

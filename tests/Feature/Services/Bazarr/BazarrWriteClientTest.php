@@ -263,6 +263,38 @@ test('subtitle tools tasks and media actions use exact Bazarr endpoints', functi
         && $request->data() === ['radarrid' => 84, 'action' => 'search-missing']);
 });
 
+test('case-sensitive subtitle tool actions reach Bazarr unchanged', function (string $action): void {
+    Http::fake(['bazarr.test/api/subtitles' => Http::response('', 204)]);
+
+    // Bazarr's own action names are case-sensitive, and these are the values the
+    // drawer submits and OperationRequest approves.
+    $this->client->applySubtitleTool([
+        'action' => $action,
+        'language' => 'en',
+        'path' => '/media/private/movie.en.srt',
+        'media_type' => 'movie',
+        'media_id' => 84,
+        'forced' => false,
+        'hearing_impaired' => false,
+    ]);
+
+    Http::assertSent(fn (Request $request): bool => $request->method() === 'PATCH'
+        && $request->url() === 'http://bazarr.test/api/subtitles'
+        && $request->data()['action'] === $action);
+})->with(['remove_HI', 'OCR_fixes', 'remove_tags', 'fix_uppercase']);
+
+test('an action outside the allowlist is refused before any request', function (): void {
+    Http::preventStrayRequests();
+
+    expect(fn (): mixed => $this->client->applySubtitleTool([
+        'action' => 'drop_database',
+        'language' => 'en',
+        'path' => '/media/private/movie.en.srt',
+        'media_type' => 'movie',
+        'media_id' => 84,
+    ]))->toThrow(InvalidArgumentException::class, 'subtitle action is invalid');
+});
+
 test('writes are never retried after connection loss', function (): void {
     Http::fake([
         'bazarr.test/api/system/tasks' => Http::sequence()

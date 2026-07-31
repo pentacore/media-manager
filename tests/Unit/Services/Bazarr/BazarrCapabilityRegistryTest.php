@@ -30,6 +30,7 @@ function expectedBazarrCapabilities(
     bool $episodeMediaAction = true,
     bool $movieMediaAction = true,
     bool $tasks = true,
+    bool $providerStatus = true,
     bool $languageProfiles = true,
     bool $settingsAdapter = false,
     bool $notificationAdapter = false,
@@ -48,6 +49,7 @@ function expectedBazarrCapabilities(
         'episode_media_action' => $episodeMediaAction,
         'movie_media_action' => $movieMediaAction,
         'tasks' => $tasks,
+        'provider_status' => $providerStatus,
         'language_profiles' => $languageProfiles,
         'settings_adapter' => $settingsAdapter,
         'notification_adapter' => $notificationAdapter,
@@ -80,6 +82,7 @@ function completeBazarrSwagger(
         '/movies/subtitles' => ['patch', 'post', 'delete'],
         '/subtitles' => ['patch'],
         '/system/tasks' => ['get', 'post'],
+        '/providers' => ['get'],
         '/system/languages/profiles' => ['get'],
     ];
 
@@ -370,6 +373,7 @@ test('unavailable or malformed Swagger falls back to bounded safe reads', functi
         episodeMediaAction: false,
         movieMediaAction: false,
         tasks: false,
+        providerStatus: false,
     ));
 
     $fallbackPaths = collect(Http::recorded())
@@ -446,6 +450,7 @@ test('partial fallback failures disable only dependent capabilities and do not s
         episodeMediaAction: false,
         movieMediaAction: false,
         tasks: false,
+        providerStatus: false,
     ));
 
     Http::assertSent(fn (Request $request): bool => parse_url($request->url(), PHP_URL_PATH) === '/api/system/languages/profiles');
