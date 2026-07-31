@@ -1,3 +1,10 @@
+# [1.15.0](https://github.com/pentacore/media-manager/compare/v1.14.1...v1.15.0) (2026-07-31)
+
+
+### Features
+
+* **ai:** make the assistant panel wider and drag-resizable ([4eea4d5](https://github.com/pentacore/media-manager/commit/4eea4d536a8b7a3014e80c0eb58ab4f2d5ef644b))
+
 ## [1.14.1](https://github.com/pentacore/media-manager/compare/v1.14.0...v1.14.1) (2026-07-31)
 
 

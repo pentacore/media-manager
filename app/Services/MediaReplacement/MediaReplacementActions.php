@@ -13,14 +13,11 @@ use App\Models\ActionRequest;
 use App\Models\MediaReplacementAttempt;
 use App\Models\ServiceConnection;
 use App\Services\Actions\ActionExecutor;
-use App\Services\Actions\SharedMediaTargetLock;
 use App\Services\Radarr\RadarrClient;
 use App\Services\Sonarr\SonarrClient;
-use Illuminate\Contracts\Cache\Lock;
 use Illuminate\Contracts\Database\Query\Builder;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\RequestException;
-use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
 use InvalidArgumentException;
 use RuntimeException;
@@ -76,34 +73,20 @@ final readonly class MediaReplacementActions implements ActionExecutor
             ? new SonarrClient($serviceConnection)
             : new RadarrClient($serviceConnection);
 
-        // Shared installed-file lock: a media replacement must never run
-        // concurrently with a Bazarr subtitle download/delete/sync/translate/
-        // modify for the same installed file. Keyed on the pinned managing arr
-        // connection plus the stable installed-file identity (media type + arr
-        // media id) so both executors compute the same key.
-        $sharedLocks = $this->acquireSharedTargetLocks($serviceConnection, $serviceType, $storedTarget);
-
-        try {
-            return $this->runReplacement(
-                $actionRequest,
-                $payload,
-                $serviceType,
-                $serviceConnection,
-                $client,
-                $storedTarget,
-                $fingerprint,
-                $requiredLanguages,
-            );
-        } finally {
-            foreach ($sharedLocks as $sharedLock) {
-                $sharedLock->release();
-            }
-        }
+        return $this->runReplacement(
+            $actionRequest,
+            $payload,
+            $serviceType,
+            $serviceConnection,
+            $client,
+            $storedTarget,
+            $fingerprint,
+            $requiredLanguages,
+        );
     }
 
     /**
-     * Run the revalidate + grab-before-delete replacement under the shared
-     * installed-file lock held by the caller.
+     * Run the revalidate + grab-before-delete replacement.
      *
      * @param  array<string, mixed>  $payload
      * @param  array<string, mixed>  $storedTarget
@@ -517,48 +500,6 @@ final readonly class MediaReplacementActions implements ActionExecutor
         );
 
         return $connection;
-    }
-
-    /**
-     * Acquire the shared installed-file lock(s) for the reviewed target so a
-     * Bazarr subtitle operation cannot run concurrently against the same file.
-     * A season-pack replacement touches several episodes, so one lock per arr
-     * media id is taken all-or-nothing; a held lock aborts before any write.
-     *
-     * @param  array<string, mixed>  $target
-     * @return list<Lock>
-     */
-    private function acquireSharedTargetLocks(
-        ServiceConnection $serviceConnection,
-        ServiceType $serviceType,
-        array $target,
-    ): array {
-        $mediaType = $serviceType === ServiceType::Sonarr ? 'episode' : 'movie';
-        $mediaIds = $serviceType === ServiceType::Sonarr
-            ? array_map(intval(...), is_array($target['episode_ids'] ?? null) ? $target['episode_ids'] : [])
-            : [(int) ($target['movie_id'] ?? 0)];
-        $mediaIds = array_values(array_unique(array_filter($mediaIds, static fn (int $id): bool => $id > 0)));
-
-        $locks = [];
-
-        foreach ($mediaIds as $mediumId) {
-            $lock = Cache::lock(
-                SharedMediaTargetLock::key($serviceConnection->id, $mediaType, $mediumId),
-                SharedMediaTargetLock::TTL_SECONDS,
-            );
-
-            if (! $lock->get()) {
-                foreach ($locks as $acquired) {
-                    $acquired->release();
-                }
-
-                throw new RuntimeException('This installed media file is locked by another operation.');
-            }
-
-            $locks[] = $lock;
-        }
-
-        return $locks;
     }
 
     /**
