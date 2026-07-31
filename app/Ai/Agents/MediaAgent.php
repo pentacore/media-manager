@@ -72,6 +72,18 @@ class MediaAgent implements Agent, Conversational, HasProviderOptions, HasTools
         return resolve(AiSettings::class)->model();
     }
 
+    /**
+     * Seconds to wait on the provider before aborting a turn. The SDK picks
+     * this up via Promptable::getTimeout() for both prompt() and stream(), in
+     * preference to its own default. A chat turn can chain many tool
+     * round-trips (MaxSteps is 24), so the default here is far more generous
+     * than a single-request timeout — admins tune it in Admin → AI Settings.
+     */
+    public function timeout(): int
+    {
+        return resolve(AiSettings::class)->chatTimeout();
+    }
+
     public function providerOptions(Lab|string $provider): array
     {
         $options = match ($provider) {

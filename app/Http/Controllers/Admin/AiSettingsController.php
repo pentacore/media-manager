@@ -37,6 +37,7 @@ class AiSettingsController extends Controller
                 'soft_budget_usd' => $aiSettings->softBudgetUsd(),
                 'hard_budget_usd' => $aiSettings->hardBudgetUsd(),
                 'advisor_reasoning_level' => $aiSettings->advisorReasoningLevel(),
+                'chat_timeout' => $aiSettings->chatTimeout(),
                 'failover_provider' => $aiSettings->failoverProvider()?->value ?? 'none',
                 'models_dev_pricing_enabled' => $aiSettings->modelsDevPricingEnabled(),
                 'ignored_pricing_providers' => $aiSettings->ignoredPricingProviders(),
@@ -146,6 +147,9 @@ class AiSettingsController extends Controller
             isset($validated['hard_budget_usd']) ? (float) $validated['hard_budget_usd'] : null,
         );
         $aiSettings->setAdvisorReasoningLevel(AiReasoningLevel::from($validated['advisor_reasoning_level']));
+        $aiSettings->setChatTimeout(
+            isset($validated['chat_timeout']) ? (int) $validated['chat_timeout'] : null,
+        );
         $aiSettings->setFailoverProvider(
             empty($validated['failover_provider']) ? null : Lab::tryFrom($validated['failover_provider']),
         );

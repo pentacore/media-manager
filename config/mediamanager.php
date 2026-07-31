@@ -37,6 +37,12 @@ return [
         // admin AI Settings page.
         'title_model' => env('MEDIAMANAGER_AI_TITLE_MODEL', 'gpt-5.4-nano'),
 
+        // Seconds MediaAgent waits for a provider response before aborting a
+        // chat turn. A tool-using turn can chain several provider round-trips,
+        // so this is deliberately generous. Overridable per-install via env or
+        // the admin AI Settings page (which persists on top of this default).
+        'chat_timeout' => (int) env('MEDIAMANAGER_AI_CHAT_TIMEOUT', 120),
+
         // Opt-in: swap the PriceFetcherAgent's custom host-allowlisted HTTP
         // GET tool for the SDK's provider-native WebFetch. Only works on
         // providers that support it (OpenAI/Anthropic); unsupported providers
