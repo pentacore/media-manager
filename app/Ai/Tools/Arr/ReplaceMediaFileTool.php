@@ -6,10 +6,9 @@ namespace App\Ai\Tools\Arr;
 
 use App\Ai\Risk;
 use App\Ai\Tools\BaseTool;
-use App\Enums\SeasonPackPolicy;
 use App\Services\MediaReplacement\MediaFileInspector;
 use App\Services\MediaReplacement\ReplacementCandidateFinder;
-use App\Settings\MediaReplacementSettings;
+use App\Services\MediaReplacement\ReplacementRequestBuilder;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
 use Illuminate\JsonSchema\Types\Type;
 use InvalidArgumentException;
@@ -81,33 +80,20 @@ class ReplaceMediaFileTool extends BaseTool
             );
         }
 
-        $mediaReplacementSettings = resolve(MediaReplacementSettings::class);
-        $isSeasonPack = ($candidate['season_pack'] ?? false) === true;
-        $candidateRequiresApproval = ($candidate['requires_approval'] ?? false) === true;
+        $built = resolve(ReplacementRequestBuilder::class)->build(
+            snapshot: $snapshot,
+            candidate: $candidate,
+            requiredLanguages: $result['effective_languages'],
+            selectionMode: $selectionMode,
+            reason: $reason,
+        );
 
         return [
             'type' => 'replace_media_file',
             'source_service' => 'ai',
             'target_service' => $service,
-            'force_requires_approval' => $candidateRequiresApproval
-                || ($isSeasonPack
-                    && $mediaReplacementSettings->seasonPackPolicy() === SeasonPackPolicy::ApprovalRequired),
-            'payload' => [
-                'title' => sprintf('Replace %s', $snapshot['display_name'] ?? 'media file'),
-                'detail' => $reason,
-                'service' => $service,
-                'service_connection_id' => $snapshot['service_connection_id'] ?? null,
-                'scope' => $snapshot['scope'] ?? null,
-                'target' => $snapshot,
-                'candidate_fingerprint' => $candidate['fingerprint'],
-                'candidate' => $candidate,
-                'required_languages' => $result['effective_languages'],
-                'confidence' => $candidate['confidence'],
-                'matched_rules' => $candidate['matched_rules'],
-                'selection_mode' => $selectionMode,
-                'agent_rationale' => mb_substr($reason, 0, 1000),
-                'original_history_id' => $snapshot['original_history_id'] ?? null,
-            ],
+            'force_requires_approval' => $built['force_requires_approval'],
+            'payload' => $built['payload'],
         ];
     }
 
