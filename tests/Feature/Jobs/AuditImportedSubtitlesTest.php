@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use App\Enums\UserRole;
 use App\Jobs\AuditImportedSubtitles;
+use App\Jobs\ProcessWebhookEvent;
 use App\Models\ActionRequest;
 use App\Models\ActionTypeConfig;
 use App\Models\ServiceConnection;
@@ -11,9 +12,12 @@ use App\Models\User;
 use App\Models\WebhookEvent;
 use App\Services\MediaReplacement\ImportedSubtitleAuditor;
 use App\Settings\MediaReplacementSettings;
+use App\Settings\WebhookSettings;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Notification;
+use Illuminate\Support\Facades\Queue;
 
 beforeEach(function (): void {
     Cache::flush();
@@ -112,6 +116,36 @@ function fakeAuditArrForJob(array $opts = []): void
     ]);
 }
 
+/**
+ * A stored Download event for the series `fakeAuditArrForJob()` describes.
+ */
+function importedDownloadEvent(ServiceConnection $serviceConnection): WebhookEvent
+{
+    return WebhookEvent::factory()->create([
+        'service_connection_id' => $serviceConnection->id,
+        'event_type' => 'Download',
+        'payload' => [
+            'eventType' => 'Download',
+            'series' => ['id' => 42, 'title' => 'Tagged Show'],
+            'episodes' => [['id' => 101, 'seasonNumber' => 1, 'episodeNumber' => 1]],
+            'downloadId' => 'DL-ORGANIC',
+        ],
+    ]);
+}
+
+/**
+ * The job as the handlers queue it: event id, connection id and payload, all
+ * read off the event at dispatch time the way queueFor() does.
+ */
+function auditJobFor(WebhookEvent $webhookEvent): AuditImportedSubtitles
+{
+    return new AuditImportedSubtitles(
+        $webhookEvent->id,
+        $webhookEvent->service_connection_id,
+        $webhookEvent->payload,
+    );
+}
+
 test('it delegates a tagged import to the auditor', function (): void {
     // Delegation is observed through its effect: with the connection tagged and
     // the imported file missing a required language, the auditor dispatches a
@@ -121,18 +155,9 @@ test('it delegates a tagged import to the auditor', function (): void {
     $connection = taggedSonarrConnection();
     fakeAuditArrForJob(['subtitles' => 'Japanese']);
 
-    $webhookEvent = WebhookEvent::factory()->create([
-        'service_connection_id' => $connection->id,
-        'event_type' => 'Download',
-        'payload' => [
-            'eventType' => 'Download',
-            'series' => ['id' => 42, 'title' => 'Tagged Show'],
-            'episodes' => [['id' => 101, 'seasonNumber' => 1, 'episodeNumber' => 1]],
-            'downloadId' => 'DL-ORGANIC',
-        ],
-    ]);
+    $webhookEvent = importedDownloadEvent($connection);
 
-    new AuditImportedSubtitles($webhookEvent->id)->handle(resolve(ImportedSubtitleAuditor::class));
+    auditJobFor($webhookEvent)->handle(resolve(ImportedSubtitleAuditor::class));
 
     $actionRequest = ActionRequest::query()->where('type', 'replace_media_file')->sole();
 
@@ -142,44 +167,85 @@ test('it delegates a tagged import to the auditor', function (): void {
         ->and($actionRequest->payload['auto_check_key'])->toBe(sprintf('sonarr:%d:42-101', $connection->id));
 });
 
-test('it does nothing when the webhook event has been pruned', function (): void {
-    // No auditor collaborator needed: the guard returns before it is used, and
-    // preventStrayRequests would catch any arr call.
-    Http::preventStrayRequests();
-
-    new AuditImportedSubtitles(999_999)->handle(resolve(ImportedSubtitleAuditor::class));
-
-    expect(ActionRequest::query()->where('type', 'replace_media_file')->count())->toBe(0);
-    Http::assertNothingSent();
-});
-
-test('it does nothing when the connection was removed while the job waited', function (): void {
-    // This is the real shape of the "no connection" case, and the reason the
-    // delay needs a guard at all: webhook_events.service_connection_id is NOT
-    // NULL and cascades on delete, so deleting the connection during the 30
-    // second wait takes the event row with it rather than leaving a
-    // connection-less event behind. The job's own ServiceConnection check is
-    // therefore defensive; this exercises the pruned-event guard.
+test('it audits from the carried state when the event row has been pruned', function (): void {
+    // The event row is not guaranteed to outlive the 30 second delay, so the job
+    // carries the connection id and payload rather than re-reading them. This is
+    // the case that makes it necessary; the capture-off test below is the same
+    // thing through the real code path that deletes the row.
     $connection = taggedSonarrConnection();
     fakeAuditArrForJob(['subtitles' => 'Japanese']);
 
-    $webhookEvent = WebhookEvent::factory()->create([
-        'service_connection_id' => $connection->id,
-        'event_type' => 'Download',
-        'payload' => [
-            'eventType' => 'Download',
-            'series' => ['id' => 42, 'title' => 'Tagged Show'],
-            'episodes' => [['id' => 101, 'seasonNumber' => 1, 'episodeNumber' => 1]],
-            'downloadId' => 'DL-ORGANIC',
-        ],
-    ]);
+    $webhookEvent = importedDownloadEvent($connection);
+    $job = auditJobFor($webhookEvent);
+
+    $webhookEvent->delete();
+
+    $job->handle(resolve(ImportedSubtitleAuditor::class));
+
+    $actionRequest = ActionRequest::query()->where('type', 'replace_media_file')->sole();
+
+    // Losing the link is the whole cost of a pruned event: webhook_event_id is
+    // nullable and the database nulls it on delete anyway. The connection stays
+    // pinned in the payload, so the executor still acts on the right instance.
+    expect($actionRequest->webhook_event_id)->toBeNull()
+        ->and($actionRequest->payload['service_connection_id'])->toBe($connection->id);
+});
+
+test('it drops the audit with a warning when the connection is gone', function (): void {
+    // The only remaining bail, and now a reachable one: deleting the connection
+    // cascades its webhook events away, so neither the carried id nor the event
+    // resolves. It must not be silent — a dropped check that logged nothing is
+    // exactly what made the capture-off case invisible.
+    $connection = taggedSonarrConnection();
+    fakeAuditArrForJob(['subtitles' => 'Japanese']);
+
+    $webhookEvent = importedDownloadEvent($connection);
+    $job = auditJobFor($webhookEvent);
+    $connectionId = $connection->id;
 
     $connection->delete();
 
-    new AuditImportedSubtitles($webhookEvent->id)->handle(resolve(ImportedSubtitleAuditor::class));
+    Log::shouldReceive('debug')->zeroOrMoreTimes();
+    Log::shouldReceive('info')->zeroOrMoreTimes();
+    Log::shouldReceive('warning')
+        ->once()
+        ->withArgs(fn (string $message, array $context): bool => $message === 'Automatic subtitle check dropped: the service connection no longer exists.'
+            && $context['service_connection_id'] === $connectionId);
+
+    $job->handle(resolve(ImportedSubtitleAuditor::class));
 
     // The arr surface is faked, so nothing happening can only be the guard: an
     // unguarded run would reach the inspection and dispatch a request.
     expect(ActionRequest::query()->where('type', 'replace_media_file')->count())->toBe(0);
     Http::assertNothingSent();
+});
+
+test('the audit still runs when webhook capture is off', function (): void {
+    // With capture off, ProcessWebhookEvent deletes the event row as soon as the
+    // handler returns — 30 seconds before this job runs. Every earlier consumer
+    // of a WebhookEvent runs inline, before that delete, so nothing caught this:
+    // re-reading the event here made the whole feature a silent no-op for any
+    // operator with capture turned off.
+    $connection = taggedSonarrConnection();
+    fakeAuditArrForJob(['subtitles' => 'Japanese']);
+    resolve(WebhookSettings::class)->setCaptureEnabled(false);
+
+    ActionTypeConfig::factory()->create([
+        'type' => 'emby_library_scan',
+        'requires_approval' => false,
+        'is_enabled' => true,
+    ]);
+
+    $webhookEvent = importedDownloadEvent($connection);
+
+    new ProcessWebhookEvent($webhookEvent)->handle();
+
+    expect(WebhookEvent::query()->whereKey($webhookEvent->id)->exists())->toBeFalse();
+
+    // The job is faked in tests/Pest.php, so the handler's dispatch is captured
+    // instead of running inline while the row still exists — which is also the
+    // ordering production gets from a real queue.
+    Queue::pushed(AuditImportedSubtitles::class)->sole()->handle(resolve(ImportedSubtitleAuditor::class));
+
+    expect(ActionRequest::query()->where('type', 'replace_media_file')->sole()->webhook_event_id)->toBeNull();
 });

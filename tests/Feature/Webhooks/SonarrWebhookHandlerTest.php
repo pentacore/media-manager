@@ -399,12 +399,19 @@ test('Download event queues the automatic subtitle check', function (): void {
 
     // The delay is load-bearing, not cosmetic: it gives Sonarr's mediainfo scan
     // time to finish so the imported file's subtitle list is populated when the
-    // audit reads it. queueFor() is shared with the Radarr handler, so this is
-    // the one place it is pinned.
+    // audit reads it. 30 is written out rather than read from DELAY_SECONDS so
+    // that shrinking the constant — which reopens that race — fails here.
+    //
+    // The carried connection id and payload are pinned for the same reason the
+    // job carries them: the event row may be deleted before the job runs, so
+    // they are the only state the audit is guaranteed to see. queueFor() is
+    // shared with the Radarr handler, so both are pinned once, here.
     Queue::assertPushed(
         AuditImportedSubtitles::class,
         fn (AuditImportedSubtitles $job): bool => $job->webhookEventId === $webhookEvent->id
-            && $job->delay?->getTimestamp() === now()->addSeconds(AuditImportedSubtitles::DELAY_SECONDS)->getTimestamp(),
+            && $job->serviceConnectionId === $this->connection->id
+            && $job->payload['downloadId'] === 'DL-1'
+            && $job->delay?->getTimestamp() === now()->addSeconds(30)->getTimestamp(),
     );
 });
 
