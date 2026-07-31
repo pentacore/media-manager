@@ -33,6 +33,8 @@ class AiSettings
 
     public const MEDIA_ADVISOR_REASONING_LEVEL_KEY = 'ai.advisor_reasoning_level';
 
+    public const string CHAT_TIMEOUT_KEY = 'ai.chat_timeout';
+
     public const string MODELS_DEV_PRICING_ENABLED_KEY = 'ai.pricing.models_dev_enabled';
 
     public const string IGNORED_PRICING_PROVIDERS_KEY = 'ai.pricing.ignored_providers';
@@ -137,6 +139,31 @@ class AiSettings
             self::MEDIA_ADVISOR_REASONING_LEVEL_KEY,
             config('mediamanager.ai.advisor_reasoning_level', AiReasoningLevel::None->value),
         );
+    }
+
+    /**
+     * Seconds MediaAgent waits for a provider response before aborting a chat
+     * turn. A saved value overrides the `mediamanager.ai.chat_timeout` config
+     * default; when nothing is persisted the config default applies.
+     */
+    public function chatTimeout(): int
+    {
+        $stored = $this->appSettings->get(self::CHAT_TIMEOUT_KEY);
+
+        if ($stored === null) {
+            return (int) config('mediamanager.ai.chat_timeout', 120);
+        }
+
+        return (int) $stored;
+    }
+
+    /**
+     * Persist the chat timeout. A null value clears the setting so the timeout
+     * falls back to the config default again.
+     */
+    public function setChatTimeout(?int $seconds): void
+    {
+        $this->appSettings->set(self::CHAT_TIMEOUT_KEY, $seconds);
     }
 
     public function setTitleModel(string $model): void

@@ -39,6 +39,7 @@ interface AiSettingsState {
     soft_budget_usd: number | null;
     hard_budget_usd: number | null;
     advisor_reasoning_level: AiReasoningLevel;
+    chat_timeout: number;
     failover_provider: string;
     models_dev_pricing_enabled: boolean;
     ignored_pricing_providers: string[];
@@ -265,6 +266,43 @@ const budgetState = computed<{
                         </Select>
                         <InputError
                             :message="errors.advisor_reasoning_level"
+                            class="mt-1"
+                        />
+                    </div>
+                </div>
+
+                <!-- Chat timeout -->
+                <div
+                    class="grid items-start gap-6"
+                    style="grid-template-columns: 200px 1fr"
+                >
+                    <Field
+                        label="Chat timeout"
+                        hint="How long a chat turn may wait on the provider before it is aborted. A turn that chains several tool calls needs more time than a plain answer. Raising this past the server request limit (OCTANE_MAX_EXECUTION_TIME) has no effect. Leave blank to use the .env default."
+                    >
+                        <span />
+                    </Field>
+                    <div>
+                        <div class="relative max-w-[200px]">
+                            <Input
+                                id="chat_timeout"
+                                name="chat_timeout"
+                                type="number"
+                                step="1"
+                                min="30"
+                                max="600"
+                                class="h-8 pr-10 text-sm"
+                                :default-value="settings.chat_timeout"
+                                placeholder="120"
+                            />
+                            <span
+                                class="font-mono-tabular pointer-events-none absolute top-1/2 right-2 -translate-y-1/2 text-[12px] text-muted-foreground"
+                            >
+                                sec
+                            </span>
+                        </div>
+                        <InputError
+                            :message="errors.chat_timeout"
                             class="mt-1"
                         />
                     </div>
