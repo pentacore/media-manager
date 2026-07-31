@@ -48,6 +48,11 @@ class ServiceConnectionUpdateRequest extends FormRequest
             'sonarr_root_folders.*.root_folder_id' => ['required', 'integer', 'min:1'],
             'sonarr_root_folders.*.path' => ['required', 'string', 'max:1000'],
             'sonarr_root_folders.*.scope' => ['nullable', 'string', 'in:anime,tv'],
+            // Sonarr/Radarr-only: arr tag labels that opt a series or movie into
+            // the automatic subtitle check on import. Labels rather than ids, so
+            // the configuration survives a tag being recreated upstream.
+            'subtitle_check_tags' => ['nullable', 'array', 'max:50'],
+            'subtitle_check_tags.*' => ['required', 'string', 'max:100'],
             // Whisparr-only: which API generation this connection speaks.
             'whisparr_version' => ['nullable', 'string', 'in:v2,v3'],
         ];

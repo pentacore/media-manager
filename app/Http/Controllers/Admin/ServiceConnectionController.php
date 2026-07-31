@@ -15,8 +15,11 @@ use App\Models\ServiceConnection;
 use App\Services\Arr\ArrClient;
 use App\Services\MediaReplacement\SonarrLibraryTypeSettings;
 use App\Services\MediaReplacement\SonarrRootFolderCatalog;
+use App\Services\MediaReplacement\SubtitleCheckTagSettings;
 use App\Services\Prowlarr\ProwlarrClient;
+use App\Services\Radarr\RadarrClient;
 use App\Services\ServiceClientFactory;
+use App\Services\Sonarr\SonarrClient;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -59,6 +62,7 @@ class ServiceConnectionController extends Controller
     public function edit(
         ServiceConnection $serviceConnection,
         SonarrRootFolderCatalog $sonarrRootFolderCatalog,
+        SubtitleCheckTagSettings $subtitleCheckTagSettings,
     ): Response {
         $diskSettings = is_array($serviceConnection->settings['disk'] ?? null)
             ? $serviceConnection->settings['disk']
@@ -101,7 +105,54 @@ class ServiceConnectionController extends Controller
             'sonarrRootFolders' => $serviceConnection->type === ServiceType::Sonarr
                 ? Inertia::defer(fn (): array => $sonarrRootFolderCatalog->forConnection($serviceConnection))
                 : [],
+            'arrTags' => $this->arrTags($serviceConnection),
+            'subtitleCheckTags' => $subtitleCheckTagSettings->forConnection($serviceConnection),
         ]);
+    }
+
+    /**
+     * Tag labels defined on a Sonarr/Radarr instance, for the subtitle-check
+     * picker. Returns null for other service types and when the instance cannot
+     * be reached, so the form can tell "none defined" apart from "unavailable".
+     *
+     * @return list<array{id: int, label: string}>|null
+     */
+    private function arrTags(ServiceConnection $serviceConnection): ?array
+    {
+        if (! in_array($serviceConnection->type, [ServiceType::Sonarr, ServiceType::Radarr], true)) {
+            return null;
+        }
+
+        if (! $serviceConnection->is_active) {
+            return null;
+        }
+
+        try {
+            $tags = $serviceConnection->type === ServiceType::Sonarr
+                ? new SonarrClient($serviceConnection)->getTags()
+                : new RadarrClient($serviceConnection)->getTags();
+        } catch (Throwable) {
+            return null;
+        }
+
+        $labels = [];
+
+        foreach ($tags as $tag) {
+            if (! is_array($tag)) {
+                continue;
+            }
+
+            $id = $tag['id'] ?? null;
+            $label = $tag['label'] ?? null;
+
+            if (! is_int($id) || ! is_string($label) || trim($label) === '') {
+                continue;
+            }
+
+            $labels[] = ['id' => $id, 'label' => $label];
+        }
+
+        return $labels;
     }
 
     /**
@@ -257,6 +308,7 @@ class ServiceConnectionController extends Controller
         ServiceConnectionUpdateRequest $serviceConnectionUpdateRequest,
         ServiceConnection $serviceConnection,
         SonarrLibraryTypeSettings $sonarrLibraryTypeSettings,
+        SubtitleCheckTagSettings $subtitleCheckTagSettings,
     ): RedirectResponse {
         $validated = $serviceConnectionUpdateRequest->validated();
 
@@ -278,12 +330,14 @@ class ServiceConnectionController extends Controller
         $diskDisplay = $validated['disk_display'] ?? null;
         $hiddenCategories = $validated['hidden_categories'] ?? null;
         $sonarrRootFolders = $validated['sonarr_root_folders'] ?? null;
+        $subtitleCheckTags = $validated['subtitle_check_tags'] ?? null;
         unset(
             $validated['disk_mode'],
             $validated['disk_paths'],
             $validated['disk_display'],
             $validated['hidden_categories'],
             $validated['sonarr_root_folders'],
+            $validated['subtitle_check_tags'],
         );
 
         if ($diskMode !== null || $diskPaths !== null || $diskDisplay !== null) {
@@ -311,6 +365,13 @@ class ServiceConnectionController extends Controller
         if (is_array($sonarrRootFolders) && $serviceConnection->type === ServiceType::Sonarr) {
             $existingSettings = $validated['settings'] ?? $serviceConnection->settings ?? [];
             $validated['settings'] = $sonarrLibraryTypeSettings->mergeInto($existingSettings, $sonarrRootFolders);
+        }
+
+        if (is_array($subtitleCheckTags) && in_array($serviceConnection->type, [ServiceType::Sonarr, ServiceType::Radarr], true)) {
+            $existingSettings = is_array($validated['settings'] ?? null)
+                ? $validated['settings']
+                : (is_array($serviceConnection->settings) ? $serviceConnection->settings : []);
+            $validated['settings'] = $subtitleCheckTagSettings->mergeInto($existingSettings, $subtitleCheckTags);
         }
 
         $validated = $this->mergeWhisparrVersion($validated, $serviceConnection);
