@@ -27,6 +27,39 @@ test('admin can open AI chat and send a message', function (): void {
         ->assertSee('Sure, here is what I found.');
 });
 
+test('assistant panel opens at the wide default and can be resized', function (): void {
+    $this->actingAs(User::factory()->admin()->create());
+
+    $page = visit('/dashboard');
+
+    $page->assertNoSmoke()
+        ->click('AI Assistant')
+        ->assertVisible('[data-slot="ai-chat-resize"]')
+        ->assertScript('document.querySelector(\'[data-slot="sheet-content"]\').offsetWidth', 560);
+
+    // Drag the handle 240px to the left, which widens the right-anchored panel.
+    $page->script(<<<'JS'
+        (() => {
+            const handle = document.querySelector('[data-slot="ai-chat-resize"]');
+            const start = handle.getBoundingClientRect().left;
+            const base = { bubbles: true, cancelable: true, pointerId: 1, pointerType: 'mouse', button: 0, clientY: 300 };
+
+            handle.dispatchEvent(new PointerEvent('pointerdown', { ...base, clientX: start }));
+            window.dispatchEvent(new PointerEvent('pointermove', { ...base, clientX: start - 240 }));
+            window.dispatchEvent(new PointerEvent('pointerup', { ...base, clientX: start - 240 }));
+        })()
+    JS);
+
+    $page->assertScript('document.querySelector(\'[data-slot="sheet-content"]\').offsetWidth', 800)
+        ->assertScript("localStorage.getItem('mm.ai-chat.width')", '800')
+        ->assertNoJavaScriptErrors();
+
+    // The stored width survives a full page load.
+    $page->navigate('/dashboard')
+        ->click('AI Assistant')
+        ->assertScript('document.querySelector(\'[data-slot="sheet-content"]\').offsetWidth', 800);
+});
+
 test('proposed workflow renders confirm card and approval round-trips', function (): void {
     $admin = User::factory()->admin()->create();
     $callCount = 0;
