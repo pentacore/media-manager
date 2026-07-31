@@ -130,6 +130,17 @@ class FakeDestructiveTool extends BaseTool
     }
 }
 
+class FakeHookedDestructiveTool extends FakeDestructiveTool
+{
+    public ?int $queuedActionRequestId = null;
+
+    #[Override]
+    protected function actionRequestQueued(ActionRequest $actionRequest, array $candidate): void
+    {
+        $this->queuedActionRequestId = $actionRequest->id;
+    }
+}
+
 test('Read tool returns json-encoded execute() result', function (): void {
     $tool = new FakeReadTool;
 
@@ -165,6 +176,20 @@ test('Destructive tool routes through ActionOrchestrator', function (): void {
     expect($decoded['status'])->toBe(ActionRequestStatus::Pending->value);
 
     expect(ActionRequest::where('type', 'delete_series')->count())->toBe(1);
+});
+
+test('Destructive tool invokes its scoped post-queue hook', function (): void {
+    ActionTypeConfig::factory()->create([
+        'type' => 'delete_series',
+        'is_enabled' => true,
+        'requires_approval' => true,
+    ]);
+
+    $tool = new FakeHookedDestructiveTool;
+    $result = json_decode($tool->handle(makeFakeRequest()), true);
+
+    expect($tool->queuedActionRequestId)->toBe($result['action_request_id'])
+        ->and(ActionRequest::query()->find($tool->queuedActionRequestId))->not->toBeNull();
 });
 
 test('Destructive tool refuses to run in Advisory mode', function (): void {

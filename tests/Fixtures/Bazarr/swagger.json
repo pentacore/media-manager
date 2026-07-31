@@ -1,0 +1,26 @@
+{
+    "swagger": "2.0",
+    "basePath": "/api",
+    "info": {
+        "title": "Bazarr",
+        "version": "1.6.0",
+        "description": "API docs for Bazarr"
+    },
+    "securityDefinitions": {
+        "apikey": {
+            "type": "apiKey",
+            "in": "header",
+            "name": "X-API-KEY"
+        }
+    },
+    "paths": {
+        "/system/status": {
+            "get": {
+                "responses": {
+                    "200": {"description": "Success"},
+                    "401": {"description": "Not Authenticated"}
+                }
+            }
+        }
+    }
+}

@@ -18,6 +18,9 @@ use App\Ai\Tools\Arr\ReplaceMediaFileTool;
 use App\Ai\Tools\Arr\ResolveManualImportChatTool;
 use App\Ai\Tools\Arr\SearchMediaTool;
 use App\Ai\Tools\Arr\SetMediaQualityProfileTool;
+use App\Ai\Tools\Bazarr\InspectSubtitleTool;
+use App\Ai\Tools\Bazarr\RequestSubtitleOperationTool;
+use App\Ai\Tools\Bazarr\SearchSubtitlesTool;
 use App\Ai\Tools\Emby\LibraryScanTool;
 use App\Ai\Tools\Emby\MarkAsUnwatchedTool;
 use App\Ai\Tools\Emby\MarkAsWatchedTool;
@@ -111,6 +114,8 @@ The media library tools (SearchMediaTool, GetMediaTool, AddMediaTool, DeleteMedi
 - A queued/completed ActionRequest means replacement was requested/initiated, not fixed. Say subtitles are fixed only when verification reports verified.
 - Do not retry a failed replacement autonomously.
 
+**Bazarr subtitles:** when Bazarr is configured, inspect one exact item with InspectSubtitleTool before searching. SearchSubtitlesTool returns opaque candidate fingerprints only. RequestSubtitleOperationTool is destructive and always follows Action Rules; never claim a queued operation has already fixed the subtitle.
+
 **Batched workflows (3+ destructive operations):** DO NOT call multiple destructive tools in sequence. Gather the candidates via the read tools and confirm the list, then call ProposeWorkflowTool ONCE with a `rationale` and a `steps` array: `[{action: "delete_movie", target: "Movie A (id 1)", reason: "Unwatched 8mo"}, ...]`. You'll get back `{status: 'awaiting_confirmation', workflow_id, ...}` — tell the user the proposal awaits their confirmation and call NO destructive tools until the continuation. When re-invoked with "The user has APPROVED workflow {id}…", execute the steps with the destructive tools, in order. On decline, acknowledge and ask what they'd like instead.
 
 Important rules:
@@ -175,6 +180,12 @@ PROMPT;
         if ($this->hasActiveConnection(ServiceType::Prowlarr)) {
             $tools[] = resolve(SearchIndexersTool::class);
             $tools[] = resolve(ListIndexersTool::class);
+        }
+
+        if ($this->hasActiveConnection(ServiceType::Bazarr)) {
+            $tools[] = resolve(InspectSubtitleTool::class);
+            $tools[] = resolve(SearchSubtitlesTool::class);
+            $tools[] = resolve(RequestSubtitleOperationTool::class);
         }
 
         if (! empty(config('services.tmdb.api_key'))) {

@@ -11,7 +11,7 @@ beforeEach(function (): void {
     // Force all env vars to empty so .env-baked values don't leak into tests.
     // putenv('KEY=') with empty RHS sets it to '', which the seeder treats as "unset"
     // (same as getenv returning false) and generates a random token.
-    foreach (['SONARR', 'RADARR', 'EMBY', 'SEERR', 'PROWLARR', 'SABNZBD'] as $prefix) {
+    foreach (['SONARR', 'RADARR', 'BAZARR', 'EMBY', 'SEERR', 'PROWLARR', 'SABNZBD'] as $prefix) {
         putenv($prefix.'_URL=');
         putenv($prefix.'_API_KEY=');
         putenv($prefix.'_WEBHOOK_TOKEN=');
@@ -20,7 +20,7 @@ beforeEach(function (): void {
 });
 
 afterEach(function (): void {
-    foreach (['SONARR', 'RADARR', 'EMBY', 'SEERR', 'PROWLARR', 'SABNZBD'] as $prefix) {
+    foreach (['SONARR', 'RADARR', 'BAZARR', 'EMBY', 'SEERR', 'PROWLARR', 'SABNZBD'] as $prefix) {
         putenv($prefix.'_URL');
         putenv($prefix.'_API_KEY');
         putenv($prefix.'_WEBHOOK_TOKEN');
@@ -45,6 +45,15 @@ test('creates connections for services with url and api key set', function (): v
     expect(ServiceConnection::where('type', ServiceType::Radarr)->value('url'))->toBe('http://radarr.example:7878');
     expect(ServiceConnection::where('type', ServiceType::Emby)->value('url'))->toBe('http://emby.example:8096');
     expect(ServiceConnection::where('type', ServiceType::Seerr)->value('url'))->toBe('http://seerr.example:5055');
+});
+
+test('creates a Bazarr connection with url and api key set', function (): void {
+    putenv('BAZARR_URL=http://bazarr.example:6767');
+    putenv('BAZARR_API_KEY=bazarr-key');
+
+    $this->seed(ServiceConnectionSeeder::class);
+
+    expect(ServiceConnection::where('type', ServiceType::Bazarr)->value('url'))->toBe('http://bazarr.example:6767');
 });
 
 test('skips services without both url and api key', function (): void {

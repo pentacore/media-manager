@@ -1,0 +1,12 @@
+{
+    "data": [
+        {
+            "interval": "every 6 hours",
+            "job_id": "wanted_search_missing_subtitles",
+            "job_running": false,
+            "name": "Search for wanted subtitles",
+            "next_run_in": "3 hours",
+            "next_run_time": "2026-07-16T15:00:00+00:00"
+        }
+    ]
+}

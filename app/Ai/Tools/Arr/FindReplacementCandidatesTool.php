@@ -6,10 +6,13 @@ namespace App\Ai\Tools\Arr;
 
 use App\Ai\Risk;
 use App\Ai\Tools\BaseTool;
+use App\Enums\ServiceType;
+use App\Models\ServiceConnection;
 use App\Services\MediaReplacement\MediaFileInspector;
 use App\Services\MediaReplacement\ReplacementCandidateFinder;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
 use Illuminate\JsonSchema\Types\Type;
+use InvalidArgumentException;
 use Laravel\Ai\Tools\Request;
 use Stringable;
 
@@ -35,13 +38,19 @@ class FindReplacementCandidatesTool extends BaseTool
     protected function execute(Request $request): array
     {
         $args = $request->toArray();
+        $service = mb_strtolower(trim((string) ($args['service'] ?? '')));
+        $serviceConnection = $this->serviceConnection(
+            $service,
+            $this->nullableInt($args['service_connection_id'] ?? null),
+        );
 
         $snapshot = resolve(MediaFileInspector::class)->inspect(
-            service: (string) ($args['service'] ?? ''),
+            service: $service,
             itemId: (int) ($args['item_id'] ?? 0),
             seasonNumber: $this->nullableInt($args['season_number'] ?? null),
             episodeNumber: $this->nullableInt($args['episode_number'] ?? null),
             absoluteEpisodeNumber: $this->nullableInt($args['absolute_episode_number'] ?? null),
+            serviceConnection: $serviceConnection,
         );
 
         if (($snapshot['ambiguous'] ?? false) === true) {
@@ -52,6 +61,7 @@ class FindReplacementCandidatesTool extends BaseTool
             target: $snapshot,
             languageOverride: $this->languageOverride($args['required_languages'] ?? null),
             limit: $this->nullableInt($args['limit'] ?? null) ?? 5,
+            serviceConnection: $serviceConnection,
         );
     }
 
@@ -72,6 +82,31 @@ class FindReplacementCandidatesTool extends BaseTool
         return is_numeric($value) ? (int) $value : null;
     }
 
+    private function serviceConnection(string $service, ?int $serviceConnectionId): ServiceConnection
+    {
+        $serviceType = match ($service) {
+            'sonarr' => ServiceType::Sonarr,
+            'radarr' => ServiceType::Radarr,
+            default => throw new InvalidArgumentException('service must be "sonarr" or "radarr".'),
+        };
+        $builder = ServiceConnection::query()
+            ->where('type', $serviceType)
+            ->where('is_active', true);
+
+        if ($serviceConnectionId !== null) {
+            return $builder->whereKey($serviceConnectionId)->firstOrFail();
+        }
+
+        $connections = $builder->limit(2)->get();
+        throw_unless(
+            $connections->count() === 1,
+            InvalidArgumentException::class,
+            'Specify service_connection_id because the active service connection is ambiguous.',
+        );
+
+        return $connections->firstOrFail();
+    }
+
     /**
      * @return array<string, Type>
      */
@@ -82,6 +117,10 @@ class FindReplacementCandidatesTool extends BaseTool
                 ->enum(['sonarr', 'radarr'])
                 ->description('sonarr for a TV/anime episode, radarr for a movie.')
                 ->required(),
+            'service_connection_id' => $schema->integer()
+                ->description('Exact active Sonarr or Radarr connection ID. Required when more than one matching connection is active.')
+                ->required()
+                ->nullable(),
             'item_id' => $schema->integer()
                 ->description('Sonarr series id or Radarr movie id. Never guess it.')
                 ->required(),

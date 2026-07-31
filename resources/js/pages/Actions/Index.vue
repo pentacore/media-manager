@@ -336,17 +336,9 @@ function replacementSelectionMode(row: ActionRequestRow): string {
 }
 
 function replacementAffectedFiles(row: ActionRequestRow): number {
-    const target = row.payload?.['target'];
+    const count = row.payload?.['affected_file_count'];
 
-    if (target === null || typeof target !== 'object') {
-        return 0;
-    }
-
-    const ids =
-        (target as Record<string, unknown>)['episode_file_ids'] ??
-        (target as Record<string, unknown>)['movie_file_ids'];
-
-    return Array.isArray(ids) ? ids.length : 0;
+    return typeof count === 'number' ? count : 0;
 }
 
 function replacementEvidence(row: ActionRequestRow): string {
@@ -358,11 +350,14 @@ function replacementEvidence(row: ActionRequestRow): string {
 
     const names = rules
         .map((rule) =>
-            rule !== null &&
-            typeof rule === 'object' &&
-            typeof (rule as Record<string, unknown>)['name'] === 'string'
-                ? ((rule as Record<string, unknown>)['name'] as string)
-                : '',
+            typeof rule === 'string'
+                ? rule
+                : rule !== null &&
+                    typeof rule === 'object' &&
+                    typeof (rule as Record<string, unknown>)['name'] ===
+                        'string'
+                  ? ((rule as Record<string, unknown>)['name'] as string)
+                  : '',
         )
         .filter((name) => name.length > 0);
 
@@ -370,13 +365,7 @@ function replacementEvidence(row: ActionRequestRow): string {
 }
 
 function replacementIsSeasonPack(row: ActionRequestRow): boolean {
-    const candidate = row.payload?.['candidate'];
-
-    return (
-        candidate !== null &&
-        typeof candidate === 'object' &&
-        (candidate as Record<string, unknown>)['season_pack'] === true
-    );
+    return row.payload?.['season_pack'] === true;
 }
 
 function statusCount(id: string): number {

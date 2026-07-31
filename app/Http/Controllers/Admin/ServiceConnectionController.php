@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers\Admin;
 
+use App\Enums\BazarrServiceRole;
 use App\Enums\ServiceType;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Admin\ServiceConnectionStoreRequest;
@@ -13,13 +14,17 @@ use App\Jobs\FetchLatestServiceVersion;
 use App\Jobs\PingServiceHealth;
 use App\Models\ServiceConnection;
 use App\Services\Arr\ArrClient;
+use App\Services\Bazarr\SubtitleCaseSupersession;
 use App\Services\MediaReplacement\SonarrLibraryTypeSettings;
 use App\Services\MediaReplacement\SonarrRootFolderCatalog;
 use App\Services\Prowlarr\ProwlarrClient;
 use App\Services\ServiceClientFactory;
+use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\QueryException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -41,15 +46,29 @@ class ServiceConnectionController extends Controller
     {
         return Inertia::render('Admin/Connections/Create', [
             'serviceTypes' => ServiceType::mapForSelect(labelKey: 'label'),
+            'arrConnections' => $this->arrConnections(),
         ]);
     }
 
     public function store(ServiceConnectionStoreRequest $serviceConnectionStoreRequest): RedirectResponse
     {
         $validated = $serviceConnectionStoreRequest->validated();
+        $mappingIds = [
+            BazarrServiceRole::Sonarr->value => isset($validated['sonarr_connection_id'])
+                ? (int) $validated['sonarr_connection_id']
+                : null,
+            BazarrServiceRole::Radarr->value => isset($validated['radarr_connection_id'])
+                ? (int) $validated['radarr_connection_id']
+                : null,
+        ];
+        unset($validated['sonarr_connection_id'], $validated['radarr_connection_id']);
         $validated = $this->mergeWhisparrVersion($validated);
 
-        ServiceConnection::create($validated);
+        DB::transaction(function () use ($validated, $mappingIds): void {
+            $serviceConnection = ServiceConnection::create($validated);
+
+            $this->syncBazarrLinks($serviceConnection, $mappingIds);
+        });
 
         Inertia::flash('toast', ['type' => 'success', 'message' => __('Connection created.')]);
 
@@ -60,6 +79,19 @@ class ServiceConnectionController extends Controller
         ServiceConnection $serviceConnection,
         SonarrRootFolderCatalog $sonarrRootFolderCatalog,
     ): Response {
+        $serviceConnection->load('bazarrServiceLinks');
+
+        $selectedMappingIds = [
+            BazarrServiceRole::Sonarr->value => $serviceConnection->type === ServiceType::Bazarr
+                ? $serviceConnection->bazarrServiceLinks
+                    ->firstWhere('role', BazarrServiceRole::Sonarr)?->related_connection_id
+                : null,
+            BazarrServiceRole::Radarr->value => $serviceConnection->type === ServiceType::Bazarr
+                ? $serviceConnection->bazarrServiceLinks
+                    ->firstWhere('role', BazarrServiceRole::Radarr)?->related_connection_id
+                : null,
+        ];
+
         $diskSettings = is_array($serviceConnection->settings['disk'] ?? null)
             ? $serviceConnection->settings['disk']
             : ['mode' => 'all', 'paths' => [], 'display' => []];
@@ -90,8 +122,14 @@ class ServiceConnectionController extends Controller
                     ? $this->sabnzbdNotificationScriptFor($serviceConnection)
                     : null,
                 'whisparr_version' => $serviceConnection->whisparrVersion()->value,
+                'sonarr_connection_id' => $selectedMappingIds[BazarrServiceRole::Sonarr->value],
+                'radarr_connection_id' => $selectedMappingIds[BazarrServiceRole::Radarr->value],
             ],
             'serviceTypes' => ServiceType::mapForSelect(labelKey: 'label'),
+            'arrConnections' => $this->arrConnections(
+                $serviceConnection,
+                array_values(array_filter($selectedMappingIds)),
+            ),
             'indexers' => $serviceConnection->type === ServiceType::Prowlarr
                 ? Inertia::defer(fn (): array => $this->loadProwlarrIndexers($serviceConnection))
                 : [],
@@ -102,6 +140,39 @@ class ServiceConnectionController extends Controller
                 ? Inertia::defer(fn (): array => $sonarrRootFolderCatalog->forConnection($serviceConnection))
                 : [],
         ]);
+    }
+
+    /**
+     * @param  list<int>  $selectedConnectionIds
+     * @return list<array{id: int, type: string, name: string}>
+     */
+    private function arrConnections(
+        ?ServiceConnection $editingConnection = null,
+        array $selectedConnectionIds = [],
+    ): array {
+        $builder = ServiceConnection::query()
+            ->whereIn('type', [ServiceType::Sonarr->value, ServiceType::Radarr->value]);
+
+        if ($editingConnection instanceof ServiceConnection) {
+            $builder->whereKeyNot($editingConnection->getKey());
+        }
+
+        return $builder
+            ->where(function (Builder $builder) use ($selectedConnectionIds): void {
+                $builder->where('is_active', true);
+
+                if ($selectedConnectionIds !== []) {
+                    $builder->orWhereIn('id', $selectedConnectionIds);
+                }
+            })
+            ->orderBy('name')
+            ->get(['id', 'type', 'name', 'is_active'])
+            ->map(fn (ServiceConnection $serviceConnection): array => [
+                'id' => $serviceConnection->id,
+                'type' => $serviceConnection->type->value,
+                'name' => $serviceConnection->name.($serviceConnection->is_active ? '' : ' (inactive)'),
+            ])
+            ->all();
     }
 
     /**
@@ -185,10 +256,14 @@ class ServiceConnectionController extends Controller
      */
     private function webhookUrlFor(ServiceConnection $serviceConnection): string
     {
-        $base = route('webhooks.handle', [
-            'service' => $serviceConnection->type->value,
-            'connection' => $serviceConnection->id,
-        ]);
+        // Bazarr notifications use their own dedicated intake route; the
+        // generic webhook controller has no Bazarr handler arm.
+        $base = $serviceConnection->type === ServiceType::Bazarr
+            ? route('webhooks.bazarr', ['serviceConnection' => $serviceConnection])
+            : route('webhooks.handle', [
+                'service' => $serviceConnection->type->value,
+                'connection' => $serviceConnection->id,
+            ]);
 
         $token = $serviceConnection->webhook_token;
 
@@ -257,8 +332,18 @@ class ServiceConnectionController extends Controller
         ServiceConnectionUpdateRequest $serviceConnectionUpdateRequest,
         ServiceConnection $serviceConnection,
         SonarrLibraryTypeSettings $sonarrLibraryTypeSettings,
+        SubtitleCaseSupersession $subtitleCaseSupersession,
     ): RedirectResponse {
         $validated = $serviceConnectionUpdateRequest->validated();
+        $mappingIds = [
+            BazarrServiceRole::Sonarr->value => isset($validated['sonarr_connection_id'])
+                ? (int) $validated['sonarr_connection_id']
+                : null,
+            BazarrServiceRole::Radarr->value => isset($validated['radarr_connection_id'])
+                ? (int) $validated['radarr_connection_id']
+                : null,
+        ];
+        unset($validated['sonarr_connection_id'], $validated['radarr_connection_id']);
 
         // Do not wipe existing secrets when the admin submits the form without
         // retyping them (blank/null means "keep existing value").
@@ -315,25 +400,133 @@ class ServiceConnectionController extends Controller
 
         $validated = $this->mergeWhisparrVersion($validated, $serviceConnection);
 
-        $serviceConnection->update($validated);
+        DB::transaction(function () use ($serviceConnection, $validated, $mappingIds, $subtitleCaseSupersession): void {
+            $wasActive = $serviceConnection->is_active;
+
+            // Capture the Bazarr connection's existing pairings before the sync
+            // so we can supersede cases for any mapping that is removed or
+            // repointed at a different managing connection.
+            $existingPairings = $serviceConnection->type === ServiceType::Bazarr
+                ? $serviceConnection->bazarrServiceLinks()->get()
+                    ->mapWithKeys(fn ($link): array => [$link->role->value => $link->related_connection_id])
+                    ->all()
+                : [];
+
+            $serviceConnection->update($validated);
+
+            $retyped = $serviceConnection->wasChanged('type');
+
+            if ($retyped) {
+                $serviceConnection->incomingBazarrServiceLinks()->delete();
+            }
+
+            $this->syncBazarrLinks($serviceConnection, $mappingIds);
+
+            // A deactivated or retyped connection can no longer reconcile any of
+            // its cases (as Bazarr or as the managing arr), so supersede them.
+            if (($wasActive && ! $serviceConnection->is_active) || $retyped) {
+                $subtitleCaseSupersession->forConnection($serviceConnection);
+            }
+
+            // A removed or repointed mapping supersedes the cases that belonged to
+            // the old Bazarr-to-managing pairing.
+            foreach ($existingPairings as $role => $previousRelatedId) {
+                if ($previousRelatedId === null) {
+                    continue;
+                }
+
+                if (($mappingIds[$role] ?? null) !== $previousRelatedId) {
+                    $subtitleCaseSupersession->forPairing($serviceConnection->id, (int) $previousRelatedId);
+                }
+            }
+        });
 
         Inertia::flash('toast', ['type' => 'success', 'message' => __('Connection updated.')]);
 
         return to_route('admin.connections.index');
     }
 
+    /**
+     * @param  array{sonarr: int|null, radarr: int|null}  $mappingIds
+     */
+    private function syncBazarrLinks(ServiceConnection $serviceConnection, array $mappingIds): void
+    {
+        if ($serviceConnection->type !== ServiceType::Bazarr) {
+            $serviceConnection->bazarrServiceLinks()->delete();
+
+            return;
+        }
+
+        foreach (BazarrServiceRole::cases() as $role) {
+            $relatedConnectionId = $mappingIds[$role->value] ?? null;
+
+            if ($relatedConnectionId === null) {
+                $serviceConnection->bazarrServiceLinks()->where('role', $role->value)->delete();
+
+                continue;
+            }
+
+            $serviceConnection->bazarrServiceLinks()->updateOrCreate(
+                ['role' => $role->value],
+                ['related_connection_id' => $relatedConnectionId],
+            );
+        }
+    }
+
     public function destroy(ServiceConnection $serviceConnection): RedirectResponse
     {
-        $serviceConnection->delete();
+        if ($serviceConnection->bazarrSubtitleCases()->exists()
+            || $serviceConnection->managedSubtitleCases()->exists()) {
+            return $this->subtitleHistoryDeletionConflict();
+        }
+
+        try {
+            DB::transaction(fn (): ?bool => $serviceConnection->delete());
+        } catch (QueryException $queryException) {
+            throw_unless($this->isSubtitleHistoryRestrictViolation($queryException), $queryException);
+
+            return $this->subtitleHistoryDeletionConflict();
+        }
 
         Inertia::flash('toast', ['type' => 'success', 'message' => __('Connection deleted.')]);
 
         return to_route('admin.connections.index');
     }
 
-    public function toggle(ServiceConnection $serviceConnection): RedirectResponse
+    private function subtitleHistoryDeletionConflict(): RedirectResponse
     {
-        $serviceConnection->update(['is_active' => ! $serviceConnection->is_active]);
+        Inertia::flash('toast', [
+            'type' => 'error',
+            'message' => __('Connection cannot be deleted because subtitle workflow history references it.'),
+        ]);
+
+        return to_route('admin.connections.index');
+    }
+
+    private function isSubtitleHistoryRestrictViolation(QueryException $queryException): bool
+    {
+        if (! in_array((string) $queryException->getCode(), ['23001', '23503'], true)) {
+            return false;
+        }
+
+        return str_contains($queryException->getMessage(), 'subtitle_cases_bazarr_connection_id_foreign')
+            || str_contains($queryException->getMessage(), 'subtitle_cases_service_connection_id_foreign');
+    }
+
+    public function toggle(
+        ServiceConnection $serviceConnection,
+        SubtitleCaseSupersession $subtitleCaseSupersession,
+    ): RedirectResponse {
+        DB::transaction(function () use ($serviceConnection, $subtitleCaseSupersession): void {
+            $wasActive = $serviceConnection->is_active;
+            $serviceConnection->update(['is_active' => ! $serviceConnection->is_active]);
+
+            // Deactivating a connection disables new reconciliation for its cases,
+            // so supersede the active ones (as Bazarr or as the managing arr).
+            if ($wasActive) {
+                $subtitleCaseSupersession->forConnection($serviceConnection);
+            }
+        });
 
         $status = $serviceConnection->is_active ? 'enabled' : 'disabled';
         Inertia::flash('toast', ['type' => 'success', 'message' => __(sprintf('Connection %s.', $status))]);

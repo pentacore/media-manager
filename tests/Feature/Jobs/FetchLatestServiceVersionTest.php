@@ -68,6 +68,21 @@ test('fetches and stores latest_version for emby', function (): void {
     expect($connection->fresh()->latest_version)->toBe('4.8.0.80');
 });
 
+test('fetches and stores latest_version for Bazarr', function (): void {
+    $connection = ServiceConnection::factory()->bazarr()->create();
+
+    Http::fake([
+        'api.github.com/repos/morpheus65535/bazarr/releases/latest' => Http::response(['tag_name' => 'v1.6.0']),
+    ]);
+
+    app()->call([new FetchLatestServiceVersion($connection), 'handle']);
+
+    expect($connection->fresh()->latest_version)->toBe('1.6.0')
+        ->and(FetchLatestServiceVersion::REPO_MAP['bazarr'])->toBe('morpheus65535/bazarr');
+
+    Http::assertSentCount(1);
+});
+
 test('no-op for service types not in REPO_MAP', function (): void {
     // Contrived case — all our current types have mappings. Guard against future types being added without a repo.
     expect(FetchLatestServiceVersion::REPO_MAP)->toHaveKeys(['sonarr', 'radarr', 'seerr', 'emby']);
