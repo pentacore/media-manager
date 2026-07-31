@@ -7,6 +7,7 @@ namespace App\Services\Sonarr;
 use App\Cache\Services\SonarrCache;
 use App\Enums\UserRole;
 use App\Enums\WebhookHandlingStatus;
+use App\Jobs\AuditImportedSubtitles;
 use App\Models\User;
 use App\Models\WebhookEvent;
 use App\Notifications\ServiceWarning;
@@ -129,6 +130,11 @@ class SonarrWebhookHandler extends AbstractWebhookHandler
 
         if ($webhookEvent->serviceConnection !== null) {
             $this->mediaReplacementTracker->verifyDownload($webhookEvent->serviceConnection, $payload);
+
+            // Queued, not inline: the audit sweeps every indexer when a language
+            // is missing, and its delay lets Sonarr finish the mediainfo scan
+            // this import's subtitle list is read from.
+            AuditImportedSubtitles::queueFor($webhookEvent);
         }
 
         $this->actionOrchestrator->dispatch(
