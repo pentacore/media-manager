@@ -392,3 +392,24 @@ test('a tagged Radarr import keys the cap by movie id', function (): void {
     expect($actionRequest->payload['auto_check_key'])->toBe(sprintf('radarr:%d:42', $radarr->id))
         ->and($actionRequest->payload['selection_mode'])->toBe('automatic');
 });
+
+test('a specials import is inspected rather than reported as unidentifiable', function (): void {
+    // Sonarr numbers Specials as season 0, which must not be coerced to "no
+    // season" — MediaFileInspector would then match no episode and the operator
+    // would get an "unidentifiable import" notification for every special.
+    fakeAuditArr([
+        'subtitles' => 'Japanese',
+        'episodes' => [[
+            'id' => 101, 'seriesId' => 42, 'seasonNumber' => 0, 'episodeNumber' => 1,
+            'episodeFileId' => 501, 'monitored' => true, 'hasFile' => true, 'title' => 'OVA',
+        ]],
+    ]);
+
+    resolve(ImportedSubtitleAuditor::class)->audit(
+        $this->connection,
+        importPayload(['episodes' => [['id' => 101, 'seasonNumber' => 0, 'episodeNumber' => 1]]]),
+        null,
+    );
+
+    expect(ActionRequest::query()->where('type', 'replace_media_file')->count())->toBe(1);
+});
