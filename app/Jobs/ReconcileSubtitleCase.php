@@ -1,0 +1,789 @@
+<?php
+
+declare(strict_types=1);
+
+namespace App\Jobs;
+
+use App\Enums\ActionRequestStatus;
+use App\Enums\ServiceType;
+use App\Enums\SubtitleCaseAttemptOutcome;
+use App\Enums\SubtitleCaseAttemptType;
+use App\Enums\SubtitleCaseStatus;
+use App\Models\ActionRequest;
+use App\Models\ServiceConnection;
+use App\Models\SubtitleCase;
+use App\Models\SubtitleCaseAttempt;
+use App\Providers\AIServiceProvider;
+use App\Services\Bazarr\BazarrClient;
+use App\Services\Bazarr\BazarrDownloadRequestCreator;
+use App\Services\Bazarr\BazarrSettingsAdapter;
+use App\Services\Bazarr\SubtitleCandidateEligibility;
+use App\Services\Bazarr\SubtitleCaseLifecycle;
+use App\Services\Bazarr\SubtitleCaseReconciler;
+use App\Services\Bazarr\SubtitleInventoryService;
+use App\Settings\BazarrAutomationSettings;
+use DateTimeInterface;
+use Illuminate\Contracts\Queue\ShouldQueue;
+use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Foundation\Queue\Queueable;
+use Illuminate\Http\Client\ConnectionException;
+use Illuminate\Http\Client\RequestException;
+use Illuminate\Queue\Attributes\Timeout;
+use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\RateLimiter;
+use Illuminate\Support\Str;
+use Throwable;
+
+/**
+ * Deliberately without a try cap, and without queue-level rate limiting. A release
+ * counts as an attempt even though handle() never ran, so a large cycle
+ * (max_cases_per_cycle accepts 1000) behind a per-minute limiter burned every job's
+ * attempts without contacting Bazarr, and failed() then parked healthy searching
+ * cases as "Bazarr probe failed". Throttling now sits at the provider search, and
+ * retryUntil() bounds only genuine retries.
+ */
+#[Timeout(60)]
+final class ReconcileSubtitleCase implements ShouldQueue
+{
+    use Queueable;
+
+    /**
+     * Bounds genuine retries only: admission no longer waits in the queue, so this
+     * window covers the 60/300-second backoff of an upstream outage rather than the
+     * time a cycle takes to drain.
+     */
+    private const int RETRY_WINDOW_MINUTES = 60;
+
+    /**
+     * Provider searches allowed per connection per minute. The per-cycle slot budget
+     * bounds how many probes a cycle performs; this bounds the burst rate, including
+     * webhook-triggered probes that arrive outside a cycle.
+     */
+    private const int PROVIDER_SEARCHES_PER_MINUTE = 10;
+
+    private const string VERIFICATION_ERROR_CATEGORY = 'verification_read_failure';
+
+    /**
+     * Identifies this queue message, so only its own retries can reuse the cycle
+     * probe slot it consumed. It is serialized with the payload, which makes it
+     * stable across retries and distinct from every other dispatch — the sweep,
+     * webhooks and action listeners all dispatch this job independently for the
+     * same case.
+     *
+     * Read through reservationIdentity(): a payload queued before this property
+     * existed is restored without the constructor and leaves it uninitialized.
+     */
+    public readonly string $reservationId;
+
+    /**
+     * @param  array<string, mixed>  $candidate
+     */
+    public function __construct(
+        public array $candidate,
+        public bool $probeAllowed = true,
+        public ?int $subtitleCaseId = null,
+        public ?int $targetBazarrConnectionId = null,
+    ) {
+        $this->reservationId = (string) Str::uuid();
+    }
+
+    public static function forCase(SubtitleCase $subtitleCase): self
+    {
+        return new self(
+            candidate: [],
+            subtitleCaseId: $subtitleCase->id,
+            targetBazarrConnectionId: $subtitleCase->bazarr_connection_id,
+        );
+    }
+
+    public function bazarrConnectionId(): string
+    {
+        return (string) ($this->targetBazarrConnectionId ?? $this->candidate['bazarr_connection_id'] ?? 'unknown');
+    }
+
+    /**
+     * @return list<int>
+     */
+    public function backoff(): array
+    {
+        return [60, 300];
+    }
+
+    public function retryUntil(): DateTimeInterface
+    {
+        return now()->addMinutes(self::RETRY_WINDOW_MINUTES);
+    }
+
+    /**
+     * No queue-level rate limiting. A RateLimited release counts as an attempt even
+     * though handle() never ran, so a large cycle (max_cases_per_cycle accepts 1000)
+     * queued behind a per-minute limiter burned every job's attempts and deadline
+     * without a single provider call — and most of those jobs only needed the
+     * deterministic reconciliation that runs before any search anyway. The provider
+     * search throttles itself instead, in probe().
+     *
+     * @return list<object>
+     */
+    public function middleware(): array
+    {
+        return [];
+    }
+
+    public function handle(
+        SubtitleCaseReconciler $subtitleCaseReconciler,
+        SubtitleCandidateEligibility $subtitleCandidateEligibility,
+        BazarrDownloadRequestCreator $bazarrDownloadRequestCreator,
+        SubtitleCaseLifecycle $subtitleCaseLifecycle,
+        BazarrAutomationSettings $bazarrAutomationSettings,
+        BazarrSettingsAdapter $bazarrSettingsAdapter,
+        SubtitleInventoryService $subtitleInventoryService,
+    ): void {
+        $subtitleCase = $this->subtitleCaseId === null
+            ? $subtitleCaseReconciler->reconcile($this->candidate)
+            : SubtitleCase::query()->find($this->subtitleCaseId);
+
+        // Targeted reconciliation must verify the real outcome of a case that is
+        // waiting on Bazarr: refresh the actual installed file so a satisfied
+        // requirement resolves, and a completed-but-ineffective download re-enters
+        // probing to reach the replacement path.
+        if ($this->subtitleCaseId !== null
+            && $subtitleCase instanceof SubtitleCase
+            && in_array($subtitleCase->status, [
+                SubtitleCaseStatus::DownloadRequested,
+                SubtitleCaseStatus::BazarrSearching,
+            ], true)) {
+            $subtitleCase = $this->verifyTargetedOutcome(
+                $subtitleCase,
+                $subtitleCaseReconciler,
+                $subtitleCaseLifecycle,
+                $subtitleInventoryService,
+            );
+        }
+
+        if ($subtitleCase instanceof SubtitleCase
+            && $subtitleCase->status === SubtitleCaseStatus::ReplacementEligible) {
+            $this->dispatchAdvisor($subtitleCase, $bazarrAutomationSettings);
+
+            return;
+        }
+
+        if (! $this->probeAllowed
+            || ! $subtitleCase instanceof SubtitleCase
+            || $subtitleCase->status !== SubtitleCaseStatus::BazarrSearching) {
+            return;
+        }
+
+        Cache::lock('bazarr-subtitle-probe:'.$subtitleCase->id, 60)->block(
+            5,
+            fn () => $this->probe(
+                $subtitleCase,
+                $subtitleCandidateEligibility,
+                $bazarrDownloadRequestCreator,
+                $subtitleCaseLifecycle,
+                $bazarrAutomationSettings,
+                $bazarrSettingsAdapter,
+            ),
+        );
+    }
+
+    private function probe(
+        SubtitleCase $subtitleCase,
+        SubtitleCandidateEligibility $subtitleCandidateEligibility,
+        BazarrDownloadRequestCreator $bazarrDownloadRequestCreator,
+        SubtitleCaseLifecycle $subtitleCaseLifecycle,
+        BazarrAutomationSettings $bazarrAutomationSettings,
+        BazarrSettingsAdapter $bazarrSettingsAdapter,
+    ): void {
+        $subtitleCase->refresh();
+
+        if ($subtitleCase->status !== SubtitleCaseStatus::BazarrSearching
+            || $this->recentProbeExists($subtitleCase, $bazarrAutomationSettings)) {
+            return;
+        }
+
+        // Consume a shared per-connection cycle probe slot immediately before any
+        // provider search, regardless of origin (scheduled sweep or webhook forCase),
+        // so notification-triggered probes cannot exceed the per-cycle budget. With
+        // no slot left, deterministic reconciliation (already done) stands and the
+        // provider search is skipped until the next cycle.
+        //
+        // A retry reuses the reservation its own first attempt consumed, keyed by
+        // this queue message. Asking for a second one lets a small budget
+        // (max_probes_per_cycle = 1, or a budget other cases have spent) turn the
+        // retry into a silent success: the queue would delete the job with tries
+        // left and failed() would never park the case. Keying the reuse on the case
+        // instead would let every other job dispatched for it — sweep, webhook,
+        // action listener — call itself a retry and bypass the cycle budget.
+        if (! $this->reservationHeld($subtitleCase->bazarr_connection_id)
+            && ! $this->reserveProbeSlot($subtitleCase->bazarr_connection_id, $bazarrAutomationSettings)) {
+            return;
+        }
+
+        // Per-minute provider throttle, applied here rather than as queue middleware:
+        // a release would spend the job's attempts and deadline on work it had not
+        // started, while every case that reaches this line has already had its
+        // deterministic reconciliation. Over budget, the search waits for the next
+        // cycle instead of occupying the queue.
+        if (! RateLimiter::attempt(
+            'bazarr-probe-searches:'.$subtitleCase->bazarr_connection_id,
+            self::PROVIDER_SEARCHES_PER_MINUTE,
+            static fn (): bool => true,
+        )) {
+            return;
+        }
+
+        $startedAt = now();
+
+        try {
+            $bazarrConnection = ServiceConnection::query()->find($subtitleCase->bazarr_connection_id);
+
+            if (! $bazarrConnection instanceof ServiceConnection
+                || $bazarrConnection->type !== ServiceType::Bazarr
+                || ! $bazarrConnection->is_active) {
+                return;
+            }
+
+            $bazarrClient = new BazarrClient($bazarrConnection);
+            $mediaId = $subtitleCase->media_type === 'episode'
+                ? (int) ($subtitleCase->target_ids['episode_id'] ?? 0)
+                : (int) ($subtitleCase->target_ids['radarr_id'] ?? 0);
+            $candidates = $subtitleCase->media_type === 'episode'
+                ? $bazarrClient->searchEpisode($mediaId)
+                : $bazarrClient->searchMovie($mediaId);
+            $providers = $bazarrClient->getProviders()['data'];
+            $availableProviders = array_values(array_filter(array_map(
+                static fn (array $provider): ?string => is_string($provider['name'] ?? null)
+                    && in_array($provider['status'] ?? null, ['healthy', 'available', 'enabled'], true)
+                    && ! is_string($provider['throttled_until'] ?? null)
+                        ? $provider['name']
+                        : null,
+                $providers,
+            )));
+            $minimumScore = $candidates === []
+                ? null
+                : $bazarrSettingsAdapter->effectiveMinimumScore($bazarrConnection, $subtitleCase->media_type);
+            $context = [
+                'minimum_score' => $minimumScore,
+                'available_providers' => $availableProviders,
+                'threshold_available' => $minimumScore !== null,
+            ];
+            $requirements = $this->missingRequirements($subtitleCase);
+            $counts = $this->emptyClassificationCounts();
+            $eligibleRequirements = [];
+
+            foreach ($candidates as $candidate) {
+                foreach ($requirements as $requirement) {
+                    $classification = $subtitleCandidateEligibility->classify($candidate, $requirement, $context);
+                    $counts[$classification]++;
+
+                    if ($classification === 'eligible') {
+                        $eligibleRequirements[$this->requirementKey($requirement)] ??= $requirement;
+                    }
+                }
+            }
+
+            // Every eligible missing language gets its own download request; the
+            // creator enforces per-case/language uniqueness under its own lock.
+            $actionRequest = null;
+
+            foreach ($eligibleRequirements as $eligibleRequirement) {
+                $created = $bazarrDownloadRequestCreator->create($subtitleCase, $eligibleRequirement);
+                $actionRequest ??= $created;
+            }
+
+            $outcome = $actionRequest instanceof ActionRequest
+                ? (SubtitleCaseAttemptOutcome::Succeeded)
+                : ($counts['capability_limited'] > 0 ? SubtitleCaseAttemptOutcome::Indeterminate : SubtitleCaseAttemptOutcome::Empty);
+            SubtitleCaseAttempt::query()->create([
+                'subtitle_case_id' => $subtitleCase->id,
+                'action_request_id' => $actionRequest?->id,
+                'type' => SubtitleCaseAttemptType::Probe,
+                'candidate_count' => count($candidates),
+                'eligible_candidate_count' => $counts['eligible'],
+                'summary' => $counts,
+                'outcome' => $outcome,
+                'error_category' => $outcome === SubtitleCaseAttemptOutcome::Indeterminate ? 'capability_limited' : null,
+                'started_at' => $startedAt,
+                'completed_at' => now(),
+            ]);
+
+            if ($outcome === SubtitleCaseAttemptOutcome::Empty
+                && SubtitleCaseAttempt::query()
+                    ->where('subtitle_case_id', $subtitleCase->id)
+                    ->where('type', SubtitleCaseAttemptType::Probe)
+                    ->where('outcome', SubtitleCaseAttemptOutcome::Empty)
+                    ->count() >= $bazarrAutomationSettings->emptyProbeThreshold()) {
+                $transitioned = $subtitleCaseLifecycle->transition(
+                    $subtitleCase->fresh(),
+                    SubtitleCaseStatus::ReplacementEligible,
+                );
+
+                if ($transitioned) {
+                    $this->dispatchAdvisor($subtitleCase->fresh(), $bazarrAutomationSettings);
+                }
+            }
+        } catch (Throwable $throwable) {
+            SubtitleCaseAttempt::query()->create([
+                'subtitle_case_id' => $subtitleCase->id,
+                'type' => SubtitleCaseAttemptType::Probe,
+                'candidate_count' => 0,
+                'eligible_candidate_count' => 0,
+                'summary' => ['eligible' => 0],
+                'outcome' => SubtitleCaseAttemptOutcome::Failed,
+                'error_category' => 'upstream_failure',
+                'started_at' => $startedAt,
+                'completed_at' => now(),
+            ]);
+
+            // A brief Bazarr or provider outage is the most likely probe failure,
+            // and swallowing it here spent none of the configured tries while
+            // permanently removing an otherwise automatable case from probing.
+            // Retryable failures are rethrown so the backoff applies; failed()
+            // parks the case once the last attempt is exhausted.
+            throw_if($this->isRetryable($throwable), $throwable);
+
+            $subtitleCaseLifecycle->needsReview($subtitleCase->fresh(), 'Bazarr probe failed.');
+            report($throwable);
+        }
+    }
+
+    /**
+     * Upstream connectivity, server errors and throttling are expected to clear
+     * on their own; anything else (bad data, a definite 4xx) will fail the same
+     * way on every attempt and is parked immediately instead.
+     */
+    private function isRetryable(Throwable $throwable): bool
+    {
+        if ($throwable instanceof ConnectionException) {
+            return true;
+        }
+
+        return $throwable instanceof RequestException
+            && ($throwable->response->serverError() || $throwable->response->status() === 429);
+    }
+
+    private function verifyTargetedOutcome(
+        SubtitleCase $subtitleCase,
+        SubtitleCaseReconciler $subtitleCaseReconciler,
+        SubtitleCaseLifecycle $subtitleCaseLifecycle,
+        SubtitleInventoryService $subtitleInventoryService,
+    ): SubtitleCase {
+        try {
+            $candidate = $subtitleInventoryService->caseCandidateFor($subtitleCase);
+        } catch (Throwable $throwable) {
+            // A failed read says nothing about the subtitle, so it must never be
+            // treated as "still missing". Transient failures retry; a definite one
+            // (4xx, malformed payload) will fail the same way forever, and this job
+            // is the only thing still looking at the case — a waiting case is not in
+            // the bulk candidate feed and the completion listener has already fired.
+            // So it goes to an operator instead of waiting silently.
+            if ($this->isRetryable($throwable)) {
+                // Recorded before the rethrow so failed() can tell a job that died
+                // verifying a live target from one that died searching providers —
+                // the instance that threw is gone by then. It is also the operator's
+                // audit trail for the outage.
+                $this->recordFailedVerification($subtitleCase);
+
+                throw $throwable;
+            }
+
+            report($throwable);
+
+            return $this->parkUnverifiableCase(
+                $subtitleCase,
+                $subtitleCaseLifecycle,
+                'bazarr_verification_failed',
+            );
+        }
+
+        // An unreadable target — vanished media, unmapped Arr connection — is not an
+        // authoritative "still missing" either, and nothing will read it later.
+        if ($candidate === null) {
+            return $this->parkUnverifiableCase(
+                $subtitleCase,
+                $subtitleCaseLifecycle,
+                'bazarr_target_unreadable',
+            );
+        }
+
+        $reconciled = $subtitleCaseReconciler->reconcile($candidate);
+        $subtitleCase = $reconciled instanceof SubtitleCase
+            ? $reconciled
+            : ($subtitleCase->fresh() ?? $subtitleCase);
+
+        // A settled download that left the requirement unmet re-enters probing so
+        // the normal empty-probe path can escalate the case to replacement. Probe
+        // spacing is not consulted here: the download was requested moments after a
+        // probe, so with a 24-hour window this verification could never advance the
+        // case. probe() enforces the spacing itself, so the case simply waits in
+        // bazarr_searching until the window elapses.
+        if ($subtitleCase->status === SubtitleCaseStatus::DownloadRequested
+            && $this->downloadSettled($subtitleCase)
+            && $subtitleCaseLifecycle->transition($subtitleCase, SubtitleCaseStatus::BazarrSearching)) {
+            return $subtitleCase->fresh() ?? $subtitleCase;
+        }
+
+        return $subtitleCase;
+    }
+
+    /**
+     * Ownership of a waiting case is claimed only by the job that failed reading it
+     * *while it was waiting*. A read that failed during bazarr_searching says nothing
+     * about a download another dispatch queued afterwards, so no marker is written for
+     * that phase. The marker carries this queue message's identity, so one job's
+     * outage cannot be read as another job's claim.
+     */
+    private function recordFailedVerification(SubtitleCase $subtitleCase): void
+    {
+        if ($subtitleCase->status !== SubtitleCaseStatus::DownloadRequested) {
+            return;
+        }
+
+        SubtitleCaseAttempt::query()->create([
+            'subtitle_case_id' => $subtitleCase->id,
+            'type' => SubtitleCaseAttemptType::Reconciliation,
+            'outcome' => SubtitleCaseAttemptOutcome::Failed,
+            'summary' => [
+                'result' => 'verification_read_failed',
+                'reservation' => $this->reservationIdentity(),
+            ],
+            'error_category' => self::VERIFICATION_ERROR_CATEGORY,
+            'started_at' => now(),
+            'completed_at' => now(),
+        ]);
+    }
+
+    /**
+     * Did *this* queue message die while reading the live target of a case that was
+     * already waiting on a download? Only then may failed() park that waiting case:
+     * a job that died searching providers, or a different dispatch's outage, must
+     * leave it alone, because the download's completion listener still expects to
+     * verify it. The window stops an old outage from parking a case much later.
+     */
+    private function failedVerificationExists(int $subtitleCaseId): bool
+    {
+        return SubtitleCaseAttempt::query()
+            ->where('subtitle_case_id', $subtitleCaseId)
+            ->where('type', SubtitleCaseAttemptType::Reconciliation)
+            ->where('outcome', SubtitleCaseAttemptOutcome::Failed)
+            ->where('error_category', self::VERIFICATION_ERROR_CATEGORY)
+            ->where('summary->reservation', $this->reservationIdentity())
+            ->where('started_at', '>', now()->subMinutes(self::RETRY_WINDOW_MINUTES * 2))
+            ->exists();
+    }
+
+    /**
+     * Only a case waiting on a download is handed to an operator here, because that
+     * is the state with no other observer: it has left the bulk candidate feed and
+     * its completion listener has already fired. A bazarr_searching case is still
+     * swept every cycle, so it keeps waiting rather than adding review noise — and so
+     * does any case whose Bazarr connection is currently inactive or unmapped, which
+     * is a configuration state automation is paused for anyway.
+     */
+    private function parkUnverifiableCase(
+        SubtitleCase $subtitleCase,
+        SubtitleCaseLifecycle $subtitleCaseLifecycle,
+        string $reason,
+    ): SubtitleCase {
+        $subtitleCase = $subtitleCase->fresh() ?? $subtitleCase;
+
+        if ($subtitleCase->status !== SubtitleCaseStatus::DownloadRequested) {
+            return $subtitleCase;
+        }
+
+        $bazarrConnection = ServiceConnection::query()->find($subtitleCase->bazarr_connection_id);
+
+        if (! $bazarrConnection instanceof ServiceConnection
+            || $bazarrConnection->type !== ServiceType::Bazarr
+            || ! $bazarrConnection->is_active) {
+            return $subtitleCase;
+        }
+
+        $subtitleCaseLifecycle->needsReview($subtitleCase, $reason);
+
+        return $subtitleCase->fresh() ?? $subtitleCase;
+    }
+
+    /**
+     * No linked download is expected to act any more: each of them either completed,
+     * or failed with an uncertain outcome that this live read has now verified. A
+     * probe queues one request per missing language, so the whole correlated set has
+     * to be settled — leaving the waiting state while an earlier language is still
+     * pending would strand the case, because that request's later completion no
+     * longer finds a `download_requested` case to reconcile.
+     */
+    private function downloadSettled(SubtitleCase $subtitleCase): bool
+    {
+        $requestIds = $this->downloadRequestIds($subtitleCase);
+
+        if ($requestIds === []) {
+            return false;
+        }
+
+        $actionRequests = ActionRequest::query()->findMany($requestIds);
+
+        if ($actionRequests->isEmpty()) {
+            return false;
+        }
+
+        return $actionRequests->every(fn (ActionRequest $actionRequest): bool => $actionRequest->status === ActionRequestStatus::Completed
+            || ($actionRequest->status === ActionRequestStatus::Failed
+                && ($actionRequest->result['indeterminate'] ?? false) === true));
+    }
+
+    /**
+     * The scalar column keeps only the most recent request; every per-language
+     * request lives in the evidence map.
+     *
+     * @return list<int>
+     */
+    private function downloadRequestIds(SubtitleCase $subtitleCase): array
+    {
+        $recorded = $subtitleCase->evidence['download_requests'] ?? null;
+        $requestIds = is_array($recorded)
+            ? array_values(array_filter(array_map(
+                static fn (mixed $id): ?int => is_int($id) && $id > 0 ? $id : null,
+                $recorded,
+            ), static fn (?int $id): bool => $id !== null))
+            : [];
+
+        if ($subtitleCase->download_action_request_id !== null) {
+            $requestIds[] = $subtitleCase->download_action_request_id;
+        }
+
+        return array_values(array_unique($requestIds));
+    }
+
+    /**
+     * Probe spacing counts attempts that actually reached the providers. A failed
+     * attempt is recorded before the exception is rethrown, so counting it would
+     * make the queued retry return without contacting Bazarr: the remaining tries
+     * would go unspent, failed() would never park the case, and the case would
+     * wait out the whole spacing window instead.
+     */
+    private function recentProbeExists(
+        SubtitleCase $subtitleCase,
+        BazarrAutomationSettings $bazarrAutomationSettings,
+    ): bool {
+        return $this->probeAttemptsWithinSpacing($subtitleCase, $bazarrAutomationSettings)
+            ->whereNot('outcome', SubtitleCaseAttemptOutcome::Failed)
+            ->exists();
+    }
+
+    /**
+     * @return Builder<SubtitleCaseAttempt>
+     */
+    private function probeAttemptsWithinSpacing(
+        SubtitleCase $subtitleCase,
+        BazarrAutomationSettings $bazarrAutomationSettings,
+    ): Builder {
+        return SubtitleCaseAttempt::query()
+            ->where('subtitle_case_id', $subtitleCase->id)
+            ->where('type', SubtitleCaseAttemptType::Probe)
+            ->where('started_at', '>', now()->subHours($bazarrAutomationSettings->probeSpacingHours()));
+    }
+
+    /**
+     * @return list<array{code: string, forced: bool, hearing_impaired: bool}>
+     */
+    private function missingRequirements(SubtitleCase $subtitleCase): array
+    {
+        $missingLanguages = is_array($subtitleCase->evidence['missing_languages'] ?? null)
+            ? $subtitleCase->evidence['missing_languages']
+            : [];
+
+        return array_values(array_filter(
+            $subtitleCase->required_languages,
+            static fn (mixed $requirement): bool => is_array($requirement)
+                && in_array($requirement['code'] ?? null, $missingLanguages, true),
+        ));
+    }
+
+    /**
+     * @param  array{code: string, forced: bool, hearing_impaired: bool}  $requirement
+     */
+    private function requirementKey(array $requirement): string
+    {
+        return sprintf('%s|%d|%d', $requirement['code'], (int) $requirement['forced'], (int) $requirement['hearing_impaired']);
+    }
+
+    /**
+     * @return array<string, int>
+     */
+    private function emptyClassificationCounts(): array
+    {
+        return [
+            'eligible' => 0,
+            'wrong_language' => 0,
+            'wrong_qualifier' => 0,
+            'provider_unavailable' => 0,
+            'below_threshold' => 0,
+            'malformed' => 0,
+            'capability_limited' => 0,
+        ];
+    }
+
+    private function dispatchAdvisor(
+        SubtitleCase $subtitleCase,
+        BazarrAutomationSettings $bazarrAutomationSettings,
+    ): void {
+        $maximum = $bazarrAutomationSettings->maxAdvisorEscalationsPerCycle();
+
+        if (! AIServiceProvider::enabled()
+            || ! $bazarrAutomationSettings->enabled()
+            || $maximum < 1) {
+            return;
+        }
+
+        Cache::lock('bazarr-advisor-cycle-lock:'.$subtitleCase->bazarr_connection_id, 10)->block(
+            5,
+            function () use ($subtitleCase, $bazarrAutomationSettings, $maximum): void {
+                $ttl = now()->addMinutes($bazarrAutomationSettings->reconciliationIntervalMinutes());
+                $slotKey = sprintf('bazarr-advisor-cycle-slot:%d:%d', $subtitleCase->bazarr_connection_id, $subtitleCase->id);
+
+                // One escalation per case per cycle. A case already escalated this
+                // cycle must not consume another slot, so repeated reconciliation of
+                // the same eligible case cannot starve other cases of the cap.
+                if (Cache::get($slotKey) !== null) {
+                    return;
+                }
+
+                $key = 'bazarr-advisor-cycle-count:'.$subtitleCase->bazarr_connection_id;
+                $used = (int) Cache::get($key, 0);
+
+                if ($used >= $maximum) {
+                    return;
+                }
+
+                Cache::put($slotKey, true, $ttl);
+                Cache::put($key, $used + 1, $ttl);
+                dispatch(new RunSubtitleAdvisor($subtitleCase->id));
+            },
+        );
+    }
+
+    private function reserveProbeSlot(int $connectionId, BazarrAutomationSettings $bazarrAutomationSettings): bool
+    {
+        return (bool) Cache::lock('bazarr-probe-cycle-lock:'.$connectionId, 10)->block(
+            5,
+            function () use ($connectionId, $bazarrAutomationSettings): bool {
+                $key = 'bazarr-probe-cycle-count:'.$connectionId;
+                $used = (int) Cache::get($key, 0);
+
+                if ($used >= $bazarrAutomationSettings->maxProbesPerCycle()) {
+                    return false;
+                }
+
+                $ttl = now()->addMinutes($bazarrAutomationSettings->reconciliationIntervalMinutes());
+                Cache::put($key, $used + 1, $ttl);
+                // Records that this queue message owns one of the cycle's slots. It
+                // expires with the cycle, so a retry landing in the next cycle asks
+                // for admission again against that cycle's fresh budget.
+                Cache::put($this->reservationKey($connectionId), true, $ttl);
+
+                return true;
+            },
+        );
+    }
+
+    private function reservationHeld(int $connectionId): bool
+    {
+        return Cache::get($this->reservationKey($connectionId)) !== null;
+    }
+
+    private function reservationKey(int $connectionId): string
+    {
+        return sprintf('bazarr-probe-cycle-reservation:%d:%s', $connectionId, $this->reservationIdentity());
+    }
+
+    /**
+     * A payload queued by the previous release restores the four properties it knew
+     * about and never runs the constructor, so the identity is derived from the
+     * payload itself: stable across that message's own retries, without reading an
+     * uninitialized typed property and failing every attempt.
+     */
+    private function reservationIdentity(): string
+    {
+        if (! isset($this->reservationId)) {
+            $this->reservationId = 'payload:'.hash('sha256', json_encode([
+                $this->candidate,
+                $this->probeAllowed,
+                $this->subtitleCaseId,
+                $this->targetBazarrConnectionId,
+            ], JSON_THROW_ON_ERROR));
+        }
+
+        return $this->reservationId;
+    }
+
+    public function failed(?Throwable $throwable): void
+    {
+        Log::error('Subtitle case reconciliation failed.', [
+            'bazarr_connection_id' => $this->candidate['bazarr_connection_id'] ?? null,
+            'service_connection_id' => $this->candidate['service_connection_id'] ?? null,
+            'exception' => $throwable instanceof Throwable ? $throwable::class : null,
+        ]);
+
+        // The retries are spent, so the case this job was working on is parked for an
+        // operator instead of silently dropping out of automation. The queue
+        // reconstructs this job from its serialized payload before calling failed(),
+        // so the case is resolved from constructor data — anything recorded on the
+        // instance that threw is already gone.
+        $subtitleCase = $this->probedSubtitleCase();
+
+        if (! $subtitleCase instanceof SubtitleCase) {
+            return;
+        }
+
+        $reason = $subtitleCase->status === SubtitleCaseStatus::DownloadRequested
+            ? 'bazarr_verification_failed'
+            : 'Bazarr probe failed.';
+
+        // needsReview() transitions conditionally on the current status, so a case
+        // that moves on between this read and the write is left alone.
+        resolve(SubtitleCaseLifecycle::class)->needsReview($subtitleCase, $reason);
+    }
+
+    /**
+     * Only a case still in the state this job owns may be parked. A case that moved
+     * on — a concurrently dispatched reconciliation can queue a download while this
+     * job sits in backoff — must not be dragged into review, or that download's
+     * completion has nothing left to verify.
+     *
+     * `download_requested` is owned only by a job that actually died reading the live
+     * target: that job is the sole verifier of a waiting case, so letting its retries
+     * expire silently would leave the case outside the missing feed with nobody
+     * looking at it. A job that died searching providers has no claim on it.
+     */
+    private function probedSubtitleCase(): ?SubtitleCase
+    {
+        $ownedStatuses = [SubtitleCaseStatus::BazarrSearching];
+
+        if ($this->subtitleCaseId !== null && $this->failedVerificationExists($this->subtitleCaseId)) {
+            $ownedStatuses[] = SubtitleCaseStatus::DownloadRequested;
+        }
+
+        $builder = SubtitleCase::query()->whereIn('status', array_map(
+            static fn (SubtitleCaseStatus $subtitleCaseStatus): string => $subtitleCaseStatus->value,
+            $ownedStatuses,
+        ));
+
+        if ($this->subtitleCaseId !== null) {
+            return $builder->whereKey($this->subtitleCaseId)->first();
+        }
+
+        foreach (['bazarr_connection_id', 'service_connection_id', 'file_fingerprint', 'requirements_fingerprint'] as $key) {
+            if (! isset($this->candidate[$key])) {
+                return null;
+            }
+        }
+
+        return $builder
+            ->where('bazarr_connection_id', $this->candidate['bazarr_connection_id'])
+            ->where('service_connection_id', $this->candidate['service_connection_id'])
+            ->where('file_fingerprint', $this->candidate['file_fingerprint'])
+            ->where('requirements_fingerprint', $this->candidate['requirements_fingerprint'])
+            ->first();
+    }
+}

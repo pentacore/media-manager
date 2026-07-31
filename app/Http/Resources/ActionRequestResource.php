@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Http\Resources;
 
 use App\Models\ActionRequest;
+use App\Services\Actions\ActionRequestBrowserPayload;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 use Override;
@@ -46,7 +47,7 @@ class ActionRequestResource extends JsonResource
             'target_service' => $this->target_service,
             'status' => $this->status->value,
             'requires_approval' => $this->requires_approval,
-            'payload' => $this->payload,
+            'payload' => resolve(ActionRequestBrowserPayload::class)->for($this->resource),
             'result' => $request->user()?->isAdmin() ? $this->result : $this->safeResult(),
             'approved_by' => $this->whenLoaded('approvedByUser', fn () => $this->approvedByUser?->name),
             'webhook_source' => $this->whenLoaded('webhookEvent', fn () => $this->webhookEvent?->serviceConnection?->name),

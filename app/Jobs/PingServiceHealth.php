@@ -136,6 +136,7 @@ class PingServiceHealth implements ShouldQueue
         $client = resolve(ServiceClientFactory::class)->make($this->serviceConnection);
 
         return match ($this->serviceConnection->type) {
+            ServiceType::Bazarr => $client->getFreshSystemStatus(),
             ServiceType::Emby => $client->getSystemInfo(),
             ServiceType::Seerr => $client->getStatus(),
             ServiceType::SABnzbd => $client->getVersion(),

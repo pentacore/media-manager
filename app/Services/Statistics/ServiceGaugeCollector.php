@@ -5,7 +5,9 @@ declare(strict_types=1);
 namespace App\Services\Statistics;
 
 use App\Enums\ServiceType;
+use App\Enums\SubtitleCaseStatus;
 use App\Models\ServiceConnection;
+use App\Models\SubtitleCase;
 use App\Services\ServiceClientFactory;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
@@ -96,8 +98,55 @@ class ServiceGaugeCollector
             ),
             ServiceType::SABnzbd => $this->collectSabnzbd($client, $serviceConnection, $at),
             ServiceType::Prowlarr => $this->collectDiskSpace($client->getDiskSpace(), $serviceConnection, $at),
+            ServiceType::Bazarr => $this->collectBazarr($serviceConnection, $at),
             default => $this->collectArr($client, $serviceConnection, $at), // Sonarr / Radarr / Whisparr
         };
+    }
+
+    private function collectBazarr(ServiceConnection $serviceConnection, CarbonImmutable $at): void
+    {
+        $dimensions = ['connection' => (string) $serviceConnection->id];
+        $counts = SubtitleCase::query()
+            ->where('bazarr_connection_id', $serviceConnection->id)
+            ->selectRaw('status, COUNT(*) as total')
+            ->groupBy('status')
+            ->pluck('total', 'status');
+        $activeStatuses = [
+            SubtitleCaseStatus::Observing,
+            SubtitleCaseStatus::BazarrSearching,
+            SubtitleCaseStatus::DownloadRequested,
+            SubtitleCaseStatus::ReplacementEligible,
+            SubtitleCaseStatus::AdvisorRunning,
+            SubtitleCaseStatus::ReplacementRequested,
+            SubtitleCaseStatus::NeedsReview,
+        ];
+
+        foreach (SubtitleCaseStatus::cases() as $subtitleCaseStatus) {
+            $this->statsRecorder->sample(
+                'subtitles.cases',
+                [...$dimensions, 'status' => $subtitleCaseStatus->value],
+                $at,
+                (float) ($counts[$subtitleCaseStatus->value] ?? 0),
+            );
+        }
+
+        $wantedCount = array_sum(array_map(
+            static fn (SubtitleCaseStatus $subtitleCaseStatus): int => (int) ($counts[$subtitleCaseStatus->value] ?? 0),
+            $activeStatuses,
+        ));
+        $missingRequirementCount = SubtitleCase::query()
+            ->where('bazarr_connection_id', $serviceConnection->id)
+            ->whereIn('status', $activeStatuses)
+            ->select(['id', 'evidence'])
+            ->lazyById()
+            ->sum(static function (SubtitleCase $subtitleCase): int {
+                $missingLanguages = $subtitleCase->evidence['missing_languages'] ?? null;
+
+                return is_array($missingLanguages) ? count($missingLanguages) : 0;
+            });
+
+        $this->statsRecorder->sample('subtitles.wanted', $dimensions, $at, (float) $wantedCount);
+        $this->statsRecorder->sample('subtitles.missing_requirements', $dimensions, $at, (float) $missingRequirementCount);
     }
 
     /**

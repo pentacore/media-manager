@@ -54,3 +54,4 @@ require __DIR__.'/prowlarr.php';
 require __DIR__.'/sabnzbd.php';
 require __DIR__.'/actions.php';
 require __DIR__.'/ai.php';
+require __DIR__.'/bazarr.php';

@@ -1,0 +1,23 @@
+{
+    "data": [
+        {
+            "alternativeTitles": ["Example Alternate Title"],
+            "audio_language": [{"name": "English", "code2": "en", "code3": "eng"}],
+            "fanart": "/images/movies/fanart.jpg",
+            "imdbId": "tt0000001",
+            "missing_subtitles": [{"name": "Swedish", "code2": "sv", "code3": "swe", "forced": false, "hi": false}],
+            "monitored": true,
+            "overview": "A sanitized movie overview.",
+            "path": "/media/movies/Example Movie (2024)",
+            "poster": "/images/movies/poster.jpg",
+            "profileId": 1,
+            "radarrId": 801,
+            "sceneName": "Example.Movie.2024.1080p",
+            "subtitles": [],
+            "tags": ["4"],
+            "title": "Example Movie",
+            "year": "2024"
+        }
+    ],
+    "total": 37
+}

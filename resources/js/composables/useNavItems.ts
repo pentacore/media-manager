@@ -3,6 +3,7 @@ import {
     Activity,
     Bot,
     Brain,
+    Captions,
     ChartLine,
     Clock,
     DollarSign,
@@ -41,6 +42,7 @@ import ServiceConnectionController from '@/actions/App/Http/Controllers/Admin/Se
 import AdminStatisticsController from '@/actions/App/Http/Controllers/Admin/StatisticsController';
 import UserController from '@/actions/App/Http/Controllers/Admin/UserController';
 import WebhookLogController from '@/actions/App/Http/Controllers/Admin/WebhookLogController';
+import BazarrOverviewController from '@/actions/App/Http/Controllers/Bazarr/OverviewController';
 import NowPlayingController from '@/actions/App/Http/Controllers/Emby/NowPlayingController';
 import WatchHistoryController from '@/actions/App/Http/Controllers/Emby/WatchHistoryController';
 import LibraryActivityController from '@/actions/App/Http/Controllers/Library/ActivityController';
@@ -126,6 +128,11 @@ export function useNavItems(counts?: NavCounts): ComputedRef<NavGroup[]> {
                         title: 'Seasonal Anime',
                         href: AnimeController.index.url(),
                         icon: Sprout,
+                    },
+                    {
+                        title: 'Subtitles',
+                        href: BazarrOverviewController.url(),
+                        icon: Captions,
                     },
                     {
                         title: 'Search',

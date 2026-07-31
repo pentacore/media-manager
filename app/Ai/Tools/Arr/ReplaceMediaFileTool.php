@@ -7,7 +7,10 @@ namespace App\Ai\Tools\Arr;
 use App\Ai\Risk;
 use App\Ai\Tools\BaseTool;
 use App\Enums\SeasonPackPolicy;
+use App\Enums\ServiceType;
+use App\Models\ServiceConnection;
 use App\Services\MediaReplacement\MediaFileInspector;
+use App\Services\MediaReplacement\MediaReplacementActionPayload;
 use App\Services\MediaReplacement\ReplacementCandidateFinder;
 use App\Settings\MediaReplacementSettings;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
@@ -42,6 +45,10 @@ class ReplaceMediaFileTool extends BaseTool
         $fingerprint = (string) ($args['candidate_fingerprint'] ?? '');
         $selectionMode = ($args['selection_mode'] ?? null) === 'automatic' ? 'automatic' : 'manual';
         $reason = (string) ($args['reason'] ?? '');
+        $serviceConnection = $this->serviceConnection(
+            $service,
+            $this->nullableInt($args['service_connection_id'] ?? null),
+        );
 
         $snapshot = resolve(MediaFileInspector::class)->inspect(
             service: $service,
@@ -49,6 +56,7 @@ class ReplaceMediaFileTool extends BaseTool
             seasonNumber: $this->nullableInt($args['season_number'] ?? null),
             episodeNumber: $this->nullableInt($args['episode_number'] ?? null),
             absoluteEpisodeNumber: $this->nullableInt($args['absolute_episode_number'] ?? null),
+            serviceConnection: $serviceConnection,
         );
 
         throw_if(
@@ -61,6 +69,7 @@ class ReplaceMediaFileTool extends BaseTool
             target: $snapshot,
             languageOverride: $this->languageOverride($args['required_languages'] ?? null),
             limit: 10,
+            serviceConnection: $serviceConnection,
         );
 
         $candidate = $this->matchCandidate($result['candidates'], $fingerprint);
@@ -92,22 +101,14 @@ class ReplaceMediaFileTool extends BaseTool
             'force_requires_approval' => $candidateRequiresApproval
                 || ($isSeasonPack
                     && $mediaReplacementSettings->seasonPackPolicy() === SeasonPackPolicy::ApprovalRequired),
-            'payload' => [
-                'title' => sprintf('Replace %s', $snapshot['display_name'] ?? 'media file'),
-                'detail' => $reason,
-                'service' => $service,
-                'service_connection_id' => $snapshot['service_connection_id'] ?? null,
-                'scope' => $snapshot['scope'] ?? null,
-                'target' => $snapshot,
-                'candidate_fingerprint' => $candidate['fingerprint'],
-                'candidate' => $candidate,
-                'required_languages' => $result['effective_languages'],
-                'confidence' => $candidate['confidence'],
-                'matched_rules' => $candidate['matched_rules'],
-                'selection_mode' => $selectionMode,
-                'agent_rationale' => mb_substr($reason, 0, 1000),
-                'original_history_id' => $snapshot['original_history_id'] ?? null,
-            ],
+            'payload' => resolve(MediaReplacementActionPayload::class)->build(
+                target: $snapshot,
+                candidate: $candidate,
+                effectiveLanguages: $result['effective_languages'],
+                matchedRules: $candidate['matched_rules'],
+                selectionMode: $selectionMode,
+                reason: $reason,
+            ),
         ];
     }
 
@@ -147,6 +148,31 @@ class ReplaceMediaFileTool extends BaseTool
         return is_numeric($value) ? (int) $value : null;
     }
 
+    private function serviceConnection(string $service, ?int $serviceConnectionId): ServiceConnection
+    {
+        $serviceType = match ($service) {
+            'sonarr' => ServiceType::Sonarr,
+            'radarr' => ServiceType::Radarr,
+            default => throw new InvalidArgumentException('service must be "sonarr" or "radarr".'),
+        };
+        $builder = ServiceConnection::query()
+            ->where('type', $serviceType)
+            ->where('is_active', true);
+
+        if ($serviceConnectionId !== null) {
+            return $builder->whereKey($serviceConnectionId)->firstOrFail();
+        }
+
+        $connections = $builder->limit(2)->get();
+        throw_unless(
+            $connections->count() === 1,
+            InvalidArgumentException::class,
+            'Specify service_connection_id because the active service connection is ambiguous.',
+        );
+
+        return $connections->firstOrFail();
+    }
+
     /**
      * @return array<string, Type>
      */
@@ -157,6 +183,10 @@ class ReplaceMediaFileTool extends BaseTool
                 ->enum(['sonarr', 'radarr'])
                 ->description('sonarr for a TV/anime episode, radarr for a movie.')
                 ->required(),
+            'service_connection_id' => $schema->integer()
+                ->description('Exact active Sonarr or Radarr connection ID. Required when more than one matching connection is active.')
+                ->required()
+                ->nullable(),
             'item_id' => $schema->integer()
                 ->description('Sonarr series id or Radarr movie id.')
                 ->required(),

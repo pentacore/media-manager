@@ -3,8 +3,11 @@
 declare(strict_types=1);
 
 use App\Enums\MediaReplacementStatus;
+use App\Enums\SubtitleCaseStatus;
 use App\Enums\UserRole;
+use App\Models\ActionRequest;
 use App\Models\MediaReplacementAttempt;
+use App\Models\SubtitleCase;
 use App\Models\User;
 use App\Notifications\MediaReplacementStatusChanged;
 use Illuminate\Support\Facades\Notification;
@@ -114,6 +117,25 @@ test('the sweep notification never claims deletion that did not happen', functio
         MediaReplacementStatusChanged::class,
         fn (MediaReplacementStatusChanged $mediaReplacementStatusChanged): bool => str_contains($mediaReplacementStatusChanged->message, 'the old file was not removed'),
     );
+});
+
+test('a timed-out attempt moves a correlated subtitle case to needs_review', function (): void {
+    $actionRequest = ActionRequest::factory()->create(['type' => 'replace_media_file']);
+    $case = SubtitleCase::factory()->create([
+        'status' => SubtitleCaseStatus::ReplacementRequested,
+        'replacement_action_request_id' => $actionRequest->id,
+    ]);
+    $actionRequest->update(['payload' => [...($actionRequest->payload ?? []), 'subtitle_case_id' => $case->id]]);
+    $attempt = MediaReplacementAttempt::factory()->create([
+        'action_request_id' => $actionRequest->id,
+        'status' => MediaReplacementStatus::Downloading,
+        'started_at' => now()->subHours(9),
+    ]);
+
+    $this->artisan('media-replacement:reconcile')->assertSuccessful();
+
+    expect($attempt->fresh()->status)->toBe(MediaReplacementStatus::NeedsAttention)
+        ->and($case->fresh()->status)->toBe(SubtitleCaseStatus::NeedsReview);
 });
 
 test('the custom timeout threshold is respected', function (): void {

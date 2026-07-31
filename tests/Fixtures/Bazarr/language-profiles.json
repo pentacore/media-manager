@@ -1,0 +1,15 @@
+[
+    {
+        "profileId": 1,
+        "name": "English and Swedish",
+        "cutoff": 2,
+        "items": [
+            {"id": 1, "language": "en", "audio_exclude": "False", "hi": "False", "forced": "False"},
+            {"id": 2, "language": "sv", "audio_exclude": "False", "hi": "False", "forced": "False"}
+        ],
+        "mustContain": [],
+        "mustNotContain": [],
+        "originalFormat": false,
+        "tag": null
+    }
+]

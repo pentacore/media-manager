@@ -4,12 +4,15 @@ declare(strict_types=1);
 
 namespace App\Http\Requests\Admin;
 
+use App\Concerns\BazarrServiceMappingValidationRules;
 use App\Enums\ServiceType;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
 
 class ServiceConnectionUpdateRequest extends FormRequest
 {
+    use BazarrServiceMappingValidationRules;
+
     /**
      * @return array<string, ValidationRule|array<mixed>|string>
      */
@@ -24,6 +27,7 @@ class ServiceConnectionUpdateRequest extends FormRequest
             // The controller filters empty strings so they never overwrite state.
             'api_key' => ['nullable', 'string', 'max:500'],
             'webhook_token' => ['nullable', 'string', 'min:10', 'max:500'],
+            ...$this->bazarrServiceMappingRules(),
             // Disk-display preferences for the Service Health page. Only
             // meaningful for sonarr/radarr connections, but accepted on any
             // type so the form can store/restore the picker state.
