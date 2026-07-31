@@ -244,7 +244,7 @@ test('a staged upload executes end to end once its action is approved', function
         ->assertCreated();
 
     $actionRequest = ActionRequest::query()->sole();
-    $upload = SubtitleUpload::query()->sole();
+    $subtitleUpload = SubtitleUpload::query()->sole();
 
     // The executor revalidates a linked case against the live Arr file identity
     // before writing, so a case keyed any other way would be rejected here and the
@@ -252,7 +252,7 @@ test('a staged upload executes end to end once its action is approved', function
     new ExecuteActionRequest($actionRequest)->handle();
 
     expect($actionRequest->fresh()->status)->toBe(ActionRequestStatus::Completed)
-        ->and($upload->refresh()->consumed_at)->not->toBeNull();
+        ->and($subtitleUpload->refresh()->consumed_at)->not->toBeNull();
 
     Http::assertSent(fn (Request $request): bool => $request->method() === 'POST'
         && $request->url() === 'http://bazarr.test/api/movies/subtitles');
@@ -364,9 +364,7 @@ test('pruning leaves an upload uncleaned when its staged file could not be delet
     // A transient filesystem failure must not record cleanup: prune only revisits
     // rows with a null cleaned_up_at, so the staged subtitle would otherwise stay
     // on disk as an untracked orphan forever.
-    $failingDisk = Mockery::mock(Storage::disk('local'))->makePartial();
-    $failingDisk->shouldReceive('delete')->once()->andReturnFalse();
-    Storage::set('local', $failingDisk);
+    failLocalDiskDeletes();
 
     new PruneSubtitleUploads()->handle();
 
@@ -383,9 +381,7 @@ test('an executed upload whose staged file could not be deleted stays claimable 
     ]);
     Storage::disk('local')->put($upload->path, 'subtitle');
 
-    $failingDisk = Mockery::mock(Storage::disk('local'))->makePartial();
-    $failingDisk->shouldReceive('delete')->once()->andReturnFalse();
-    Storage::set('local', $failingDisk);
+    failLocalDiskDeletes();
 
     $request = ActionRequest::factory()->create([
         'type' => 'bazarr_upload_subtitle',
@@ -410,6 +406,18 @@ test('an executed upload whose staged file could not be deleted stays claimable 
     expect($upload->refresh()->consumed_at)->not->toBeNull()
         ->and($upload->refresh()->cleaned_up_at)->toBeNull();
 });
+
+/**
+ * Swap the local disk for one whose delete() reports failure, as a filesystem
+ * error would. The variable name is what Rector derives from Mockery's return
+ * type; it is confined to this helper.
+ */
+function failLocalDiskDeletes(): void
+{
+    $legacyMock = Mockery::mock(Storage::disk('local'))->makePartial();
+    $legacyMock->shouldReceive('delete')->once()->andReturnFalse();
+    Storage::set('local', $legacyMock);
+}
 
 /**
  * @return array<string, mixed>

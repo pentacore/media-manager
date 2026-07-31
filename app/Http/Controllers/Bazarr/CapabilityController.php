@@ -24,14 +24,14 @@ final class CapabilityController extends Controller
         $validated = $request->validate([
             'connection' => ['required', 'integer', 'min:1'],
         ]);
-        $connection = ServiceConnection::query()
+        $serviceConnection = ServiceConnection::query()
             ->whereKey((int) $validated['connection'])
             ->where('type', ServiceType::Bazarr)
             ->where('is_active', true)
             ->firstOrFail();
 
         return response()->json([
-            'capabilities' => new BazarrClient($connection)->getCapabilities(),
+            'capabilities' => new BazarrClient($serviceConnection)->getCapabilities(),
         ]);
     }
 }

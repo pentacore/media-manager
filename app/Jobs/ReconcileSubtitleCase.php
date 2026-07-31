@@ -119,7 +119,6 @@ final class ReconcileSubtitleCase implements ShouldQueue
                 $subtitleCase,
                 $subtitleCaseReconciler,
                 $subtitleCaseLifecycle,
-                $bazarrAutomationSettings,
                 $subtitleInventoryService,
             );
         }
@@ -312,7 +311,6 @@ final class ReconcileSubtitleCase implements ShouldQueue
         SubtitleCase $subtitleCase,
         SubtitleCaseReconciler $subtitleCaseReconciler,
         SubtitleCaseLifecycle $subtitleCaseLifecycle,
-        BazarrAutomationSettings $bazarrAutomationSettings,
         SubtitleInventoryService $subtitleInventoryService,
     ): SubtitleCase {
         try {
