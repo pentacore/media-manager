@@ -50,7 +50,13 @@ class ServiceConnectionUpdateRequest extends FormRequest
             'sonarr_root_folders.*.scope' => ['nullable', 'string', 'in:anime,tv'],
             // Sonarr/Radarr-only: arr tag labels that opt a series or movie into
             // the automatic subtitle check on import. Labels rather than ids, so
-            // the configuration survives a tag being recreated upstream.
+            // a tag deleted and recreated upstream keeps its configuration
+            // instead of silently pointing at a dead id.
+            //
+            // That survival is not unconditional: only labels the instance
+            // currently reports get a checkbox, so a stored label missing
+            // upstream is dropped by the next save of any field on this page.
+            // It survives recreation only if no save happens in between.
             //
             // Entries are `nullable`, not `required`, so the picker can keep the
             // field present with a single empty value when every checkbox is
