@@ -40,6 +40,17 @@ class SubtitleCheckTagSettings
     }
 
     /**
+     * Fold a raw arr tag label into the form this class stores, so a runtime
+     * comparison against an upstream label and the stored list cannot drift.
+     * Returns an empty string for a label that normalizes to nothing, which
+     * normalize() drops and which never equals a stored entry.
+     */
+    public function normalizeLabel(string $label): string
+    {
+        return mb_strtolower(trim($label));
+    }
+
+    /**
      * Labels are compared case-insensitively against the arr's own tag labels,
      * so they are stored folded — that keeps the comparison a plain equality
      * check at every call site.
@@ -59,7 +70,7 @@ class SubtitleCheckTagSettings
                 continue;
             }
 
-            $label = mb_strtolower(trim($tag));
+            $label = $this->normalizeLabel($tag);
 
             if ($label === '') {
                 continue;
