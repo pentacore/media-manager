@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import type { FormDataConvertible } from '@inertiajs/core';
 import { Form, Head, Link, useHttp } from '@inertiajs/vue3';
 import { ClipboardCopy, Eye, EyeOff, Plug, RefreshCw } from '@lucide/vue';
 import { computed, ref } from 'vue';
@@ -34,8 +35,15 @@ interface ServiceTypeOption {
     label: string;
 }
 
-defineProps<{
+interface ArrConnectionOption {
+    id: number;
+    type: 'sonarr' | 'radarr';
+    name: string;
+}
+
+const props = defineProps<{
     serviceTypes: ServiceTypeOption[];
+    arrConnections: ArrConnectionOption[];
 }>();
 
 defineOptions({
@@ -55,6 +63,9 @@ defineOptions({
 });
 
 const selectedType = ref('');
+const notConnectedValue = 'not-connected';
+const selectedSonarrConnectionId = ref(notConnectedValue);
+const selectedRadarrConnectionId = ref(notConnectedValue);
 const webhookToken = ref('');
 const serviceUrl = ref('');
 const apiKey = ref('');
@@ -145,6 +156,13 @@ const servicePlaceholders = {
 
 const whisparrVersion = ref('v3');
 const showWhisparrVersion = computed(() => selectedType.value === 'whisparr');
+const showBazarrMappings = computed(() => selectedType.value === 'bazarr');
+const sonarrConnections = computed(() =>
+    props.arrConnections.filter((connection) => connection.type === 'sonarr'),
+);
+const radarrConnections = computed(() =>
+    props.arrConnections.filter((connection) => connection.type === 'radarr'),
+);
 
 const placeholders = computed(
     () =>
@@ -171,13 +189,26 @@ const placeholders = computed(
             <CardContent>
                 <Form
                     v-bind="ServiceConnectionController.store.form.post()"
+                    :transform="
+                        (data: Record<string, FormDataConvertible>) => ({
+                            ...data,
+                            sonarr_connection_id:
+                                data.sonarr_connection_id === notConnectedValue
+                                    ? null
+                                    : data.sonarr_connection_id,
+                            radarr_connection_id:
+                                data.radarr_connection_id === notConnectedValue
+                                    ? null
+                                    : data.radarr_connection_id,
+                        })
+                    "
                     class="space-y-4"
                     v-slot="{ errors, processing }"
                 >
                     <div class="space-y-2">
-                        <Label for="type">Service Type</Label>
+                        <Label for="service_type">Service Type</Label>
                         <Select name="type" v-model="selectedType">
-                            <SelectTrigger>
+                            <SelectTrigger id="service_type" class="w-full">
                                 <SelectValue
                                     placeholder="Select a service type"
                                 />
@@ -187,12 +218,88 @@ const placeholders = computed(
                                     v-for="serviceType in serviceTypes"
                                     :key="serviceType.value"
                                     :value="serviceType.value"
+                                    :aria-label="serviceType.label"
                                 >
                                     {{ serviceType.label }}
                                 </SelectItem>
                             </SelectContent>
                         </Select>
                         <InputError :message="errors.type" />
+                    </div>
+
+                    <div
+                        v-if="showBazarrMappings"
+                        class="grid gap-4 sm:grid-cols-2"
+                    >
+                        <div class="space-y-2">
+                            <Label for="sonarr_connection_id"
+                                >Sonarr connection</Label
+                            >
+                            <Select
+                                name="sonarr_connection_id"
+                                v-model="selectedSonarrConnectionId"
+                            >
+                                <SelectTrigger
+                                    id="sonarr_connection_id"
+                                    class="w-full"
+                                >
+                                    <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem
+                                        :value="notConnectedValue"
+                                        aria-label="No Sonarr connection"
+                                        >Not connected</SelectItem
+                                    >
+                                    <SelectItem
+                                        v-for="connection in sonarrConnections"
+                                        :key="connection.id"
+                                        :value="String(connection.id)"
+                                        :aria-label="`Use ${connection.name} as Sonarr connection`"
+                                    >
+                                        {{ connection.name }}
+                                    </SelectItem>
+                                </SelectContent>
+                            </Select>
+                            <InputError
+                                :message="errors.sonarr_connection_id"
+                            />
+                        </div>
+
+                        <div class="space-y-2">
+                            <Label for="radarr_connection_id"
+                                >Radarr connection</Label
+                            >
+                            <Select
+                                name="radarr_connection_id"
+                                v-model="selectedRadarrConnectionId"
+                            >
+                                <SelectTrigger
+                                    id="radarr_connection_id"
+                                    class="w-full"
+                                >
+                                    <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem
+                                        :value="notConnectedValue"
+                                        aria-label="No Radarr connection"
+                                        >Not connected</SelectItem
+                                    >
+                                    <SelectItem
+                                        v-for="connection in radarrConnections"
+                                        :key="connection.id"
+                                        :value="String(connection.id)"
+                                        :aria-label="`Use ${connection.name} as Radarr connection`"
+                                    >
+                                        {{ connection.name }}
+                                    </SelectItem>
+                                </SelectContent>
+                            </Select>
+                            <InputError
+                                :message="errors.radarr_connection_id"
+                            />
+                        </div>
                     </div>
 
                     <div v-if="showWhisparrVersion" class="space-y-2">

@@ -1,0 +1,25 @@
+{
+    "data": [
+        {
+            "action": 1,
+            "title": "Example Movie",
+            "timestamp": "yesterday",
+            "description": "Swedish subtitle downloaded",
+            "radarrId": 801,
+            "monitored": true,
+            "path": null,
+            "language": {"name": "Swedish", "code2": "sv", "code3": "swe", "forced": false, "hi": false},
+            "tags": ["4"],
+            "score": "93.0%",
+            "subs_id": "sanitized-movie-subtitle-id",
+            "provider": "example-provider",
+            "subtitles_path": "/media/movies/Example Movie (2024)/Example Movie.sv.srt",
+            "upgradable": false,
+            "parsed_timestamp": "07/15/26 18:00:00",
+            "blacklisted": false,
+            "matches": ["title", "year"],
+            "dont_matches": []
+        }
+    ],
+    "total": 16
+}

@@ -22,6 +22,7 @@ use App\Models\WebhookEvent;
 use Illuminate\Broadcasting\PrivateChannel;
 use Illuminate\Contracts\Broadcasting\ShouldBroadcast;
 use Illuminate\Contracts\Broadcasting\ShouldBroadcastNow;
+use Illuminate\Contracts\Events\ShouldDispatchAfterCommit;
 use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\Queue;
 
@@ -36,6 +37,7 @@ test('ActionRequestCreated broadcasts on the shared members.actions channel', fu
     $event = new ActionRequestCreated($actionRequest);
 
     expect($event)->toBeInstanceOf(ShouldBroadcast::class);
+    expect($event)->toBeInstanceOf(ShouldDispatchAfterCommit::class);
     expect($event->broadcastAs())->toBe('ActionRequestCreated');
     expect($event->broadcastOn())->toEqual(new PrivateChannel('members.actions'));
 
@@ -66,6 +68,47 @@ test('ActionRequestCreated strips sensitive detail from broadcast payload', func
         'success' => false,
         'reason' => 'execution_failed',
     ]);
+});
+
+test('ActionRequestCreated strips replacement target and candidate details from broadcasts', function (): void {
+    $actionRequest = ActionRequest::factory()->create([
+        'type' => 'replace_media_file',
+        'payload' => [
+            'title' => str_repeat('T', 400),
+            'detail' => str_repeat('D', 1_100),
+            'service' => 'sonarr',
+            'scope' => 'anime',
+            'target' => [
+                'episode_file_ids' => [501, 502],
+                'private_path' => '/anime/private/Frieren.mkv',
+            ],
+            'candidate_fingerprint' => 'private-candidate-fingerprint',
+            'candidate' => [
+                'season_pack' => true,
+                'download_url' => 'https://indexer.test/private-download',
+            ],
+            'required_languages' => ['eng'],
+            'confidence' => 97,
+            'matched_rules' => ['Trusted English'],
+            'selection_mode' => 'automatic',
+            'agent_rationale' => str_repeat('R', 1_100),
+            'subtitle_case_id' => 42,
+        ],
+    ]);
+
+    $payload = new ActionRequestCreated($actionRequest)->broadcastWith();
+    $encodedPayload = json_encode($payload, JSON_THROW_ON_ERROR);
+
+    expect($payload['payload'])->toMatchArray([
+        'title' => str_repeat('T', 300),
+        'detail' => str_repeat('D', 1_000),
+        'affected_file_count' => 2,
+        'season_pack' => true,
+    ])
+        ->and($encodedPayload)
+        ->not->toContain('/anime/private/Frieren.mkv')
+        ->not->toContain('private-candidate-fingerprint')
+        ->not->toContain('https://indexer.test/private-download');
 });
 
 test('ActionRequestStatusChanged broadcasts on the shared members.actions channel', function (): void {

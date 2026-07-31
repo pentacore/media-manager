@@ -109,6 +109,23 @@ test('Prowlarr tools appear only with an active Prowlarr connection', function (
     expect($shortNames())->not->toContain('SearchIndexersTool');
 });
 
+test('Bazarr subtitle tools appear only with an active Bazarr connection', function (): void {
+    $shortNames = fn (): array => collect(iterator_to_array((new MediaAgent)->tools(), false))
+        ->map(fn ($tool): string => class_basename($tool))->all();
+
+    expect($shortNames())->not->toContain('InspectSubtitleTool');
+
+    $connection = ServiceConnection::factory()->bazarr()->create(['is_active' => true]);
+
+    expect($shortNames())->toContain('InspectSubtitleTool')
+        ->toContain('SearchSubtitlesTool')
+        ->toContain('RequestSubtitleOperationTool');
+
+    $connection->update(['is_active' => false]);
+
+    expect($shortNames())->not->toContain('InspectSubtitleTool');
+});
+
 test('TMDB tools appear only when an API key is configured', function (): void {
     $shortNames = fn (): array => collect(iterator_to_array((new MediaAgent)->tools(), false))
         ->map(fn ($t): string => class_basename($t))->all();
@@ -165,4 +182,8 @@ test('instructions cover the behavioral guidance the schemas cannot express', fu
         ->toContain('ReplaceMediaFileTool')
         ->toContain('automatic_candidate')
         ->toContain('verified');
+
+    expect($instructions)->toContain('InspectSubtitleTool')
+        ->toContain('SearchSubtitlesTool')
+        ->toContain('RequestSubtitleOperationTool');
 });

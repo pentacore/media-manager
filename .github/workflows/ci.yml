@@ -22,7 +22,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@v7.0.1
 
       - name: Setup PHP
         uses: shivammathur/setup-php@v2
@@ -49,7 +49,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@v7.0.1
 
       - name: Setup PHP
         uses: shivammathur/setup-php@v2
@@ -174,7 +174,7 @@ jobs:
       TYPESENSE_API_KEY: xyz
 
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@v7.0.1
 
       - name: Setup PHP
         uses: shivammathur/setup-php@v2
@@ -220,26 +220,11 @@ jobs:
       # Browser tests drive a real Chromium via Playwright. Running them under
       # --parallel starves the box and intermittently trips Playwright's 15s
       # navigation timeout on page load. Run them serially, on their own.
+      # Same script developers run locally, so the SSR-backed suite cannot drift
+      # between the two: it starts the SSR server, waits for it to report healthy
+      # and runs the browser suite with SSR errors fatal.
       - name: Run Pest (browser with SSR)
-        run: |
-          INERTIA_SSR_ENABLED=true php artisan inertia:start-ssr > /tmp/inertia-ssr.log 2>&1 &
-          SSR_PID=$!
-          trap 'kill "$SSR_PID" 2>/dev/null || true; cat /tmp/inertia-ssr.log' EXIT
-
-          for attempt in $(seq 1 30); do
-            if php artisan inertia:check-ssr > /dev/null 2>&1; then
-              break
-            fi
-
-            if [ "$attempt" -eq 30 ]; then
-              echo "Inertia SSR failed to become healthy." >&2
-              exit 1
-            fi
-
-            sleep 1
-          done
-
-          INERTIA_SSR_ENABLED=true INERTIA_SSR_THROW_ON_ERROR=true vendor/bin/pest --compact --testsuite=Browser
+        run: composer test:browser
 
   octane-smoke:
     name: Octane smoke test
@@ -282,7 +267,7 @@ jobs:
           - 8108:8108
 
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@v7.0.1
 
       - name: Pre-generate Wayfinder + Typefinder types
         uses: ./.github/actions/generate-types

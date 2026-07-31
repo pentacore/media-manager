@@ -9,15 +9,18 @@ use App\Events\ActionRequestStatusChanged;
 use App\Events\ServiceHealthChanged;
 use App\Events\WebhookEventProcessed;
 use App\Events\WebhookReceived;
+use App\Jobs\ReconcileBazarrConnection;
 use App\Listeners\RebroadcastDashboardStats;
 use App\Listeners\RunDecisionAgentForWebhook;
 use App\Settings\AiSettings;
 use App\Settings\AppSettings;
 use App\Settings\DecisionAgentSettings;
 use Carbon\CarbonImmutable;
+use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Support\Facades\Date;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Event;
+use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\ServiceProvider;
 use Illuminate\Validation\Rules\Password;
 use Laravel\Telescope\TelescopeApplicationServiceProvider;
@@ -54,6 +57,10 @@ class AppServiceProvider extends ServiceProvider
     public function boot(): void
     {
         $this->configureDefaults();
+        RateLimiter::for(
+            'bazarr-reconciliation',
+            fn (ReconcileBazarrConnection $reconcileBazarrConnection): Limit => Limit::perMinute(30)->by((string) $reconcileBazarrConnection->connectionId),
+        );
         Event::listen(SocialiteWasCalled::class, AuthentikExtendSocialite::class);
 
         // Pipe the four high-signal upstream events through the throttled

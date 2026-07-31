@@ -12,11 +12,13 @@ use App\Console\Commands\CollectServiceGauges;
 use App\Console\Commands\PollSabnzbdHistory;
 use App\Console\Commands\PruneAiProposedWorkflows;
 use App\Console\Commands\PruneStatistics;
+use App\Console\Commands\ReconcileBazarrSubtitles;
 use App\Console\Commands\ReconcileMediaReplacementAttempts;
 use App\Console\Commands\ReconcileStuckActionRequests;
 use App\Console\Commands\RefreshInterventionCount;
 use App\Console\Commands\RefreshSabnzbdDownloadCounts;
 use App\Console\Commands\WarmServiceCaches;
+use App\Jobs\PruneSubtitleUploads;
 use App\Jobs\ReconcileSearchIndex;
 use App\Jobs\SyncAnimeMappingJob;
 use App\Models\ActivityLog;
@@ -58,6 +60,10 @@ Schedule::command(ReconcileStuckActionRequests::class)
     ->hourly()
     ->withoutOverlapping();
 
+Schedule::command(ReconcileBazarrSubtitles::class)
+    ->everyFiveMinutes()
+    ->withoutOverlapping();
+
 // The weekly run refreshes the whole catalog from the Models.dev feed with
 // verifier fallback; the monthly --verify run re-checks the core providers
 // against their first-party pricing pages. The distinct arguments give Laravel
@@ -89,6 +95,10 @@ Schedule::command(WarmServiceCaches::class)
 
 Schedule::job(new ReconcileSearchIndex)
     ->dailyAt('03:30')
+    ->withoutOverlapping();
+
+Schedule::job(new PruneSubtitleUploads)
+    ->hourly()
     ->withoutOverlapping();
 
 Schedule::job(new SyncAnimeMappingJob)

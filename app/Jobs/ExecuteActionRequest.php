@@ -10,6 +10,8 @@ use App\Models\ActionRequest;
 use App\Services\Actions\ActionExecutor;
 use App\Services\Arr\ManualImportActions;
 use App\Services\Arr\RemoveStuckDownloadActions;
+use App\Services\Bazarr\BazarrActions;
+use App\Services\Bazarr\BazarrIndeterminateOutcomeException;
 use App\Services\Emby\EmbyActions;
 use App\Services\MediaReplacement\MediaReplacementActions;
 use App\Services\Radarr\RadarrActions;
@@ -22,11 +24,13 @@ use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\RequestException;
+use Illuminate\Queue\Attributes\Timeout;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
 use Illuminate\Support\Facades\Log;
 use Throwable;
 
+#[Timeout(300)]
 class ExecuteActionRequest implements ShouldBeUnique, ShouldQueue
 {
     use Dispatchable;
@@ -66,6 +70,14 @@ class ExecuteActionRequest implements ShouldBeUnique, ShouldQueue
 
         try {
             $result = $executor->execute($this->actionRequest);
+        } catch (BazarrIndeterminateOutcomeException $indeterminate) {
+            $this->markFailed([
+                'reason' => 'needs_reconciliation',
+                'message' => $indeterminate->getMessage(),
+                'indeterminate' => true,
+            ]);
+
+            return;
         } catch (ConnectionException|RequestException $exception) {
             // Only genuinely transient failures retry: connection loss and
             // upstream 5xx. A 4xx is deterministic (deleting an
@@ -105,6 +117,7 @@ class ExecuteActionRequest implements ShouldBeUnique, ShouldQueue
                 'reason' => 'execution_failed',
                 'message' => $permanent->getMessage(),
                 'exception' => $permanent::class,
+                'indeterminate' => false,
             ]);
 
             return;
@@ -187,6 +200,15 @@ class ExecuteActionRequest implements ShouldBeUnique, ShouldQueue
             'resolve_manual_import' => ManualImportActions::class,
             'remove_stuck_download' => RemoveStuckDownloadActions::class,
             'replace_media_file' => MediaReplacementActions::class,
+            'bazarr_download_best',
+            'bazarr_download_exact',
+            'bazarr_upload_subtitle',
+            'bazarr_delete_subtitle',
+            'bazarr_sync_subtitle',
+            'bazarr_translate_subtitle',
+            'bazarr_modify_subtitle',
+            'bazarr_scan_media',
+            'bazarr_run_task' => BazarrActions::class,
             default => null,
         };
 

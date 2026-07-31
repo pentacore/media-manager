@@ -7,6 +7,8 @@ use App\Events\ActionRequestStatusChanged;
 use App\Jobs\ExecuteActionRequest;
 use App\Models\ActionRequest;
 use App\Services\Actions\ActionExecutor;
+use App\Services\Bazarr\BazarrActions;
+use App\Services\Bazarr\BazarrIndeterminateOutcomeException;
 use App\Services\MediaReplacement\MediaReplacementActions;
 use App\Services\Radarr\RadarrActions;
 use App\Services\Sonarr\SonarrActions;
@@ -79,6 +81,51 @@ test('routes replace_media_file to the media replacement executor', function ():
     $fresh = $request->fresh();
     expect($fresh->status)->toBe(ActionRequestStatus::Completed);
     expect($fresh->result)->toMatchArray(['success' => true, 'replacement_initiated' => true]);
+});
+
+test('routes every Bazarr action type to the Bazarr executor', function (string $type): void {
+    $request = ActionRequest::factory()->create([
+        'status' => ActionRequestStatus::Approved,
+        'type' => $type,
+    ]);
+    $mock = Mockery::mock(ActionExecutor::class);
+    $mock->shouldReceive('execute')->once()->andReturn(['operation' => $type]);
+    $this->app->bind(BazarrActions::class, fn (): ActionExecutor => $mock);
+
+    new ExecuteActionRequest($request)->handle();
+
+    expect($request->fresh()->status)->toBe(ActionRequestStatus::Completed);
+})->with([
+    'bazarr_download_best',
+    'bazarr_download_exact',
+    'bazarr_upload_subtitle',
+    'bazarr_delete_subtitle',
+    'bazarr_sync_subtitle',
+    'bazarr_translate_subtitle',
+    'bazarr_modify_subtitle',
+    'bazarr_scan_media',
+    'bazarr_run_task',
+]);
+
+test('marks indeterminate Bazarr outcomes failed without rethrowing for retry', function (): void {
+    $request = ActionRequest::factory()->create([
+        'status' => ActionRequestStatus::Approved,
+        'type' => 'bazarr_download_best',
+    ]);
+    $mock = Mockery::mock(ActionExecutor::class);
+    $mock->shouldReceive('execute')->once()
+        ->andThrow(new BazarrIndeterminateOutcomeException('Bazarr may have accepted the write.'));
+    $this->app->bind(BazarrActions::class, fn (): ActionExecutor => $mock);
+
+    new ExecuteActionRequest($request)->handle();
+
+    expect($request->fresh()->status)->toBe(ActionRequestStatus::Failed)
+        ->and($request->fresh()->result)->toMatchArray([
+            'success' => false,
+            'reason' => 'needs_reconciliation',
+            'message' => 'Bazarr may have accepted the write.',
+            'indeterminate' => true,
+        ]);
 });
 
 test('marks as Failed immediately for permanent (non-transient) exceptions', function (): void {

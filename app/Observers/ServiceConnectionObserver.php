@@ -9,8 +9,9 @@ use App\Events\ServiceConnectionUpserted;
 use App\Jobs\FetchLatestServiceVersion;
 use App\Jobs\PingServiceHealth;
 use App\Models\ServiceConnection;
+use Illuminate\Contracts\Events\ShouldHandleEventsAfterCommit;
 
-class ServiceConnectionObserver
+class ServiceConnectionObserver implements ShouldHandleEventsAfterCommit
 {
     /**
      * Queue a health ping + version fetch for every newly created connection,

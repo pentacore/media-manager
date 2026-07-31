@@ -1,0 +1,9 @@
+{
+    "data": [
+        {
+            "name": "example-provider",
+            "status": "Good",
+            "retry": "-"
+        }
+    ]
+}

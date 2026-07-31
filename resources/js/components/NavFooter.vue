@@ -7,10 +7,10 @@ import {
     SidebarMenuItem,
 } from '@/components/ui/sidebar';
 import { toUrl } from '@/lib/utils';
-import type { NavItem } from '@/types';
+import type { NavLink } from '@/types';
 
 type Props = {
-    items: NavItem[];
+    items: NavLink[];
     class?: string;
 };
 
