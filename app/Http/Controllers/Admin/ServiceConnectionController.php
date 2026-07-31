@@ -105,26 +105,27 @@ class ServiceConnectionController extends Controller
             'sonarrRootFolders' => $serviceConnection->type === ServiceType::Sonarr
                 ? Inertia::defer(fn (): array => $sonarrRootFolderCatalog->forConnection($serviceConnection))
                 : [],
-            'arrTags' => $this->arrTags($serviceConnection),
+            'arrTags' => in_array($serviceConnection->type, [ServiceType::Sonarr, ServiceType::Radarr], true)
+                ? Inertia::defer(fn (): ?array => $this->arrTags($serviceConnection))
+                : null,
             'subtitleCheckTags' => $subtitleCheckTagSettings->forConnection($serviceConnection),
         ]);
     }
 
     /**
      * Tag labels defined on a Sonarr/Radarr instance, for the subtitle-check
-     * picker. Returns null for other service types, for a disabled connection,
-     * and when the instance cannot be reached — so the form can tell "none
-     * defined" (an empty list) apart from "unavailable" (null). Rows the
-     * instance reports without a usable int id and non-blank label are dropped.
+     * picker. Returns null for a disabled connection and when the instance
+     * cannot be reached — so the form can tell "none defined" (an empty list)
+     * apart from "unavailable" (null). Rows the instance reports without a
+     * usable int id and a non-blank label are dropped.
+     *
+     * Caller must restrict this to Sonarr and Radarr connections; edit() owns
+     * that check, because it also decides whether to defer the prop at all.
      *
      * @return list<array{id: int, label: string}>|null
      */
     private function arrTags(ServiceConnection $serviceConnection): ?array
     {
-        if (! in_array($serviceConnection->type, [ServiceType::Sonarr, ServiceType::Radarr], true)) {
-            return null;
-        }
-
         if (! $serviceConnection->is_active) {
             return null;
         }
