@@ -345,3 +345,50 @@ test('an upstream tag label is folded and trimmed before it is compared', functi
     expect(ActionRequest::query()->where('type', 'replace_media_file')->count())->toBe(1);
 });
 
+
+test('a tagged Radarr import keys the cap by movie id', function (): void {
+    $radarr = ServiceConnection::factory()->radarr()->create([
+        'url' => 'http://radarr.local:7878', 'api_key' => 'test', 'is_active' => true,
+        'settings' => ['subtitle_check_tags' => ['sub-check']],
+    ]);
+
+    $settings = resolve(MediaReplacementSettings::class);
+    $configuration = $settings->configuration();
+    $configuration['guidance']['movie']['rules'] = [[
+        'name' => 'CR', 'enabled' => true, 'strength' => 'guarantee', 'languages' => ['English'],
+        'conditions' => [['field' => 'title', 'value' => 'CR']],
+    ]];
+    $settings->setConfiguration($configuration);
+
+    Http::fake([
+        'radarr.local:7878/api/v3/tag' => Http::response([['id' => 1, 'label' => 'sub-check']]),
+        'radarr.local:7878/api/v3/moviefile/77' => Http::response([
+            'id' => 77, 'quality' => ['quality' => ['name' => 'WEBDL-1080p']], 'size' => 100,
+            'sceneName' => 'Movie.2024.OLD', 'releaseGroup' => 'OLD',
+            'mediaInfo' => ['subtitles' => 'Japanese'],
+        ]),
+        'radarr.local:7878/api/v3/movie/42' => Http::response([
+            'id' => 42, 'title' => 'Tagged Movie', 'monitored' => true, 'tags' => [1], 'movieFileId' => 77,
+        ]),
+        'radarr.local:7878/api/v3/history*' => Http::response(['records' => [[
+            'id' => 9001, 'eventType' => 'downloadFolderImported', 'movieId' => 42, 'movieFileId' => 77,
+        ]]]),
+        'radarr.local:7878/api/v3/release*' => Http::response([[
+            'guid' => 'g3', 'indexerId' => 10, 'title' => 'Movie.2024.CR', 'movieId' => 42,
+            'downloadAllowed' => true, 'rejections' => [], 'customFormatScore' => 0,
+            'qualityWeight' => 100, 'seeders' => 5, 'ageMinutes' => 60,
+            'downloadUrl' => 'http://radarr.local/download/g3',
+        ]]),
+    ]);
+
+    resolve(ImportedSubtitleAuditor::class)->audit(
+        $radarr,
+        ['eventType' => 'Download', 'movie' => ['id' => 42, 'title' => 'Tagged Movie'], 'downloadId' => 'DL-MOVIE'],
+        null,
+    );
+
+    $actionRequest = ActionRequest::query()->where('type', 'replace_media_file')->sole();
+
+    expect($actionRequest->payload['auto_check_key'])->toBe(sprintf('radarr:%d:42', $radarr->id))
+        ->and($actionRequest->payload['selection_mode'])->toBe('automatic');
+});
