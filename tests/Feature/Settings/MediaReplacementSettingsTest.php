@@ -318,9 +318,17 @@ test('out-of-range subtitle check values fall back to defaults', function (): vo
         ],
     ]);
 
+    // The accessors alone cannot see the difference, because configuration()
+    // re-normalizes on every read: assert the persisted row too, so the write
+    // path is pinned to never store an out-of-range value in the first place.
     expect($mediaReplacementSettings->subtitleCheckEnabled())->toBeFalse()
         ->and($mediaReplacementSettings->subtitleCheckMaxAttempts())->toBe(1)
-        ->and($mediaReplacementSettings->subtitleCheckCooldownHours())->toBe(24);
+        ->and($mediaReplacementSettings->subtitleCheckCooldownHours())->toBe(24)
+        ->and(AppSetting::find('ai.media_replacement')?->value['subtitle_check'])->toBe([
+            'enabled' => false,
+            'max_attempts_per_target' => 1,
+            'cooldown_hours' => 24,
+        ]);
 });
 
 test('it restores invalid stored subtitle check values to safe defaults', function (mixed $invalidSubtitleCheck): void {
@@ -355,7 +363,7 @@ test('it restores invalid stored subtitle check values to safe defaults', functi
     'missing keys' => [[]],
 ]);
 
-test('it preserves valid non-default subtitle check bounds', function (): void {
+test('it preserves subtitle check values at both ends of the accepted range', function (): void {
     $mediaReplacementSettings = resolve(MediaReplacementSettings::class);
 
     $mediaReplacementSettings->setConfiguration([
