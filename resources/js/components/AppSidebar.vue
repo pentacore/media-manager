@@ -21,7 +21,7 @@ import { useAiChat } from '@/composables/useAiChat';
 import { useNavCounts } from '@/composables/useNavCounts';
 import { useNavItems } from '@/composables/useNavItems';
 import { dashboard } from '@/routes';
-import type { NavGroup } from '@/types';
+import type { NavGroup, NavItem } from '@/types';
 
 const page = usePage();
 const { isMobile } = useSidebar();
@@ -29,10 +29,20 @@ const { openChat } = useAiChat();
 
 const navGroups = useNavItems(useNavCounts());
 
+function keepItem(item: NavItem): boolean {
+    return !item.mobileOnly || isMobile.value;
+}
+
 const visibleGroups = computed<NavGroup[]>(() =>
     navGroups.value.map((group) => ({
         label: group.label,
-        items: group.items.filter((item) => !item.mobileOnly || isMobile.value),
+        items: group.items
+            .filter(keepItem)
+            .map((item) =>
+                item.children
+                    ? { ...item, children: item.children.filter(keepItem) }
+                    : item,
+            ),
     })),
 );
 

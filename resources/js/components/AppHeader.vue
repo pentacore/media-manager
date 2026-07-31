@@ -36,7 +36,7 @@ import { useCurrentUrl } from '@/composables/useCurrentUrl';
 import { getInitials } from '@/composables/useInitials';
 import { toUrl } from '@/lib/utils';
 import { dashboard } from '@/routes';
-import type { BreadcrumbItem, NavItem } from '@/types';
+import type { BreadcrumbItem, NavLink } from '@/types';
 
 type Props = {
     breadcrumbs?: BreadcrumbItem[];
@@ -53,7 +53,7 @@ const { isCurrentUrl, whenCurrentUrl } = useCurrentUrl();
 const activeItemStyles =
     'text-neutral-900 dark:bg-neutral-800 dark:text-neutral-100';
 
-const mainNavItems: NavItem[] = [
+const mainNavItems: NavLink[] = [
     {
         title: 'Dashboard',
         href: dashboard(),
@@ -61,7 +61,7 @@ const mainNavItems: NavItem[] = [
     },
 ];
 
-const rightNavItems: NavItem[] = [
+const rightNavItems: NavLink[] = [
     {
         title: 'Repository',
         href: 'https://github.com/laravel/vue-starter-kit',

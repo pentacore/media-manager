@@ -18,8 +18,10 @@ import {
     Play,
     ScrollText,
     Search,
+    Settings2,
     Shield,
     Sprout,
+    Stethoscope,
     Tv,
     Users,
     Webhook as WebhookIcon,
@@ -189,53 +191,68 @@ export function useNavItems(counts?: NavCounts): ComputedRef<NavGroup[]> {
             return groups;
         }
 
-        groups.push({
-            label: 'Admin',
-            items: [
-                {
-                    title: 'Connections',
-                    href: ServiceConnectionController.index.url(),
-                    icon: LinkIcon,
-                },
-                {
-                    title: 'Users',
-                    href: UserController.index.url(),
-                    icon: Users,
-                },
-                {
-                    title: 'Approval Rules',
-                    href: ActionTypeConfigController.index.url(),
-                    icon: Shield,
-                },
-                ...(aiEnabled.value
-                    ? [
-                          {
-                              title: 'AI Settings',
-                              href: AiSettingsController.index.url(),
-                              icon: Brain,
-                          },
-                          {
-                              title: 'Decision Agent',
-                              href: DecisionAgentSettingsController.index.url(),
-                              icon: Bot,
-                          },
-                          {
-                              title: 'AI Usage',
-                              href: AiUsageController.index.url(),
-                              icon: ChartLine,
-                          },
-                          {
-                              title: 'AI Conversations',
-                              href: AiConversationController.index.url(),
-                              icon: MessageSquare,
-                          },
-                          {
-                              title: 'AI Prices',
-                              href: AiModelPriceController.index.url(),
-                              icon: DollarSign,
-                          },
-                      ]
-                    : []),
+        const adminItems: NavGroup['items'] = [
+            {
+                title: 'Configuration',
+                icon: Settings2,
+                children: [
+                    {
+                        title: 'Connections',
+                        href: ServiceConnectionController.index.url(),
+                        icon: LinkIcon,
+                    },
+                    {
+                        title: 'Users',
+                        href: UserController.index.url(),
+                        icon: Users,
+                    },
+                    {
+                        title: 'Approval Rules',
+                        href: ActionTypeConfigController.index.url(),
+                        icon: Shield,
+                    },
+                ],
+            },
+        ];
+
+        if (aiEnabled.value) {
+            adminItems.push({
+                title: 'AI',
+                icon: Brain,
+                children: [
+                    {
+                        title: 'AI Settings',
+                        href: AiSettingsController.index.url(),
+                        icon: Brain,
+                    },
+                    {
+                        title: 'Decision Agent',
+                        href: DecisionAgentSettingsController.index.url(),
+                        icon: Bot,
+                    },
+                    {
+                        title: 'AI Usage',
+                        href: AiUsageController.index.url(),
+                        icon: ChartLine,
+                    },
+                    {
+                        title: 'AI Conversations',
+                        href: AiConversationController.index.url(),
+                        icon: MessageSquare,
+                    },
+                    {
+                        title: 'AI Prices',
+                        href: AiModelPriceController.index.url(),
+                        icon: DollarSign,
+                    },
+                ],
+            });
+        }
+
+        adminItems.push({
+            title: 'Diagnostics',
+            icon: Stethoscope,
+            children: [
                 {
                     title: 'System stats',
                     href: AdminStatisticsController().url,
@@ -253,6 +270,8 @@ export function useNavItems(counts?: NavCounts): ComputedRef<NavGroup[]> {
                 },
             ],
         });
+
+        groups.push({ label: 'Admin', items: adminItems });
 
         return groups;
     });

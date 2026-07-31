@@ -57,9 +57,17 @@ test('the sidebar shows four single-concept groups with the renamed labels', fun
 test('members see no admin group', function (): void {
     $this->actingAs(User::factory()->member()->create());
 
+    // The `assertSee('Overview')` anchor is load-bearing: assertDontSeeIn()
+    // asserts count() === 0 on a locator, and Playwright's count() does not
+    // throw when the root selector matches nothing. Without a positive
+    // assertion every negative below would pass vacuously if
+    // `[data-sidebar="content"]` ever disappeared.
     visit('/dashboard')
         ->assertNoSmoke()
+        ->assertSee('Overview')
         ->assertDontSeeIn('[data-sidebar="content"]', 'Admin')
+        ->assertDontSeeIn('[data-sidebar="content"]', 'Configuration')
+        ->assertDontSeeIn('[data-sidebar="content"]', 'Diagnostics')
         ->assertDontSeeIn('[data-sidebar="content"]', 'Connections')
         ->assertDontSeeIn('[data-sidebar="content"]', 'Users');
 });
@@ -67,7 +75,10 @@ test('members see no admin group', function (): void {
 test('admins see both stats pages under distinct names', function (): void {
     $this->actingAs(User::factory()->admin()->create());
 
-    visit('/dashboard')
+    // `System stats` now lives inside the collapsed `Diagnostics` sub-group.
+    // Landing on the page itself force-opens its parent, which exercises the
+    // rename without toggling (and therefore without persisting) anything.
+    visit('/admin/statistics')
         ->assertNoSmoke()
         ->assertSee('Watch stats')
         ->assertSee('System stats');
@@ -82,4 +93,47 @@ test('the Search link is hidden on desktop and shown on mobile', function (): vo
         ->resize(390, 844)
         ->click('[data-sidebar="trigger"]')
         ->assertSee('Search');
+});
+
+test('admin sub-groups start collapsed and reveal children on click', function (): void {
+    $this->actingAs(User::factory()->admin()->create());
+
+    visit('/dashboard')
+        ->assertNoSmoke()
+        ->assertSee('Configuration')
+        ->assertSee('Diagnostics')
+        ->assertDontSeeIn('[data-sidebar="content"]', 'Connections')
+        ->assertDontSeeIn('[data-sidebar="content"]', 'Approval Rules')
+        ->click('button:has-text("Configuration")')
+        ->assertSee('Connections')
+        ->assertSee('Users')
+        ->assertSee('Approval Rules');
+});
+
+test('the parent group auto-opens when a child page is current', function (): void {
+    $this->actingAs(User::factory()->admin()->create());
+
+    visit('/admin/users')
+        ->assertNoSmoke()
+        ->assertSee('Users')
+        ->assertSee('Connections');
+});
+
+test('an opened sub-group stays open across a navigation', function (): void {
+    $this->actingAs(User::factory()->admin()->create());
+
+    visit('/dashboard')
+        ->assertNoSmoke()
+        ->click('button:has-text("Diagnostics")')
+        ->assertSee('Webhook Log')
+        // The brief navigated via `Movies`, but every *arr-backed page
+        // redirects straight back to the dashboard when no service connection
+        // is configured, so nothing was ever navigated. `Activity log` needs no
+        // connection. `Append-only audit feed` exists only after the visit
+        // lands, and assertPathIs() reads the URL without retrying, so the
+        // assertSee() in front of it is what makes this deterministic.
+        ->click('[data-sidebar="content"] a:has-text("Activity log")')
+        ->assertSee('Append-only audit feed')
+        ->assertPathIs('/activity-log')
+        ->assertSee('Webhook Log');
 });
