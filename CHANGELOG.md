@@ -1,3 +1,10 @@
+## [1.15.1](https://github.com/pentacore/media-manager/compare/v1.15.0...v1.15.1) (2026-07-31)
+
+
+### Bug Fixes
+
+* **ssr:** inline npm deps into the SSR bundle ([4c14f7f](https://github.com/pentacore/media-manager/commit/4c14f7f5501b504866e98d1cf0d08cd27d11abf0))
+
 # [1.15.0](https://github.com/pentacore/media-manager/compare/v1.14.1...v1.15.0) (2026-07-31)
 
 
