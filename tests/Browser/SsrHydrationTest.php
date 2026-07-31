@@ -11,7 +11,12 @@ test('server-rendered dashboard hydrates and remains interactive', function (): 
         ->assertAttribute('#app', 'data-server-rendered', 'true')
         ->assertNoSmoke()
         ->keys(':root', 'Meta+k')
-        ->assertSee('Now Playing')
+        // Scoped to the palette's section wrapper: this assertion is what proves
+        // hydration took, so it must fail when the Meta+k handler never ran.
+        // Unscoped assertSee() is a case-insensitive substring match over the
+        // whole page, and the server-rendered sidebar already contains
+        // "Now Playing" — so it would pass with the palette still shut.
+        ->assertSeeIn('[data-palette-sections]', 'Now Playing')
         ->type('input[type="search"]', 'severance')
         ->keys('input[type="search"]', 'Enter')
         ->assertPathIs('/media/search')
