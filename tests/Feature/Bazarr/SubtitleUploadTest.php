@@ -188,7 +188,7 @@ test('subtitle uploads enforce extension mime size and text content validation',
     'larger than five megabytes' => fn (): UploadedFile => UploadedFile::fake()->create('subtitle.srt', 5121, 'text/plain'),
 ]);
 
-test('failed action creation rolls back database state and deletes the staged file', function (): void {
+test('failed action creation cancels the staged upload and deletes the staged file', function (): void {
     ActionTypeConfig::query()
         ->where('type', 'bazarr_upload_subtitle')
         ->update(['is_enabled' => false]);
@@ -202,10 +202,37 @@ test('failed action creation rolls back database state and deletes the staged fi
         ->assertUnprocessable()
         ->assertJsonValidationErrors('subtitle_file');
 
-    expect(SubtitleCase::query()->count())->toBe(0)
-        ->and(SubtitleUpload::query()->count())->toBe(0)
+    // The row survives the failure as the record of a staged file, marked cancelled
+    // and cleaned because the file really went away.
+    $subtitleUpload = SubtitleUpload::query()->sole();
+
+    expect($subtitleUpload->action_request_id)->toBeNull()
+        ->and($subtitleUpload->cancelled_at)->not->toBeNull()
+        ->and($subtitleUpload->cleaned_up_at)->not->toBeNull()
         ->and(ActionRequest::query()->count())->toBe(0);
     Storage::disk('local')->assertDirectoryEmpty('bazarr-subtitle-uploads');
+});
+
+test('a staged upload whose rollback cannot delete the file stays prunable', function (): void {
+    ActionTypeConfig::query()
+        ->where('type', 'bazarr_upload_subtitle')
+        ->update(['is_enabled' => false]);
+    failLocalDiskDeletes();
+
+    $this->actingAs(User::factory()->member()->create())
+        ->withHeader('Accept', 'application/json')
+        ->post(route('bazarr.uploads.store'), [
+            ...uploadPayload($this),
+            'subtitle_file' => validSubtitleUpload(),
+        ])
+        ->assertUnprocessable();
+
+    // A transient unlink failure must leave the row claimable, or the staged file
+    // becomes an untracked orphan no prune cycle can ever find.
+    $subtitleUpload = SubtitleUpload::query()->sole();
+
+    expect($subtitleUpload->cancelled_at)->not->toBeNull()
+        ->and($subtitleUpload->cleaned_up_at)->toBeNull();
 });
 
 test('auto approved upload execution is deferred until its transaction commits', function (): void {

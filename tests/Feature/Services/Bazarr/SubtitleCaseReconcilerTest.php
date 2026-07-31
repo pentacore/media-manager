@@ -83,6 +83,51 @@ test('the same material identity is idempotent and terminal identities stay clos
     SubtitleCaseStatus::Handled,
 ]);
 
+test('a closed identity coming back still retires the active case for its target', function (): void {
+    $candidate = subtitleCaseCandidate($this->bazarr, $this->sonarr);
+    $subtitleCaseReconciler = resolve(SubtitleCaseReconciler::class);
+
+    // Identity A is dismissed by an operator.
+    $dismissed = $subtitleCaseReconciler->reconcile($candidate);
+    $dismissed->forceFill(['status' => SubtitleCaseStatus::Dismissed])->save();
+
+    // The file changes, so identity B becomes the active case for the same target.
+    $replacementCandidate = [...$candidate, 'file_fingerprint' => hash('sha256', 'file-v2')];
+    $active = $subtitleCaseReconciler->reconcile($replacementCandidate);
+
+    expect($active?->status)->toBe(SubtitleCaseStatus::Observing);
+
+    // The file reverts to A. A stays dismissed, but B no longer describes anything
+    // installed, so it must not keep offering actions against a missing file.
+    $result = $subtitleCaseReconciler->reconcile($candidate);
+
+    expect($result?->is($dismissed))->toBeTrue()
+        ->and($dismissed->fresh()->status)->toBe(SubtitleCaseStatus::Dismissed)
+        ->and($active->fresh()->status)->toBe(SubtitleCaseStatus::Superseded)
+        ->and($active->fresh()->superseded_at)->not->toBeNull();
+});
+
+test('a complete requirement resolves the stale active case of a closed identity', function (): void {
+    $candidate = subtitleCaseCandidate($this->bazarr, $this->sonarr);
+    $subtitleCaseReconciler = resolve(SubtitleCaseReconciler::class);
+    $handled = $subtitleCaseReconciler->reconcile($candidate);
+    $handled->forceFill(['status' => SubtitleCaseStatus::Handled])->save();
+    $active = $subtitleCaseReconciler->reconcile([
+        ...$candidate,
+        'file_fingerprint' => hash('sha256', 'file-v2'),
+    ]);
+
+    $result = $subtitleCaseReconciler->reconcile([
+        ...$candidate,
+        'missing_languages' => [],
+        'current_subtitles' => ['eng', 'jpn'],
+    ]);
+
+    expect($result?->is($handled))->toBeTrue()
+        ->and($handled->fresh()->status)->toBe(SubtitleCaseStatus::Handled)
+        ->and($active->fresh()->status)->toBe(SubtitleCaseStatus::Resolved);
+});
+
 test('a superseded identity is observed again when it reappears missing', function (): void {
     $candidate = subtitleCaseCandidate($this->bazarr, $this->sonarr);
     $subtitleCaseReconciler = resolve(SubtitleCaseReconciler::class);

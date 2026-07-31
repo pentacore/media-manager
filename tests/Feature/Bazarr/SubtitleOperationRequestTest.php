@@ -266,6 +266,52 @@ test('an operation this Bazarr cannot perform is refused server side', function 
     Http::assertNotSent(fn (Request $request): bool => $request->method() === 'PATCH');
 });
 
+test('a media scan is gated on the media action write not on the inventory reads', function (): void {
+    // Bazarr advertises the inventory reads but not the movie media-action PATCH
+    // that a scan actually calls, so the scan must be refused.
+    $this->swaggerPaths = [
+        '/movies' => ['get' => ['responses' => ['200' => ['description' => 'OK']]]],
+        '/episodes' => ['get' => ['responses' => ['200' => ['description' => 'OK']]]],
+        '/series' => ['patch' => ['responses' => ['204' => ['description' => 'OK']]]],
+    ];
+
+    $this->actingAs(User::factory()->member()->create())
+        ->postJson(route('bazarr.operations.store'), [
+            'operation' => 'scan_media',
+            'connection' => $this->bazarr->id,
+            'media_type' => 'movie',
+            'media_id' => 801,
+            'target_fingerprint' => new BazarrMediaFingerprint()->make('movie', $this->rawMovie),
+            'media_action' => 'scan-disk',
+        ])
+        ->assertUnprocessable()
+        ->assertJsonValidationErrors('operation');
+
+    expect(ActionRequest::query()->count())->toBe(0);
+});
+
+test('a media scan is accepted once its media action write is advertised', function (): void {
+    $this->swaggerPaths = [
+        '/movies' => [
+            'get' => ['responses' => ['200' => ['description' => 'OK']]],
+            'patch' => ['responses' => ['204' => ['description' => 'OK']]],
+        ],
+    ];
+
+    $this->actingAs(User::factory()->member()->create())
+        ->postJson(route('bazarr.operations.store'), [
+            'operation' => 'scan_media',
+            'connection' => $this->bazarr->id,
+            'media_type' => 'movie',
+            'media_id' => 801,
+            'target_fingerprint' => new BazarrMediaFingerprint()->make('movie', $this->rawMovie),
+            'media_action' => 'scan-disk',
+        ])
+        ->assertCreated();
+
+    expect(ActionRequest::query()->sole()->type)->toBe('bazarr_scan_media');
+});
+
 test('a manual search is refused when Bazarr has no manual search endpoint', function (): void {
     $this->swaggerPaths = [
         '/movies' => ['get' => ['responses' => ['200' => ['description' => 'OK']]]],

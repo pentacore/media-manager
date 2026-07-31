@@ -100,39 +100,52 @@ final class UploadController extends Controller
             ]);
         }
 
-        try {
-            [$upload, $actionRequest] = DB::transaction(function () use (
-                $actionOrchestrator,
-                $bazarrAutomationSettings,
-                $candidate,
+        // The case and the staged row are committed before the action is created, so
+        // a refused or failing dispatch cannot roll the row away and leave the
+        // user-supplied file on disk with nothing left to prune it.
+        [$subtitleCase, $subtitleUpload] = DB::transaction(function () use (
+            $bazarrAutomationSettings,
+            $candidate,
+            $connection,
+            $contents,
+            $extension,
+            $managingConnection,
+            $mimeType,
+            $path,
+            $uploadRequest,
+            $subtitleFile,
+            $validated,
+        ): array {
+            $subtitleCase = $this->subtitleCase(
                 $connection,
-                $contents,
-                $extension,
+                $managingConnection,
+                $candidate,
+                $validated,
+            );
+
+            return [$subtitleCase, SubtitleUpload::query()->create([
+                'user_id' => $uploadRequest->user()?->id,
+                'subtitle_case_id' => $subtitleCase->id,
+                'path' => $path,
+                'display_name' => Str::limit($subtitleFile->getClientOriginalName(), 255, ''),
+                'checksum' => hash('sha256', $contents),
+                'mime_type' => $mimeType,
+                'format' => $extension,
+                'size_bytes' => strlen($contents),
+                'expires_at' => now()->addHours($bazarrAutomationSettings->uploadExpiryHours()),
+            ])];
+        });
+
+        try {
+            $actionRequest = DB::transaction(function () use (
+                $actionOrchestrator,
+                $connection,
                 $item,
                 $managingConnection,
-                $mimeType,
-                $path,
-                $uploadRequest,
-                $subtitleFile,
+                $subtitleCase,
+                $subtitleUpload,
                 $validated,
-            ): array {
-                $subtitleCase = $this->subtitleCase(
-                    $connection,
-                    $managingConnection,
-                    $candidate,
-                    $validated,
-                );
-                $subtitleUpload = SubtitleUpload::query()->create([
-                    'user_id' => $uploadRequest->user()?->id,
-                    'subtitle_case_id' => $subtitleCase->id,
-                    'path' => $path,
-                    'display_name' => Str::limit($subtitleFile->getClientOriginalName(), 255, ''),
-                    'checksum' => hash('sha256', $contents),
-                    'mime_type' => $mimeType,
-                    'format' => $extension,
-                    'size_bytes' => strlen($contents),
-                    'expires_at' => now()->addHours($bazarrAutomationSettings->uploadExpiryHours()),
-                ]);
+            ): ActionRequest {
                 $actionRequest = $actionOrchestrator->dispatch(
                     type: 'bazarr_upload_subtitle',
                     sourceService: ServiceType::Bazarr->value,
@@ -151,29 +164,42 @@ final class UploadController extends Controller
                     ],
                 );
 
-                if (! $actionRequest instanceof ActionRequest) {
-                    throw ValidationException::withMessages([
-                        'subtitle_file' => 'Subtitle uploads are disabled in Action Rules.',
-                    ]);
-                }
+                throw_unless($actionRequest instanceof ActionRequest, ValidationException::withMessages([
+                    'subtitle_file' => 'Subtitle uploads are disabled in Action Rules.',
+                ]));
 
                 $subtitleUpload->update(['action_request_id' => $actionRequest->id]);
 
-                return [$subtitleUpload, $actionRequest];
+                return $actionRequest;
             });
         } catch (Throwable $throwable) {
-            Storage::disk('local')->delete($path);
+            $this->cancelStagedUpload($subtitleUpload);
 
             throw $throwable;
         }
 
         return response()->json([
             'id' => $actionRequest->id,
-            'upload_id' => $upload->id,
+            'upload_id' => $subtitleUpload->id,
             'type' => $actionRequest->type,
             'status' => $actionRequest->status->value,
             'message' => 'Subtitle upload added to the Action Queue.',
         ], 201);
+    }
+
+    /**
+     * Cancelling keeps the row inside the prune sweep, and cleanup is only recorded
+     * when the staged file really went away — a failed unlink stays retryable rather
+     * than leaving user-supplied data on disk with no row to find it by.
+     */
+    private function cancelStagedUpload(SubtitleUpload $subtitleUpload): void
+    {
+        $deleted = Storage::disk('local')->delete($subtitleUpload->path);
+
+        $subtitleUpload->update(array_filter([
+            'cancelled_at' => now(),
+            'cleaned_up_at' => $deleted ? now() : null,
+        ], static fn (mixed $value): bool => $value !== null));
     }
 
     /**

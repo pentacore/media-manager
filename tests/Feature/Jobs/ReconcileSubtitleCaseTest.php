@@ -207,23 +207,68 @@ test('a queue retry after a transient probe failure searches Bazarr again', func
         ->and($this->case->fresh()->status)->toBe(SubtitleCaseStatus::BazarrSearching);
 });
 
+test('a retry does not need a second cycle slot to reach Bazarr', function (): void {
+    // One probe per cycle: the first attempt spends the budget, so a retry that
+    // asked for another slot would be refused, return normally, and let the queue
+    // delete the job with tries left and failed() never running.
+    resolve(BazarrAutomationSettings::class)->setConfiguration([
+        'enabled' => true,
+        'probe_spacing_hours' => 24,
+        'empty_probe_threshold' => 2,
+        'max_probes_per_cycle' => 1,
+    ]);
+    $searches = 0;
+    Http::fake([
+        'bazarr.test/api/providers/episodes*' => function () use (&$searches): never {
+            $searches++;
+
+            throw new ConnectionException('bazarr unreachable');
+        },
+        'bazarr.test/api/providers' => Http::response(['data' => []]),
+    ]);
+    $reconcileSubtitleCase = new ReconcileSubtitleCase(probeCandidate($this->case));
+
+    foreach (range(1, 2) as $ignored) {
+        try {
+            runSubtitleProbe($reconcileSubtitleCase);
+        } catch (ConnectionException) {
+            // The queue would retry after the configured backoff.
+        }
+    }
+
+    expect($searches)->toBeGreaterThan(3)
+        ->and(SubtitleCaseAttempt::query()->where('outcome', SubtitleCaseAttemptOutcome::Failed)->count())->toBe(2);
+});
+
 test('the last probe attempt parks the case for review', function (): void {
     Http::fake([
         'bazarr.test/api/providers/episodes*' => fn (): never => throw new ConnectionException('bazarr unreachable'),
         'bazarr.test/api/providers' => Http::response(['data' => []]),
     ]);
-    $reconcileSubtitleCase = new ReconcileSubtitleCase(probeCandidate($this->case));
+    // The queue payload is serialized at dispatch, and both the attempt and the
+    // failure handler are reconstructed from it — so nothing the throwing instance
+    // recorded about the case survives into failed().
+    $payload = serialize(new ReconcileSubtitleCase(probeCandidate($this->case)));
 
     try {
-        runSubtitleProbe($reconcileSubtitleCase);
+        runSubtitleProbe(unserialize($payload));
     } catch (ConnectionException) {
         // The queue would retry; this is the final attempt.
     }
 
-    $reconcileSubtitleCase->failed(new ConnectionException('bazarr unreachable'));
+    unserialize($payload)->failed(new ConnectionException('bazarr unreachable'));
 
     expect($this->case->fresh()->status)->toBe(SubtitleCaseStatus::NeedsReview)
         ->and($this->case->fresh()->failure_reason)->toContain('probe');
+});
+
+test('failure handling leaves a case that already moved on alone', function (): void {
+    $payload = serialize(new ReconcileSubtitleCase(probeCandidate($this->case)));
+    resolve(SubtitleCaseLifecycle::class)->resolve($this->case);
+
+    unserialize($payload)->failed(new ConnectionException('bazarr unreachable'));
+
+    expect($this->case->fresh()->status)->toBe(SubtitleCaseStatus::Resolved);
 });
 
 test('a definite upstream rejection parks the case without retrying', function (): void {
@@ -481,6 +526,40 @@ test('a settled download re-enters probing even inside the probe spacing window'
 
     expect($case->fresh()->status)->toBe(SubtitleCaseStatus::BazarrSearching)
         ->and(SubtitleCaseAttempt::query()->where('subtitle_case_id', $case->id)->count())->toBe(1);
+});
+
+test('a case keeps waiting until every per-language download has settled', function (): void {
+    ['case' => $case] = targetedEpisodeCaseSetup([]);
+    $swedish = ActionRequest::factory()->create([
+        'type' => 'bazarr_download_best',
+        'status' => ActionRequestStatus::Approved,
+    ]);
+    $english = ActionRequest::factory()->create([
+        'type' => 'bazarr_download_best',
+        'status' => ActionRequestStatus::Completed,
+    ]);
+    // English was queued last, so the scalar column points at it while Swedish is
+    // still in flight. Only the evidence map records both.
+    $case->forceFill([
+        'download_action_request_id' => $english->id,
+        'evidence' => [
+            ...$case->evidence,
+            'download_requests' => ['swe|0|0' => $swedish->id, 'eng|0|0' => $english->id],
+        ],
+    ])->save();
+
+    runSubtitleProbe(ReconcileSubtitleCase::forCase($case->fresh()));
+
+    // Leaving download_requested now would strand the case: Swedish completing later
+    // finds no waiting case to reconcile, and a satisfied target also drops out of
+    // the bulk missing feed.
+    expect($case->fresh()->status)->toBe(SubtitleCaseStatus::DownloadRequested);
+
+    $swedish->forceFill(['status' => ActionRequestStatus::Completed])->save();
+
+    runSubtitleProbe(ReconcileSubtitleCase::forCase($case->fresh()));
+
+    expect($case->fresh()->status)->toBe(SubtitleCaseStatus::BazarrSearching);
 });
 
 test('a pending download leaves a still-missing case in download_requested', function (): void {

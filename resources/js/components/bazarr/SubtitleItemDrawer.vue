@@ -168,6 +168,13 @@ const preferredLanguage = computed(
         currentItem.value?.required_languages?.[0] ??
         'eng',
 );
+// Scanning is a PATCH on the media collection itself, advertised per media type
+// and independently of the inventory reads.
+const mediaActionCapability = computed(() =>
+    currentItem.value?.media_type === 'episode'
+        ? 'episode_media_action'
+        : 'movie_media_action',
+);
 
 watch(
     () => [props.open, props.item?.media_id, props.item?.media_type],
@@ -460,7 +467,7 @@ const dialogDescription = computed(
                             variant="outline"
                             :disabled="
                                 operationHttp.processing ||
-                                !supports('inventory')
+                                !supports(mediaActionCapability)
                             "
                             @click="
                                 submit('scan_media', {

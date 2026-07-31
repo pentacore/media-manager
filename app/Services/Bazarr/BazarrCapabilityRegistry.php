@@ -26,6 +26,10 @@ final class BazarrCapabilityRegistry
         'delete' => [['/episodes/subtitles', 'delete'], ['/movies/subtitles', 'delete']],
         'sync' => [['/subtitles', 'patch']],
         'translate' => [['/subtitles', 'patch']],
+        // Media actions (scan disk, search missing, sync) are writes on the media
+        // collections themselves, advertised independently of the inventory reads.
+        'episode_media_action' => [['/series', 'patch']],
+        'movie_media_action' => [['/movies', 'patch']],
         'tasks' => [['/system/tasks', 'get'], ['/system/tasks', 'post']],
         'language_profiles' => [['/system/languages/profiles', 'get']],
         'settings_adapter' => [['/system/settings', 'get'], ['/system/settings', 'post']],
@@ -69,6 +73,8 @@ final class BazarrCapabilityRegistry
             'delete' => false,
             'sync' => false,
             'translate' => false,
+            'episode_media_action' => false,
+            'movie_media_action' => false,
             'tasks' => false,
             'language_profiles' => false,
             'settings_adapter' => false,

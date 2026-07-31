@@ -60,24 +60,49 @@ final readonly class SubtitleCaseReconciler
         $existing = $this->identityQuery($candidate)->lockForUpdate()->first();
         $isComplete = $candidate['missing_languages'] === [] || ! $candidate['monitored'];
 
-        if ($existing instanceof SubtitleCase) {
-            if ($isComplete && in_array($existing->status, self::ACTIVE_STATUSES, true)) {
+        // Any other active case for this target describes a file identity that is no
+        // longer installed, so it is retired on every path — including when this
+        // identity is closed. Otherwise a dismissed identity that comes back (A
+        // dismissed, file becomes B, file reverts to A) would leave the active B case
+        // offering actions against a file that no longer exists.
+        $staleTargetCases = $this->activeTargetCases($candidate)
+            ->reject(fn (SubtitleCase $subtitleCase): bool => $existing instanceof SubtitleCase
+                && $subtitleCase->is($existing))
+            ->values();
+
+        if ($isComplete) {
+            foreach ($staleTargetCases as $staleTargetCase) {
+                $this->subtitleCaseLifecycle->resolve($staleTargetCase, [
+                    'evidence' => $this->evidence($candidate, $staleTargetCase),
+                    'observed_at' => now(),
+                ]);
+            }
+
+            if (! $existing instanceof SubtitleCase) {
+                return $staleTargetCases->first();
+            }
+
+            if (in_array($existing->status, self::ACTIVE_STATUSES, true)) {
                 $this->subtitleCaseLifecycle->resolve($existing, [
                     'evidence' => $this->evidence($candidate, $existing),
                     'observed_at' => now(),
                 ]);
-
-                return $existing;
             }
 
+            return $existing;
+        }
+
+        foreach ($staleTargetCases as $staleTargetCase) {
+            $this->subtitleCaseLifecycle->supersede($staleTargetCase);
+        }
+
+        if ($existing instanceof SubtitleCase) {
             // A resolved requirement can go missing again — the subtitle is deleted
             // while the file and language profile stay put. The resolved row cannot
             // re-enter an active state and its identity blocks a replacement, so it
             // is superseded here and a fresh case observes the identity below.
             // Explicitly closed identities (dismissed, handled) stay closed.
-            if (! $isComplete && $existing->status === SubtitleCaseStatus::Resolved) {
-                $this->subtitleCaseLifecycle->supersede($existing);
-            } elseif (! $isComplete) {
+            if ($existing->status !== SubtitleCaseStatus::Resolved) {
                 $existing->forceFill([
                     'evidence' => $this->evidence($candidate, $existing),
                     'observed_at' => now(),
@@ -85,26 +110,9 @@ final readonly class SubtitleCaseReconciler
                 $this->advanceElapsedGrace($existing);
 
                 return $existing;
-            } else {
-                return $existing;
-            }
-        }
-
-        $activeTargetCases = $this->activeTargetCases($candidate);
-
-        if ($isComplete) {
-            foreach ($activeTargetCases as $activeTargetCase) {
-                $this->subtitleCaseLifecycle->resolve($activeTargetCase, [
-                    'evidence' => $this->evidence($candidate, $activeTargetCase),
-                    'observed_at' => now(),
-                ]);
             }
 
-            return $activeTargetCases->first();
-        }
-
-        foreach ($activeTargetCases as $activeTargetCase) {
-            $this->subtitleCaseLifecycle->supersede($activeTargetCase);
+            $this->subtitleCaseLifecycle->supersede($existing);
         }
 
         // Superseded rows keep their identity columns but are out of the partial

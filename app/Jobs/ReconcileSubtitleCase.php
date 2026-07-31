@@ -23,6 +23,7 @@ use App\Services\Bazarr\SubtitleCaseReconciler;
 use App\Services\Bazarr\SubtitleInventoryService;
 use App\Settings\BazarrAutomationSettings;
 use Illuminate\Contracts\Queue\ShouldQueue;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Foundation\Queue\Queueable;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\RequestException;
@@ -48,13 +49,6 @@ final class ReconcileSubtitleCase implements ShouldQueue
         public ?int $subtitleCaseId = null,
         public ?int $targetBazarrConnectionId = null,
     ) {}
-
-    /**
-     * The case this attempt was probing, so failed() can park it once the tries
-     * are exhausted. Set during the attempt rather than constructed, because a
-     * candidate-based job only resolves its case while running.
-     */
-    private ?int $probedSubtitleCaseId = null;
 
     public static function forCase(SubtitleCase $subtitleCase): self
     {
@@ -169,7 +163,14 @@ final class ReconcileSubtitleCase implements ShouldQueue
         // so notification-triggered probes cannot exceed the per-cycle budget. With
         // no slot left, deterministic reconciliation (already done) stands and the
         // provider search is skipped until the next cycle.
-        if (! $this->reserveProbeSlot($subtitleCase->bazarr_connection_id, $bazarrAutomationSettings)) {
+        //
+        // A retry reuses the reservation its first attempt already consumed. Asking
+        // for a second one lets a small budget (max_probes_per_cycle = 1, or a
+        // budget other cases have spent) turn the retry into a silent success: the
+        // queue would delete the job with tries left and failed() would never park
+        // the case.
+        if (! $this->retryingFailedProbe($subtitleCase, $bazarrAutomationSettings)
+            && ! $this->reserveProbeSlot($subtitleCase->bazarr_connection_id, $bazarrAutomationSettings)) {
             return;
         }
 
@@ -281,11 +282,7 @@ final class ReconcileSubtitleCase implements ShouldQueue
             // permanently removing an otherwise automatable case from probing.
             // Retryable failures are rethrown so the backoff applies; failed()
             // parks the case once the last attempt is exhausted.
-            if ($this->isRetryable($throwable)) {
-                $this->probedSubtitleCaseId = $subtitleCase->id;
-
-                throw $throwable;
-            }
+            throw_if($this->isRetryable($throwable), $throwable);
 
             $subtitleCaseLifecycle->needsReview($subtitleCase->fresh(), 'Bazarr probe failed.');
             report($throwable);
@@ -345,25 +342,53 @@ final class ReconcileSubtitleCase implements ShouldQueue
     }
 
     /**
-     * The linked download is no longer expected to act: it either completed, or it
-     * failed with an uncertain outcome that this live read has now verified. Both
-     * mean the case must stop waiting on it.
+     * No linked download is expected to act any more: each of them either completed,
+     * or failed with an uncertain outcome that this live read has now verified. A
+     * probe queues one request per missing language, so the whole correlated set has
+     * to be settled — leaving the waiting state while an earlier language is still
+     * pending would strand the case, because that request's later completion no
+     * longer finds a `download_requested` case to reconcile.
      */
     private function downloadSettled(SubtitleCase $subtitleCase): bool
     {
-        if ($subtitleCase->download_action_request_id === null) {
+        $requestIds = $this->downloadRequestIds($subtitleCase);
+
+        if ($requestIds === []) {
             return false;
         }
 
-        $actionRequest = ActionRequest::query()->find($subtitleCase->download_action_request_id);
+        $actionRequests = ActionRequest::query()->findMany($requestIds);
 
-        if (! $actionRequest instanceof ActionRequest) {
+        if ($actionRequests->isEmpty()) {
             return false;
         }
 
-        return $actionRequest->status === ActionRequestStatus::Completed
+        return $actionRequests->every(fn (ActionRequest $actionRequest): bool => $actionRequest->status === ActionRequestStatus::Completed
             || ($actionRequest->status === ActionRequestStatus::Failed
-                && ($actionRequest->result['indeterminate'] ?? false) === true);
+                && ($actionRequest->result['indeterminate'] ?? false) === true));
+    }
+
+    /**
+     * The scalar column keeps only the most recent request; every per-language
+     * request lives in the evidence map.
+     *
+     * @return list<int>
+     */
+    private function downloadRequestIds(SubtitleCase $subtitleCase): array
+    {
+        $recorded = $subtitleCase->evidence['download_requests'] ?? null;
+        $requestIds = is_array($recorded)
+            ? array_values(array_filter(array_map(
+                static fn (mixed $id): ?int => is_int($id) && $id > 0 ? $id : null,
+                $recorded,
+            ), static fn (?int $id): bool => $id !== null))
+            : [];
+
+        if ($subtitleCase->download_action_request_id !== null) {
+            $requestIds[] = $subtitleCase->download_action_request_id;
+        }
+
+        return array_values(array_unique($requestIds));
     }
 
     /**
@@ -377,12 +402,36 @@ final class ReconcileSubtitleCase implements ShouldQueue
         SubtitleCase $subtitleCase,
         BazarrAutomationSettings $bazarrAutomationSettings,
     ): bool {
+        return $this->probeAttemptsWithinSpacing($subtitleCase, $bazarrAutomationSettings)
+            ->whereNot('outcome', SubtitleCaseAttemptOutcome::Failed)
+            ->exists();
+    }
+
+    /**
+     * A failed probe attempt inside the spacing window is this job's own earlier
+     * try: the record is persisted, so it survives the queue's serialization
+     * boundary where an in-memory retry counter would not.
+     */
+    private function retryingFailedProbe(
+        SubtitleCase $subtitleCase,
+        BazarrAutomationSettings $bazarrAutomationSettings,
+    ): bool {
+        return $this->probeAttemptsWithinSpacing($subtitleCase, $bazarrAutomationSettings)
+            ->where('outcome', SubtitleCaseAttemptOutcome::Failed)
+            ->exists();
+    }
+
+    /**
+     * @return Builder<SubtitleCaseAttempt>
+     */
+    private function probeAttemptsWithinSpacing(
+        SubtitleCase $subtitleCase,
+        BazarrAutomationSettings $bazarrAutomationSettings,
+    ): Builder {
         return SubtitleCaseAttempt::query()
             ->where('subtitle_case_id', $subtitleCase->id)
             ->where('type', SubtitleCaseAttemptType::Probe)
-            ->whereNot('outcome', SubtitleCaseAttemptOutcome::Failed)
-            ->where('started_at', '>', now()->subHours($bazarrAutomationSettings->probeSpacingHours()))
-            ->exists();
+            ->where('started_at', '>', now()->subHours($bazarrAutomationSettings->probeSpacingHours()));
     }
 
     /**
@@ -495,19 +544,38 @@ final class ReconcileSubtitleCase implements ShouldQueue
             'exception' => $throwable instanceof Throwable ? $throwable::class : null,
         ]);
 
-        // The retries are spent, so the case that was probing when the last
-        // attempt failed is parked for an operator instead of silently dropping
-        // out of automation.
-        $subtitleCaseId = $this->probedSubtitleCaseId ?? $this->subtitleCaseId;
-
-        if ($subtitleCaseId === null) {
-            return;
-        }
-
-        $subtitleCase = SubtitleCase::query()->find($subtitleCaseId);
+        // The retries are spent, so the case that was probing when the last attempt
+        // failed is parked for an operator instead of silently dropping out of
+        // automation. The queue reconstructs this job from its serialized payload
+        // before calling failed(), so the case is resolved from constructor data —
+        // anything recorded on the instance that threw is already gone.
+        $subtitleCase = $this->probedSubtitleCase();
 
         if ($subtitleCase instanceof SubtitleCase) {
             resolve(SubtitleCaseLifecycle::class)->needsReview($subtitleCase, 'Bazarr probe failed.');
         }
+    }
+
+    private function probedSubtitleCase(): ?SubtitleCase
+    {
+        if ($this->subtitleCaseId !== null) {
+            return SubtitleCase::query()->find($this->subtitleCaseId);
+        }
+
+        foreach (['bazarr_connection_id', 'service_connection_id', 'file_fingerprint', 'requirements_fingerprint'] as $key) {
+            if (! isset($this->candidate[$key])) {
+                return null;
+            }
+        }
+
+        // Only a case that is still searching was the one this job probed; a case
+        // that has since moved on must not be dragged into review.
+        return SubtitleCase::query()
+            ->where('bazarr_connection_id', $this->candidate['bazarr_connection_id'])
+            ->where('service_connection_id', $this->candidate['service_connection_id'])
+            ->where('file_fingerprint', $this->candidate['file_fingerprint'])
+            ->where('requirements_fingerprint', $this->candidate['requirements_fingerprint'])
+            ->where('status', SubtitleCaseStatus::BazarrSearching)
+            ->first();
     }
 }

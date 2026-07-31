@@ -35,8 +35,27 @@ return new class extends Migration
         ");
     }
 
+    /**
+     * Reversible only while no identity has actually been reopened. Once a
+     * superseded row and a live row share an identity — exactly what the partial
+     * index exists to allow — the full constraint cannot be restored, and the only
+     * ways to force it would be destroying case history or rewriting fingerprints
+     * that reconciliation derives from the media file. Both are worse than an
+     * explicit stop, so the duplicates are reported and the rollback refuses.
+     */
     public function down(): void
     {
+        $duplicateIdentities = DB::table('subtitle_cases')
+            ->selectRaw('bazarr_connection_id, service_connection_id, file_fingerprint, requirements_fingerprint, count(*) as total')
+            ->groupBy('bazarr_connection_id', 'service_connection_id', 'file_fingerprint', 'requirements_fingerprint')
+            ->havingRaw('count(*) > 1')
+            ->count();
+
+        throw_if($duplicateIdentities > 0, RuntimeException::class, sprintf(
+            'Cannot restore the full subtitle_cases material-identity constraint: %d identities have been reopened and now have superseded history. Resolve or delete the superseded rows for those identities first.',
+            $duplicateIdentities,
+        ));
+
         DB::statement('DROP INDEX IF EXISTS subtitle_cases_material_identity_unique');
 
         Schema::table('subtitle_cases', function (Blueprint $blueprint): void {

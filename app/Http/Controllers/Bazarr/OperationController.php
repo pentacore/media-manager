@@ -38,7 +38,7 @@ final class OperationController extends Controller
 
         $operation = (string) $validated['operation'];
         $bazarrClient = new BazarrClient($connection);
-        $this->validateCapability($operation, $bazarrClient);
+        $this->validateCapability($operation, $mediaType, $bazarrClient);
         $this->validateOpaqueSelection($operation, $validated, $item, $bazarrClient, $mediaType, $mediaId);
         $managingConnection = $this->managingConnection($connection, $mediaType);
         $type = 'bazarr_'.$operation;
@@ -71,7 +71,7 @@ final class OperationController extends Controller
      * server's gate: a queued request may auto-execute, and an unsupported write
      * would only fail once it reached the provider.
      */
-    private function validateCapability(string $operation, BazarrClient $bazarrClient): void
+    private function validateCapability(string $operation, string $mediaType, BazarrClient $bazarrClient): void
     {
         $capability = match ($operation) {
             'download_best' => 'best_download',
@@ -80,7 +80,9 @@ final class OperationController extends Controller
             // The subtitle tools all ride the same upstream endpoint.
             'sync_subtitle', 'modify_subtitle' => 'sync',
             'translate_subtitle' => 'translate',
-            'scan_media' => 'inventory',
+            // A media action is a PATCH on the media collection itself, advertised
+            // per media type and independently of the inventory reads.
+            'scan_media' => $mediaType === 'episode' ? 'episode_media_action' : 'movie_media_action',
             default => throw ValidationException::withMessages(['operation' => 'Unsupported Bazarr operation.']),
         };
 

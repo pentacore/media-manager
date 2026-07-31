@@ -27,6 +27,8 @@ function expectedBazarrCapabilities(
     bool $delete = true,
     bool $sync = true,
     bool $translate = true,
+    bool $episodeMediaAction = true,
+    bool $movieMediaAction = true,
     bool $tasks = true,
     bool $languageProfiles = true,
     bool $settingsAdapter = false,
@@ -43,6 +45,8 @@ function expectedBazarrCapabilities(
         'delete' => $delete,
         'sync' => $sync,
         'translate' => $translate,
+        'episode_media_action' => $episodeMediaAction,
+        'movie_media_action' => $movieMediaAction,
         'tasks' => $tasks,
         'language_profiles' => $languageProfiles,
         'settings_adapter' => $settingsAdapter,
@@ -63,7 +67,9 @@ function completeBazarrSwagger(
 ): array {
     $paths = [
         '/episodes' => ['get'],
-        '/movies' => ['get'],
+        // The media collections also carry the media-action write.
+        '/movies' => ['get', 'patch'],
+        '/series' => ['patch'],
         '/episodes/wanted' => ['get'],
         '/movies/wanted' => ['get'],
         '/episodes/history' => ['get'],
@@ -170,7 +176,11 @@ test('a missing Swagger path disables only capabilities that depend on it', func
     ],
     'one side of inventory pair' => [
         ['/movies'],
-        expectedBazarrCapabilities(inventory: false),
+        expectedBazarrCapabilities(inventory: false, movieMediaAction: false),
+    ],
+    'episode media action route' => [
+        ['/series'],
+        expectedBazarrCapabilities(episodeMediaAction: false),
     ],
     'one side of provider pair' => [
         ['/providers/movies'],
@@ -329,7 +339,7 @@ test('capability caches are isolated by Bazarr connection', function (): void {
 
     expect($firstCapabilities)
         ->toBe(expectedBazarrCapabilities())
-        ->and($secondCapabilities)->toBe(expectedBazarrCapabilities(inventory: false))
+        ->and($secondCapabilities)->toBe(expectedBazarrCapabilities(inventory: false, movieMediaAction: false))
         ->and(Cache::store('array')->tags(['bazarr:91'])->get('bazarr:91:capabilities'))->toBe($firstCapabilities)
         ->and(Cache::store('array')->tags(['bazarr:92'])->get('bazarr:92:capabilities'))->toBe($secondCapabilities);
 
@@ -357,6 +367,8 @@ test('unavailable or malformed Swagger falls back to bounded safe reads', functi
         delete: false,
         sync: false,
         translate: false,
+        episodeMediaAction: false,
+        movieMediaAction: false,
         tasks: false,
     ));
 
@@ -431,6 +443,8 @@ test('partial fallback failures disable only dependent capabilities and do not s
         delete: false,
         sync: false,
         translate: false,
+        episodeMediaAction: false,
+        movieMediaAction: false,
         tasks: false,
     ));
 
