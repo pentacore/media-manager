@@ -10,7 +10,8 @@ use App\Settings\MediaReplacementSettings;
 /**
  * Builds the `replace_media_file` ActionRequest payload and its approval
  * override. Both the AI tool and the automatic subtitle check dispatch the same
- * action, and the executor reads fifteen payload keys — a second hand-built
+ * action, whose fourteen-key payload — plus an optional auto-check key — is
+ * read by MediaReplacementActions and the approval card; a second hand-built
  * copy of that shape would drift.
  */
 final readonly class ReplacementRequestBuilder
