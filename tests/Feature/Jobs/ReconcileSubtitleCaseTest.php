@@ -637,6 +637,56 @@ test('a failed verification read keeps the case waiting and retries', function (
     expect($case->fresh()->status)->toBe(SubtitleCaseStatus::Resolved);
 });
 
+test('a targeted verification that exhausts its retries parks the waiting case', function (): void {
+    $failReads = false;
+    ['case' => $case, 'bazarr' => $bazarr] = targetedEpisodeCaseSetup([], function () use (&$failReads): mixed {
+        throw_if($failReads, ConnectionException::class, 'bazarr unreachable');
+
+        return Http::response(['data' => [[
+            'sonarrSeriesId' => 101,
+            'sonarrEpisodeId' => 701,
+            'title' => 'Frieren S01E01',
+            'subtitles' => [],
+        ]]]);
+    });
+    $case->forceFill(['download_action_request_id' => ActionRequest::factory()->create([
+        'type' => 'bazarr_download_best',
+        'status' => ActionRequestStatus::Completed,
+    ])->id])->save();
+    $failReads = true;
+    new BazarrCache($bazarr)->bustAll();
+    $payload = serialize(ReconcileSubtitleCase::forCase($case->fresh()));
+
+    // Every attempt rethrows, so the retryUntil window eventually closes and the
+    // queue calls failed(). This job is the only verifier of a download_requested
+    // case — it is outside the bulk missing feed and its completion listener has
+    // already fired — so it must not be dropped still waiting.
+    expect(fn (): mixed => runSubtitleProbe(unserialize($payload)))
+        ->toThrow(ConnectionException::class)
+        ->and($case->fresh()->status)->toBe(SubtitleCaseStatus::DownloadRequested);
+
+    unserialize($payload)->failed(new ConnectionException('bazarr unreachable'));
+
+    expect($case->fresh()->status)->toBe(SubtitleCaseStatus::NeedsReview)
+        ->and($case->fresh()->failure_reason)->toBe('bazarr_verification_failed');
+});
+
+test('an expired targeted job leaves a case that already resolved alone', function (): void {
+    ['case' => $case] = targetedEpisodeCaseSetup([]);
+    $case->forceFill(['download_action_request_id' => ActionRequest::factory()->create([
+        'type' => 'bazarr_download_best',
+        'status' => ActionRequestStatus::Completed,
+    ])->id])->save();
+    $payload = serialize(ReconcileSubtitleCase::forCase($case->fresh()));
+
+    // Another dispatch verified the case in the meantime.
+    resolve(SubtitleCaseLifecycle::class)->resolve($case->fresh());
+
+    unserialize($payload)->failed(new ConnectionException('bazarr unreachable'));
+
+    expect($case->fresh()->status)->toBe(SubtitleCaseStatus::Resolved);
+});
+
 test('a definitive verification failure parks the case for an operator', function (): void {
     $failReads = false;
     ['case' => $case, 'bazarr' => $bazarr] = targetedEpisodeCaseSetup([], function () use (&$failReads): mixed {

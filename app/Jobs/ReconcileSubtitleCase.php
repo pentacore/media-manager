@@ -62,6 +62,8 @@ final class ReconcileSubtitleCase implements ShouldQueue
      */
     private const int PROVIDER_SEARCHES_PER_MINUTE = 10;
 
+    private const string VERIFICATION_ERROR_CATEGORY = 'verification_read_failure';
+
     /**
      * Identifies this queue message, so only its own retries can reuse the cycle
      * probe slot it consumed. It is serialized with the payload, which makes it
@@ -376,7 +378,15 @@ final class ReconcileSubtitleCase implements ShouldQueue
             // is the only thing still looking at the case — a waiting case is not in
             // the bulk candidate feed and the completion listener has already fired.
             // So it goes to an operator instead of waiting silently.
-            throw_if($this->isRetryable($throwable), $throwable);
+            if ($this->isRetryable($throwable)) {
+                // Recorded before the rethrow so failed() can tell a job that died
+                // verifying a live target from one that died searching providers —
+                // the instance that threw is gone by then. It is also the operator's
+                // audit trail for the outage.
+                $this->recordFailedVerification($subtitleCase);
+
+                throw $throwable;
+            }
 
             report($throwable);
 
@@ -415,6 +425,37 @@ final class ReconcileSubtitleCase implements ShouldQueue
         }
 
         return $subtitleCase;
+    }
+
+    private function recordFailedVerification(SubtitleCase $subtitleCase): void
+    {
+        SubtitleCaseAttempt::query()->create([
+            'subtitle_case_id' => $subtitleCase->id,
+            'type' => SubtitleCaseAttemptType::Reconciliation,
+            'outcome' => SubtitleCaseAttemptOutcome::Failed,
+            'summary' => ['result' => 'verification_read_failed'],
+            'error_category' => self::VERIFICATION_ERROR_CATEGORY,
+            'started_at' => now(),
+            'completed_at' => now(),
+        ]);
+    }
+
+    /**
+     * Did this job die while reading a live target rather than while searching
+     * providers? Only then may failed() park a case waiting on a download: a job that
+     * was probing must leave such a case alone, because another dispatch queued that
+     * download and its completion listener still expects to verify it. The window
+     * stops an old outage from parking a case much later.
+     */
+    private function failedVerificationExists(int $subtitleCaseId): bool
+    {
+        return SubtitleCaseAttempt::query()
+            ->where('subtitle_case_id', $subtitleCaseId)
+            ->where('type', SubtitleCaseAttemptType::Reconciliation)
+            ->where('outcome', SubtitleCaseAttemptOutcome::Failed)
+            ->where('error_category', self::VERIFICATION_ERROR_CATEGORY)
+            ->where('started_at', '>', now()->subMinutes(self::RETRY_WINDOW_MINUTES * 2))
+            ->exists();
     }
 
     /**
@@ -669,29 +710,49 @@ final class ReconcileSubtitleCase implements ShouldQueue
             'exception' => $throwable instanceof Throwable ? $throwable::class : null,
         ]);
 
-        // The retries are spent, so the case that was probing when the last attempt
-        // failed is parked for an operator instead of silently dropping out of
-        // automation. The queue reconstructs this job from its serialized payload
-        // before calling failed(), so the case is resolved from constructor data —
-        // anything recorded on the instance that threw is already gone.
+        // The retries are spent, so the case this job was working on is parked for an
+        // operator instead of silently dropping out of automation. The queue
+        // reconstructs this job from its serialized payload before calling failed(),
+        // so the case is resolved from constructor data — anything recorded on the
+        // instance that threw is already gone.
         $subtitleCase = $this->probedSubtitleCase();
 
-        if ($subtitleCase instanceof SubtitleCase) {
-            resolve(SubtitleCaseLifecycle::class)->needsReview($subtitleCase, 'Bazarr probe failed.');
+        if (! $subtitleCase instanceof SubtitleCase) {
+            return;
         }
+
+        $reason = $subtitleCase->status === SubtitleCaseStatus::DownloadRequested
+            ? 'bazarr_verification_failed'
+            : 'Bazarr probe failed.';
+
+        // needsReview() transitions conditionally on the current status, so a case
+        // that moves on between this read and the write is left alone.
+        resolve(SubtitleCaseLifecycle::class)->needsReview($subtitleCase, $reason);
     }
 
     /**
-     * Only a case still searching was the one this job probed. A case that moved on
-     * — a concurrently dispatched reconciliation can queue a download while this job
-     * sits in backoff — must not be dragged into review: the completion listener
-     * only verifies a case that is still download_requested, so parking it here
-     * would strand the download result. The guard applies to targeted jobs too,
-     * which are exactly the ones another dispatch can overtake.
+     * Only a case still in the state this job owns may be parked. A case that moved
+     * on — a concurrently dispatched reconciliation can queue a download while this
+     * job sits in backoff — must not be dragged into review, or that download's
+     * completion has nothing left to verify.
+     *
+     * `download_requested` is owned only by a job that actually died reading the live
+     * target: that job is the sole verifier of a waiting case, so letting its retries
+     * expire silently would leave the case outside the missing feed with nobody
+     * looking at it. A job that died searching providers has no claim on it.
      */
     private function probedSubtitleCase(): ?SubtitleCase
     {
-        $builder = SubtitleCase::query()->where('status', SubtitleCaseStatus::BazarrSearching);
+        $ownedStatuses = [SubtitleCaseStatus::BazarrSearching];
+
+        if ($this->subtitleCaseId !== null && $this->failedVerificationExists($this->subtitleCaseId)) {
+            $ownedStatuses[] = SubtitleCaseStatus::DownloadRequested;
+        }
+
+        $builder = SubtitleCase::query()->whereIn('status', array_map(
+            static fn (SubtitleCaseStatus $subtitleCaseStatus): string => $subtitleCaseStatus->value,
+            $ownedStatuses,
+        ));
 
         if ($this->subtitleCaseId !== null) {
             return $builder->whereKey($this->subtitleCaseId)->first();
