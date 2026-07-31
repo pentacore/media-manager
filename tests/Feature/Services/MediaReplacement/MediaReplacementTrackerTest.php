@@ -634,6 +634,36 @@ test('a grab with no release title is a no-op rather than a sweep', function ():
     Http::assertNotSent(fn (Request $request): bool => $request->method() === 'DELETE');
 });
 
+test('a stored service in mixed case still correlates a radarr grab', function (): void {
+    // attemptTargetId() must normalize `service` the way remonitorTarget() and
+    // the rest of the namespace do. Compared exactly, 'Radarr' falls through to
+    // series_id — which a movie target does not have — so the attempt gets a null
+    // target id, drops out of correlation altogether, and never records the
+    // download id that later events and the competing-grab sweep depend on.
+    $radarrConnection = ServiceConnection::factory()->radarr()->create([
+        'url' => 'http://radarr.local:7878', 'api_key' => 'test', 'is_active' => true,
+    ]);
+
+    $mediaReplacementAttempt = MediaReplacementAttempt::factory()->create([
+        'service_connection_id' => $radarrConnection->id,
+        'status' => MediaReplacementStatus::Downloading,
+        'scope' => 'movie',
+        'target' => ['service' => 'Radarr', 'scope' => 'movie', 'movie_id' => 7, 'movie_file_ids' => [70]],
+        'candidate' => ['title' => 'Movie.2020.GOOD', 'fingerprint' => 'fp'],
+        'required_languages' => ['eng'],
+        'download_id' => null,
+    ]);
+
+    resolve(MediaReplacementTracker::class)->recordGrab($radarrConnection, [
+        'eventType' => 'Grab',
+        'movie' => ['id' => 7, 'title' => 'Movie'],
+        'release' => ['releaseTitle' => 'Movie.2020.GOOD'],
+        'downloadId' => 'DL-M1',
+    ]);
+
+    expect($mediaReplacementAttempt->fresh()->download_id)->toBe('DL-M1');
+});
+
 test('a padded webhook download id is stored trimmed so it can be compared', function (): void {
     // The stored id is what the competing-grab sweep is armed with and what it
     // compares against the queue's own ids. Storing " DL-1 " would arm a sweep

@@ -78,6 +78,16 @@ final readonly class CompetingGrabSweeper
             return 0;
         }
 
+        // ONE shape decision for the whole sweep, from the connection, used for
+        // the target and for every queue row alike. Two independent derivations
+        // that merely agree today are a drift hazard, and this one is worse than
+        // most: reading the target as Radarr while reading rows as Sonarr
+        // compares movie_id to seriesId, and because those are independent id
+        // spaces a numeric collision lands in the either-side-empty branch and
+        // matches EVERY row of that series. The connection is the right single
+        // source because it is the API these rows were just read from; a target
+        // whose stored `service` disagrees with it then reduces to a null parent
+        // id and matches nothing, which is the safe direction for corrupt data.
         $isRadarr = $serviceConnection->type === ServiceType::Radarr;
         $client = $isRadarr ? new RadarrClient($serviceConnection) : new SonarrClient($serviceConnection);
 
@@ -171,20 +181,18 @@ final readonly class CompetingGrabSweeper
      * parent media id, and the episode ids it covers (always empty for Radarr,
      * which has no episode dimension).
      *
-     * Which shape to read is decided from the target's OWN `service` field, the
-     * way MediaReplacementTracker::attemptTargetId() decides it, so the two rules
-     * can never disagree about the same stored target. The connection's type is
-     * the fallback, because it is the only signal a legacy target without a
-     * `service` field carries.
+     * $isRadarr is the sweep's single shape decision — see run(). This does NOT
+     * consult the target's own `service` field: doing so was a second derivation
+     * that could disagree with the one applied to queue rows, and it bought
+     * nothing, because the only case where the two answers differ is a target
+     * whose stored service contradicts its connection, which resolveConnection()
+     * rejects and which must match nothing either way.
      *
      * @param  array<string, mixed>  $target
      * @return array{parentId: ?int, episodeIds: list<int>}
      */
-    private function targetIdentity(array $target, bool $connectionIsRadarr): array
+    private function targetIdentity(array $target, bool $isRadarr): array
     {
-        $service = mb_strtolower(trim((string) ($target['service'] ?? '')));
-        $isRadarr = $service === '' ? $connectionIsRadarr : $service === 'radarr';
-
         if ($isRadarr) {
             return ['parentId' => $this->positiveInt($target['movie_id'] ?? null), 'episodeIds' => []];
         }

@@ -555,10 +555,18 @@ final readonly class MediaReplacementTracker
         return is_int($id) && $id > 0 ? $id : null;
     }
 
+    /**
+     * The stored target's own media id. `service` is normalized the way
+     * remonitorTarget() below and the rest of this namespace normalize it: an
+     * exact `=== 'radarr'` here read a stored 'Radarr' or ' radarr' as Sonarr and
+     * looked up series_id on a movie target, while remonitorTarget() read the
+     * same value as Radarr — two answers for one target, and a null id here
+     * silently drops the attempt out of every correlation.
+     */
     private function attemptTargetId(MediaReplacementAttempt $mediaReplacementAttempt): ?int
     {
         $target = is_array($mediaReplacementAttempt->target) ? $mediaReplacementAttempt->target : [];
-        $id = ($target['service'] ?? null) === 'radarr'
+        $id = mb_strtolower(trim((string) ($target['service'] ?? ''))) === 'radarr'
             ? ($target['movie_id'] ?? null)
             : ($target['series_id'] ?? null);
 

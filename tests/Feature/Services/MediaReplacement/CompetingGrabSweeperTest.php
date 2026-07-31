@@ -408,10 +408,36 @@ test('a target with no series id matches nothing and removes nothing', function 
     Http::assertNotSent(fn (Request $request): bool => $request->method() === 'DELETE');
 });
 
-test('a legacy target with no service field is read using the connection type', function (): void {
-    // The fallback in targetIdentity(). Rows still have to match, so the target
-    // must be reduced to the sonarr shape on the strength of the connection
-    // alone.
+test('a target whose stored service disagrees with the connection matches nothing', function (): void {
+    // A Radarr-shaped target stored against a Sonarr connection.
+    // MediaReplacementActions::resolveConnection() throws on a type mismatch, so
+    // this should be unreachable — but movie ids and series ids are independent
+    // id spaces, so movie_id 42 against series 42 is an ordinary numeric
+    // collision, not a coincidence. Reading the target in one shape and the
+    // queue rows in another makes that collision compare equal, land in the
+    // either-side-empty branch, and match EVERY row of the series — deleting
+    // them with removeFromClient: true. One shape decision used for both sides
+    // is what stops it, and corrupt data then removes nothing at all.
+    $mediaReplacementAttempt = sweeperAttempt($this->connection->id, [
+        'target' => ['service' => 'radarr', 'scope' => 'movie', 'movie_id' => 42, 'movie_file_ids' => [70]],
+        'download_id' => 'DL-OURS',
+    ]);
+
+    fakeSweeperQueue([
+        ['id' => 945, 'seriesId' => 42, 'episodeId' => 101, 'downloadId' => 'DL-A', 'title' => 'Series42.S01E01'],
+        ['id' => 946, 'seriesId' => 42, 'episodeId' => 102, 'downloadId' => 'DL-B', 'title' => 'Series42.S01E02'],
+    ]);
+
+    $removed = resolve(CompetingGrabSweeper::class)->sweep($this->connection, $mediaReplacementAttempt);
+
+    expect($removed)->toBe(0);
+    Http::assertNotSent(fn (Request $request): bool => $request->method() === 'DELETE');
+});
+
+test('a target stored without a service field still matches its rows', function (): void {
+    // Data-shape coverage, not a branch guard: the shape decision comes from the
+    // connection, so a target with no `service` field is not a special case any
+    // more. Kept because targets predating that field are real rows on disk.
     $mediaReplacementAttempt = sweeperAttempt($this->connection->id, [
         'target' => ['scope' => 'anime', 'series_id' => 42, 'episode_ids' => [101]],
         'download_id' => 'DL-OURS',
