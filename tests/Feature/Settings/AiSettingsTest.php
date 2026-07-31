@@ -30,6 +30,32 @@ test('setMode persists and is read back', function (): void {
     $this->assertDatabaseHas('app_settings', ['key' => 'ai.mode']);
 });
 
+test('chatTimeout falls back to the config default when nothing is persisted', function (): void {
+    config()->set('mediamanager.ai.chat_timeout', 120);
+
+    expect(resolve(AiSettings::class)->chatTimeout())->toBe(120);
+});
+
+test('setChatTimeout persists and overrides the config default', function (): void {
+    config()->set('mediamanager.ai.chat_timeout', 120);
+    $aiSettings = resolve(AiSettings::class);
+
+    $aiSettings->setChatTimeout(300);
+
+    expect($aiSettings->chatTimeout())->toBe(300);
+    $this->assertDatabaseHas('app_settings', ['key' => 'ai.chat_timeout']);
+});
+
+test('setChatTimeout with null clears the override back to the config default', function (): void {
+    config()->set('mediamanager.ai.chat_timeout', 120);
+    $aiSettings = resolve(AiSettings::class);
+    $aiSettings->setChatTimeout(300);
+
+    $aiSettings->setChatTimeout(null);
+
+    expect($aiSettings->chatTimeout())->toBe(120);
+});
+
 test('setModel persists and is read back', function (): void {
     $aiSettings = resolve(AiSettings::class);
 

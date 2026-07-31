@@ -25,6 +25,14 @@ test('MediaAgent is an Agent + Conversational + HasTools', function (): void {
     expect($agent)->toBeInstanceOf(HasTools::class);
 });
 
+test('MediaAgent takes its prompt timeout from AiSettings', function (): void {
+    // The SDK reads this method in Promptable::getTimeout() for both prompt()
+    // and stream(), in preference to its own default.
+    resolve(AiSettings::class)->setChatTimeout(300);
+
+    expect((new MediaAgent)->timeout())->toBe(300);
+});
+
 test('every tool returned by tools() is a usable SDK Tool', function (): void {
     $tools = iterator_to_array((new MediaAgent)->tools(), false);
 
