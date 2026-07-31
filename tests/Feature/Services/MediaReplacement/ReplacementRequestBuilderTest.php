@@ -64,6 +64,36 @@ test('it builds the replace_media_file payload from a snapshot and candidate', f
         ->and($built['payload'])->not->toHaveKey('auto_check_key');
 });
 
+test('the payload keys stay in the order the executor and the approval card were built against', function (): void {
+    // The tool emitted this exact shape before the builder was extracted, and a
+    // second entry point now emits it too. Key set and order are the contract:
+    // toMatchArray is order-insensitive and subset-only, so only this pins them.
+    $built = resolve(ReplacementRequestBuilder::class)->build(
+        builderSnapshot(),
+        builderCandidate(),
+        ['eng'],
+        'automatic',
+        'Missing English subtitles.',
+    );
+
+    expect(array_keys($built['payload']))->toBe([
+        'title',
+        'detail',
+        'service',
+        'service_connection_id',
+        'scope',
+        'target',
+        'candidate_fingerprint',
+        'candidate',
+        'required_languages',
+        'confidence',
+        'matched_rules',
+        'selection_mode',
+        'agent_rationale',
+        'original_history_id',
+    ]);
+});
+
 test('a candidate that requires approval forces approval', function (): void {
     $built = resolve(ReplacementRequestBuilder::class)->build(
         builderSnapshot(),
@@ -118,7 +148,24 @@ test('an auto check key is included when supplied', function (): void {
         'sonarr:3:42-101',
     );
 
-    expect($built['payload']['auto_check_key'])->toBe('sonarr:3:42-101');
+    expect($built['payload']['auto_check_key'])->toBe('sonarr:3:42-101')
+        ->and(array_keys($built['payload']))->toBe([
+            'title',
+            'detail',
+            'service',
+            'service_connection_id',
+            'scope',
+            'target',
+            'candidate_fingerprint',
+            'candidate',
+            'required_languages',
+            'confidence',
+            'matched_rules',
+            'selection_mode',
+            'agent_rationale',
+            'original_history_id',
+            'auto_check_key',
+        ]);
 });
 
 test('the rationale is truncated to a thousand characters', function (): void {
