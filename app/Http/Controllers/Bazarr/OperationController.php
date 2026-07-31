@@ -38,6 +38,7 @@ final class OperationController extends Controller
 
         $operation = (string) $validated['operation'];
         $bazarrClient = new BazarrClient($connection);
+        $this->validateCapability($operation, $bazarrClient);
         $this->validateOpaqueSelection($operation, $validated, $item, $bazarrClient, $mediaType, $mediaId);
         $managingConnection = $this->managingConnection($connection, $mediaType);
         $type = 'bazarr_'.$operation;
@@ -63,6 +64,31 @@ final class OperationController extends Controller
             'status' => $actionRequest->status->value,
             'message' => 'Subtitle operation added to the Action Queue.',
         ], 201);
+    }
+
+    /**
+     * The UI hides operations this Bazarr cannot perform, but the capability is the
+     * server's gate: a queued request may auto-execute, and an unsupported write
+     * would only fail once it reached the provider.
+     */
+    private function validateCapability(string $operation, BazarrClient $bazarrClient): void
+    {
+        $capability = match ($operation) {
+            'download_best' => 'best_download',
+            'download_exact' => 'exact_download',
+            'delete_subtitle' => 'delete',
+            // The subtitle tools all ride the same upstream endpoint.
+            'sync_subtitle', 'modify_subtitle' => 'sync',
+            'translate_subtitle' => 'translate',
+            'scan_media' => 'inventory',
+            default => throw ValidationException::withMessages(['operation' => 'Unsupported Bazarr operation.']),
+        };
+
+        if (($bazarrClient->getCapabilities()[$capability] ?? false) !== true) {
+            throw ValidationException::withMessages([
+                'operation' => 'This Bazarr version does not support that subtitle operation.',
+            ]);
+        }
     }
 
     /**

@@ -56,6 +56,29 @@ beforeEach(function (): void {
         'original_format' => false,
     ];
 
+    // Read at request time so a test can narrow what this Bazarr advertises.
+    $this->swaggerPaths = [
+        '/providers/episodes' => [
+            'get' => ['responses' => ['200' => ['description' => 'OK']]],
+            'post' => ['responses' => ['204' => ['description' => 'OK']]],
+        ],
+        '/providers/movies' => [
+            'get' => ['responses' => ['200' => ['description' => 'OK']]],
+            'post' => ['responses' => ['204' => ['description' => 'OK']]],
+        ],
+        '/movies/subtitles' => [
+            'patch' => ['responses' => ['204' => ['description' => 'OK']]],
+            'delete' => ['responses' => ['204' => ['description' => 'OK']]],
+        ],
+        '/episodes/subtitles' => [
+            'patch' => ['responses' => ['204' => ['description' => 'OK']]],
+            'delete' => ['responses' => ['204' => ['description' => 'OK']]],
+        ],
+        '/subtitles' => [
+            'patch' => ['responses' => ['204' => ['description' => 'OK']]],
+        ],
+    ];
+
     Http::fake(function (Request $request) {
         $path = parse_url($request->url(), PHP_URL_PATH);
 
@@ -67,27 +90,7 @@ beforeEach(function (): void {
                 'swagger' => '2.0',
                 'basePath' => '/api',
                 'info' => ['title' => 'Bazarr', 'version' => '1.6.0'],
-                'paths' => [
-                    '/providers/episodes' => [
-                        'get' => ['responses' => ['200' => ['description' => 'OK']]],
-                        'post' => ['responses' => ['204' => ['description' => 'OK']]],
-                    ],
-                    '/providers/movies' => [
-                        'get' => ['responses' => ['200' => ['description' => 'OK']]],
-                        'post' => ['responses' => ['204' => ['description' => 'OK']]],
-                    ],
-                    '/movies/subtitles' => [
-                        'patch' => ['responses' => ['204' => ['description' => 'OK']]],
-                        'delete' => ['responses' => ['204' => ['description' => 'OK']]],
-                    ],
-                    '/episodes/subtitles' => [
-                        'patch' => ['responses' => ['204' => ['description' => 'OK']]],
-                        'delete' => ['responses' => ['204' => ['description' => 'OK']]],
-                    ],
-                    '/subtitles' => [
-                        'patch' => ['responses' => ['204' => ['description' => 'OK']]],
-                    ],
-                ],
+                'paths' => $this->swaggerPaths,
             ]),
             default => Http::response(['data' => []]),
         };
@@ -219,6 +222,66 @@ test('members create an approval-gated exact download from a fresh server-side c
         'target_fingerprint' => $targetFingerprint,
         'candidate_fingerprint' => $candidateFingerprint,
     ])->and($actionRequest->status)->toBe(ActionRequestStatus::Pending);
+});
+
+test('members read Bazarr capabilities without running a manual search', function (): void {
+    $this->actingAs(User::factory()->member()->create())
+        ->getJson(route('bazarr.capabilities', ['connection' => $this->bazarr->id]))
+        ->assertOk()
+        ->assertJsonPath('capabilities.manual_search', true)
+        ->assertJsonPath('capabilities.sync', true)
+        ->assertJsonPath('capabilities.upload', false);
+
+    Http::assertNotSent(fn (Request $request): bool => parse_url($request->url(), PHP_URL_PATH) === '/api/providers/movies');
+});
+
+test('viewers cannot read Bazarr capabilities', function (): void {
+    $this->actingAs(User::factory()->create())
+        ->getJson(route('bazarr.capabilities', ['connection' => $this->bazarr->id]))
+        ->assertForbidden();
+});
+
+test('an operation this Bazarr cannot perform is refused server side', function (): void {
+    // This Bazarr exposes nothing but the movie list, so no write capability is
+    // available; a queued request could auto-execute, so the server is the gate.
+    $this->swaggerPaths = [
+        '/movies' => ['get' => ['responses' => ['200' => ['description' => 'OK']]]],
+    ];
+
+    $this->actingAs(User::factory()->member()->create())
+        ->postJson(route('bazarr.operations.store'), [
+            'operation' => 'download_best',
+            'connection' => $this->bazarr->id,
+            'media_type' => 'movie',
+            'media_id' => 801,
+            'target_fingerprint' => new BazarrMediaFingerprint()->make('movie', $this->rawMovie),
+            'language' => 'swe',
+            'forced' => false,
+            'hearing_impaired' => false,
+        ])
+        ->assertUnprocessable()
+        ->assertJsonValidationErrors('operation');
+
+    expect(ActionRequest::query()->count())->toBe(0);
+    Http::assertNotSent(fn (Request $request): bool => $request->method() === 'PATCH');
+});
+
+test('a manual search is refused when Bazarr has no manual search endpoint', function (): void {
+    $this->swaggerPaths = [
+        '/movies' => ['get' => ['responses' => ['200' => ['description' => 'OK']]]],
+    ];
+
+    $this->actingAs(User::factory()->member()->create())
+        ->getJson(route('bazarr.search', [
+            'connection' => $this->bazarr->id,
+            'media_type' => 'movie',
+            'media_id' => 801,
+            'target_fingerprint' => new BazarrMediaFingerprint()->make('movie', $this->rawMovie),
+        ]))
+        ->assertUnprocessable()
+        ->assertJsonValidationErrors('connection');
+
+    Http::assertNotSent(fn (Request $request): bool => parse_url($request->url(), PHP_URL_PATH) === '/api/providers/movies');
 });
 
 test('stale media and candidate fingerprints cannot create an action', function (string $field): void {

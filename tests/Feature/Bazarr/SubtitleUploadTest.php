@@ -74,7 +74,11 @@ beforeEach(function (): void {
                 'basePath' => '/api',
                 'info' => ['title' => 'Bazarr', 'version' => '1.6.0'],
                 'paths' => [
+                    // Upload capability requires the endpoint on both media types.
                     '/movies/subtitles' => [
+                        'post' => ['responses' => ['204' => ['description' => 'OK']]],
+                    ],
+                    '/episodes/subtitles' => [
                         'post' => ['responses' => ['204' => ['description' => 'OK']]],
                     ],
                 ],

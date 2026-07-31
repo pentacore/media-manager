@@ -33,6 +33,16 @@ final class SearchController extends Controller
         }
 
         $bazarrClient = new BazarrClient($connection);
+        $capabilities = $bazarrClient->getCapabilities();
+
+        // Without manual search the provider query below fails, and the response
+        // that would have carried the capability never arrives.
+        if (($capabilities['manual_search'] ?? false) !== true) {
+            throw ValidationException::withMessages([
+                'connection' => 'This Bazarr version does not support manual subtitle search.',
+            ]);
+        }
+
         $candidates = $mediaType === 'episode'
             ? $bazarrClient->searchEpisode($mediaId)
             : $bazarrClient->searchMovie($mediaId);
@@ -44,7 +54,7 @@ final class SearchController extends Controller
                 static fn (array $candidate): array => new SubtitleCandidateResource($candidate)->resolve(),
                 $candidates,
             ),
-            'capabilities' => $bazarrClient->getCapabilities(),
+            'capabilities' => $capabilities,
         ]);
     }
 

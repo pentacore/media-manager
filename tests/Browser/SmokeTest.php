@@ -367,6 +367,7 @@ function browserSmokeExcludedRouteNames(): array
         'ai.chat.pending-workflow',
         'ai.conversations.index',
         'media.search.instant',
+        'bazarr.capabilities',
         'bazarr.search',
         'monitoring.watch-history.export',
         'security.edit',

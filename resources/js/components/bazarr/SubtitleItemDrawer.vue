@@ -3,6 +3,7 @@ import { useHttp, usePage } from '@inertiajs/vue3';
 import { Download, Search, Sparkles, Upload } from '@lucide/vue';
 import { computed, ref, watch } from 'vue';
 import { toast } from 'vue-sonner';
+import CapabilityController from '@/actions/App/Http/Controllers/Bazarr/CapabilityController';
 import OperationController from '@/actions/App/Http/Controllers/Bazarr/OperationController';
 import SearchController from '@/actions/App/Http/Controllers/Bazarr/SearchController';
 import UploadController from '@/actions/App/Http/Controllers/Bazarr/UploadController';
@@ -40,6 +41,10 @@ interface SearchResponse {
         occurred_at: string;
     }>;
     candidates: SubtitleCandidateResource[];
+    capabilities: Record<string, boolean>;
+}
+
+interface CapabilityResponse {
     capabilities: Record<string, boolean>;
 }
 
@@ -137,6 +142,11 @@ const operationHttp = useHttp<OperationForm, OperationResponse>({
     media_action: null,
 });
 
+const capabilityHttp = useHttp<
+    { connection: number | null },
+    CapabilityResponse
+>({ connection: null });
+
 const uploadHttp = useHttp<UploadForm, OperationResponse>({
     connection: null,
     media_type: '',
@@ -170,8 +180,35 @@ watch(
         uploadOpen.value = false;
         selectedUpload.value = null;
         uploadHttp.reset();
+
+        if (props.open) {
+            loadCapabilities();
+        }
     },
 );
+
+/**
+ * Capabilities are discovered as soon as the drawer opens, independently of the
+ * manual search: an operation stays disabled until its own flag is known to be
+ * true, so a Bazarr version lacking a feature can never be handed work for it.
+ */
+function loadCapabilities(): void {
+    if (!props.connectionId) {
+        return;
+    }
+
+    capabilityHttp.connection = props.connectionId;
+    capabilityHttp.get(CapabilityController.url(), {
+        onSuccess: (response) => {
+            capabilities.value = response.capabilities;
+        },
+        onError: () => toast.error('Could not read Bazarr capabilities.'),
+    });
+}
+
+function supports(capability: string): boolean {
+    return capabilities.value?.[capability] === true;
+}
 
 function search(): void {
     if (!props.item || !props.connectionId) {
@@ -377,7 +414,7 @@ const dialogDescription = computed(
                             variant="outline"
                             :disabled="
                                 searchHttp.processing ||
-                                capabilities?.manual_search === false
+                                !supports('manual_search')
                             "
                             data-test="subtitle-search"
                             @click="search"
@@ -396,7 +433,7 @@ const dialogDescription = computed(
                             size="sm"
                             :disabled="
                                 operationHttp.processing ||
-                                capabilities?.best_download === false
+                                !supports('best_download')
                             "
                             data-test="subtitle-request-best"
                             @click="requestBest"
@@ -410,7 +447,7 @@ const dialogDescription = computed(
                             :disabled="
                                 operationHttp.processing ||
                                 uploadHttp.processing ||
-                                capabilities?.upload === false
+                                !supports('upload')
                             "
                             data-test="subtitle-upload-open"
                             @click="openUpload"
@@ -423,7 +460,7 @@ const dialogDescription = computed(
                             variant="outline"
                             :disabled="
                                 operationHttp.processing ||
-                                capabilities?.inventory === false
+                                !supports('inventory')
                             "
                             @click="
                                 submit('scan_media', {
@@ -441,7 +478,7 @@ const dialogDescription = computed(
                         :candidates="candidates"
                         :disabled="
                             operationHttp.processing ||
-                            capabilities?.exact_download === false
+                            !supports('exact_download')
                         "
                         @request="requestCandidate"
                     />

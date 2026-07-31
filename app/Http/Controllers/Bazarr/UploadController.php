@@ -14,6 +14,7 @@ use App\Models\ServiceConnection;
 use App\Models\SubtitleCase;
 use App\Models\SubtitleUpload;
 use App\Services\Actions\ActionOrchestrator;
+use App\Services\Bazarr\BazarrClient;
 use App\Services\Bazarr\SubtitleCaseFingerprint;
 use App\Services\Bazarr\SubtitleInventoryService;
 use App\Settings\BazarrAutomationSettings;
@@ -47,6 +48,14 @@ final class UploadController extends Controller
             (int) $validated['media_id'],
         );
         $item = $inspection['item'];
+
+        // Capability is the server's gate, not just a disabled button: an
+        // auto-approved upload would otherwise fail deep inside the executor.
+        if ((new BazarrClient($connection)->getCapabilities()['upload'] ?? false) !== true) {
+            throw ValidationException::withMessages([
+                'subtitle_file' => 'This Bazarr version does not support subtitle uploads.',
+            ]);
+        }
 
         if (($item['target_fingerprint'] ?? null) !== $validated['target_fingerprint']) {
             throw ValidationException::withMessages([

@@ -61,7 +61,7 @@ const emit = defineEmits<{
                     size="sm"
                     variant="outline"
                     :data-test="`subtitle-track-${index}-sync`"
-                    :disabled="capabilities?.sync === false"
+                    :disabled="capabilities?.sync !== true"
                     @click="
                         emit('operate', {
                             operation: 'sync_subtitle',
@@ -76,7 +76,7 @@ const emit = defineEmits<{
                     size="sm"
                     variant="outline"
                     :data-test="`subtitle-track-${index}-translate`"
-                    :disabled="capabilities?.translate === false"
+                    :disabled="capabilities?.translate !== true"
                     @click="
                         emit('operate', {
                             operation: 'translate_subtitle',
@@ -91,7 +91,7 @@ const emit = defineEmits<{
                     size="sm"
                     variant="outline"
                     :data-test="`subtitle-track-${index}-remove-hi`"
-                    :disabled="capabilities?.sync === false"
+                    :disabled="capabilities?.sync !== true"
                     @click="
                         emit('operate', {
                             operation: 'modify_subtitle',
@@ -107,7 +107,7 @@ const emit = defineEmits<{
                     size="sm"
                     variant="destructive"
                     :data-test="`subtitle-track-${index}-delete`"
-                    :disabled="capabilities?.delete === false"
+                    :disabled="capabilities?.delete !== true"
                     @click="
                         emit('operate', {
                             operation: 'delete_subtitle',

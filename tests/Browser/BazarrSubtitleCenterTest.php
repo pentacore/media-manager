@@ -515,11 +515,54 @@ test('track operations Bazarr cannot perform are disabled once capabilities load
     visit(route('bazarr.library', ['connection' => $bazarr->id], false))
         ->click('@subtitle-item-movie-801')
         ->assertSee('Current tracks')
-        ->click('@subtitle-search')
+        // No manual search is needed: capabilities are discovered when the drawer
+        // opens, so an unsupported operation is never offered in the first place.
         ->assertScript('document.querySelector(\'[data-test="subtitle-track-0-sync"]\').disabled === true')
         ->assertScript('document.querySelector(\'[data-test="subtitle-track-0-translate"]\').disabled === true')
         ->assertScript('document.querySelector(\'[data-test="subtitle-track-0-remove-hi"]\').disabled === true')
         ->assertScript('document.querySelector(\'[data-test="subtitle-track-0-delete"]\').disabled === true')
+        ->assertNoSmoke();
+
+    expect(ActionRequest::query()->count())->toBe(0);
+});
+
+test('operations a Bazarr without discovery cannot perform stay disabled', function (): void {
+    $this->seed(ActionTypeConfigSeeder::class);
+    $bazarr = ServiceConnection::factory()->bazarr()->create([
+        'name' => 'Primary Bazarr',
+        'url' => 'http://bazarr.test',
+        'api_key' => 'bazarr-secret',
+    ]);
+    $radarr = ServiceConnection::factory()->radarr()->create();
+    BazarrServiceLink::factory()->create([
+        'bazarr_connection_id' => $bazarr->id,
+        'related_connection_id' => $radarr->id,
+        'role' => BazarrServiceRole::Radarr,
+    ]);
+    // Swagger is unreadable, so no capability is ever known to be true. Every
+    // operation must stay disabled rather than defaulting to enabled.
+    fakeServiceHttp(fn (Request $request) => match (parse_url($request->url(), PHP_URL_PATH)) {
+        '/api/movies' => Http::response(['data' => [[
+            'radarrId' => 801,
+            'title' => 'Example Movie',
+            'sceneName' => 'Example.Movie.2024.1080p',
+            'path' => '/media/movies/Example Movie (2024)',
+            'monitored' => true,
+            'missing_subtitles' => [],
+            'subtitles' => [],
+        ]], 'total' => 1]),
+        '/api/swagger.json' => Http::response(['message' => 'not found'], 404),
+        default => Http::response(['data' => [], 'total' => 0]),
+    });
+
+    $this->actingAs(User::factory()->member()->create());
+
+    visit(route('bazarr.library', ['connection' => $bazarr->id], false))
+        ->click('@subtitle-item-movie-801')
+        ->assertSee('Find subtitles')
+        ->assertScript('document.querySelector(\'[data-test="subtitle-search"]\').disabled === true')
+        ->assertScript('document.querySelector(\'[data-test="subtitle-request-best"]\').disabled === true')
+        ->assertScript('document.querySelector(\'[data-test="subtitle-upload-open"]\').disabled === true')
         ->assertNoSmoke();
 
     expect(ActionRequest::query()->count())->toBe(0);
@@ -651,7 +694,12 @@ test('member uploads a subtitle from the item drawer', function (): void {
         'url' => 'http://bazarr.test',
         'api_key' => 'bazarr-secret',
     ]);
-    $radarr = ServiceConnection::factory()->radarr()->create();
+    // A routable host, because the upload case is keyed by the live Radarr file
+    // identity and loopback URLs are deliberately left unfaked.
+    $radarr = ServiceConnection::factory()->radarr()->create([
+        'url' => 'http://radarr.test',
+        'api_key' => 'radarr-secret',
+    ]);
     BazarrServiceLink::factory()->create([
         'bazarr_connection_id' => $bazarr->id,
         'related_connection_id' => $radarr->id,
@@ -679,12 +727,25 @@ test('member uploads a subtitle from the item drawer', function (): void {
         return match ($path) {
             '/api/movies/wanted', '/api/movies' => Http::response(['data' => [$movie], 'total' => 1]),
             '/api/movies/history' => Http::response(['data' => [], 'total' => 0]),
+            // The linked upload case is keyed by the live Radarr file identity.
+            '/api/v3/movie/802' => Http::response(['id' => 802, 'title' => 'Upload Example Movie', 'movieFileId' => 92]),
+            '/api/v3/moviefile/92' => Http::response([
+                'id' => 92,
+                'size' => 7_516_192_768,
+                'dateAdded' => '2026-07-21T09:00:00Z',
+                'sceneName' => 'Upload.Example.Movie.2024.1080p',
+                'path' => '/media/movies/Upload Example Movie (2024)/movie.mkv',
+            ]),
             '/api/swagger.json' => Http::response([
                 'swagger' => '2.0',
                 'basePath' => '/api',
                 'info' => ['title' => 'Bazarr', 'version' => '1.6.0'],
                 'paths' => [
+                    // Upload capability requires the endpoint on both media types.
                     '/movies/subtitles' => [
+                        'post' => ['responses' => ['204' => ['description' => 'OK']]],
+                    ],
+                    '/episodes/subtitles' => [
                         'post' => ['responses' => ['204' => ['description' => 'OK']]],
                     ],
                 ],
@@ -702,6 +763,10 @@ test('member uploads a subtitle from the item drawer', function (): void {
         ->assertSee('Upload Example Movie')
         ->click('@subtitle-item-movie-802');
 
+    // Upload stays disabled until capability discovery confirms Bazarr supports it.
+    $webpage->assertScript(
+        'document.querySelector(\'[data-test="subtitle-upload-open"]\').disabled === false',
+    );
     $webpage->script("document.querySelector('[data-test=\"subtitle-upload-open\"]').click()");
     $webpage->assertSee('Upload subtitle file');
 
