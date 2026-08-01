@@ -21,9 +21,14 @@ abstract class ArrClient
 
     protected function buildClient(bool $withRetry = true): PendingRequest
     {
+        // Arr endpoints routinely do real work before answering (folder scans,
+        // import matching, blocklist-and-search), so the former 10s budget was
+        // too tight for anything but plain reads. Note this is a per-attempt
+        // budget: a retried call can still spend roughly three times this long
+        // before failing, so raising it also lengthens the worst case.
         $pendingRequest = Http::baseUrl(rtrim($this->connection->url, '/'))
             ->withHeaders(['X-Api-Key' => $this->connection->api_key])
-            ->timeout(10)
+            ->timeout((int) config('mediamanager.arr.request_timeout'))
             ->connectTimeout(3)
             ->withUserAgent('MediaManager/'.config('app.version').' '.class_basename($this));
 
@@ -138,10 +143,10 @@ abstract class ArrClient
      * ManualImportResource[] from upstream — caller maps it.
      *
      * Upstream scans the download folder and re-runs its import matching
-     * before answering, so a season pack routinely outlives the generic 10s
-     * timeout. Retrying that scan only multiplies the work upstream while the
-     * three attempts plus backoff surface as a ~31s connection timeout, so
-     * this takes a dedicated longer timeout with no transparent retry.
+     * before answering, so a season pack is slow by design. Retrying that scan
+     * only multiplies the work upstream and multiplies the wait before the
+     * caller learns it failed, so this opts out of the transparent retry and
+     * relies on the (generous) generic per-attempt timeout.
      *
      * @param  array<string, mixed>  $params
      * @return array<int, array<string, mixed>>
@@ -151,7 +156,6 @@ abstract class ArrClient
     public function getManualImport(array $params): array
     {
         return $this->buildClient(withRetry: false)
-            ->timeout(60)
             ->get(sprintf('/api/%s/manualimport', $this->apiVersion), $params)
             ->throw()
             ->json() ?? [];
@@ -250,11 +254,10 @@ abstract class ArrClient
      * bad release and does not re-grab it.
      *
      * The service blocklists AND kicks off an AutoRedownloadFailed indexer
-     * search before answering, so this routinely outlives the generic 10s
-     * timeout. It is also a non-idempotent write: under the generic retry a
-     * slow response became three blocklist-and-search side effects, and the
-     * three 10s attempts plus backoff surfaced as a ~31s connection timeout.
-     * Dedicated long timeout, no transparent retry.
+     * search before answering, so like the interactive release search it can
+     * outlive even the generous generic timeout. It is also a non-idempotent
+     * write: under the generic retry a slow response became three
+     * blocklist-and-search side effects. Dedicated long timeout, no retry.
      *
      * @throws RequestException|ConnectionException
      */

@@ -136,6 +136,20 @@ return [
     |
     */
 
+    'arr' => [
+        // Per-attempt HTTP timeout for Sonarr/Radarr/Whisparr/Prowlarr calls.
+        // Their endpoints commonly do real work before answering (folder
+        // scans, import matching, blocklist-and-search), which the previous
+        // 10s budget did not cover.
+        //
+        // This is per attempt, not per call: a retried request can spend
+        // roughly three times this long before it finally fails, so raise it
+        // with the worst case in mind rather than only the slow-success case.
+        // Individual slow endpoints (interactive release search) still pin
+        // their own longer timeout at the call site.
+        'request_timeout' => (int) env('MEDIAMANAGER_ARR_TIMEOUT', 60),
+    ],
+
     'cache' => [
         // Cache driver to use. Defaults to redis (Valkey-compatible) so tagged
         // flushes work; override per-env (e.g. 'array' in tests).

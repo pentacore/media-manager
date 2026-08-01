@@ -1,6 +1,8 @@
 <?php
 
 use App\Models\ServiceConnection;
+use App\Services\Prowlarr\ProwlarrClient;
+use App\Services\Radarr\RadarrClient;
 use App\Services\Sonarr\SonarrClient;
 use Illuminate\Http\Client\Request;
 use Illuminate\Http\Client\RequestException;
@@ -183,6 +185,44 @@ test('markHistoryFailed posts to the failed-history endpoint', function (): void
 
     Http::assertSent(fn (Request $request): bool => $request->method() === 'POST'
         && str_contains($request->url(), '/api/v3/history/failed/77'));
+});
+
+test('the per-attempt timeout comes from config and covers every Arr service', function (): void {
+    config()->set('mediamanager.arr.request_timeout', 45);
+
+    $timeouts = [];
+
+    Http::fake(function (Request $request, array $options) use (&$timeouts) {
+        $timeouts[] = $options['timeout'] ?? null;
+
+        return Http::response([]);
+    });
+
+    // Sonarr/Radarr/Whisparr/Prowlarr all inherit buildClient(), so one config
+    // value covers every Arr service rather than each client carrying its own.
+    new SonarrClient($this->connection)->getSystemStatus();
+    new RadarrClient($this->connection)->getSystemStatus();
+    new ProwlarrClient($this->connection)->getSystemStatus();
+
+    expect($timeouts)->toBe([45, 45, 45]);
+});
+
+test('an endpoint that pins its own longer timeout is not capped by the generic one', function (): void {
+    config()->set('mediamanager.arr.request_timeout', 45);
+
+    $timeout = null;
+
+    Http::fake(function (Request $request, array $options) use (&$timeout) {
+        $timeout = $options['timeout'] ?? null;
+
+        return Http::response([]);
+    });
+
+    // An interactive release search sweeps every indexer, so it keeps its own
+    // budget above whatever the generic per-attempt value happens to be.
+    new SonarrClient($this->connection)->getReleases(['episodeId' => 1]);
+
+    expect($timeout)->toBe(120);
 });
 
 test('markHistoryFailed is not retried on a server error (single non-idempotent POST)', function (): void {
