@@ -10,6 +10,7 @@ use App\Models\ActionRequest;
 use App\Models\ActionTypeConfig;
 use App\Settings\AiSettings;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
+use Illuminate\Http\Client\ConnectionException;
 use Laravel\Ai\Tools\Request;
 
 function makeFakeRequest(array $args = []): Request
@@ -69,6 +70,32 @@ class FakeThrowingTool extends BaseTool
     protected function execute(Request $request): array
     {
         throw new RuntimeException('boom');
+    }
+}
+
+class FakeUnreachableServiceTool extends BaseTool
+{
+    public function description(): Stringable|string
+    {
+        return 'fake';
+    }
+
+    /**
+     * @return array{}
+     */
+    public function schema(JsonSchema $schema): array
+    {
+        return [];
+    }
+
+    public function risk(): Risk
+    {
+        return Risk::Read;
+    }
+
+    protected function execute(Request $request): array
+    {
+        throw new ConnectionException('cURL error 28: Operation timed out after 30000 milliseconds (see https://sonarr.local:8989/api/v3/manualimport?apikey=secret)');
     }
 }
 
@@ -158,6 +185,29 @@ test('handle catches throwables and returns a structured error JSON', function (
     expect($decoded['error'])->toBe('tool_failed');
     expect($decoded['code'])->toBe('runtime_exception');
     expect($decoded['message'])->toContain('try again');
+});
+
+test('a failure carries a human-readable reason the agent can relay to chat', function (): void {
+    $result = new FakeUnreachableServiceTool()->handle(makeFakeRequest());
+
+    $decoded = json_decode($result, true);
+
+    // Without this the user only learns *that* it broke; the why lived in the
+    // server logs. The message tells the agent to repeat the reason verbatim.
+    expect($decoded['detail'])->toBe('The service could not be reached, or took too long to respond.');
+    expect($decoded['message'])->toContain('relay the detail');
+});
+
+test('the surfaced reason never leaks the underlying request URL or credentials', function (): void {
+    $result = new FakeUnreachableServiceTool()->handle(makeFakeRequest());
+
+    $decoded = json_decode($result, true);
+
+    // A client exception message embeds the request URL; a service reached
+    // over a query-string API key would otherwise leak it into the transcript.
+    expect($decoded['detail'])->not->toContain('apikey')
+        ->and($decoded['detail'])->not->toContain('secret')
+        ->and($decoded['detail'])->not->toContain('sonarr.local');
 });
 
 test('Destructive tool routes through ActionOrchestrator', function (): void {

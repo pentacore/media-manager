@@ -15,6 +15,7 @@ use App\Services\AiBudget\AiBudgetExceededException;
 use App\Services\AiBudget\AiBudgetGuard;
 use App\Settings\AiSettings;
 use Carbon\CarbonImmutable;
+use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\RequestException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -159,22 +160,31 @@ class ChatController extends Controller
             // consume provider tokens without billing them.
             ignore_user_abort(true);
 
-            foreach ($stream as $event) {
-                echo 'data: '.($event)."\n\n";
+            try {
+                foreach ($stream as $event) {
+                    echo 'data: '.($event)."\n\n";
 
-                // response()->stream() callbacks don't auto-flush per write —
-                // without this the whole SSE body buffers into one chunk. Only
-                // flush when output reaches the SAPI directly (level <= 1):
-                // deeper nesting means a capturing harness (browser tests)
-                // owns the buffer stack, and ob_flush there strands bytes in
-                // an intermediate buffer that never reaches the client.
-                if (ob_get_level() <= 1) {
-                    if (ob_get_level() === 1) {
-                        @ob_flush();
+                    // response()->stream() callbacks don't auto-flush per write —
+                    // without this the whole SSE body buffers into one chunk. Only
+                    // flush when output reaches the SAPI directly (level <= 1):
+                    // deeper nesting means a capturing harness (browser tests)
+                    // owns the buffer stack, and ob_flush there strands bytes in
+                    // an intermediate buffer that never reaches the client.
+                    if (ob_get_level() <= 1) {
+                        if (ob_get_level() === 1) {
+                            @ob_flush();
+                        }
+
+                        flush();
                     }
-
-                    flush();
                 }
+            } catch (Throwable $throwable) {
+                // Headers are already sent, so we cannot fall back to
+                // handleAgentFailure()'s JSON 500. Without an explicit error
+                // event the stream just stops: the client sees a truncated
+                // reply and no reason, sending the user to the logs to find
+                // out why. Emit one the client can surface instead.
+                $this->handleStreamFailure($throwable);
             }
 
             // The conversation id is populated once the SDK events (and the
@@ -277,6 +287,40 @@ class ChatController extends Controller
         }
 
         return response()->json($payload, 500);
+    }
+
+    /**
+     * Emit a terminal SSE error event for a failure raised while the stream was
+     * being consumed. Mirrors handleAgentFailure()'s logging and its local-only
+     * detail, but speaks SSE because the response is already committed.
+     */
+    private function handleStreamFailure(Throwable $throwable): void
+    {
+        $context = [
+            'exception' => $throwable::class,
+            'message' => $throwable->getMessage(),
+        ];
+
+        if ($throwable instanceof RequestException) {
+            $context['response_body'] = $throwable->response->body();
+            $context['response_status'] = $throwable->response->status();
+        }
+
+        Log::error('AI stream failed.', $context);
+
+        // Classify rather than pass through: a client exception message embeds
+        // the request URL, which for a query-string API key would leak it into
+        // the transcript. The timeout case is named because that is the one
+        // users otherwise have to go digging in the logs to identify.
+        $message = $throwable instanceof ConnectionException
+            ? 'The assistant could not reach a required service in time. Please try again.'
+            : 'The assistant stopped unexpectedly. Please try again.';
+
+        if (app()->isLocal()) {
+            $message .= ' ('.$throwable->getMessage().')';
+        }
+
+        echo 'data: '.json_encode(['type' => 'error', 'message' => $message])."\n\n";
     }
 
     /**

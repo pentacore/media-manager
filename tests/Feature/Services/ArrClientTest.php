@@ -185,6 +185,38 @@ test('markHistoryFailed posts to the failed-history endpoint', function (): void
         && str_contains($request->url(), '/api/v3/history/failed/77'));
 });
 
+test('markHistoryFailed is not retried on a server error (single non-idempotent POST)', function (): void {
+    Http::fake(['sonarr.local:8989/api/v3/history/failed/77' => Http::response([], 500)]);
+
+    $client = new SonarrClient($this->connection);
+
+    // Upstream blocklists AND starts an AutoRedownloadFailed search before it
+    // answers, so this outlives the generic 10s timeout. Under the generic
+    // retry that became three blocklist-and-search side effects, and the three
+    // attempts plus backoff surfaced to the user as a ~31s connection timeout.
+    try {
+        $client->markHistoryFailed(77);
+    } catch (RequestException) {
+        // expected — a 500 surfaces to the caller to classify
+    }
+
+    Http::assertSentCount(1);
+});
+
+test('getManualImport is not retried on a server error (the scan is expensive upstream)', function (): void {
+    Http::fake(['sonarr.local:8989/api/v3/manualimport*' => Http::response([], 500)]);
+
+    $client = new SonarrClient($this->connection);
+
+    try {
+        $client->getManualImport(['downloadId' => 'abc']);
+    } catch (RequestException) {
+        // expected — a 500 surfaces to the caller to classify
+    }
+
+    Http::assertSentCount(1);
+});
+
 test('grabRelease is not retried on a server error (single non-idempotent POST)', function (): void {
     Http::fake(['sonarr.local:8989/api/v3/release' => Http::response([], 500)]);
 

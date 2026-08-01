@@ -9,6 +9,8 @@ use App\Enums\AiMode;
 use App\Models\ActionRequest;
 use App\Services\Actions\ActionOrchestrator;
 use App\Settings\AiSettings;
+use Illuminate\Http\Client\ConnectionException;
+use Illuminate\Http\Client\RequestException;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Laravel\Ai\Contracts\Tool;
@@ -43,7 +45,11 @@ abstract class BaseTool implements Tool
             return $this->safeEncode([
                 'error' => 'tool_failed',
                 'code' => $this->errorCodeFor($throwable),
-                'message' => 'The tool failed. Tell the user what you were trying to do and suggest they try again.',
+                // Not `reason`: that key already carries machine tokens like
+                // `no_action_type_config` on the queue path, and the agent is
+                // told to repeat this one word-for-word to the user.
+                'detail' => $this->failureReasonFor($throwable),
+                'message' => 'The tool failed. Tell the user what you were trying to do and relay the detail verbatim, so they do not have to read the logs to find out what went wrong, then suggest they try again.',
             ]);
         }
 
@@ -132,6 +138,26 @@ abstract class BaseTool implements Tool
         $base = class_basename($throwable);
 
         return strtolower(preg_replace('/(?<!^)[A-Z]/', '_$0', $base) ?: 'unknown');
+    }
+
+    /**
+     * A short, human-readable cause the agent can repeat to the user, so a
+     * failure is visible in chat rather than only in the logs.
+     *
+     * Deliberately classified rather than passed through: a client exception
+     * message embeds the request URL, and an upstream service reached over a
+     * query-string API key would leak that key straight into the transcript.
+     */
+    protected function failureReasonFor(Throwable $throwable): string
+    {
+        return match (true) {
+            $throwable instanceof ConnectionException => 'The service could not be reached, or took too long to respond.',
+            $throwable instanceof RequestException => sprintf(
+                'The service rejected the request (HTTP %d).',
+                $throwable->response->status(),
+            ),
+            default => 'An unexpected error occurred while running the tool.',
+        };
     }
 
     /**

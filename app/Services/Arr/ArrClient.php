@@ -137,6 +137,12 @@ abstract class ArrClient
      * accept `folder` for ad-hoc imports. The response is the raw
      * ManualImportResource[] from upstream — caller maps it.
      *
+     * Upstream scans the download folder and re-runs its import matching
+     * before answering, so a season pack routinely outlives the generic 10s
+     * timeout. Retrying that scan only multiplies the work upstream while the
+     * three attempts plus backoff surface as a ~31s connection timeout, so
+     * this takes a dedicated longer timeout with no transparent retry.
+     *
      * @param  array<string, mixed>  $params
      * @return array<int, array<string, mixed>>
      *
@@ -144,7 +150,8 @@ abstract class ArrClient
      */
     public function getManualImport(array $params): array
     {
-        return $this->buildClient()
+        return $this->buildClient(withRetry: false)
+            ->timeout(60)
             ->get(sprintf('/api/%s/manualimport', $this->apiVersion), $params)
             ->throw()
             ->json() ?? [];
@@ -242,11 +249,19 @@ abstract class ArrClient
      * Mark a history record as failed so the managing service blocklists the
      * bad release and does not re-grab it.
      *
+     * The service blocklists AND kicks off an AutoRedownloadFailed indexer
+     * search before answering, so this routinely outlives the generic 10s
+     * timeout. It is also a non-idempotent write: under the generic retry a
+     * slow response became three blocklist-and-search side effects, and the
+     * three 10s attempts plus backoff surfaced as a ~31s connection timeout.
+     * Dedicated long timeout, no transparent retry.
+     *
      * @throws RequestException|ConnectionException
      */
     public function markHistoryFailed(int $historyId): void
     {
-        $this->buildClient()
+        $this->buildClient(withRetry: false)
+            ->timeout(120)
             ->post(sprintf('/api/%s/history/failed/%d', $this->apiVersion, $historyId))
             ->throw();
     }

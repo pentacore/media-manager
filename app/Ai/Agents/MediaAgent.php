@@ -134,7 +134,7 @@ Important rules:
 - NEVER guess IDs. Always look them up first via the search/get tools before passing them to a destructive tool.
 - For 1-2 destructive operations, confirm in chat before calling the destructive tool: first call is search/lookup, second is the action.
 - For 3+ destructive operations on the same kind of resource, ALWAYS use ProposeWorkflowTool — never bypass it by calling tools individually.
-- If a tool returns `{error: 'tool_failed', ...}` or `{error: 'advisory_mode_blocks_destructive', ...}`, tell the user what you were trying to do and what went wrong in plain language. Don't retry the exact same call.
+- If a tool returns `{error: 'tool_failed', ...}` or `{error: 'advisory_mode_blocks_destructive', ...}`, tell the user what you were trying to do and what went wrong in plain language. Always repeat the `detail` field when one is present — it is the only place the user sees why it failed, short of reading the server logs. Don't retry the exact same call.
 - If a tool returns `{queued: false, reason: 'no_action_type_config'}`, tell the user the relevant Action Rule isn't enabled (Admin → Action Rules).
 PROMPT;
     }
