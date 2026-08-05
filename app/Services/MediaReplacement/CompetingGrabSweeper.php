@@ -99,6 +99,14 @@ final readonly class CompetingGrabSweeper
         $records = is_array($queue['records'] ?? null) ? $queue['records'] : [];
 
         $removed = 0;
+        $removedTitles = [];
+        // A season pack occupies one queue row per contained episode, all sharing a
+        // single downloadId. removeFromClient evicts the download itself, so the
+        // first removal settles every row carrying that id and the rest would 404 —
+        // an expected failure that used to log a warning per row. Skipping them
+        // keeps the count honest (they were removed, by the first call) and the log
+        // quiet enough that a real removal failure still stands out.
+        $removedDownloadIds = [];
 
         foreach ($records as $record) {
             if (! is_array($record)) {
@@ -115,7 +123,11 @@ final readonly class CompetingGrabSweeper
                 continue;
             }
 
-            $recordDownloadId = trim((string) ($record['downloadId'] ?? ''));
+            $recordDownloadId = $this->scalarString($record['downloadId'] ?? null);
+
+            if ($recordDownloadId !== '' && in_array($recordDownloadId, $removedDownloadIds, true)) {
+                continue;
+            }
 
             // Our own download, positively identified. Both sides are trimmed:
             // an accidental difference in padding must not be the reason we
@@ -135,17 +147,39 @@ final readonly class CompetingGrabSweeper
             // Belt and braces: a row the client renamed away from our download
             // id but that still carries the vetted release title is spared. A
             // title can only keep a row here, never condemn one.
-            if ($vettedTitle !== '' && $this->normalizeTitle((string) ($record['title'] ?? '')) === $vettedTitle) {
+            if ($vettedTitle !== '' && $this->normalizeTitle($this->scalarString($record['title'] ?? null)) === $vettedTitle) {
                 continue;
             }
 
             if ($this->remove($client, $queueItemId, $mediaReplacementAttempt)) {
                 $removed++;
-                $this->notify($serviceConnection, $mediaReplacementAttempt, (string) ($record['title'] ?? 'unknown release'));
+                $title = $this->scalarString($record['title'] ?? null);
+                $removedTitles[] = $title === '' ? 'unknown release' : $title;
+
+                if ($recordDownloadId !== '') {
+                    $removedDownloadIds[] = $recordDownloadId;
+                }
             }
         }
 
+        // One notification per sweep, not per row: a competing season pack removes
+        // several rows for a single event, and an operator does not want one alert
+        // each. Sent after the loop so the message can name everything removed.
+        if ($removedTitles !== []) {
+            $this->notify($serviceConnection, $mediaReplacementAttempt, $removedTitles);
+        }
+
         return $removed;
+    }
+
+    /**
+     * A queue field as a string, treating anything non-scalar as absent. A malformed
+     * payload would otherwise reach `(string)` on an array and emit an "Array to
+     * string conversion" warning into the log for a row we are about to ignore.
+     */
+    private function scalarString(mixed $value): string
+    {
+        return is_scalar($value) ? trim((string) $value) : '';
     }
 
     private function remove(
@@ -344,10 +378,14 @@ final readonly class CompetingGrabSweeper
      * catch, which would report zero removals despite rows having really been
      * removed and would skip every remaining queue record.
      */
+    /**
+     * @param  list<string>  $removedTitles  Every release removed by this sweep, in
+     *                                       the order the queue reported them.
+     */
     private function notify(
         ServiceConnection $serviceConnection,
         MediaReplacementAttempt $mediaReplacementAttempt,
-        string $removedTitle,
+        array $removedTitles,
     ): void {
         try {
             $admins = User::query()->where('role', UserRole::Admin)->get();
@@ -359,16 +397,22 @@ final readonly class CompetingGrabSweeper
             Notification::send($admins, new MediaReplacementStatusChanged(
                 service: $serviceConnection->type->value,
                 title: (string) ($mediaReplacementAttempt->candidate['title'] ?? 'Media replacement'),
-                message: sprintf(
-                    'Removed a competing download the service started for this target: "%s".',
-                    $removedTitle,
-                ),
+                message: count($removedTitles) === 1
+                    ? sprintf(
+                        'Removed a competing download the service started for this target: "%s".',
+                        $removedTitles[0],
+                    )
+                    : sprintf(
+                        'Removed %d competing downloads the service started for this target: %s.',
+                        count($removedTitles),
+                        implode(', ', array_map(static fn (string $title): string => sprintf('"%s"', $title), $removedTitles)),
+                    ),
                 level: 'warning',
             ));
         } catch (Throwable $throwable) {
             Log::warning('Could not notify admins about a removed competing grab.', [
                 'attempt_id' => $mediaReplacementAttempt->id,
-                'queue_item_title' => $removedTitle,
+                'queue_item_titles' => $removedTitles,
                 'exception' => $throwable::class,
             ]);
         }

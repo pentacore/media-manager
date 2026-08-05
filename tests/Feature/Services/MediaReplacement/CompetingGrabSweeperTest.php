@@ -12,6 +12,7 @@ use Illuminate\Contracts\Notifications\Dispatcher;
 use Illuminate\Http\Client\Request;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Notification;
 
 beforeEach(function (): void {
@@ -208,6 +209,74 @@ test('it notifies admins about each competing grab it removed', function (): voi
     );
 });
 
+test('a multi-row removal sends one aggregated notification, not one per row', function (): void {
+    $admin = User::factory()->admin()->create();
+    $mediaReplacementAttempt = sweeperAttempt($this->connection->id);
+
+    // Two competing rows for one target. Notifying per row would alert the operator
+    // twice about a single event, and a competing season pack can span many more.
+    fakeSweeperQueue([
+        ['id' => 921, 'seriesId' => 42, 'episodeId' => 101, 'downloadId' => 'DL-OTHER-A', 'title' => 'Random.Anime.S01E01.A'],
+        ['id' => 922, 'seriesId' => 42, 'episodeId' => 101, 'downloadId' => 'DL-OTHER-B', 'title' => 'Random.Anime.S01E01.B'],
+    ]);
+
+    expect(resolve(CompetingGrabSweeper::class)->sweep($this->connection, $mediaReplacementAttempt))->toBe(2);
+
+    Notification::assertSentToTimes($admin, MediaReplacementStatusChanged::class, 1);
+    Notification::assertSentTo(
+        $admin,
+        MediaReplacementStatusChanged::class,
+        // Both titles named, so the single alert does not hide what the second
+        // removal was.
+        fn (MediaReplacementStatusChanged $notification): bool => str_contains($notification->message, 'Removed 2 competing downloads')
+            && str_contains($notification->message, 'Random.Anime.S01E01.A')
+            && str_contains($notification->message, 'Random.Anime.S01E01.B'),
+    );
+});
+
+test('a season pack sharing one download id is removed once, without 404 noise', function (): void {
+    $mediaReplacementAttempt = sweeperAttempt($this->connection->id);
+
+    // Sonarr lists a pack as one row per contained episode, all carrying the same
+    // downloadId. removeFromClient settles the whole download on the first call, so
+    // the second row would 404 — an expected failure that must not be retried and
+    // must not log a warning suggesting something went wrong.
+    fakeSweeperQueue([
+        ['id' => 931, 'seriesId' => 42, 'episodeId' => 101, 'downloadId' => 'DL-PACK', 'title' => 'Random.Anime.S01.Batch'],
+        ['id' => 932, 'seriesId' => 42, 'episodeId' => 101, 'downloadId' => 'DL-PACK', 'title' => 'Random.Anime.S01.Batch'],
+    ]);
+
+    Log::spy();
+
+    expect(resolve(CompetingGrabSweeper::class)->sweep($this->connection, $mediaReplacementAttempt))->toBe(1);
+
+    // Exactly one DELETE: the second row is skipped because its download is already gone.
+    Http::assertSentCount(2); // the queue GET plus one DELETE
+    Http::assertSent(fn (Request $request): bool => $request->method() === 'DELETE'
+        && str_contains($request->url(), '/api/v3/queue/931'));
+    Http::assertNotSent(fn (Request $request): bool => $request->method() === 'DELETE'
+        && str_contains($request->url(), '/api/v3/queue/932'));
+
+    Log::shouldNotHaveReceived('warning');
+});
+
+test('a malformed queue row is ignored without an array-to-string warning', function (): void {
+    $mediaReplacementAttempt = sweeperAttempt($this->connection->id);
+
+    // A row whose downloadId and title are arrays rather than strings. Casting them
+    // with (string) would emit "Array to string conversion" into the log for a row
+    // we are about to ignore anyway.
+    fakeSweeperQueue([
+        ['id' => 941, 'seriesId' => 42, 'episodeId' => 101, 'downloadId' => ['nested'], 'title' => ['nested']],
+    ]);
+
+    $removed = resolve(CompetingGrabSweeper::class)->sweep($this->connection, $mediaReplacementAttempt);
+
+    // Treated as a row with no download id and no title, so it is a competitor and
+    // is removed — the point is that it happens without a PHP warning.
+    expect($removed)->toBe(1);
+});
+
 test('a notification failure neither truncates the sweep nor distorts the removal count', function (): void {
     User::factory()->admin()->create();
     $mediaReplacementAttempt = sweeperAttempt($this->connection->id);
@@ -218,15 +287,19 @@ test('a notification failure neither truncates the sweep nor distorts the remova
     ]);
 
     // Notification::fake() never throws, so stand in a dispatcher whose every
-    // send fails the way a broken mailer or notifications table would.
+    // send fails the way a broken mailer or notifications table would. Once, not
+    // twice: the sweep now sends a single aggregated notification after the loop,
+    // which is also why a failing dispatcher can no longer truncate the loop by
+    // construction rather than by this test's vigilance. The count assertion below
+    // is what still has to hold.
     $mock = Mockery::mock(Dispatcher::class);
-    $mock->shouldReceive('send')->twice()->andThrow(new RuntimeException('notification backend unavailable'));
+    $mock->shouldReceive('send')->once()->andThrow(new RuntimeException('notification backend unavailable'));
     Notification::swap($mock);
 
     $removed = resolve(CompetingGrabSweeper::class)->sweep($this->connection, $mediaReplacementAttempt);
 
-    // Both rows must still be removed: the first failure must not abort the
-    // loop, and the count must reflect the queue, not the notifications.
+    // Both rows must still be removed, and the count must reflect the queue rather
+    // than the notification outcome — a swallowed send must not read as 0 removed.
     expect($removed)->toBe(2);
 
     Http::assertSent(fn (Request $request): bool => $request->method() === 'DELETE'
