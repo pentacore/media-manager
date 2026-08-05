@@ -220,26 +220,11 @@ jobs:
       # Browser tests drive a real Chromium via Playwright. Running them under
       # --parallel starves the box and intermittently trips Playwright's 15s
       # navigation timeout on page load. Run them serially, on their own.
+      # Same script developers run locally, so the SSR-backed suite cannot drift
+      # between the two: it starts the SSR server, waits for it to report healthy
+      # and runs the browser suite with SSR errors fatal.
       - name: Run Pest (browser with SSR)
-        run: |
-          INERTIA_SSR_ENABLED=true php artisan inertia:start-ssr > /tmp/inertia-ssr.log 2>&1 &
-          SSR_PID=$!
-          trap 'kill "$SSR_PID" 2>/dev/null || true; cat /tmp/inertia-ssr.log' EXIT
-
-          for attempt in $(seq 1 30); do
-            if php artisan inertia:check-ssr > /dev/null 2>&1; then
-              break
-            fi
-
-            if [ "$attempt" -eq 30 ]; then
-              echo "Inertia SSR failed to become healthy." >&2
-              exit 1
-            fi
-
-            sleep 1
-          done
-
-          INERTIA_SSR_ENABLED=true INERTIA_SSR_THROW_ON_ERROR=true vendor/bin/pest --compact --testsuite=Browser
+        run: composer test:browser
 
   octane-smoke:
     name: Octane smoke test
@@ -396,17 +381,17 @@ jobs:
             exit 1
           fi
 
-      # The queue/scheduler/reverb/migrate entrypoint blocks otherwise run
+      # The queue/scheduler/ssr/reverb/migrate entrypoint blocks otherwise run
       # for the first time in production — a bash typo or renamed artisan
       # flag would ship green and crash-loop the worker. Boot each role and
       # assert it stays up. (reverb binds :8080, so the web container is
-      # stopped first.)
-      - name: Smoke queue/scheduler/reverb roles
+      # stopped first; ssr binds :13714.)
+      - name: Smoke queue/scheduler/ssr/reverb roles
         env:
           APP_KEY: ${{ steps.app_key.outputs.APP_KEY }}
         run: |
           docker rm -f octane
-          for role in queue scheduler reverb; do
+          for role in queue scheduler ssr reverb; do
             docker run -d \
               --name "$role" \
               --network host \
@@ -436,7 +421,7 @@ jobs:
           done
           sleep 10
           fail=0
-          for role in queue scheduler reverb; do
+          for role in queue scheduler ssr reverb; do
             if [ "$(docker inspect -f '{{.State.Running}}' "$role")" != "true" ]; then
               echo "--- $role container exited ---" >&2
               docker logs "$role" >&2 || true
@@ -447,6 +432,40 @@ jobs:
           done
           exit "$fail"
 
+      # Staying up is not enough for SSR: the Node bundle must actually resolve
+      # its imports and render. A bundle that externalises npm packages boots
+      # the artisan command and then dies, because the runtime image ships no
+      # node_modules — so assert the SSR server answers on its own port.
+      - name: Assert SSR server renders
+        run: |
+          for i in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:13714/health > /dev/null 2>&1; then
+              echo "SSR server healthy after ${i}s"
+              break
+            fi
+            if [ "$i" -eq 30 ]; then
+              echo "SSR server never became healthy" >&2
+              docker logs ssr >&2
+              exit 1
+            fi
+            sleep 1
+          done
+          body=$(curl -fsS -X POST http://127.0.0.1:13714/render \
+            -H 'Content-Type: application/json' \
+            -d '{"component":"auth/Login","props":{"errors":{},"auth":{"user":null}},"url":"/login","version":"1","clearHistory":false,"encryptHistory":false}')
+          echo "$body" | head -c 500
+          if echo "$body" | grep -q '"error"'; then
+            echo "SSR render returned an error" >&2
+            docker logs ssr >&2
+            exit 1
+          fi
+          if ! echo "$body" | grep -q 'data-server-rendered'; then
+            echo "SSR render produced no server-rendered markup" >&2
+            docker logs ssr >&2
+            exit 1
+          fi
+          echo "SSR rendered auth/Login successfully"
+
       - name: Stop containers
         if: always()
-        run: docker rm -f octane queue scheduler reverb || true
+        run: docker rm -f octane queue scheduler ssr reverb || true

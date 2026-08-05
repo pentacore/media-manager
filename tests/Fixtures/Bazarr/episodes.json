@@ -1,0 +1,17 @@
+{
+    "data": [
+        {
+            "audio_language": [{"name": "English", "code2": "en", "code3": "eng"}],
+            "episode": 3,
+            "missing_subtitles": [{"name": "Swedish", "code2": "sv", "code3": "swe", "forced": false, "hi": false}],
+            "monitored": true,
+            "path": "/media/series/Example/Season 01/Example S01E03.mkv",
+            "season": 1,
+            "sonarrEpisodeId": 701,
+            "sonarrSeriesId": 101,
+            "subtitles": [{"name": "English", "code2": "en", "code3": "eng", "path": "/media/series/Example/Season 01/Example S01E03.en.srt", "forced": false, "hi": false, "file_size": 24000, "embedded_track_id": null}],
+            "title": "A Representative Episode",
+            "sceneName": "Example.S01E03.1080p"
+        }
+    ]
+}

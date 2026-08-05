@@ -6,6 +6,7 @@ namespace App\Services;
 
 use App\Enums\ServiceType;
 use App\Models\ServiceConnection;
+use App\Services\Bazarr\BazarrClient;
 use App\Services\Emby\EmbyClient;
 use App\Services\Prowlarr\ProwlarrClient;
 use App\Services\Radarr\RadarrClient;
@@ -17,11 +18,12 @@ use Illuminate\Database\Eloquent\ModelNotFoundException;
 
 class ServiceClientFactory
 {
-    public function make(ServiceConnection $serviceConnection): SonarrClient|RadarrClient|EmbyClient|SeerrClient|ProwlarrClient|SabnzbdClient|WhisparrClient
+    public function make(ServiceConnection $serviceConnection): SonarrClient|RadarrClient|BazarrClient|EmbyClient|SeerrClient|ProwlarrClient|SabnzbdClient|WhisparrClient
     {
         return match ($serviceConnection->type) {
             ServiceType::Sonarr => new SonarrClient($serviceConnection),
             ServiceType::Radarr => new RadarrClient($serviceConnection),
+            ServiceType::Bazarr => new BazarrClient($serviceConnection),
             ServiceType::Emby => new EmbyClient($serviceConnection),
             ServiceType::Seerr => new SeerrClient($serviceConnection),
             ServiceType::Prowlarr => new ProwlarrClient($serviceConnection),
@@ -35,7 +37,7 @@ class ServiceClientFactory
      *
      * @throws ModelNotFoundException when no active connection exists
      */
-    public function makeForType(ServiceType $serviceType): SonarrClient|RadarrClient|EmbyClient|SeerrClient|ProwlarrClient|SabnzbdClient|WhisparrClient
+    public function makeForType(ServiceType $serviceType): SonarrClient|RadarrClient|BazarrClient|EmbyClient|SeerrClient|ProwlarrClient|SabnzbdClient|WhisparrClient
     {
         return $this->make(ServiceConnection::resolveActive($serviceType));
     }

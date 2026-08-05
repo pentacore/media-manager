@@ -9,12 +9,69 @@ use App\Models\ServiceConnection;
 use App\Models\ServiceMetric;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Http\Client\ConnectionException;
+use Illuminate\Http\Client\Request;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Http;
 
 beforeEach(function (): void {
     Http::preventStrayRequests();
+    Cache::flush();
     Event::fake([ServiceHealthChanged::class]);
+});
+
+test('marks Bazarr healthy and stores its reported version', function (): void {
+    $connection = ServiceConnection::factory()->bazarr()->create([
+        'url' => 'http://bazarr.local:6767',
+        'api_key' => 'bazarr-secret',
+        'health_status' => null,
+        'health_message' => 'previously failed',
+    ]);
+
+    Http::fake([
+        'bazarr.local:6767/api/system/status' => Http::response([
+            'data' => ['bazarr_version' => '1.6.0'],
+        ]),
+    ]);
+
+    new PingServiceHealth($connection)->handle();
+
+    $fresh = $connection->fresh();
+
+    expect($fresh->health_status)->toBe(HealthStatus::Healthy)
+        ->and($fresh->health_message)->toBeNull()
+        ->and($fresh->version)->toBe('1.6.0')
+        ->and($fresh->last_seen_at)->not->toBeNull();
+
+    Http::assertSent(fn (Request $request): bool => $request->url() === 'http://bazarr.local:6767/api/system/status'
+        && $request->hasHeader('X-API-KEY', 'bazarr-secret'));
+    Http::assertSentCount(1);
+});
+
+test('Bazarr health checks bypass cached system status', function (): void {
+    $connection = ServiceConnection::factory()->bazarr()->create([
+        'url' => 'http://bazarr.local:6767',
+        'api_key' => 'bazarr-secret',
+    ]);
+
+    Http::fake([
+        'bazarr.local:6767/api/system/status' => Http::sequence()
+            ->push(['data' => ['bazarr_version' => '1.6.0']])
+            ->push(['data' => ['bazarr_version' => '1.6.1']]),
+    ]);
+
+    new PingServiceHealth($connection)->handle();
+    new PingServiceHealth($connection)->handle();
+
+    expect($connection->fresh()->version)->toBe('1.6.1');
+
+    $authenticatedStatusRequests = Http::recorded(
+        fn (Request $request): bool => $request->url() === 'http://bazarr.local:6767/api/system/status'
+            && $request->hasHeader('X-API-KEY', 'bazarr-secret'),
+    );
+
+    expect($authenticatedStatusRequests)->toHaveCount(2);
+    Http::assertSentCount(2);
 });
 
 test('marks healthy and updates version on success', function (): void {

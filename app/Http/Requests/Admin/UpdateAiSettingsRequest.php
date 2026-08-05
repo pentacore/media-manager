@@ -34,6 +34,10 @@ class UpdateAiSettingsRequest extends FormRequest
             'soft_budget_usd' => ['nullable', 'numeric', 'min:0', 'max:100000'],
             'hard_budget_usd' => ['nullable', 'numeric', 'min:0', 'max:100000', 'gte:soft_budget_usd'],
             'advisor_reasoning_level' => ['required', AiReasoningLevel::validationRule()],
+            // Bounded well above a single provider round-trip (a tool-using
+            // turn chains many) but below the PHP/proxy request ceiling that
+            // would cut the response off before the timeout could fire.
+            'chat_timeout' => ['nullable', 'integer', 'between:30,600'],
             'failover_provider' => ['nullable', 'string', 'in:anthropic,openai,gemini,groq,mistral'],
             'models_dev_pricing_enabled' => ['nullable', 'boolean'],
             'ignored_pricing_providers' => ['nullable', 'array'],
@@ -68,11 +72,12 @@ class UpdateAiSettingsRequest extends FormRequest
 
     /**
      * Normalize the "None" failover choice (sent as an empty string or the
-     * `none` sentinel by the select) to null so the nullable rule applies, and
-     * decode the `media_replacement` JSON string submitted by the settings form
-     * into an array. A malformed JSON string becomes an empty array so the
-     * nested rules surface normal validation errors; an entirely absent field
-     * falls back to the stored configuration so partial updates are safe.
+     * `none` sentinel by the select) and a blank `chat_timeout` to null so the
+     * nullable rules apply, and decode the `media_replacement` JSON string
+     * submitted by the settings form into an array. A malformed JSON string
+     * becomes an empty array so the nested rules surface normal validation
+     * errors; an entirely absent field falls back to the stored configuration
+     * so partial updates are safe.
      */
     #[Override]
     protected function prepareForValidation(): void
@@ -81,6 +86,12 @@ class UpdateAiSettingsRequest extends FormRequest
 
         if ($failover === '' || $failover === 'none') {
             $this->merge(['failover_provider' => null]);
+        }
+
+        // A cleared number input posts an empty string, which would fail the
+        // integer rule; null instead clears the setting back to the default.
+        if ($this->input('chat_timeout') === '') {
+            $this->merge(['chat_timeout' => null]);
         }
 
         if (! $this->has('media_replacement')) {

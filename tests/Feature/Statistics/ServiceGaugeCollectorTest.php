@@ -3,13 +3,16 @@
 declare(strict_types=1);
 
 use App\Enums\ServiceType;
+use App\Enums\SubtitleCaseStatus;
 use App\Models\IndexedMovie;
 use App\Models\IndexedSeries;
 use App\Models\ServiceConnection;
 use App\Models\StatRollup;
+use App\Models\SubtitleCase;
 use App\Services\Statistics\ServiceGaugeCollector;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
 
 beforeEach(function (): void {
     Http::preventStrayRequests();
@@ -71,6 +74,66 @@ it('samples disk space and queue depth for an Arr connection', function (): void
         ->and($total->sum)->toBe(500.0)
         ->and($queue->sum)->toBe(7.0)
         ->and($queue->dimensions)->toEqualCanonicalizing(['connection' => (string) $sonarr->id, 'service' => 'sonarr']);
+});
+
+it('samples low-cardinality Bazarr case and missing requirement gauges without issuing requests', function (): void {
+    $bazarr = ServiceConnection::factory()->bazarr()->create([
+        'is_active' => true,
+        'url' => 'http://bazarr.test',
+    ]);
+    $sonarr = ServiceConnection::factory()->sonarr()->create(['is_active' => false]);
+    SubtitleCase::factory()->count(2)->create([
+        'bazarr_connection_id' => $bazarr->id,
+        'service_connection_id' => $sonarr->id,
+        'status' => SubtitleCaseStatus::ReplacementEligible,
+        'evidence' => [
+            'display_name' => 'Private title',
+            'missing_languages' => ['eng', 'swe'],
+        ],
+    ]);
+    SubtitleCase::factory()->create([
+        'bazarr_connection_id' => $bazarr->id,
+        'service_connection_id' => $sonarr->id,
+        'status' => SubtitleCaseStatus::NeedsReview,
+        'evidence' => ['missing_languages' => ['eng']],
+    ]);
+    SubtitleCase::factory()->create([
+        'bazarr_connection_id' => $bazarr->id,
+        'service_connection_id' => $sonarr->id,
+        'status' => SubtitleCaseStatus::Resolved,
+        'evidence' => ['missing_languages' => []],
+    ]);
+    Log::spy();
+    resolve(ServiceGaugeCollector::class)->collect();
+
+    Http::assertNothingSent();
+    Log::shouldNotHaveReceived('info');
+
+    $statRollup = StatRollup::query()
+        ->where('metric', 'subtitles.cases')
+        ->where('period', 'hour')
+        ->where('dimensions->status', SubtitleCaseStatus::ReplacementEligible->value)
+        ->sole();
+    $wanted = StatRollup::query()->where('metric', 'subtitles.wanted')->where('period', 'hour')->sole();
+    $missing = StatRollup::query()->where('metric', 'subtitles.missing_requirements')->where('period', 'hour')->sole();
+
+    expect($statRollup->sum)->toBe(2.0)
+        ->and($statRollup->dimensions)->toEqualCanonicalizing([
+            'connection' => (string) $bazarr->id,
+            'status' => SubtitleCaseStatus::ReplacementEligible->value,
+        ])
+        ->and($wanted->sum)->toBe(3.0)
+        ->and($wanted->dimensions)->toBe(['connection' => (string) $bazarr->id])
+        ->and($missing->sum)->toBe(5.0)
+        ->and($missing->dimensions)->toBe(['connection' => (string) $bazarr->id])
+        ->and(json_encode(
+            StatRollup::query()->whereIn('metric', [
+                'subtitles.cases',
+                'subtitles.wanted',
+                'subtitles.missing_requirements',
+            ])->pluck('dimensions')->all(),
+            JSON_THROW_ON_ERROR,
+        ))->not->toContain('Private title', 'language', 'media_id');
 });
 
 it('samples pending requests for a Seerr connection', function (): void {

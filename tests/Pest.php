@@ -9,7 +9,9 @@ use App\Jobs\ExecuteActionRequest;
 use App\Jobs\FetchLatestServiceVersion;
 use App\Jobs\PingServiceHealth;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\Client\Request;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Queue;
 use Tests\TestCase;
 
@@ -103,4 +105,30 @@ expect()->extend('toBeOne', fn () => $this->toBe(1));
 function something(): void
 {
     // ..
+}
+
+/**
+ * Fake outbound service HTTP without intercepting Inertia's SSR gateway.
+ *
+ * Inertia renders through an HTTP call to the local SSR bundle server, so a
+ * wildcard or closure `Http::fake()` swallows it too: the gateway then receives
+ * the stubbed service payload instead of `{head, body}` and every page renders
+ * blank — which reads as a hydration failure rather than a faked request. Host
+ * pattern fakes are unaffected because unmatched requests still execute, so
+ * only closure and wildcard fakes need this. Returning null from the closure
+ * lets the request through.
+ *
+ * @param  Closure(Request, array<string, mixed>): mixed  $handler
+ */
+function fakeServiceHttp(Closure $handler): void
+{
+    Http::fake(function (Request $request, array $options) use ($handler): mixed {
+        $host = parse_url($request->url(), PHP_URL_HOST);
+
+        if (in_array($host, ['127.0.0.1', 'localhost', '::1'], true)) {
+            return null;
+        }
+
+        return $handler($request, $options);
+    });
 }

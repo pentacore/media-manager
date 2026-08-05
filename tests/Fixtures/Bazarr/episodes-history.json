@@ -1,0 +1,27 @@
+{
+    "data": [
+        {
+            "seriesTitle": "Example Series",
+            "monitored": true,
+            "episode_number": "1x3",
+            "episodeTitle": "A Representative Episode",
+            "timestamp": "2 hours ago",
+            "subs_id": "sanitized-subtitle-id",
+            "description": "Swedish subtitle downloaded",
+            "sonarrSeriesId": 101,
+            "language": {"name": "Swedish", "code2": "sv", "code3": "swe", "forced": false, "hi": false},
+            "score": "91.0%",
+            "tags": ["2"],
+            "action": 1,
+            "subtitles_path": "/media/series/Example/Season 01/Example S01E03.sv.srt",
+            "sonarrEpisodeId": 701,
+            "provider": "example-provider",
+            "upgradable": false,
+            "parsed_timestamp": "07/16/26 10:00:00",
+            "blacklisted": false,
+            "matches": ["series", "season", "episode"],
+            "dont_matches": []
+        }
+    ],
+    "total": 24
+}

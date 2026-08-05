@@ -25,6 +25,14 @@ test('MediaAgent is an Agent + Conversational + HasTools', function (): void {
     expect($agent)->toBeInstanceOf(HasTools::class);
 });
 
+test('MediaAgent takes its prompt timeout from AiSettings', function (): void {
+    // The SDK reads this method in Promptable::getTimeout() for both prompt()
+    // and stream(), in preference to its own default.
+    resolve(AiSettings::class)->setChatTimeout(300);
+
+    expect((new MediaAgent)->timeout())->toBe(300);
+});
+
 test('every tool returned by tools() is a usable SDK Tool', function (): void {
     $tools = iterator_to_array((new MediaAgent)->tools(), false);
 
@@ -87,6 +95,22 @@ test('tool list includes the subtitle replacement tools', function (): void {
         ->toContain('ReplaceMediaFileTool');
 });
 
+test('the replacement instructions keep Bazarr out of the replacement flow', function (): void {
+    $instructions = (string) (new MediaAgent)->instructions();
+
+    [, $replacementSection] = explode('**Replacing imported media with missing/incorrect subtitles:**', $instructions, 2);
+    [$replacementSection] = explode('**Bazarr subtitles:**', $replacementSection, 2);
+
+    // The replacement flow must not route through Bazarr: it exists precisely
+    // because Bazarr already failed to supply the subtitle. Without this the
+    // agent re-checks Bazarr, finds nothing, and never reaches the arr grab.
+    expect($replacementSection)->toContain('Bazarr plays NO part in this flow')
+        ->and($replacementSection)->toContain('InspectSubtitleTool')
+        ->and($replacementSection)->toContain('SearchSubtitlesTool')
+        ->and($replacementSection)->toContain('RequestSubtitleOperationTool')
+        ->and($replacementSection)->toContain('Do not re-check Bazarr first');
+});
+
 test('tool list has the 31 core tools when no optional integration is configured', function (): void {
     $tools = collect(iterator_to_array((new MediaAgent)->tools(), false));
 
@@ -107,6 +131,23 @@ test('Prowlarr tools appear only with an active Prowlarr connection', function (
     $connection->update(['is_active' => false]);
 
     expect($shortNames())->not->toContain('SearchIndexersTool');
+});
+
+test('Bazarr subtitle tools appear only with an active Bazarr connection', function (): void {
+    $shortNames = fn (): array => collect(iterator_to_array((new MediaAgent)->tools(), false))
+        ->map(fn ($tool): string => class_basename($tool))->all();
+
+    expect($shortNames())->not->toContain('InspectSubtitleTool');
+
+    $connection = ServiceConnection::factory()->bazarr()->create(['is_active' => true]);
+
+    expect($shortNames())->toContain('InspectSubtitleTool')
+        ->toContain('SearchSubtitlesTool')
+        ->toContain('RequestSubtitleOperationTool');
+
+    $connection->update(['is_active' => false]);
+
+    expect($shortNames())->not->toContain('InspectSubtitleTool');
 });
 
 test('TMDB tools appear only when an API key is configured', function (): void {
@@ -165,4 +206,8 @@ test('instructions cover the behavioral guidance the schemas cannot express', fu
         ->toContain('ReplaceMediaFileTool')
         ->toContain('automatic_candidate')
         ->toContain('verified');
+
+    expect($instructions)->toContain('InspectSubtitleTool')
+        ->toContain('SearchSubtitlesTool')
+        ->toContain('RequestSubtitleOperationTool');
 });

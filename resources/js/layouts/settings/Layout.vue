@@ -8,9 +8,9 @@ import { edit as editProfile } from '@/routes/profile';
 import { edit as editSecurity } from '@/routes/security';
 import { edit as editNotifications } from '@/routes/settings/notifications';
 import { edit as editPreferences } from '@/routes/settings/preferences';
-import type { NavItem } from '@/types';
+import type { NavLink } from '@/types';
 
-const sidebarNavItems: NavItem[] = [
+const sidebarNavItems: NavLink[] = [
     { title: 'Profile', href: editProfile() },
     { title: 'Security', href: editSecurity() },
     { title: 'Preferences', href: editPreferences() },

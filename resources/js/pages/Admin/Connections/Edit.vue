@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import type { FormDataConvertible } from '@inertiajs/core';
 import { Form, Head, Link, router, useHttp } from '@inertiajs/vue3';
 import {
     Antenna,
@@ -52,6 +53,12 @@ interface ServiceTypeOption {
     label: string;
 }
 
+interface ArrConnectionOption {
+    id: number;
+    type: 'sonarr' | 'radarr';
+    name: string;
+}
+
 interface Connection {
     id: number;
     type: { value: string } | string;
@@ -71,6 +78,8 @@ interface Connection {
     hidden_categories?: string[];
     sabnzbd_webhook_script?: string | null;
     whisparr_version?: string;
+    sonarr_connection_id: number | null;
+    radarr_connection_id: number | null;
 }
 
 interface Indexer {
@@ -100,6 +109,7 @@ interface ArrTag {
 const props = defineProps<{
     connection: Connection;
     serviceTypes: ServiceTypeOption[];
+    arrConnections: ArrConnectionOption[];
     indexers?: Indexer[];
     availableDiskPaths?: DiskPath[];
     sonarrRootFolders?: SonarrRootFolder[];
@@ -126,6 +136,17 @@ const typeValue =
         : props.connection.type.value;
 
 const selectedType = ref(typeValue);
+const notConnectedValue = 'not-connected';
+const selectedSonarrConnectionId = ref(
+    props.connection.sonarr_connection_id === null
+        ? notConnectedValue
+        : String(props.connection.sonarr_connection_id),
+);
+const selectedRadarrConnectionId = ref(
+    props.connection.radarr_connection_id === null
+        ? notConnectedValue
+        : String(props.connection.radarr_connection_id),
+);
 const serviceUrl = ref(props.connection.url);
 const apiKey = ref('');
 const webhookToken = ref('');
@@ -146,6 +167,13 @@ const diskDisplay = reactive<Record<string, DiskMetric>>({
 
 const whisparrVersion = ref(props.connection.whisparr_version ?? 'v3');
 const showWhisparrVersion = computed(() => typeValue === 'whisparr');
+const showBazarrMappings = computed(() => selectedType.value === 'bazarr');
+const sonarrConnections = computed(() =>
+    props.arrConnections.filter((connection) => connection.type === 'sonarr'),
+);
+const radarrConnections = computed(() =>
+    props.arrConnections.filter((connection) => connection.type === 'radarr'),
+);
 
 const supportsDiskPicker = computed(
     () => typeValue === 'sonarr' || typeValue === 'radarr',
@@ -342,17 +370,30 @@ function testIndexer(indexerId: number): void {
                     v-bind="
                         ServiceConnectionController.update.form(connection.id)
                     "
+                    :transform="
+                        (data: Record<string, FormDataConvertible>) => ({
+                            ...data,
+                            sonarr_connection_id:
+                                data.sonarr_connection_id === notConnectedValue
+                                    ? null
+                                    : data.sonarr_connection_id,
+                            radarr_connection_id:
+                                data.radarr_connection_id === notConnectedValue
+                                    ? null
+                                    : data.radarr_connection_id,
+                        })
+                    "
                     class="space-y-4"
                     v-slot="{ errors, processing }"
                 >
                     <div class="space-y-2">
-                        <Label for="type">Service Type</Label>
+                        <Label for="service_type">Service Type</Label>
                         <Select
                             name="type"
                             v-model="selectedType"
                             :default-value="typeValue"
                         >
-                            <SelectTrigger>
+                            <SelectTrigger id="service_type" class="w-full">
                                 <SelectValue
                                     placeholder="Select a service type"
                                 />
@@ -362,12 +403,88 @@ function testIndexer(indexerId: number): void {
                                     v-for="serviceType in serviceTypes"
                                     :key="serviceType.value"
                                     :value="serviceType.value"
+                                    :aria-label="serviceType.label"
                                 >
                                     {{ serviceType.label }}
                                 </SelectItem>
                             </SelectContent>
                         </Select>
                         <InputError :message="errors.type" />
+                    </div>
+
+                    <div
+                        v-if="showBazarrMappings"
+                        class="grid gap-4 sm:grid-cols-2"
+                    >
+                        <div class="space-y-2">
+                            <Label for="sonarr_connection_id"
+                                >Sonarr connection</Label
+                            >
+                            <Select
+                                name="sonarr_connection_id"
+                                v-model="selectedSonarrConnectionId"
+                            >
+                                <SelectTrigger
+                                    id="sonarr_connection_id"
+                                    class="w-full"
+                                >
+                                    <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem
+                                        :value="notConnectedValue"
+                                        aria-label="No Sonarr connection"
+                                        >Not connected</SelectItem
+                                    >
+                                    <SelectItem
+                                        v-for="connection in sonarrConnections"
+                                        :key="connection.id"
+                                        :value="String(connection.id)"
+                                        :aria-label="`Use ${connection.name} as Sonarr connection`"
+                                    >
+                                        {{ connection.name }}
+                                    </SelectItem>
+                                </SelectContent>
+                            </Select>
+                            <InputError
+                                :message="errors.sonarr_connection_id"
+                            />
+                        </div>
+
+                        <div class="space-y-2">
+                            <Label for="radarr_connection_id"
+                                >Radarr connection</Label
+                            >
+                            <Select
+                                name="radarr_connection_id"
+                                v-model="selectedRadarrConnectionId"
+                            >
+                                <SelectTrigger
+                                    id="radarr_connection_id"
+                                    class="w-full"
+                                >
+                                    <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem
+                                        :value="notConnectedValue"
+                                        aria-label="No Radarr connection"
+                                        >Not connected</SelectItem
+                                    >
+                                    <SelectItem
+                                        v-for="connection in radarrConnections"
+                                        :key="connection.id"
+                                        :value="String(connection.id)"
+                                        :aria-label="`Use ${connection.name} as Radarr connection`"
+                                    >
+                                        {{ connection.name }}
+                                    </SelectItem>
+                                </SelectContent>
+                            </Select>
+                            <InputError
+                                :message="errors.radarr_connection_id"
+                            />
+                        </div>
                     </div>
 
                     <div v-if="showWhisparrVersion" class="space-y-2">

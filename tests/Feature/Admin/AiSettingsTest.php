@@ -132,6 +132,64 @@ test('admin can update settings', function (): void {
     expect($aiSettings->advisorReasoningLevel())->toBe('medium');
 });
 
+test('admin can update the chat timeout', function (): void {
+    $admin = User::factory()->admin()->create();
+
+    $this->actingAs($admin)
+        ->put(route('admin.ai-settings.update'), [
+            ...baseAiSettingsPayload(),
+            'chat_timeout' => 300,
+        ])
+        ->assertRedirect(route('admin.ai-settings.index'))
+        ->assertSessionHasNoErrors();
+
+    expect(resolve(AiSettings::class)->chatTimeout())->toBe(300);
+});
+
+test('a blank chat timeout clears the override back to the config default', function (): void {
+    $admin = User::factory()->admin()->create();
+    config()->set('mediamanager.ai.chat_timeout', 120);
+    resolve(AiSettings::class)->setChatTimeout(300);
+
+    $this->actingAs($admin)
+        ->put(route('admin.ai-settings.update'), [
+            ...baseAiSettingsPayload(),
+            'chat_timeout' => '',
+        ])
+        ->assertRedirect(route('admin.ai-settings.index'))
+        ->assertSessionHasNoErrors();
+
+    expect(resolve(AiSettings::class)->chatTimeout())->toBe(120);
+});
+
+test('update rejects an out-of-range chat timeout', function (string|int $value): void {
+    $admin = User::factory()->admin()->create();
+
+    $this->actingAs($admin)
+        ->put(route('admin.ai-settings.update'), [
+            ...baseAiSettingsPayload(),
+            'chat_timeout' => $value,
+        ])
+        ->assertSessionHasErrors('chat_timeout');
+})->with([
+    'below the floor' => [29],
+    'above the ceiling' => [601],
+    'not a number' => ['soon'],
+]);
+
+test('index exposes the chat timeout', function (): void {
+    $admin = User::factory()->admin()->create();
+    resolve(AiSettings::class)->setChatTimeout(300);
+
+    $this->actingAs($admin)
+        ->get(route('admin.ai-settings.index'))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->component('Admin/AiSettings/Index')
+            ->where('settings.chat_timeout', 300)
+        );
+});
+
 test('admin can set and clear the failover provider', function (): void {
     $admin = User::factory()->admin()->create();
 

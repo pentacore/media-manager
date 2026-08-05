@@ -9,6 +9,7 @@ use App\Cache\Services\SonarrCache;
 use App\Enums\MediaReplacementStatus;
 use App\Enums\ServiceType;
 use App\Jobs\SweepCompetingGrabs;
+use App\Events\MediaReplacementAttemptChanged;
 use App\Models\ActionRequest;
 use App\Models\MediaReplacementAttempt;
 use App\Models\ServiceConnection;
@@ -74,6 +75,36 @@ final readonly class MediaReplacementActions implements ActionExecutor
             ? new SonarrClient($serviceConnection)
             : new RadarrClient($serviceConnection);
 
+        return $this->runReplacement(
+            $actionRequest,
+            $payload,
+            $serviceType,
+            $serviceConnection,
+            $client,
+            $storedTarget,
+            $fingerprint,
+            $requiredLanguages,
+        );
+    }
+
+    /**
+     * Run the revalidate + grab-before-delete replacement.
+     *
+     * @param  array<string, mixed>  $payload
+     * @param  array<string, mixed>  $storedTarget
+     * @param  list<string>|null  $requiredLanguages
+     * @return array<string, mixed>
+     */
+    private function runReplacement(
+        ActionRequest $actionRequest,
+        array $payload,
+        ServiceType $serviceType,
+        ServiceConnection $serviceConnection,
+        SonarrClient|RadarrClient $client,
+        array $storedTarget,
+        string $fingerprint,
+        ?array $requiredLanguages,
+    ): array {
         // Resume, don't re-grab: if a prior run already had its grab accepted
         // (durable grab_accepted_at) but died or failed during the post-grab
         // cleanup, a Retry must NOT re-issue the non-idempotent grab POST
@@ -566,6 +597,14 @@ final readonly class MediaReplacementActions implements ActionExecutor
             'The approved service connection type does not match the replacement service; aborting.',
         );
 
+        // A pinned connection deactivated after approval must abort rather than
+        // run a destructive replacement against a server the operator disabled.
+        throw_unless(
+            $connection->is_active,
+            InvalidArgumentException::class,
+            'The approved service connection was deactivated after approval; aborting the replacement.',
+        );
+
         return $connection;
     }
 
@@ -676,14 +715,22 @@ final readonly class MediaReplacementActions implements ActionExecutor
      */
     private function markTerminal(MediaReplacementAttempt $mediaReplacementAttempt, MediaReplacementStatus $mediaReplacementStatus, string $reason): void
     {
-        MediaReplacementAttempt::query()
+        $won = MediaReplacementAttempt::query()
             ->whereKey($mediaReplacementAttempt->id)
             ->whereNotIn('status', MediaReplacementStatus::terminalValues())
             ->update([
                 'status' => $mediaReplacementStatus->value,
                 'failure_reason' => $reason,
                 'completed_at' => now(),
-            ]);
+            ]) === 1;
+
+        // Only announce a terminal state this call actually won, so a correlated
+        // subtitle case moves to needs_review without a concurrent webhook result
+        // being clobbered or re-announced.
+        if ($won) {
+            $mediaReplacementAttempt->refresh();
+            event(new MediaReplacementAttemptChanged($mediaReplacementAttempt));
+        }
     }
 
     /**

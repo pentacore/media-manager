@@ -17,6 +17,7 @@ class ServiceConnectionSeeder extends Seeder
     private const array SERVICES = [
         ['prefix' => 'SONARR', 'type' => ServiceType::Sonarr, 'defaultName' => 'Sonarr'],
         ['prefix' => 'RADARR', 'type' => ServiceType::Radarr, 'defaultName' => 'Radarr'],
+        ['prefix' => 'BAZARR', 'type' => ServiceType::Bazarr, 'defaultName' => 'Bazarr'],
         ['prefix' => 'EMBY', 'type' => ServiceType::Emby, 'defaultName' => 'Emby'],
         ['prefix' => 'SEERR', 'type' => ServiceType::Seerr, 'defaultName' => 'Seerr'],
         ['prefix' => 'PROWLARR', 'type' => ServiceType::Prowlarr, 'defaultName' => 'Prowlarr'],

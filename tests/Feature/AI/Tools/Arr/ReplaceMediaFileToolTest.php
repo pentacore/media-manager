@@ -179,6 +179,39 @@ test('automatic selection queues when the fingerprint matches the automatic cand
     expect(ActionRequest::first()->payload['selection_mode'])->toBe('automatic');
 });
 
+test('multiple active service connections require an explicit pinned connection id', function (): void {
+    $serviceConnection = ServiceConnection::query()->where('type', 'sonarr')->firstOrFail();
+    ServiceConnection::factory()->sonarr()->create([
+        'url' => 'http://another-sonarr.test',
+        'api_key' => 'another-secret',
+        'is_active' => true,
+    ]);
+    fakeReplaceableTarget();
+    $fingerprint = candidateFingerprint();
+    $arguments = [
+        'service' => 'sonarr',
+        'item_id' => 42,
+        'season_number' => 1,
+        'episode_number' => 1,
+        'absolute_episode_number' => null,
+        'candidate_fingerprint' => $fingerprint,
+        'selection_mode' => 'manual',
+        'required_languages' => ['English'],
+        'reason' => 'Current file has no English subtitles.',
+    ];
+
+    $ambiguous = json_decode(new ReplaceMediaFileTool()->handle(new Request($arguments)), true, flags: JSON_THROW_ON_ERROR);
+    $pinned = json_decode(new ReplaceMediaFileTool()->handle(new Request([
+        ...$arguments,
+        'service_connection_id' => $serviceConnection->id,
+    ])), true, flags: JSON_THROW_ON_ERROR);
+
+    expect($ambiguous)->toHaveKey('error', 'tool_failed')
+        ->and($pinned)->toHaveKey('queued', true)
+        ->and(ActionRequest::query()->firstOrFail()->payload['service_connection_id'])
+        ->toBe($serviceConnection->id);
+});
+
 test('a season pack is rejected because packs are not yet selectable', function (): void {
     // Season packs are recognised by the ranker but excluded (the executor
     // cannot yet scope a multi-file pack replacement), so no candidate matches

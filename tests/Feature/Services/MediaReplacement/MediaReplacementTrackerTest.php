@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use App\Enums\MediaReplacementStatus;
 use App\Enums\UserRole;
+use App\Events\MediaReplacementAttemptChanged;
 use App\Models\MediaReplacementAttempt;
 use App\Models\ServiceConnection;
 use App\Models\User;
@@ -11,6 +12,7 @@ use App\Notifications\MediaReplacementStatusChanged;
 use App\Services\MediaReplacement\MediaReplacementTracker;
 use Illuminate\Http\Client\Request;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Notification;
 
@@ -113,6 +115,7 @@ test('a unique grab attaches the download id to the requested attempt', function
 test('multiple matching attempts on grab are flagged for attention rather than guessed', function (): void {
     $mediaReplacementAttempt = trackerAttempt($this->connection->id);
     $b = trackerAttempt($this->connection->id);
+    Event::fake([MediaReplacementAttemptChanged::class]);
 
     resolve(MediaReplacementTracker::class)->recordGrab($this->connection, grabPayload());
 
@@ -120,6 +123,7 @@ test('multiple matching attempts on grab are flagged for attention rather than g
         ->and($b->fresh()->status)->toBe(MediaReplacementStatus::NeedsAttention)
         ->and($mediaReplacementAttempt->fresh()->failure_reason)->toBe('ambiguous_webhook_correlation');
     Notification::assertSentTimes(MediaReplacementStatusChanged::class, 2);
+    Event::assertDispatched(MediaReplacementAttemptChanged::class, 2);
 });
 
 test('a download verifies the attempt when every required language is present', function (): void {
@@ -133,6 +137,7 @@ test('a download verifies the attempt when every required language is present', 
         'cleanup_completed_at' => now(),
     ]);
     fakeInspectSubtitles('English / Japanese');
+    Event::fake([MediaReplacementAttemptChanged::class]);
 
     resolve(MediaReplacementTracker::class)->verifyDownload($this->connection, [
         'eventType' => 'Download',
@@ -144,6 +149,7 @@ test('a download verifies the attempt when every required language is present', 
     expect($fresh->status)->toBe(MediaReplacementStatus::Verified)
         ->and($fresh->verification['missing'])->toBe([]);
     Notification::assertSentTimes(MediaReplacementStatusChanged::class, 1);
+    Event::assertDispatchedOnce(MediaReplacementAttemptChanged::class);
 
     // Monitoring suspended by the executor is restored to the ORIGINAL state.
     Http::assertSent(fn (Request $request): bool => $request->method() === 'PUT'
@@ -158,6 +164,7 @@ test('does not restore monitoring for an originally-unmonitored target', functio
         'was_monitored' => false,
     ]);
     fakeInspectSubtitles('English');
+    Event::fake([MediaReplacementAttemptChanged::class]);
 
     resolve(MediaReplacementTracker::class)->verifyDownload($this->connection, [
         'eventType' => 'Download', 'series' => ['id' => 42], 'downloadId' => 'DL-1',
@@ -200,6 +207,7 @@ test('a download missing a required language needs attention with verification e
         'required_languages' => ['eng', 'swe'],
     ]);
     fakeInspectSubtitles('English');
+    Event::fake([MediaReplacementAttemptChanged::class]);
 
     resolve(MediaReplacementTracker::class)->verifyDownload($this->connection, [
         'eventType' => 'Download',
@@ -212,6 +220,7 @@ test('a download missing a required language needs attention with verification e
         ->and($fresh->verification['required'])->toBe(['eng', 'swe'])
         ->and($fresh->verification['found'])->toBe(['eng'])
         ->and($fresh->verification['missing'])->toBe(['swe']);
+    Event::assertDispatchedOnce(MediaReplacementAttemptChanged::class);
 });
 
 test('a download with an unknown download id is a no-op', function (): void {
@@ -274,15 +283,19 @@ test('manual interaction on a tracked download needs attention', function (): vo
         'download_id' => 'DL-1',
         'status' => MediaReplacementStatus::Downloading,
     ]);
+    Event::fake([MediaReplacementAttemptChanged::class]);
 
-    resolve(MediaReplacementTracker::class)->recordManualIntervention($this->connection, [
+    $payload = [
         'eventType' => 'ManualInteractionRequired',
         'series' => ['id' => 42],
         'downloadInfo' => ['downloadId' => 'DL-1'],
-    ]);
+    ];
+    resolve(MediaReplacementTracker::class)->recordManualIntervention($this->connection, $payload);
+    resolve(MediaReplacementTracker::class)->recordManualIntervention($this->connection, $payload);
 
     expect($mediaReplacementAttempt->fresh()->status)->toBe(MediaReplacementStatus::NeedsAttention);
     Notification::assertSentTimes(MediaReplacementStatusChanged::class, 1);
+    Event::assertDispatchedOnce(MediaReplacementAttemptChanged::class);
 });
 
 test('an ambiguous mid-cleanup inspection with empty required languages is not finalized verified', function (): void {
@@ -322,10 +335,12 @@ test('an ambiguous mid-cleanup inspection with empty required languages is not f
     // Executor finishes cleanup (monitoring restored); the finalizer must NOT
     // report the ambiguous inspection as Verified despite an empty `missing`.
     $pending->forceFill(['monitoring_suspended' => false, 'cleanup_completed_at' => now()])->save();
+    Event::fake([MediaReplacementAttemptChanged::class]);
     resolve(MediaReplacementTracker::class)->finalizeAfterCleanup($this->connection, $pending);
 
     expect($mediaReplacementAttempt->fresh()->status)->toBe(MediaReplacementStatus::NeedsAttention)
         ->and($mediaReplacementAttempt->fresh()->failure_reason)->toBe('imported_subtitles_missing_required_language');
+    Event::assertDispatchedOnce(MediaReplacementAttemptChanged::class);
 });
 
 test('a Download whose inspection outlives the executor cleanup still finalizes (no lost wakeup)', function (): void {

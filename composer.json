@@ -85,6 +85,10 @@
             "@lint:check",
             "@php artisan test"
         ],
+        "test:browser": [
+            "Composer\\Config::disableProcessTimeout",
+            "bash -c 'php artisan inertia:stop-ssr > /dev/null 2>&1 || true; INERTIA_SSR_ENABLED=true php artisan inertia:start-ssr > /tmp/inertia-ssr.log 2>&1 & trap \"php artisan inertia:stop-ssr > /dev/null 2>&1 || true\" EXIT; for attempt in $(seq 1 30); do php artisan inertia:check-ssr > /dev/null 2>&1 && break; if [ $attempt -eq 30 ]; then echo \"Inertia SSR failed to become healthy.\" >&2; cat /tmp/inertia-ssr.log >&2; exit 1; fi; sleep 1; done; INERTIA_SSR_ENABLED=true INERTIA_SSR_THROW_ON_ERROR=true vendor/bin/pest --compact --testsuite=Browser'"
+        ],
         "post-autoload-dump": [
             "Illuminate\\Foundation\\ComposerScripts::postAutoloadDump",
             "@php artisan package:discover --ansi"

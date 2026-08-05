@@ -1,0 +1,16 @@
+{
+    "data": [
+        {
+            "seriesTitle": "Example Series",
+            "episode_number": "1x3",
+            "episodeTitle": "A Representative Episode",
+            "missing_subtitles": [{"name": "Swedish", "code2": "sv", "code3": "swe", "forced": false, "hi": false}],
+            "sonarrSeriesId": 101,
+            "sonarrEpisodeId": 701,
+            "sceneName": "Example.S01E03.1080p",
+            "tags": ["2"],
+            "seriesType": "standard"
+        }
+    ],
+    "total": 12
+}

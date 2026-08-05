@@ -5,13 +5,15 @@ declare(strict_types=1);
 namespace App\Events;
 
 use App\Models\ActionRequest;
+use App\Services\Actions\ActionRequestBrowserPayload;
 use Illuminate\Broadcasting\InteractsWithSockets;
 use Illuminate\Broadcasting\PrivateChannel;
 use Illuminate\Contracts\Broadcasting\ShouldBroadcast;
+use Illuminate\Contracts\Events\ShouldDispatchAfterCommit;
 use Illuminate\Foundation\Events\Dispatchable;
 use Illuminate\Queue\SerializesModels;
 
-class ActionRequestCreated implements ShouldBroadcast
+class ActionRequestCreated implements ShouldBroadcast, ShouldDispatchAfterCommit
 {
     use Dispatchable;
     use InteractsWithSockets;
@@ -54,7 +56,7 @@ class ActionRequestCreated implements ShouldBroadcast
             'target_service' => $this->actionRequest->target_service,
             'status' => $this->actionRequest->status->value,
             'requires_approval' => $this->actionRequest->requires_approval,
-            'payload' => $this->actionRequest->payload,
+            'payload' => resolve(ActionRequestBrowserPayload::class)->for($this->actionRequest),
             'result' => $safeResult,
             'approved_by' => $this->actionRequest->approvedByUser?->name,
             'webhook_source' => $this->actionRequest->webhookEvent?->serviceConnection?->name,
