@@ -178,11 +178,11 @@ test('holds execution ownership through upstream and cleanup work', function ():
         }
 
         $observedOwnedRequest = true;
-        $probe = Cache::lock('media-replacement-execution:'.$actionRequest->id, 1);
-        $acquired = $probe->get();
+        $lock = Cache::lock('media-replacement-execution:'.$actionRequest->id, 1);
+        $acquired = $lock->get();
 
         if ($acquired) {
-            $probe->release();
+            $lock->release();
         }
 
         expect($acquired)->toBeFalse();

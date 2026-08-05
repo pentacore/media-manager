@@ -74,85 +74,85 @@ class ReconcileMediaReplacementAttempts extends Command
             }
 
             try {
-            // Conditional transition: a concurrent Download webhook may have
-            // moved this row to a terminal state (verified/needs_attention)
-            // between selection and here. Only flag rows that are still
-            // `downloading`, and only notify when this update actually changed
-            // one — never regress a webhook result.
-            //
-            // The age predicate is repeated here rather than trusted from the
-            // selection above, and it is what makes an operator Retry safe. A resume
-            // rewrites started_at to now as its FIRST act but leaves the row
-            // `downloading`, so status alone cannot tell a stalled attempt from one
-            // that just restarted. Flagging a live run would regress its status and —
-            // worse — restore monitoring below while it is mid-cleanup, so the
-            // blocklist that follows would fire the arr's queued re-search against a
-            // monitored target.
-            //
-            // What re-evaluating the age INSIDE the update can speak for: the read and
-            // the write are one statement, so once the resume's started_at write has
-            // committed this matches nothing at all. The selecting query's snapshot,
-            // which cannot be retracted, is no longer what decides.
-            //
-            // The shared execution lock closes the reverse ordering too. This pass
-            // owns it from this transition through the monitor PUT, so an executor
-            // cannot resume until restoration is complete; it then re-inspects and
-            // re-suspends the current target before any blocklist.
-            $affected = MediaReplacementAttempt::query()
-                ->whereKey($attempt->id)
-                ->where('status', MediaReplacementStatus::Downloading->value)
-                ->where(function (Builder $builder) use ($cutoff): void {
-                    $builder->where('started_at', '<', $cutoff)
-                        ->orWhere(function (Builder $builder) use ($cutoff): void {
-                            $builder->whereNull('started_at')->where('created_at', '<', $cutoff);
-                        });
-                })
-                ->update([
-                    'status' => MediaReplacementStatus::NeedsAttention->value,
-                    'failure_reason' => 'download_timeout',
-                    'completed_at' => CarbonImmutable::now(),
-                ]);
-
-            if ($affected !== 1) {
-                // Counted, never silent. Both clauses of the conditional update can be
-                // what declined the row — a webhook terminalized it, or a resume moved
-                // started_at back inside the cutoff — and the age clause in particular
-                // must not be able to skip a selected row with nothing in the output.
+                // Conditional transition: a concurrent Download webhook may have
+                // moved this row to a terminal state (verified/needs_attention)
+                // between selection and here. Only flag rows that are still
+                // `downloading`, and only notify when this update actually changed
+                // one — never regress a webhook result.
                 //
-                // Reported as one figure because the two causes are genuinely
-                // indistinguishable from here: the update reports a count, not a reason,
-                // and re-reading the row to attribute one would be a second read of a
-                // row that is by definition being changed underneath us — it could name
-                // a cause that was not the one that actually declined the update. One
-                // honest number with both causes named beats a precise-looking
-                // attribution that can be wrong.
-                $superseded++;
+                // The age predicate is repeated here rather than trusted from the
+                // selection above, and it is what makes an operator Retry safe. A resume
+                // rewrites started_at to now as its FIRST act but leaves the row
+                // `downloading`, so status alone cannot tell a stalled attempt from one
+                // that just restarted. Flagging a live run would regress its status and —
+                // worse — restore monitoring below while it is mid-cleanup, so the
+                // blocklist that follows would fire the arr's queued re-search against a
+                // monitored target.
+                //
+                // What re-evaluating the age INSIDE the update can speak for: the read and
+                // the write are one statement, so once the resume's started_at write has
+                // committed this matches nothing at all. The selecting query's snapshot,
+                // which cannot be retracted, is no longer what decides.
+                //
+                // The shared execution lock closes the reverse ordering too. This pass
+                // owns it from this transition through the monitor PUT, so an executor
+                // cannot resume until restoration is complete; it then re-inspects and
+                // re-suspends the current target before any blocklist.
+                $affected = MediaReplacementAttempt::query()
+                    ->whereKey($attempt->id)
+                    ->where('status', MediaReplacementStatus::Downloading->value)
+                    ->where(function (Builder $builder) use ($cutoff): void {
+                        $builder->where('started_at', '<', $cutoff)
+                            ->orWhere(function (Builder $builder) use ($cutoff): void {
+                                $builder->whereNull('started_at')->where('created_at', '<', $cutoff);
+                            });
+                    })
+                    ->update([
+                        'status' => MediaReplacementStatus::NeedsAttention->value,
+                        'failure_reason' => 'download_timeout',
+                        'completed_at' => CarbonImmutable::now(),
+                    ]);
 
-                continue;
-            }
+                if ($affected !== 1) {
+                    // Counted, never silent. Both clauses of the conditional update can be
+                    // what declined the row — a webhook terminalized it, or a resume moved
+                    // started_at back inside the cutoff — and the age clause in particular
+                    // must not be able to skip a selected row with nothing in the output.
+                    //
+                    // Reported as one figure because the two causes are genuinely
+                    // indistinguishable from here: the update reports a count, not a reason,
+                    // and re-reading the row to attribute one would be a second read of a
+                    // row that is by definition being changed underneath us — it could name
+                    // a cause that was not the one that actually declined the update. One
+                    // honest number with both causes named beats a precise-looking
+                    // attribution that can be wrong.
+                    $superseded++;
 
-            $flagged++;
-            $attempt->refresh();
+                    continue;
+                }
 
-            // Announce the terminal state this sweep won so a correlated subtitle
-            // case can move to needs_review.
-            event(new MediaReplacementAttemptChanged($attempt));
+                $flagged++;
+                $attempt->refresh();
 
-            // The sweep is the last actor that will ever touch this attempt on
-            // several paths (indeterminate grab, executor died mid-cleanup,
-            // lost Grab webhook) — if the executor suspended monitoring, no
-            // webhook is coming to restore it, so restore it here or the
-            // target silently stops getting upgrades forever.
-            $monitoringRestored = $mediaReplacementTracker->restoreSuspendedMonitoring($attempt);
+                // Announce the terminal state this sweep won so a correlated subtitle
+                // case can move to needs_review.
+                event(new MediaReplacementAttemptChanged($attempt));
 
-            if ($admins->isNotEmpty()) {
-                Notification::send($admins, new MediaReplacementStatusChanged(
-                    service: (string) ($attempt->target['service'] ?? ''),
-                    title: (string) ($attempt->candidate['title'] ?? 'Media replacement'),
-                    message: $this->timeoutMessage($attempt, $hours, $monitoringRestored),
-                    level: 'warning',
-                ));
-            }
+                // The sweep is the last actor that will ever touch this attempt on
+                // several paths (indeterminate grab, executor died mid-cleanup,
+                // lost Grab webhook) — if the executor suspended monitoring, no
+                // webhook is coming to restore it, so restore it here or the
+                // target silently stops getting upgrades forever.
+                $monitoringRestored = $mediaReplacementTracker->restoreSuspendedMonitoring($attempt);
+
+                if ($admins->isNotEmpty()) {
+                    Notification::send($admins, new MediaReplacementStatusChanged(
+                        service: (string) ($attempt->target['service'] ?? ''),
+                        title: (string) ($attempt->candidate['title'] ?? 'Media replacement'),
+                        message: $this->timeoutMessage($attempt, $hours, $monitoringRestored),
+                        level: 'warning',
+                    ));
+                }
             } finally {
                 $executionLock->release();
             }
@@ -237,73 +237,73 @@ class ReconcileMediaReplacementAttempts extends Command
             }
 
             try {
-            // Re-read immediately before acting, with fresh() rather than refresh():
-            // the row can be DELETED between the query above and here, because
-            // MediaReplacementAttempt is MassPrunable and model:prune is scheduled, and
-            // a long-settled attempt is simultaneously prunable and selectable here.
-            // refresh() uses findOrFail, and that ModelNotFoundException would escape
-            // the try below and abort handle() — skipping every remaining repair AND
-            // the whole timeout pass.
-            $fresh = $attempt->fresh();
+                // Re-read immediately before acting, with fresh() rather than refresh():
+                // the row can be DELETED between the query above and here, because
+                // MediaReplacementAttempt is MassPrunable and model:prune is scheduled, and
+                // a long-settled attempt is simultaneously prunable and selectable here.
+                // refresh() uses findOrFail, and that ModelNotFoundException would escape
+                // the try below and abort handle() — skipping every remaining repair AND
+                // the whole timeout pass.
+                $fresh = $attempt->fresh();
 
-            if (! $fresh instanceof MediaReplacementAttempt) {
-                $vanished++;
+                if (! $fresh instanceof MediaReplacementAttempt) {
+                    $vanished++;
 
-                continue;
-            }
+                    continue;
+                }
 
-            // A live run owns this row. An operator Retry reopens it to `downloading`
-            // and/or rewrites started_at to now, and re-suspends monitoring for its own
-            // resumed cleanup; restoring monitoring now would strip that run's
-            // protection and let its blocklist trigger the competing auto-search.
-            if (! $fresh->status->isTerminal() || ! $this->startedBefore($fresh, $cutoff)) {
-                $claimed++;
+                // A live run owns this row. An operator Retry reopens it to `downloading`
+                // and/or rewrites started_at to now, and re-suspends monitoring for its own
+                // resumed cleanup; restoring monitoring now would strip that run's
+                // protection and let its blocklist trigger the competing auto-search.
+                if (! $fresh->status->isTerminal() || ! $this->startedBefore($fresh, $cutoff)) {
+                    $claimed++;
 
-                continue;
-            }
+                    continue;
+                }
 
-            // Someone else discharged the obligation between the query and now — an
-            // import event landing, or a concurrent invocation. Not a retry, and
-            // reporting it as one would send an operator hunting for a run that never
-            // happened.
-            if ($fresh->monitoring_suspended !== true) {
-                $alreadySettled++;
+                // Someone else discharged the obligation between the query and now — an
+                // import event landing, or a concurrent invocation. Not a retry, and
+                // reporting it as one would send an operator hunting for a run that never
+                // happened.
+                if ($fresh->monitoring_suspended !== true) {
+                    $alreadySettled++;
 
-                continue;
-            }
+                    continue;
+                }
 
-            // One attempt's failure must not abort the rest. restoreSuspendedMonitoring
-            // already swallows arr-API errors and returns false, so this catch is for
-            // the unexpected (a write failure); either way the suspension flag stays
-            // set and the next scheduled run retries.
-            try {
-                $settledNow = $mediaReplacementTracker->restoreSuspendedMonitoring($fresh);
-            } catch (Throwable $throwable) {
-                $settledNow = false;
+                // One attempt's failure must not abort the rest. restoreSuspendedMonitoring
+                // already swallows arr-API errors and returns false, so this catch is for
+                // the unexpected (a write failure); either way the suspension flag stays
+                // set and the next scheduled run retries.
+                try {
+                    $settledNow = $mediaReplacementTracker->restoreSuspendedMonitoring($fresh);
+                } catch (Throwable $throwable) {
+                    $settledNow = false;
 
-                Log::warning('Reconciliation could not restore monitoring on a settled media replacement attempt.', [
+                    Log::warning('Reconciliation could not restore monitoring on a settled media replacement attempt.', [
+                        'attempt_id' => $fresh->id,
+                        'exception' => $throwable::class,
+                    ]);
+                }
+
+                if ($settledNow) {
+                    $restored++;
+
+                    continue;
+                }
+
+                // Logged rather than notified: this command runs hourly, so an arr that
+                // stays unreachable would notify every hour for the same attempt, and
+                // there is no durable "already told you" marker to suppress it with.
+                // Every attempt this pass can touch is already failed/needs_attention and
+                // was notified when it got there, and monitoring_suspended remains as the
+                // durable record that monitoring is still off.
+                Log::warning('Monitoring is still suspended on a settled media replacement attempt; will retry next run.', [
                     'attempt_id' => $fresh->id,
-                    'exception' => $throwable::class,
+                    'status' => $fresh->status->value,
+                    'failure_reason' => $fresh->failure_reason,
                 ]);
-            }
-
-            if ($settledNow) {
-                $restored++;
-
-                continue;
-            }
-
-            // Logged rather than notified: this command runs hourly, so an arr that
-            // stays unreachable would notify every hour for the same attempt, and
-            // there is no durable "already told you" marker to suppress it with.
-            // Every attempt this pass can touch is already failed/needs_attention and
-            // was notified when it got there, and monitoring_suspended remains as the
-            // durable record that monitoring is still off.
-            Log::warning('Monitoring is still suspended on a settled media replacement attempt; will retry next run.', [
-                'attempt_id' => $fresh->id,
-                'status' => $fresh->status->value,
-                'failure_reason' => $fresh->failure_reason,
-            ]);
             } finally {
                 $executionLock->release();
             }

@@ -196,15 +196,15 @@ final readonly class CompetingGrabSweeper
             $fetched += count($pageRecords);
             $before = count($recordsById);
 
-            foreach ($pageRecords as $record) {
-                if (! is_array($record)) {
+            foreach ($pageRecords as $pageRecord) {
+                if (! is_array($pageRecord)) {
                     continue;
                 }
 
-                $queueItemId = $this->positiveInt($record['id'] ?? null);
+                $queueItemId = $this->positiveInt($pageRecord['id'] ?? null);
 
                 if ($queueItemId !== null) {
-                    $recordsById[$queueItemId] = $record;
+                    $recordsById[$queueItemId] = $pageRecord;
                 }
             }
 

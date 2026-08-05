@@ -147,7 +147,7 @@ function auditJobFor(WebhookEvent $webhookEvent): AuditImportedSubtitles
 }
 
 test('it waits before retrying a transient failure', function (): void {
-    $defaults = (new ReflectionClass(AuditImportedSubtitles::class))->getDefaultProperties();
+    $defaults = new ReflectionClass(AuditImportedSubtitles::class)->getDefaultProperties();
 
     expect($defaults['backoff'] ?? null)->toBe(30);
 });

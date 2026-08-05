@@ -261,10 +261,10 @@ test('both reconciliation passes skip attempts owned by a live executor', functi
         'monitoring_suspended' => true,
         'target' => ['service' => 'sonarr', 'series_id' => 42, 'episode_ids' => [7, 8], 'episode_file_ids' => [501]],
     ]);
-    $settled = settledSuspendedAttempt();
+    $mediaReplacementAttempt = settledSuspendedAttempt();
 
     $downloadingLock = Cache::lock('media-replacement-execution:'.$downloading->action_request_id, 900);
-    $settledLock = Cache::lock('media-replacement-execution:'.$settled->action_request_id, 900);
+    $settledLock = Cache::lock('media-replacement-execution:'.$mediaReplacementAttempt->action_request_id, 900);
 
     expect($downloadingLock->get())->toBeTrue()
         ->and($settledLock->get())->toBeTrue();
@@ -278,7 +278,7 @@ test('both reconciliation passes skip attempts owned by a live executor', functi
 
     expect($downloading->fresh()->status)->toBe(MediaReplacementStatus::Downloading)
         ->and($downloading->fresh()->monitoring_suspended)->toBeTrue()
-        ->and($settled->fresh()->monitoring_suspended)->toBeTrue();
+        ->and($mediaReplacementAttempt->fresh()->monitoring_suspended)->toBeTrue();
 
     Http::assertNothingSent();
     Notification::assertNothingSent();

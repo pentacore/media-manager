@@ -194,9 +194,11 @@ class ServiceConnectionController extends Controller
             if (! is_int($id)) {
                 continue;
             }
+
             if ($label === null) {
                 continue;
             }
+
             if ($label === '') {
                 continue;
             }
