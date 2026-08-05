@@ -83,6 +83,58 @@ test('it removes a queue item on the target whose title is not the vetted releas
         && ! str_contains($request->url(), 'includeEpisode'));
 });
 
+test('it removes a competing grab from a later queue page', function (): void {
+    $mediaReplacementAttempt = sweeperAttempt($this->connection->id);
+    $pageOne = [];
+
+    for ($index = 1; $index <= 200; $index++) {
+        $pageOne[] = [
+            'id' => 1_000 + $index,
+            'seriesId' => 99,
+            'episodeId' => 999,
+            'downloadId' => 'DL-OTHER-'.$index,
+            'title' => 'Unrelated.Release.'.$index,
+        ];
+    }
+
+    Http::fake(function (Request $request) use ($pageOne) {
+        if ($request->method() === 'DELETE') {
+            return Http::response([], 200);
+        }
+
+        if (str_contains($request->url(), 'page=2')) {
+            return Http::response([
+                'page' => 2,
+                'pageSize' => 200,
+                'totalRecords' => 201,
+                'records' => [[
+                    'id' => 9_900,
+                    'seriesId' => 42,
+                    'episodeId' => 101,
+                    'downloadId' => 'DL-PAGE-TWO',
+                    'title' => 'Random.Anime.S01E01.PAGE2',
+                ]],
+            ]);
+        }
+
+        return Http::response([
+            'page' => 1,
+            'pageSize' => 200,
+            'totalRecords' => 201,
+            'records' => $pageOne,
+        ]);
+    });
+
+    expect(resolve(CompetingGrabSweeper::class)->sweep($this->connection, $mediaReplacementAttempt))->toBe(1);
+
+    Http::assertSent(fn (Request $request): bool => $request->method() === 'GET'
+        && str_contains($request->url(), 'page=1'));
+    Http::assertSent(fn (Request $request): bool => $request->method() === 'GET'
+        && str_contains($request->url(), 'page=2'));
+    Http::assertSent(fn (Request $request): bool => $request->method() === 'DELETE'
+        && str_contains($request->url(), '/api/v3/queue/9900'));
+});
+
 test('it leaves a row carrying the vetted release title alone even under a different download id', function (): void {
     $mediaReplacementAttempt = sweeperAttempt($this->connection->id);
 

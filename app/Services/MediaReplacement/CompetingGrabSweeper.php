@@ -38,6 +38,8 @@ use Throwable;
  */
 final readonly class CompetingGrabSweeper
 {
+    private const int QUEUE_PAGE_SIZE = 200;
+
     /**
      * Remove every queue item on the attempt's target that is not the vetted
      * release. Returns how many were removed. Never throws — a sweep failure
@@ -95,8 +97,10 @@ final readonly class CompetingGrabSweeper
         $targetIdentity = $this->targetIdentity($target, $isRadarr);
         $siblingDownloadIds = $this->siblingDownloadIds($serviceConnection, $mediaReplacementAttempt);
 
-        $queue = $client->getQueue(['pageSize' => 200]);
-        $records = is_array($queue['records'] ?? null) ? $queue['records'] : [];
+        // Materialize every page before deleting. Removing page-one downloads
+        // changes the queue's pagination and would otherwise shift unseen rows
+        // forward while the next request still asks for page two.
+        $records = $this->queueRecords($client);
 
         $removed = 0;
         $removedTitles = [];
@@ -173,6 +177,49 @@ final readonly class CompetingGrabSweeper
     }
 
     /**
+     * Read the complete paginated queue into a stable, queue-id de-duplicated set.
+     *
+     * @return list<array<string, mixed>>
+     */
+    private function queueRecords(SonarrClient|RadarrClient $client): array
+    {
+        $page = 1;
+        $fetched = 0;
+        $recordsById = [];
+
+        do {
+            $queue = $client->getQueue([
+                'page' => $page,
+                'pageSize' => self::QUEUE_PAGE_SIZE,
+            ]);
+            $pageRecords = is_array($queue['records'] ?? null) ? $queue['records'] : [];
+            $fetched += count($pageRecords);
+            $before = count($recordsById);
+
+            foreach ($pageRecords as $record) {
+                if (! is_array($record)) {
+                    continue;
+                }
+
+                $queueItemId = $this->positiveInt($record['id'] ?? null);
+
+                if ($queueItemId !== null) {
+                    $recordsById[$queueItemId] = $record;
+                }
+            }
+
+            $totalRecords = $this->nonNegativeInt($queue['totalRecords'] ?? null);
+            $shortPage = count($pageRecords) < self::QUEUE_PAGE_SIZE;
+            $reachedTotal = $totalRecords !== null && $fetched >= $totalRecords;
+            $madeProgress = count($recordsById) > $before;
+
+            $page++;
+        } while (! $shortPage && ! $reachedTotal && $madeProgress);
+
+        return array_values($recordsById);
+    }
+
+    /**
      * A queue field as a string, treating anything non-scalar as absent. A malformed
      * payload would otherwise reach `(string)` on an array and emit an "Array to
      * string conversion" warning into the log for a row we are about to ignore.
@@ -180,6 +227,19 @@ final readonly class CompetingGrabSweeper
     private function scalarString(mixed $value): string
     {
         return is_scalar($value) ? trim((string) $value) : '';
+    }
+
+    private function nonNegativeInt(mixed $value): ?int
+    {
+        if (is_int($value)) {
+            return $value >= 0 ? $value : null;
+        }
+
+        if (! is_string($value) || preg_match('/^\d+$/D', trim($value)) !== 1) {
+            return null;
+        }
+
+        return (int) trim($value);
     }
 
     private function remove(

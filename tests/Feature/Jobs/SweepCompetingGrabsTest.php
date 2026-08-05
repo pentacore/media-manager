@@ -121,7 +121,7 @@ test('it stops after the final pass', function (): void {
     Queue::assertNotPushed(SweepCompetingGrabs::class);
 });
 
-test('it does nothing for a terminal attempt', function (): void {
+test('it performs one final sweep for a terminal attempt without scheduling a successor', function (): void {
     Queue::fake();
     fakeSweepJobQueue();
 
@@ -132,8 +132,7 @@ test('it does nothing for a terminal attempt', function (): void {
 
     new SweepCompetingGrabs($mediaReplacementAttempt->id, 0)->handle($this->competingGrabSweeper);
 
-    // The attempt is armed, so any sweep would have read the queue.
-    Http::assertNothingSent();
+    assertSweptTheQueue();
     Queue::assertNotPushed(SweepCompetingGrabs::class);
 });
 

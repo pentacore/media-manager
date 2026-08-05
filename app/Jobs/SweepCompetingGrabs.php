@@ -66,12 +66,6 @@ class SweepCompetingGrabs implements ShouldQueue
             return;
         }
 
-        // A terminal attempt has either imported or been given up on; sweeping
-        // the queue on its behalf could only remove someone else's download.
-        if ($mediaReplacementAttempt->status->isTerminal()) {
-            return;
-        }
-
         $serviceConnection = $mediaReplacementAttempt->serviceConnection;
 
         if (! $serviceConnection instanceof ServiceConnection) {
@@ -79,6 +73,14 @@ class SweepCompetingGrabs implements ShouldQueue
         }
 
         $competingGrabSweeper->sweep($serviceConnection, $mediaReplacementAttempt);
+
+        // A terminal state may have been produced by our own import before this
+        // delayed backstop ran. Sweep once so a competitor whose Grab webhook was
+        // lost cannot survive, then stop the chain rather than polling a settled
+        // target indefinitely.
+        if ($mediaReplacementAttempt->status->isTerminal()) {
+            return;
+        }
 
         self::queueFor($this->attemptId, $this->pass + 1);
     }
