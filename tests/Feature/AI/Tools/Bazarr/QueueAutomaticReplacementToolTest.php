@@ -86,7 +86,9 @@ test('it queues the unique automatic candidate and records the action in the run
         ->and($this->case->fresh()->status)->toBe(SubtitleCaseStatus::ReplacementRequested)
         ->and($this->case->fresh()->replacement_action_request_id)->toBe($result['action_request_id']);
 
-    expect(ActionRequest::query()->findOrFail($result['action_request_id'])->payload)
+    $payload = ActionRequest::query()->findOrFail($result['action_request_id'])->payload;
+
+    expect($payload)
         ->toMatchArray([
             'subtitle_case_id' => $this->case->id,
             'service_connection_id' => $this->radarr->id,
@@ -94,6 +96,30 @@ test('it queues the unique automatic candidate and records the action in the run
             'candidate_fingerprint' => advisorReleaseFingerprint(),
             'required_languages' => ['eng'],
         ]);
+
+    // The advisor, the arr tool and the automatic subtitle check all dispatch
+    // `replace_media_file`, and the executor reads the payload by key. This pins the
+    // exact set and order the shared ReplacementRequestBuilder emits, so a payload
+    // hand-rolled here again — or a key quietly added or reordered — fails loudly
+    // rather than reaching the executor in a shape only one caller produces.
+    // toMatchArray above is order-insensitive and subset-only, so it cannot do this.
+    expect(array_keys($payload))->toBe([
+        'title',
+        'detail',
+        'service',
+        'service_connection_id',
+        'scope',
+        'target',
+        'candidate_fingerprint',
+        'candidate',
+        'required_languages',
+        'confidence',
+        'matched_rules',
+        'selection_mode',
+        'agent_rationale',
+        'original_history_id',
+        'subtitle_case_id',
+    ]);
 });
 
 test('it allows Action Rules to auto-approve the replacement request', function (): void {

@@ -3,8 +3,8 @@
 declare(strict_types=1);
 
 use App\Enums\MediaReplacementStatus;
-use App\Jobs\SweepCompetingGrabs;
 use App\Events\MediaReplacementAttemptChanged;
+use App\Jobs\SweepCompetingGrabs;
 use App\Models\ActionRequest;
 use App\Models\MediaReplacementAttempt;
 use App\Models\ServiceConnection;

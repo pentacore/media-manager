@@ -168,6 +168,101 @@ test('an auto check key is included when supplied', function (): void {
         ]);
 });
 
+test('a subtitle case id is included when supplied, after the base keys', function (): void {
+    $built = resolve(ReplacementRequestBuilder::class)->build(
+        builderSnapshot(),
+        builderCandidate(),
+        ['eng'],
+        'automatic',
+        'Advisor requested a replacement.',
+        subtitleCaseId: 77,
+    );
+
+    expect($built['payload']['subtitle_case_id'])->toBe(77)
+        ->and($built['payload'])->not->toHaveKey('auto_check_key')
+        ->and(array_keys($built['payload']))->toBe([
+            'title',
+            'detail',
+            'service',
+            'service_connection_id',
+            'scope',
+            'target',
+            'candidate_fingerprint',
+            'candidate',
+            'required_languages',
+            'confidence',
+            'matched_rules',
+            'selection_mode',
+            'agent_rationale',
+            'original_history_id',
+            'subtitle_case_id',
+        ]);
+});
+
+test('the two correlation keys belong to different callers and are never both emitted', function (): void {
+    // auto_check_key is the automatic check's; subtitle_case_id is the Bazarr
+    // advisor's. Nothing supplies both, and each caller's request must carry only
+    // its own — a request answering to both correlation schemes would be counted
+    // by the attempt cap AND owned by an advisor case.
+    $autoCheck = resolve(ReplacementRequestBuilder::class)->build(
+        builderSnapshot(), builderCandidate(), ['eng'], 'manual', '', 'sonarr:3:42-101',
+    );
+    $advisor = resolve(ReplacementRequestBuilder::class)->build(
+        builderSnapshot(), builderCandidate(), ['eng'], 'automatic', '', subtitleCaseId: 77,
+    );
+    $neither = resolve(ReplacementRequestBuilder::class)->build(
+        builderSnapshot(), builderCandidate(), ['eng'], 'manual', '',
+    );
+
+    expect($autoCheck['payload'])->not->toHaveKey('subtitle_case_id')
+        ->and($advisor['payload'])->not->toHaveKey('auto_check_key')
+        ->and($neither['payload'])->not->toHaveKey('auto_check_key')
+        ->and($neither['payload'])->not->toHaveKey('subtitle_case_id');
+});
+
+test('the title is bounded so a long display name cannot overflow its column', function (): void {
+    $snapshot = builderSnapshot();
+    $snapshot['display_name'] = str_repeat('n', 400);
+
+    $built = resolve(ReplacementRequestBuilder::class)->build(
+        $snapshot,
+        builderCandidate(),
+        ['eng'],
+        'manual',
+        '',
+    );
+
+    expect(mb_strlen($built['payload']['title']))->toBe(300);
+});
+
+test('the detail is bounded by the same thousand characters as the rationale', function (): void {
+    $built = resolve(ReplacementRequestBuilder::class)->build(
+        builderSnapshot(),
+        builderCandidate(),
+        ['eng'],
+        'manual',
+        str_repeat('x', 1500),
+    );
+
+    expect(mb_strlen($built['payload']['detail']))->toBe(1000)
+        ->and($built['payload']['detail'])->toBe($built['payload']['agent_rationale']);
+});
+
+test('matched rules default to an empty list rather than null', function (): void {
+    $candidate = builderCandidate();
+    unset($candidate['matched_rules']);
+
+    $built = resolve(ReplacementRequestBuilder::class)->build(
+        builderSnapshot(),
+        $candidate,
+        ['eng'],
+        'manual',
+        '',
+    );
+
+    expect($built['payload']['matched_rules'])->toBe([]);
+});
+
 test('the rationale is truncated to a thousand characters', function (): void {
     $built = resolve(ReplacementRequestBuilder::class)->build(
         builderSnapshot(),

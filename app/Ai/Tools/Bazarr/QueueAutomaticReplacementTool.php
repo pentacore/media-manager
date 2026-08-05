@@ -16,7 +16,7 @@ use App\Models\SubtitleCaseAttempt;
 use App\Services\Bazarr\SubtitleAdvisorProjection;
 use App\Services\Bazarr\SubtitleCaseFingerprint;
 use App\Services\Bazarr\SubtitleCaseLifecycle;
-use App\Services\MediaReplacement\MediaReplacementActionPayload;
+use App\Services\MediaReplacement\ReplacementRequestBuilder;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
 use Illuminate\JsonSchema\Types\Type;
 use InvalidArgumentException;
@@ -94,26 +94,30 @@ final class QueueAutomaticReplacementTool extends BaseTool
         );
         throw_if($reason === '', InvalidArgumentException::class, 'A concise replacement reason is required.');
 
-        $matchedRules = is_array($automatic['matched_rules'] ?? null)
-            ? array_values($automatic['matched_rules'])
-            : [];
         $target = $replacementContext['target'];
+
+        // Shared with the arr tool and the automatic subtitle check, so all three
+        // dispatch an identically shaped payload. The builder also owns
+        // force_requires_approval; it cannot differ from the value computed here
+        // before, because automaticCandidate() only ever returns a candidate whose
+        // requires_approval is false, and returns null for a season pack unless the
+        // policy is AutomaticAboveThreshold — so neither operand can be true.
+        $built = resolve(ReplacementRequestBuilder::class)->build(
+            snapshot: $target,
+            candidate: $automatic,
+            requiredLanguages: $replacementContext['effective_languages'],
+            selectionMode: 'automatic',
+            reason: $reason,
+            subtitleCaseId: $subtitleCase->id,
+        );
 
         return [
             'type' => 'replace_media_file',
             'source_service' => 'subtitle_advisor',
             'target_service' => (string) ($target['service'] ?? ''),
-            'force_requires_approval' => ($automatic['requires_approval'] ?? false) === true,
+            'force_requires_approval' => $built['force_requires_approval'],
             'defer_execution' => true,
-            'payload' => resolve(MediaReplacementActionPayload::class)->build(
-                target: $target,
-                candidate: $automatic,
-                effectiveLanguages: $replacementContext['effective_languages'],
-                matchedRules: $matchedRules,
-                selectionMode: 'automatic',
-                reason: $reason,
-                subtitleCaseId: $subtitleCase->id,
-            ),
+            'payload' => $built['payload'],
         ];
     }
 
