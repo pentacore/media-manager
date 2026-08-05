@@ -43,6 +43,11 @@ class AuditImportedSubtitles implements ShouldQueue
     public int $tries = 2;
 
     /**
+     * A transient database or upstream failure is unlikely to clear immediately.
+     */
+    public int $backoff = 30;
+
+    /**
      * @param  array<string, mixed>  $payload
      */
     public function __construct(

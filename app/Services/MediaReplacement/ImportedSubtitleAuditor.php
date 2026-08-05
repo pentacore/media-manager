@@ -18,6 +18,7 @@ use App\Services\Actions\ActionOrchestrator;
 use App\Services\Radarr\RadarrClient;
 use App\Services\Sonarr\SonarrClient;
 use App\Settings\MediaReplacementSettings;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Notification;
 use Throwable;
@@ -200,6 +201,39 @@ final readonly class ImportedSubtitleAuditor
             return;
         }
 
+        $acquired = Cache::lock(
+            AutomaticSubtitleCheckLock::key($autoCheckKey),
+            AutomaticSubtitleCheckLock::TTL_SECONDS,
+        )->get(function () use ($serviceConnection, $snapshot, $missing, $autoCheckKey, $webhookEvent, $isRadarr): void {
+            $this->requestReplacement(
+                $serviceConnection,
+                $snapshot,
+                $missing,
+                $autoCheckKey,
+                $webhookEvent,
+                $isRadarr,
+            );
+        });
+
+        if ($acquired === false) {
+            $this->skip($serviceConnection, 'concurrent_audit');
+        }
+    }
+
+    /**
+     * Admit and dispatch one replacement while the caller owns the target lock.
+     *
+     * @param  array<string, mixed>  $snapshot
+     * @param  list<string>  $missing
+     */
+    private function requestReplacement(
+        ServiceConnection $serviceConnection,
+        array $snapshot,
+        array $missing,
+        string $autoCheckKey,
+        ?WebhookEvent $webhookEvent,
+        bool $isRadarr,
+    ): void {
         if ($this->capReached($autoCheckKey)) {
             $this->notify(
                 $serviceConnection,
@@ -250,7 +284,7 @@ final readonly class ImportedSubtitleAuditor
         // forces Pending whenever the AI chat mode is Advisory, so an AI setting
         // gates this non-AI feature. That only ever tightens the gate, so it is
         // left as-is rather than worked around.
-        $this->actionOrchestrator->dispatch(
+        $actionRequest = $this->actionOrchestrator->dispatch(
             type: 'replace_media_file',
             sourceService: $isRadarr ? 'radarr' : 'sonarr',
             targetService: $isRadarr ? 'radarr' : 'sonarr',
@@ -270,6 +304,19 @@ final readonly class ImportedSubtitleAuditor
             // finder's constraints loosen.
             forceRequiresApproval: $automaticCandidate === null || $built['force_requires_approval'],
         );
+
+        if (! $actionRequest instanceof ActionRequest) {
+            $this->notify(
+                $serviceConnection,
+                (string) ($snapshot['display_name'] ?? 'Imported media'),
+                sprintf(
+                    'Missing subtitles (%s), but an automatic replacement could not be requested because the replacement action type is missing or disabled.',
+                    implode(', ', $missing),
+                ),
+            );
+
+            return;
+        }
 
         $this->notify(
             $serviceConnection,

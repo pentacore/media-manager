@@ -262,6 +262,45 @@ test('the per-target cap stops a second attempt inside the cooldown', function (
     );
 });
 
+test('a concurrent audit lock prevents a second request for the same target', function (): void {
+    fakeAuditArr(['subtitles' => 'Japanese']);
+
+    $autoCheckKey = sprintf('sonarr:%d:42-101', $this->connection->id);
+    $lock = Cache::lock('automatic-subtitle-check:'.hash('sha256', $autoCheckKey), 300);
+
+    expect($lock->get())->toBeTrue();
+
+    try {
+        resolve(ImportedSubtitleAuditor::class)->audit($this->connection, importPayload(), null);
+    } finally {
+        $lock->release();
+    }
+
+    expect(ActionRequest::query()->where('payload->auto_check_key', $autoCheckKey)->count())->toBe(0);
+
+    Http::assertNotSent(fn (Request $request): bool => str_contains($request->url(), '/api/v3/release'));
+});
+
+test('a disabled replacement action is not reported as a successful request', function (): void {
+    fakeAuditArr(['subtitles' => 'Japanese']);
+    ActionTypeConfig::query()->where('type', 'replace_media_file')->update(['is_enabled' => false]);
+
+    resolve(ImportedSubtitleAuditor::class)->audit($this->connection, importPayload(), null);
+
+    expect(ActionRequest::query()->where('type', 'replace_media_file')->count())->toBe(0);
+
+    Notification::assertSentTo(
+        $this->admin,
+        MediaReplacementStatusChanged::class,
+        fn (MediaReplacementStatusChanged $notification): bool => str_contains($notification->message, 'missing or disabled'),
+    );
+    Notification::assertNotSentTo(
+        $this->admin,
+        MediaReplacementStatusChanged::class,
+        fn (MediaReplacementStatusChanged $notification): bool => str_contains($notification->message, 'requested a replacement'),
+    );
+});
+
 test('an attempt older than the cooldown does not block a new one', function (): void {
     fakeAuditArr(['subtitles' => 'Japanese']);
 

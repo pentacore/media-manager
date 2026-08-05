@@ -146,6 +146,12 @@ function auditJobFor(WebhookEvent $webhookEvent): AuditImportedSubtitles
     );
 }
 
+test('it waits before retrying a transient failure', function (): void {
+    $defaults = (new ReflectionClass(AuditImportedSubtitles::class))->getDefaultProperties();
+
+    expect($defaults['backoff'] ?? null)->toBe(30);
+});
+
 test('it delegates a tagged import to the auditor', function (): void {
     // Delegation is observed through its effect: with the connection tagged and
     // the imported file missing a required language, the auditor dispatches a
