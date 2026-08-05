@@ -202,7 +202,22 @@ final readonly class MediaReplacementActions implements ActionExecutor
                     'failure_reason' => null,
                     'completed_at' => null,
                 ]);
-            $existing->refresh();
+            // fresh() rather than refresh(): refresh() is findOrFail, and this row can
+            // be pruned between the load above and here — MediaReplacementAttempt is
+            // MassPrunable and model:prune is scheduled, so a long-settled attempt an
+            // operator retries is exactly the shape that vanishes. A pruned row must
+            // fail this one ActionRequest with a stated reason, not an unhandled
+            // ModelNotFoundException. Same treatment the reconcile command already
+            // applies to its own re-read.
+            $refreshed = $existing->fresh();
+
+            throw_unless(
+                $refreshed instanceof MediaReplacementAttempt,
+                InvalidArgumentException::class,
+                'The replacement attempt was pruned while this retry was resuming; nothing was changed.',
+            );
+
+            $existing = $refreshed;
 
             $resumeTarget = is_array($existing->target) ? $existing->target : $storedTarget;
 

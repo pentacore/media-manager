@@ -705,7 +705,15 @@ final readonly class MediaReplacementTracker
     private function remonitorTarget(ServiceConnection $serviceConnection, array $target): bool
     {
         try {
-            if (mb_strtolower(trim((string) ($target['service'] ?? ''))) === 'radarr') {
+            // Shape decided from the CONNECTION, not the target's own `service`. These
+            // writes go to the connection the webhook arrived on, so deriving the client
+            // from a second source lets a target whose stored service contradicts its
+            // connection send a movie call to a Sonarr instance. Same single-source rule
+            // CompetingGrabSweeper settled on. No reachable input changes behaviour: the
+            // inspector stamps the matching literal into every snapshot it writes, and
+            // MediaReplacementActions aborts a replacement whose stored and fresh
+            // services disagree — but one source cannot disagree with itself.
+            if ($serviceConnection->type === ServiceType::Radarr) {
                 $movieId = (int) ($target['movie_id'] ?? 0);
 
                 if ($movieId > 0) {

@@ -27,7 +27,12 @@ class ReconcileMediaReplacementAttempts extends Command
     public function handle(): int
     {
         $hours = max(1, (int) $this->option('hours'));
-        $cutoff = CarbonImmutable::now()->subHours($hours);
+        // Truncated to the second so the PHP and SQL halves of the age test agree.
+        // startedBefore() compares full microseconds in PHP, while the same $cutoff
+        // bound into a query is rendered as 'Y-m-d H:i:s' — so a row falling inside
+        // the cutoff's own second was selected by one and rejected by the other,
+        // deferring it a whole run. It erred toward not flagging, but for no reason.
+        $cutoff = CarbonImmutable::now()->subHours($hours)->startOfSecond();
 
         $mediaReplacementTracker = resolve(MediaReplacementTracker::class);
 

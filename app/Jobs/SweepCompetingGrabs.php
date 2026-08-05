@@ -35,6 +35,15 @@ class SweepCompetingGrabs implements ShouldQueue
      */
     public int $tries = 2;
 
+    /**
+     * Paired with $tries because the failure this retry exists for is a transient
+     * database blip at the lookup below, and an immediate retry is likely to hit
+     * the same blip. 30s matches ExecuteActionRequest and FetchLatestServiceVersion,
+     * the siblings whose work is likewise cheap to repeat and worthless to lose;
+     * it also stays well inside the gap to this chain's next pass.
+     */
+    public int $backoff = 30;
+
     public function __construct(
         public int $attemptId,
         public int $pass = 0,

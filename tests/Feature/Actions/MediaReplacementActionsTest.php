@@ -14,6 +14,7 @@ use App\Services\MediaReplacement\MediaReplacementTracker;
 use App\Services\MediaReplacement\ReleaseFingerprint;
 use App\Settings\MediaReplacementSettings;
 use GuzzleHttp\Promise\PromiseInterface;
+use InvalidArgumentException;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\Request;
 use Illuminate\Support\Facades\Cache;
@@ -465,6 +466,42 @@ test('resumes the interrupted post-grab cleanup without re-grabbing', function (
         // so the eventual Grab/Download webhook can still correlate and verify it.
         ->and(MediaReplacementAttempt::first()->status)->toBe(MediaReplacementStatus::Downloading)
         ->and(MediaReplacementAttempt::first()->completed_at)->toBeNull();
+});
+
+test('a resume whose attempt is pruned mid-flight fails with a stated reason', function (): void {
+    fakeExecutor();
+    $actionRequest = replaceActionRequest();
+
+    $attempt = MediaReplacementAttempt::factory()->create([
+        'action_request_id' => $actionRequest->id,
+        'status' => MediaReplacementStatus::NeedsAttention,
+        'grab_accepted_at' => now(),
+        'failure_reason' => 'deletion_failed',
+        'was_monitored' => false,
+        'target' => [
+            'service' => 'sonarr', 'scope' => 'anime', 'series_id' => 42,
+            'episode_ids' => [101], 'episode_file_ids' => [501],
+            'installed_release' => 'Trusted.Anime.S01E01.OLD', 'original_history_id' => 999,
+        ],
+    ]);
+
+    // MediaReplacementAttempt is MassPrunable and model:prune is scheduled, so a
+    // long-settled attempt an operator retries is exactly the row that can vanish
+    // between the executor's load and its re-read. Deleting on the reopen write puts
+    // the prune in that window deterministically. Before this guard the re-read was
+    // findOrFail and the operator got an unhandled ModelNotFoundException.
+    MediaReplacementAttempt::updated(static function (MediaReplacementAttempt $updated) use ($attempt): void {
+        if ($updated->id === $attempt->id) {
+            MediaReplacementAttempt::withoutEvents(static fn (): mixed => MediaReplacementAttempt::query()->whereKey($attempt->id)->delete());
+        }
+    });
+
+    expect(fn (): array => resolve(MediaReplacementActions::class)->execute($actionRequest))
+        ->toThrow(InvalidArgumentException::class, 'pruned while this retry was resuming');
+
+    // Nothing destructive ran on the way out.
+    Http::assertNotSent(fn (Request $request): bool => $request->method() === 'DELETE'
+        && str_contains($request->url(), '/api/v3/episodefile/'));
 });
 
 test('resumes cleanup after a worker crash left it unfinished with no failure marker', function (): void {
