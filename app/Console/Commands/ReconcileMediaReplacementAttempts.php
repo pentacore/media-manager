@@ -10,12 +10,14 @@ use App\Events\MediaReplacementAttemptChanged;
 use App\Models\MediaReplacementAttempt;
 use App\Models\User;
 use App\Notifications\MediaReplacementStatusChanged;
+use App\Services\MediaReplacement\MediaReplacementExecutionLock;
 use App\Services\MediaReplacement\MediaReplacementTracker;
 use Carbon\CarbonImmutable;
 use Illuminate\Console\Attributes\Description;
 use Illuminate\Console\Attributes\Signature;
 use Illuminate\Console\Command;
 use Illuminate\Contracts\Database\Query\Builder;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Notification;
 use Throwable;
@@ -57,8 +59,21 @@ class ReconcileMediaReplacementAttempts extends Command
         $admins = User::query()->where('role', UserRole::Admin)->get();
         $flagged = 0;
         $superseded = 0;
+        $owned = 0;
 
         foreach ($stuck as $attempt) {
+            $executionLock = Cache::lock(
+                MediaReplacementExecutionLock::key($attempt->action_request_id),
+                MediaReplacementExecutionLock::TTL_SECONDS,
+            );
+
+            if (! $executionLock->get()) {
+                $owned++;
+
+                continue;
+            }
+
+            try {
             // Conditional transition: a concurrent Download webhook may have
             // moved this row to a terminal state (verified/needs_attention)
             // between selection and here. Only flag rows that are still
@@ -79,19 +94,10 @@ class ReconcileMediaReplacementAttempts extends Command
             // committed this matches nothing at all. The selecting query's snapshot,
             // which cannot be retracted, is no longer what decides.
             //
-            // What it cannot speak for — the reverse order, and it is the same residual
-            // the repair pass discloses. For this update to match, it must commit
-            // BEFORE the resume's started_at write (MediaReplacementActions::execute()).
-            // So on every path where a row IS flagged here, the resume is still ahead of
-            // us, and restoreSuspendedMonitoring() below can land after the resume
-            // re-asserts its own suspension — leaving the target monitored when the
-            // resume blocklists. The window is this update to that monitor PUT: one arr
-            // round trip, and the harmful ordering additionally needs the resume to get
-            // through its own unmonitor inside it. Closing it would need an atomic claim
-            // on the row, and there is nothing safe to claim with — writing
-            // monitoring_suspended = false before the PUT succeeds would destroy the
-            // restore obligation itself. The resume's re-assert is the mitigation, not a
-            // guarantee.
+            // The shared execution lock closes the reverse ordering too. This pass
+            // owns it from this transition through the monitor PUT, so an executor
+            // cannot resume until restoration is complete; it then re-inspects and
+            // re-suspends the current target before any blocklist.
             $affected = MediaReplacementAttempt::query()
                 ->whereKey($attempt->id)
                 ->where('status', MediaReplacementStatus::Downloading->value)
@@ -147,6 +153,9 @@ class ReconcileMediaReplacementAttempts extends Command
                     level: 'warning',
                 ));
             }
+            } finally {
+                $executionLock->release();
+            }
         }
 
         // Same shape as the repair pass's reporting: the cause is named, and the whole
@@ -154,13 +163,14 @@ class ReconcileMediaReplacementAttempts extends Command
         // ordinary run.
         $summary = sprintf('Flagged %d stuck media replacement attempt(s) as needs_attention', $flagged);
 
-        $this->info($superseded === 0
+        $skipped = array_values(array_filter([
+            $superseded > 0 ? sprintf('%d settled or restarted between selection and update', $superseded) : null,
+            $owned > 0 ? sprintf('%d owned by a live executor', $owned) : null,
+        ]));
+
+        $this->info($skipped === []
             ? $summary.'.'
-            : sprintf(
-                '%s (skipped: %d settled or restarted between selection and update).',
-                $summary,
-                $superseded,
-            ));
+            : sprintf('%s (skipped: %s).', $summary, implode('; ', $skipped)));
 
         return self::SUCCESS;
     }
@@ -191,10 +201,10 @@ class ReconcileMediaReplacementAttempts extends Command
      * predicate (terminal, suspended, old enough) on a fresh row immediately before
      * acting; the selecting query's snapshot is not evidence by the time we act on it.
      *
-     * What none of that closes is the interval between one row's re-read and its own
-     * monitor PUT. The resume path covers that from its own side by re-asserting the
-     * suspension immediately before it blocklists, rather than trusting the flag this
-     * pass clears.
+     * The execution lock is acquired before that current read and held through the
+     * monitor PUT. A retry cannot enter its unmonitor/blocklist sequence until this
+     * repair releases ownership, at which point it re-inspects and re-suspends the
+     * target itself.
      */
     private function restoreSettledMonitoring(CarbonImmutable $cutoff, MediaReplacementTracker $mediaReplacementTracker): void
     {
@@ -212,8 +222,21 @@ class ReconcileMediaReplacementAttempts extends Command
         $claimed = 0;
         $alreadySettled = 0;
         $vanished = 0;
+        $owned = 0;
 
         foreach ($settled as $attempt) {
+            $executionLock = Cache::lock(
+                MediaReplacementExecutionLock::key($attempt->action_request_id),
+                MediaReplacementExecutionLock::TTL_SECONDS,
+            );
+
+            if (! $executionLock->get()) {
+                $owned++;
+
+                continue;
+            }
+
+            try {
             // Re-read immediately before acting, with fresh() rather than refresh():
             // the row can be DELETED between the query above and here, because
             // MediaReplacementAttempt is MassPrunable and model:prune is scheduled, and
@@ -281,6 +304,9 @@ class ReconcileMediaReplacementAttempts extends Command
                 'status' => $fresh->status->value,
                 'failure_reason' => $fresh->failure_reason,
             ]);
+            } finally {
+                $executionLock->release();
+            }
         }
 
         $summary = sprintf(
@@ -296,6 +322,7 @@ class ReconcileMediaReplacementAttempts extends Command
             $claimed > 0 ? sprintf('%d claimed by a live retry', $claimed) : null,
             $alreadySettled > 0 ? sprintf('%d already restored by another actor', $alreadySettled) : null,
             $vanished > 0 ? sprintf('%d pruned mid-pass', $vanished) : null,
+            $owned > 0 ? sprintf('%d owned by a live executor', $owned) : null,
         ]));
 
         $this->info($skipped === []

@@ -19,6 +19,7 @@ use App\Services\Sonarr\SonarrClient;
 use Illuminate\Contracts\Database\Query\Builder;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\RequestException;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
 use InvalidArgumentException;
 use RuntimeException;
@@ -49,6 +50,20 @@ final readonly class MediaReplacementActions implements ActionExecutor
             InvalidArgumentException::class,
             sprintf('MediaReplacementActions cannot execute type "%s"', $actionRequest->type),
         );
+
+        return Cache::lock(
+            MediaReplacementExecutionLock::key($actionRequest->id),
+            MediaReplacementExecutionLock::TTL_SECONDS,
+        )->block(30, fn (): array => $this->executeOwned($actionRequest));
+    }
+
+    /**
+     * Execute while holding exclusive ownership against reconciliation.
+     *
+     * @return array<string, mixed>
+     */
+    private function executeOwned(ActionRequest $actionRequest): array
+    {
 
         $payload = $actionRequest->payload;
         $service = mb_strtolower(trim((string) ($payload['service'] ?? $actionRequest->target_service)));
@@ -158,26 +173,10 @@ final readonly class MediaReplacementActions implements ActionExecutor
                 ];
             }
 
-            // Rewrite started_at BEFORE anything else this run does. It is the age
-            // basis media-replacement:reconcile filters both of its passes on, and
-            // until now it recorded the ORIGINAL attempt — so an operator Retry of a
-            // days-old row ran a live executor that the hourly reconcile treated as
-            // ancient and fair game. The damaging order is: this run reads the target
-            // as suspended, reconcile restores monitoring and clears the flag,
-            // blocklistAfterGrab then blocklists a MONITORED target, and the arr's
-            // queued re-search grabs a competitor. A resumed attempt genuinely is a
-            // download attempt starting now, so this is the honest value as well as
-            // the safe one — and it applies whether or not the conditional reopen
-            // below matches, which is what covers a row that stays terminal.
-            //
-            // It only helps because both reconcile passes re-evaluate the age against
-            // current state rather than trusting their selecting query: the timeout
-            // pass inside its conditional update, the repair pass on a fresh read. What
-            // it buys in each case is exclusion from the moment this write commits, not
-            // exclusion outright — a timeout update or a repair read that got in first
-            // is still ahead of us and can issue its monitor PUT afterwards. Doing this
-            // write FIRST is what makes that window as narrow as it can be made without
-            // an atomic claim on the row; see blocklistAfterGrab()'s docblock.
+            // A resumed attempt genuinely starts now, so reset the age basis used by
+            // later reconciliation runs. The shared execution lock excludes a
+            // reconciliation already in progress until this cleanup releases it;
+            // once acquired, that later run also sees this current timestamp.
             $existing->forceFill(['started_at' => now()])->save();
 
             // Cleanup is unfinished (a worker crash after the grab, or a deletion
@@ -547,27 +546,10 @@ final readonly class MediaReplacementActions implements ActionExecutor
      * checkable here. It is false when a monitored target could not be suspended,
      * where markHistoryFailed would launch the competing auto-search unopposed.
      *
-     * Do NOT restate this as a guarantee about other actors. The cleanup phase being
-     * open (cleanup_completed_at still null) does keep the webhook tracker from
-     * remonitoring, but it does not bind everyone: media-replacement:reconcile
-     * restores monitoring on a `downloading` row it times out regardless of the
-     * cleanup phase, and on a settled row with no import event at all. Both of its
-     * passes are bounded by the --hours cutoff, and because the resume path rewrites
-     * started_at to now, both re-evaluate that cutoff against current state rather than
-     * against their selecting query: the timeout pass atomically, inside its
-     * conditional update, and the repair pass on a fresh read.
-     *
-     * Neither is closed, and both windows open BEFORE this run's started_at write
-     * commits. The timeout pass is excluded only from the moment that write lands — an
-     * update of its that commits earlier still flags the row and still runs its own
-     * restore afterwards, which is the residual spelled out inline in
-     * ReconcileMediaReplacementAttempts::handle(). The repair pass is the same shape: it
-     * can decide on a read taken before that write and issue its monitor PUT after it.
-     *
-     * So do not claim the target is guaranteed unmonitored here. What is true is that
-     * this run suspended it itself, with only the file delete in between, and that the
-     * only actors in a position to have undone it are those two passes, each acting on
-     * a decision it took before this run's started_at write landed.
+     * The tracker also defers its remonitor while cleanup is open. Reconciliation is
+     * the other actor capable of restoring monitoring, and both of its passes acquire
+     * the same execution lock held around this method. It therefore cannot issue a
+     * monitor PUT between this run's unmonitor and blocklist calls.
      */
     private function blocklistAfterGrab(
         SonarrClient|RadarrClient $client,

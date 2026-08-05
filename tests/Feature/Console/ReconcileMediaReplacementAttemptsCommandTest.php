@@ -11,9 +11,11 @@ use App\Models\ServiceConnection;
 use App\Models\SubtitleCase;
 use App\Models\User;
 use App\Notifications\MediaReplacementStatusChanged;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Notification;
 
 beforeEach(function (): void {
+    Cache::flush();
     Notification::fake();
     User::factory()->create(['role' => UserRole::Admin]);
 });
@@ -230,6 +232,39 @@ function settledSuspendedAttempt(array $overrides = []): MediaReplacementAttempt
         'target' => ['service' => 'sonarr', 'series_id' => 42, 'episode_ids' => [7, 8], 'episode_file_ids' => [501]],
     ], $overrides));
 }
+
+test('both reconciliation passes skip attempts owned by a live executor', function (): void {
+    Http::fake(['*' => Http::response([], 200)]);
+
+    $downloading = MediaReplacementAttempt::factory()->create([
+        'status' => MediaReplacementStatus::Downloading,
+        'started_at' => now()->subHours(9),
+        'was_monitored' => true,
+        'monitoring_suspended' => true,
+        'target' => ['service' => 'sonarr', 'series_id' => 42, 'episode_ids' => [7, 8], 'episode_file_ids' => [501]],
+    ]);
+    $settled = settledSuspendedAttempt();
+
+    $downloadingLock = Cache::lock('media-replacement-execution:'.$downloading->action_request_id, 900);
+    $settledLock = Cache::lock('media-replacement-execution:'.$settled->action_request_id, 900);
+
+    expect($downloadingLock->get())->toBeTrue()
+        ->and($settledLock->get())->toBeTrue();
+
+    try {
+        $this->artisan('media-replacement:reconcile')->assertSuccessful();
+    } finally {
+        $settledLock->release();
+        $downloadingLock->release();
+    }
+
+    expect($downloading->fresh()->status)->toBe(MediaReplacementStatus::Downloading)
+        ->and($downloading->fresh()->monitoring_suspended)->toBeTrue()
+        ->and($settled->fresh()->monitoring_suspended)->toBeTrue();
+
+    Http::assertNothingSent();
+    Notification::assertNothingSent();
+});
 
 test('a settled attempt keeps its terminal result but has its monitoring restored', function (): void {
     Http::fake(['*' => Http::response([], 200)]);

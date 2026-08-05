@@ -66,7 +66,7 @@ function sonarrReplacementRelease(): array
  * Method-aware fake so a GET and DELETE on the same /episodefile/{id} URL can
  * return different statuses.
  *
- * @param  array{grabOk?: bool, grabConnection?: bool, grabStatus?: int, deleteOk?: bool, monitorOk?: bool, monitored?: bool, currentFileId?: int, subtitles?: string, releases?: list<array<string, mixed>>, queueRecords?: list<array<string, mixed>>, onDelete?: callable}  $opts
+ * @param  array{grabOk?: bool, grabConnection?: bool, grabStatus?: int, deleteOk?: bool, monitorOk?: bool, monitored?: bool, currentFileId?: int, subtitles?: string, releases?: list<array<string, mixed>>, queueRecords?: list<array<string, mixed>>, onDelete?: callable, onRequest?: callable}  $opts
  */
 function fakeExecutor(array $opts = []): void
 {
@@ -82,10 +82,15 @@ function fakeExecutor(array $opts = []): void
     $releases = $opts['releases'] ?? [sonarrReplacementRelease()];
     $queueRecords = $opts['queueRecords'] ?? [];
     $onDelete = $opts['onDelete'] ?? null;
+    $onRequest = $opts['onRequest'] ?? null;
 
-    Http::fake(function (Request $request) use ($grabConnection, $grabStatus, $deleteStatus, $monitorOk, $monitored, $currentFileId, $subtitles, $releases, $queueRecords, $onDelete) {
+    Http::fake(function (Request $request) use ($grabConnection, $grabStatus, $deleteStatus, $monitorOk, $monitored, $currentFileId, $subtitles, $releases, $queueRecords, $onDelete, $onRequest) {
         $method = $request->method();
         $url = $request->url();
+
+        if ($onRequest !== null) {
+            $onRequest($request);
+        }
 
         throw_if($method === 'POST' && str_contains($url, '/api/v3/release') && $grabConnection, ConnectionException::class, 'Connection timed out');
 
@@ -161,6 +166,31 @@ test('grabs the replacement before deleting the reviewed file', function (): voi
         ->and($deleteIndex)->not->toBeFalse()
         ->and($grabIndex)->toBeLessThan($deleteIndex)
         ->and(MediaReplacementAttempt::first()->status)->toBe(MediaReplacementStatus::Downloading);
+});
+
+test('holds execution ownership through upstream and cleanup work', function (): void {
+    $actionRequest = replaceActionRequest();
+    $observedOwnedRequest = false;
+
+    fakeExecutor(['onRequest' => function (Request $request) use ($actionRequest, &$observedOwnedRequest): void {
+        if ($request->method() !== 'POST' || ! str_contains($request->url(), '/api/v3/release')) {
+            return;
+        }
+
+        $observedOwnedRequest = true;
+        $probe = Cache::lock('media-replacement-execution:'.$actionRequest->id, 1);
+        $acquired = $probe->get();
+
+        if ($acquired) {
+            $probe->release();
+        }
+
+        expect($acquired)->toBeFalse();
+    }]);
+
+    resolve(MediaReplacementActions::class)->execute($actionRequest);
+
+    expect($observedOwnedRequest)->toBeTrue();
 });
 
 test('an approved rejected candidate tells Sonarr to override its release decision', function (): void {
