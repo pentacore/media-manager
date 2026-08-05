@@ -91,17 +91,28 @@ test('an admin can untick every tag and have the cleared selection persist', fun
  * with it. The server-rendered HTML is that same first paint without the race,
  * so this asserts on it directly. Like SsrHydrationTest in this suite, it needs
  * `artisan inertia:start-ssr`.
+ *
+ * Its oracle is the BUILT SSR bundle, not this repository's source, and a running
+ * SSR process holds that bundle in memory — `npm run build` does not reach it. So
+ * after any frontend change this test is only meaningful once SSR has been
+ * RESTARTED, not merely rebuilt. That is not a footnote: a stale bundle produced a
+ * false green on this very test during development, which is why the
+ * data-server-rendered assertion below exists — a dead or unreachable SSR server
+ * falls back to a client-rendered root whose data-page JSON does not carry this
+ * copy, and without that assertion the failure reads as a confusing content
+ * mismatch rather than "SSR was not running".
  */
 test('the server-rendered first paint says tags are loading, not that they failed', function (): void {
     $serviceConnection = makeSonarrConnectionWithStoredTag();
 
-    fakeSonarrSubtitleCheckTagEndpoints();
-
+    // No arr endpoints faked on purpose: nothing resolves a deferred prop during a
+    // synchronous get(), so this request reaches no arr instance at all.
     $html = (string) $this->actingAs(User::factory()->admin()->create())
         ->get(route('admin.connections.edit', $serviceConnection))
         ->getContent();
 
-    expect($html)->toContain('Automatic subtitle check')
+    expect($html)->toContain('data-server-rendered')
+        ->and($html)->toContain('Automatic subtitle check')
         ->and($html)->toContain('Loading tags')
         // Mistaking "not yet arrived" for "failed" is the specific regression
         // here: it would tell every admin their URL and API key are wrong on

@@ -9,7 +9,14 @@ use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
 
 beforeEach(function (): void {
-    Cache::flush();
+    // Pinned and store-scoped the way SonarrClientCacheIntegrationTest does it: the
+    // assertions below turn on a cache hit, so they must not depend on whatever store
+    // and TTLs the ambient env happens to supply. Cache::flush() on the default store
+    // worked only because phpunit.xml sets CACHE_STORE=array — true today, and a
+    // confusing failure the moment it is not.
+    config()->set('mediamanager.cache.store', 'array');
+    config()->set('mediamanager.cache.ttl.metadata', 600);
+    Cache::store('array')->flush();
     Http::preventStrayRequests();
 });
 
@@ -42,7 +49,12 @@ test('radarr tags are fetched and cached', function (): void {
 
     $client = new RadarrClient($connection);
 
-    expect($client->getTags())->toHaveCount(1);
+    // Content asserted, not just the count: the Radarr override is its own method, so
+    // a count-only assertion would let a shape regression through on this side while
+    // the Sonarr test kept passing.
+    expect($client->getTags())->toHaveCount(1)
+        ->and($client->getTags()[0]['id'])->toBe(5)
+        ->and($client->getTags()[0]['label'])->toBe('sub-check');
 
     $client->getTags();
 
