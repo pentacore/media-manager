@@ -14,7 +14,6 @@ use App\Services\MediaReplacement\MediaReplacementTracker;
 use App\Services\MediaReplacement\ReleaseFingerprint;
 use App\Settings\MediaReplacementSettings;
 use GuzzleHttp\Promise\PromiseInterface;
-use InvalidArgumentException;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\Request;
 use Illuminate\Support\Facades\Cache;
