@@ -72,14 +72,29 @@ final readonly class MediaReplacementTracker
 
             if ($matches->count() === 1) {
                 $downloadId = $this->downloadId($payload);
+                $mediaReplacementAttempt = $matches->first();
 
-                // Never write a null over an id an earlier delivery recorded.
-                // The stored id is the only thing that arms
-                // CompetingGrabSweeper, so clearing it would silently disarm
-                // this attempt's remaining sweeps — including the delayed
-                // passes — for the rest of its life.
-                if ($downloadId !== null) {
-                    $matches->first()->update(['download_id' => $downloadId]);
+                if (! $mediaReplacementAttempt instanceof MediaReplacementAttempt || $downloadId === null) {
+                    return;
+                }
+
+                $storedDownloadId = is_string($mediaReplacementAttempt->download_id)
+                    && trim($mediaReplacementAttempt->download_id) !== ''
+                        ? trim($mediaReplacementAttempt->download_id)
+                        : null;
+
+                if ($storedDownloadId === null) {
+                    $mediaReplacementAttempt->update(['download_id' => $downloadId]);
+
+                    return;
+                }
+
+                // The first non-empty id is durable identity. A redelivery of
+                // the same Grab is idempotent; a later same-title Grab carrying
+                // another id is a competitor and must never steal correlation
+                // from the vetted download.
+                if ($storedDownloadId !== $downloadId) {
+                    $this->sweepCompetingGrab($serviceConnection, $matches);
                 }
 
                 return;
@@ -686,6 +701,12 @@ final readonly class MediaReplacementTracker
      */
     public function hasAttemptForDownload(ServiceConnection $serviceConnection, string $downloadId): bool
     {
+        $downloadId = trim($downloadId);
+
+        if ($downloadId === '') {
+            return false;
+        }
+
         return MediaReplacementAttempt::query()
             ->where('service_connection_id', $serviceConnection->id)
             ->where('download_id', $downloadId)

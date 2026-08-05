@@ -506,6 +506,25 @@ test('a grab for our target with a different release is swept as a competing gra
         ->and($mediaReplacementAttempt->download_id)->toBe('DL-OURS');
 });
 
+test('a same-title grab with a different download id cannot replace durable identity', function (): void {
+    $mediaReplacementAttempt = trackerAttempt($this->connection->id, [
+        'status' => MediaReplacementStatus::Downloading,
+        'grab_accepted_at' => now(),
+        'download_id' => 'DL-OURS',
+    ]);
+
+    fakeTrackerCompetingQueue();
+
+    resolve(MediaReplacementTracker::class)->recordGrab($this->connection, grabPayload([
+        'downloadId' => 'DL-RACE',
+    ]));
+
+    expect($mediaReplacementAttempt->fresh()->download_id)->toBe('DL-OURS');
+
+    Http::assertSent(fn (Request $request): bool => $request->method() === 'DELETE'
+        && str_contains($request->url(), '/api/v3/queue/920'));
+});
+
 test('a matching grab still correlates and records the download id', function (): void {
     $mediaReplacementAttempt = trackerAttempt($this->connection->id, [
         'status' => MediaReplacementStatus::Downloading,

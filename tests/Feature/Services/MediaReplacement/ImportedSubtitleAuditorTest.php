@@ -217,7 +217,7 @@ test('the check is skipped entirely when disabled', function (): void {
     Http::assertNothingSent();
 });
 
-test("a replacement's own import is skipped", function (): void {
+test("a replacement's own padded download id is normalized and skipped", function (): void {
     fakeAuditArr(['subtitles' => 'Japanese']);
 
     MediaReplacementAttempt::factory()->create([
@@ -229,7 +229,11 @@ test("a replacement's own import is skipped", function (): void {
         'download_id' => 'DL-ORGANIC',
     ]);
 
-    resolve(ImportedSubtitleAuditor::class)->audit($this->connection, importPayload(), null);
+    resolve(ImportedSubtitleAuditor::class)->audit(
+        $this->connection,
+        importPayload(['downloadId' => ' DL-ORGANIC ']),
+        null,
+    );
 
     // Counted by the auditor's own key, not by type: the attempt factory creates
     // its own replace_media_file request to satisfy the foreign key.
