@@ -185,8 +185,12 @@ final readonly class CompetingGrabSweeper
      * consult the target's own `service` field: doing so was a second derivation
      * that could disagree with the one applied to queue rows, and it bought
      * nothing, because the only case where the two answers differ is a target
-     * whose stored service contradicts its connection, which resolveConnection()
-     * rejects and which must match nothing either way.
+     * whose stored service contradicts its connection — and such a target never
+     * reaches a sweep. MediaReplacementActions::inspectFromSnapshot() dispatches
+     * on the target's own service, so a contradicting target queries the wrong
+     * arr API, comes back ambiguous, and trips the sameFiles() throw_unless
+     * before any grab. (Not resolveConnection(): that compares payload['service'],
+     * not payload['target']['service'], so it cannot see this mismatch.)
      *
      * @param  array<string, mixed>  $target
      * @return array{parentId: ?int, episodeIds: list<int>}

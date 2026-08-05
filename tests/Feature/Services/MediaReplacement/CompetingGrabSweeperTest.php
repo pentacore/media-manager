@@ -410,8 +410,10 @@ test('a target with no series id matches nothing and removes nothing', function 
 
 test('a target whose stored service disagrees with the connection matches nothing', function (): void {
     // A Radarr-shaped target stored against a Sonarr connection.
-    // MediaReplacementActions::resolveConnection() throws on a type mismatch, so
-    // this should be unreachable — but movie ids and series ids are independent
+    // Unreachable in practice: inspectFromSnapshot() dispatches on the target's own
+    // service, so a contradicting target queries the wrong arr API, returns
+    // ambiguous, and trips sameFiles() before any grab. (Not resolveConnection() —
+    // that compares payload['service'], not the target's.) But movie ids and series ids are independent
     // id spaces, so movie_id 42 against series 42 is an ordinary numeric
     // collision, not a coincidence. Reading the target in one shape and the
     // queue rows in another makes that collision compare equal, land in the

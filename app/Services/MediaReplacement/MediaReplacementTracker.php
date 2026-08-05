@@ -671,8 +671,14 @@ final readonly class MediaReplacementTracker
      * Whether a replacement attempt on this connection owns the given download.
      *
      * The automatic subtitle check uses this to stay off its own replacements:
-     * a replacement's import is verified by verifyDownload(), which already
-     * flags a still-missing language as imported_subtitles_missing_required_language.
+     * a replacement's import is one verifyDownload() verifies, or has already
+     * judged, and it flags a still-missing language as
+     * imported_subtitles_missing_required_language. "Or has already judged"
+     * matters: for an attempt terminal on a NON-recoverable reason,
+     * attemptsByDownloadId() excludes it and verifyDownload() returns without
+     * re-inspecting. No subtitle judgement is made for that import, and stepping
+     * aside is still right — the attempt is already operator-facing, and auditing
+     * would fire a fresh replacement at a case a human owns.
      * Terminal attempts count too — the webhook that terminalizes an attempt and
      * the auditor observe the same event, and the auditor must not act on it in
      * either ordering. Deliberately broader than attemptsByDownloadId(), which

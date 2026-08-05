@@ -850,11 +850,22 @@ final readonly class MediaReplacementActions implements ActionExecutor
             return false;
         }
 
-        if (($stored['service'] ?? null) !== ($fresh['service'] ?? null)) {
+        // Normalized the way attemptTargetId() and remonitorTarget() normalize it, so
+        // one namespace has one answer for what a stored `service` means. The
+        // equality below is unaffected in practice (both sides come from the same
+        // inspector, which writes a lowercase literal), but the key choice is not: an
+        // exact `=== 'radarr'` read a stored 'Radarr' as Sonarr and compared
+        // episode_file_ids on a movie target, where both sides are absent — so
+        // normalizedIds() returned [] on each side and the `!== []` guard was the only
+        // thing standing between that and a false "unchanged" verdict.
+        $storedService = mb_strtolower(trim((string) ($stored['service'] ?? '')));
+        $freshService = mb_strtolower(trim((string) ($fresh['service'] ?? '')));
+
+        if ($storedService !== $freshService) {
             return false;
         }
 
-        $key = ($stored['service'] ?? null) === 'radarr' ? 'movie_file_ids' : 'episode_file_ids';
+        $key = $storedService === 'radarr' ? 'movie_file_ids' : 'episode_file_ids';
 
         return $this->normalizedIds($stored[$key] ?? null) === $this->normalizedIds($fresh[$key] ?? null)
             && $this->normalizedIds($fresh[$key] ?? null) !== [];
