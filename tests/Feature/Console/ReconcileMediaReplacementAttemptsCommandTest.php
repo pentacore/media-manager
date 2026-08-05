@@ -122,6 +122,24 @@ test('the sweep notification never claims deletion that did not happen', functio
     );
 });
 
+test('completed indeterminate cleanup does not claim the old file was removed', function (): void {
+    MediaReplacementAttempt::factory()->create([
+        'status' => MediaReplacementStatus::Downloading,
+        'started_at' => now()->subHours(9),
+        'grab_attempted_at' => now()->subHours(9),
+        'grab_accepted_at' => null,
+        'cleanup_completed_at' => now()->subHours(8),
+    ]);
+
+    $this->artisan('media-replacement:reconcile')->assertSuccessful();
+
+    Notification::assertSentTo(
+        User::first(),
+        MediaReplacementStatusChanged::class,
+        fn (MediaReplacementStatusChanged $notification): bool => str_contains($notification->message, 'no grab was confirmed, so the old file was not removed'),
+    );
+});
+
 test('a stale downloading attempt an operator retried mid-pass is not flagged as timed out', function (): void {
     // The resume path rewrites started_at to now as its first act — a resumed attempt
     // is a download starting now — but leaves the row `downloading`, so status alone
