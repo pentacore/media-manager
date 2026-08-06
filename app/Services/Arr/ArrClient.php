@@ -64,6 +64,23 @@ abstract class ArrClient
     }
 
     /**
+     * Tags defined on this instance. Sonarr and Radarr both expose them as
+     * TagResource[] — `{id, label}` — and reference them by id from series and
+     * movie resources.
+     *
+     * @return array<int, array<string, mixed>>
+     *
+     * @throws RequestException|ConnectionException
+     */
+    public function getTags(): array
+    {
+        return $this->buildClient()
+            ->get(sprintf('/api/%s/tag', $this->apiVersion))
+            ->throw()
+            ->json() ?? [];
+    }
+
+    /**
      * @return array<int, array<string, mixed>>
      *
      * @throws RequestException|ConnectionException

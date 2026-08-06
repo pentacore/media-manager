@@ -30,15 +30,15 @@ test('admin can open AI chat and send a message', function (): void {
 test('assistant panel opens at the wide default and can be resized', function (): void {
     $this->actingAs(User::factory()->admin()->create());
 
-    $page = visit('/dashboard');
+    $pendingAwaitablePage = visit('/dashboard');
 
-    $page->assertNoSmoke()
+    $pendingAwaitablePage->assertNoSmoke()
         ->click('AI Assistant')
         ->assertVisible('[data-slot="ai-chat-resize"]')
         ->assertScript('document.querySelector(\'[data-slot="sheet-content"]\').offsetWidth', 560);
 
     // Drag the handle 240px to the left, which widens the right-anchored panel.
-    $page->script(<<<'JS'
+    $pendingAwaitablePage->script(<<<'JS'
         (() => {
             const handle = document.querySelector('[data-slot="ai-chat-resize"]');
             const start = handle.getBoundingClientRect().left;
@@ -50,12 +50,12 @@ test('assistant panel opens at the wide default and can be resized', function ()
         })()
     JS);
 
-    $page->assertScript('document.querySelector(\'[data-slot="sheet-content"]\').offsetWidth', 800)
+    $pendingAwaitablePage->assertScript('document.querySelector(\'[data-slot="sheet-content"]\').offsetWidth', 800)
         ->assertScript("localStorage.getItem('mm.ai-chat.width')", '800')
         ->assertNoJavaScriptErrors();
 
     // The stored width survives a full page load.
-    $page->navigate('/dashboard')
+    $pendingAwaitablePage->navigate('/dashboard')
         ->click('AI Assistant')
         ->assertScript('document.querySelector(\'[data-slot="sheet-content"]\').offsetWidth', 800);
 });

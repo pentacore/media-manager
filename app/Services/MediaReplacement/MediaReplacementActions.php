@@ -9,6 +9,7 @@ use App\Cache\Services\SonarrCache;
 use App\Enums\MediaReplacementStatus;
 use App\Enums\ServiceType;
 use App\Events\MediaReplacementAttemptChanged;
+use App\Jobs\SweepCompetingGrabs;
 use App\Models\ActionRequest;
 use App\Models\MediaReplacementAttempt;
 use App\Models\ServiceConnection;
@@ -18,6 +19,7 @@ use App\Services\Sonarr\SonarrClient;
 use Illuminate\Contracts\Database\Query\Builder;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\RequestException;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
 use InvalidArgumentException;
 use RuntimeException;
@@ -35,6 +37,7 @@ final readonly class MediaReplacementActions implements ActionExecutor
         private MediaFileInspector $mediaFileInspector,
         private ReplacementCandidateFinder $replacementCandidateFinder,
         private MediaReplacementTracker $mediaReplacementTracker,
+        private CompetingGrabSweeper $competingGrabSweeper,
     ) {}
 
     /**
@@ -47,6 +50,20 @@ final readonly class MediaReplacementActions implements ActionExecutor
             InvalidArgumentException::class,
             sprintf('MediaReplacementActions cannot execute type "%s"', $actionRequest->type),
         );
+
+        return Cache::lock(
+            MediaReplacementExecutionLock::key($actionRequest->id),
+            MediaReplacementExecutionLock::TTL_SECONDS,
+        )->block(30, fn (): array => $this->executeOwned($actionRequest));
+    }
+
+    /**
+     * Execute while holding exclusive ownership against reconciliation.
+     *
+     * @return array<string, mixed>
+     */
+    private function executeOwned(ActionRequest $actionRequest): array
+    {
 
         $payload = $actionRequest->payload;
         $service = mb_strtolower(trim((string) ($payload['service'] ?? $actionRequest->target_service)));
@@ -156,6 +173,12 @@ final readonly class MediaReplacementActions implements ActionExecutor
                 ];
             }
 
+            // A resumed attempt genuinely starts now, so reset the age basis used by
+            // later reconciliation runs. The shared execution lock excludes a
+            // reconciliation already in progress until this cleanup releases it;
+            // once acquired, that later run also sees this current timestamp.
+            $existing->forceFill(['started_at' => now()])->save();
+
             // Cleanup is unfinished (a worker crash after the grab, or a deletion
             // failure). Resume the remaining destructive steps idempotently. Reopen
             // the status to `downloading` ONLY when it is still an executor-owned
@@ -178,19 +201,63 @@ final readonly class MediaReplacementActions implements ActionExecutor
                     'failure_reason' => null,
                     'completed_at' => null,
                 ]);
-            $existing->refresh();
+            // fresh() rather than refresh(): refresh() is findOrFail, and this row can
+            // be pruned between the load above and here — MediaReplacementAttempt is
+            // MassPrunable and model:prune is scheduled, so a long-settled attempt an
+            // operator retries is exactly the shape that vanishes. A pruned row must
+            // fail this one ActionRequest with a stated reason, not an unhandled
+            // ModelNotFoundException. Same treatment the reconcile command already
+            // applies to its own re-read.
+            $refreshed = $existing->fresh();
+
+            throw_unless(
+                $refreshed instanceof MediaReplacementAttempt,
+                InvalidArgumentException::class,
+                'The replacement attempt was pruned while this retry was resuming; nothing was changed.',
+            );
+
+            $existing = $refreshed;
+
+            $resumeTarget = is_array($existing->target) ? $existing->target : $storedTarget;
+
+            // RE-ASSERT the suspension instead of trusting the persisted flag for the
+            // BLOCKLIST DECISION. This row has been sitting in the database since the
+            // run that died, and other actors can have remonitored the target since
+            // (the reconciliation repair pass does exactly that on settled attempts).
+            // Trusting a flag another process may have cleared is a
+            // time-of-check/time-of-use bug: it would blocklist a target that is
+            // monitored again, and the arr's queued re-search would then grab a
+            // competitor. The unmonitor PUT is idempotent, so re-issuing it is cheap
+            // and makes the blocklist decision depend on what is true NOW.
+            $wasMonitored = $existing->was_monitored === true;
+            $didSuspend = $wasMonitored && $this->unmonitorTarget($client, $serviceType, $resumeTarget, $actionRequest);
+
+            // The PERSISTED flag answers a different question — "does someone still
+            // owe this target a remonitor?" — and must never lose a `true` an earlier
+            // run earned. A failed unmonitor PUT is not evidence that the target is
+            // monitored; it is evidence of nothing, and arr trouble is a likely reason
+            // the earlier run died in the first place. Writing $didSuspend here would
+            // therefore clear the obligation precisely when it is most likely still
+            // outstanding, and every actor that could discharge it stands down on a
+            // false flag: restoreSuspendedMonitoring() returns success without an arr
+            // call, verifyDownload() sees nothing to restore, and both reconciliation
+            // passes select on monitoring_suspended = true. The target would stop
+            // receiving upgrades permanently.
+            $existing->forceFill([
+                'monitoring_suspended' => $didSuspend || ($wasMonitored && $existing->monitoring_suspended === true),
+            ])->save();
 
             return $this->completePostGrab(
                 $client,
                 $serviceType,
                 $serviceConnection,
-                is_array($existing->target) ? $existing->target : $storedTarget,
+                $resumeTarget,
                 $existing,
                 $payload['original_history_id'] ?? null,
-                // Independent, durable suspension state — never inferred from the
-                // mutable failure_reason. Blocklist is safe when monitoring was
-                // suspended, or when nothing needed suspending.
-                blocklistAllowed: $existing->was_monitored !== true || $existing->monitoring_suspended === true,
+                // Same rule as the fresh path: safe when nothing needed suspending,
+                // or when we just suspended it ourselves. A monitored target we
+                // could not suspend must not be blocklisted.
+                blocklistAllowed: ! $wasMonitored || $didSuspend,
                 actionRequest: $actionRequest,
             );
         }
@@ -234,6 +301,16 @@ final readonly class MediaReplacementActions implements ActionExecutor
         $wasMonitored = $existing?->was_monitored === true
             || ($freshTarget['monitored'] ?? null) === true;
 
+        // Carry forward a restore a prior run still OWES, for the same reason
+        // was_monitored is preserved above and the resume path re-asserts it: a
+        // rejected grab whose restore PUT failed leaves the target genuinely
+        // unmonitored with the flag set, and the reset below would erase the only
+        // durable record of that. Nothing would then put monitoring back —
+        // restoreSuspendedMonitoring() reports success without an arr call,
+        // verifyDownload() sees nothing to restore, and both reconciliation passes
+        // select on monitoring_suspended = true.
+        $owedRestore = $wasMonitored && $existing?->monitoring_suspended === true;
+
         // Claim the attempt as `downloading` BEFORE the grab. Keying updateOrCreate
         // on the unique action_request_id makes Action-Queue Retry idempotent — a
         // prior failed attempt row is reset and reused instead of hitting a
@@ -261,7 +338,9 @@ final readonly class MediaReplacementActions implements ActionExecutor
                 // the executor blocklists — reopening the competing auto-search race.
                 'cleanup_completed_at' => null,
                 'was_monitored' => $wasMonitored,
-                'monitoring_suspended' => null,
+                // Not blindly null: an unlifted suspension a prior run left behind is
+                // an obligation, not stale state (see $owedRestore above).
+                'monitoring_suspended' => $owedRestore ? true : null,
                 'verification' => null,
                 'failure_reason' => null,
                 'started_at' => now(),
@@ -275,13 +354,17 @@ final readonly class MediaReplacementActions implements ActionExecutor
         // AutoRedownloadFailed search that markHistoryFailed() would otherwise
         // trigger from grabbing a competing, non-rule-vetted release.
         //
-        // `didSuspend` = we actually suspended monitoring and therefore own its
-        // restoration; false for an already-unmonitored target (nothing to
-        // restore) OR when suspension failed. It is persisted so the blocklist
-        // decision and the restore decision (this run and any Retry) are driven
-        // by durable state, never inferred from the mutable failure_reason.
+        // `didSuspend` = THIS run suspended monitoring; false for an
+        // already-unmonitored target (nothing to suppress) OR when the PUT failed. It
+        // drives the blocklist decision below, which must depend on what is true now.
+        //
+        // The persisted flag answers the different question of whether a remonitor is
+        // still owed, so it is the union of this run's suspension and one inherited
+        // from a prior run. A failed PUT is not evidence that the target is monitored,
+        // and writing $didSuspend alone would drop an inherited obligation with no
+        // actor left to discharge it.
         $didSuspend = $wasMonitored && $this->unmonitorTarget($client, $serviceType, $freshTarget, $actionRequest);
-        $attempt->forceFill(['monitoring_suspended' => $didSuspend])->save();
+        $attempt->forceFill(['monitoring_suspended' => $didSuspend || $owedRestore])->save();
 
         // Blocklisting is safe when the target was never monitored, or when we
         // successfully suspended it. A failed suspension of a monitored target
@@ -303,9 +386,18 @@ final readonly class MediaReplacementActions implements ActionExecutor
             // stuck `downloading` (which would make the job retry the whole grab).
             $restoreFailed = false;
 
-            if ($didSuspend) {
+            // Attempt the restore whenever one is OWED, not only when this run is what
+            // took monitoring away: an inherited suspension is just as real, and
+            // skipping it here was how a Retry could turn a recoverable state into a
+            // permanent one.
+            if ($didSuspend || $owedRestore) {
                 try {
                     $this->setMonitored($client, $serviceType, $freshTarget, true);
+                    // Record the restore. Leaving the flag set would advertise a
+                    // suspension that no longer exists, and the reconciliation
+                    // repair pass would later re-issue a pointless monitor PUT (or
+                    // warn that monitoring is still off) for every rejected grab.
+                    $attempt->forceFill(['monitoring_suspended' => false])->save();
                 } catch (Throwable $throwable) {
                     $restoreFailed = true;
                     Log::warning('Media replacement could not restore monitoring after a rejected grab.', [
@@ -364,10 +456,12 @@ final readonly class MediaReplacementActions implements ActionExecutor
 
     /**
      * Complete the destructive post-grab steps: delete the reviewed file(s),
-     * blocklist the old release (when monitoring is suspended), and bust the
-     * service cache. Shared by the normal flow and the resume-after-accepted-grab
-     * path, so a Retry finishes an interrupted replacement idempotently instead
-     * of reporting a no-op as success.
+     * blocklist the old release (when monitoring is suspended), sweep any
+     * competing grab, and bust the service cache. Monitoring is deliberately
+     * left suspended — the import event restores it. Shared by the normal flow
+     * and the resume-after-accepted-grab path, so a Retry finishes an
+     * interrupted replacement idempotently instead of reporting a no-op as
+     * success.
      *
      * @param  array<string, mixed>  $target
      * @return array<string, mixed>
@@ -386,37 +480,41 @@ final readonly class MediaReplacementActions implements ActionExecutor
 
         $blocklistWarning = $this->blocklistAfterGrab($client, $originalHistoryId, $blocklistAllowed, $actionRequest);
 
-        // The executor OWNS restoring monitoring, here — AFTER blocklisting —
-        // rather than leaving it to the tracker, which is what closes the
-        // blocklist/remonitor race: the tracker will not restore monitoring
-        // until cleanup_completed_at is set (below), so throughout this cleanup
-        // the target is guaranteed to stay suspended while markHistoryFailed runs.
-        // A failed restore leaves monitoring_suspended=true so the tracker retries
-        // it once the download imports.
-        if ($mediaReplacementAttempt->monitoring_suspended === true) {
-            try {
-                $this->setMonitored($client, $serviceType, $target, true);
-                $mediaReplacementAttempt->forceFill(['monitoring_suspended' => false])->save();
-            } catch (Throwable $throwable) {
-                Log::warning('Media replacement could not restore monitoring after cleanup; the tracker will retry on import.', [
-                    'action_request_id' => $actionRequest->id,
-                    'exception' => $throwable::class,
-                ]);
-            }
-        }
+        // Blocklisting makes the arr QUEUE its own re-search; the search itself
+        // runs seconds later, well after this method returns. Monitoring must
+        // therefore stay suspended past the end of this run — the import event
+        // owns the restore (MediaReplacementTracker), and the reconciliation
+        // sweep is the backstop if no import ever arrives. Restoring here is
+        // what previously let the queued search grab a competing release and
+        // start a second download.
+        $competingGrabsRemoved = $this->competingGrabSweeper->sweep($serviceConnection, $mediaReplacementAttempt);
 
         // Mark the cleanup phase complete: only now may the tracker restore
-        // monitoring (for any remaining suspension) on a subsequent import event.
-        // No status write — a terminal state a webhook set in the meantime survives.
+        // monitoring on a subsequent import event. No status write — a terminal
+        // state a webhook set in the meantime survives.
         $mediaReplacementAttempt->forceFill(['cleanup_completed_at' => now()])->save();
 
-        // Finalize a verification a Download webhook recorded WHILE this cleanup was
-        // in flight. In that window restoration was deferred to us (the executor),
-        // so the tracker deliberately left the attempt pending rather than falsely
-        // reporting restore_monitoring_failed. Now that cleanup is done and
-        // monitoring restored, terminalize that stored verification. No-op unless
-        // such a pending verification exists, so it never clobbers a real webhook
-        // terminal outcome.
+        // Backstop for a re-search that lands after the synchronous sweep above, and
+        // for a lost Grab webhook. Armed only when the blocklist actually SUCCEEDED,
+        // which is exactly when blocklistAfterGrab returns null. $blocklistAllowed is
+        // the wrong gate: it also holds on the two paths where no blocklist ran at all
+        // — a non-int original_history_id, and markHistoryFailed throwing.
+        //
+        // A queued re-search is not the only way a competitor can appear: where the
+        // blocklist was declined, monitoring is still ON and the old file has just been
+        // deleted, so an RSS sync can grab one. These passes are not a defence against
+        // that and never were — they span 600s while RSS sync runs on a ~15 minute
+        // interval — so arming them there would buy nothing and risk removing, with
+        // removeFromClient: true, a same-target download that simply is not ours.
+        if ($blocklistWarning === null) {
+            SweepCompetingGrabs::queueFor($mediaReplacementAttempt->id);
+        }
+
+        // Finalize a verification a Download webhook recorded WHILE this cleanup
+        // was in flight. In that window restoration was deferred to us, so the
+        // tracker deliberately left the attempt pending; finalizeAfterCleanup
+        // performs the restore and terminalizes it. No-op unless such a pending
+        // verification exists, so it never clobbers a webhook terminal outcome.
         $this->mediaReplacementTracker->finalizeAfterCleanup($serviceConnection, $mediaReplacementAttempt);
 
         $serviceType === ServiceType::Sonarr
@@ -435,17 +533,23 @@ final readonly class MediaReplacementActions implements ActionExecutor
             'replacement_initiated' => true,
             'deleted_files' => $deletedFiles,
             'blocklist_warning' => $blocklistWarning,
+            'competing_grabs_removed' => $competingGrabsRemoved,
         ];
     }
 
     /**
-     * Blocklist the old release when it is safe. Safety is determined by the
-     * cleanup PHASE, not the attempt's status: this runs while cleanup_completed_at
-     * is still null, and the tracker will not restore monitoring until that is set,
-     * so the target is guaranteed to remain suspended here — blocklisting cannot
-     * race a remonitor. It is skipped only when we never successfully suspended
-     * monitoring (a monitored target we could not unmonitor), where markHistoryFailed
-     * would launch the competing auto-search.
+     * Blocklist the old release when it is safe.
+     *
+     * Safety rests on ONE thing only: this run suspended monitoring itself, moments
+     * ago, and $blocklistAllowed carries that result. Both callers compute it from a
+     * fresh unmonitor rather than from durable state, which is what makes the claim
+     * checkable here. It is false when a monitored target could not be suspended,
+     * where markHistoryFailed would launch the competing auto-search unopposed.
+     *
+     * The tracker also defers its remonitor while cleanup is open. Reconciliation is
+     * the other actor capable of restoring monitoring, and both of its passes acquire
+     * the same execution lock held around this method. It therefore cannot issue a
+     * monitor PUT between this run's unmonitor and blocklist calls.
      */
     private function blocklistAfterGrab(
         SonarrClient|RadarrClient $client,
@@ -457,9 +561,8 @@ final readonly class MediaReplacementActions implements ActionExecutor
             return 'Skipped blocklisting the old release because monitoring could not be suspended (avoids a competing auto-search).';
         }
 
-        // Safe regardless of the attempt's status: the cleanup phase is still
-        // open (cleanup_completed_at null), so the tracker has not remonitored and
-        // the target is guaranteed suspended.
+        // Safe regardless of the attempt's status: $blocklistAllowed means this run
+        // just suspended monitoring on the target itself.
         return $this->blocklistOriginal($client, $originalHistoryId, $actionRequest);
     }
 
@@ -611,11 +714,7 @@ final readonly class MediaReplacementActions implements ActionExecutor
     {
         $won = MediaReplacementAttempt::query()
             ->whereKey($mediaReplacementAttempt->id)
-            ->whereNotIn('status', [
-                MediaReplacementStatus::Verified->value,
-                MediaReplacementStatus::Failed->value,
-                MediaReplacementStatus::NeedsAttention->value,
-            ])
+            ->whereNotIn('status', MediaReplacementStatus::terminalValues())
             ->update([
                 'status' => $mediaReplacementStatus->value,
                 'failure_reason' => $reason,
@@ -748,11 +847,22 @@ final readonly class MediaReplacementActions implements ActionExecutor
             return false;
         }
 
-        if (($stored['service'] ?? null) !== ($fresh['service'] ?? null)) {
+        // Normalized the way attemptTargetId() and remonitorTarget() normalize it, so
+        // one namespace has one answer for what a stored `service` means. The
+        // equality below is unaffected in practice (both sides come from the same
+        // inspector, which writes a lowercase literal), but the key choice is not: an
+        // exact `=== 'radarr'` read a stored 'Radarr' as Sonarr and compared
+        // episode_file_ids on a movie target, where both sides are absent — so
+        // normalizedIds() returned [] on each side and the `!== []` guard was the only
+        // thing standing between that and a false "unchanged" verdict.
+        $storedService = mb_strtolower(trim((string) ($stored['service'] ?? '')));
+        $freshService = mb_strtolower(trim((string) ($fresh['service'] ?? '')));
+
+        if ($storedService !== $freshService) {
             return false;
         }
 
-        $key = ($stored['service'] ?? null) === 'radarr' ? 'movie_file_ids' : 'episode_file_ids';
+        $key = $storedService === 'radarr' ? 'movie_file_ids' : 'episode_file_ids';
 
         return $this->normalizedIds($stored[$key] ?? null) === $this->normalizedIds($fresh[$key] ?? null)
             && $this->normalizedIds($fresh[$key] ?? null) !== [];

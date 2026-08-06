@@ -17,6 +17,11 @@ final readonly class MediaReplacementSettings
      *     global_languages: list<string>,
      *     scoped_languages: array{anime: null, tv: null, movie: null},
      *     season_pack_policy: value-of<SeasonPackPolicy>,
+     *     subtitle_check: array{
+     *         enabled: bool,
+     *         max_attempts_per_target: int<1, max>,
+     *         cooldown_hours: int<1, max>
+     *     },
      *     sonarr_root_folders: list<array{
      *         service_connection_id: int,
      *         root_folder_id: int,
@@ -40,6 +45,11 @@ final readonly class MediaReplacementSettings
             'movie' => null,
         ],
         'season_pack_policy' => 'approval_required',
+        'subtitle_check' => [
+            'enabled' => false,
+            'max_attempts_per_target' => 1,
+            'cooldown_hours' => 24,
+        ],
         'sonarr_root_folders' => [],
         'guidance' => [
             'anime' => [
@@ -75,6 +85,11 @@ final readonly class MediaReplacementSettings
      *         movie: list<string>|null
      *     },
      *     season_pack_policy: value-of<SeasonPackPolicy>,
+     *     subtitle_check: array{
+     *         enabled: bool,
+     *         max_attempts_per_target: int<1, max>,
+     *         cooldown_hours: int<1, max>
+     *     },
      *     sonarr_root_folders: list<array{
      *         service_connection_id: int,
      *         root_folder_id: int,
@@ -117,6 +132,21 @@ final readonly class MediaReplacementSettings
     public function automaticSelectionThreshold(): int
     {
         return $this->configuration()['automatic_selection_threshold'];
+    }
+
+    public function subtitleCheckEnabled(): bool
+    {
+        return $this->configuration()['subtitle_check']['enabled'];
+    }
+
+    public function subtitleCheckMaxAttempts(): int
+    {
+        return $this->configuration()['subtitle_check']['max_attempts_per_target'];
+    }
+
+    public function subtitleCheckCooldownHours(): int
+    {
+        return $this->configuration()['subtitle_check']['cooldown_hours'];
     }
 
     public function seasonPackPolicy(): SeasonPackPolicy
@@ -177,6 +207,11 @@ final readonly class MediaReplacementSettings
      *         movie: list<string>|null
      *     },
      *     season_pack_policy: value-of<SeasonPackPolicy>,
+     *     subtitle_check: array{
+     *         enabled: bool,
+     *         max_attempts_per_target: int<1, max>,
+     *         cooldown_hours: int<1, max>
+     *     },
      *     sonarr_root_folders: list<array{
      *         service_connection_id: int,
      *         root_folder_id: int,
@@ -218,6 +253,25 @@ final readonly class MediaReplacementSettings
         $normalizedConfiguration['sonarr_root_folders'] = is_array($sonarrRootFolders)
             ? $this->normalizeSonarrRootFolders($sonarrRootFolders)
             : self::DEFAULT_CONFIGURATION['sonarr_root_folders'];
+
+        $subtitleCheck = is_array($configuration['subtitle_check'] ?? null)
+            ? $configuration['subtitle_check']
+            : [];
+        $subtitleCheckEnabled = $subtitleCheck['enabled'] ?? null;
+        $subtitleCheckMaxAttempts = $subtitleCheck['max_attempts_per_target'] ?? null;
+        $subtitleCheckCooldownHours = $subtitleCheck['cooldown_hours'] ?? null;
+
+        $normalizedConfiguration['subtitle_check'] = [
+            'enabled' => is_bool($subtitleCheckEnabled)
+                ? $subtitleCheckEnabled
+                : self::DEFAULT_CONFIGURATION['subtitle_check']['enabled'],
+            'max_attempts_per_target' => is_int($subtitleCheckMaxAttempts) && $subtitleCheckMaxAttempts >= 1
+                ? $subtitleCheckMaxAttempts
+                : self::DEFAULT_CONFIGURATION['subtitle_check']['max_attempts_per_target'],
+            'cooldown_hours' => is_int($subtitleCheckCooldownHours) && $subtitleCheckCooldownHours >= 1
+                ? $subtitleCheckCooldownHours
+                : self::DEFAULT_CONFIGURATION['subtitle_check']['cooldown_hours'],
+        ];
 
         foreach (MediaReplacementScope::cases() as $scope) {
             $languages = is_array($scopedLanguages)

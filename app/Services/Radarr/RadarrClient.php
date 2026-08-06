@@ -117,6 +117,20 @@ class RadarrClient extends ArrClient implements Warmable
         );
     }
 
+    /**
+     * @return array<int, array<string, mixed>>
+     *
+     * @throws RequestException|ConnectionException
+     */
+    #[Override]
+    public function getTags(): array
+    {
+        return $this->cache()->rememberMetadata(
+            'tags',
+            fn (): array => parent::getTags(),
+        );
+    }
+
     public function warm(): void
     {
         $cache = $this->cache();
