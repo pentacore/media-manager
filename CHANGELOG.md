@@ -1,3 +1,53 @@
+# [1.16.0](https://github.com/pentacore/media-manager/compare/v1.15.1...v1.16.0) (2026-08-06)
+
+
+### Bug Fixes
+
+* **media-replacement:** arm the competing-grab sweep only once the download id is known ([ca26156](https://github.com/pentacore/media-manager/commit/ca26156d6bbb05a5fb2d5de36af895d29cc128ab))
+* **media-replacement:** carry an unlifted suspension across a fresh-path retry ([8fe178d](https://github.com/pentacore/media-manager/commit/8fe178d840713d28ef5e086fd1edafb2d581778d))
+* **media-replacement:** carry the audit's state so capture-off cannot mute it ([d44ec90](https://github.com/pentacore/media-manager/commit/d44ec900deacbabf14cbbdcca78d20767e7520c4))
+* **media-replacement:** compare the same download id the sweep was armed with ([0f94931](https://github.com/pentacore/media-manager/commit/0f9493174e6260093635cbe523e4bababf682b90))
+* **media-replacement:** coordinate reconciliation ([495eb43](https://github.com/pentacore/media-manager/commit/495eb433a1bea1dbd5dc6701b278a94d48373358))
+* **media-replacement:** finish competing grab sweeps ([0a3c25f](https://github.com/pentacore/media-manager/commit/0a3c25fa9e6913f40399dd962747e7a72dae0b1c))
+* **media-replacement:** harden the job, the cutoff and two re-reads ([b5353c1](https://github.com/pentacore/media-manager/commit/b5353c14a7e0102dc833c17ea3259201ad9d1c79))
+* **media-replacement:** inspect a fresh arr state in the subtitle auditor ([f568ea2](https://github.com/pentacore/media-manager/commit/f568ea2b79839842266730c833509298a753afda))
+* **media-replacement:** keep notification failures out of the sweep outcome ([e5542a1](https://github.com/pentacore/media-manager/commit/e5542a1956cfbca49a19229693e1a57238944a78))
+* **media-replacement:** keep the resume's restore obligation and age it correctly ([39ba2a8](https://github.com/pentacore/media-manager/commit/39ba2a824611e492ad1d3e2f65c455d8d8cc68ab))
+* **media-replacement:** let an admin clear every subtitle-check tag ([b75fca4](https://github.com/pentacore/media-manager/commit/b75fca453a0f9a3cf6cc78b2bc9cce18919d77aa))
+* **media-replacement:** make the sweep's service shape one decision, not two ([90d0e60](https://github.com/pentacore/media-manager/commit/90d0e60380f8483ea3cc20ca6b59bb931ee1462c))
+* **media-replacement:** preserve download identity ([0a46979](https://github.com/pentacore/media-manager/commit/0a469794117d75af1a3b42ec5a2b98faa90e9da4))
+* **media-replacement:** quieten and consolidate the competing-grab sweep ([31f7b28](https://github.com/pentacore/media-manager/commit/31f7b2874d9c6b65c0f05bfdf526a3618f3f2b83))
+* **media-replacement:** re-assert the suspension when resuming a cleanup ([0126616](https://github.com/pentacore/media-manager/commit/012661621af655c6cc3b66061e4600837e5ba494))
+* **media-replacement:** repair monitoring left suspended on a settled attempt ([1bfd13c](https://github.com/pentacore/media-manager/commit/1bfd13c9aa3b3f644912b6f57ada5cf9c9215009))
+* **media-replacement:** report indeterminate cleanup accurately ([88112a4](https://github.com/pentacore/media-manager/commit/88112a4f1a0aeb3bf977ef544eeb41bbabea7ceb))
+* **media-replacement:** serialize automatic checks ([1be3402](https://github.com/pentacore/media-manager/commit/1be340251de6b6a54f218537540f54a27d2f6052))
+* **media-replacement:** stop a sweep from removing a sibling attempt's download ([dd723c5](https://github.com/pentacore/media-manager/commit/dd723c58c876892462ef5ca3571b3da8ce9c5467))
+* **media-replacement:** stop the blocklist from starting a second download ([513f8ff](https://github.com/pentacore/media-manager/commit/513f8ff7ff76aa27cf9969a74a71828a2c3938f9))
+* **media-replacement:** trim arr tag labels where they enter the app ([cd6cdce](https://github.com/pentacore/media-manager/commit/cd6cdce42ab947d858cddc88969ef69033c14f73))
+* **media-replacement:** widen the sibling keep set to protect batch packs ([8770ade](https://github.com/pentacore/media-manager/commit/8770ade1fedb394aa0512a80236b9eed3de5fa92))
+
+
+### Features
+
+* **arr:** read instance tags ([a50767c](https://github.com/pentacore/media-manager/commit/a50767cb0770d2926e7cfda935d2fcb2c80379c3))
+* **media-replacement:** accept the subtitle-check switches on the AI settings form ([8c33828](https://github.com/pentacore/media-manager/commit/8c33828d836d5befc97b744f470f7827fdc2673c))
+* **media-replacement:** add competing-grab sweeper ([965f106](https://github.com/pentacore/media-manager/commit/965f106ffdf3d0d5d9d8fcaf7ce8f68d9b2e0ebd))
+* **media-replacement:** add delayed competing-grab sweep passes ([c1a79f9](https://github.com/pentacore/media-manager/commit/c1a79f9447a6c61024b70fe7ed29029b19a98ac5))
+* **media-replacement:** add the global subtitle-check switches ([3715f3c](https://github.com/pentacore/media-manager/commit/3715f3c3dff2759f3b5dddf3741a15addb0c3572))
+* **media-replacement:** add the subtitle-check controls to the AI settings panel ([ae7b675](https://github.com/pentacore/media-manager/commit/ae7b675ea92cf9248a97da7ed3aa72ca2d08b52f))
+* **media-replacement:** add the subtitle-check tag picker to the connection form ([1b26a24](https://github.com/pentacore/media-manager/commit/1b26a247388570ea805c3492257518ba43ef9b93))
+* **media-replacement:** audit tagged imports for required subtitles ([adc1c12](https://github.com/pentacore/media-manager/commit/adc1c1260d5576fa0db14ebdd20a7ce9af21616f))
+* **media-replacement:** expose download-to-attempt correlation ([f915f64](https://github.com/pentacore/media-manager/commit/f915f64ed4b5a532a062abfc9f6e19400011425d))
+* **media-replacement:** read and persist subtitle-check tags on a connection ([ce30d8c](https://github.com/pentacore/media-manager/commit/ce30d8cca052e1477d6af2c9d6272c98f3bc4b57))
+* **media-replacement:** run the subtitle check on import webhooks ([79b1b3e](https://github.com/pentacore/media-manager/commit/79b1b3e69750f0e7f497ecaef59cc4a8bf426497))
+* **media-replacement:** store subtitle-check tag labels per connection ([41906a8](https://github.com/pentacore/media-manager/commit/41906a88220927176f46252b44703a30a9353f5d))
+* **media-replacement:** sweep competing grabs detected via the Grab webhook ([3613376](https://github.com/pentacore/media-manager/commit/361337665e20c2bbb1cb95e28e066ed06b08f9a7))
+
+
+### Performance Improvements
+
+* **media-replacement:** defer the arr tags prop ([00f4fc7](https://github.com/pentacore/media-manager/commit/00f4fc781daeb58c8fe60471fbbc930cda8764a7))
+
 ## [1.15.1](https://github.com/pentacore/media-manager/compare/v1.15.0...v1.15.1) (2026-07-31)
 
 

@@ -30,12 +30,6 @@ use Throwable;
  */
 final readonly class MediaReplacementTracker
 {
-    private const array TERMINAL_STATUSES = [
-        MediaReplacementStatus::Verified,
-        MediaReplacementStatus::Failed,
-        MediaReplacementStatus::NeedsAttention,
-    ];
-
     /**
      * needs_attention reasons that a later webhook may still resolve: the
      * sweep timed the download out, a manual import was pending, or the old
@@ -52,6 +46,7 @@ final readonly class MediaReplacementTracker
     public function __construct(
         private MediaFileInspector $mediaFileInspector,
         private LanguageNormalizer $languageNormalizer,
+        private CompetingGrabSweeper $competingGrabSweeper,
     ) {}
 
     /**
@@ -67,13 +62,46 @@ final readonly class MediaReplacementTracker
                 return;
             }
 
-            $matches = $this->nonTerminalAttempts($serviceConnection)->filter(
-                fn (MediaReplacementAttempt $mediaReplacementAttempt): bool => $this->attemptTargetId($mediaReplacementAttempt) === $targetId
-                    && $this->normalizeTitle((string) ($mediaReplacementAttempt->candidate['title'] ?? '')) === $this->normalizeTitle($title),
+            $onTarget = $this->nonTerminalAttempts($serviceConnection)->filter(
+                fn (MediaReplacementAttempt $mediaReplacementAttempt): bool => $this->attemptTargetId($mediaReplacementAttempt) === $targetId,
+            );
+
+            $matches = $onTarget->filter(
+                fn (MediaReplacementAttempt $mediaReplacementAttempt): bool => $this->normalizeTitle((string) ($mediaReplacementAttempt->candidate['title'] ?? '')) === $this->normalizeTitle($title),
             );
 
             if ($matches->count() === 1) {
-                $matches->first()->update(['download_id' => $this->downloadId($payload)]);
+                $downloadId = $this->downloadId($payload);
+                $mediaReplacementAttempt = $matches->first();
+
+                if (! $mediaReplacementAttempt instanceof MediaReplacementAttempt || $downloadId === null) {
+                    return;
+                }
+
+                $storedDownloadId = is_string($mediaReplacementAttempt->download_id)
+                    && trim($mediaReplacementAttempt->download_id) !== ''
+                        ? trim($mediaReplacementAttempt->download_id)
+                        : null;
+
+                if ($storedDownloadId === null) {
+                    $mediaReplacementAttempt->update(['download_id' => $downloadId]);
+
+                    return;
+                }
+
+                // The first non-empty id is durable identity. A redelivery of
+                // the same Grab is idempotent; a later same-title Grab carrying
+                // another id is a competitor and must never steal correlation
+                // from the vetted download.
+                if ($storedDownloadId !== $downloadId) {
+                    $this->sweepCompetingGrab($serviceConnection, $matches);
+                }
+
+                return;
+            }
+
+            if ($matches->isEmpty()) {
+                $this->sweepCompetingGrab($serviceConnection, $onTarget);
 
                 return;
             }
@@ -133,12 +161,12 @@ final readonly class MediaReplacementTracker
             $cleanupDone = $attempt->cleanup_completed_at !== null;
 
             // Import arrived while the executor is still mid-cleanup: monitoring was
-            // intentionally suspended and its restoration is DEFERRED to the executor
-            // (it owns the restore during its own run, to not race the blocklist).
-            // Record the subtitle verification but leave the attempt PENDING —
-            // terminalizing it here as restore_monitoring_failed would be false
-            // (no restore was attempted). The executor finalizes this stored
-            // verification once its cleanup completes and monitoring is restored.
+            // intentionally suspended and restoring it now could precede the
+            // blocklist and the re-search the blocklist queues. Record the subtitle
+            // verification but leave the attempt PENDING — terminalizing it here as
+            // restore_monitoring_failed would be false (no restore was attempted).
+            // finalizeAfterCleanup() restores monitoring and terminalizes this
+            // stored verification once the cleanup phase closes.
             if ($needsRestore && ! $cleanupDone) {
                 // Persist the EXACT success predicate (which also rejects an
                 // ambiguous / no-file inspection), not just an empty `missing`:
@@ -166,12 +194,12 @@ final readonly class MediaReplacementTracker
             }
 
             // Restore the ORIGINAL monitoring the executor suspended — but ONLY
-            // once the executor has finished its cleanup phase
-            // (cleanup_completed_at set) and monitoring is in fact still
-            // suspended. Deferring until cleanup is complete is what prevents this
-            // remonitor from racing the executor's blocklist (the executor owns
-            // the restore during its own run). If the executor is still cleaning
-            // up, leave monitoring alone; it (or a later event) will restore it.
+            // once the cleanup phase has closed (cleanup_completed_at set) and
+            // monitoring is in fact still suspended. Deferring until then is what
+            // keeps the restore behind the blocklist and behind the re-search the
+            // blocklist queues inside the arr. This is the normal path: an import
+            // arrives minutes after cleanup, by which time that search has run and
+            // been rejected against the unmonitored target.
             $restored = ! $needsRestore
                 || ($cleanupDone && $this->remonitorTarget($serviceConnection, is_array($attempt->target) ? $attempt->target : []));
 
@@ -211,14 +239,14 @@ final readonly class MediaReplacementTracker
 
     /**
      * Finalize a verification a Download webhook recorded while the executor was
-     * still mid-cleanup. During that window restoration was deferred to the
-     * executor, so verifyDownload() left the attempt PENDING (non-terminal) with
+     * still mid-cleanup. In that window a restore could have preceded the
+     * blocklist, so verifyDownload() left the attempt PENDING (non-terminal) with
      * only its subtitle verification stored, rather than falsely failing it. The
-     * executor calls this once it has finished cleanup and restored monitoring, to
-     * terminalize that stored verification against the now-settled monitoring
-     * state. No-op unless the attempt is still pending with a recorded
-     * verification, so it never clobbers a real webhook terminal outcome nor acts
-     * before an import event.
+     * executor calls this once it has closed the cleanup phase; this is then the
+     * first safe moment to restore monitoring, which it does before terminalizing
+     * the stored verification against the resulting monitoring state. No-op unless
+     * the attempt is still pending with a recorded verification, so it never
+     * clobbers a real webhook terminal outcome nor acts before an import event.
      */
     public function finalizeAfterCleanup(ServiceConnection $serviceConnection, MediaReplacementAttempt $mediaReplacementAttempt): void
     {
@@ -233,7 +261,7 @@ final readonly class MediaReplacementTracker
                 return;
             }
 
-            if (in_array($mediaReplacementAttempt->status, self::TERMINAL_STATUSES, true)) {
+            if ($mediaReplacementAttempt->status->isTerminal()) {
                 return;
             }
 
@@ -252,10 +280,11 @@ final readonly class MediaReplacementTracker
             // `missing === []` here would wrongly pass an empty-required ambiguous
             // inspection.
             $subtitlesOk = ($verification['subtitles_ok'] ?? null) === true;
-            // Cleanup is complete by now, so monitoring_suspended is false when the
-            // executor restored it (or there was nothing to restore) and true only
-            // when its restore genuinely failed.
-            $restored = $mediaReplacementAttempt->monitoring_suspended !== true;
+            // The executor no longer restores monitoring — it must stay suspended
+            // across the whole window in which the arr runs the re-search its
+            // blocklist queued. Cleanup is complete by the time we get here, so
+            // this is the first safe moment to put monitoring back.
+            $restored = $this->restoreSuspendedMonitoring($mediaReplacementAttempt);
 
             $ok = $subtitlesOk && $restored;
             $reasons = array_values(array_filter([
@@ -334,7 +363,7 @@ final readonly class MediaReplacementTracker
     {
         return MediaReplacementAttempt::query()
             ->where('service_connection_id', $serviceConnection->id)
-            ->whereNotIn('status', array_map(static fn (MediaReplacementStatus $mediaReplacementStatus): string => $mediaReplacementStatus->value, self::TERMINAL_STATUSES))
+            ->whereNotIn('status', MediaReplacementStatus::terminalValues())
             ->get();
     }
 
@@ -349,13 +378,11 @@ final readonly class MediaReplacementTracker
             ->where('service_connection_id', $serviceConnection->id)
             ->where('download_id', $downloadId)
             ->where(function (Builder $builder): void {
-                $builder->whereNotIn('status', array_map(
-                    static fn (MediaReplacementStatus $mediaReplacementStatus): string => $mediaReplacementStatus->value,
-                    self::TERMINAL_STATUSES,
-                ))->orWhere(function (Builder $builder): void {
-                    $builder->where('status', MediaReplacementStatus::NeedsAttention->value)
-                        ->whereIn('failure_reason', self::RECOVERABLE_FAILURE_REASONS);
-                });
+                $builder->whereNotIn('status', MediaReplacementStatus::terminalValues())
+                    ->orWhere(function (Builder $builder): void {
+                        $builder->where('status', MediaReplacementStatus::NeedsAttention->value)
+                            ->whereIn('failure_reason', self::RECOVERABLE_FAILURE_REASONS);
+                    });
             })
             ->get();
     }
@@ -381,13 +408,11 @@ final readonly class MediaReplacementTracker
         $won = MediaReplacementAttempt::query()
             ->whereKey($mediaReplacementAttempt->id)
             ->where(function (Builder $builder): void {
-                $builder->whereNotIn('status', array_map(
-                    static fn (MediaReplacementStatus $mediaReplacementStatus): string => $mediaReplacementStatus->value,
-                    self::TERMINAL_STATUSES,
-                ))->orWhere(function (Builder $builder): void {
-                    $builder->where('status', MediaReplacementStatus::NeedsAttention->value)
-                        ->whereIn('failure_reason', self::RECOVERABLE_FAILURE_REASONS);
-                });
+                $builder->whereNotIn('status', MediaReplacementStatus::terminalValues())
+                    ->orWhere(function (Builder $builder): void {
+                        $builder->where('status', MediaReplacementStatus::NeedsAttention->value)
+                            ->whereIn('failure_reason', self::RECOVERABLE_FAILURE_REASONS);
+                    });
             })
             ->update([
                 'status' => $status->value,
@@ -426,6 +451,41 @@ final readonly class MediaReplacementTracker
                 'warning',
                 'Replacement webhook correlation was ambiguous and needs manual review.',
             );
+        }
+    }
+
+    /**
+     * A grab landed on a target we are actively replacing, for a release that no
+     * attempt on that target vetted. The expected source is the arr's own
+     * auto-redownload search — blocklisting the old release makes the arr queue
+     * one — but the webhook does not say who asked for the grab, so this claims
+     * nothing about the requester. What it acts on is narrower and observable: a
+     * second download for this target is starting while a vetted replacement is
+     * still in flight, and the two would run in parallel.
+     *
+     * Only attempts whose own grab the arr has already accepted (grab_accepted_at)
+     * may sweep. Before that, a title mismatch could still be our own release
+     * under a name the indexer reported differently.
+     *
+     * The sweep is additionally armed only by the attempt's recorded download_id
+     * — see CompetingGrabSweeper — so a competitor grabbed before our own Grab
+     * webhook landed removes nothing here. SweepCompetingGrabs' delayed passes
+     * cover that gap only where the executor armed them, which is where the
+     * blocklist succeeded (MediaReplacementActions guards queueFor on it): where
+     * it was declined, nothing cleans such a competitor up and the reconciliation
+     * command is the only remaining backstop for the attempt itself. sweep()
+     * never throws and logs its own failures, so there is no result to inspect.
+     *
+     * @param  Collection<int, MediaReplacementAttempt>  $onTarget
+     */
+    private function sweepCompetingGrab(ServiceConnection $serviceConnection, Collection $onTarget): void
+    {
+        $accepted = $onTarget->filter(
+            static fn (MediaReplacementAttempt $mediaReplacementAttempt): bool => $mediaReplacementAttempt->grab_accepted_at !== null,
+        );
+
+        foreach ($accepted as $attempt) {
+            $this->competingGrabSweeper->sweep($serviceConnection, $attempt);
         }
     }
 
@@ -472,13 +532,24 @@ final readonly class MediaReplacementTracker
     }
 
     /**
+     * The webhook's download id, TRIMMED. This value is both the correlation key
+     * for later events and what arms CompetingGrabSweeper, which compares it
+     * against the queue's own ids. Deciding emptiness on the trimmed form while
+     * storing the padded one would let a padded " DL-X " arm a sweep that can
+     * never recognise our own "DL-X" download — and the sweep removes what it
+     * does not recognise, with removeFromClient: true.
+     *
      * @param  array<string, mixed>  $payload
      */
     private function downloadId(array $payload): ?string
     {
         $downloadId = $payload['downloadId'] ?? ($payload['downloadInfo']['downloadId'] ?? null);
 
-        return is_string($downloadId) && trim($downloadId) !== '' ? $downloadId : null;
+        if (! is_string($downloadId) || trim($downloadId) === '') {
+            return null;
+        }
+
+        return trim($downloadId);
     }
 
     /**
@@ -493,10 +564,18 @@ final readonly class MediaReplacementTracker
         return is_int($id) && $id > 0 ? $id : null;
     }
 
+    /**
+     * The stored target's own media id. `service` is normalized the way
+     * remonitorTarget() below and the rest of this namespace normalize it: an
+     * exact `=== 'radarr'` here read a stored 'Radarr' or ' radarr' as Sonarr and
+     * looked up series_id on a movie target, while remonitorTarget() read the
+     * same value as Radarr — two answers for one target, and a null id here
+     * silently drops the attempt out of every correlation.
+     */
     private function attemptTargetId(MediaReplacementAttempt $mediaReplacementAttempt): ?int
     {
         $target = is_array($mediaReplacementAttempt->target) ? $mediaReplacementAttempt->target : [];
-        $id = ($target['service'] ?? null) === 'radarr'
+        $id = mb_strtolower(trim((string) ($target['service'] ?? ''))) === 'radarr'
             ? ($target['movie_id'] ?? null)
             : ($target['series_id'] ?? null);
 
@@ -556,10 +635,19 @@ final readonly class MediaReplacementTracker
     }
 
     /**
-     * Restore monitoring suspended by the executor for an attempt that is
-     * being terminalized outside the normal webhook/executor handshake (the
-     * reconciliation sweep). Returns true when monitoring is settled — either
-     * restored now, or there was nothing to restore.
+     * Restore monitoring the executor suspended. Returns true when monitoring is
+     * SETTLED — restored now, or there was nothing to restore — which is what lets
+     * callers fold it straight into a success predicate.
+     *
+     * This is the primary restore for the executor/webhook handshake:
+     * finalizeAfterCleanup() calls it as the first safe moment to put monitoring
+     * back once the cleanup phase closes. The reconciliation command also calls it
+     * for attempts that settle without any import event, where no webhook is coming.
+     *
+     * Both no-op paths matter and are deliberate: an attempt that never had
+     * monitoring suspended returns true untouched, and one suspended on a target the
+     * user had already unmonitored has the flag cleared WITHOUT an arr call, because
+     * re-enabling monitoring nobody asked for would be wrong.
      */
     public function restoreSuspendedMonitoring(MediaReplacementAttempt $mediaReplacementAttempt): bool
     {
@@ -595,6 +683,37 @@ final readonly class MediaReplacementTracker
     }
 
     /**
+     * Whether a replacement attempt on this connection owns the given download.
+     *
+     * The automatic subtitle check uses this to stay off its own replacements:
+     * a replacement's import is one verifyDownload() verifies, or has already
+     * judged, and it flags a still-missing language as
+     * imported_subtitles_missing_required_language. "Or has already judged"
+     * matters: for an attempt terminal on a NON-recoverable reason,
+     * attemptsByDownloadId() excludes it and verifyDownload() returns without
+     * re-inspecting. No subtitle judgement is made for that import, and stepping
+     * aside is still right — the attempt is already operator-facing, and auditing
+     * would fire a fresh replacement at a case a human owns.
+     * Terminal attempts count too — the webhook that terminalizes an attempt and
+     * the auditor observe the same event, and the auditor must not act on it in
+     * either ordering. Deliberately broader than attemptsByDownloadId(), which
+     * narrows to the attempts that may still be advanced.
+     */
+    public function hasAttemptForDownload(ServiceConnection $serviceConnection, string $downloadId): bool
+    {
+        $downloadId = trim($downloadId);
+
+        if ($downloadId === '') {
+            return false;
+        }
+
+        return MediaReplacementAttempt::query()
+            ->where('service_connection_id', $serviceConnection->id)
+            ->where('download_id', $downloadId)
+            ->exists();
+    }
+
+    /**
      * Restore monitoring on the target after the replacement imported. The
      * executor unmonitors it before blocklisting to suppress the arr's
      * auto-redownload search; this puts it back.
@@ -607,7 +726,15 @@ final readonly class MediaReplacementTracker
     private function remonitorTarget(ServiceConnection $serviceConnection, array $target): bool
     {
         try {
-            if (mb_strtolower(trim((string) ($target['service'] ?? ''))) === 'radarr') {
+            // Shape decided from the CONNECTION, not the target's own `service`. These
+            // writes go to the connection the webhook arrived on, so deriving the client
+            // from a second source lets a target whose stored service contradicts its
+            // connection send a movie call to a Sonarr instance. Same single-source rule
+            // CompetingGrabSweeper settled on. No reachable input changes behaviour: the
+            // inspector stamps the matching literal into every snapshot it writes, and
+            // MediaReplacementActions aborts a replacement whose stored and fresh
+            // services disagree — but one source cannot disagree with itself.
+            if ($serviceConnection->type === ServiceType::Radarr) {
                 $movieId = (int) ($target['movie_id'] ?? 0);
 
                 if ($movieId > 0) {
