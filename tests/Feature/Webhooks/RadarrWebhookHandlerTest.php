@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use App\Enums\MediaReplacementStatus;
+use App\Jobs\AuditImportedSubtitles;
 use App\Jobs\ProcessWebhookEvent;
 use App\Models\ActionRequest;
 use App\Models\ActionTypeConfig;
@@ -12,6 +13,7 @@ use App\Models\ServiceConnection;
 use App\Models\WebhookEvent;
 use App\Services\Radarr\RadarrWebhookHandler;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Queue;
 
 beforeEach(function (): void {
     $this->connection = ServiceConnection::factory()->radarr()->create();
@@ -312,6 +314,43 @@ test('Unknown eventType is logged and skipped (no ActivityLog)', function (): vo
     expect(ActionRequest::count())->toBe(0);
     expect(ActivityLog::count())->toBe(0);
     expect($webhookEvent->fresh()->processed_at)->not->toBeNull();
+});
+
+test('Download event queues the automatic subtitle check', function (): void {
+    Queue::fake();
+
+    $webhookEvent = WebhookEvent::factory()->create([
+        'service_connection_id' => $this->connection->id,
+        'event_type' => 'Download',
+        'payload' => [
+            'eventType' => 'Download',
+            'movie' => ['id' => 88, 'title' => 'A Movie'],
+            'downloadId' => 'RDL-1',
+        ],
+    ]);
+
+    resolve(RadarrWebhookHandler::class)->handle($webhookEvent);
+
+    Queue::assertPushed(AuditImportedSubtitles::class, fn (AuditImportedSubtitles $job): bool => $job->webhookEventId === $webhookEvent->id);
+});
+
+test('a non-import event does not queue the automatic subtitle check', function (): void {
+    // Pins the dispatch to the Download branch: queueing it from handle() for
+    // every event type would still satisfy the test above.
+    Queue::fake();
+
+    $webhookEvent = WebhookEvent::factory()->create([
+        'service_connection_id' => $this->connection->id,
+        'event_type' => 'Rename',
+        'payload' => [
+            'eventType' => 'Rename',
+            'movie' => ['id' => 88, 'title' => 'A Movie'],
+        ],
+    ]);
+
+    resolve(RadarrWebhookHandler::class)->handle($webhookEvent);
+
+    Queue::assertNotPushed(AuditImportedSubtitles::class);
 });
 
 test('ProcessWebhookEvent routes Radarr connections to RadarrWebhookHandler', function (): void {

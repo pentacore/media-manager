@@ -11,9 +11,13 @@ use Illuminate\Notifications\Messages\BroadcastMessage;
 use Illuminate\Notifications\Notification;
 
 /**
- * Notifies admins when a media subtitle replacement reaches a terminal or
- * needs-attention state (verified, failed, needs_attention). Channel selection
- * is delegated to PreferenceResolver so each user controls what reaches them.
+ * Notifies admins about a media subtitle replacement. MediaReplacementTracker
+ * sends it when an attempt reaches a terminal or needs-attention state
+ * (verified, failed, needs_attention); ImportedSubtitleAuditor also sends it for
+ * the automatic check's outcomes — a replacement requested, an import whose file
+ * could not be identified, a target that hit its attempt cap, and a missing
+ * language with no eligible replacement. Channel selection is delegated to
+ * PreferenceResolver so each user controls what reaches them.
  */
 class MediaReplacementStatusChanged extends Notification
 {

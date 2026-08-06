@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use App\Enums\MediaReplacementStatus;
+use App\Jobs\AuditImportedSubtitles;
 use App\Jobs\ProcessWebhookEvent;
 use App\Models\ActionRequest;
 use App\Models\ActionTypeConfig;
@@ -13,6 +14,7 @@ use App\Models\WebhookEvent;
 use App\Services\Sonarr\SonarrWebhookHandler;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Queue;
 
 beforeEach(function (): void {
     $this->connection = ServiceConnection::factory()->sonarr()->create();
@@ -376,6 +378,60 @@ test('Unknown eventType is logged and skipped (no ActivityLog)', function (): vo
     expect(ActionRequest::count())->toBe(0);
     expect(ActivityLog::count())->toBe(0);
     expect($webhookEvent->fresh()->processed_at)->not->toBeNull();
+});
+
+test('Download event queues the automatic subtitle check', function (): void {
+    Queue::fake();
+    $this->freezeSecond();
+
+    $webhookEvent = WebhookEvent::factory()->create([
+        'service_connection_id' => $this->connection->id,
+        'event_type' => 'Download',
+        'payload' => [
+            'eventType' => 'Download',
+            'series' => ['id' => 42, 'title' => 'My Show'],
+            'episodes' => [['seasonNumber' => 1, 'episodeNumber' => 1]],
+            'downloadId' => 'DL-1',
+        ],
+    ]);
+
+    resolve(SonarrWebhookHandler::class)->handle($webhookEvent);
+
+    // The delay is load-bearing, not cosmetic: it gives Sonarr's mediainfo scan
+    // time to finish so the imported file's subtitle list is populated when the
+    // audit reads it. 30 is written out rather than read from DELAY_SECONDS so
+    // that shrinking the constant — which reopens that race — fails here.
+    //
+    // The carried connection id and payload are pinned for the same reason the
+    // job carries them: the event row may be deleted before the job runs, so
+    // they are the only state the audit is guaranteed to see. queueFor() is
+    // shared with the Radarr handler, so both are pinned once, here.
+    Queue::assertPushed(
+        AuditImportedSubtitles::class,
+        fn (AuditImportedSubtitles $job): bool => $job->webhookEventId === $webhookEvent->id
+            && $job->serviceConnectionId === $this->connection->id
+            && $job->payload['downloadId'] === 'DL-1'
+            && $job->delay?->getTimestamp() === now()->addSeconds(30)->getTimestamp(),
+    );
+});
+
+test('a non-import event does not queue the automatic subtitle check', function (): void {
+    // Pins the dispatch to the Download branch: queueing it from handle() for
+    // every event type would still satisfy the test above.
+    Queue::fake();
+
+    $webhookEvent = WebhookEvent::factory()->create([
+        'service_connection_id' => $this->connection->id,
+        'event_type' => 'Rename',
+        'payload' => [
+            'eventType' => 'Rename',
+            'series' => ['id' => 42, 'title' => 'My Show'],
+        ],
+    ]);
+
+    resolve(SonarrWebhookHandler::class)->handle($webhookEvent);
+
+    Queue::assertNotPushed(AuditImportedSubtitles::class);
 });
 
 test('ProcessWebhookEvent routes sonarr connections to SonarrWebhookHandler', function (): void {

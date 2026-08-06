@@ -20,12 +20,20 @@ interface ScopeGuidance {
 }
 
 type Scope = 'anime' | 'tv' | 'movie';
+
+export interface SubtitleCheckConfiguration {
+    enabled: boolean;
+    max_attempts_per_target: number;
+    cooldown_hours: number;
+}
+
 export interface MediaReplacementConfiguration {
     automatic_selection_enabled: boolean;
     automatic_selection_threshold: number;
     global_languages: string[];
     scoped_languages: Record<Scope, string[] | null>;
     season_pack_policy: string;
+    subtitle_check: SubtitleCheckConfiguration;
     guidance: Record<Scope, ScopeGuidance>;
 }
 
@@ -37,9 +45,24 @@ const props = defineProps<{
     errors: Record<string, string>;
 }>();
 
-const state = reactive<MediaReplacementConfiguration>(
-    structuredClone(toRaw(props.configuration)),
-);
+const defaultSubtitleCheck: SubtitleCheckConfiguration = {
+    enabled: false,
+    max_attempts_per_target: 1,
+    cooldown_hours: 24,
+};
+
+const incomingConfiguration = structuredClone(toRaw(props.configuration));
+
+// The block is always present in a normalized configuration; the fallback keeps
+// the bindings defined if the page is ever handed an older payload that predates
+// it, since the hidden field posts `state` verbatim.
+const state = reactive<MediaReplacementConfiguration>({
+    ...incomingConfiguration,
+    subtitle_check: {
+        ...defaultSubtitleCheck,
+        ...(incomingConfiguration.subtitle_check ?? {}),
+    },
+});
 
 const scopes: Array<{ key: Scope; label: string }> = [
     { key: 'anime', label: 'Anime' },
@@ -126,6 +149,60 @@ function setScopeLanguages(scope: Scope, value: string): void {
                 type="number"
                 min="0"
                 max="100"
+                class="h-8 max-w-[120px] text-sm"
+            />
+        </div>
+
+        <div
+            class="grid items-start gap-6"
+            style="grid-template-columns: 200px 1fr"
+        >
+            <Field
+                label="Automatic subtitle check"
+                hint="Check completed downloads for the required subtitle languages when the series or movie carries a subtitle-check tag. Tags are configured per connection on the connection's own settings page."
+            >
+                <span />
+            </Field>
+            <label class="flex items-center gap-2 text-sm">
+                <input v-model="state.subtitle_check.enabled" type="checkbox" />
+                Check tagged imports for missing subtitles
+            </label>
+        </div>
+
+        <div
+            class="grid items-start gap-6"
+            style="grid-template-columns: 200px 1fr"
+        >
+            <Field
+                label="Attempts per item"
+                hint="How many replacements the automatic check may request for the same item inside the cooldown window."
+            >
+                <span />
+            </Field>
+            <Input
+                v-model.number="state.subtitle_check.max_attempts_per_target"
+                type="number"
+                min="1"
+                max="10"
+                class="h-8 max-w-[120px] text-sm"
+            />
+        </div>
+
+        <div
+            class="grid items-start gap-6"
+            style="grid-template-columns: 200px 1fr"
+        >
+            <Field
+                label="Cooldown (hours)"
+                hint="Window over which the attempts-per-item limit is counted."
+            >
+                <span />
+            </Field>
+            <Input
+                v-model.number="state.subtitle_check.cooldown_hours"
+                type="number"
+                min="1"
+                max="720"
                 class="h-8 max-w-[120px] text-sm"
             />
         </div>

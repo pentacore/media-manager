@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use App\Jobs\Ai\GenerateConversationTitle;
+use App\Jobs\AuditImportedSubtitles;
 use App\Jobs\EmbedLibraryItem;
 use App\Jobs\ExecuteActionRequest;
 use App\Jobs\FetchLatestServiceVersion;
@@ -52,7 +53,12 @@ pest()->extend(TestCase::class)
         // (async queue); action execution is covered by the direct executor
         // tests (ExecuteActionRequestTest, *ActionsTest) and by suites that
         // re-fake the queue and assert push behaviour.
-        Queue::fake([PingServiceHealth::class, FetchLatestServiceVersion::class, GenerateConversationTitle::class, EmbedLibraryItem::class, ExecuteActionRequest::class]);
+        // AuditImportedSubtitles is faked for the same reason: the arr Download
+        // handlers queue it, the sync queue ignores its delay, and on a
+        // connection with subtitle-check tags it would inspect the arr and sweep
+        // every indexer. Its own test calls handle() directly and the handler
+        // tests re-fake the queue, so neither is affected.
+        Queue::fake([PingServiceHealth::class, FetchLatestServiceVersion::class, GenerateConversationTitle::class, EmbedLibraryItem::class, ExecuteActionRequest::class, AuditImportedSubtitles::class]);
 
         // External-API caches (app/Cache/Services) default to redis in production.
         // Force the array store in tests so per-test state is isolated and tagged

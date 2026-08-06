@@ -17,8 +17,11 @@ use App\Services\Arr\ArrClient;
 use App\Services\Bazarr\SubtitleCaseSupersession;
 use App\Services\MediaReplacement\SonarrLibraryTypeSettings;
 use App\Services\MediaReplacement\SonarrRootFolderCatalog;
+use App\Services\MediaReplacement\SubtitleCheckTagSettings;
 use App\Services\Prowlarr\ProwlarrClient;
+use App\Services\Radarr\RadarrClient;
 use App\Services\ServiceClientFactory;
+use App\Services\Sonarr\SonarrClient;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\QueryException;
 use Illuminate\Http\JsonResponse;
@@ -78,6 +81,7 @@ class ServiceConnectionController extends Controller
     public function edit(
         ServiceConnection $serviceConnection,
         SonarrRootFolderCatalog $sonarrRootFolderCatalog,
+        SubtitleCheckTagSettings $subtitleCheckTagSettings,
     ): Response {
         $serviceConnection->load('bazarrServiceLinks');
 
@@ -139,7 +143,70 @@ class ServiceConnectionController extends Controller
             'sonarrRootFolders' => $serviceConnection->type === ServiceType::Sonarr
                 ? Inertia::defer(fn (): array => $sonarrRootFolderCatalog->forConnection($serviceConnection))
                 : [],
+            'arrTags' => in_array($serviceConnection->type, [ServiceType::Sonarr, ServiceType::Radarr], true)
+                ? Inertia::defer(fn (): ?array => $this->arrTags($serviceConnection))
+                : null,
+            'subtitleCheckTags' => $subtitleCheckTagSettings->forConnection($serviceConnection),
         ]);
+    }
+
+    /**
+     * Tag labels defined on a Sonarr/Radarr instance, for the subtitle-check
+     * picker. Returns null for a disabled connection and when the instance
+     * cannot be reached — so the form can tell "none defined" (an empty list)
+     * apart from "unavailable" (null). Rows the instance reports without a
+     * usable int id and a non-blank label are dropped.
+     *
+     * Labels are trimmed here, where they enter the app. The stored side is
+     * always trimmed, so an untrimmed label would compare unequal to its own
+     * stored form and render a configured tag as unchecked — which the next
+     * save would then persist as a deselection.
+     *
+     * Caller must restrict this to Sonarr and Radarr connections; edit() owns
+     * that check, because it also decides whether to defer the prop at all.
+     *
+     * @return list<array{id: int, label: string}>|null
+     */
+    private function arrTags(ServiceConnection $serviceConnection): ?array
+    {
+        if (! $serviceConnection->is_active) {
+            return null;
+        }
+
+        try {
+            $tags = $serviceConnection->type === ServiceType::Sonarr
+                ? new SonarrClient($serviceConnection)->getTags()
+                : new RadarrClient($serviceConnection)->getTags();
+        } catch (Throwable $throwable) {
+            Log::warning('Failed to load arr tags for connection edit page', [
+                'connection_id' => $serviceConnection->id,
+                'exception' => $throwable::class,
+            ]);
+
+            return null;
+        }
+
+        $labels = [];
+
+        foreach ($tags as $tag) {
+            $id = $tag['id'] ?? null;
+            $label = is_string($tag['label'] ?? null) ? trim($tag['label']) : null;
+            if (! is_int($id)) {
+                continue;
+            }
+
+            if ($label === null) {
+                continue;
+            }
+
+            if ($label === '') {
+                continue;
+            }
+
+            $labels[] = ['id' => $id, 'label' => $label];
+        }
+
+        return $labels;
     }
 
     /**
@@ -332,6 +399,7 @@ class ServiceConnectionController extends Controller
         ServiceConnectionUpdateRequest $serviceConnectionUpdateRequest,
         ServiceConnection $serviceConnection,
         SonarrLibraryTypeSettings $sonarrLibraryTypeSettings,
+        SubtitleCheckTagSettings $subtitleCheckTagSettings,
         SubtitleCaseSupersession $subtitleCaseSupersession,
     ): RedirectResponse {
         $validated = $serviceConnectionUpdateRequest->validated();
@@ -363,12 +431,14 @@ class ServiceConnectionController extends Controller
         $diskDisplay = $validated['disk_display'] ?? null;
         $hiddenCategories = $validated['hidden_categories'] ?? null;
         $sonarrRootFolders = $validated['sonarr_root_folders'] ?? null;
+        $subtitleCheckTags = $validated['subtitle_check_tags'] ?? null;
         unset(
             $validated['disk_mode'],
             $validated['disk_paths'],
             $validated['disk_display'],
             $validated['hidden_categories'],
             $validated['sonarr_root_folders'],
+            $validated['subtitle_check_tags'],
         );
 
         if ($diskMode !== null || $diskPaths !== null || $diskDisplay !== null) {
@@ -396,6 +466,11 @@ class ServiceConnectionController extends Controller
         if (is_array($sonarrRootFolders) && $serviceConnection->type === ServiceType::Sonarr) {
             $existingSettings = $validated['settings'] ?? $serviceConnection->settings ?? [];
             $validated['settings'] = $sonarrLibraryTypeSettings->mergeInto($existingSettings, $sonarrRootFolders);
+        }
+
+        if (is_array($subtitleCheckTags) && in_array($serviceConnection->type, [ServiceType::Sonarr, ServiceType::Radarr], true)) {
+            $existingSettings = $validated['settings'] ?? $serviceConnection->settings ?? [];
+            $validated['settings'] = $subtitleCheckTagSettings->mergeInto($existingSettings, $subtitleCheckTags);
         }
 
         $validated = $this->mergeWhisparrVersion($validated, $serviceConnection);
