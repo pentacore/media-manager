@@ -18,7 +18,7 @@
         "@laravel/vite-plugin-wayfinder": "^0.1.3",
         "@pentacore/vite-plugin-laravel-typefinder": "^5.0.0",
         "@semantic-release/changelog": "^7.0.0",
-        "@semantic-release/git": "^10.0.1",
+        "@semantic-release/git": "^11.0.1",
         "@stylistic/eslint-plugin": "^5.10.0",
         "@tailwindcss/vite": "^4.3.3",
         "@types/node": "^26.1.2",
