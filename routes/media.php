@@ -38,6 +38,7 @@ Route::middleware(['auth', 'verified', 'password.set', 'role:member'])
 
         // Manual media replacement
         Route::get('replacement/inspect', [MediaReplacementController::class, 'inspect'])->name('replacement.inspect');
+        Route::get('replacement/candidates', [MediaReplacementController::class, 'candidates'])->name('replacement.candidates');
 
         // Seerr requests
         Route::get('requests', [RequestController::class, 'index'])->name('requests.index');

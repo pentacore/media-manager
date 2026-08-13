@@ -9,10 +9,12 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\Media\ReplacementTargetRequest;
 use App\Services\MediaReplacement\MediaFileInspector;
 use App\Services\MediaReplacement\MediaReplacementTargetFingerprint;
+use App\Services\MediaReplacement\ReplacementCandidateFinder;
 use App\Settings\MediaReplacementSettings;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\RequestException;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Str;
 
 class MediaReplacementController extends Controller
@@ -51,6 +53,45 @@ class MediaReplacementController extends Controller
             'snapshot' => $snapshot,
             'fingerprint' => MediaReplacementTargetFingerprint::fromSnapshot($snapshot),
             'required_languages' => $scope === null ? [] : $mediaReplacementSettings->effectiveLanguages($scope),
+        ]);
+    }
+
+    public function candidates(
+        ReplacementTargetRequest $request,
+        MediaFileInspector $mediaFileInspector,
+        ReplacementCandidateFinder $replacementCandidateFinder,
+    ): JsonResponse {
+        $connection = $request->connection();
+        $validated = $request->validated();
+
+        // Narrow catch per .ai/rules/controllers.md — never Throwable — covering
+        // both upstream round-trips (inspect + find) with one 502 translation.
+        try {
+            $snapshot = $mediaFileInspector->inspect(
+                (string) ($validated['service'] ?? ''),
+                (int) ($validated['item_id'] ?? 0),
+                seasonNumber: isset($validated['season_number']) ? (int) $validated['season_number'] : null,
+                episodeNumber: isset($validated['episode_number']) ? (int) $validated['episode_number'] : null,
+                serviceConnection: $connection,
+            );
+
+            abort_if(($snapshot['ambiguous'] ?? false) === true, 422, 'This file cannot be replaced automatically.');
+
+            $fingerprint = MediaReplacementTargetFingerprint::fromSnapshot($snapshot);
+
+            $result = Cache::remember(
+                "media-replacement:candidates:{$fingerprint}",
+                120,
+                fn (): array => $replacementCandidateFinder->find($snapshot, serviceConnection: $connection),
+            );
+        } catch (RequestException|ConnectionException) {
+            return response()->json(['message' => 'Sonarr/Radarr is unreachable.'], 502);
+        }
+
+        return response()->json([
+            'candidates' => $result['candidates'],
+            'effective_languages' => $result['effective_languages'],
+            'excluded' => $result['excluded'],
         ]);
     }
 
