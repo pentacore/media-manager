@@ -43,6 +43,7 @@ class FetchLatestServiceVersion implements ShouldQueue
         'bazarr' => 'morpheus65535/bazarr',
         'prowlarr' => 'Prowlarr/Prowlarr',
         'seerr' => 'seerr-team/seerr',
+        'sabnzbd' => 'sabnzbd/sabnzbd',
         'emby' => 'MediaBrowser/Emby.Releases', // Emby is closed-source, but this is the canonical repo and latest release should be correct
         'whisparr' => 'Whisparr/Whisparr',
     ];

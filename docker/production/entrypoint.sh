@@ -24,12 +24,25 @@ warm_caches() {
     php artisan event:cache
 }
 
+run_migrations() {
+    # --isolated takes a DB-level atomic lock so concurrent replicas don't
+    # race the migrations table. The seeder that follows is idempotent and
+    # never touches admin-owned approval toggles (see ActionTypeConfigSeeder);
+    # running it on every deploy delivers newly added action types to
+    # existing databases.
+    # A replica that loses the migration lock proceeds to the seeder against a
+    # possibly mid-migration schema and may crash; the restart policy retries
+    # it after the winner finishes — accepted for the env-driven path.
+    php artisan migrate --force --isolated
+    php artisan db:seed --class=ActionTypeConfigSeeder --force
+}
+
 if [[ "${RUN_MIGRATIONS:-false}" == "true" ]]; then
     # --isolated takes a DB-level atomic lock so concurrent web replicas don't
     # race the migrations table. The dedicated `migrate` role below is still
     # the recommended pattern for multi-replica deployments.
     echo "Running migrations..."
-    php artisan migrate --force --isolated
+    run_migrations
 fi
 
 case "$role" in
@@ -89,7 +102,8 @@ case "$role" in
         ;;
 
     migrate)
-        exec php artisan migrate --force --isolated
+        run_migrations
+        exit 0
         ;;
 
     *)

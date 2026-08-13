@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use App\Enums\ServiceType;
 use App\Events\ServiceLatestVersionFetched;
 use App\Jobs\FetchLatestServiceVersion;
 use App\Models\ServiceConnection;
@@ -197,4 +198,11 @@ test('REPO_MAP includes Prowlarr', function (): void {
     expect(FetchLatestServiceVersion::REPO_MAP)
         ->toHaveKey('prowlarr')
         ->and(FetchLatestServiceVersion::REPO_MAP['prowlarr'])->toBe('Prowlarr/Prowlarr');
+});
+
+test('repo map covers every service type', function (): void {
+    foreach (ServiceType::cases() as $serviceType) {
+        expect(FetchLatestServiceVersion::REPO_MAP)
+            ->toHaveKey($serviceType->value, message: "no version-check repo for {$serviceType->value}");
+    }
 });
