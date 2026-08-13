@@ -31,6 +31,13 @@ class InterventionCounter
      *  cadence so the cache is always populated by the next poll. */
     public const int CACHE_TTL = 600;
 
+    /** Cache TTL (seconds) for a recompute that couldn't reach every
+     *  service and had no previous total to fall back on. Short, so the
+     *  badge recovers quickly once the upstream answers — but present,
+     *  because with no cache entry at all HandleInertiaRequests re-walks
+     *  the unreachable service inline on every page render. */
+    public const int FAILURE_CACHE_TTL = 60;
+
     /** Tracked-state values that mean "stuck — admin needs to act". */
     private const array INTERVENTION_STATES = [
         'importBlocked',
@@ -79,7 +86,13 @@ class InterventionCounter
         if ($anyFailed) {
             $cached = Cache::get(self::CACHE_KEY);
 
-            return is_int($cached) ? $cached : $count;
+            if (is_int($cached)) {
+                return $cached;
+            }
+
+            Cache::put(self::CACHE_KEY, $count, self::FAILURE_CACHE_TTL);
+
+            return $count;
         }
 
         Cache::put(self::CACHE_KEY, $count, self::CACHE_TTL);

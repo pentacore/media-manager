@@ -8,6 +8,8 @@ use App\Jobs\EmbedLibraryItem;
 use App\Jobs\ExecuteActionRequest;
 use App\Jobs\FetchLatestServiceVersion;
 use App\Jobs\PingServiceHealth;
+use App\Services\Library\InterventionCounter;
+use App\Services\Sabnzbd\SabnzbdDownloadCounter;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Client\Request;
 use Illuminate\Support\Facades\Cache;
@@ -75,6 +77,16 @@ pest()->extend(TestCase::class)
 
         config()->set('mediamanager.cache.store', 'array');
         Cache::store('array')->flush();
+
+        // The sidebar badge counters (HandleInertiaRequests) recompute inline
+        // on a cold cache, walking every *arr / SAB connection the test
+        // created — real HTTP to unreachable factory hosts (.local DNS stalls
+        // ~13s) that burns the 30s assertion budget and flakes whichever
+        // connection test runs into it. Seed both caches so page renders
+        // never recompute; the badge logic itself is covered by feature tests
+        // (InterventionCounterTest, HandleInertiaRequestsTest).
+        Cache::put(InterventionCounter::CACHE_KEY, 0, 600);
+        Cache::put(SabnzbdDownloadCounter::CACHE_KEY, ['queued' => 0, 'completed' => 0], 600);
     })
     ->in('Browser');
 

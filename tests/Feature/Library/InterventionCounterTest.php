@@ -76,6 +76,38 @@ test('upstream HTTP failure does not zero the badge for the other service', func
     expect(resolve(InterventionCounter::class)->recompute())->toBe(1);
 });
 
+test('cold-cache recompute with a failing upstream still writes a cache entry', function (): void {
+    ServiceConnection::factory()->sonarr()->create([
+        'url' => 'http://sonarr.fake:8989',
+    ]);
+
+    Http::fake([
+        'sonarr.fake:8989/api/v3/queue*' => Http::response('Server Error', 500),
+    ]);
+
+    expect(resolve(InterventionCounter::class)->recompute())->toBe(0);
+
+    // Without this write, every Inertia render re-walks the unreachable
+    // service inline (HandleInertiaRequests recomputes on cache miss),
+    // stalling all page loads until the upstream answers again.
+    expect(Cache::has(InterventionCounter::CACHE_KEY))->toBeTrue();
+});
+
+test('a failing upstream keeps the previously cached total instead of overwriting it', function (): void {
+    Cache::put(InterventionCounter::CACHE_KEY, 7, 60);
+
+    ServiceConnection::factory()->sonarr()->create([
+        'url' => 'http://sonarr.fake:8989',
+    ]);
+
+    Http::fake([
+        'sonarr.fake:8989/api/v3/queue*' => Http::response('Server Error', 500),
+    ]);
+
+    expect(resolve(InterventionCounter::class)->recompute())->toBe(7);
+    expect(Cache::get(InterventionCounter::CACHE_KEY))->toBe(7);
+});
+
 test('get returns 0 when the cache is empty', function (): void {
     expect(resolve(InterventionCounter::class)->get())->toBe(0);
 });
