@@ -118,6 +118,7 @@ test('it queues the unique automatic candidate and records the action in the run
         'selection_mode',
         'agent_rationale',
         'original_history_id',
+        'verify_subtitles',
         'subtitle_case_id',
     ]);
 });

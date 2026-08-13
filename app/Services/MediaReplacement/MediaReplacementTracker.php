@@ -149,13 +149,30 @@ final readonly class MediaReplacementTracker
             );
 
             $required = $this->normalizeCodes($attempt->required_languages);
-            $found = ($snapshot['ambiguous'] ?? false) === true
-                ? []
-                : $this->normalizeCodes($snapshot['subtitles'] ?? []);
-            $missing = array_values(array_diff($required, $found));
+            // Read from the attempt's ActionRequest, not a column: the flag is a
+            // per-request choice the builder wrote into the payload, and the
+            // manual replace endpoint (Task 6) is the only caller expected to pass
+            // false. An absent key (every pre-existing caller) defaults to true.
+            $verifySubtitles = (bool) ($attempt->actionRequest?->payload['verify_subtitles'] ?? true);
 
-            $verification = ['required' => $required, 'found' => $found, 'missing' => $missing];
-            $subtitlesOk = ($snapshot['ambiguous'] ?? false) !== true && $missing === [];
+            if ($verifySubtitles) {
+                $found = ($snapshot['ambiguous'] ?? false) === true
+                    ? []
+                    : $this->normalizeCodes($snapshot['subtitles'] ?? []);
+                $missing = array_values(array_diff($required, $found));
+
+                $verification = ['subtitles_checked' => true, 'required' => $required, 'found' => $found, 'missing' => $missing];
+                $subtitlesOk = ($snapshot['ambiguous'] ?? false) !== true && $missing === [];
+            } else {
+                // Verification opted out: download tracking, import confirmation,
+                // and the monitoring restore below all still run — only the
+                // language comparison is skipped. An ambiguous inspection (no file
+                // found) still fails, since that means the import itself is not
+                // confirmed, independent of subtitle verification.
+                $missing = [];
+                $verification = ['subtitles_checked' => false, 'required' => $required, 'found' => [], 'missing' => []];
+                $subtitlesOk = ($snapshot['ambiguous'] ?? false) !== true;
+            }
 
             $needsRestore = $attempt->monitoring_suspended === true;
             $cleanupDone = $attempt->cleanup_completed_at !== null;

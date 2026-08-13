@@ -11,9 +11,11 @@ use App\Settings\MediaReplacementSettings;
  * Builds the `replace_media_file` ActionRequest payload and its approval
  * override. Three entry points dispatch the same action — the arr AI tool, the
  * automatic subtitle check, and the Bazarr subtitle advisor — so a second
- * hand-built copy of the shape would drift. Thirteen of the fourteen base
+ * hand-built copy of the shape would drift. Thirteen of the fifteen base
  * payload keys are read by MediaReplacementActions or the approval card;
- * `agent_rationale` is stored for audit only and read by neither.
+ * `agent_rationale` is stored for audit only and read by neither, and
+ * `verify_subtitles` is read only by MediaReplacementTracker's post-import
+ * verification, via the attempt's ActionRequest.
  *
  * Two optional trailing keys correlate a request back to whichever automation
  * raised it: `auto_check_key` for the automatic check's attempt cap, and
@@ -37,6 +39,13 @@ final readonly class ReplacementRequestBuilder
      * @param  array<string, mixed>  $candidate
      * @param  list<string>  $requiredLanguages
      * @param  'automatic'|'manual'  $selectionMode
+     * @param  bool  $verifySubtitles  Whether post-import verification should
+     *                                 compare the imported file's subtitles against
+     *                                 $requiredLanguages. Defaults to true for
+     *                                 backward compatibility with every existing
+     *                                 caller (auditor, advisor, AI tool), which never
+     *                                 passes it. The manual replace endpoint is the
+     *                                 only caller expected to pass false.
      * @param  string|null  $autoCheckKey  Per-target key used by the automatic
      *                                     check to enforce its attempt cap; null for
      *                                     operator- and agent-initiated requests.
@@ -50,6 +59,7 @@ final readonly class ReplacementRequestBuilder
         array $requiredLanguages,
         string $selectionMode,
         string $reason,
+        bool $verifySubtitles = true,
         ?string $autoCheckKey = null,
         ?int $subtitleCaseId = null,
     ): array {
@@ -80,6 +90,7 @@ final readonly class ReplacementRequestBuilder
             'selection_mode' => $selectionMode,
             'agent_rationale' => $boundedReason,
             'original_history_id' => $snapshot['original_history_id'] ?? null,
+            'verify_subtitles' => $verifySubtitles,
         ];
 
         if ($autoCheckKey !== null) {
