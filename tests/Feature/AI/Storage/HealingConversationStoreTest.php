@@ -36,7 +36,7 @@ function fakeInner(Collection $messages): ConversationStore
             return 'fake';
         }
 
-        public function storeAssistantMessage(string $conversationId, ?string $participantType, string|int|null $participantId, AgentPrompt $prompt, AgentResponse $response): ?string
+        public function storeAssistantMessage(string $conversationId, ?string $participantType, string|int|null $participantId, AgentPrompt $prompt, AgentResponse $response): string
         {
             return 'fake';
         }
