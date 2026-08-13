@@ -15,7 +15,8 @@ function seedRenameConversation(int $userId): string
     $id = (string) Str::uuid();
     DB::table('agent_conversations')->insert([
         'id' => $id,
-        'user_id' => $userId,
+        'participant_type' => User::class,
+        'participant_id' => $userId,
         'title' => 'Original title',
         'created_at' => now()->subHour(),
         'updated_at' => now()->subHour(),

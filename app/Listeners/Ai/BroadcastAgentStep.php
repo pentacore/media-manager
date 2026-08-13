@@ -6,6 +6,7 @@ namespace App\Listeners\Ai;
 
 use App\Ai\Agents\MediaAgent;
 use App\Events\Ai\AgentStepUpdate;
+use App\Models\User;
 use Illuminate\Support\Facades\DB;
 use Laravel\Ai\Concerns\RemembersConversations;
 use Laravel\Ai\Events\ToolInvoked;
@@ -55,7 +56,8 @@ class BroadcastAgentStep
         if ($userId === null) {
             $userId = (int) DB::table('agent_conversations')
                 ->where('id', $conversationId)
-                ->value('user_id');
+                ->where('participant_type', (new User)->getMorphClass())
+                ->value('participant_id');
 
             if ($userId === 0) {
                 return null;

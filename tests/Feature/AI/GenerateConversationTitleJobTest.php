@@ -24,7 +24,8 @@ function seedTitleConvo(string $firstMessage): string
     $id = (string) Str::uuid();
     DB::table('agent_conversations')->insert([
         'id' => $id,
-        'user_id' => null,
+        'participant_type' => null,
+        'participant_id' => null,
         'title' => $title,
         'created_at' => now(),
         'updated_at' => now(),

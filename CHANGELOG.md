@@ -1,3 +1,10 @@
+## [1.16.2](https://github.com/pentacore/media-manager/compare/v1.16.1...v1.16.2) (2026-08-13)
+
+
+### Bug Fixes
+
+* **library:** cache failed intervention recomputes to stop per-render stalls ([15aed87](https://github.com/pentacore/media-manager/commit/15aed873ed0a59554577d8ad8db7e6008a1f4eb0))
+
 ## [1.16.1](https://github.com/pentacore/media-manager/compare/v1.16.0...v1.16.1) (2026-08-12)
 
 # [1.16.0](https://github.com/pentacore/media-manager/compare/v1.15.1...v1.16.0) (2026-08-06)

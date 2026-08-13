@@ -25,7 +25,8 @@ class ConversationController extends Controller
         }
 
         $rows = DB::table('agent_conversations')
-            ->where('user_id', $user->id)
+            ->where('participant_type', $user->getMorphClass())
+            ->where('participant_id', $user->id)
             ->whereNull('archived_at')
             ->latest('updated_at')
             ->limit(self::RECENT_LIMIT)
@@ -49,7 +50,7 @@ class ConversationController extends Controller
             ->first();
 
         if ($row === null
-            || ($user instanceof User && (int) $row->user_id !== (int) $user->id)
+            || ($user instanceof User && ($row->participant_type !== $user->getMorphClass() || (int) $row->participant_id !== (int) $user->id))
             || $row->archived_at !== null
         ) {
             return response()->json(['message' => 'Conversation not found.'], 404);
@@ -83,9 +84,9 @@ class ConversationController extends Controller
 
         $row = DB::table('agent_conversations')
             ->where('id', $conversation)
-            ->first(['id', 'user_id']);
+            ->first(['id', 'participant_type', 'participant_id']);
 
-        if ($row === null || ! $user instanceof User || (int) $row->user_id !== (int) $user->id) {
+        if ($row === null || ! $user instanceof User || $row->participant_type !== $user->getMorphClass() || (int) $row->participant_id !== (int) $user->id) {
             return response()->json(['message' => 'Conversation not found.'], 404);
         }
 

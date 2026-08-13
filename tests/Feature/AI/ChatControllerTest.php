@@ -65,7 +65,8 @@ test('admin cannot continue another users AI conversation', function (): void {
 
     DB::table('agent_conversations')->insert([
         'id' => '018f7cf5-3b26-72c8-93e5-6dc5b44f2472',
-        'user_id' => $owner->id,
+        'participant_type' => User::class,
+        'participant_id' => $owner->id,
         'title' => 'Private conversation',
         'created_at' => now(),
         'updated_at' => now(),
@@ -146,7 +147,8 @@ test('subsequent turns do not dispatch GenerateConversationTitle', function (): 
 
     DB::table('agent_conversations')->insert([
         'id' => $existing,
-        'user_id' => $admin->id,
+        'participant_type' => User::class,
+        'participant_id' => $admin->id,
         'title' => 'Existing convo',
         'created_at' => now()->subHour(),
         'updated_at' => now()->subHour(),

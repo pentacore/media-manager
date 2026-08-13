@@ -413,7 +413,8 @@ class ChatController extends Controller
 
         return DB::table('agent_conversations')
             ->where('id', $conversationId)
-            ->where('user_id', $user->id)
+            ->where('participant_type', $user->getMorphClass())
+            ->where('participant_id', $user->id)
             ->whereNull('archived_at')
             ->exists();
     }

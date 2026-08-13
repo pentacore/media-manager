@@ -103,6 +103,6 @@ test('production documentation explains SSR rollout and rollback', function (): 
     expect($readme)->toContain('## Production deployment')
         ->and($readme)->toContain('docker compose --env-file .env up -d')
         ->and($readme)->toContain('php artisan inertia:check-ssr')
-        ->and($readme)->toContain('docker compose --env-file .env restart ssr')
+        ->and($readme)->toContain('docker compose --env-file .env stop ssr')
         ->and($readme)->toContain('INERTIA_SSR_ENABLED=false');
 });
