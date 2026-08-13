@@ -314,8 +314,9 @@ test('the shared installed-file lease outlives the executor that holds it', func
 test('rejects execution while another subtitle operation holds the shared installed-file lock', function (): void {
     // Another Bazarr subtitle executor has claimed the same installed episode
     // file (managing Sonarr connection + episode id), so this subtitle operation
-    // must not run concurrently against it. Media replacement deliberately does
-    // not take this lock — it never waits on Bazarr.
+    // must not run concurrently against it. Media replacement deliberately takes
+    // SharedMediaTargetLock, ensuring mutual exclusion with Bazarr subtitle
+    // operations on the same installed file (see SharedMediaTargetLock's docblock).
     $lock = Cache::lock(
         SharedMediaTargetLock::key($this->sonarr->id, 'episode', 701),
         120,
