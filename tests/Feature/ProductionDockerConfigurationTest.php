@@ -50,7 +50,7 @@ test('production migrate role uses isolated migrations', function (): void {
     preg_match('/\s+migrate\)(.*?)\s+;;/s', (string) $entrypoint, $migrateBlock);
     expect($migrateBlock)->not->toBeEmpty();
 
-    expect($migrateBlock[1])->toContain('php artisan migrate --force --isolated');
+    expect($migrateBlock[1])->toContain('run_migrations');
 });
 
 test('production frontend build creates an Inertia SSR bundle', function (): void {
@@ -105,4 +105,30 @@ test('production documentation explains SSR rollout and rollback', function (): 
         ->and($readme)->toContain('php artisan inertia:check-ssr')
         ->and($readme)->toContain('docker compose --env-file .env stop ssr')
         ->and($readme)->toContain('INERTIA_SSR_ENABLED=false');
+});
+
+test('production entrypoint seeds action types after migrations on both paths', function (): void {
+    $entrypoint = (string) file_get_contents(base_path('docker/production/entrypoint.sh'));
+
+    // Shared function runs migrate then the seeder, in that order.
+    preg_match('/run_migrations\(\)\s*\{(.*?)\n\}/s', $entrypoint, $fn);
+    expect($fn)->not->toBeEmpty();
+    $migratePos = mb_strpos($fn[1], 'php artisan migrate --force --isolated');
+    $seedPos = mb_strpos($fn[1], 'php artisan db:seed --class=ActionTypeConfigSeeder --force');
+    expect($migratePos)->not->toBeFalse()
+        ->and($seedPos)->not->toBeFalse()
+        ->and($seedPos)->toBeGreaterThan($migratePos);
+
+    // RUN_MIGRATIONS=true path calls the shared function. Anchor on the `if`
+    // statement itself so the match cannot start inside run_migrations() or a
+    // comment mentioning the variable.
+    preg_match('/if \[\[ "\$\{RUN_MIGRATIONS[^\n]*\n(.*?)\nfi\b/s', $entrypoint, $runBlock);
+    expect($runBlock)->not->toBeEmpty()
+        ->and($runBlock[1])->toContain('run_migrations')
+        ->and($runBlock[1])->not->toContain('php artisan migrate');
+
+    // Dedicated migrate role calls the shared function.
+    preg_match('/\s+migrate\)(.*?)\s+;;/s', $entrypoint, $migrateBlock);
+    expect($migrateBlock)->not->toBeEmpty()
+        ->and($migrateBlock[1])->toContain('run_migrations');
 });
