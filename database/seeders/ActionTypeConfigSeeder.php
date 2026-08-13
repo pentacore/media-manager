@@ -6,6 +6,7 @@ namespace Database\Seeders;
 
 use App\Models\ActionTypeConfig;
 use Illuminate\Database\Seeder;
+use Illuminate\Database\UniqueConstraintViolationException;
 
 class ActionTypeConfigSeeder extends Seeder
 {
@@ -180,10 +181,54 @@ class ActionTypeConfigSeeder extends Seeder
                 'requires_approval' => true,
                 'is_enabled' => true,
             ],
+            [
+                'type' => 'whisparr_add_item',
+                'label' => 'Add item to Whisparr',
+                'description' => 'Add a series or movie to Whisparr (AI-initiated).',
+                'requires_approval' => true,
+                'is_enabled' => true,
+            ],
+            [
+                'type' => 'whisparr_delete_item',
+                'label' => 'Delete item from Whisparr',
+                'description' => 'Remove a series or movie from Whisparr, including files (AI-initiated).',
+                'requires_approval' => true,
+                'is_enabled' => true,
+            ],
+            [
+                'type' => 'whisparr_monitor_item',
+                'label' => 'Toggle Whisparr item monitoring',
+                'description' => 'Set whether Whisparr monitors an item for new releases (AI-initiated).',
+                'requires_approval' => false,
+                'is_enabled' => true,
+            ],
+            [
+                'type' => 'whisparr_set_quality_profile',
+                'label' => 'Change Whisparr quality profile',
+                'description' => 'Change the quality profile assigned to an item in Whisparr (AI-initiated).',
+                'requires_approval' => false,
+                'is_enabled' => true,
+            ],
         ];
 
         foreach ($types as $type) {
-            ActionTypeConfig::updateOrCreate(['type' => $type['type']], $type);
+            try {
+                $config = ActionTypeConfig::query()->firstOrCreate(['type' => $type['type']], $type);
+            } catch (UniqueConstraintViolationException) {
+                // Concurrent replica created the row between firstOrCreate's read and
+                // its insert (the entrypoint's env-driven migration path can run on
+                // several replicas). Theirs wins — re-read it.
+                $config = ActionTypeConfig::query()->where('type', $type['type'])->firstOrFail();
+            }
+
+            if (! $config->wasRecentlyCreated) {
+                // requires_approval / is_enabled belong to the admin via Action Rules —
+                // a re-run must never reset them. Only the display copy self-heals.
+                $config->update([
+                    'label' => $type['label'],
+                    'description' => $type['description'],
+                ]);
+            }
         }
     }
 }
