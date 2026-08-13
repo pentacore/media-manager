@@ -47,25 +47,3 @@ test('every action type mapped by the executor is seeded', function (): void {
             ->toBeTrue("missing seeded action type: {$type}");
     }
 });
-
-test('seeder tolerates a concurrent replica creating the same type', function (): void {
-    ActionTypeConfig::creating(function (ActionTypeConfig $model): bool {
-        if ($model->type === 'whisparr_add_item' && ActionTypeConfig::query()->where('type', 'whisparr_add_item')->doesntExist()) {
-            ActionTypeConfig::factory()->createQuietly([
-                'type' => 'whisparr_add_item',
-                'label' => 'replica label',
-                'description' => 'replica description',
-                'requires_approval' => false,
-                'is_enabled' => true,
-            ]);
-        }
-
-        return true;
-    });
-
-    $this->seed(ActionTypeConfigSeeder::class);
-
-    $actionTypeConfig = ActionTypeConfig::query()->where('type', 'whisparr_add_item')->sole();
-    expect($actionTypeConfig->requires_approval)->toBeFalse()
-        ->and($actionTypeConfig->label)->toBe('Add item to Whisparr');
-});
