@@ -152,8 +152,11 @@ final readonly class MediaReplacementTracker
             // Read from the attempt's ActionRequest, not a column: the flag is a
             // per-request choice the builder wrote into the payload, and the
             // manual replace endpoint (Task 6) is the only caller expected to pass
-            // false. An absent key (every pre-existing caller) defaults to true.
-            $verifySubtitles = (bool) ($attempt->actionRequest?->payload['verify_subtitles'] ?? true);
+            // false. Strict `=== false` rather than a bool cast: verification must
+            // be skipped ONLY on the literal value the builder writes. A malformed
+            // or legacy payload — absent key, `0`, `''`, `[]` — must fail SAFE by
+            // still verifying, not silently disable verification via truthiness.
+            $verifySubtitles = ($attempt->actionRequest?->payload['verify_subtitles'] ?? true) !== false;
 
             if ($verifySubtitles) {
                 $found = ($snapshot['ambiguous'] ?? false) === true

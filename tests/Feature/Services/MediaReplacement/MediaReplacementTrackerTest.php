@@ -262,6 +262,35 @@ test('a download with verify_subtitles disabled skips the language comparison bu
         && $request->data()['monitored'] === true);
 });
 
+test('a download with a non-boolean falsy verify_subtitles value still runs the language comparison', function (): void {
+    // The flag must be skipped ONLY on the literal `false` the builder writes.
+    // A malformed/legacy payload carrying `0` (int zero) is falsy under a bool
+    // cast but must fail SAFE — i.e. still verify — rather than silently
+    // disabling verification via truthiness.
+    $mediaReplacementAttempt = trackerAttempt($this->connection->id, [
+        'action_request_id' => ActionRequest::factory()->state([
+            'type' => 'replace_media_file',
+            'payload' => ['verify_subtitles' => 0],
+        ]),
+        'download_id' => 'DL-1',
+        'required_languages' => ['eng', 'swe'],
+    ]);
+    fakeInspectSubtitles('English');
+    Event::fake([MediaReplacementAttemptChanged::class]);
+
+    resolve(MediaReplacementTracker::class)->verifyDownload($this->connection, [
+        'eventType' => 'Download',
+        'series' => ['id' => 42],
+        'downloadId' => 'DL-1',
+    ]);
+
+    $fresh = $mediaReplacementAttempt->fresh();
+    expect($fresh->status)->toBe(MediaReplacementStatus::NeedsAttention)
+        ->and($fresh->failure_reason)->toBe('imported_subtitles_missing_required_language')
+        ->and($fresh->verification['subtitles_checked'])->toBeTrue()
+        ->and($fresh->verification['missing'])->toBe(['swe']);
+});
+
 test('a download with verify_subtitles absent from the payload still runs the language comparison', function (): void {
     // Backward compatibility: existing callers (auditor/advisor/AI tool) never
     // pass the flag at all, so an absent key must behave exactly as `true`.
