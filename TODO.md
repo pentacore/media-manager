@@ -1,7 +1,21 @@
 # OLD/BLOCKED
 - [ ] The AI Price Refresh should queue up a job to run in the background
     - [x] To begin with, we can just queue up a job and have it run in the background (Somehow we need the frontend to know if the job is done or not, so we cant queue up multiple jobs if one is already running, and we can show a loading state on the refresh button while the job is running)
-    - [ ] (Awaiting support in the prisma-php/prisma package for batching) maybe make use of batching if the model supports it (Then we will also need a job that regularly checks the job status, and calls any tools it requests and then posts the updated data), also allow setting a specific model to use for this functionality.
+    - [ ] (Awaiting support in the prism-php/prism package for batching) maybe make use of batching if the model supports it (Then we will also need a job that regularly checks the job status, and calls any tools it requests and then posts the updated data), also allow setting a specific model to use for this functionality.
+# CONSISTENCY FIXES (from 2026-08-12 project audit)
+- [ ] Add the four `whisparr_*` action types (`whisparr_add_item`, `whisparr_delete_item`, `whisparr_monitor_item`, `whisparr_set_quality_profile`) to `ActionTypeConfigSeeder` — currently `ActionOrchestrator` skips them ("no ActionTypeConfig") so the AI's Whisparr destructive tools silently no-op on a fresh install
+- [ ] Add the supported `BAZARR_URL/API_KEY/WEBHOOK_TOKEN/NAME` vars to `.env.example` (Whisparr stays admin-UI-only by choice — no seeder prefix)
+- [ ] Add SABnzbd (`sabnzbd/sabnzbd`) to the GitHub version-check repo map in `FetchLatestServiceVersion`
+- [ ] Delete the empty `AiEffortLevel` enum stub (referenced nowhere)
+
+# FEATURES (from 2026-08-12 project audit)
+- [ ] Manual "Replace file" trigger in the media UI (series/movie pages) so media replacement works without AI — candidate finder/ranker/approval flow all already exist
+- [ ] Enforce AI model rate limits (currently display-only on the AI Usage page — admins can define limits but nothing throttles)
+- [ ] Admin view for `MediaReplacementAttempt` history/detail (outcomes currently only surface via the Action Queue panel + notifications; consider broadcasting `MediaReplacementAttemptChanged`)
+- [ ] Torrent download client support (qBittorrent first) alongside SABnzbd, reusing the Downloads-page patterns
+- [ ] Jellyfin support (Emby API fork — much of `EmbyClient`/webhook handling carries over)
+- [ ] More notification channels: Discord / Telegram / generic webhook alongside ntfy
+
 # NEW
 - [ ] Make use of inertia pre-fetching to speed up page loading times (This will require some changes to the way we load data for the pages, but it should be worth it in the end)
 - [x] The free usage tracking should be defined as pools, since multiple models can share the same pool

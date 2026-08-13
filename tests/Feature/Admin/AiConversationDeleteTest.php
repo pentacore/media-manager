@@ -16,7 +16,8 @@ function deleteConvoSeed(int $userId): string
     $id = (string) Str::uuid();
     DB::table('agent_conversations')->insert([
         'id' => $id,
-        'user_id' => $userId,
+        'participant_type' => User::class,
+        'participant_id' => $userId,
         'title' => 'Delete me',
         'created_at' => now(),
         'updated_at' => now(),
@@ -25,7 +26,8 @@ function deleteConvoSeed(int $userId): string
     DB::table('agent_conversation_messages')->insert([
         'id' => (string) Str::uuid7(),
         'conversation_id' => $id,
-        'user_id' => $userId,
+        'participant_type' => User::class,
+        'participant_id' => $userId,
         'agent' => MediaAgent::class,
         'role' => 'user',
         'content' => 'first message',

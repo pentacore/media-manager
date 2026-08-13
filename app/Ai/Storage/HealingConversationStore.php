@@ -21,27 +21,36 @@ class HealingConversationStore implements ConversationStore
     public function __construct(private readonly ConversationStore $conversationStore) {}
 
     #[Override]
-    public function latestConversationId(string|int $userId): ?string
+    public function latestConversationId(string $participantType, string|int $participantId): ?string
     {
-        return $this->conversationStore->latestConversationId($userId);
+        return $this->conversationStore->latestConversationId($participantType, $participantId);
     }
 
     #[Override]
-    public function storeConversation(string|int|null $userId, string $title): string
+    public function storeConversation(?string $participantType, string|int|null $participantId, string $title): string
     {
-        return $this->conversationStore->storeConversation($userId, $title);
+        return $this->conversationStore->storeConversation($participantType, $participantId, $title);
     }
 
     #[Override]
-    public function storeUserMessage(string $conversationId, string|int|null $userId, AgentPrompt $prompt): string
+    public function storeUserMessage(string $conversationId, ?string $participantType, string|int|null $participantId, AgentPrompt $prompt): string
     {
-        return $this->conversationStore->storeUserMessage($conversationId, $userId, $prompt);
+        return $this->conversationStore->storeUserMessage($conversationId, $participantType, $participantId, $prompt);
     }
 
     #[Override]
-    public function storeAssistantMessage(string $conversationId, string|int|null $userId, AgentPrompt $prompt, AgentResponse $response): string
+    public function storeAssistantMessage(string $conversationId, ?string $participantType, string|int|null $participantId, AgentPrompt $prompt, AgentResponse $response): ?string
     {
-        return $this->conversationStore->storeAssistantMessage($conversationId, $userId, $prompt, $response);
+        return $this->conversationStore->storeAssistantMessage($conversationId, $participantType, $participantId, $prompt, $response);
+    }
+
+    /**
+     * @param  array<int, ToolResult>  $toolResults
+     */
+    #[Override]
+    public function storeApprovalResults(string $conversationId, ?string $participantType, string|int|null $participantId, array $toolResults): void
+    {
+        $this->conversationStore->storeApprovalResults($conversationId, $participantType, $participantId, $toolResults);
     }
 
     /**

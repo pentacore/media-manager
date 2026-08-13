@@ -15,7 +15,8 @@ function adminInsertConvo(int $userId, string $title, ?string $archivedAt = null
     $id = (string) Str::uuid();
     DB::table('agent_conversations')->insert([
         'id' => $id,
-        'user_id' => $userId,
+        'participant_type' => User::class,
+        'participant_id' => $userId,
         'title' => $title,
         'archived_at' => $archivedAt,
         'created_at' => $updatedAt ?? now(),

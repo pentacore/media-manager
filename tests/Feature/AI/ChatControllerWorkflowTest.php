@@ -20,7 +20,8 @@ test('approving a workflow transitions it and synthesizes a continuation prompt'
 
     DB::table('agent_conversations')->insert([
         'id' => $conversationId,
-        'user_id' => $this->admin->id,
+        'participant_type' => User::class,
+        'participant_id' => $this->admin->id,
         'title' => 'fake',
         'created_at' => now(),
         'updated_at' => now(),
@@ -65,7 +66,8 @@ test('declining a workflow transitions it and synthesizes a decline prompt', fun
 
     DB::table('agent_conversations')->insert([
         'id' => $conversationId,
-        'user_id' => $this->admin->id,
+        'participant_type' => User::class,
+        'participant_id' => $this->admin->id,
         'title' => 'fake',
         'created_at' => now(),
         'updated_at' => now(),
