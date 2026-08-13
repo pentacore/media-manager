@@ -56,7 +56,8 @@ test('streaming a first turn appends the minted conversation id before DONE', fu
     $body = $response->streamedContent();
 
     $conversationId = DB::table('agent_conversations')
-        ->where('user_id', $admin->id)
+        ->where('participant_type', User::class)
+        ->where('participant_id', $admin->id)
         ->value('id');
 
     expect($conversationId)->not->toBeNull()
@@ -76,7 +77,8 @@ test('streaming an existing conversation echoes its id in the terminal event', f
 
     DB::table('agent_conversations')->insert([
         'id' => $conversationId,
-        'user_id' => $admin->id,
+        'participant_type' => User::class,
+        'participant_id' => $admin->id,
         'title' => 'Existing conversation',
         'created_at' => now(),
         'updated_at' => now(),
@@ -160,7 +162,8 @@ test('streaming a first turn seeds a fallback title and dispatches GenerateConve
     $response->streamedContent();
 
     $conversationId = DB::table('agent_conversations')
-        ->where('user_id', $admin->id)
+        ->where('participant_type', User::class)
+        ->where('participant_id', $admin->id)
         ->value('id');
 
     expect($conversationId)->not->toBeNull();
@@ -217,7 +220,8 @@ test('admin cannot stream against another users conversation', function (): void
 
     DB::table('agent_conversations')->insert([
         'id' => $conversationId,
-        'user_id' => $owner->id,
+        'participant_type' => User::class,
+        'participant_id' => $owner->id,
         'title' => 'Private conversation',
         'created_at' => now(),
         'updated_at' => now(),

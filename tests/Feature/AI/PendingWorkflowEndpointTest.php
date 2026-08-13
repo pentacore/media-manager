@@ -15,7 +15,8 @@ function seedOwnedConversation(User $user, string $id = '01890000-0000-7000-8000
 {
     DB::table('agent_conversations')->insert([
         'id' => $id,
-        'user_id' => $user->id,
+        'participant_type' => User::class,
+        'participant_id' => $user->id,
         'title' => 'Test conversation',
         'created_at' => now(),
         'updated_at' => now(),

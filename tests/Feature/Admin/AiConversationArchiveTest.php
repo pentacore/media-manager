@@ -16,7 +16,8 @@ function archiveConvoSeed(int $userId): string
     $id = (string) Str::uuid();
     DB::table('agent_conversations')->insert([
         'id' => $id,
-        'user_id' => $userId,
+        'participant_type' => User::class,
+        'participant_id' => $userId,
         'title' => 'Archive me',
         'created_at' => now(),
         'updated_at' => now(),

@@ -16,7 +16,8 @@ function seedConversationWithMessages(int $userId, ?string $archivedAt = null): 
     $conversationId = (string) Str::uuid();
     DB::table('agent_conversations')->insert([
         'id' => $conversationId,
-        'user_id' => $userId,
+        'participant_type' => User::class,
+        'participant_id' => $userId,
         'title' => 'A conversation',
         'archived_at' => $archivedAt,
         'created_at' => now(),
@@ -27,7 +28,8 @@ function seedConversationWithMessages(int $userId, ?string $archivedAt = null): 
         [
             'id' => (string) Str::uuid7(),
             'conversation_id' => $conversationId,
-            'user_id' => $userId,
+            'participant_type' => User::class,
+            'participant_id' => $userId,
             'agent' => MediaAgent::class,
             'role' => 'user',
             'content' => 'Hello',
@@ -42,7 +44,8 @@ function seedConversationWithMessages(int $userId, ?string $archivedAt = null): 
         [
             'id' => (string) Str::uuid7(),
             'conversation_id' => $conversationId,
-            'user_id' => $userId,
+            'participant_type' => User::class,
+            'participant_id' => $userId,
             'agent' => MediaAgent::class,
             'role' => 'assistant',
             'content' => 'Hi there',

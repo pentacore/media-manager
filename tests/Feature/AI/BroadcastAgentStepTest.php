@@ -20,7 +20,8 @@ test('listener broadcasts AgentStepUpdate when conversation context is present',
 
     DB::table('agent_conversations')->insert([
         'id' => $conversationId,
-        'user_id' => $user->id,
+        'participant_type' => User::class,
+        'participant_id' => $user->id,
         'title' => 'Test',
         'created_at' => now(),
         'updated_at' => now(),

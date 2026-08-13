@@ -28,7 +28,8 @@ class AiConversationController extends Controller
         $builder = DB::table('agent_conversations')
             ->select([
                 'agent_conversations.id',
-                'agent_conversations.user_id',
+                'agent_conversations.participant_type',
+                'agent_conversations.participant_id',
                 'agent_conversations.title',
                 'agent_conversations.archived_at',
                 'agent_conversations.updated_at',
@@ -40,7 +41,9 @@ class AiConversationController extends Controller
         $this->applyStateFilter($builder, $state);
 
         if ($userId !== null) {
-            $builder->where('agent_conversations.user_id', $userId);
+            $builder
+                ->where('agent_conversations.participant_type', (new User)->getMorphClass())
+                ->where('agent_conversations.participant_id', $userId);
         }
 
         if ($search !== '') {
@@ -53,7 +56,8 @@ class AiConversationController extends Controller
         )->withQueryString();
 
         $userIds = collect($lengthAwarePaginator->items())
-            ->pluck('user_id')
+            ->filter(fn ($row): bool => $row->participant_type === (new User)->getMorphClass())
+            ->pluck('participant_id')
             ->filter()
             ->unique()
             ->all();
@@ -70,11 +74,11 @@ class AiConversationController extends Controller
             'updated_at' => $row->updated_at,
             'created_at' => $row->created_at,
             'message_count' => (int) $row->message_count,
-            'user' => $row->user_id !== null && $usersById->has($row->user_id)
+            'user' => $row->participant_id !== null && $usersById->has($row->participant_id)
                 ? [
-                    'id' => $usersById[$row->user_id]->id,
-                    'name' => $usersById[$row->user_id]->name,
-                    'email' => $usersById[$row->user_id]->email,
+                    'id' => $usersById[$row->participant_id]->id,
+                    'name' => $usersById[$row->participant_id]->name,
+                    'email' => $usersById[$row->participant_id]->email,
                 ]
                 : null,
         ])->all();
@@ -107,8 +111,8 @@ class AiConversationController extends Controller
 
         abort_if($row === null, 404);
 
-        $owner = $row->user_id !== null
-            ? User::query()->find($row->user_id, ['id', 'name', 'email'])
+        $owner = $row->participant_type === (new User)->getMorphClass() && $row->participant_id !== null
+            ? User::query()->find($row->participant_id, ['id', 'name', 'email'])
             : null;
 
         $messages = DB::table('agent_conversation_messages')

@@ -21,22 +21,22 @@ function fakeInner(Collection $messages): ConversationStore
     {
         public function __construct(private Collection $messages) {}
 
-        public function latestConversationId(string|int $userId): ?string
+        public function latestConversationId(string $participantType, string|int $participantId): ?string
         {
             return null;
         }
 
-        public function storeConversation(string|int|null $userId, string $title): string
+        public function storeConversation(?string $participantType, string|int|null $participantId, string $title): string
         {
             return 'fake';
         }
 
-        public function storeUserMessage(string $conversationId, string|int|null $userId, AgentPrompt $prompt): string
+        public function storeUserMessage(string $conversationId, ?string $participantType, string|int|null $participantId, AgentPrompt $prompt): string
         {
             return 'fake';
         }
 
-        public function storeAssistantMessage(string $conversationId, string|int|null $userId, AgentPrompt $prompt, AgentResponse $response): string
+        public function storeAssistantMessage(string $conversationId, ?string $participantType, string|int|null $participantId, AgentPrompt $prompt, AgentResponse $response): ?string
         {
             return 'fake';
         }
@@ -44,6 +44,11 @@ function fakeInner(Collection $messages): ConversationStore
         public function getLatestConversationMessages(string $conversationId, int $limit): Collection
         {
             return $this->messages;
+        }
+
+        public function storeApprovalResults(string $conversationId, ?string $participantType, string|int|null $participantId, array $toolResults): void
+        {
+            // No-op for the fake store.
         }
     };
 }
@@ -103,7 +108,8 @@ test('reasoningId and reasoningSummary are restored from raw DB rows', function 
 
     DB::table('agent_conversations')->insert([
         'id' => $conversationId,
-        'user_id' => null,
+        'participant_type' => null,
+        'participant_id' => null,
         'title' => 'test',
         'created_at' => now(),
         'updated_at' => now(),
@@ -112,7 +118,8 @@ test('reasoningId and reasoningSummary are restored from raw DB rows', function 
     DB::table('agent_conversation_messages')->insert([
         'id' => '01900000-0000-7000-0000-000000000002',
         'conversation_id' => $conversationId,
-        'user_id' => null,
+        'participant_type' => null,
+        'participant_id' => null,
         'agent' => 'TestAgent',
         'role' => 'assistant',
         'content' => '',
