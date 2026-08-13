@@ -6,8 +6,6 @@ namespace Database\Seeders;
 
 use App\Models\ActionTypeConfig;
 use Illuminate\Database\Seeder;
-use Illuminate\Database\UniqueConstraintViolationException;
-use Illuminate\Support\Facades\DB;
 
 class ActionTypeConfigSeeder extends Seeder
 {
@@ -213,18 +211,12 @@ class ActionTypeConfigSeeder extends Seeder
         ];
 
         foreach ($types as $type) {
-            try {
-                $config = ActionTypeConfig::query()->firstOrCreate(['type' => $type['type']], $type);
-            } catch (UniqueConstraintViolationException) {
-                // Concurrent replica created the row between firstOrCreate's read and
-                // its insert (the entrypoint's env-driven migration path can run on
-                // several replicas). Theirs wins — re-read it.
-                $config = ActionTypeConfig::query()->where('type', $type['type'])->first();
-                if (! $config) {
-                    // Row still not visible; skip to next type and let a later operation find it
-                    continue;
-                }
-            }
+            // firstOrCreate is race-safe: on a unique-constraint collision with a
+            // concurrent replica (the entrypoint's env-driven migration path can run
+            // on several), Laravel's createOrFirst re-reads the winner and rethrows
+            // only when the re-read finds nothing — losing the race is tolerated,
+            // real failures stay loud.
+            $config = ActionTypeConfig::query()->firstOrCreate(['type' => $type['type']], $type);
 
             if (! $config->wasRecentlyCreated) {
                 // requires_approval / is_enabled belong to the admin via Action Rules —
