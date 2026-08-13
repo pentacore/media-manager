@@ -5,6 +5,7 @@ declare(strict_types=1);
 use App\Models\ServiceConnection;
 use App\Models\User;
 use App\Settings\MediaReplacementSettings;
+use Illuminate\Http\Client\Request;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
 
@@ -215,6 +216,12 @@ test('a second candidates request within the cache TTL does not re-hit the relea
     $this->actingAs($member)
         ->getJson(route('media.replacement.candidates', $params))
         ->assertOk();
+
+    // The load-bearing assertion: the release search itself — the thing this
+    // endpoint's cache is meant to protect — was hit exactly once across both
+    // calls, regardless of how any other endpoint's own caching behaves.
+    expect(Http::recorded(fn (Request $request): bool => str_contains($request->url(), '/api/v3/release')))
+        ->toHaveCount(1);
 
     // Each inspect() round-trips the moviefile and history endpoints fresh
     // every call (2 requests), while RadarrClient::getMovieById is cached by
