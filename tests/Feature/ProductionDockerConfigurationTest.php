@@ -44,7 +44,7 @@ test('production reverb healthcheck accepts http status codes without curl fail-
     expect($reverbBlock[1])->toContain("grep -qE '^[234]'");
 });
 
-test('production migrate role uses isolated migrations', function (): void {
+test('production migrate role delegates to run_migrations', function (): void {
     $entrypoint = file_get_contents(base_path('docker/production/entrypoint.sh'));
 
     preg_match('/\s+migrate\)(.*?)\s+;;/s', (string) $entrypoint, $migrateBlock);

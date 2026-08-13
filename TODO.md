@@ -7,6 +7,7 @@
 - [x] Add the supported `BAZARR_URL/API_KEY/WEBHOOK_TOKEN/NAME` vars to `.env.example` (Whisparr stays admin-UI-only by choice — no seeder prefix)
 - [x] Add SABnzbd (`sabnzbd/sabnzbd`) to the GitHub version-check repo map in `FetchLatestServiceVersion`
 - [x] Delete the empty `AiEffortLevel` enum stub (referenced nowhere)
+- [ ] Promote ExecuteActionRequest's executor match keys to a public constant and derive the "executor types are seeded" test from it (final-review recommendation — permanently closes the executor-mapped-but-unseeded bug class)
 
 # FEATURES (from 2026-08-12 project audit)
 - [ ] Manual "Replace file" trigger in the media UI (series/movie pages) so media replacement works without AI — candidate finder/ranker/approval flow all already exist

@@ -30,6 +30,9 @@ run_migrations() {
     # never touches admin-owned approval toggles (see ActionTypeConfigSeeder);
     # running it on every deploy delivers newly added action types to
     # existing databases.
+    # A replica that loses the migration lock proceeds to the seeder against a
+    # possibly mid-migration schema and may crash; the restart policy retries
+    # it after the winner finishes — accepted for the env-driven path.
     php artisan migrate --force --isolated
     php artisan db:seed --class=ActionTypeConfigSeeder --force
 }
