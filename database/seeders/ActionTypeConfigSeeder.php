@@ -7,6 +7,7 @@ namespace Database\Seeders;
 use App\Models\ActionTypeConfig;
 use Illuminate\Database\Seeder;
 use Illuminate\Database\UniqueConstraintViolationException;
+use Illuminate\Support\Facades\DB;
 
 class ActionTypeConfigSeeder extends Seeder
 {
@@ -218,7 +219,11 @@ class ActionTypeConfigSeeder extends Seeder
                 // Concurrent replica created the row between firstOrCreate's read and
                 // its insert (the entrypoint's env-driven migration path can run on
                 // several replicas). Theirs wins — re-read it.
-                $config = ActionTypeConfig::query()->where('type', $type['type'])->firstOrFail();
+                $config = ActionTypeConfig::query()->where('type', $type['type'])->first();
+                if (! $config) {
+                    // Row still not visible; skip to next type and let a later operation find it
+                    continue;
+                }
             }
 
             if (! $config->wasRecentlyCreated) {

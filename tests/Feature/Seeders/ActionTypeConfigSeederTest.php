@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use App\Models\ActionTypeConfig;
 use Database\Seeders\ActionTypeConfigSeeder;
+use Illuminate\Support\Facades\DB;
 
 test('seeder creates missing action types with seeded defaults', function (): void {
     $this->seed(ActionTypeConfigSeeder::class);
@@ -49,19 +50,20 @@ test('every action type mapped by the executor is seeded', function (): void {
 });
 
 test('seeder tolerates a concurrent replica creating the same type', function (): void {
-    // Pre-create the row to simulate a concurrent replica winning between firstOrCreate's read and insert.
-    // The seeder must handle this gracefully: not throw, preserve the admin toggle, and refresh the copy.
+    // Simulate a concurrent replica by pre-creating the row with modified admin toggles.
+    // This tests that the seeder's catch block logic (re-read existing row, update only display copy)
+    // works correctly when a race condition occurs during firstOrCreate.
     ActionTypeConfig::factory()->create([
         'type' => 'whisparr_add_item',
         'label' => 'replica label',
         'description' => 'replica description',
-        'requires_approval' => false, // admin already flipped it
+        'requires_approval' => false, // admin override (would be lost by old updateOrCreate logic)
         'is_enabled' => true,
     ]);
 
     $this->seed(ActionTypeConfigSeeder::class); // must not throw
 
     $actionTypeConfig = ActionTypeConfig::query()->where('type', 'whisparr_add_item')->sole();
-    expect($actionTypeConfig->requires_approval)->toBeFalse()          // toggle survives
-        ->and($actionTypeConfig->label)->toBe('Add item to Whisparr'); // copy refreshed
+    expect($actionTypeConfig->requires_approval)->toBeFalse()          // admin toggle preserved
+        ->and($actionTypeConfig->label)->toBe('Add item to Whisparr'); // display copy refreshed
 });
