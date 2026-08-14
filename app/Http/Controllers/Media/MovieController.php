@@ -53,6 +53,7 @@ class MovieController extends BaseArrController
 
         return Inertia::render('Radarr/Movies/Show', [
             'connection' => $this->connectionUrl($connection),
+            'service_connection_id' => $connection->id,
             'movie' => $this->mapMovie($movie, detailed: true),
         ]);
     }

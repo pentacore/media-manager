@@ -1,8 +1,16 @@
 <script setup lang="ts">
 import { Head, Link, router } from '@inertiajs/vue3';
-import { ArrowLeft, Clock, ExternalLink, HardDrive, Trash2 } from '@lucide/vue';
+import {
+    ArrowLeft,
+    Clock,
+    ExternalLink,
+    HardDrive,
+    Replace,
+    Trash2,
+} from '@lucide/vue';
 import { ref } from 'vue';
 import MovieController from '@/actions/App/Http/Controllers/Media/MovieController';
+import ReplaceFileDialog from '@/components/media-replacement/ReplaceFileDialog.vue';
 import { Pill, Poster, StatusPill } from '@/components/mm';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -49,6 +57,7 @@ interface MovieDetail {
 
 const props = defineProps<{
     connection: { url: string };
+    service_connection_id: number;
     movie: MovieDetail;
 }>();
 
@@ -63,6 +72,7 @@ defineOptions({
 
 const deleteDialogOpen = ref(false);
 const deleteFiles = ref(false);
+const replaceDialogOpen = ref(false);
 
 function formatSize(bytes: number): string {
     if (!bytes || bytes <= 0) {
@@ -126,6 +136,17 @@ function confirmDelete() {
                         Open in Radarr
                     </Button>
                 </a>
+                <Button
+                    v-if="movie.has_file"
+                    variant="outline"
+                    size="sm"
+                    class="h-8 text-xs"
+                    data-replacement-trigger
+                    @click="replaceDialogOpen = true"
+                >
+                    <Replace class="size-3.5" />
+                    Replace file
+                </Button>
                 <Dialog v-model:open="deleteDialogOpen">
                     <DialogTrigger as-child>
                         <Button
@@ -337,4 +358,12 @@ function confirmDelete() {
             </div>
         </div>
     </div>
+
+    <ReplaceFileDialog
+        v-if="movie.has_file"
+        v-model:open="replaceDialogOpen"
+        service="radarr"
+        :connection-id="service_connection_id"
+        :item-id="movie.id"
+    />
 </template>

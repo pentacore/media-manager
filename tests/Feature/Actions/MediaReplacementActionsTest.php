@@ -321,29 +321,22 @@ test('pins execution to the approved connection when multiple are active', funct
     expect(MediaReplacementAttempt::first()->service_connection_id)->toBe($pinned->id);
 });
 
-test('a held Bazarr subtitle lock does not block a media replacement', function (): void {
+test('a held Bazarr-style shared target lock blocks a concurrent media replacement', function (): void {
     fakeExecutor();
     $connectionId = ServiceConnection::query()->firstOrFail()->id;
 
-    // A Bazarr subtitle operation holds the shared installed-file lock for the
-    // same episode. Replacement no longer coordinates with Bazarr: by the time a
-    // replacement is queued Bazarr has already failed to supply the subtitle, so
-    // the replacement proceeds regardless of what Bazarr is doing.
-    $lock = Cache::lock(SharedMediaTargetLock::key($connectionId, 'episode', 101), 120);
+    // Computed exactly the way BazarrActions::sharedTargetLock() computes it for
+    // an episode target ('episode' + the sonarr episode id) — same connection,
+    // same file, so the two executors must collide on this key.
+    $lock = Cache::lock(SharedMediaTargetLock::key($connectionId, 'episode', 101), SharedMediaTargetLock::TTL_SECONDS);
     expect($lock->get())->toBeTrue();
 
     try {
-        $result = resolve(MediaReplacementActions::class)->execute(replaceActionRequest());
+        expect(fn (): array => resolve(MediaReplacementActions::class)->execute(replaceActionRequest()))
+            ->toThrow(RuntimeException::class);
 
-        expect($result['replacement_initiated'])->toBeTrue();
-
-        $requests = Http::recorded()->map(fn (array $pair): string => $pair[0]->method().' '.$pair[0]->url())->values();
-        $grabIndex = $requests->search(fn (string $value): bool => $value === 'POST http://sonarr.local:8989/api/v3/release');
-        $deleteIndex = $requests->search(fn (string $value): bool => $value === 'DELETE http://sonarr.local:8989/api/v3/episodefile/501');
-
-        expect($grabIndex)->not->toBeFalse()
-            ->and($deleteIndex)->not->toBeFalse()
-            ->and($grabIndex)->toBeLessThan($deleteIndex);
+        // The lock is checked before any upstream call is made.
+        Http::assertNothingSent();
     } finally {
         $lock->release();
     }

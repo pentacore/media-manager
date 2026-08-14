@@ -120,6 +120,7 @@ test('members can view a single series with deferred episodes', function (): voi
         ->assertInertia(fn ($page) => $page
             ->component('Sonarr/Series/Show')
             ->where('connection.url', 'http://sonarr.local:8989')
+            ->where('service_connection_id', $this->connection->id)
             ->where('series.id', 42)
             ->where('series.title', 'My Show')
             ->where('series.title_slug', 'my-show')

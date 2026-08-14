@@ -3,11 +3,7 @@
 declare(strict_types=1);
 
 use App\Enums\AiMode;
-use App\Enums\MediaReplacementScope;
-use App\Enums\ServiceType;
-use App\Models\ServiceConnection;
 use App\Models\User;
-use App\Services\MediaReplacement\SubtitleCheckTagSettings;
 use App\Settings\AiSettings;
 use App\Settings\MediaReplacementSettings;
 use Illuminate\Support\Facades\Cache;
@@ -16,43 +12,6 @@ use Laravel\Ai\Enums\Lab;
 beforeEach(function (): void {
     Cache::flush();
 });
-
-/**
- * A complete, valid media replacement configuration for update requests.
- *
- * @param  array<string, mixed>  $overrides
- * @return array<string, mixed>
- */
-function validMediaReplacementConfiguration(array $overrides = []): array
-{
-    return array_replace([
-        'automatic_selection_enabled' => true,
-        'automatic_selection_threshold' => 95,
-        'global_languages' => ['English'],
-        'scoped_languages' => ['anime' => ['Japanese'], 'tv' => null, 'movie' => null],
-        'season_pack_policy' => 'approval_required',
-        'subtitle_check' => [
-            'enabled' => false,
-            'max_attempts_per_target' => 1,
-            'cooldown_hours' => 24,
-        ],
-        'guidance' => [
-            'anime' => [
-                'notes' => 'CR-tagged releases are trusted.',
-                'rules' => [[
-                    'name' => 'Crunchyroll English',
-                    'enabled' => true,
-                    'strength' => 'guarantee',
-                    'languages' => ['English'],
-                    'conditions' => [['field' => 'title', 'value' => 'CR']],
-                    'explanation' => 'The CR tag identifies Crunchyroll releases.',
-                ]],
-            ],
-            'tv' => ['notes' => '', 'rules' => []],
-            'movie' => ['notes' => '', 'rules' => []],
-        ],
-    ], $overrides);
-}
 
 /**
  * Base payload for a valid AI settings update request.
@@ -309,300 +268,32 @@ test('update requires mode, model, and title_model', function (): void {
         ->assertSessionHasErrors(['mode', 'model', 'title_model', 'advisor_reasoning_level']);
 });
 
-test('index exposes media replacement configuration and enum options', function (): void {
-    $admin = User::factory()->admin()->create();
-
-    $this->actingAs($admin)
-        ->get(route('admin.ai-settings.index'))
-        ->assertOk()
-        ->assertInertia(fn ($page) => $page
-            ->component('Admin/AiSettings/Index')
-            ->where('settings.media_replacement.automatic_selection_threshold', 90)
-            ->where('settings.media_replacement.season_pack_policy', 'approval_required')
-            ->where('settings.media_replacement.global_languages', ['eng'])
-            ->where('settings.media_replacement.subtitle_check', [
-                'enabled' => false,
-                'max_attempts_per_target' => 1,
-                'cooldown_hours' => 24,
-            ])
-            ->has('seasonPackPolicies')
-            ->has('subtitleRuleStrengths')
-            ->has('conditionFields')
-        );
-});
-
-test('index does not expose legacy Sonarr root-folder classifications', function (): void {
-    $admin = User::factory()->admin()->create();
-    resolve(MediaReplacementSettings::class)->setConfiguration([
-        'sonarr_root_folders' => [[
-            'service_connection_id' => 123,
-            'root_folder_id' => 2,
-            'path' => '/anime',
-            'scope' => 'anime',
-        ]],
-    ]);
-
-    $this->actingAs($admin)
-        ->get(route('admin.ai-settings.index'))
-        ->assertOk()
-        ->assertInertia(fn ($page) => $page
-            ->missing('sonarrRootFolders')
-            ->missing('settings.media_replacement.sonarr_root_folders')
-        );
-});
-
-test('admin can update media replacement settings and the service round-trips them', function (): void {
-    $admin = User::factory()->admin()->create();
-    $configuration = validMediaReplacementConfiguration();
-
-    $this->actingAs($admin)
-        ->put(route('admin.ai-settings.update'), [
-            ...baseAiSettingsPayload(),
-            'media_replacement' => json_encode($configuration, JSON_THROW_ON_ERROR),
-        ])
-        ->assertRedirect(route('admin.ai-settings.index'))
-        ->assertSessionHasNoErrors();
-
-    $mediaReplacementSettings = resolve(MediaReplacementSettings::class);
-
-    expect($mediaReplacementSettings->automaticSelectionThreshold())->toBe(95)
-        ->and($mediaReplacementSettings->automaticSelectionEnabled())->toBeTrue()
-        ->and($mediaReplacementSettings->effectiveLanguages(MediaReplacementScope::Anime))->toBe(['jpn'])
-        ->and($mediaReplacementSettings->effectiveLanguages(MediaReplacementScope::Tv))->toBe(['eng'])
-        ->and($mediaReplacementSettings->guidance(MediaReplacementScope::Anime)['notes'])->toBe('CR-tagged releases are trusted.')
-        ->and($mediaReplacementSettings->guidance(MediaReplacementScope::Anime)['rules'])->toHaveCount(1);
-});
-
-test('updating AI settings preserves legacy Sonarr root-folder classifications', function (): void {
-    $admin = User::factory()->admin()->create();
-    $legacyAssignments = [[
-        'service_connection_id' => 123,
-        'root_folder_id' => 2,
-        'path' => '/anime',
-        'scope' => 'anime',
-    ]];
-    resolve(MediaReplacementSettings::class)->setConfiguration([
-        'sonarr_root_folders' => $legacyAssignments,
-    ]);
-
-    $this->actingAs($admin)
-        ->put(route('admin.ai-settings.update'), [
-            ...baseAiSettingsPayload(),
-            'media_replacement' => json_encode(validMediaReplacementConfiguration(), JSON_THROW_ON_ERROR),
-        ])
-        ->assertRedirect(route('admin.ai-settings.index'))
-        ->assertSessionHasNoErrors();
-
-    expect(resolve(MediaReplacementSettings::class)->sonarrRootFolders())->toBe($legacyAssignments);
-});
-
-test('update accepts a request without media replacement and preserves stored configuration', function (): void {
-    $admin = User::factory()->admin()->create();
-    resolve(MediaReplacementSettings::class)->setConfiguration(validMediaReplacementConfiguration());
-
-    $this->actingAs($admin)
-        ->put(route('admin.ai-settings.update'), baseAiSettingsPayload())
-        ->assertRedirect(route('admin.ai-settings.index'))
-        ->assertSessionHasNoErrors();
-
-    expect(resolve(MediaReplacementSettings::class)->automaticSelectionThreshold())->toBe(95);
-});
-
-test('update rejects invalid media replacement configuration', function (array $overrides, string $errorKey): void {
+test('ai settings update no longer accepts media_replacement fields', function (): void {
     $admin = User::factory()->admin()->create();
 
     $this->actingAs($admin)
         ->put(route('admin.ai-settings.update'), [
             ...baseAiSettingsPayload(),
-            'media_replacement' => json_encode(
-                validMediaReplacementConfiguration($overrides),
-                JSON_THROW_ON_ERROR,
-            ),
-        ])
-        ->assertSessionHasErrors($errorKey);
-})->with([
-    'threshold above 100' => [
-        ['automatic_selection_threshold' => 101],
-        'media_replacement.automatic_selection_threshold',
-    ],
-    'empty global languages' => [
-        ['global_languages' => []],
-        'media_replacement.global_languages',
-    ],
-    'unknown scope key' => [
-        ['scoped_languages' => ['anime' => null, 'tv' => null, 'movie' => null, 'music' => ['English']]],
-        'media_replacement.scoped_languages',
-    ],
-    'notes longer than 4000 characters' => [
-        ['guidance' => [
-            'anime' => ['notes' => str_repeat('a', 4001), 'rules' => []],
-            'tv' => ['notes' => '', 'rules' => []],
-            'movie' => ['notes' => '', 'rules' => []],
-        ]],
-        'media_replacement.guidance.anime.notes',
-    ],
-    'unknown condition field' => [
-        ['guidance' => [
-            'anime' => [
-                'notes' => '',
-                'rules' => [[
-                    'name' => 'Bad condition',
-                    'enabled' => true,
-                    'strength' => 'guarantee',
-                    'languages' => ['English'],
-                    'conditions' => [['field' => 'indexer', 'value' => 'CR']],
-                ]],
-            ],
-            'tv' => ['notes' => '', 'rules' => []],
-            'movie' => ['notes' => '', 'rules' => []],
-        ]],
-        'media_replacement.guidance.anime.rules.0.conditions.0.field',
-    ],
-    'unknown strength' => [
-        ['guidance' => [
-            'anime' => [
-                'notes' => '',
-                'rules' => [[
-                    'name' => 'Bad strength',
-                    'enabled' => true,
-                    'strength' => 'absolute',
-                    'languages' => ['English'],
-                    'conditions' => [['field' => 'title', 'value' => 'CR']],
-                ]],
-            ],
-            'tv' => ['notes' => '', 'rules' => []],
-            'movie' => ['notes' => '', 'rules' => []],
-        ]],
-        'media_replacement.guidance.anime.rules.0.strength',
-    ],
-    'rule without languages' => [
-        ['guidance' => [
-            'anime' => [
-                'notes' => '',
-                'rules' => [[
-                    'name' => 'No languages',
-                    'enabled' => true,
-                    'strength' => 'guarantee',
-                    'languages' => [],
-                    'conditions' => [['field' => 'title', 'value' => 'CR']],
-                ]],
-            ],
-            'tv' => ['notes' => '', 'rules' => []],
-            'movie' => ['notes' => '', 'rules' => []],
-        ]],
-        'media_replacement.guidance.anime.rules.0.languages',
-    ],
-    'missing subtitle check block' => [
-        ['subtitle_check' => null],
-        'media_replacement.subtitle_check',
-    ],
-    'unknown subtitle check key' => [
-        ['subtitle_check' => [
-            'enabled' => false,
-            'max_attempts_per_target' => 1,
-            'cooldown_hours' => 24,
-            'tags' => ['subtitle-check'],
-        ]],
-        'media_replacement.subtitle_check',
-    ],
-    'non-boolean subtitle check toggle' => [
-        ['subtitle_check' => [
-            'enabled' => 'nope',
-            'max_attempts_per_target' => 1,
-            'cooldown_hours' => 24,
-        ]],
-        'media_replacement.subtitle_check.enabled',
-    ],
-    'subtitle check attempts below one' => [
-        ['subtitle_check' => [
-            'enabled' => true,
-            'max_attempts_per_target' => 0,
-            'cooldown_hours' => 24,
-        ]],
-        'media_replacement.subtitle_check.max_attempts_per_target',
-    ],
-    'subtitle check attempts above ten' => [
-        ['subtitle_check' => [
-            'enabled' => true,
-            'max_attempts_per_target' => 11,
-            'cooldown_hours' => 24,
-        ]],
-        'media_replacement.subtitle_check.max_attempts_per_target',
-    ],
-    'subtitle check cooldown below one hour' => [
-        ['subtitle_check' => [
-            'enabled' => true,
-            'max_attempts_per_target' => 1,
-            'cooldown_hours' => 0,
-        ]],
-        'media_replacement.subtitle_check.cooldown_hours',
-    ],
-    'subtitle check cooldown above 720 hours' => [
-        ['subtitle_check' => [
-            'enabled' => true,
-            'max_attempts_per_target' => 1,
-            'cooldown_hours' => 721,
-        ]],
-        'media_replacement.subtitle_check.cooldown_hours',
-    ],
-]);
-
-test('the subtitle check settings round-trip through the AI settings form', function (): void {
-    $admin = User::factory()->admin()->create();
-
-    $this->actingAs($admin)
-        ->put(route('admin.ai-settings.update'), [
-            ...baseAiSettingsPayload(),
-            'media_replacement' => json_encode(validMediaReplacementConfiguration([
+            'media_replacement' => json_encode([
+                'automatic_selection_enabled' => true,
+                'automatic_selection_threshold' => 42,
+                'global_languages' => ['English'],
+                'scoped_languages' => ['anime' => null, 'tv' => null, 'movie' => null],
+                'season_pack_policy' => 'approval_required',
                 'subtitle_check' => [
-                    'enabled' => true,
-                    'max_attempts_per_target' => 2,
-                    'cooldown_hours' => 12,
+                    'enabled' => false,
+                    'max_attempts_per_target' => 1,
+                    'cooldown_hours' => 24,
                 ],
-            ]), JSON_THROW_ON_ERROR),
+                'guidance' => [
+                    'anime' => ['notes' => '', 'rules' => []],
+                    'tv' => ['notes' => '', 'rules' => []],
+                    'movie' => ['notes' => '', 'rules' => []],
+                ],
+            ], JSON_THROW_ON_ERROR),
         ])
         ->assertRedirect(route('admin.ai-settings.index'))
         ->assertSessionHasNoErrors();
 
-    $mediaReplacementSettings = resolve(MediaReplacementSettings::class);
-
-    expect($mediaReplacementSettings->subtitleCheckEnabled())->toBeTrue()
-        ->and($mediaReplacementSettings->subtitleCheckMaxAttempts())->toBe(2)
-        ->and($mediaReplacementSettings->subtitleCheckCooldownHours())->toBe(12);
-});
-
-test('saving the AI settings form leaves per-connection subtitle-check tags alone', function (): void {
-    $admin = User::factory()->admin()->create();
-    $subtitleCheckTagSettings = resolve(SubtitleCheckTagSettings::class);
-    $serviceConnection = ServiceConnection::factory()->create([
-        'type' => ServiceType::Sonarr,
-        'settings' => $subtitleCheckTagSettings->mergeInto([], ['subtitle-check']),
-    ]);
-
-    $this->actingAs($admin)
-        ->put(route('admin.ai-settings.update'), [
-            ...baseAiSettingsPayload(),
-            'media_replacement' => json_encode(validMediaReplacementConfiguration([
-                'subtitle_check' => [
-                    'enabled' => true,
-                    'max_attempts_per_target' => 2,
-                    'cooldown_hours' => 12,
-                ],
-            ]), JSON_THROW_ON_ERROR),
-        ])
-        ->assertRedirect(route('admin.ai-settings.index'))
-        ->assertSessionHasNoErrors();
-
-    expect($subtitleCheckTagSettings->forConnection($serviceConnection->refresh()))->toBe(['subtitle-check']);
-});
-
-test('update rejects malformed media replacement json', function (): void {
-    $admin = User::factory()->admin()->create();
-
-    $this->actingAs($admin)
-        ->put(route('admin.ai-settings.update'), [
-            ...baseAiSettingsPayload(),
-            'media_replacement' => '{not valid json',
-        ])
-        ->assertSessionHasErrors('media_replacement.automatic_selection_enabled');
+    expect(resolve(MediaReplacementSettings::class)->automaticSelectionThreshold())->toBe(90);
 });
