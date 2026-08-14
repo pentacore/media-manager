@@ -2,9 +2,17 @@
 
 declare(strict_types=1);
 
+use App\Enums\ActionRequestStatus;
+use App\Enums\AiMode;
+use App\Enums\MediaReplacementStatus;
+use App\Models\ActionRequest;
+use App\Models\ActionTypeConfig;
+use App\Models\MediaReplacementAttempt;
 use App\Models\ServiceConnection;
 use App\Models\User;
+use App\Settings\AiSettings;
 use App\Settings\MediaReplacementSettings;
+use Database\Seeders\ActionTypeConfigSeeder;
 use Illuminate\Http\Client\Request;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
@@ -12,7 +20,34 @@ use Illuminate\Support\Facades\Http;
 beforeEach(function (): void {
     Http::preventStrayRequests();
     Cache::flush();
+    $this->seed(ActionTypeConfigSeeder::class);
 });
+
+/**
+ * GETs the inspect endpoint under a throwaway member and returns the fresh
+ * target fingerprint, so a replace() test can submit a fingerprint that
+ * matches the current snapshot instead of a hardcoded, immediately-stale
+ * one. The caller's own actingAs() for the actual replace() call happens
+ * afterwards and takes over the authenticated user.
+ */
+function replacementCurrentFingerprintFor(ServiceConnection $connection): string
+{
+    return test()->actingAs(User::factory()->member()->create())
+        ->getJson(route('media.replacement.inspect', replacementInspectParams($connection)))
+        ->json('fingerprint');
+}
+
+/**
+ * GETs the candidates endpoint under a throwaway member and returns the
+ * first ranked candidate's fingerprint, so a replace() test can submit a
+ * candidate that the finder's shared cache entry actually knows about.
+ */
+function replacementCandidateFingerprintFor(ServiceConnection $connection): string
+{
+    return test()->actingAs(User::factory()->member()->create())
+        ->getJson(route('media.replacement.candidates', replacementInspectParams($connection)))
+        ->json('candidates.0.fingerprint');
+}
 
 function replacementInspectParams(ServiceConnection $connection, array $overrides = []): array
 {
@@ -230,4 +265,160 @@ test('a second candidates request within the cache TTL does not re-hit the relea
     // controller (1 request total). Two candidates requests therefore make
     // 1 (movie) + 2 + 2 (moviefile/history) + 1 (release) = 6, not 8.
     Http::assertSentCount(6);
+});
+
+test('replace rejects when the target fingerprint is stale', function (): void {
+    $connection = ServiceConnection::factory()->radarr()->create(['url' => 'http://radarr.local:7878']);
+    fakeRadarrMovieWithFile(movieId: 10, fileId: 5);
+    fakeRadarrReleases(movieId: 10);
+
+    $this->actingAs(User::factory()->member()->create())
+        ->postJson(route('media.replacement.replace'), [
+            ...replacementInspectParams($connection),
+            'target_fingerprint' => str_repeat('0', 64), // stale
+            'candidate_fingerprint' => 'candidate-a',
+            'verify_subtitles' => true,
+        ])
+        ->assertUnprocessable()
+        ->assertJsonValidationErrors('target_fingerprint');
+});
+
+test('replace rejects when another replacement is in flight', function (): void {
+    $connection = ServiceConnection::factory()->radarr()->create(['url' => 'http://radarr.local:7878']);
+    fakeRadarrMovieWithFile(movieId: 10, fileId: 5);
+    fakeRadarrReleases(movieId: 10);
+    MediaReplacementAttempt::factory()->create([
+        'status' => MediaReplacementStatus::Downloading,
+        'target' => ['service' => 'radarr', 'service_connection_id' => $connection->id, 'movie_id' => 10],
+    ]);
+
+    $this->actingAs(User::factory()->member()->create())
+        ->postJson(route('media.replacement.replace'), [
+            ...replacementInspectParams($connection),
+            'target_fingerprint' => replacementCurrentFingerprintFor($connection), // helper: GET inspect, return fingerprint
+            'candidate_fingerprint' => 'candidate-a',
+            'verify_subtitles' => true,
+        ])
+        ->assertUnprocessable();
+});
+
+test('replace rejects when a pending ActionRequest for the target is already queued', function (): void {
+    $connection = ServiceConnection::factory()->radarr()->create(['url' => 'http://radarr.local:7878']);
+    fakeRadarrMovieWithFile(movieId: 10, fileId: 5);
+    fakeRadarrReleases(movieId: 10);
+    ActionRequest::factory()->create([
+        'type' => 'replace_media_file',
+        'status' => ActionRequestStatus::Pending,
+        'payload' => [
+            'target' => ['service' => 'radarr', 'service_connection_id' => $connection->id, 'movie_id' => 10],
+        ],
+    ]);
+
+    $this->actingAs(User::factory()->member()->create())
+        ->postJson(route('media.replacement.replace'), [
+            ...replacementInspectParams($connection),
+            'target_fingerprint' => replacementCurrentFingerprintFor($connection),
+            'candidate_fingerprint' => 'candidate-a',
+            'verify_subtitles' => true,
+        ])
+        ->assertUnprocessable();
+});
+
+test('replace queues an ActionRequest with manual selection and the verify flag', function (): void {
+    $connection = ServiceConnection::factory()->radarr()->create(['url' => 'http://radarr.local:7878']);
+    fakeRadarrMovieWithFile(movieId: 10, fileId: 5);
+    fakeRadarrReleases(movieId: 10);
+    $fingerprint = replacementCurrentFingerprintFor($connection);
+    $candidate = replacementCandidateFingerprintFor($connection); // helper: GET candidates, return first fingerprint
+
+    $response = $this->actingAs(User::factory()->member()->create())
+        ->postJson(route('media.replacement.replace'), [
+            ...replacementInspectParams($connection),
+            'target_fingerprint' => $fingerprint,
+            'candidate_fingerprint' => $candidate,
+            'verify_subtitles' => false,
+        ])
+        ->assertCreated();
+
+    $actionRequest = ActionRequest::query()->findOrFail($response->json('action_request_id'));
+    expect($actionRequest->payload['selection_mode'])->toBe('manual')
+        ->and($actionRequest->payload['verify_subtitles'])->toBeFalse()
+        ->and($actionRequest->payload['candidate_fingerprint'])->toBe($candidate)
+        ->and($actionRequest->status)->toBe(ActionRequestStatus::Pending); // replace_media_file requires approval by default
+});
+
+test('replace rejects an unknown candidate fingerprint', function (): void {
+    $connection = ServiceConnection::factory()->radarr()->create(['url' => 'http://radarr.local:7878']);
+    fakeRadarrMovieWithFile(movieId: 10, fileId: 5);
+    fakeRadarrReleases(movieId: 10);
+
+    $this->actingAs(User::factory()->member()->create())
+        ->postJson(route('media.replacement.replace'), [
+            ...replacementInspectParams($connection),
+            'target_fingerprint' => replacementCurrentFingerprintFor($connection),
+            'candidate_fingerprint' => 'not-a-real-candidate',
+            'verify_subtitles' => true,
+        ])
+        ->assertUnprocessable()
+        ->assertJsonValidationErrors('candidate_fingerprint');
+});
+
+test('a Sonarr/Radarr connection failure surfaces as a 502 for replace', function (): void {
+    $connection = ServiceConnection::factory()->radarr()->create(['url' => 'http://radarr.local:7878']);
+    Http::fake(['http://radarr.local:7878/*' => Http::failedConnection()]);
+
+    $this->actingAs(User::factory()->member()->create())
+        ->postJson(route('media.replacement.replace'), [
+            ...replacementInspectParams($connection),
+            'target_fingerprint' => str_repeat('0', 64),
+            'candidate_fingerprint' => 'candidate-a',
+            'verify_subtitles' => true,
+        ])
+        ->assertStatus(502)
+        ->assertJsonPath('message', 'Sonarr/Radarr is unreachable.');
+});
+
+test('replace rejects with the Action Rules message when the action type is disabled', function (): void {
+    $connection = ServiceConnection::factory()->radarr()->create(['url' => 'http://radarr.local:7878']);
+    fakeRadarrMovieWithFile(movieId: 10, fileId: 5);
+    fakeRadarrReleases(movieId: 10);
+    ActionTypeConfig::query()->where('type', 'replace_media_file')->update(['is_enabled' => false]);
+
+    $fingerprint = replacementCurrentFingerprintFor($connection);
+    $candidate = replacementCandidateFingerprintFor($connection);
+
+    $this->actingAs(User::factory()->member()->create())
+        ->postJson(route('media.replacement.replace'), [
+            ...replacementInspectParams($connection),
+            'target_fingerprint' => $fingerprint,
+            'candidate_fingerprint' => $candidate,
+            'verify_subtitles' => true,
+        ])
+        ->assertUnprocessable()
+        ->assertJsonPath('message', 'This action is disabled in Action Rules.');
+});
+
+test('replace still queues Pending in advisory mode even when the action type auto-approves', function (): void {
+    resolve(AiSettings::class)->setMode(AiMode::Advisory);
+
+    $connection = ServiceConnection::factory()->radarr()->create(['url' => 'http://radarr.local:7878']);
+    fakeRadarrMovieWithFile(movieId: 10, fileId: 5);
+    fakeRadarrReleases(movieId: 10);
+    ActionTypeConfig::query()->where('type', 'replace_media_file')->update(['requires_approval' => false]);
+
+    $fingerprint = replacementCurrentFingerprintFor($connection);
+    $candidate = replacementCandidateFingerprintFor($connection);
+
+    $response = $this->actingAs(User::factory()->member()->create())
+        ->postJson(route('media.replacement.replace'), [
+            ...replacementInspectParams($connection),
+            'target_fingerprint' => $fingerprint,
+            'candidate_fingerprint' => $candidate,
+            'verify_subtitles' => true,
+        ])
+        ->assertCreated();
+
+    $actionRequest = ActionRequest::query()->findOrFail($response->json('action_request_id'));
+    expect($actionRequest->status)->toBe(ActionRequestStatus::Pending)
+        ->and($actionRequest->requires_approval)->toBeTrue();
 });
