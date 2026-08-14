@@ -53,6 +53,7 @@ class SeriesController extends BaseArrController
 
         return Inertia::render('Sonarr/Series/Show', [
             'connection' => $this->connectionUrl($connection),
+            'service_connection_id' => $connection->id,
             'series' => $this->mapSeries($series, detailed: true),
             'episodes' => Inertia::defer(fn (): array => array_map(fn (array $ep): array => [
                 'id' => $ep['id'] ?? null,

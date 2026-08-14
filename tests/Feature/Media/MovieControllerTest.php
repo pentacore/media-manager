@@ -166,6 +166,7 @@ test('members can view a single movie', function (): void {
             ->where('movie.title_slug', 'my-movie-2024')
             ->where('movie.studio', 'A24')
             ->where('connection.url', 'http://radarr.local:7878')
+            ->where('service_connection_id', $this->connection->id)
         );
 });
 
