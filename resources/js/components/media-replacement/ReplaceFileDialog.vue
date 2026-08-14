@@ -31,14 +31,12 @@ type Phase =
 
 interface ReplacementSnapshot {
     service: 'sonarr' | 'radarr';
+    service_connection_id: number;
     display_name: string;
     scope: string | null;
     quality: string | null;
-    release_group: string | null;
-    installed_release: string | null;
     size: number | null;
     subtitles: string[];
-    monitored: boolean;
     date_added: string | null;
 }
 
@@ -82,6 +80,7 @@ interface CandidatesResponse {
 interface ReplaceResponse {
     action_request_id: number;
     action_queue_url: string;
+    requires_approval: boolean;
 }
 
 const props = defineProps<{
@@ -263,7 +262,7 @@ async function submitReplacement(): Promise<void> {
     errorMessage.value = null;
 
     try {
-        await jsonRequest<ReplaceResponse>(
+        const data = await jsonRequest<ReplaceResponse>(
             'post',
             MediaReplacementController.replace.url(),
             {
@@ -278,12 +277,17 @@ async function submitReplacement(): Promise<void> {
             return;
         }
 
-        toast.success('Replacement queued', {
-            action: {
-                label: 'Action Queue',
-                onClick: () => router.visit(ActionRequestController.index.url()),
+        toast.success(
+            data.requires_approval
+                ? 'Replacement queued for approval'
+                : 'Replacement queued',
+            {
+                action: {
+                    label: 'Action Queue',
+                    onClick: () => router.visit(ActionRequestController.index.url()),
+                },
             },
-        });
+        );
         emit('update:open', false);
     } catch (error) {
         if (seq !== requestSeq) {
@@ -388,20 +392,10 @@ watch(
                         </h3>
                         <Badge variant="outline">{{ snapshot.quality ?? 'Unknown quality' }}</Badge>
                     </div>
-                    <p
-                        v-if="snapshot.installed_release"
-                        class="truncate text-[12px] text-muted-foreground"
-                        :title="snapshot.installed_release"
-                    >
-                        {{ snapshot.installed_release }}
-                    </p>
                     <div
                         class="flex flex-wrap items-center gap-3 text-[12px] text-muted-foreground"
                     >
                         <span>{{ formatSize(snapshot.size) }}</span>
-                        <span v-if="snapshot.release_group">
-                            {{ snapshot.release_group }}
-                        </span>
                         <span v-if="snapshot.subtitles.length">
                             Subtitles: {{ snapshot.subtitles.join(', ') }}
                         </span>
