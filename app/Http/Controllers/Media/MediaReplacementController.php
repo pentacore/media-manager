@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers\Media;
 
+use App\Enums\ActionRequestStatus;
 use App\Enums\MediaReplacementScope;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Media\QueueReplacementRequest;
@@ -19,6 +20,7 @@ use App\Settings\MediaReplacementSettings;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\RequestException;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
@@ -56,7 +58,7 @@ class MediaReplacementController extends Controller
         $scope = MediaReplacementScope::tryFrom((string) ($snapshot['scope'] ?? ''));
 
         return response()->json([
-            'snapshot' => $snapshot,
+            'snapshot' => $this->presentSnapshot($snapshot),
             'fingerprint' => MediaReplacementTargetFingerprint::fromSnapshot($snapshot),
             'required_languages' => $scope === null ? [] : $mediaReplacementSettings->effectiveLanguages($scope),
         ]);
@@ -136,59 +138,105 @@ class MediaReplacementController extends Controller
             ]);
         }
 
-        abort_if(
-            $pendingReplacementGuard->inFlightFor($snapshot),
-            422,
-            'A replacement for this file is already in flight.',
-        );
+        // Two concurrent POSTs for the same target could both pass the guard
+        // check below before either dispatches, creating duplicate pending
+        // ActionRequests. Serialize the guard→dispatch section per target.
+        // Key prefix ("media-replacement:submit:") is distinct from
+        // SharedMediaTargetLock's ("media-target:") and MediaReplacementExecutionLock's
+        // — no deadlock risk: ExecuteActionRequest only runs later, in a
+        // separate queue worker process, after this lock is already released.
+        $submissionLock = Cache::lock("media-replacement:submit:{$fingerprint}", 30);
 
-        try {
-            $result = Cache::remember(
-                "media-replacement:candidates:{$fingerprint}",
-                120,
-                fn (): array => $replacementCandidateFinder->find($snapshot, serviceConnection: $connection),
-            );
-        } catch (RequestException|ConnectionException) {
-            return response()->json(['message' => 'Sonarr/Radarr is unreachable.'], 502);
-        }
-
-        $candidate = collect($result['candidates'])
-            ->firstWhere('fingerprint', $validated['candidate_fingerprint']);
-
-        if ($candidate === null) {
+        if (! $submissionLock->get()) {
             throw ValidationException::withMessages([
-                'candidate_fingerprint' => 'That release is no longer available — search again.',
+                'target_fingerprint' => 'Another replacement request for this file is being processed — try again.',
             ]);
         }
 
-        $built = $replacementRequestBuilder->build(
-            $snapshot,
-            $candidate,
-            $result['effective_languages'],
-            'manual',
-            sprintf('Manual replacement requested by %s', $request->user()->name),
-            verifySubtitles: (bool) ($validated['verify_subtitles'] ?? true),
-        );
+        try {
+            abort_if(
+                $pendingReplacementGuard->inFlightFor($snapshot),
+                422,
+                'A replacement for this file is already in flight.',
+            );
 
-        $isRadarr = $validated['service'] === 'radarr';
+            try {
+                $result = Cache::remember(
+                    "media-replacement:candidates:{$fingerprint}",
+                    120,
+                    fn (): array => $replacementCandidateFinder->find($snapshot, serviceConnection: $connection),
+                );
+            } catch (RequestException|ConnectionException) {
+                return response()->json(['message' => 'Sonarr/Radarr is unreachable.'], 502);
+            }
 
-        // Exact signature: dispatch(string $type, string $sourceService, string $targetService,
-        //   array $payload, ?WebhookEvent $webhookEvent = null, ?bool $forceRequiresApproval = null,
-        //   bool $deferExecution = false): ?ActionRequest  — same call shape as ImportedSubtitleAuditor.
-        $actionRequest = $actionOrchestrator->dispatch(
-            type: 'replace_media_file',
-            sourceService: $isRadarr ? 'radarr' : 'sonarr',
-            targetService: $isRadarr ? 'radarr' : 'sonarr',
-            payload: $built['payload'],
-            forceRequiresApproval: $built['force_requires_approval'],
-        );
+            $candidate = collect($result['candidates'])
+                ->firstWhere('fingerprint', $validated['candidate_fingerprint']);
 
-        abort_if(! $actionRequest instanceof ActionRequest, 422, 'This action is disabled in Action Rules.');
+            if ($candidate === null) {
+                throw ValidationException::withMessages([
+                    'candidate_fingerprint' => 'That release is no longer available — search again.',
+                ]);
+            }
 
-        return response()->json([
-            'action_request_id' => $actionRequest->id,
-            'action_queue_url' => route('actions.requests.index'),
-        ], 201);
+            $built = $replacementRequestBuilder->build(
+                $snapshot,
+                $candidate,
+                $result['effective_languages'],
+                'manual',
+                sprintf('Manual replacement requested by %s', $request->user()->name),
+                verifySubtitles: (bool) ($validated['verify_subtitles'] ?? true),
+            );
+
+            $isRadarr = $validated['service'] === 'radarr';
+
+            // Exact signature: dispatch(string $type, string $sourceService, string $targetService,
+            //   array $payload, ?WebhookEvent $webhookEvent = null, ?bool $forceRequiresApproval = null,
+            //   bool $deferExecution = false): ?ActionRequest  — same call shape as ImportedSubtitleAuditor.
+            $actionRequest = $actionOrchestrator->dispatch(
+                type: 'replace_media_file',
+                sourceService: $isRadarr ? 'radarr' : 'sonarr',
+                targetService: $isRadarr ? 'radarr' : 'sonarr',
+                payload: $built['payload'],
+                forceRequiresApproval: $built['force_requires_approval'],
+            );
+
+            abort_if(! $actionRequest instanceof ActionRequest, 422, 'This action is disabled in Action Rules.');
+
+            return response()->json([
+                'action_request_id' => $actionRequest->id,
+                'action_queue_url' => route('actions.requests.index'),
+                'requires_approval' => $actionRequest->status === ActionRequestStatus::Pending,
+            ], 201);
+        } finally {
+            $submissionLock->release();
+        }
+    }
+
+    /**
+     * Whitelist the inspector snapshot down to the fields the "Replace file"
+     * dialog actually renders. `scene_name` / `installed_release` can carry
+     * the upstream `relativePath` fallback (see MediaFileInspector::sceneName())
+     * — a filesystem path leak — and internal identifiers
+     * (episode_file_ids/movie_file_ids/original_history_id/...) have no
+     * business reaching the client. candidates()/replace() re-inspect
+     * server-side, so they are unaffected by this trim.
+     *
+     * @param  array<string, mixed>  $snapshot
+     * @return array<string, mixed>
+     */
+    private function presentSnapshot(array $snapshot): array
+    {
+        return Arr::only($snapshot, [
+            'display_name',
+            'service',
+            'service_connection_id',
+            'scope',
+            'quality',
+            'size',
+            'date_added',
+            'subtitles',
+        ]);
     }
 
     /**

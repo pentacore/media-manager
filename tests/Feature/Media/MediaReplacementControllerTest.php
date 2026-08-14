@@ -187,6 +187,20 @@ test('members get snapshot, fingerprint and required languages', function (): vo
         ->and($response->json('snapshot.service_connection_id'))->toBe($connection->id)
         ->and($response->json('fingerprint'))->toHaveLength(64)
         ->and($response->json('required_languages'))->toBeArray();
+
+    // The snapshot is a whitelisted presentation subset — never the raw
+    // inspector output. In particular, scene_name/installed_release can carry
+    // the upstream relativePath fallback (a filesystem path leak) and must
+    // never reach the client.
+    $keys = collect($response->json('snapshot'))->keys()->sort()->values()->all();
+    $whitelist = collect([
+        'display_name', 'service', 'service_connection_id', 'scope',
+        'quality', 'size', 'date_added', 'subtitles',
+    ])->sort()->values()->all();
+
+    expect($keys)->toBe($whitelist)
+        ->and($response->json('snapshot'))->not->toHaveKey('scene_name')
+        ->and($response->json('snapshot'))->not->toHaveKey('installed_release');
 });
 
 test('ambiguous targets return a structured error', function (): void {
@@ -344,7 +358,38 @@ test('replace queues an ActionRequest with manual selection and the verify flag'
     expect($actionRequest->payload['selection_mode'])->toBe('manual')
         ->and($actionRequest->payload['verify_subtitles'])->toBeFalse()
         ->and($actionRequest->payload['candidate_fingerprint'])->toBe($candidate)
-        ->and($actionRequest->status)->toBe(ActionRequestStatus::Pending); // replace_media_file requires approval by default
+        ->and($actionRequest->status)->toBe(ActionRequestStatus::Pending) // replace_media_file requires approval by default
+        ->and($response->json('requires_approval'))->toBeTrue();
+});
+
+test('replace rejects a concurrent submission for the same target while one is already in flight', function (): void {
+    $connection = ServiceConnection::factory()->radarr()->create(['url' => 'http://radarr.local:7878']);
+    fakeRadarrMovieWithFile(movieId: 10, fileId: 5);
+    fakeRadarrReleases(movieId: 10);
+    $fingerprint = replacementCurrentFingerprintFor($connection);
+    $candidate = replacementCandidateFingerprintFor($connection);
+
+    // Hold the exact submission lock the controller acquires, simulating a
+    // second concurrent POST racing an in-flight first one.
+    $lock = Cache::lock("media-replacement:submit:{$fingerprint}", 30);
+    expect($lock->get())->toBeTrue();
+
+    try {
+        $this->actingAs(User::factory()->member()->create())
+            ->postJson(route('media.replacement.replace'), [
+                ...replacementInspectParams($connection),
+                'target_fingerprint' => $fingerprint,
+                'candidate_fingerprint' => $candidate,
+                'verify_subtitles' => true,
+            ])
+            ->assertUnprocessable()
+            ->assertJsonPath(
+                'errors.target_fingerprint.0',
+                'Another replacement request for this file is being processed — try again.',
+            );
+    } finally {
+        $lock->release();
+    }
 });
 
 test('replace rejects an unknown candidate fingerprint', function (): void {
