@@ -31,7 +31,7 @@
         "eslint-plugin-import": "^2.32.0",
         "eslint-plugin-vue": "^10.9.2",
         "playwright": "^1.62.1",
-        "prettier": "^3.8.4",
+        "prettier": "^3.9.6",
         "prettier-plugin-tailwindcss": "^0.8.1",
         "semantic-release": "^25.0.8",
         "typescript": "^6.0.3",
