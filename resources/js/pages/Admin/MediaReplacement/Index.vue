@@ -3,6 +3,7 @@ import { Form, Head } from '@inertiajs/vue3';
 import MediaReplacementSettingsController from '@/actions/App/Http/Controllers/Admin/MediaReplacementSettingsController';
 import MediaReplacementSettings from '@/components/media-replacement/MediaReplacementSettings.vue';
 import type { MediaReplacementConfiguration } from '@/components/media-replacement/MediaReplacementSettings.vue';
+import MediaReplacementTabs from '@/components/media-replacement/MediaReplacementTabs.vue';
 import { Button } from '@/components/ui/button';
 import { dashboard } from '@/routes';
 
@@ -18,6 +19,7 @@ const props = defineProps<{
     seasonPackPolicies: EnumOption[];
     subtitleRuleStrengths: EnumOption[];
     conditionFields: EnumOption[];
+    attentionCount: number;
 }>();
 
 defineOptions({
@@ -51,6 +53,8 @@ defineOptions({
                 replacing installed media.
             </p>
         </div>
+
+        <MediaReplacementTabs :attention-count="props.attentionCount" />
 
         <Form
             v-bind="MediaReplacementSettingsController.update.form()"

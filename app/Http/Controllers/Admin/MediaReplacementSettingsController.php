@@ -8,6 +8,7 @@ use App\Enums\SeasonPackPolicy;
 use App\Enums\SubtitleRuleStrength;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Admin\UpdateMediaReplacementSettingsRequest;
+use App\Models\MediaReplacementAttempt;
 use App\Settings\MediaReplacementSettings;
 use Illuminate\Http\RedirectResponse;
 use Inertia\Inertia;
@@ -32,6 +33,7 @@ class MediaReplacementSettingsController extends Controller
                 ['value' => 'title', 'label' => 'Title token/phrase'],
                 ['value' => 'custom_format', 'label' => 'Custom format'],
             ],
+            'attentionCount' => MediaReplacementAttempt::unacknowledgedAttentionCount(),
         ]);
     }
 

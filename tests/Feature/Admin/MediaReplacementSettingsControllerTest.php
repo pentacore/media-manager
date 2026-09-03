@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use App\Enums\MediaReplacementScope;
 use App\Enums\ServiceType;
+use App\Models\MediaReplacementAttempt;
 use App\Models\ServiceConnection;
 use App\Models\User;
 use App\Services\MediaReplacement\SubtitleCheckTagSettings;
@@ -389,4 +390,13 @@ test('update rejects malformed media replacement json', function (): void {
             'media_replacement' => '{not valid json',
         ])
         ->assertSessionHasErrors('media_replacement.automatic_selection_enabled');
+});
+
+test('index exposes the open attention count for the attempts tab badge', function (): void {
+    MediaReplacementAttempt::factory()->needsAttention()->create();
+
+    $this->actingAs(User::factory()->admin()->create())
+        ->get(route('admin.media-replacement.index'))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page->where('attentionCount', 1));
 });
