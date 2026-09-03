@@ -45,7 +45,11 @@ test('a stale downloading attempt is flagged needs_attention and notifies admins
         ->and($fresh->failure_reason)->toBe('download_timeout')
         ->and($fresh->completed_at)->not->toBeNull();
 
-    Notification::assertSentTimes(MediaReplacementStatusChanged::class, 1);
+    Notification::assertSentTo(
+        User::first(),
+        MediaReplacementStatusChanged::class,
+        fn (MediaReplacementStatusChanged $mediaReplacementStatusChanged): bool => $mediaReplacementStatusChanged->url === route('admin.media-replacement.attempts.show', $attempt, absolute: false),
+    );
 });
 
 test('a downloading attempt with null started_at uses created_at as the age basis', function (): void {

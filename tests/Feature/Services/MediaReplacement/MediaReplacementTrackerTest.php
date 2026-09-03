@@ -150,6 +150,11 @@ test('a download verifies the attempt when every required language is present', 
     expect($fresh->status)->toBe(MediaReplacementStatus::Verified)
         ->and($fresh->verification['missing'])->toBe([]);
     Notification::assertSentTimes(MediaReplacementStatusChanged::class, 1);
+    Notification::assertSentTo(
+        User::first(),
+        MediaReplacementStatusChanged::class,
+        fn (MediaReplacementStatusChanged $mediaReplacementStatusChanged): bool => str_starts_with($mediaReplacementStatusChanged->url, '/admin/media-replacement/attempts/'),
+    );
     Event::assertDispatchedOnce(MediaReplacementAttemptChanged::class);
 
     // Monitoring suspended by the executor is restored to the ORIGINAL state.

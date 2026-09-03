@@ -528,6 +528,7 @@ final readonly class MediaReplacementTracker
             title: $title,
             message: $message,
             level: $level,
+            url: route('admin.media-replacement.attempts.show', $mediaReplacementAttempt, absolute: false),
         ));
     }
 
