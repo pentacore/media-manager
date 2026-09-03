@@ -167,11 +167,14 @@ final readonly class MediaReplacementOperatorActions
             : new SonarrClient($serviceConnection);
 
         try {
-            foreach ($this->queueRecords($client) as $record) {
+            // Keyed by queue item id: queueRecords() has already validated every
+            // key as a positive int, so there is no second, possibly stricter
+            // reading of the id here — a numeric-string id that paging accepted
+            // cannot then be silently skipped for removal.
+            foreach ($this->queueRecords($client) as $queueItemId => $record) {
                 $recordDownloadId = is_scalar($record['downloadId'] ?? null) ? trim((string) $record['downloadId']) : '';
-                $queueItemId = is_int($record['id'] ?? null) && $record['id'] > 0 ? $record['id'] : null;
 
-                if ($queueItemId === null || strcasecmp($recordDownloadId, $downloadId) !== 0) {
+                if (strcasecmp($recordDownloadId, $downloadId) !== 0) {
                     continue;
                 }
 
@@ -195,27 +198,78 @@ final readonly class MediaReplacementOperatorActions
     }
 
     /**
-     * Every queue page, materialised before any deletion.
+     * Every queue page, materialised before any deletion and keyed by queue
+     * item id. Same termination rule as CompetingGrabSweeper::queueRecords(),
+     * because the failure it guards against is the same: an upstream that
+     * reports no usable `totalRecords` and ignores `page` would otherwise serve
+     * a full page forever, and this runs synchronously on an admin request.
+     * Stop as soon as the page is short, the fetched count reached the reported
+     * total, or the page contributed no id we had not already seen.
      *
-     * @return list<array<string, mixed>>
+     * @return array<int, array<string, mixed>>
      *
      * @throws RequestException|ConnectionException
      */
     private function queueRecords(SonarrClient|RadarrClient $client): array
     {
         $page = 1;
-        $records = [];
+        $fetched = 0;
+        $recordsById = [];
 
         do {
             $queue = $client->getQueue(['page' => $page, 'pageSize' => self::QUEUE_PAGE_SIZE]);
             $pageRecords = is_array($queue['records'] ?? null)
                 ? array_values(array_filter($queue['records'], is_array(...)))
                 : [];
-            $records = [...$records, ...$pageRecords];
-            $total = is_int($queue['totalRecords'] ?? null) ? $queue['totalRecords'] : null;
-            $page++;
-        } while (count($pageRecords) === self::QUEUE_PAGE_SIZE && ($total === null || count($records) < $total));
+            $fetched += count($pageRecords);
+            $before = count($recordsById);
 
-        return $records;
+            foreach ($pageRecords as $pageRecord) {
+                $queueItemId = $this->positiveInt($pageRecord['id'] ?? null);
+
+                if ($queueItemId !== null) {
+                    $recordsById[$queueItemId] = $pageRecord;
+                }
+            }
+
+            $shortPage = count($pageRecords) < self::QUEUE_PAGE_SIZE;
+            $totalRecords = $this->nonNegativeInt($queue['totalRecords'] ?? null);
+            $reachedTotal = $totalRecords !== null && $fetched >= $totalRecords;
+            $madeProgress = count($recordsById) > $before;
+
+            $page++;
+        } while (! $shortPage && ! $reachedTotal && $madeProgress);
+
+        return $recordsById;
+    }
+
+    /**
+     * A queue item id, accepting the digit-only strings an arr may serialise
+     * ids as. Anything else is absent: a row we cannot address is a row we must
+     * not try to delete.
+     */
+    private function positiveInt(mixed $value): ?int
+    {
+        $integer = $this->nonNegativeInt($value);
+
+        return $integer !== null && $integer > 0 ? $integer : null;
+    }
+
+    /**
+     * `totalRecords` as an int, leniently. A digit-only string must still bound
+     * the paging loop — treating it as absent is what turns a quirky payload
+     * into an unbounded read.
+     */
+    private function nonNegativeInt(mixed $value): ?int
+    {
+        if (is_int($value)) {
+            return $value >= 0 ? $value : null;
+        }
+
+        if (! is_string($value) || preg_match('/^\d+$/D', trim($value)) !== 1) {
+            return null;
+        }
+
+        return (int) trim($value);
     }
 }

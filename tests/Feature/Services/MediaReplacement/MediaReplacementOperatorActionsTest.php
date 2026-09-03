@@ -30,6 +30,19 @@ function operatorActions(): MediaReplacementOperatorActions
     return resolve(MediaReplacementOperatorActions::class);
 }
 
+/**
+ * A queue page of rows that are nobody's replacement, ids $from..$from+$count-1.
+ *
+ * @return list<array<string, mixed>>
+ */
+function operatorActionsQueuePage(int $from, int $count): array
+{
+    return array_map(
+        static fn (int $id): array => ['id' => $id, 'downloadId' => 'OTHER-'.$id, 'title' => 'Something.Else.'.$id],
+        range($from, $from + $count - 1),
+    );
+}
+
 test('acknowledge stamps the row, keeps the status and announces the change', function (): void {
     $attempt = MediaReplacementAttempt::factory()->needsAttention()->create(['service_connection_id' => $this->connection->id]);
 
@@ -143,6 +156,56 @@ test('cancel removes our queue row without blocklisting, restores monitoring and
         && str_contains($request->url(), 'skipRedownload=true'));
     Http::assertNotSent(fn (Request $request): bool => str_contains($request->url(), '/api/v3/queue/8'));
     Event::assertDispatched(MediaReplacementAttemptChanged::class);
+});
+
+test('cancel pages through the queue and removes a row a later page reports under a numeric-string id', function (): void {
+    Http::fake([
+        'sonarr.local:8989/api/v3/queue/7000*' => Http::response([], 200),
+        'sonarr.local:8989/api/v3/queue?*' => Http::sequence()
+            // A full page of strangers, and a `totalRecords` the arr serialised
+            // as a string, which must still page and still bound the loop.
+            ->push(['totalRecords' => '201', 'records' => operatorActionsQueuePage(1, 200)])
+            ->push(['totalRecords' => '201', 'records' => [
+                ['id' => '7000', 'downloadId' => 'abc123', 'title' => 'Trusted.Anime.S01E01.CR'],
+            ]]),
+    ]);
+    $attempt = MediaReplacementAttempt::factory()->downloading()->create([
+        'service_connection_id' => $this->connection->id,
+        'download_id' => 'ABC123',
+        'monitoring_suspended' => null,
+    ]);
+
+    $result = operatorActions()->cancel($attempt);
+
+    expect($result->ok)->toBeTrue()
+        ->and($result->message)->toBe('Attempt cancelled.')
+        ->and($attempt->fresh()->status)->toBe(MediaReplacementStatus::Failed);
+    Http::assertSent(fn (Request $request): bool => $request->method() === 'DELETE'
+        && str_contains($request->url(), '/api/v3/queue/7000?'));
+});
+
+test('cancel stops paging when a page repeats itself and reports no total', function (): void {
+    // The runaway shape: a full page every time, no usable totalRecords, and an
+    // upstream ignoring `page`. Only the no-new-ids guard can end this.
+    Http::fake([
+        'sonarr.local:8989/api/v3/queue?*' => Http::sequence()
+            ->push(['records' => operatorActionsQueuePage(1, 200)])
+            ->push(['records' => operatorActionsQueuePage(1, 200)]),
+    ]);
+    $attempt = MediaReplacementAttempt::factory()->downloading()->create([
+        'service_connection_id' => $this->connection->id,
+        'download_id' => 'ABC123',
+        'monitoring_suspended' => null,
+    ]);
+
+    // A third GET exhausts the sequence and throws, so a runaway fails loudly
+    // rather than hanging the suite.
+    $result = operatorActions()->cancel($attempt);
+
+    expect($result->ok)->toBeTrue()
+        ->and($result->message)->toBe('Attempt cancelled.')
+        ->and($attempt->fresh()->status)->toBe(MediaReplacementStatus::Failed);
+    Http::assertSentCount(2);
 });
 
 test('cancel still fails the attempt when the arr queue is unreachable', function (): void {
