@@ -235,6 +235,12 @@ final readonly class MediaReplacementActions implements ActionExecutor
                     'status' => MediaReplacementStatus::Downloading->value,
                     'failure_reason' => null,
                     'completed_at' => null,
+                    // An acknowledgement belongs to the run that produced the
+                    // needs_attention outcome, so a re-run must start unacknowledged —
+                    // otherwise a re-broken attempt never re-enters the badge (see the
+                    // pre-grab reset below for the full consequence list).
+                    'acknowledged_at' => null,
+                    'acknowledged_by' => null,
                 ]);
             // fresh() rather than refresh(): refresh() is findOrFail, and this row can
             // be pruned between the load above and here — MediaReplacementAttempt is
@@ -378,6 +384,15 @@ final readonly class MediaReplacementActions implements ActionExecutor
                 'monitoring_suspended' => $owedRestore ? true : null,
                 'verification' => null,
                 'failure_reason' => null,
+                // An acknowledgement is an operator's "I have looked at THIS
+                // outcome", so it belongs to the run that produced it and must not
+                // survive into a re-run: a re-broken attempt would otherwise stay
+                // invisible — uncounted by unacknowledgedAttentionCount(), with
+                // `can.acknowledge` false so nobody can acknowledge the new
+                // breakage, hidden by "Hide acknowledged", and captioned with a
+                // stale "Acknowledged by".
+                'acknowledged_at' => null,
+                'acknowledged_by' => null,
                 'started_at' => now(),
                 'completed_at' => null,
             ],

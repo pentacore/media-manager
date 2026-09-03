@@ -922,6 +922,60 @@ test('a retry reuses the existing attempt row instead of hitting a duplicate key
         ->and(MediaReplacementAttempt::first()->failure_reason)->toBeNull();
 });
 
+test('a retry clears an acknowledgement so a re-broken attempt re-enters the badge', function (): void {
+    fakeExecutor();
+    $actionRequest = replaceActionRequest();
+
+    // An operator acknowledged the needs_attention row, then hit Retry on the
+    // Action Queue. The reused row must come back unacknowledged: the sidebar
+    // badge, `can.acknowledge` and the "Hide acknowledged" filter all key off
+    // acknowledged_at, so a surviving acknowledgement would silence the NEXT
+    // breakage this run produces.
+    $attempt = MediaReplacementAttempt::factory()->needsAttention()->acknowledged()->create([
+        'action_request_id' => $actionRequest->id,
+    ]);
+
+    expect($attempt->acknowledged_at)->not->toBeNull();
+
+    resolve(MediaReplacementActions::class)->execute($actionRequest);
+
+    $fresh = $attempt->fresh();
+
+    expect($fresh->status)->toBe(MediaReplacementStatus::Downloading)
+        ->and($fresh->acknowledged_at)->toBeNull()
+        ->and($fresh->acknowledged_by)->toBeNull();
+});
+
+test('a resume clears an acknowledgement along with the rest of the per-run state', function (): void {
+    fakeExecutor();
+    $actionRequest = replaceActionRequest();
+
+    // Same story on the resume branch — the reachable one: the grab was accepted,
+    // the deletion failed (needs_attention/deletion_failed), the operator
+    // acknowledged, and Retry resumes the remaining cleanup.
+    $attempt = MediaReplacementAttempt::factory()->needsAttention()->acknowledged()->create([
+        'action_request_id' => $actionRequest->id,
+        'grab_accepted_at' => now(),
+        'failure_reason' => 'deletion_failed',
+        'was_monitored' => false,
+        'target' => [
+            'service' => 'sonarr', 'scope' => 'anime', 'series_id' => 42,
+            'episode_ids' => [101], 'episode_file_ids' => [501],
+            'installed_release' => 'Trusted.Anime.S01E01.OLD', 'original_history_id' => 999,
+        ],
+    ]);
+
+    expect($attempt->acknowledged_at)->not->toBeNull();
+
+    resolve(MediaReplacementActions::class)->execute($actionRequest);
+
+    $fresh = $attempt->fresh();
+
+    expect($fresh->status)->toBe(MediaReplacementStatus::Downloading)
+        ->and($fresh->acknowledged_at)->toBeNull()
+        ->and($fresh->acknowledged_by)->toBeNull();
+});
+
 test('does not regress a terminal state the real tracker set during execution', function (): void {
     // Drive the REAL tracker (not a raw DB write) as a fast Download webhook
     // arriving while the executor is still deleting: it correlates by download
