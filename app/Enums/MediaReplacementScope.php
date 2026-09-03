@@ -13,4 +13,13 @@ enum MediaReplacementScope: string
     case Anime = 'anime';
     case Tv = 'tv';
     case Movie = 'movie';
+
+    public function label(): string
+    {
+        return match ($this) {
+            self::Anime => 'Anime',
+            self::Tv => 'TV',
+            self::Movie => 'Movie',
+        };
+    }
 }

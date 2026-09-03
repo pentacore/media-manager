@@ -51,4 +51,16 @@ enum MediaReplacementStatus: string
             array_filter(self::cases(), static fn (self $mediaReplacementStatus): bool => $mediaReplacementStatus->isTerminal()),
         ));
     }
+
+    public function label(): string
+    {
+        return match ($this) {
+            self::Requested => 'Requested',
+            self::Downloading => 'Downloading',
+            self::Imported => 'Imported',
+            self::Verified => 'Verified',
+            self::Failed => 'Failed',
+            self::NeedsAttention => 'Needs attention',
+        };
+    }
 }
