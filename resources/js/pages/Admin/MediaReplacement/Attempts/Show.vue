@@ -549,7 +549,7 @@ onMounted(subscribe);
             </div>
         </details>
 
-        <Dialog v-model:open="cancelOpen">
+        <Dialog v-if="attempt.can.cancel" v-model:open="cancelOpen">
             <DialogContent class="max-w-lg">
                 <DialogHeader>
                     <DialogTitle class="flex items-center gap-2">
