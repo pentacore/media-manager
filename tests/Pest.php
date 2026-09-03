@@ -67,6 +67,13 @@ pest()->extend(TestCase::class)
         // flushes don't leak across runs.
         config()->set('mediamanager.cache.store', 'array');
         Cache::store('array')->flush();
+
+        // Feature tests assert Inertia props on controllers whose Vue page
+        // may not be in the committed Vite manifest yet (added in a later
+        // task). withoutVite() skips the manifest lookup while the Blade
+        // view still renders, so assertViewHas('page') / assertInertia()
+        // keep working regardless of build state.
+        $this->withoutVite();
     })
     ->in('Feature');
 
