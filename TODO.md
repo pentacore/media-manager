@@ -12,7 +12,7 @@
 # FEATURES (from 2026-08-12 project audit)
 - [x] Manual "Replace file" trigger in the media UI (series/movie pages) so media replacement works without AI — candidate finder/ranker/approval flow all already exist
 - [ ] Enforce AI model rate limits (currently display-only on the AI Usage page — admins can define limits but nothing throttles)
-- [ ] Admin view for `MediaReplacementAttempt` history/detail (outcomes currently only surface via the Action Queue panel + notifications; consider broadcasting `MediaReplacementAttemptChanged`)
+- [x] Admin view for `MediaReplacementAttempt` history/detail (outcomes currently only surface via the Action Queue panel + notifications; consider broadcasting `MediaReplacementAttemptChanged`)
 - [ ] Torrent download client support (qBittorrent first) alongside SABnzbd, reusing the Downloads-page patterns
 - [ ] Jellyfin support (Emby API fork — much of `EmbyClient`/webhook handling carries over)
 - [ ] More notification channels: Discord / Telegram / generic webhook alongside ntfy
