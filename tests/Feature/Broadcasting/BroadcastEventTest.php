@@ -7,6 +7,7 @@ use App\Events\ActionRequestStatusChanged;
 use App\Events\ActivityLogCreated;
 use App\Events\DashboardStatsUpdated;
 use App\Events\EmbyPlaybackUpdated;
+use App\Events\MediaReplacementAttemptChanged;
 use App\Events\ServiceConnectionDeleted;
 use App\Events\ServiceConnectionUpserted;
 use App\Events\ServiceHealthChanged;
@@ -16,6 +17,7 @@ use App\Events\WebhookReceived;
 use App\Models\ActionRequest;
 use App\Models\ActivityLog;
 use App\Models\EmbyActivity;
+use App\Models\MediaReplacementAttempt;
 use App\Models\ServiceConnection;
 use App\Models\User;
 use App\Models\WebhookEvent;
@@ -331,4 +333,30 @@ test('webhook intake survives a broken broadcaster because dashboard rebroadcast
     );
 
     $response->assertOk();
+});
+
+test('MediaReplacementAttemptChanged broadcasts a scalar summary on the admin channel', function (): void {
+    MediaReplacementAttempt::factory()->needsAttention()->create();
+    $attempt = MediaReplacementAttempt::factory()->needsAttention()->create();
+
+    $event = new MediaReplacementAttemptChanged($attempt);
+
+    expect($event)->toBeInstanceOf(ShouldBroadcast::class);
+    expect($event)->not->toBeInstanceOf(ShouldBroadcastNow::class);
+    expect($event)->toBeInstanceOf(ShouldDispatchAfterCommit::class);
+    expect($event->broadcastOn())->toEqual(new PrivateChannel('admin.media-replacement'));
+    expect($event->broadcastAs())->toBe('MediaReplacementAttemptChanged');
+
+    $payload = $event->broadcastWith();
+    expect($payload)->toHaveKeys([
+        'id', 'action_request_id', 'status', 'failure_reason', 'scope', 'service_type',
+        'display_name', 'acknowledged', 'completed_at', 'updated_at', 'attention_unacknowledged',
+    ]);
+    expect($payload['status'])->toBe('needs_attention');
+    expect($payload['service_type'])->toBe('sonarr');
+    expect($payload['display_name'])->toBe('Trusted Anime S01E01');
+    expect($payload['acknowledged'])->toBeFalse();
+    expect($payload['attention_unacknowledged'])->toBe(2);
+    // JSON columns never leave the server through the socket.
+    expect($payload)->not->toHaveKeys(['target', 'candidate', 'verification']);
 });
