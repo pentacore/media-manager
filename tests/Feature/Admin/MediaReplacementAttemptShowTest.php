@@ -7,7 +7,6 @@ use App\Models\MediaReplacementAttempt;
 use App\Models\User;
 
 beforeEach(function (): void {
-    config()->set('inertia.testing.ensure_pages_exist', false);
     $this->admin = User::factory()->admin()->create();
 });
 

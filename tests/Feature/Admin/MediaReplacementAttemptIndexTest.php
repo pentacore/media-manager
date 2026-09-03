@@ -7,8 +7,6 @@ use App\Models\ServiceConnection;
 use App\Models\User;
 
 beforeEach(function (): void {
-    // The Vue page lands in a later task; assert the props, not the component file.
-    config()->set('inertia.testing.ensure_pages_exist', false);
     $this->admin = User::factory()->admin()->create();
 });
 
