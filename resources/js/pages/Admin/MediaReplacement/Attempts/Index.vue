@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { Head, Link, router } from '@inertiajs/vue3';
 import { Eye, RefreshCcw } from '@lucide/vue';
-import { onMounted, ref, watch } from 'vue';
+import { onMounted, onUnmounted, ref, watch } from 'vue';
 import ActionRequestController from '@/actions/App/Http/Controllers/Actions/ActionRequestController';
 import MediaReplacementAttemptController from '@/actions/App/Http/Controllers/Admin/MediaReplacementAttemptController';
 import MediaReplacementSettingsController from '@/actions/App/Http/Controllers/Admin/MediaReplacementSettingsController';
@@ -145,6 +145,14 @@ function episodeCode(row: AttemptRow): string {
 }
 
 function applyFilters(next: Partial<typeof props.filters>): void {
+    // A pending debounced search must not fire after this visit: its `merged`
+    // would be rebuilt from the pre-visit `props.filters` and would drop the
+    // filter applied here (and `replace: true` would rewrite the URL to it).
+    if (searchTimer) {
+        clearTimeout(searchTimer);
+        searchTimer = null;
+    }
+
     const merged = { ...props.filters, ...next };
     const query: Record<string, string | number> = {};
 
@@ -245,6 +253,16 @@ const STATUS_ORDER = [
     'needs_attention',
 ];
 
+// Summed over the statuses only — `statusCounts` also carries the derived
+// `attention_unacknowledged` key, which would double-count. Kept independent
+// of the active filters so the tile agrees with its siblings.
+function totalAttempts(): number {
+    return STATUS_ORDER.reduce(
+        (sum, status) => sum + (props.statusCounts[status] ?? 0),
+        0,
+    );
+}
+
 const { subscribe } = useRealtimeReload({
     channel: 'admin.media-replacement',
     event: 'MediaReplacementAttemptChanged',
@@ -252,6 +270,15 @@ const { subscribe } = useRealtimeReload({
 });
 
 onMounted(subscribe);
+
+// `setTimeout` isn't bound to the effect scope, so a pending search would
+// still navigate back to this list after the user has left for a detail page.
+onUnmounted(() => {
+    if (searchTimer) {
+        clearTimeout(searchTimer);
+        searchTimer = null;
+    }
+});
 </script>
 
 <template>
@@ -297,7 +324,7 @@ onMounted(subscribe);
                     All
                 </div>
                 <div class="font-mono-tabular text-[15px]">
-                    {{ attempts.meta.total }}
+                    {{ totalAttempts() }}
                 </div>
             </button>
             <button
