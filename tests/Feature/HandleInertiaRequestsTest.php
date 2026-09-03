@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use App\Enums\UserRole;
+use App\Models\MediaReplacementAttempt;
 use App\Models\ServiceConnection;
 use App\Models\User;
 use App\Services\Library\InterventionCounter;
@@ -127,4 +128,20 @@ test('version is not shared with guests', function (): void {
     $this->get(route('home'))
         ->assertOk()
         ->assertInertia(fn ($page) => $page->where('version', null));
+});
+
+test('nav.replacementAttention counts unacknowledged needs_attention attempts for admins only', function (): void {
+    MediaReplacementAttempt::factory()->needsAttention()->create();
+    MediaReplacementAttempt::factory()->needsAttention()->acknowledged()->create();
+    MediaReplacementAttempt::factory()->verified()->create();
+
+    $this->actingAs(User::factory()->admin()->create())
+        ->get(route('dashboard'))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page->where('nav.replacementAttention', 1));
+
+    $this->actingAs(User::factory()->member()->create())
+        ->get(route('dashboard'))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page->where('nav.replacementAttention', 0));
 });

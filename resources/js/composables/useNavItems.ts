@@ -224,6 +224,9 @@ export function useNavItems(counts?: NavCounts): ComputedRef<NavGroup[]> {
                         title: 'Media Replacement',
                         href: MediaReplacementSettingsController.index.url(),
                         icon: Replace,
+                        badge: counts
+                            ? () => counts.replacementAttention.value
+                            : undefined,
                     },
                 ],
             },
