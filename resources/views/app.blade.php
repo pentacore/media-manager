@@ -55,7 +55,15 @@
             'scheme' => config('reverb.public.scheme') ?? $reverbOptions['scheme'] ?? 'https',
         ]) }}">
 
-        @vite(['resources/css/app.css', 'resources/js/app.ts', "resources/js/pages/{$page['component']}.vue"])
+        {{-- The per-page entry is a modulepreload hint only; the client still
+             resolves the component at runtime via import.meta.glob. Skip it
+             under phpunit so a feature test can assert Inertia props on a
+             controller before its Vue page exists / has a fresh build. --}}
+        @vite(array_filter([
+            'resources/css/app.css',
+            'resources/js/app.ts',
+            app()->runningUnitTests() ? null : "resources/js/pages/{$page['component']}.vue",
+        ]))
         <x-inertia::head>
             <title>{{ config('app.name', 'Laravel') }}</title>
         </x-inertia::head>
