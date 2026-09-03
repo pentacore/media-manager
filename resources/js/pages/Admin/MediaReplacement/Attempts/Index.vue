@@ -290,7 +290,10 @@ onUnmounted(() => {
                 Admin <span class="text-fg-subtle">/</span> Media replacement
                 <span class="text-fg-subtle">/</span> Attempts
             </div>
-            <h1 class="text-[22px] leading-tight font-semibold tracking-tight">
+            <h1
+                data-attempts-title
+                class="text-[22px] leading-tight font-semibold tracking-tight"
+            >
                 Replacement attempts
             </h1>
             <p class="mt-1 max-w-[640px] text-[13px] text-muted-foreground">
