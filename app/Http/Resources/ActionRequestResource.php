@@ -26,6 +26,7 @@ use Pentacore\Typefinder\Attributes\TypefinderResource;
     'result' => 'Record<string, unknown> | null',
     'approved_by' => 'string | null',
     'webhook_source' => 'string | null',
+    'replacement_attempt' => '{ id: number; status: string; failure_reason: string | null } | null',
     'created_at' => 'string | null',
     'updated_at' => 'string | null',
 ])]
@@ -51,6 +52,11 @@ class ActionRequestResource extends JsonResource
             'result' => $request->user()?->isAdmin() ? $this->result : $this->safeResult(),
             'approved_by' => $this->whenLoaded('approvedByUser', fn () => $this->approvedByUser?->name),
             'webhook_source' => $this->whenLoaded('webhookEvent', fn () => $this->webhookEvent?->serviceConnection?->name),
+            'replacement_attempt' => $this->whenLoaded('mediaReplacementAttempt', fn (): ?array => $this->mediaReplacementAttempt === null ? null : [
+                'id' => $this->mediaReplacementAttempt->id,
+                'status' => $this->mediaReplacementAttempt->status->value,
+                'failure_reason' => $this->mediaReplacementAttempt->failure_reason,
+            ]),
             'created_at' => $this->created_at?->toISOString(),
             'updated_at' => $this->updated_at?->toISOString(),
         ];

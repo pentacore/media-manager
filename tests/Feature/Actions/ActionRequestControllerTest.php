@@ -5,6 +5,7 @@ declare(strict_types=1);
 use App\Enums\ActionRequestStatus;
 use App\Jobs\ExecuteActionRequest;
 use App\Models\ActionRequest;
+use App\Models\MediaReplacementAttempt;
 use App\Models\User;
 use Illuminate\Support\Facades\Queue;
 
@@ -147,6 +148,40 @@ test('status filter narrows results', function (): void {
             ->has('requests.data', 2)
             ->where('filters.status', 'pending')
         );
+});
+
+test('replacement rows expose their attempt summary and other rows expose null', function (): void {
+    // Explicit timestamps: `latest()` ties on identical created_at are
+    // otherwise unordered, which made data.0/data.1 flaky.
+    $attempt = MediaReplacementAttempt::factory()->failed()->for(
+        ActionRequest::factory()->state(['created_at' => now()->subMinute()]),
+        'actionRequest'
+    )->create();
+    $plain = ActionRequest::factory()->create();
+
+    $this->actingAs(User::factory()->member()->create())
+        ->get(route('actions.requests.index'))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->where('requests.data.0.id', $plain->id)
+            ->where('requests.data.0.replacement_attempt', null)
+            ->where('requests.data.1.id', $attempt->action_request_id)
+            ->where('requests.data.1.replacement_attempt.id', $attempt->id)
+            ->where('requests.data.1.replacement_attempt.status', 'failed')
+            ->where('requests.data.1.replacement_attempt.failure_reason', 'grab_rejected')
+        );
+});
+
+test('the request query parameter preselects a row', function (): void {
+    $actionRequest = ActionRequest::factory()->create();
+
+    $this->actingAs(User::factory()->member()->create())
+        ->get(route('actions.requests.index', ['request' => $actionRequest->id]))
+        ->assertInertia(fn ($page) => $page->where('preselect', $actionRequest->id));
+
+    $this->actingAs(User::factory()->member()->create())
+        ->get(route('actions.requests.index', ['request' => 'abc']))
+        ->assertInertia(fn ($page) => $page->where('preselect', null));
 });
 
 // ---------- APPROVE ----------
