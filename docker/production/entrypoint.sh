@@ -66,7 +66,6 @@ case "$role" in
         exec php artisan queue:work \
             --sleep=3 \
             --tries=3 \
-            --max-time=3600 \
             --timeout=300 \
             --no-interaction \
             --verbose
