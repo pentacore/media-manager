@@ -4,8 +4,10 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers\Admin;
 
+use App\Enums\ActionRequestStatus;
 use App\Enums\MediaReplacementScope;
 use App\Enums\MediaReplacementStatus;
+use App\Enums\ServiceType;
 use App\Http\Controllers\Controller;
 use App\Models\MediaReplacementAttempt;
 use App\Models\ServiceConnection;
@@ -74,6 +76,101 @@ class MediaReplacementAttemptController extends Controller
             ],
             'statusCounts' => $this->statusCounts(),
         ]);
+    }
+
+    public function show(MediaReplacementAttempt $mediaReplacementAttempt): Response
+    {
+        $mediaReplacementAttempt->load(['serviceConnection:id,name,type', 'actionRequest:id,status', 'acknowledgedBy:id,name']);
+
+        $target = is_array($mediaReplacementAttempt->target) ? $mediaReplacementAttempt->target : [];
+        $serviceConnection = $mediaReplacementAttempt->serviceConnection;
+        $downloadId = $this->stringOrNull($mediaReplacementAttempt->download_id);
+
+        return Inertia::render('Admin/MediaReplacement/Attempts/Show', [
+            'attempt' => [
+                'id' => $mediaReplacementAttempt->id,
+                'action_request_id' => $mediaReplacementAttempt->action_request_id,
+                'status' => $mediaReplacementAttempt->status->value,
+                'failure_reason' => $mediaReplacementAttempt->failure_reason,
+                'scope' => $mediaReplacementAttempt->scope,
+                'service' => $serviceConnection === null ? null : [
+                    'id' => $serviceConnection->id,
+                    'name' => $serviceConnection->name,
+                    'type' => $serviceConnection->type->value,
+                ],
+                'display_name' => $this->stringOrNull($target['display_name'] ?? null),
+                'season_number' => is_int($target['season_number'] ?? null) ? $target['season_number'] : null,
+                'episode_numbers' => array_values(array_filter(is_array($target['episode_numbers'] ?? null) ? $target['episode_numbers'] : [], is_int(...))),
+                'timeline' => [
+                    'created_at' => $mediaReplacementAttempt->created_at?->toIso8601String(),
+                    'started_at' => $mediaReplacementAttempt->started_at?->toIso8601String(),
+                    'grab_attempted_at' => $mediaReplacementAttempt->grab_attempted_at?->toIso8601String(),
+                    'grab_accepted_at' => $mediaReplacementAttempt->grab_accepted_at?->toIso8601String(),
+                    'cleanup_completed_at' => $mediaReplacementAttempt->cleanup_completed_at?->toIso8601String(),
+                    'completed_at' => $mediaReplacementAttempt->completed_at?->toIso8601String(),
+                ],
+                'download_id' => $downloadId,
+                'target' => $target,
+                'candidate' => is_array($mediaReplacementAttempt->candidate) ? $mediaReplacementAttempt->candidate : [],
+                'verification' => $mediaReplacementAttempt->verification,
+                'required_languages' => $this->stringList($mediaReplacementAttempt->required_languages),
+                'monitoring' => [
+                    'was_monitored' => $mediaReplacementAttempt->was_monitored,
+                    'monitoring_suspended' => $mediaReplacementAttempt->monitoring_suspended,
+                ],
+                'acknowledged' => $mediaReplacementAttempt->acknowledged_at === null ? null : [
+                    'at' => $mediaReplacementAttempt->acknowledged_at->toIso8601String(),
+                    'by_name' => $mediaReplacementAttempt->acknowledgedBy?->name,
+                ],
+                'action_request' => [
+                    'id' => $mediaReplacementAttempt->action_request_id,
+                    'status' => $mediaReplacementAttempt->actionRequest?->status->value,
+                ],
+                'links' => [
+                    'media' => $this->mediaLink($target, $serviceConnection),
+                    'action_request' => route('actions.requests.index', ['request' => $mediaReplacementAttempt->action_request_id]),
+                    'grab_queue' => $downloadId === null ? null : route('media.library.activity.queue'),
+                ],
+                'can' => $this->abilities($mediaReplacementAttempt),
+            ],
+        ]);
+    }
+
+    /**
+     * The same predicates the write actions enforce, so the page never offers
+     * a button the server would refuse.
+     *
+     * @return array{retry: bool, restore_monitoring: bool, acknowledge: bool, cancel: bool}
+     */
+    private function abilities(MediaReplacementAttempt $mediaReplacementAttempt): array
+    {
+        return [
+            'retry' => $mediaReplacementAttempt->status === MediaReplacementStatus::Failed
+                && $mediaReplacementAttempt->actionRequest?->status === ActionRequestStatus::Failed,
+            'restore_monitoring' => $mediaReplacementAttempt->status->isTerminal()
+                && $mediaReplacementAttempt->monitoring_suspended === true,
+            'acknowledge' => $mediaReplacementAttempt->status === MediaReplacementStatus::NeedsAttention
+                && $mediaReplacementAttempt->acknowledged_at === null,
+            'cancel' => in_array($mediaReplacementAttempt->status, [MediaReplacementStatus::Requested, MediaReplacementStatus::Downloading], true),
+        ];
+    }
+
+    /**
+     * @param  array<string, mixed>  $target
+     */
+    private function mediaLink(array $target, ?ServiceConnection $serviceConnection): ?string
+    {
+        $service = $target['service'] ?? $serviceConnection?->type->value;
+
+        if ($service === ServiceType::Radarr->value) {
+            $movieId = $target['movie_id'] ?? null;
+
+            return is_int($movieId) && $movieId > 0 ? route('media.movies.show', ['id' => $movieId]) : null;
+        }
+
+        $seriesId = $target['series_id'] ?? null;
+
+        return is_int($seriesId) && $seriesId > 0 ? route('media.series.show', ['id' => $seriesId]) : null;
     }
 
     /**
