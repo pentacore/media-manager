@@ -11,7 +11,11 @@ use App\Enums\ServiceType;
 use App\Http\Controllers\Controller;
 use App\Models\MediaReplacementAttempt;
 use App\Models\ServiceConnection;
+use App\Models\User;
+use App\Services\MediaReplacement\MediaReplacementOperatorActions;
+use App\Services\MediaReplacement\OperatorActionResult;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -134,6 +138,46 @@ class MediaReplacementAttemptController extends Controller
                 'can' => $this->abilities($mediaReplacementAttempt),
             ],
         ]);
+    }
+
+    public function acknowledge(
+        Request $request,
+        MediaReplacementAttempt $mediaReplacementAttempt,
+        MediaReplacementOperatorActions $mediaReplacementOperatorActions,
+    ): RedirectResponse {
+        abort_unless($this->abilities($mediaReplacementAttempt)['acknowledge'], 409);
+        $user = $request->user();
+        abort_unless($user instanceof User, 403);
+
+        return $this->flashResult($mediaReplacementOperatorActions->acknowledge($mediaReplacementAttempt, $user));
+    }
+
+    public function restoreMonitoring(
+        MediaReplacementAttempt $mediaReplacementAttempt,
+        MediaReplacementOperatorActions $mediaReplacementOperatorActions,
+    ): RedirectResponse {
+        abort_unless($this->abilities($mediaReplacementAttempt)['restore_monitoring'], 409);
+
+        return $this->flashResult($mediaReplacementOperatorActions->restoreMonitoring($mediaReplacementAttempt));
+    }
+
+    public function cancel(
+        MediaReplacementAttempt $mediaReplacementAttempt,
+        MediaReplacementOperatorActions $mediaReplacementOperatorActions,
+    ): RedirectResponse {
+        abort_unless($this->abilities($mediaReplacementAttempt)['cancel'], 409);
+
+        return $this->flashResult($mediaReplacementOperatorActions->cancel($mediaReplacementAttempt));
+    }
+
+    private function flashResult(OperatorActionResult $operatorActionResult): RedirectResponse
+    {
+        Inertia::flash('toast', [
+            'type' => $operatorActionResult->ok ? 'success' : 'error',
+            'message' => $operatorActionResult->message,
+        ]);
+
+        return back();
     }
 
     /**
