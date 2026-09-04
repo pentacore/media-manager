@@ -6,19 +6,36 @@ namespace App\Services\Notifications;
 
 use App\Models\NotificationPreference;
 use App\Models\User;
+use App\Notifications\Channels\DiscordChannel;
 use App\Notifications\Channels\NtfyChannel;
+use App\Notifications\Channels\PushChannel;
+use App\Notifications\Channels\TelegramChannel;
+use App\Notifications\Channels\WebhookChannel;
 use App\Notifications\ServiceUpdateAvailable;
 
 /**
  * Resolves the channel list for a (user, notification class, severity)
  * tuple. Anything the user hasn't explicitly toggled falls back to the
- * defaults below — database + broadcast on by default; mail/ntfy off
- * unless toggled — all four deliver.
+ * defaults below — database + broadcast on by default; mail and the push
+ * channels off unless toggled — all of them deliver.
  */
 class PreferenceResolver
 {
     /** Channels available across the whole pipeline. */
-    public const array CHANNELS = ['database', 'broadcast', 'mail', 'ntfy'];
+    public const array CHANNELS = ['database', 'broadcast', 'mail', 'ntfy', 'discord', 'telegram', 'webhook'];
+
+    /**
+     * Custom push channels: Laravel resolves them by class name, the
+     * preference table stores them by short name.
+     *
+     * @var array<string, class-string<PushChannel>>
+     */
+    public const array CHANNEL_CLASSES = [
+        'ntfy' => NtfyChannel::class,
+        'discord' => DiscordChannel::class,
+        'telegram' => TelegramChannel::class,
+        'webhook' => WebhookChannel::class,
+    ];
 
     /** Severities Laravel notifications will route through this resolver. */
     public const array SEVERITIES = ['info', 'warning', 'error'];
@@ -28,6 +45,9 @@ class PreferenceResolver
         'broadcast' => true,
         'mail' => false,
         'ntfy' => false,
+        'discord' => false,
+        'telegram' => false,
+        'webhook' => false,
     ];
 
     /**
@@ -70,6 +90,9 @@ class PreferenceResolver
                 'broadcast' => $row->broadcast,
                 'mail' => $row->mail,
                 'ntfy' => $row->ntfy,
+                'discord' => $row->discord,
+                'telegram' => $row->telegram,
+                'webhook' => $row->webhook,
             ]
             : [...self::DEFAULTS, ...(self::CLASS_DEFAULTS[$notificationClass] ?? [])];
 
@@ -78,9 +101,8 @@ class PreferenceResolver
             static fn (string $channel): bool => $flags[$channel],
         ));
 
-        // 'ntfy' is a custom channel: Laravel resolves it by class name.
         return array_map(
-            static fn (string $channel): string => $channel === 'ntfy' ? NtfyChannel::class : $channel,
+            static fn (string $channel): string => self::CHANNEL_CLASSES[$channel] ?? $channel,
             $enabled,
         );
     }

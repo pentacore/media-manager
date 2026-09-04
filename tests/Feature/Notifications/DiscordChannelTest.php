@@ -51,5 +51,6 @@ test('send swallows delivery failures and logs a warning', function (): void {
 
     $user = User::factory()->create(['discord_webhook_url' => 'https://discord.com/api/webhooks/1/abc']);
 
-    new DiscordChannel()->send($user, new ServiceWarning('sonarr', 'T', 'M', 'warning'));
-})->throwsNoExceptions()->skip('enabled in Task 6');
+    expect(fn (): mixed => new DiscordChannel()->send($user, new ServiceWarning('sonarr', 'T', 'M', 'warning')))
+        ->not->toThrow(Throwable::class);
+});
