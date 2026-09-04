@@ -149,13 +149,33 @@ final readonly class MediaReplacementTracker
             );
 
             $required = $this->normalizeCodes($attempt->required_languages);
-            $found = ($snapshot['ambiguous'] ?? false) === true
-                ? []
-                : $this->normalizeCodes($snapshot['subtitles'] ?? []);
-            $missing = array_values(array_diff($required, $found));
+            // Read from the attempt's ActionRequest, not a column: the flag is a
+            // per-request choice the builder wrote into the payload, and the
+            // manual replace endpoint (Task 6) is the only caller expected to pass
+            // false. Strict `=== false` rather than a bool cast: verification must
+            // be skipped ONLY on the literal value the builder writes. A malformed
+            // or legacy payload — absent key, `0`, `''`, `[]` — must fail SAFE by
+            // still verifying, not silently disable verification via truthiness.
+            $verifySubtitles = ($attempt->actionRequest?->payload['verify_subtitles'] ?? true) !== false;
 
-            $verification = ['required' => $required, 'found' => $found, 'missing' => $missing];
-            $subtitlesOk = ($snapshot['ambiguous'] ?? false) !== true && $missing === [];
+            if ($verifySubtitles) {
+                $found = ($snapshot['ambiguous'] ?? false) === true
+                    ? []
+                    : $this->normalizeCodes($snapshot['subtitles'] ?? []);
+                $missing = array_values(array_diff($required, $found));
+
+                $verification = ['subtitles_checked' => true, 'required' => $required, 'found' => $found, 'missing' => $missing];
+                $subtitlesOk = ($snapshot['ambiguous'] ?? false) !== true && $missing === [];
+            } else {
+                // Verification opted out: download tracking, import confirmation,
+                // and the monitoring restore below all still run — only the
+                // language comparison is skipped. An ambiguous inspection (no file
+                // found) still fails, since that means the import itself is not
+                // confirmed, independent of subtitle verification.
+                $missing = [];
+                $verification = ['subtitles_checked' => false, 'required' => $required, 'found' => [], 'missing' => []];
+                $subtitlesOk = ($snapshot['ambiguous'] ?? false) !== true;
+            }
 
             $needsRestore = $attempt->monitoring_suspended === true;
             $cleanupDone = $attempt->cleanup_completed_at !== null;
@@ -508,6 +528,7 @@ final readonly class MediaReplacementTracker
             title: $title,
             message: $message,
             level: $level,
+            url: route('admin.media-replacement.attempts.show', $mediaReplacementAttempt, absolute: false),
         ));
     }
 

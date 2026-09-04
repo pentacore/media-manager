@@ -180,10 +180,52 @@ class ActionTypeConfigSeeder extends Seeder
                 'requires_approval' => true,
                 'is_enabled' => true,
             ],
+            [
+                'type' => 'whisparr_add_item',
+                'label' => 'Add item to Whisparr',
+                'description' => 'Add a series or movie to Whisparr (AI-initiated).',
+                'requires_approval' => true,
+                'is_enabled' => true,
+            ],
+            [
+                'type' => 'whisparr_delete_item',
+                'label' => 'Delete item from Whisparr',
+                'description' => 'Remove a series or movie from Whisparr, including files (AI-initiated).',
+                'requires_approval' => true,
+                'is_enabled' => true,
+            ],
+            [
+                'type' => 'whisparr_monitor_item',
+                'label' => 'Toggle Whisparr item monitoring',
+                'description' => 'Set whether Whisparr monitors an item for new releases (AI-initiated).',
+                'requires_approval' => false,
+                'is_enabled' => true,
+            ],
+            [
+                'type' => 'whisparr_set_quality_profile',
+                'label' => 'Change Whisparr quality profile',
+                'description' => 'Change the quality profile assigned to an item in Whisparr (AI-initiated).',
+                'requires_approval' => false,
+                'is_enabled' => true,
+            ],
         ];
 
         foreach ($types as $type) {
-            ActionTypeConfig::updateOrCreate(['type' => $type['type']], $type);
+            // firstOrCreate is race-safe: on a unique-constraint collision with a
+            // concurrent replica (the entrypoint's env-driven migration path can run
+            // on several), Laravel's createOrFirst re-reads the winner and rethrows
+            // only when the re-read finds nothing — losing the race is tolerated,
+            // real failures stay loud.
+            $config = ActionTypeConfig::query()->firstOrCreate(['type' => $type['type']], $type);
+
+            if (! $config->wasRecentlyCreated) {
+                // requires_approval / is_enabled belong to the admin via Action Rules —
+                // a re-run must never reset them. Only the display copy self-heals.
+                $config->update([
+                    'label' => $type['label'],
+                    'description' => $type['description'],
+                ]);
+            }
         }
     }
 }

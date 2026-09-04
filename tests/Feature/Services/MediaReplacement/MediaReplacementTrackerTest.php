@@ -5,6 +5,7 @@ declare(strict_types=1);
 use App\Enums\MediaReplacementStatus;
 use App\Enums\UserRole;
 use App\Events\MediaReplacementAttemptChanged;
+use App\Models\ActionRequest;
 use App\Models\MediaReplacementAttempt;
 use App\Models\ServiceConnection;
 use App\Models\User;
@@ -149,6 +150,11 @@ test('a download verifies the attempt when every required language is present', 
     expect($fresh->status)->toBe(MediaReplacementStatus::Verified)
         ->and($fresh->verification['missing'])->toBe([]);
     Notification::assertSentTimes(MediaReplacementStatusChanged::class, 1);
+    Notification::assertSentTo(
+        User::first(),
+        MediaReplacementStatusChanged::class,
+        fn (MediaReplacementStatusChanged $mediaReplacementStatusChanged): bool => str_starts_with($mediaReplacementStatusChanged->url, '/admin/media-replacement/attempts/'),
+    );
     Event::assertDispatchedOnce(MediaReplacementAttemptChanged::class);
 
     // Monitoring suspended by the executor is restored to the ORIGINAL state.
@@ -221,6 +227,96 @@ test('a download missing a required language needs attention with verification e
         ->and($fresh->verification['found'])->toBe(['eng'])
         ->and($fresh->verification['missing'])->toBe(['swe']);
     Event::assertDispatchedOnce(MediaReplacementAttemptChanged::class);
+});
+
+test('a download with verify_subtitles disabled skips the language comparison but still restores monitoring', function (): void {
+    // The inspected snapshot is MISSING a required language ('swe'); with
+    // verification disabled this must not fail the attempt, and the monitoring
+    // restore (a side effect independent of subtitle verification) must still run.
+    $mediaReplacementAttempt = trackerAttempt($this->connection->id, [
+        'action_request_id' => ActionRequest::factory()->state([
+            'type' => 'replace_media_file',
+            'payload' => ['verify_subtitles' => false],
+        ]),
+        'download_id' => 'DL-1',
+        'required_languages' => ['eng', 'swe'],
+        'was_monitored' => true,
+        'monitoring_suspended' => true,
+        'cleanup_completed_at' => now(),
+    ]);
+    fakeInspectSubtitles('English');
+    Event::fake([MediaReplacementAttemptChanged::class]);
+
+    resolve(MediaReplacementTracker::class)->verifyDownload($this->connection, [
+        'eventType' => 'Download',
+        'series' => ['id' => 42],
+        'downloadId' => 'DL-1',
+    ]);
+
+    $fresh = $mediaReplacementAttempt->fresh();
+    expect($fresh->status)->toBe(MediaReplacementStatus::Verified)
+        ->and($fresh->verification['subtitles_checked'])->toBeFalse()
+        ->and($fresh->verification['missing'])->toBe([])
+        ->and($fresh->monitoring_suspended)->toBeFalse();
+
+    // The same monitoring-restore side effect the happy-path test checks —
+    // skipping verification must not skip the restore.
+    Http::assertSent(fn (Request $request): bool => $request->method() === 'PUT'
+        && str_contains($request->url(), '/api/v3/episode/monitor')
+        && $request->data()['episodeIds'] === [101]
+        && $request->data()['monitored'] === true);
+});
+
+test('a download with a non-boolean falsy verify_subtitles value still runs the language comparison', function (): void {
+    // The flag must be skipped ONLY on the literal `false` the builder writes.
+    // A malformed/legacy payload carrying `0` (int zero) is falsy under a bool
+    // cast but must fail SAFE — i.e. still verify — rather than silently
+    // disabling verification via truthiness.
+    $mediaReplacementAttempt = trackerAttempt($this->connection->id, [
+        'action_request_id' => ActionRequest::factory()->state([
+            'type' => 'replace_media_file',
+            'payload' => ['verify_subtitles' => 0],
+        ]),
+        'download_id' => 'DL-1',
+        'required_languages' => ['eng', 'swe'],
+    ]);
+    fakeInspectSubtitles('English');
+    Event::fake([MediaReplacementAttemptChanged::class]);
+
+    resolve(MediaReplacementTracker::class)->verifyDownload($this->connection, [
+        'eventType' => 'Download',
+        'series' => ['id' => 42],
+        'downloadId' => 'DL-1',
+    ]);
+
+    $fresh = $mediaReplacementAttempt->fresh();
+    expect($fresh->status)->toBe(MediaReplacementStatus::NeedsAttention)
+        ->and($fresh->failure_reason)->toBe('imported_subtitles_missing_required_language')
+        ->and($fresh->verification['subtitles_checked'])->toBeTrue()
+        ->and($fresh->verification['missing'])->toBe(['swe']);
+});
+
+test('a download with verify_subtitles absent from the payload still runs the language comparison', function (): void {
+    // Backward compatibility: existing callers (auditor/advisor/AI tool) never
+    // pass the flag at all, so an absent key must behave exactly as `true`.
+    $mediaReplacementAttempt = trackerAttempt($this->connection->id, [
+        'download_id' => 'DL-1',
+        'required_languages' => ['eng', 'swe'],
+    ]);
+    fakeInspectSubtitles('English');
+    Event::fake([MediaReplacementAttemptChanged::class]);
+
+    resolve(MediaReplacementTracker::class)->verifyDownload($this->connection, [
+        'eventType' => 'Download',
+        'series' => ['id' => 42],
+        'downloadId' => 'DL-1',
+    ]);
+
+    $fresh = $mediaReplacementAttempt->fresh();
+    expect($fresh->status)->toBe(MediaReplacementStatus::NeedsAttention)
+        ->and($fresh->failure_reason)->toBe('imported_subtitles_missing_required_language')
+        ->and($fresh->verification['subtitles_checked'])->toBeTrue()
+        ->and($fresh->verification['missing'])->toBe(['swe']);
 });
 
 test('a download with an unknown download id is a no-op', function (): void {

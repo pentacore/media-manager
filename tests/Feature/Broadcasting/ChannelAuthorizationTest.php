@@ -149,3 +149,30 @@ test('viewer cannot join the admin.ai-prices channel', function (): void {
         ])
         ->assertForbidden();
 });
+
+test('admin can join the admin.media-replacement channel', function (): void {
+    $this->actingAs(User::factory()->admin()->create())
+        ->post('/broadcasting/auth', [
+            'socket_id' => '1234.1234567',
+            'channel_name' => 'private-admin.media-replacement',
+        ])
+        ->assertOk();
+});
+
+test('member cannot join the admin.media-replacement channel', function (): void {
+    $this->actingAs(User::factory()->member()->create())
+        ->post('/broadcasting/auth', [
+            'socket_id' => '1234.1234567',
+            'channel_name' => 'private-admin.media-replacement',
+        ])
+        ->assertForbidden();
+});
+
+test('viewer cannot join the admin.media-replacement channel', function (): void {
+    $this->actingAs(User::factory()->create())
+        ->post('/broadcasting/auth', [
+            'socket_id' => '1234.1234567',
+            'channel_name' => 'private-admin.media-replacement',
+        ])
+        ->assertForbidden();
+});

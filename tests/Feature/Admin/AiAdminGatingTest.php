@@ -16,6 +16,7 @@ dataset('non-ai admin pages', [
     'users' => ['admin.users.index'],
     'webhook log' => ['admin.webhook-log.index'],
     'jobs' => ['admin.jobs.index'],
+    'media replacement' => ['admin.media-replacement.index'],
 ]);
 
 test('ai admin pages return 404 when AI is disabled', function (string $routeName): void {

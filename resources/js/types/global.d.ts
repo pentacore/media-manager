@@ -26,7 +26,14 @@ declare module '@inertiajs/core' {
             name: string;
             auth: Auth;
             ai: { enabled: boolean };
-            nav: { pendingActions: number; activeSessions: number };
+            nav: {
+                pendingActions: number;
+                activeSessions: number;
+                unreadNotifications: number;
+                libraryIntervention: number;
+                sabnzbdDownloads: { queued: number; completed: number };
+                replacementAttention: number;
+            };
             sidebarOpen: boolean;
             version: {
                 current: string;

@@ -6,14 +6,11 @@ namespace App\Http\Controllers\Admin;
 
 use App\Enums\AiMode;
 use App\Enums\AiReasoningLevel;
-use App\Enums\SeasonPackPolicy;
-use App\Enums\SubtitleRuleStrength;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Admin\UpdateAiSettingsRequest;
 use App\Models\AiModelPrice;
 use App\Services\AiBudget\AiBudgetGuard;
 use App\Settings\AiSettings;
-use App\Settings\MediaReplacementSettings;
 use Illuminate\Http\RedirectResponse;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -24,11 +21,7 @@ class AiSettingsController extends Controller
     public function index(
         AiSettings $aiSettings,
         AiBudgetGuard $aiBudgetGuard,
-        MediaReplacementSettings $mediaReplacementSettings,
     ): Response {
-        $mediaReplacementConfiguration = $mediaReplacementSettings->configuration();
-        unset($mediaReplacementConfiguration['sonarr_root_folders']);
-
         return Inertia::render('Admin/AiSettings/Index', [
             'settings' => [
                 'mode' => $aiSettings->mode()->value,
@@ -41,7 +34,6 @@ class AiSettingsController extends Controller
                 'failover_provider' => $aiSettings->failoverProvider()?->value ?? 'none',
                 'models_dev_pricing_enabled' => $aiSettings->modelsDevPricingEnabled(),
                 'ignored_pricing_providers' => $aiSettings->ignoredPricingProviders(),
-                'media_replacement' => $mediaReplacementConfiguration,
             ],
             'budget' => [
                 'spend' => round($aiBudgetGuard->currentMonthSpend(), 4),
@@ -61,14 +53,6 @@ class AiSettingsController extends Controller
                 ['value' => Lab::Mistral->value, 'label' => 'Mistral'],
             ],
             'ignorablePricingProviders' => $this->ignorablePricingProviders(),
-            'seasonPackPolicies' => SeasonPackPolicy::mapForSelect(labelKey: 'label'),
-            'subtitleRuleStrengths' => SubtitleRuleStrength::mapForSelect(labelKey: 'label'),
-            'conditionFields' => [
-                ['value' => 'release_group', 'label' => 'Release group'],
-                ['value' => 'subgroup', 'label' => 'Subgroup'],
-                ['value' => 'title', 'label' => 'Title token/phrase'],
-                ['value' => 'custom_format', 'label' => 'Custom format'],
-            ],
         ]);
     }
 
@@ -133,7 +117,6 @@ class AiSettingsController extends Controller
     public function update(
         UpdateAiSettingsRequest $updateAiSettingsRequest,
         AiSettings $aiSettings,
-        MediaReplacementSettings $mediaReplacementSettings,
     ): RedirectResponse {
         $validated = $updateAiSettingsRequest->validated();
 
@@ -159,10 +142,6 @@ class AiSettingsController extends Controller
                 : null,
         );
         $aiSettings->setIgnoredPricingProviders($validated['ignored_pricing_providers'] ?? []);
-
-        $mediaReplacementConfiguration = $validated['media_replacement'];
-        $mediaReplacementConfiguration['sonarr_root_folders'] = $mediaReplacementSettings->sonarrRootFolders();
-        $mediaReplacementSettings->setConfiguration($mediaReplacementConfiguration);
 
         Inertia::flash('toast', ['type' => 'success', 'message' => __('AI settings updated.')]);
 

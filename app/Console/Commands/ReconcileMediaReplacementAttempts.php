@@ -151,6 +151,7 @@ class ReconcileMediaReplacementAttempts extends Command
                         title: (string) ($attempt->candidate['title'] ?? 'Media replacement'),
                         message: $this->timeoutMessage($attempt, $hours, $monitoringRestored),
                         level: 'warning',
+                        url: route('admin.media-replacement.attempts.show', $attempt, absolute: false),
                     ));
                 }
             } finally {

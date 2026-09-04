@@ -16,6 +16,7 @@ use App\Models\SubtitleUpload;
 use App\Services\Actions\ActionExecutor;
 use App\Services\Actions\SharedMediaTargetLock;
 use App\Support\UpstreamErrorText;
+use Carbon\CarbonInterface;
 use Illuminate\Contracts\Cache\Lock;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\RequestException;
@@ -413,7 +414,7 @@ final readonly class BazarrActions implements ActionExecutor
             $upload->update(array_filter([
                 'consumed_at' => now(),
                 'cleaned_up_at' => $deleted ? now() : null,
-            ], static fn (mixed $value): bool => $value !== null));
+            ], static fn (mixed $value): bool => $value instanceof CarbonInterface));
         } finally {
             $uploadLock->release();
         }

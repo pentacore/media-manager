@@ -7,10 +7,12 @@ import {
     ChevronRight,
     ExternalLink,
     HardDrive,
+    Replace,
     Trash2,
 } from '@lucide/vue';
 import { ref } from 'vue';
 import SeriesController from '@/actions/App/Http/Controllers/Media/SeriesController';
+import ReplaceFileDialog from '@/components/media-replacement/ReplaceFileDialog.vue';
 import { Pill, Poster, StatusPill } from '@/components/mm';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -30,6 +32,12 @@ import {
 } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
 import { Skeleton } from '@/components/ui/skeleton';
+import {
+    Tooltip,
+    TooltipContent,
+    TooltipProvider,
+    TooltipTrigger,
+} from '@/components/ui/tooltip';
 import { dashboard } from '@/routes';
 
 interface QualityProfile {
@@ -84,6 +92,7 @@ interface SeriesDetail {
 
 const props = defineProps<{
     connection: { url: string };
+    service_connection_id: number;
     series: SeriesDetail;
     episodes?: Episode[];
     qualityProfiles?: QualityProfile[];
@@ -101,6 +110,19 @@ defineOptions({
 const deleteFiles = ref(false);
 const deleteDialogOpen = ref(false);
 const openSeasons = ref<Record<number, boolean>>({});
+const replaceDialogOpen = ref(false);
+const replaceTarget = ref<{
+    seasonNumber: number;
+    episodeNumber: number;
+} | null>(null);
+
+function openReplaceDialog(episode: Episode): void {
+    replaceTarget.value = {
+        seasonNumber: episode.season_number,
+        episodeNumber: episode.episode_number,
+    };
+    replaceDialogOpen.value = true;
+}
 
 function posterUrl(): string | null {
     const poster = props.series.images.find(
@@ -523,6 +545,37 @@ function sonarrSeriesUrl(): string | null {
                                                         : 'Missing'
                                                 }}
                                             </Pill>
+                                            <TooltipProvider
+                                                v-if="episode.has_file"
+                                                :delay-duration="200"
+                                            >
+                                                <Tooltip>
+                                                    <TooltipTrigger as-child>
+                                                        <Button
+                                                            variant="ghost"
+                                                            size="icon-sm"
+                                                            data-replacement-trigger
+                                                            @click="
+                                                                openReplaceDialog(
+                                                                    episode,
+                                                                )
+                                                            "
+                                                        >
+                                                            <Replace
+                                                                class="size-3.5"
+                                                            />
+                                                            <span
+                                                                class="sr-only"
+                                                            >
+                                                                Replace file
+                                                            </span>
+                                                        </Button>
+                                                    </TooltipTrigger>
+                                                    <TooltipContent>
+                                                        Replace file
+                                                    </TooltipContent>
+                                                </Tooltip>
+                                            </TooltipProvider>
                                         </div>
                                     </div>
                                     <p
@@ -550,4 +603,14 @@ function sonarrSeriesUrl(): string | null {
             </WhenVisible>
         </div>
     </div>
+
+    <ReplaceFileDialog
+        v-if="replaceTarget"
+        v-model:open="replaceDialogOpen"
+        service="sonarr"
+        :connection-id="service_connection_id"
+        :item-id="series.id"
+        :season-number="replaceTarget.seasonNumber"
+        :episode-number="replaceTarget.episodeNumber"
+    />
 </template>
