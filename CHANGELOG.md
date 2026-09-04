@@ -1,3 +1,46 @@
+# [1.17.0](https://github.com/pentacore/media-manager/compare/v1.16.2...v1.17.0) (2026-09-04)
+
+
+### Bug Fixes
+
+* **actions:** corrected race test to verify catch block fires ([0b57408](https://github.com/pentacore/media-manager/commit/0b57408ab0688b29cdc498556aa12f1154039a54))
+* **actions:** delegate race handling to Laravel 13 firstOrCreate ([d9897a5](https://github.com/pentacore/media-manager/commit/d9897a544c720077ab14f549b108fee90d6f988e))
+* **actions:** self-heal action types without resetting admin gates ([70f3bbd](https://github.com/pentacore/media-manager/commit/70f3bbde3622788ff5959e9cbfb0217e5a197c0d))
+* **deploy:** seed action types after migrations on both entrypoint paths ([08a80c0](https://github.com/pentacore/media-manager/commit/08a80c05b55d0727eacadfce0857beda7fe026bf))
+* **media-replacement:** bound operator-cancel queue paging ([b3e63e8](https://github.com/pentacore/media-manager/commit/b3e63e864a00e1ccbda67a49528602aac1063ccd))
+* **media-replacement:** cancel the attempts search debounce and unfilter the All tile ([ac29d08](https://github.com/pentacore/media-manager/commit/ac29d082a8a7bde442346de652ec53d599fcc066))
+* **media-replacement:** close the manual replace review-fix gaps ([bfa5e9e](https://github.com/pentacore/media-manager/commit/bfa5e9e9303afa4f0e081ac6cbf494924d357fcd)), closes [guard-throu#dispatch](https://github.com/guard-throu/issues/dispatch)
+* **media-replacement:** drop leaked snapshot fields, distinguish toasts ([f39f929](https://github.com/pentacore/media-manager/commit/f39f929497d4d3c0d04b0924297b8acf636620a0))
+* **media-replacement:** gate the cancel confirm dialog on can.cancel ([785a0c5](https://github.com/pentacore/media-manager/commit/785a0c5ba03882bee9203a6b01075a1f4143471a))
+* **media-replacement:** reset acknowledgement when an attempt re-enters the executor ([5c9d94c](https://github.com/pentacore/media-manager/commit/5c9d94c241bdd202cf73c20d2a0dc4b673b4015a))
+* **media-replacement:** serialize replacements per installed file ([c43352d](https://github.com/pentacore/media-manager/commit/c43352d2636b2d2d8e603e9f4a9cc49880fcebed))
+* **media-replacement:** skip subtitle verification only on literal false ([d67fed7](https://github.com/pentacore/media-manager/commit/d67fed773dd3dad81317c1a77239d1675f453b32))
+* **tests:** use withoutVite() for feature tests instead of a Blade guard ([22c3c16](https://github.com/pentacore/media-manager/commit/22c3c1636d71937e91135262b78783fa3bc82343))
+
+
+### Features
+
+* **actions:** expose the replacement attempt summary and a request preselect ([ba92c4d](https://github.com/pentacore/media-manager/commit/ba92c4d391caeec4db30b36c357c70a65dc9f3c3))
+* **actions:** show the replacement attempt on the queue and refresh it live ([4e58420](https://github.com/pentacore/media-manager/commit/4e5842045cf1895d4053466f3c2fb04858a006f4))
+* **media-replacement:** add a server-computed target fingerprint ([e1d5772](https://github.com/pentacore/media-manager/commit/e1d5772f644d482695c56289749fd168c6ba8897))
+* **media-replacement:** add acknowledge, restore-monitoring and cancel endpoints ([d0bb209](https://github.com/pentacore/media-manager/commit/d0bb20914f74e908781a36afdfab757c990f42fc))
+* **media-replacement:** add attempt acknowledgement columns and helpers ([0d8b172](https://github.com/pentacore/media-manager/commit/0d8b1720baff71c5b97c29a5e1a204951a55d1fa))
+* **media-replacement:** add operator actions service for attempts ([625cb5f](https://github.com/pentacore/media-manager/commit/625cb5fea70dbdfd1e5bc108affbf808db879652))
+* **media-replacement:** add the admin attempt detail endpoint ([4768e23](https://github.com/pentacore/media-manager/commit/4768e2333ff2b961d3681f7aba04bd4c5ebf58bf))
+* **media-replacement:** add the admin attempts index endpoint ([c5242e3](https://github.com/pentacore/media-manager/commit/c5242e31dc8d6ba17264d37f0576906d97efaade))
+* **media-replacement:** add the attempt detail page with operator actions ([2092bc5](https://github.com/pentacore/media-manager/commit/2092bc5959ac7768b56b453ef8cd04b0fcb638e2))
+* **media-replacement:** add the attempts tab and list page ([3f0489e](https://github.com/pentacore/media-manager/commit/3f0489e4909243a1677020d8b80eff273d7d2666))
+* **media-replacement:** add the manual candidates endpoint ([fac2b07](https://github.com/pentacore/media-manager/commit/fac2b075bb6cb7b677e2880cfa63edfe61aac730))
+* **media-replacement:** add the manual inspect endpoint ([d1cc78b](https://github.com/pentacore/media-manager/commit/d1cc78b8e8fac51025b07b4e203c0de14345e893))
+* **media-replacement:** add the manual replace endpoint ([4425bde](https://github.com/pentacore/media-manager/commit/4425bde0c56480831ca59d9dbbcd33a048bfbd9d))
+* **media-replacement:** add the Replace file dialog to series and movie pages ([89b9bd6](https://github.com/pentacore/media-manager/commit/89b9bd631c3c085550a2069a28cc9156a4eba39a))
+* **media-replacement:** broadcast attempt changes on an admin channel ([45ae1c0](https://github.com/pentacore/media-manager/commit/45ae1c01d6504e6bae85d450c2ea003d2af6229d))
+* **media-replacement:** link attempt notifications to the attempt page ([53ed85e](https://github.com/pentacore/media-manager/commit/53ed85e0c88d48de0df3be2fc177b2a135b5d1eb))
+* **media-replacement:** make subtitle verification optional per request ([cc0ac17](https://github.com/pentacore/media-manager/commit/cc0ac17c277cca9046801be9b319490fda04fa3f))
+* **media-replacement:** move settings to their own admin page ([5961e69](https://github.com/pentacore/media-manager/commit/5961e6927e01f86d46df4955b28a29148c2cd838))
+* **media-replacement:** show open attention count on the sidebar badge ([78965c6](https://github.com/pentacore/media-manager/commit/78965c677db0f356c60084798162c815fe8a4fd7))
+* **monitoring:** check SABnzbd upstream releases ([9cc209c](https://github.com/pentacore/media-manager/commit/9cc209c6d4daf93add90cecf08b87e64041c874c))
+
 ## [1.16.2](https://github.com/pentacore/media-manager/compare/v1.16.1...v1.16.2) (2026-08-13)
 
 
