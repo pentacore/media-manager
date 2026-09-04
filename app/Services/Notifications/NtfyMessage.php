@@ -5,9 +5,9 @@ declare(strict_types=1);
 namespace App\Services\Notifications;
 
 /**
- * Builds the ntfy JSON-publish payload fragment shared by every
- * notification's toNtfy(). Severity buckets map to ntfy integer
- * priorities (1-5) and a tag emoji.
+ * Builds the ntfy JSON-publish payload fragment NtfyChannel derives from a
+ * PushMessage. Severity buckets map to ntfy integer priorities (1-5) and a
+ * tag emoji.
  */
 class NtfyMessage
 {

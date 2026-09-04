@@ -4,48 +4,38 @@ declare(strict_types=1);
 
 namespace App\Notifications\Channels;
 
-use Illuminate\Notifications\Notification;
+use App\Services\Notifications\NtfyMessage;
+use App\Services\Notifications\PushMessage;
 use Illuminate\Support\Facades\Http;
-use Illuminate\Support\Facades\Log;
-use Throwable;
 
 /**
  * Publishes a notification to the globally configured ntfy server using
- * the notifiable's per-user topic. Delivery is best-effort: failures are
- * logged and swallowed so webhook handlers and jobs never break on ntfy
- * downtime.
+ * the notifiable's topic (per-user column or global destination config).
  */
-class NtfyChannel
+class NtfyChannel extends PushChannel
 {
-    public function send(object $notifiable, Notification $notification): void
+    public const string DRIVER = 'ntfy';
+
+    public function deliver(mixed $route, PushMessage $message): void
     {
-        $topic = method_exists($notifiable, 'routeNotificationForNtfy')
-            ? $notifiable->routeNotificationForNtfy()
-            : null;
+        $payload = [
+            ...NtfyMessage::for($message->severity, $message->title, $message->body, $message->url),
+            'topic' => (string) $route,
+        ];
 
-        if (! is_string($topic) || $topic === '' || ! method_exists($notification, 'toNtfy')) {
-            return;
+        $request = Http::timeout(5);
+
+        $token = config('services.ntfy.token');
+
+        if (is_string($token) && $token !== '') {
+            $request = $request->withToken($token);
         }
 
-        $payload = [...$notification->toNtfy($notifiable), 'topic' => $topic];
+        $request->post((string) config('services.ntfy.server'), $payload)->throw();
+    }
 
-        try {
-            $request = Http::timeout(5);
-
-            $token = config('services.ntfy.token');
-
-            if (is_string($token) && $token !== '') {
-                $request = $request->withToken($token);
-            }
-
-            $request->post((string) config('services.ntfy.server'), $payload)->throw();
-        } catch (Throwable $throwable) {
-            Log::warning('Ntfy delivery failed', [
-                'topic' => $topic,
-                'notification' => $notification::class,
-                'exception' => $throwable::class,
-                'message' => $throwable->getMessage(),
-            ]);
-        }
+    public function label(): string
+    {
+        return 'Ntfy';
     }
 }
