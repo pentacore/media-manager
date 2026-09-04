@@ -48,6 +48,7 @@ final class MediaReplacementAttemptChanged implements ShouldBroadcast, ShouldDis
     {
         $attempt = $this->mediaReplacementAttempt;
         $attempt->loadMissing('serviceConnection:id,type');
+
         $target = is_array($attempt->target) ? $attempt->target : [];
         $displayName = $target['display_name'] ?? null;
 

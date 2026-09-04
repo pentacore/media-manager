@@ -46,21 +46,21 @@ function operatorActionsQueuePage(int $from, int $count): array
 test('acknowledge stamps the row, keeps the status and announces the change', function (): void {
     $attempt = MediaReplacementAttempt::factory()->needsAttention()->create(['service_connection_id' => $this->connection->id]);
 
-    $result = operatorActions()->acknowledge($attempt, $this->admin);
+    $operatorActionResult = operatorActions()->acknowledge($attempt, $this->admin);
 
     $fresh = $attempt->fresh();
-    expect($result->ok)->toBeTrue()
+    expect($operatorActionResult->ok)->toBeTrue()
         ->and($fresh->status)->toBe(MediaReplacementStatus::NeedsAttention)
         ->and($fresh->acknowledged_at)->not->toBeNull()
         ->and($fresh->acknowledged_by)->toBe($this->admin->id)
         ->and($fresh->failure_reason)->toBe('download_timeout');
-    Event::assertDispatched(MediaReplacementAttemptChanged::class, fn (MediaReplacementAttemptChanged $event): bool => $event->mediaReplacementAttempt->is($attempt));
+    Event::assertDispatched(fn (MediaReplacementAttemptChanged $event): bool => $event->mediaReplacementAttempt->is($attempt));
 });
 
 test('acknowledge refuses an already acknowledged or settled attempt', function (MediaReplacementAttempt $attempt): void {
-    $result = operatorActions()->acknowledge($attempt, $this->admin);
+    $operatorActionResult = operatorActions()->acknowledge($attempt, $this->admin);
 
-    expect($result->ok)->toBeFalse();
+    expect($operatorActionResult->ok)->toBeFalse();
     Event::assertNotDispatched(MediaReplacementAttemptChanged::class);
 })->with([
     'already acknowledged' => fn (): MediaReplacementAttempt => MediaReplacementAttempt::factory()->needsAttention()->acknowledged()->create(),
@@ -70,9 +70,9 @@ test('acknowledge refuses an already acknowledged or settled attempt', function 
 test('restore monitoring refuses when nothing is suspended', function (): void {
     $attempt = MediaReplacementAttempt::factory()->verified()->create(['service_connection_id' => $this->connection->id]);
 
-    $result = operatorActions()->restoreMonitoring($attempt);
+    $operatorActionResult = operatorActions()->restoreMonitoring($attempt);
 
-    expect($result->ok)->toBeFalse();
+    expect($operatorActionResult->ok)->toBeFalse();
     Http::assertNothingSent();
     Event::assertNotDispatched(MediaReplacementAttemptChanged::class);
 });
@@ -81,9 +81,9 @@ test('restore monitoring re-monitors the target episodes and clears the flag', f
     Http::fake(['sonarr.local:8989/api/v3/episode/monitor' => Http::response([], 202)]);
     $attempt = MediaReplacementAttempt::factory()->needsAttention()->monitoringSuspended()->create(['service_connection_id' => $this->connection->id]);
 
-    $result = operatorActions()->restoreMonitoring($attempt);
+    $operatorActionResult = operatorActions()->restoreMonitoring($attempt);
 
-    expect($result->ok)->toBeTrue()
+    expect($operatorActionResult->ok)->toBeTrue()
         ->and($attempt->fresh()->monitoring_suspended)->toBeFalse();
     Http::assertSent(fn (Request $request): bool => $request->method() === 'PUT'
         && str_ends_with($request->url(), '/api/v3/episode/monitor')
@@ -96,9 +96,9 @@ test('restore monitoring reports a failed arr call and keeps the flag', function
     Http::fake(['sonarr.local:8989/api/v3/episode/monitor' => Http::response([], 500)]);
     $attempt = MediaReplacementAttempt::factory()->needsAttention()->monitoringSuspended()->create(['service_connection_id' => $this->connection->id]);
 
-    $result = operatorActions()->restoreMonitoring($attempt);
+    $operatorActionResult = operatorActions()->restoreMonitoring($attempt);
 
-    expect($result->ok)->toBeFalse()
+    expect($operatorActionResult->ok)->toBeFalse()
         ->and($attempt->fresh()->monitoring_suspended)->toBeTrue();
     Event::assertNotDispatched(MediaReplacementAttemptChanged::class);
 });
@@ -115,10 +115,10 @@ test('cancel refuses while the executor holds the execution lock', function (): 
     $attempt = MediaReplacementAttempt::factory()->downloading()->create(['service_connection_id' => $this->connection->id]);
     Cache::lock(MediaReplacementExecutionLock::key($attempt->action_request_id), MediaReplacementExecutionLock::TTL_SECONDS)->get();
 
-    $result = operatorActions()->cancel($attempt);
+    $operatorActionResult = operatorActions()->cancel($attempt);
 
-    expect($result->ok)->toBeFalse()
-        ->and($result->message)->toContain('executor')
+    expect($operatorActionResult->ok)->toBeFalse()
+        ->and($operatorActionResult->message)->toContain('executor')
         ->and($attempt->fresh()->status)->toBe(MediaReplacementStatus::Downloading);
     Http::assertNothingSent();
 });
@@ -140,11 +140,11 @@ test('cancel removes our queue row without blocklisting, restores monitoring and
         'download_id' => 'ABC123',
     ]);
 
-    $result = operatorActions()->cancel($attempt);
+    $operatorActionResult = operatorActions()->cancel($attempt);
 
     $fresh = $attempt->fresh();
-    expect($result->ok)->toBeTrue()
-        ->and($result->message)->toBe('Attempt cancelled.')
+    expect($operatorActionResult->ok)->toBeTrue()
+        ->and($operatorActionResult->message)->toBe('Attempt cancelled.')
         ->and($fresh->status)->toBe(MediaReplacementStatus::Failed)
         ->and($fresh->failure_reason)->toBe(MediaReplacementOperatorActions::CANCELLED_BY_OPERATOR)
         ->and($fresh->completed_at)->not->toBeNull()
@@ -175,10 +175,10 @@ test('cancel pages through the queue and removes a row a later page reports unde
         'monitoring_suspended' => null,
     ]);
 
-    $result = operatorActions()->cancel($attempt);
+    $operatorActionResult = operatorActions()->cancel($attempt);
 
-    expect($result->ok)->toBeTrue()
-        ->and($result->message)->toBe('Attempt cancelled.')
+    expect($operatorActionResult->ok)->toBeTrue()
+        ->and($operatorActionResult->message)->toBe('Attempt cancelled.')
         ->and($attempt->fresh()->status)->toBe(MediaReplacementStatus::Failed);
     Http::assertSent(fn (Request $request): bool => $request->method() === 'DELETE'
         && str_contains($request->url(), '/api/v3/queue/7000?'));
@@ -200,10 +200,10 @@ test('cancel stops paging when a page repeats itself and reports no total', func
 
     // A third GET exhausts the sequence and throws, so a runaway fails loudly
     // rather than hanging the suite.
-    $result = operatorActions()->cancel($attempt);
+    $operatorActionResult = operatorActions()->cancel($attempt);
 
-    expect($result->ok)->toBeTrue()
-        ->and($result->message)->toBe('Attempt cancelled.')
+    expect($operatorActionResult->ok)->toBeTrue()
+        ->and($operatorActionResult->message)->toBe('Attempt cancelled.')
         ->and($attempt->fresh()->status)->toBe(MediaReplacementStatus::Failed);
     Http::assertSentCount(2);
 });
@@ -216,10 +216,10 @@ test('cancel still fails the attempt when the arr queue is unreachable', functio
         'monitoring_suspended' => null,
     ]);
 
-    $result = operatorActions()->cancel($attempt);
+    $operatorActionResult = operatorActions()->cancel($attempt);
 
-    expect($result->ok)->toBeTrue()
-        ->and($result->message)->toContain('could not be removed')
+    expect($operatorActionResult->ok)->toBeTrue()
+        ->and($operatorActionResult->message)->toContain('could not be removed')
         ->and($attempt->fresh()->status)->toBe(MediaReplacementStatus::Failed);
 });
 
@@ -247,9 +247,9 @@ test('cancel yields to a webhook that settled the attempt first', function (): v
         'completed_at' => now(),
     ]);
 
-    $result = operatorActions()->cancel($attempt);
+    $operatorActionResult = operatorActions()->cancel($attempt);
 
-    expect($result->ok)->toBeFalse()
+    expect($operatorActionResult->ok)->toBeFalse()
         ->and($attempt->fresh()->status)->toBe(MediaReplacementStatus::Verified);
     Event::assertNotDispatched(MediaReplacementAttemptChanged::class);
 });
