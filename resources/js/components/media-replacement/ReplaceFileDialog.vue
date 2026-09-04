@@ -22,12 +22,7 @@ import type { QueryParams } from '@/wayfinder';
 
 // State machine: idle -> inspecting -> inspected -> searching -> picked -> submitting
 type Phase =
-    | 'idle'
-    | 'inspecting'
-    | 'inspected'
-    | 'searching'
-    | 'picked'
-    | 'submitting';
+    'idle' | 'inspecting' | 'inspected' | 'searching' | 'picked' | 'submitting';
 
 interface ReplacementSnapshot {
     service: 'sonarr' | 'radarr';
@@ -194,10 +189,7 @@ async function runInspect(): Promise<void> {
             return;
         }
 
-        errorMessage.value = messageFrom(
-            error,
-            'Could not inspect this file.',
-        );
+        errorMessage.value = messageFrom(error, 'Could not inspect this file.');
         phase.value = 'idle';
     } finally {
         if (seq === requestSeq) {
@@ -284,7 +276,8 @@ async function submitReplacement(): Promise<void> {
             {
                 action: {
                     label: 'Action Queue',
-                    onClick: () => router.visit(ActionRequestController.index.url()),
+                    onClick: () =>
+                        router.visit(ActionRequestController.index.url()),
                 },
             },
         );
@@ -340,14 +333,8 @@ watch(
 </script>
 
 <template>
-    <Dialog
-        :open="open"
-        @update:open="(value) => emit('update:open', value)"
-    >
-        <DialogContent
-            class="max-w-2xl"
-            data-replacement-dialog
-        >
+    <Dialog :open="open" @update:open="(value) => emit('update:open', value)">
+        <DialogContent class="max-w-2xl" data-replacement-dialog>
             <DialogHeader>
                 <DialogTitle>Replace file</DialogTitle>
                 <DialogDescription>
@@ -390,7 +377,9 @@ watch(
                         <h3 class="text-[13px] font-semibold">
                             {{ snapshot.display_name }}
                         </h3>
-                        <Badge variant="outline">{{ snapshot.quality ?? 'Unknown quality' }}</Badge>
+                        <Badge variant="outline">{{
+                            snapshot.quality ?? 'Unknown quality'
+                        }}</Badge>
                     </div>
                     <div
                         class="flex flex-wrap items-center gap-3 text-[12px] text-muted-foreground"
@@ -488,9 +477,7 @@ watch(
                             >
                                 {{ candidate.title }}
                             </p>
-                            <div
-                                class="flex flex-wrap items-center gap-1.5"
-                            >
+                            <div class="flex flex-wrap items-center gap-1.5">
                                 <Badge variant="secondary">
                                     Confidence {{ candidate.confidence }}%
                                 </Badge>
