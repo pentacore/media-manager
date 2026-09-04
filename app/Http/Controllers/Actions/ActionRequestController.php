@@ -21,10 +21,12 @@ class ActionRequestController extends Controller
     public function index(Request $request): Response
     {
         $status = $request->string('status')->toString();
+        $preselect = $request->integer('request');
 
         $builder = ActionRequest::with([
             'webhookEvent.serviceConnection:id,name,type',
             'approvedByUser:id,name',
+            'mediaReplacementAttempt:id,action_request_id,status,failure_reason',
         ])->latest();
 
         if ($status !== '') {
@@ -50,6 +52,7 @@ class ActionRequestController extends Controller
             // Inertia reload on each ActionRequestStatusChanged broadcast.
             'statusCounts' => $this->statusCounts(),
             'filters' => ['status' => $status],
+            'preselect' => $preselect > 0 ? $preselect : null,
         ]);
     }
 

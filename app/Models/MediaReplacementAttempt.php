@@ -35,10 +35,13 @@ use Override;
  * @property string|null $failure_reason
  * @property CarbonImmutable|null $started_at
  * @property CarbonImmutable|null $completed_at
+ * @property CarbonImmutable|null $acknowledged_at
+ * @property int|null $acknowledged_by
  * @property CarbonImmutable|null $created_at
  * @property CarbonImmutable|null $updated_at
  * @property-read ActionRequest $actionRequest
  * @property-read ServiceConnection|null $serviceConnection
+ * @property-read User|null $acknowledgedBy
  *
  * @method static MediaReplacementAttemptFactory factory($count = null, $state = [])
  *
@@ -63,6 +66,8 @@ use Override;
     'failure_reason',
     'started_at',
     'completed_at',
+    'acknowledged_at',
+    'acknowledged_by',
 ])]
 class MediaReplacementAttempt extends Model
 {
@@ -88,6 +93,27 @@ class MediaReplacementAttempt extends Model
     }
 
     /**
+     * @return BelongsTo<User, $this>
+     */
+    public function acknowledgedBy(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'acknowledged_by');
+    }
+
+    /**
+     * Open needs_attention rows nobody has acknowledged yet — the sidebar
+     * badge, the Attempts tab badge and the broadcast payload all report this
+     * one number, so it has exactly one definition.
+     */
+    public static function unacknowledgedAttentionCount(): int
+    {
+        return static::query()
+            ->where('status', MediaReplacementStatus::NeedsAttention->value)
+            ->whereNull('acknowledged_at')
+            ->count();
+    }
+
+    /**
      * @return array<string, string>
      */
     #[Override]
@@ -106,6 +132,7 @@ class MediaReplacementAttempt extends Model
             'cleanup_completed_at' => 'immutable_datetime',
             'started_at' => 'immutable_datetime',
             'completed_at' => 'immutable_datetime',
+            'acknowledged_at' => 'immutable_datetime',
         ];
     }
 

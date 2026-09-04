@@ -48,15 +48,9 @@ test('admin page renders without browser errors', function (string $routeName): 
 })->with('admin browser page routes');
 
 test('admin can edit and save media replacement configuration without browser errors', function (): void {
-    config()->set('mediamanager.ai.enabled', true);
-    AiModelPrice::factory()->create([
-        'provider' => 'openai',
-        'model' => 'gpt-5-mini',
-    ]);
-
     $this->actingAs(User::factory()->admin()->create());
 
-    $webpage = visit('/admin/ai-settings')
+    $webpage = visit('/admin/media-replacement')
         ->assertSee('Media replacement')
         ->assertSee('Preferred subtitle languages')
         ->assertSee('Approval required')
@@ -75,7 +69,7 @@ test('admin can edit and save media replacement configuration without browser er
             'JSON.stringify(JSON.parse(document.querySelector(\'input[name="media_replacement"]\').value).subtitle_check) === \'{"enabled":true,"max_attempts_per_target":3,"cooldown_hours":6}\'',
         )
         ->click('Save settings')
-        ->assertSee('AI settings updated.');
+        ->assertSee('Media replacement settings updated.');
 
     expect(resolve(MediaReplacementSettings::class)->configuration())
         ->automatic_selection_enabled->toBeTrue()
@@ -356,6 +350,8 @@ function browserSmokeAdminRouteNames(): array
         'actions.rules.index',
         'emby.links.index',
         'admin.statistics.index',
+        'admin.media-replacement.index',
+        'admin.media-replacement.attempts.index',
         'admin.ai-settings.index',
         'admin.decision-agent.index',
         'admin.ai-usage.index',
@@ -378,6 +374,8 @@ function browserSmokeExcludedRouteNames(): array
         'ai.chat.pending-workflow',
         'ai.conversations.index',
         'media.search.instant',
+        'media.replacement.inspect',
+        'media.replacement.candidates',
         'bazarr.capabilities',
         'bazarr.search',
         'monitoring.watch-history.export',

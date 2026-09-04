@@ -17,6 +17,7 @@ import {
     ListTodo,
     MessageSquare,
     Play,
+    Replace,
     ScrollText,
     Search,
     Settings2,
@@ -38,6 +39,7 @@ import AiSettingsController from '@/actions/App/Http/Controllers/Admin/AiSetting
 import AiUsageController from '@/actions/App/Http/Controllers/Admin/AiUsageController';
 import DecisionAgentSettingsController from '@/actions/App/Http/Controllers/Admin/DecisionAgentSettingsController';
 import JobsController from '@/actions/App/Http/Controllers/Admin/JobsController';
+import MediaReplacementSettingsController from '@/actions/App/Http/Controllers/Admin/MediaReplacementSettingsController';
 import ServiceConnectionController from '@/actions/App/Http/Controllers/Admin/ServiceConnectionController';
 import AdminStatisticsController from '@/actions/App/Http/Controllers/Admin/StatisticsController';
 import UserController from '@/actions/App/Http/Controllers/Admin/UserController';
@@ -217,6 +219,14 @@ export function useNavItems(counts?: NavCounts): ComputedRef<NavGroup[]> {
                         title: 'Approval Rules',
                         href: ActionTypeConfigController.index.url(),
                         icon: Shield,
+                    },
+                    {
+                        title: 'Media Replacement',
+                        href: MediaReplacementSettingsController.index.url(),
+                        icon: Replace,
+                        badge: counts
+                            ? () => counts.replacementAttention.value
+                            : undefined,
                     },
                 ],
             },

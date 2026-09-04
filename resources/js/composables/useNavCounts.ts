@@ -10,6 +10,7 @@ export type NavCounts = {
     libraryIntervention: Ref<number>;
     sabnzbdQueued: Ref<number>;
     sabnzbdCompleted: Ref<number>;
+    replacementAttention: Ref<number>;
 };
 
 type NavCountsPayload = {
@@ -17,6 +18,7 @@ type NavCountsPayload = {
     activeSessions?: number;
     libraryIntervention?: number;
     sabnzbdDownloads?: { queued: number; completed: number };
+    replacementAttention?: number;
 };
 
 type PlaybackPayload = {
@@ -33,6 +35,10 @@ type ActionRequestCreatedPayload = {
 type ActionRequestStatusPayload = {
     id: number;
     status: string;
+};
+
+type ReplacementAttemptPayload = {
+    attention_unacknowledged: number;
 };
 
 const TERMINAL_STATUSES = new Set(['completed', 'failed', 'rejected']);
@@ -52,6 +58,9 @@ export function useNavCounts(): NavCounts {
     const libraryIntervention = ref(initialNav?.libraryIntervention ?? 0);
     const sabnzbdQueued = ref(initialNav?.sabnzbdDownloads?.queued ?? 0);
     const sabnzbdCompleted = ref(initialNav?.sabnzbdDownloads?.completed ?? 0);
+    const replacementAttention = ref(initialNav?.replacementAttention ?? 0);
+    const role = page.props.auth.user?.role;
+    const isAdmin = (typeof role === 'string' ? role : role?.value) === 'admin';
 
     const recentSessionIds = new Set<number>();
     const sessionTimestamps = new Map<number, number>();
@@ -99,6 +108,7 @@ export function useNavCounts(): NavCounts {
             libraryIntervention.value = nav.libraryIntervention ?? 0;
             sabnzbdQueued.value = nav.sabnzbdDownloads?.queued ?? 0;
             sabnzbdCompleted.value = nav.sabnzbdDownloads?.completed ?? 0;
+            replacementAttention.value = nav.replacementAttention ?? 0;
             recentSessionIds.clear();
             sessionTimestamps.clear();
             pendingIds.clear();
@@ -182,6 +192,20 @@ export function useNavCounts(): NavCounts {
                 ),
         );
 
+        // Admin-only channel: subscribing as a member would 403 on auth and
+        // spam the console, and members never see this badge anyway.
+        if (isAdmin) {
+            channelLeases.push(
+                acquirePrivateChannel('admin.media-replacement').listen(
+                    '.MediaReplacementAttemptChanged',
+                    (event: ReplacementAttemptPayload) => {
+                        replacementAttention.value =
+                            event.attention_unacknowledged;
+                    },
+                ),
+            );
+        }
+
         activitySessionTimer = setInterval(pruneStaleSessions, 60_000);
     });
 
@@ -200,5 +224,6 @@ export function useNavCounts(): NavCounts {
         libraryIntervention,
         sabnzbdQueued,
         sabnzbdCompleted,
+        replacementAttention,
     };
 }

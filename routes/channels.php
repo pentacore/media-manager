@@ -32,6 +32,11 @@ Broadcast::channel('activity', fn (User $user): bool => true);
 // failure messages) that aren't relevant outside admin tooling.
 Broadcast::channel('admin.ai-prices', fn (User $user): bool => $user->role === UserRole::Admin);
 
+// Media replacement attempt lifecycle. Admin-only — the attempts pages are
+// gated the same way and the payload names failure reasons and targets that
+// are operator detail, not member-facing.
+Broadcast::channel('admin.media-replacement', fn (User $user): bool => $user->role === UserRole::Admin);
+
 // Per-conversation AI chat liveness — agent step updates ("Calling Sonarr…")
 // for the duration of a single in-flight chat turn. Caller must own the
 // conversation row. Auth allows subscription to archived conversations so

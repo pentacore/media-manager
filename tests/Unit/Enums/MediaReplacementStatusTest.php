@@ -50,3 +50,10 @@ test('terminalValues lists exactly the values of the terminal cases', function (
             ),
         )));
 });
+
+test('every status has a human label', function (): void {
+    expect(MediaReplacementStatus::NeedsAttention->label())->toBe('Needs attention')
+        ->and(MediaReplacementStatus::Downloading->label())->toBe('Downloading')
+        ->and(array_map(static fn (MediaReplacementStatus $status): string => $status->label(), MediaReplacementStatus::cases()))
+        ->each->not->toBe('');
+});

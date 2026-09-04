@@ -3,8 +3,6 @@ import { Form, Head } from '@inertiajs/vue3';
 import { computed, ref } from 'vue';
 import AiSettingsController from '@/actions/App/Http/Controllers/Admin/AiSettingsController';
 import InputError from '@/components/InputError.vue';
-import MediaReplacementSettings from '@/components/media-replacement/MediaReplacementSettings.vue';
-import type { MediaReplacementConfiguration } from '@/components/media-replacement/MediaReplacementSettings.vue';
 import { Field, Pill, Toggle } from '@/components/mm';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -43,15 +41,9 @@ interface AiSettingsState {
     failover_provider: string;
     models_dev_pricing_enabled: boolean;
     ignored_pricing_providers: string[];
-    media_replacement: MediaReplacementConfiguration;
 }
 
 interface IgnorableProviderOption {
-    value: string;
-    label: string;
-}
-
-interface EnumOption {
     value: string;
     label: string;
 }
@@ -71,9 +63,6 @@ const props = defineProps<{
     reasoningLevels: SelectOptionGroup<AiReasoningLevel>;
     failoverProviders: FailoverProviderOption[];
     ignorablePricingProviders: IgnorableProviderOption[];
-    seasonPackPolicies: EnumOption[];
-    subtitleRuleStrengths: EnumOption[];
-    conditionFields: EnumOption[];
 }>();
 
 defineOptions({
@@ -580,16 +569,6 @@ const budgetState = computed<{
                         </div>
                     </div>
                 </div>
-
-                <Separator />
-
-                <MediaReplacementSettings
-                    :configuration="settings.media_replacement"
-                    :season-pack-policies="seasonPackPolicies"
-                    :subtitle-rule-strengths="subtitleRuleStrengths"
-                    :condition-fields="conditionFields"
-                    :errors="errors"
-                />
 
                 <div class="flex justify-end pt-2">
                     <Button

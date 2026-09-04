@@ -10,6 +10,8 @@ use App\Http\Controllers\Admin\AiUsageController;
 use App\Http\Controllers\Admin\DecisionAgentSettingsController;
 use App\Http\Controllers\Admin\EmbyLinkController;
 use App\Http\Controllers\Admin\JobsController;
+use App\Http\Controllers\Admin\MediaReplacementAttemptController;
+use App\Http\Controllers\Admin\MediaReplacementSettingsController;
 use App\Http\Controllers\Admin\ProwlarrTestIndexerController;
 use App\Http\Controllers\Admin\ServiceConnectionController;
 use App\Http\Controllers\Admin\StatisticsController;
@@ -40,6 +42,14 @@ Route::middleware(['auth', 'verified', 'password.set', 'role:admin'])->prefix('a
     Route::delete('users/{user}', [UserController::class, 'destroy'])->name('users.destroy');
     Route::post('users/{user}/link-emby', [EmbyLinkController::class, 'link'])->name('users.link-emby');
     Route::post('users/import-from-emby', [EmbyLinkController::class, 'import'])->name('users.import-from-emby');
+
+    Route::get('media-replacement', [MediaReplacementSettingsController::class, 'index'])->name('media-replacement.index');
+    Route::put('media-replacement', [MediaReplacementSettingsController::class, 'update'])->name('media-replacement.update');
+    Route::get('media-replacement/attempts', [MediaReplacementAttemptController::class, 'index'])->name('media-replacement.attempts.index');
+    Route::get('media-replacement/attempts/{mediaReplacementAttempt}', [MediaReplacementAttemptController::class, 'show'])->name('media-replacement.attempts.show');
+    Route::post('media-replacement/attempts/{mediaReplacementAttempt}/acknowledge', [MediaReplacementAttemptController::class, 'acknowledge'])->name('media-replacement.attempts.acknowledge');
+    Route::post('media-replacement/attempts/{mediaReplacementAttempt}/restore-monitoring', [MediaReplacementAttemptController::class, 'restoreMonitoring'])->name('media-replacement.attempts.restore-monitoring');
+    Route::post('media-replacement/attempts/{mediaReplacementAttempt}/cancel', [MediaReplacementAttemptController::class, 'cancel'])->name('media-replacement.attempts.cancel');
 
     Route::middleware('ai.enabled')->group(function (): void {
         Route::get('ai-settings', [AiSettingsController::class, 'index'])->name('ai-settings.index');

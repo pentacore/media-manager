@@ -14,6 +14,7 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 use Override;
 
 /**
@@ -32,6 +33,7 @@ use Override;
  * @property CarbonImmutable|null $updated_at
  * @property-read User|null $approvedByUser
  * @property-read WebhookEvent|null $webhookEvent
+ * @property-read MediaReplacementAttempt|null $mediaReplacementAttempt
  *
  * @method static ActionRequestFactory factory($count = null, $state = [])
  * @method static Builder<static>|ActionRequest newModelQuery()
@@ -88,6 +90,14 @@ class ActionRequest extends Model
     public function approvedByUser(): BelongsTo
     {
         return $this->belongsTo(User::class, 'approved_by');
+    }
+
+    /**
+     * @return HasOne<MediaReplacementAttempt, $this>
+     */
+    public function mediaReplacementAttempt(): HasOne
+    {
+        return $this->hasOne(MediaReplacementAttempt::class);
     }
 
     public function isPending(): bool

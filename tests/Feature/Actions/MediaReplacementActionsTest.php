@@ -321,29 +321,22 @@ test('pins execution to the approved connection when multiple are active', funct
     expect(MediaReplacementAttempt::first()->service_connection_id)->toBe($pinned->id);
 });
 
-test('a held Bazarr subtitle lock does not block a media replacement', function (): void {
+test('a held Bazarr-style shared target lock blocks a concurrent media replacement', function (): void {
     fakeExecutor();
     $connectionId = ServiceConnection::query()->firstOrFail()->id;
 
-    // A Bazarr subtitle operation holds the shared installed-file lock for the
-    // same episode. Replacement no longer coordinates with Bazarr: by the time a
-    // replacement is queued Bazarr has already failed to supply the subtitle, so
-    // the replacement proceeds regardless of what Bazarr is doing.
-    $lock = Cache::lock(SharedMediaTargetLock::key($connectionId, 'episode', 101), 120);
+    // Computed exactly the way BazarrActions::sharedTargetLock() computes it for
+    // an episode target ('episode' + the sonarr episode id) — same connection,
+    // same file, so the two executors must collide on this key.
+    $lock = Cache::lock(SharedMediaTargetLock::key($connectionId, 'episode', 101), SharedMediaTargetLock::TTL_SECONDS);
     expect($lock->get())->toBeTrue();
 
     try {
-        $result = resolve(MediaReplacementActions::class)->execute(replaceActionRequest());
+        expect(fn (): array => resolve(MediaReplacementActions::class)->execute(replaceActionRequest()))
+            ->toThrow(RuntimeException::class);
 
-        expect($result['replacement_initiated'])->toBeTrue();
-
-        $requests = Http::recorded()->map(fn (array $pair): string => $pair[0]->method().' '.$pair[0]->url())->values();
-        $grabIndex = $requests->search(fn (string $value): bool => $value === 'POST http://sonarr.local:8989/api/v3/release');
-        $deleteIndex = $requests->search(fn (string $value): bool => $value === 'DELETE http://sonarr.local:8989/api/v3/episodefile/501');
-
-        expect($grabIndex)->not->toBeFalse()
-            ->and($deleteIndex)->not->toBeFalse()
-            ->and($grabIndex)->toBeLessThan($deleteIndex);
+        // The lock is checked before any upstream call is made.
+        Http::assertNothingSent();
     } finally {
         $lock->release();
     }
@@ -927,6 +920,60 @@ test('a retry reuses the existing attempt row instead of hitting a duplicate key
         ->and(MediaReplacementAttempt::where('action_request_id', $actionRequest->id)->count())->toBe(1)
         ->and(MediaReplacementAttempt::first()->status)->toBe(MediaReplacementStatus::Downloading)
         ->and(MediaReplacementAttempt::first()->failure_reason)->toBeNull();
+});
+
+test('a retry clears an acknowledgement so a re-broken attempt re-enters the badge', function (): void {
+    fakeExecutor();
+    $actionRequest = replaceActionRequest();
+
+    // An operator acknowledged the needs_attention row, then hit Retry on the
+    // Action Queue. The reused row must come back unacknowledged: the sidebar
+    // badge, `can.acknowledge` and the "Hide acknowledged" filter all key off
+    // acknowledged_at, so a surviving acknowledgement would silence the NEXT
+    // breakage this run produces.
+    $attempt = MediaReplacementAttempt::factory()->needsAttention()->acknowledged()->create([
+        'action_request_id' => $actionRequest->id,
+    ]);
+
+    expect($attempt->acknowledged_at)->not->toBeNull();
+
+    resolve(MediaReplacementActions::class)->execute($actionRequest);
+
+    $fresh = $attempt->fresh();
+
+    expect($fresh->status)->toBe(MediaReplacementStatus::Downloading)
+        ->and($fresh->acknowledged_at)->toBeNull()
+        ->and($fresh->acknowledged_by)->toBeNull();
+});
+
+test('a resume clears an acknowledgement along with the rest of the per-run state', function (): void {
+    fakeExecutor();
+    $actionRequest = replaceActionRequest();
+
+    // Same story on the resume branch — the reachable one: the grab was accepted,
+    // the deletion failed (needs_attention/deletion_failed), the operator
+    // acknowledged, and Retry resumes the remaining cleanup.
+    $attempt = MediaReplacementAttempt::factory()->needsAttention()->acknowledged()->create([
+        'action_request_id' => $actionRequest->id,
+        'grab_accepted_at' => now(),
+        'failure_reason' => 'deletion_failed',
+        'was_monitored' => false,
+        'target' => [
+            'service' => 'sonarr', 'scope' => 'anime', 'series_id' => 42,
+            'episode_ids' => [101], 'episode_file_ids' => [501],
+            'installed_release' => 'Trusted.Anime.S01E01.OLD', 'original_history_id' => 999,
+        ],
+    ]);
+
+    expect($attempt->acknowledged_at)->not->toBeNull();
+
+    resolve(MediaReplacementActions::class)->execute($actionRequest);
+
+    $fresh = $attempt->fresh();
+
+    expect($fresh->status)->toBe(MediaReplacementStatus::Downloading)
+        ->and($fresh->acknowledged_at)->toBeNull()
+        ->and($fresh->acknowledged_by)->toBeNull();
 });
 
 test('does not regress a terminal state the real tracker set during execution', function (): void {

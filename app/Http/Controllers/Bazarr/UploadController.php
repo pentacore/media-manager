@@ -18,6 +18,7 @@ use App\Services\Bazarr\BazarrClient;
 use App\Services\Bazarr\SubtitleCaseFingerprint;
 use App\Services\Bazarr\SubtitleInventoryService;
 use App\Settings\BazarrAutomationSettings;
+use Carbon\CarbonInterface;
 use finfo;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\UploadedFile;
@@ -214,7 +215,7 @@ final class UploadController extends Controller
         $subtitleUpload->update(array_filter([
             'cancelled_at' => now(),
             'cleaned_up_at' => $removed ? now() : null,
-        ], static fn (mixed $value): bool => $value !== null));
+        ], static fn (mixed $value): bool => $value instanceof CarbonInterface));
     }
 
     /**

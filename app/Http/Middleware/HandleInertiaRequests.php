@@ -8,6 +8,7 @@ use App\Enums\ActionRequestStatus;
 use App\Http\Resources\SharedUserResource;
 use App\Models\ActionRequest;
 use App\Models\EmbyActivity;
+use App\Models\MediaReplacementAttempt;
 use App\Models\User;
 use App\Providers\AIServiceProvider;
 use App\Services\Library\InterventionCounter;
@@ -63,7 +64,7 @@ class HandleInertiaRequests extends Middleware
             'ai' => [
                 'enabled' => AIServiceProvider::enabled(),
             ],
-            'nav' => $user ? $this->navCounts($user) : ['pendingActions' => 0, 'activeSessions' => 0, 'unreadNotifications' => 0, 'libraryIntervention' => 0, 'sabnzbdDownloads' => ['queued' => 0, 'completed' => 0]],
+            'nav' => $user ? $this->navCounts($user) : ['pendingActions' => 0, 'activeSessions' => 0, 'unreadNotifications' => 0, 'libraryIntervention' => 0, 'sabnzbdDownloads' => ['queued' => 0, 'completed' => 0], 'replacementAttention' => 0],
             'version' => $user ? [
                 'current' => AppVersion::current(),
                 'latest' => AppVersion::latest(),
@@ -78,7 +79,7 @@ class HandleInertiaRequests extends Middleware
      * indexed columns and bound clauses. Live updates layer on top via
      * the sidebar's WS subscriptions.
      *
-     * @return array{pendingActions: int, activeSessions: int, unreadNotifications: int, libraryIntervention: int, sabnzbdDownloads: array{queued: int, completed: int}}
+     * @return array{pendingActions: int, activeSessions: int, unreadNotifications: int, libraryIntervention: int, sabnzbdDownloads: array{queued: int, completed: int}, replacementAttention: int}
      */
     private function navCounts(User $user): array
     {
@@ -96,6 +97,9 @@ class HandleInertiaRequests extends Middleware
             // five minutes after deploy.
             'libraryIntervention' => $this->libraryInterventionCount(),
             'sabnzbdDownloads' => $this->sabnzbdDownloadCounts(),
+            // Admin-only surface (Admin → Media Replacement → Attempts); members
+            // get a constant zero so the shared shape stays stable.
+            'replacementAttention' => $user->isAdmin() ? MediaReplacementAttempt::unacknowledgedAttentionCount() : 0,
         ];
     }
 

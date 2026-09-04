@@ -5,6 +5,7 @@ declare(strict_types=1);
 use App\Http\Controllers\Library\ActivityController as LibraryActivityController;
 use App\Http\Controllers\Media\AnimeController;
 use App\Http\Controllers\Media\InstantSearchController;
+use App\Http\Controllers\Media\MediaReplacementController;
 use App\Http\Controllers\Media\MovieController;
 use App\Http\Controllers\Media\RequestController;
 use App\Http\Controllers\Media\SearchController;
@@ -34,6 +35,11 @@ Route::middleware(['auth', 'verified', 'password.set', 'role:member'])
         Route::post('movies', [MovieController::class, 'store'])->name('movies.store');
         Route::get('movies/{id}', [MovieController::class, 'show'])->whereNumber('id')->name('movies.show');
         Route::delete('movies/{id}', [MovieController::class, 'destroy'])->whereNumber('id')->name('movies.destroy');
+
+        // Manual media replacement
+        Route::get('replacement/inspect', [MediaReplacementController::class, 'inspect'])->name('replacement.inspect');
+        Route::get('replacement/candidates', [MediaReplacementController::class, 'candidates'])->name('replacement.candidates');
+        Route::post('replacement/replace', [MediaReplacementController::class, 'replace'])->name('replacement.replace');
 
         // Seerr requests
         Route::get('requests', [RequestController::class, 'index'])->name('requests.index');

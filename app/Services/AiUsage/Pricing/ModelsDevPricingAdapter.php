@@ -158,15 +158,15 @@ final class ModelsDevPricingAdapter
 
             [$candidate, $rejection, $warning] = $this->adaptModel($provider, $modelId, $modelData);
 
-            if ($rejection !== null) {
+            if ($rejection instanceof PricingRejection) {
                 $rejections[] = $rejection;
             }
 
-            if ($warning !== null) {
+            if ($warning instanceof PricingWarning) {
                 $warnings[] = $warning;
             }
 
-            if ($candidate !== null) {
+            if ($candidate instanceof ModelPriceCandidate) {
                 $candidates[] = $candidate;
             }
         }

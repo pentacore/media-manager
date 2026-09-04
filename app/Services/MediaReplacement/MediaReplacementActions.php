@@ -14,6 +14,7 @@ use App\Models\ActionRequest;
 use App\Models\MediaReplacementAttempt;
 use App\Models\ServiceConnection;
 use App\Services\Actions\ActionExecutor;
+use App\Services\Actions\SharedMediaTargetLock;
 use App\Services\Radarr\RadarrClient;
 use App\Services\Sonarr\SonarrClient;
 use Illuminate\Contracts\Database\Query\Builder;
@@ -90,16 +91,50 @@ final readonly class MediaReplacementActions implements ActionExecutor
             ? new SonarrClient($serviceConnection)
             : new RadarrClient($serviceConnection);
 
-        return $this->runReplacement(
-            $actionRequest,
-            $payload,
-            $serviceType,
-            $serviceConnection,
-            $client,
-            $storedTarget,
-            $fingerprint,
-            $requiredLanguages,
+        // Shared installed-file lock: excludes a concurrent Bazarr subtitle
+        // operation (or another replacement) on the same file. Keyed on the
+        // pinned connection plus the stable installed-file identity from the
+        // APPROVED target — the same identity source BazarrActions uses (its
+        // 'episode' + episode id, 'movie' + radarr id) — so both executors
+        // compute the same key and actually collide. Held from here through
+        // revalidation, the grab, and post-grab cleanup; same fail-loudly
+        // contract as BazarrActions so ExecuteActionRequest records a failed
+        // request rather than racing another operation.
+        $mediaType = $serviceType === ServiceType::Sonarr ? 'episode' : 'movie';
+        $mediaId = $mediaType === 'episode'
+            ? $this->firstId($storedTarget['episode_ids'] ?? null)
+            : (int) ($storedTarget['movie_id'] ?? 0);
+
+        $lock = Cache::lock(
+            SharedMediaTargetLock::key($serviceConnection->id, $mediaType, $mediaId),
+            SharedMediaTargetLock::TTL_SECONDS,
         );
+
+        throw_unless($lock->get(), RuntimeException::class, 'Another operation is already modifying this media file.');
+
+        try {
+            return $this->runReplacement(
+                $actionRequest,
+                $payload,
+                $serviceType,
+                $serviceConnection,
+                $client,
+                $storedTarget,
+                $fingerprint,
+                $requiredLanguages,
+            );
+        } finally {
+            $lock->release();
+        }
+    }
+
+    private function firstId(mixed $ids): int
+    {
+        if (! is_array($ids) || $ids === []) {
+            return 0;
+        }
+
+        return (int) array_first($ids);
     }
 
     /**
@@ -200,6 +235,12 @@ final readonly class MediaReplacementActions implements ActionExecutor
                     'status' => MediaReplacementStatus::Downloading->value,
                     'failure_reason' => null,
                     'completed_at' => null,
+                    // An acknowledgement belongs to the run that produced the
+                    // needs_attention outcome, so a re-run must start unacknowledged —
+                    // otherwise a re-broken attempt never re-enters the badge (see the
+                    // pre-grab reset below for the full consequence list).
+                    'acknowledged_at' => null,
+                    'acknowledged_by' => null,
                 ]);
             // fresh() rather than refresh(): refresh() is findOrFail, and this row can
             // be pruned between the load above and here — MediaReplacementAttempt is
@@ -343,6 +384,15 @@ final readonly class MediaReplacementActions implements ActionExecutor
                 'monitoring_suspended' => $owedRestore ? true : null,
                 'verification' => null,
                 'failure_reason' => null,
+                // An acknowledgement is an operator's "I have looked at THIS
+                // outcome", so it belongs to the run that produced it and must not
+                // survive into a re-run: a re-broken attempt would otherwise stay
+                // invisible — uncounted by unacknowledgedAttentionCount(), with
+                // `can.acknowledge` false so nobody can acknowledge the new
+                // breakage, hidden by "Hide acknowledged", and captioned with a
+                // stale "Acknowledged by".
+                'acknowledged_at' => null,
+                'acknowledged_by' => null,
                 'started_at' => now(),
                 'completed_at' => null,
             ],

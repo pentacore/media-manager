@@ -6,6 +6,7 @@ use App\Enums\MediaReplacementStatus;
 use App\Models\ActionRequest;
 use App\Models\MediaReplacementAttempt;
 use App\Models\ServiceConnection;
+use App\Models\User;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\QueryException;
 
@@ -44,4 +45,24 @@ test('it enforces one attempt per action request', function (): void {
 
     expect(fn (): MediaReplacementAttempt => MediaReplacementAttempt::factory()->create(['action_request_id' => $actionRequest->id]))
         ->toThrow(QueryException::class);
+});
+
+test('it records who acknowledged an attempt and counts open attention rows', function (): void {
+    $admin = User::factory()->admin()->create();
+    MediaReplacementAttempt::factory()->needsAttention()->create();
+    $acknowledged = MediaReplacementAttempt::factory()->needsAttention()->acknowledged($admin)->create();
+    MediaReplacementAttempt::factory()->verified()->create();
+
+    $fresh = $acknowledged->fresh();
+
+    expect($fresh->acknowledged_at)->toBeInstanceOf(CarbonImmutable::class)
+        ->and($fresh->acknowledgedBy->is($admin))->toBeTrue()
+        ->and(MediaReplacementAttempt::unacknowledgedAttentionCount())->toBe(1);
+});
+
+test('an action request exposes its replacement attempt', function (): void {
+    $attempt = MediaReplacementAttempt::factory()->downloading()->create();
+
+    expect($attempt->actionRequest->mediaReplacementAttempt->is($attempt))->toBeTrue()
+        ->and(ActionRequest::factory()->create()->mediaReplacementAttempt)->toBeNull();
 });

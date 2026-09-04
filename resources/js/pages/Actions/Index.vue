@@ -10,9 +10,11 @@ import {
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import ActionRequestController from '@/actions/App/Http/Controllers/Actions/ActionRequestController';
 import ActionTypeConfigController from '@/actions/App/Http/Controllers/Actions/ActionTypeConfigController';
+import MediaReplacementAttemptController from '@/actions/App/Http/Controllers/Admin/MediaReplacementAttemptController';
 import {
     Field,
     InitialsAvatar,
+    Pill,
     StatusPill,
     SvcChip,
     TimeStamp,
@@ -48,6 +50,7 @@ const props = defineProps<{
     };
     statusCounts: Record<string, number>;
     filters: { status: string };
+    preselect: number | null;
 }>();
 
 defineOptions({
@@ -122,7 +125,12 @@ const visibleRequests = computed<ActionRequestRow[]>(() =>
     merge.value ? liveRequests.value : props.requests.data,
 );
 
-const selectedId = ref<number | null>(visibleRequests.value[0]?.id ?? null);
+const selectedId = ref<number | null>(
+    props.preselect !== null &&
+        visibleRequests.value.some((row) => row.id === props.preselect)
+        ? props.preselect
+        : (visibleRequests.value[0]?.id ?? null),
+);
 
 watch(visibleRequests, (rows) => {
     if (
@@ -173,6 +181,22 @@ function scheduleStatusCountsReload(): void {
     }, 500);
 }
 
+// Attempt state lives on the server-rendered `requests` prop, so a changed
+// attempt needs a fresh page payload rather than an in-memory patch.
+let attemptLease: ChannelLease | null = null;
+let requestsReloadTimer: ReturnType<typeof setTimeout> | null = null;
+
+function scheduleRequestsReload(): void {
+    if (requestsReloadTimer !== null) {
+        return;
+    }
+
+    requestsReloadTimer = setTimeout(() => {
+        requestsReloadTimer = null;
+        router.reload({ only: ['requests'] });
+    }, 500);
+}
+
 onMounted(() => {
     subscribeCreated();
 
@@ -182,6 +206,23 @@ onMounted(() => {
             scheduleStatusCountsReload();
         })
         .listen('.ActionRequestCreated', () => scheduleStatusCountsReload());
+
+    // Admin-only channel; members never see attempt detail and would 403 on
+    // channel auth.
+    if (isAdmin.value) {
+        attemptLease = acquirePrivateChannel('admin.media-replacement').listen(
+            '.MediaReplacementAttemptChanged',
+            (event: { action_request_id: number }) => {
+                if (
+                    visibleRequests.value.some(
+                        (row) => row.id === event.action_request_id,
+                    )
+                ) {
+                    scheduleRequestsReload();
+                }
+            },
+        );
+    }
 });
 
 onUnmounted(() => {
@@ -191,6 +232,14 @@ onUnmounted(() => {
     if (statusCountsReloadTimer !== null) {
         clearTimeout(statusCountsReloadTimer);
         statusCountsReloadTimer = null;
+    }
+
+    attemptLease?.release();
+    attemptLease = null;
+
+    if (requestsReloadTimer !== null) {
+        clearTimeout(requestsReloadTimer);
+        requestsReloadTimer = null;
     }
 });
 
@@ -366,6 +415,23 @@ function replacementEvidence(row: ActionRequestRow): string {
 
 function replacementIsSeasonPack(row: ActionRequestRow): boolean {
     return row.payload?.['season_pack'] === true;
+}
+
+type PillVariant = 'default' | 'ok' | 'warn' | 'danger' | 'info';
+
+function attemptVariant(status: string): PillVariant {
+    switch (status) {
+        case 'verified':
+            return 'ok';
+        case 'failed':
+            return 'danger';
+        case 'needs_attention':
+            return 'warn';
+        case 'imported':
+            return 'default';
+        default:
+            return 'info';
+    }
 }
 
 function statusCount(id: string): number {
@@ -706,6 +772,59 @@ function pipelineState(
                             <Field label="Evidence">{{
                                 replacementEvidence(selected)
                             }}</Field>
+                            <Field label="Replacement attempt">
+                                <template v-if="selected.replacement_attempt">
+                                    <div
+                                        class="flex flex-wrap items-center gap-2"
+                                    >
+                                        <Pill
+                                            :variant="
+                                                attemptVariant(
+                                                    selected.replacement_attempt
+                                                        .status,
+                                                )
+                                            "
+                                            dot
+                                            data-replacement-attempt-status
+                                        >
+                                            {{
+                                                selected.replacement_attempt.status.replace(
+                                                    /_/g,
+                                                    ' ',
+                                                )
+                                            }}
+                                        </Pill>
+                                        <span
+                                            v-if="
+                                                selected.replacement_attempt
+                                                    .failure_reason
+                                            "
+                                            class="font-mono-tabular text-[11.5px] text-muted-foreground"
+                                        >
+                                            {{
+                                                selected.replacement_attempt
+                                                    .failure_reason
+                                            }}
+                                        </span>
+                                        <Link
+                                            v-if="isAdmin"
+                                            :href="
+                                                MediaReplacementAttemptController.show.url(
+                                                    selected.replacement_attempt
+                                                        .id,
+                                                )
+                                            "
+                                            class="text-[12px] text-accent hover:underline"
+                                            data-replacement-attempt-link
+                                        >
+                                            View attempt
+                                        </Link>
+                                    </div>
+                                </template>
+                                <span v-else class="text-fg-subtle"
+                                    >not started</span
+                                >
+                            </Field>
                             <div
                                 v-if="replacementIsSeasonPack(selected)"
                                 class="rounded-lg border border-warning/30 bg-warning/10 p-3 text-xs text-warning"

@@ -91,7 +91,29 @@ test('the payload keys stay in the order the executor and the approval card were
         'selection_mode',
         'agent_rationale',
         'original_history_id',
+        'verify_subtitles',
     ]);
+});
+
+test('builder defaults verify_subtitles to true and honours an explicit false', function (): void {
+    $built = resolve(ReplacementRequestBuilder::class)->build(
+        builderSnapshot(),
+        builderCandidate(),
+        ['eng'],
+        'manual',
+        'why',
+    );
+    $builtDisabled = resolve(ReplacementRequestBuilder::class)->build(
+        builderSnapshot(),
+        builderCandidate(),
+        ['eng'],
+        'manual',
+        'why',
+        verifySubtitles: false,
+    );
+
+    expect($built['payload']['verify_subtitles'])->toBeTrue()
+        ->and($builtDisabled['payload']['verify_subtitles'])->toBeFalse();
 });
 
 test('a candidate that requires approval forces approval', function (): void {
@@ -145,7 +167,7 @@ test('an auto check key is included when supplied', function (): void {
         ['eng'],
         'manual',
         '',
-        'sonarr:3:42-101',
+        autoCheckKey: 'sonarr:3:42-101',
     );
 
     expect($built['payload']['auto_check_key'])->toBe('sonarr:3:42-101')
@@ -164,6 +186,7 @@ test('an auto check key is included when supplied', function (): void {
             'selection_mode',
             'agent_rationale',
             'original_history_id',
+            'verify_subtitles',
             'auto_check_key',
         ]);
 });
@@ -195,6 +218,7 @@ test('a subtitle case id is included when supplied, after the base keys', functi
             'selection_mode',
             'agent_rationale',
             'original_history_id',
+            'verify_subtitles',
             'subtitle_case_id',
         ]);
 });
@@ -205,7 +229,7 @@ test('the two correlation keys belong to different callers and are never both em
     // its own — a request answering to both correlation schemes would be counted
     // by the attempt cap AND owned by an advisor case.
     $autoCheck = resolve(ReplacementRequestBuilder::class)->build(
-        builderSnapshot(), builderCandidate(), ['eng'], 'manual', '', 'sonarr:3:42-101',
+        builderSnapshot(), builderCandidate(), ['eng'], 'manual', '', autoCheckKey: 'sonarr:3:42-101',
     );
     $advisor = resolve(ReplacementRequestBuilder::class)->build(
         builderSnapshot(), builderCandidate(), ['eng'], 'automatic', '', subtitleCaseId: 77,
