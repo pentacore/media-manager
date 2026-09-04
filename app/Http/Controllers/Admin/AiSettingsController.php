@@ -33,6 +33,7 @@ class AiSettingsController extends Controller
                 'chat_timeout' => $aiSettings->chatTimeout(),
                 'failover_provider' => $aiSettings->failoverProvider()?->value ?? 'none',
                 'models_dev_pricing_enabled' => $aiSettings->modelsDevPricingEnabled(),
+                'rate_limits_enforced' => $aiSettings->rateLimitsEnforced(),
                 'ignored_pricing_providers' => $aiSettings->ignoredPricingProviders(),
             ],
             'budget' => [
@@ -142,6 +143,11 @@ class AiSettingsController extends Controller
                 : null,
         );
         $aiSettings->setIgnoredPricingProviders($validated['ignored_pricing_providers'] ?? []);
+        $aiSettings->setRateLimitsEnforced(
+            array_key_exists('rate_limits_enforced', $validated)
+                ? (bool) $validated['rate_limits_enforced']
+                : null,
+        );
 
         Inertia::flash('toast', ['type' => 'success', 'message' => __('AI settings updated.')]);
 

@@ -31,6 +31,7 @@ class UpdateAiSettingsRequest extends FormRequest
             'chat_timeout' => ['nullable', 'integer', 'between:30,600'],
             'failover_provider' => ['nullable', 'string', 'in:anthropic,openai,gemini,groq,mistral'],
             'models_dev_pricing_enabled' => ['nullable', 'boolean'],
+            'rate_limits_enforced' => ['nullable', 'boolean'],
             'ignored_pricing_providers' => ['nullable', 'array'],
             'ignored_pricing_providers.*' => ['string', Rule::in($this->supportedPricingProviders())],
         ];

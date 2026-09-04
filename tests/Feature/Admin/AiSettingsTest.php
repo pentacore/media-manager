@@ -297,3 +297,44 @@ test('ai settings update no longer accepts media_replacement fields', function (
 
     expect(resolve(MediaReplacementSettings::class)->automaticSelectionThreshold())->toBe(90);
 });
+
+test('index exposes whether model rate limits are enforced, defaulting to the config value', function (): void {
+    $admin = User::factory()->admin()->create();
+    config()->set('mediamanager.ai.rate_limits.enforce', true);
+
+    $this->actingAs($admin)
+        ->get(route('admin.ai-settings.index'))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->component('Admin/AiSettings/Index')
+            ->where('settings.rate_limits_enforced', true)
+        );
+});
+
+test('admin can turn rate limit enforcement on, overriding the config default', function (): void {
+    $admin = User::factory()->admin()->create();
+    config()->set('mediamanager.ai.rate_limits.enforce', false);
+
+    $this->actingAs($admin)
+        ->put(route('admin.ai-settings.update'), [
+            ...baseAiSettingsPayload(),
+            'rate_limits_enforced' => '1',
+        ])
+        ->assertRedirect(route('admin.ai-settings.index'))
+        ->assertSessionHasNoErrors();
+
+    expect(resolve(AiSettings::class)->rateLimitsEnforced())->toBeTrue();
+});
+
+test('omitting the rate limit enforcement field clears the override back to config', function (): void {
+    $admin = User::factory()->admin()->create();
+    config()->set('mediamanager.ai.rate_limits.enforce', false);
+    resolve(AiSettings::class)->setRateLimitsEnforced(true);
+
+    $this->actingAs($admin)
+        ->put(route('admin.ai-settings.update'), baseAiSettingsPayload())
+        ->assertRedirect(route('admin.ai-settings.index'))
+        ->assertSessionHasNoErrors();
+
+    expect(resolve(AiSettings::class)->rateLimitsEnforced())->toBeFalse();
+});

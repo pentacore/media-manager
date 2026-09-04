@@ -43,6 +43,14 @@ return [
         // the admin AI Settings page (which persists on top of this default).
         'chat_timeout' => (int) env('MEDIAMANAGER_AI_CHAT_TIMEOUT', 120),
 
+        // Opt-in: refuse a provider call when the model's configured rate
+        // limit (Admin > AI Prices) is already exhausted over its rolling
+        // window, instead of only showing the usage on the AI Usage page.
+        // Overridable per-install via the admin AI Settings page.
+        'rate_limits' => [
+            'enforce' => (bool) env('MEDIAMANAGER_AI_ENFORCE_RATE_LIMITS', false),
+        ],
+
         // Opt-in: swap the PriceFetcherAgent's custom host-allowlisted HTTP
         // GET tool for the SDK's provider-native WebFetch. Only works on
         // providers that support it (OpenAI/Anthropic); unsupported providers

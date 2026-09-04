@@ -7,6 +7,7 @@ use App\Models\AiFreeUsagePool;
 use App\Models\AiModelPrice;
 use App\Models\AiUsageRecord;
 use App\Models\User;
+use App\Settings\AiSettings;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
 
@@ -571,4 +572,17 @@ test('index exposes rate limit status', function (): void {
             ->has('rate_limits', 1)
             ->where('rate_limits.0.model', 'gpt-5-mini')
             ->where('rate_limits.0.limits.0.limit_value', 500));
+});
+
+test('index tells the page whether rate limits are enforced', function (): void {
+    $admin = User::factory()->admin()->create();
+    resolve(AiSettings::class)->setRateLimitsEnforced(true);
+
+    $this->actingAs($admin)
+        ->get(route('admin.ai-usage.index'))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->component('Admin/AiUsage/Index')
+            ->where('rate_limits_enforced', true)
+        );
 });

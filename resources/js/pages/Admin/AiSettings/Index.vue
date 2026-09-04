@@ -40,6 +40,7 @@ interface AiSettingsState {
     chat_timeout: number;
     failover_provider: string;
     models_dev_pricing_enabled: boolean;
+    rate_limits_enforced: boolean;
     ignored_pricing_providers: string[];
 }
 
@@ -80,6 +81,7 @@ const titleModel = ref(props.settings.title_model);
 const selectedReasoningLevel = ref(props.settings.advisor_reasoning_level);
 const selectedFailoverProvider = ref(props.settings.failover_provider);
 const modelsDevPricingEnabled = ref(props.settings.models_dev_pricing_enabled);
+const rateLimitsEnforced = ref(props.settings.rate_limits_enforced);
 const ignoredPricingProviders = ref<string[]>([
     ...props.settings.ignored_pricing_providers,
 ]);
@@ -432,6 +434,38 @@ const budgetState = computed<{
                         </div>
                         <InputError
                             :message="errors.hard_budget_usd"
+                            class="mt-1"
+                        />
+                    </div>
+                </div>
+
+                <div
+                    class="grid items-start gap-6"
+                    style="grid-template-columns: 200px 1fr"
+                >
+                    <Field
+                        label="Model rate limits"
+                        hint="When enforced, a model whose per-minute/hour/day limit (set on the AI Prices page) is already used up is refused, and the failover provider takes the turn if one is configured. When informational, limits are only shown on the AI Usage page."
+                    >
+                        <span />
+                    </Field>
+                    <div>
+                        <Toggle
+                            v-model="rateLimitsEnforced"
+                            data-rate-limits-toggle
+                            :label="
+                                rateLimitsEnforced
+                                    ? 'Enforced'
+                                    : 'Informational'
+                            "
+                        />
+                        <input
+                            type="hidden"
+                            name="rate_limits_enforced"
+                            :value="rateLimitsEnforced ? '1' : '0'"
+                        />
+                        <InputError
+                            :message="errors.rate_limits_enforced"
                             class="mt-1"
                         />
                     </div>

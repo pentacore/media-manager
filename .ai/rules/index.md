@@ -20,6 +20,7 @@ Before planning or editing, find the row whose globs match the file's path and r
 | app/Http/** | .ai/rules/http.md |
 | app/Jobs/** | .ai/rules/jobs.md |
 | resources/js/**/*.vue, resources/js/** | .ai/rules/js.md |
+| app/Listeners/Ai/** | .ai/rules/listeners-ai.md |
 | database/migrations/*.php | .ai/rules/migrations.md |
 | app/Models/*.php | .ai/rules/models.md |
 | app/Notifications/** | .ai/rules/notifications.md |
