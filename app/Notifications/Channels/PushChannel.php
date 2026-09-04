@@ -14,7 +14,8 @@ use Throwable;
  * channel driver, asks the notification for its PushMessage and hands both
  * to deliver(). Delivery is best-effort: failures are logged and swallowed
  * so webhook handlers and jobs never break on a third-party outage.
- * deliver() itself throws, which is what the "send test" actions rely on.
+ * deliver() itself throws, so a caller that needs the failure surfaced can
+ * invoke it directly instead of going through send().
  */
 abstract class PushChannel
 {
@@ -23,17 +24,21 @@ abstract class PushChannel
 
     public function send(object $notifiable, Notification $notification): void
     {
+        if (static::DRIVER === '') {
+            return;
+        }
+
         if (! method_exists($notifiable, 'routeNotificationFor') || ! method_exists($notification, 'toPush')) {
             return;
         }
 
-        $route = $notifiable->routeNotificationFor(static::DRIVER, $notification);
-
-        if ($route === null || $route === '' || $route === []) {
-            return;
-        }
-
         try {
+            $route = $notifiable->routeNotificationFor(static::DRIVER, $notification);
+
+            if ($route === null || $route === '' || $route === []) {
+                return;
+            }
+
             $this->deliver($route, $notification->toPush($notifiable));
         } catch (Throwable $throwable) {
             Log::warning(sprintf('%s delivery failed', $this->label()), [

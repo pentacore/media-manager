@@ -9,8 +9,8 @@ use App\Services\Notifications\PushMessage;
 use Illuminate\Support\Facades\Http;
 
 /**
- * Publishes a notification to the globally configured ntfy server using
- * the notifiable's topic (per-user column or global destination config).
+ * Publishes a notification to the globally configured ntfy server using the
+ * topic the notifiable returns from routeNotificationForNtfy().
  */
 class NtfyChannel extends PushChannel
 {
