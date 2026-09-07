@@ -2,6 +2,8 @@
 
 declare(strict_types=1);
 
+use App\Enums\NotificationSeverity;
+use App\Models\NotificationDestination;
 use App\Models\NotificationPreference;
 use App\Models\User;
 use App\Notifications\Channels\DiscordChannel;
@@ -75,4 +77,18 @@ test('secret user destinations are encrypted at rest and hidden from arrays', fu
         ->and($user->toArray())->not->toHaveKey('discord_webhook_url')
         ->not->toHaveKey('webhook_url')
         ->not->toHaveKey('webhook_secret');
+});
+
+test('a destination resolves to its own channel class when the severity qualifies', function (): void {
+    $destination = NotificationDestination::factory()->telegram()->minSeverity(NotificationSeverity::Warning)->create();
+    $resolver = resolve(PreferenceResolver::class);
+
+    expect($resolver->channelsFor($destination, ServiceWarning::class, 'error'))->toBe([TelegramChannel::class])
+        ->and($resolver->channelsFor($destination, ServiceWarning::class, 'info'))->toBe([]);
+});
+
+test('a disabled destination resolves to no channels', function (): void {
+    $destination = NotificationDestination::factory()->discord()->disabled()->create();
+
+    expect(resolve(PreferenceResolver::class)->channelsFor($destination, ServiceWarning::class, 'error'))->toBe([]);
 });

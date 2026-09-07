@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Services\Notifications;
 
+use App\Models\NotificationDestination;
 use App\Models\NotificationPreference;
 use App\Models\User;
 use App\Notifications\Channels\DiscordChannel;
@@ -76,10 +77,14 @@ class PreferenceResolver
     /**
      * @return array<int, string>
      */
-    public function channelsFor(User $user, string $notificationClass, string $severity): array
+    public function channelsFor(User|NotificationDestination $notifiable, string $notificationClass, string $severity): array
     {
+        if ($notifiable instanceof NotificationDestination) {
+            return $notifiable->accepts($severity) ? [$notifiable->channel->channelClass()] : [];
+        }
+
         $row = NotificationPreference::query()
-            ->where('user_id', $user->id)
+            ->where('user_id', $notifiable->id)
             ->where('notification_class', $notificationClass)
             ->where('severity', $severity)
             ->first();
