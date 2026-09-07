@@ -8,10 +8,12 @@ Before planning or editing, find the row whose globs match the file's path and r
 | app/** | .ai/rules/app.md |
 | tests/Browser/** | .ai/rules/browser.md |
 | app/Cache/Services/*.php | .ai/rules/cache-services.md |
+| app/Notifications/Channels/** | .ai/rules/channels.md |
 | app/Console/Commands/** | .ai/rules/commands.md |
 | resources/js/components/** | .ai/rules/components.md |
 | resources/js/composables/** | .ai/rules/composables.md |
 | app/Concerns/*.php | .ai/rules/concerns.md |
+| app/Http/Controllers/Admin/NotificationDestinationController.php, app/Http/Controllers/Settings/NotificationPreferencesController.php | .ai/rules/controllers-settings.md |
 | app/Http/Controllers/** | .ai/rules/controllers.md |
 | app/Enums/*.php | .ai/rules/enums.md |
 | app/Events/** | .ai/rules/events.md |
