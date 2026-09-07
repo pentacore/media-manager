@@ -72,5 +72,7 @@ test('secret user destinations are encrypted at rest and hidden from arrays', fu
 
     expect($raw->discord_webhook_url)->not->toBe('https://discord.com/api/webhooks/1/abc')
         ->and($raw->webhook_secret)->not->toBe('s3cret')
-        ->and($user->toArray())->not->toHaveKeys(['discord_webhook_url', 'webhook_url', 'webhook_secret']);
+        ->and($user->toArray())->not->toHaveKey('discord_webhook_url')
+        ->not->toHaveKey('webhook_url')
+        ->not->toHaveKey('webhook_secret');
 });

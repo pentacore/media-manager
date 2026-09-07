@@ -170,3 +170,11 @@ test('test notification endpoint errors without a topic', function (): void {
 
     Http::assertNothingSent();
 });
+
+test('the page only offers channels it can persist', function (): void {
+    $user = User::factory()->create();
+
+    $this->actingAs($user)
+        ->get(route('settings.notifications.edit'))
+        ->assertInertia(fn ($page) => $page->where('channels', ['database', 'broadcast', 'mail', 'ntfy']));
+});

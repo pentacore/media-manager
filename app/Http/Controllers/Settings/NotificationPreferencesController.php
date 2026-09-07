@@ -46,6 +46,13 @@ class NotificationPreferencesController extends Controller
         ],
     ];
 
+    /**
+     * Channels the preferences page can currently render and persist. The
+     * push channels added to PreferenceResolver::CHANNELS join this list
+     * once their destination inputs land on the page.
+     */
+    private const array PAGE_CHANNELS = ['database', 'broadcast', 'mail', 'ntfy'];
+
     public function edit(Request $request): Response
     {
         $user = $request->user();
@@ -81,7 +88,7 @@ class NotificationPreferencesController extends Controller
 
         return Inertia::render('settings/Notifications', [
             'catalog' => $catalog,
-            'channels' => PreferenceResolver::CHANNELS,
+            'channels' => self::PAGE_CHANNELS,
             'severities' => PreferenceResolver::SEVERITIES,
             'ntfyTopic' => $user->ntfy_topic,
             'ntfyConfigured' => is_string(config('services.ntfy.server')) && config('services.ntfy.server') !== '',
