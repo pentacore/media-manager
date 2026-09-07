@@ -4,17 +4,22 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers\Settings;
 
+use App\Enums\PushChannelType;
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Settings\TestNotificationChannelRequest;
+use App\Http\Requests\Settings\UpdateNotificationPreferencesRequest;
 use App\Models\NotificationPreference;
 use App\Notifications\AiBudgetSoftLimitReached;
+use App\Notifications\DecisionAgentActed;
 use App\Notifications\MediaReplacementStatusChanged;
 use App\Notifications\ServiceUpdateAvailable;
 use App\Notifications\ServiceWarning;
-use App\Services\Notifications\NtfyMessage;
+use App\Notifications\SubtitleCaseNeedsReview;
 use App\Services\Notifications\PreferenceResolver;
+use App\Services\Notifications\PushMessage;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -44,14 +49,15 @@ class NotificationPreferencesController extends Controller
             'label' => 'Subtitle replacement status',
             'description' => 'When a subtitle replacement is verified, fails, or needs manual attention.',
         ],
+        DecisionAgentActed::class => [
+            'label' => 'Decision agent activity',
+            'description' => 'When the decision agent takes or proposes an action on your library.',
+        ],
+        SubtitleCaseNeedsReview::class => [
+            'label' => 'Subtitle case needs review',
+            'description' => 'When a subtitle case is escalated and needs a human decision.',
+        ],
     ];
-
-    /**
-     * Channels the preferences page can currently render and persist. The
-     * push channels added to PreferenceResolver::CHANNELS join this list
-     * once their destination inputs land on the page.
-     */
-    private const array PAGE_CHANNELS = ['database', 'broadcast', 'mail', 'ntfy'];
 
     public function edit(Request $request): Response
     {
@@ -69,13 +75,11 @@ class NotificationPreferencesController extends Controller
             $perSeverity = [];
             foreach (PreferenceResolver::SEVERITIES as $severity) {
                 $row = $rows[$class.'|'.$severity] ?? null;
-
-                $perSeverity[$severity] = [
-                    'database' => $row?->database ?? $defaults['database'],
-                    'broadcast' => $row?->broadcast ?? $defaults['broadcast'],
-                    'mail' => $row?->mail ?? $defaults['mail'],
-                    'ntfy' => $row?->ntfy ?? $defaults['ntfy'],
-                ];
+                $flags = [];
+                foreach (PreferenceResolver::CHANNELS as $channel) {
+                    $flags[$channel] = $row?->{$channel} ?? $defaults[$channel];
+                }
+                $perSeverity[$severity] = $flags;
             }
 
             $catalog[] = [
@@ -88,27 +92,26 @@ class NotificationPreferencesController extends Controller
 
         return Inertia::render('settings/Notifications', [
             'catalog' => $catalog,
-            'channels' => self::PAGE_CHANNELS,
+            'channels' => PreferenceResolver::CHANNELS,
             'severities' => PreferenceResolver::SEVERITIES,
-            'ntfyTopic' => $user->ntfy_topic,
-            'ntfyConfigured' => is_string(config('services.ntfy.server')) && config('services.ntfy.server') !== '',
+            'destinations' => [
+                'ntfy_topic' => $user->ntfy_topic,
+                'discord_webhook_url_hint' => self::hint($user->discord_webhook_url),
+                'telegram_chat_id' => $user->telegram_chat_id,
+                'webhook_url' => $user->webhook_url,
+                'webhook_secret_set' => is_string($user->webhook_secret) && $user->webhook_secret !== '',
+            ],
+            'channelsConfigured' => [
+                'ntfy' => is_string(config('services.ntfy.server')) && config('services.ntfy.server') !== '',
+                'telegram' => is_string(config('services.telegram.token')) && config('services.telegram.token') !== '',
+            ],
         ]);
     }
 
-    public function update(Request $request): RedirectResponse
+    public function update(UpdateNotificationPreferencesRequest $updateNotificationPreferencesRequest): RedirectResponse
     {
-        $validated = $request->validate([
-            'preferences' => ['present', 'array'],
-            'preferences.*.class' => ['required', 'string'],
-            'preferences.*.severities' => ['required', 'array'],
-            'preferences.*.severities.*.database' => ['boolean'],
-            'preferences.*.severities.*.broadcast' => ['boolean'],
-            'preferences.*.severities.*.mail' => ['boolean'],
-            'preferences.*.severities.*.ntfy' => ['boolean'],
-            'ntfy_topic' => ['nullable', 'string', 'max:255', 'regex:/^[-_A-Za-z0-9]+$/'],
-        ]);
-
-        $user = $request->user();
+        $validated = $updateNotificationPreferencesRequest->validated();
+        $user = $updateNotificationPreferencesRequest->user();
 
         foreach ($validated['preferences'] as $entry) {
             if (! array_key_exists((string) $entry['class'], self::CATALOG)) {
@@ -120,23 +123,33 @@ class NotificationPreferencesController extends Controller
                     continue;
                 }
 
+                $defaults = resolve(PreferenceResolver::class)->defaultsFor($entry['class']);
+                $values = [];
+                foreach (PreferenceResolver::CHANNELS as $channel) {
+                    $values[$channel] = (bool) ($flags[$channel] ?? $defaults[$channel]);
+                }
+
                 NotificationPreference::query()->updateOrCreate(
-                    [
-                        'user_id' => $user->id,
-                        'notification_class' => $entry['class'],
-                        'severity' => $severity,
-                    ],
-                    [
-                        'database' => (bool) ($flags['database'] ?? true),
-                        'broadcast' => (bool) ($flags['broadcast'] ?? true),
-                        'mail' => (bool) ($flags['mail'] ?? false),
-                        'ntfy' => (bool) ($flags['ntfy'] ?? false),
-                    ],
+                    ['user_id' => $user->id, 'notification_class' => $entry['class'], 'severity' => $severity],
+                    $values,
                 );
             }
         }
 
-        $user->update(['ntfy_topic' => $validated['ntfy_topic'] ?? null]);
+        $attributes = [
+            'ntfy_topic' => self::blankToNull($validated['ntfy_topic'] ?? null),
+            'telegram_chat_id' => self::blankToNull($validated['telegram_chat_id'] ?? null),
+            'webhook_url' => self::blankToNull($validated['webhook_url'] ?? null),
+        ];
+
+        // Secrets are only touched when the key was submitted ('' clears).
+        foreach (['discord_webhook_url', 'webhook_secret'] as $secret) {
+            if (array_key_exists($secret, $validated)) {
+                $attributes[$secret] = self::blankToNull($validated[$secret]);
+            }
+        }
+
+        $user->update($attributes);
 
         Inertia::flash('toast', ['type' => 'success', 'message' => __('Notification preferences saved.')]);
 
@@ -144,42 +157,48 @@ class NotificationPreferencesController extends Controller
     }
 
     /**
-     * Push a test message to the current user's ntfy topic so they can
-     * verify server/topic wiring without waiting for a real event.
+     * Push a test message through one channel to the current user's own
+     * destination so they can verify wiring without waiting for a real event.
      */
-    public function test(Request $request): RedirectResponse
+    public function test(TestNotificationChannelRequest $testNotificationChannelRequest): RedirectResponse
     {
-        $user = $request->user();
-        $topic = $user->ntfy_topic;
+        $validated = $testNotificationChannelRequest->validated();
+        $user = $testNotificationChannelRequest->user();
+        $type = PushChannelType::from($validated['channel']);
+        $channel = resolve($type->channelClass());
+        $route = $user->routeNotificationFor($type->value);
 
-        if (! is_string($topic) || $topic === '') {
+        if ($route === null || $route === '' || $route === []) {
             throw ValidationException::withMessages([
-                'ntfy_topic' => __('Set and save an ntfy topic first.'),
+                'test_channel' => __('Set and save a :channel destination first.', ['channel' => $channel->label()]),
             ]);
         }
 
-        $payload = [
-            ...NtfyMessage::for('info', __('MediaManager test notification'), __('Ntfy is wired up correctly.'), route('settings.notifications.edit')),
-            'topic' => $topic,
-        ];
-
         try {
-            $ntfyRequest = Http::timeout(5);
-            $token = config('services.ntfy.token');
-
-            if (is_string($token) && $token !== '') {
-                $ntfyRequest = $ntfyRequest->withToken($token);
-            }
-
-            $ntfyRequest->post((string) config('services.ntfy.server'), $payload)->throw();
+            $channel->deliver($route, new PushMessage(
+                severity: 'info',
+                title: __('MediaManager test notification'),
+                body: __(':channel is wired up correctly.', ['channel' => $channel->label()]),
+                url: route('settings.notifications.edit'),
+            ));
         } catch (Throwable $throwable) {
             throw ValidationException::withMessages([
-                'ntfy_topic' => __('Ntfy delivery failed: :error', ['error' => $throwable->getMessage()]),
+                'test_channel' => __(':channel delivery failed: :error', ['channel' => $channel->label(), 'error' => $throwable->getMessage()]),
             ]);
         }
 
         Inertia::flash('toast', ['type' => 'success', 'message' => __('Test notification sent.')]);
 
         return back();
+    }
+
+    private static function hint(?string $secret): ?string
+    {
+        return is_string($secret) && $secret !== '' ? '…'.Str::substr($secret, -4) : null;
+    }
+
+    private static function blankToNull(?string $value): ?string
+    {
+        return $value === null || trim($value) === '' ? null : trim($value);
     }
 }
