@@ -12,6 +12,7 @@ use App\Http\Controllers\Admin\EmbyLinkController;
 use App\Http\Controllers\Admin\JobsController;
 use App\Http\Controllers\Admin\MediaReplacementAttemptController;
 use App\Http\Controllers\Admin\MediaReplacementSettingsController;
+use App\Http\Controllers\Admin\NotificationDestinationController;
 use App\Http\Controllers\Admin\ProwlarrTestIndexerController;
 use App\Http\Controllers\Admin\ServiceConnectionController;
 use App\Http\Controllers\Admin\StatisticsController;
@@ -50,6 +51,14 @@ Route::middleware(['auth', 'verified', 'password.set', 'role:admin'])->prefix('a
     Route::post('media-replacement/attempts/{mediaReplacementAttempt}/acknowledge', [MediaReplacementAttemptController::class, 'acknowledge'])->name('media-replacement.attempts.acknowledge');
     Route::post('media-replacement/attempts/{mediaReplacementAttempt}/restore-monitoring', [MediaReplacementAttemptController::class, 'restoreMonitoring'])->name('media-replacement.attempts.restore-monitoring');
     Route::post('media-replacement/attempts/{mediaReplacementAttempt}/cancel', [MediaReplacementAttemptController::class, 'cancel'])->name('media-replacement.attempts.cancel');
+
+    Route::get('notification-destinations', [NotificationDestinationController::class, 'index'])->name('notification-destinations.index');
+    Route::post('notification-destinations', [NotificationDestinationController::class, 'store'])->name('notification-destinations.store');
+    Route::put('notification-destinations/{notificationDestination}', [NotificationDestinationController::class, 'update'])->name('notification-destinations.update');
+    Route::delete('notification-destinations/{notificationDestination}', [NotificationDestinationController::class, 'destroy'])->name('notification-destinations.destroy');
+    Route::post('notification-destinations/{notificationDestination}/test', [NotificationDestinationController::class, 'test'])
+        ->middleware('throttle:6,1')
+        ->name('notification-destinations.test');
 
     Route::middleware('ai.enabled')->group(function (): void {
         Route::get('ai-settings', [AiSettingsController::class, 'index'])->name('ai-settings.index');
