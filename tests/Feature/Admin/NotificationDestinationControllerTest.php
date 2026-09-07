@@ -100,6 +100,22 @@ test('update keeps encrypted config values that are submitted blank', function (
         ->and($destination->config)->toBe(['url' => 'https://hooks.example.com/new', 'secret' => 'keep-me']);
 });
 
+test('update does not carry a stored value over into a different channel', function (): void {
+    $destination = NotificationDestination::factory()->webhook()->create();
+    $storedConfig = $destination->config;
+
+    $this->actingAs(User::factory()->admin()->create())
+        ->put(route('admin.notification-destinations.update', $destination), [
+            'channel' => 'discord',
+            'label' => 'Flipped',
+            'min_severity' => 'info',
+            'config' => ['url' => ''],
+        ])
+        ->assertSessionHasErrors('config.url');
+
+    expect($destination->refresh()->config)->toBe($storedConfig);
+});
+
 test('admin can delete a destination', function (): void {
     $destination = NotificationDestination::factory()->discord()->create();
 

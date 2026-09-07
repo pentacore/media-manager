@@ -53,3 +53,13 @@ test('admins returns only admin users', function (): void {
 
     expect(resolve(AdminNotifier::class)->admins()->pluck('id')->all())->toBe([$admin->id]);
 });
+
+test('a destination is notified exactly once no matter how many admins exist', function (): void {
+    Notification::fake();
+    User::factory()->admin()->count(3)->create();
+    $destination = NotificationDestination::factory()->discord()->create();
+
+    resolve(AdminNotifier::class)->send(new ServiceWarning('sonarr', 'T', 'M', 'error'));
+
+    Notification::assertSentToTimes($destination, ServiceWarning::class, 1);
+});

@@ -4,13 +4,13 @@ declare(strict_types=1);
 
 namespace App\Http\Requests\Admin;
 
-use App\Concerns\NotificationDestinationRules;
+use App\Concerns\NotificationDestinationValidationRules;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
 
 class StoreNotificationDestinationRequest extends FormRequest
 {
-    use NotificationDestinationRules;
+    use NotificationDestinationValidationRules;
 
     /**
      * @return array<string, ValidationRule|array<mixed>|string>

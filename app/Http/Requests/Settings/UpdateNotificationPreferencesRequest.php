@@ -4,12 +4,15 @@ declare(strict_types=1);
 
 namespace App\Http\Requests\Settings;
 
+use App\Concerns\NotificationDestinationValidationRules;
 use App\Services\Notifications\PreferenceResolver;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
 
 class UpdateNotificationPreferencesRequest extends FormRequest
 {
+    use NotificationDestinationValidationRules;
+
     /**
      * @return array<string, ValidationRule|array<mixed>|string>
      */
@@ -19,10 +22,10 @@ class UpdateNotificationPreferencesRequest extends FormRequest
             'preferences' => ['present', 'array'],
             'preferences.*.class' => ['required', 'string'],
             'preferences.*.severities' => ['required', 'array'],
-            'ntfy_topic' => ['nullable', 'string', 'max:255', 'regex:/^[-_A-Za-z0-9]+$/'],
+            'ntfy_topic' => ['nullable', ...self::ntfyTopicRules()],
             // Secrets: absent key = keep, '' = clear, value = replace (see controller).
-            'discord_webhook_url' => ['sometimes', 'nullable', 'url', 'max:2048', 'starts_with:https://discord.com/api/webhooks/,https://discordapp.com/api/webhooks/'],
-            'telegram_chat_id' => ['nullable', 'string', 'max:32', 'regex:/^-?\d+$/'],
+            'discord_webhook_url' => ['sometimes', 'nullable', ...self::discordWebhookUrlRules()],
+            'telegram_chat_id' => ['nullable', ...self::telegramChatIdRules()],
             'webhook_url' => ['nullable', 'url', 'max:2048'],
             'webhook_secret' => ['sometimes', 'nullable', 'string', 'max:255'],
         ];
@@ -39,9 +42,10 @@ class UpdateNotificationPreferencesRequest extends FormRequest
      */
     public function messages(): array
     {
-        return [
-            'discord_webhook_url.starts_with' => 'Paste the webhook URL Discord gives you (https://discord.com/api/webhooks/…).',
-            'telegram_chat_id.regex' => 'A Telegram chat id is a (possibly negative) number.',
-        ];
+        return self::destinationMessages(
+            urlAttribute: 'discord_webhook_url',
+            chatIdAttribute: 'telegram_chat_id',
+            topicAttribute: 'ntfy_topic',
+        );
     }
 }

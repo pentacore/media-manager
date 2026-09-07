@@ -70,12 +70,20 @@ class NotificationDestinationController extends Controller
         $config = $this->cleanConfig($pushChannelType, $validated['config']);
 
         // Blank encrypted fields mean "keep what is stored": the Discord URL
-        // and the webhook secret are never prefilled in the edit dialog.
+        // and the webhook secret are never prefilled in the edit dialog. Only
+        // an unchanged channel may inherit them — otherwise a channel flip
+        // would smuggle another channel's value past its own rules.
+        $channelUnchanged = $notificationDestination->channel === $pushChannelType;
+
         if ($pushChannelType === PushChannelType::Discord && $config['url'] === null) {
-            $config['url'] = $notificationDestination->config['url'] ?? null;
+            $config['url'] = $channelUnchanged ? ($notificationDestination->config['url'] ?? null) : null;
+
+            throw_if($config['url'] === null, ValidationException::withMessages([
+                'config.url' => __('A Discord webhook URL is required when changing the channel.'),
+            ]));
         }
 
-        if ($pushChannelType === PushChannelType::Webhook && $config['secret'] === null) {
+        if ($channelUnchanged && $pushChannelType === PushChannelType::Webhook && $config['secret'] === null) {
             $config['secret'] = $notificationDestination->config['secret'] ?? null;
         }
 
