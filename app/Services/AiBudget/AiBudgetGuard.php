@@ -4,14 +4,12 @@ declare(strict_types=1);
 
 namespace App\Services\AiBudget;
 
-use App\Enums\UserRole;
-use App\Models\User;
 use App\Notifications\AiBudgetSoftLimitReached;
 use App\Services\AiUsage\AiUsageReporting;
+use App\Services\Notifications\AdminNotifier;
 use App\Settings\AiSettings;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\Cache;
-use Illuminate\Support\Facades\Notification;
 use Throwable;
 
 /**
@@ -31,6 +29,7 @@ class AiBudgetGuard
     public function __construct(
         private readonly AiSettings $aiSettings,
         private readonly AiUsageReporting $aiUsageReporting,
+        private readonly AdminNotifier $adminNotifier,
     ) {}
 
     /**
@@ -123,11 +122,7 @@ class AiBudgetGuard
 
     private function dispatchSoftLimitNotification(float $spend, float $soft): void
     {
-        $admins = User::query()->where('role', UserRole::Admin)->get();
-
-        if ($admins->isNotEmpty()) {
-            Notification::send($admins, new AiBudgetSoftLimitReached($spend, $soft));
-        }
+        $this->adminNotifier->send(new AiBudgetSoftLimitReached($spend, $soft));
 
         $this->aiSettings->markSoftBudgetNotified();
     }

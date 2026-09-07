@@ -5,13 +5,11 @@ declare(strict_types=1);
 namespace App\Services\Sabnzbd;
 
 use App\Cache\Services\SabnzbdCache;
-use App\Enums\UserRole;
 use App\Enums\WebhookHandlingStatus;
-use App\Models\User;
 use App\Models\WebhookEvent;
 use App\Notifications\ServiceWarning;
+use App\Services\Notifications\AdminNotifier;
 use App\Services\Webhook\AbstractWebhookHandler;
-use Illuminate\Support\Facades\Notification;
 
 class SabnzbdWebhookHandler extends AbstractWebhookHandler
 {
@@ -126,15 +124,12 @@ class SabnzbdWebhookHandler extends AbstractWebhookHandler
             ],
         );
 
-        $admins = User::query()->where('role', UserRole::Admin)->get();
-        if ($admins->isNotEmpty()) {
-            Notification::send($admins, new ServiceWarning(
-                service: 'sabnzbd',
-                title: $title,
-                message: $message,
-                level: $severity,
-            ));
-        }
+        resolve(AdminNotifier::class)->send(new ServiceWarning(
+            service: 'sabnzbd',
+            title: $title,
+            message: $message,
+            level: $severity,
+        ));
     }
 
     /**

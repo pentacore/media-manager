@@ -10,17 +10,16 @@ use App\Enums\ActionRequestStatus;
 use App\Enums\SubtitleCaseAttemptOutcome;
 use App\Enums\SubtitleCaseAttemptType;
 use App\Enums\SubtitleCaseStatus;
-use App\Enums\UserRole;
 use App\Jobs\Middleware\LimitSubtitleAdvisorConcurrency;
 use App\Models\ActionRequest;
 use App\Models\SubtitleCase;
 use App\Models\SubtitleCaseAttempt;
-use App\Models\User;
 use App\Notifications\SubtitleCaseNeedsReview;
 use App\Providers\AIServiceProvider;
 use App\Services\AiBudget\AiBudgetExceededException;
 use App\Services\AiBudget\AiBudgetGuard;
 use App\Services\Bazarr\SubtitleCaseLifecycle;
+use App\Services\Notifications\AdminNotifier;
 use App\Settings\AiSettings;
 use App\Settings\BazarrAutomationSettings;
 use App\Support\UpstreamErrorText;
@@ -37,7 +36,6 @@ use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Facades\Notification;
 use Illuminate\Support\Str;
 use Throwable;
 
@@ -391,13 +389,7 @@ final class RunSubtitleAdvisor implements ShouldBeUnique, ShouldQueue
         string $summary,
         string $category,
     ): void {
-        $admins = User::query()->where('role', UserRole::Admin)->get();
-
-        if ($admins->isEmpty()) {
-            return;
-        }
-
-        Notification::send($admins, new SubtitleCaseNeedsReview(
+        resolve(AdminNotifier::class)->send(new SubtitleCaseNeedsReview(
             subtitleCaseId: $subtitleCase->id,
             displayName: is_string($subtitleCase->evidence['display_name'] ?? null)
                 ? $subtitleCase->evidence['display_name']

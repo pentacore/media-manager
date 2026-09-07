@@ -6,15 +6,13 @@ namespace App\Services\MediaReplacement;
 
 use App\Enums\MediaReplacementStatus;
 use App\Enums\ServiceType;
-use App\Enums\UserRole;
 use App\Models\MediaReplacementAttempt;
 use App\Models\ServiceConnection;
-use App\Models\User;
 use App\Notifications\MediaReplacementStatusChanged;
+use App\Services\Notifications\AdminNotifier;
 use App\Services\Radarr\RadarrClient;
 use App\Services\Sonarr\SonarrClient;
 use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Facades\Notification;
 use Throwable;
 
 /**
@@ -448,13 +446,7 @@ final readonly class CompetingGrabSweeper
         array $removedTitles,
     ): void {
         try {
-            $admins = User::query()->where('role', UserRole::Admin)->get();
-
-            if ($admins->isEmpty()) {
-                return;
-            }
-
-            Notification::send($admins, new MediaReplacementStatusChanged(
+            resolve(AdminNotifier::class)->send(new MediaReplacementStatusChanged(
                 service: $serviceConnection->type->value,
                 title: (string) ($mediaReplacementAttempt->candidate['title'] ?? 'Media replacement'),
                 message: count($removedTitles) === 1

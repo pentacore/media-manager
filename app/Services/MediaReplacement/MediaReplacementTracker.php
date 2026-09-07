@@ -8,18 +8,16 @@ use App\Cache\Services\RadarrCache;
 use App\Cache\Services\SonarrCache;
 use App\Enums\MediaReplacementStatus;
 use App\Enums\ServiceType;
-use App\Enums\UserRole;
 use App\Events\MediaReplacementAttemptChanged;
 use App\Models\MediaReplacementAttempt;
 use App\Models\ServiceConnection;
-use App\Models\User;
 use App\Notifications\MediaReplacementStatusChanged;
+use App\Services\Notifications\AdminNotifier;
 use App\Services\Radarr\RadarrClient;
 use App\Services\Sonarr\SonarrClient;
 use Illuminate\Contracts\Database\Query\Builder;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Facades\Notification;
 use Throwable;
 
 /**
@@ -47,6 +45,7 @@ final readonly class MediaReplacementTracker
         private MediaFileInspector $mediaFileInspector,
         private LanguageNormalizer $languageNormalizer,
         private CompetingGrabSweeper $competingGrabSweeper,
+        private readonly AdminNotifier $adminNotifier,
     ) {}
 
     /**
@@ -515,15 +514,9 @@ final readonly class MediaReplacementTracker
         string $level,
         string $message,
     ): void {
-        $admins = User::query()->where('role', UserRole::Admin)->get();
-
-        if ($admins->isEmpty()) {
-            return;
-        }
-
         $title = (string) ($mediaReplacementAttempt->candidate['title'] ?? 'Media replacement');
 
-        Notification::send($admins, new MediaReplacementStatusChanged(
+        $this->adminNotifier->send(new MediaReplacementStatusChanged(
             service: $serviceConnection->type->value,
             title: $title,
             message: $message,
