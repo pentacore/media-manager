@@ -16,9 +16,11 @@ use App\Notifications\ServiceUpdateAvailable;
 use App\Notifications\ServiceWarning;
 use App\Notifications\SubtitleCaseNeedsReview;
 use App\Services\Notifications\PreferenceResolver;
+use App\Services\Notifications\PushFailureMessage;
 use App\Services\Notifications\PushMessage;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
@@ -112,6 +114,7 @@ class NotificationPreferencesController extends Controller
     {
         $validated = $updateNotificationPreferencesRequest->validated();
         $user = $updateNotificationPreferencesRequest->user();
+        $preferenceResolver = resolve(PreferenceResolver::class);
 
         foreach ($validated['preferences'] as $entry) {
             if (! array_key_exists((string) $entry['class'], self::CATALOG)) {
@@ -123,7 +126,7 @@ class NotificationPreferencesController extends Controller
                     continue;
                 }
 
-                $defaults = resolve(PreferenceResolver::class)->defaultsFor($entry['class']);
+                $defaults = $preferenceResolver->defaultsFor($entry['class']);
                 $values = [];
                 foreach (PreferenceResolver::CHANNELS as $channel) {
                     $values[$channel] = (bool) ($flags[$channel] ?? $defaults[$channel]);
@@ -182,8 +185,18 @@ class NotificationPreferencesController extends Controller
                 url: route('settings.notifications.edit'),
             ));
         } catch (Throwable $throwable) {
+            Log::warning('Push test delivery failed', [
+                'channel' => $type->value,
+                'user_id' => $user->id,
+                'exception' => $throwable::class,
+                'message' => $throwable->getMessage(),
+            ]);
+
             throw ValidationException::withMessages([
-                'test_channel' => __(':channel delivery failed: :error', ['channel' => $channel->label(), 'error' => $throwable->getMessage()]),
+                'test_channel' => __(':channel delivery failed: :error', [
+                    'channel' => $channel->label(),
+                    'error' => PushFailureMessage::for($throwable),
+                ]),
             ]);
         }
 

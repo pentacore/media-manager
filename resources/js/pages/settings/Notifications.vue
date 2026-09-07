@@ -99,6 +99,18 @@ const hasTelegram = computed(
 );
 const hasNtfy = computed(() => props.destinations.ntfy_topic !== null);
 
+// A test send always targets the saved destination, so block it while the
+// field on screen differs from what the server last stored.
+const ntfyUnsaved = computed(
+    () => ntfyTopic.value !== (props.destinations.ntfy_topic ?? ''),
+);
+const telegramUnsaved = computed(
+    () => telegramChatId.value !== (props.destinations.telegram_chat_id ?? ''),
+);
+const webhookUnsaved = computed(
+    () => webhookUrl.value !== (props.destinations.webhook_url ?? ''),
+);
+
 function clearSecret(field: 'discord' | 'webhookSecret'): void {
     if (field === 'discord') {
         discordWebhookUrl.value = '';
@@ -151,12 +163,14 @@ function save(): void {
 
     router.put(update().url, payload, {
         preserveScroll: true,
-        onFinish: () => {
-            saving.value = false;
+        onSuccess: () => {
             discordTouched.value = false;
             webhookSecretTouched.value = false;
             discordWebhookUrl.value = '';
             webhookSecret.value = '';
+        },
+        onFinish: () => {
+            saving.value = false;
         },
     });
 }
@@ -260,12 +274,23 @@ function save(): void {
                     type="button"
                     variant="outline"
                     data-test-send="ntfy"
-                    :disabled="!hasNtfy || testingChannel !== null"
+                    :disabled="
+                        !hasNtfy ||
+                        ntfyUnsaved ||
+                        testingChannel !== null ||
+                        saving
+                    "
                     @click="sendTest('ntfy')"
                 >
                     {{ testingChannel === 'ntfy' ? 'Sending…' : 'Send test' }}
                 </Button>
             </div>
+            <p
+                v-if="ntfyUnsaved"
+                class="mt-2 text-[12px] text-muted-foreground"
+            >
+                Save before sending a test to a changed destination.
+            </p>
         </div>
 
         <div
@@ -314,7 +339,7 @@ function save(): void {
                     type="button"
                     variant="outline"
                     data-test-send="discord"
-                    :disabled="!hasDiscord || testingChannel !== null"
+                    :disabled="!hasDiscord || testingChannel !== null || saving"
                     @click="sendTest('discord')"
                 >
                     {{
@@ -351,7 +376,12 @@ function save(): void {
                     type="button"
                     variant="outline"
                     data-test-send="telegram"
-                    :disabled="!hasTelegram || testingChannel !== null"
+                    :disabled="
+                        !hasTelegram ||
+                        telegramUnsaved ||
+                        testingChannel !== null ||
+                        saving
+                    "
                     @click="sendTest('telegram')"
                 >
                     {{
@@ -359,6 +389,12 @@ function save(): void {
                     }}
                 </Button>
             </div>
+            <p
+                v-if="telegramUnsaved"
+                class="mt-2 text-[12px] text-muted-foreground"
+            >
+                Save before sending a test to a changed destination.
+            </p>
         </div>
 
         <div
@@ -416,7 +452,12 @@ function save(): void {
                     type="button"
                     variant="outline"
                     data-test-send="webhook"
-                    :disabled="!hasWebhook || testingChannel !== null"
+                    :disabled="
+                        !hasWebhook ||
+                        webhookUnsaved ||
+                        testingChannel !== null ||
+                        saving
+                    "
                     @click="sendTest('webhook')"
                 >
                     {{
@@ -424,6 +465,12 @@ function save(): void {
                     }}
                 </Button>
             </div>
+            <p
+                v-if="webhookUnsaved"
+                class="mt-2 text-[12px] text-muted-foreground"
+            >
+                Save before sending a test to a changed destination.
+            </p>
         </div>
 
         <InputError :message="$page.props.errors.test_channel" />

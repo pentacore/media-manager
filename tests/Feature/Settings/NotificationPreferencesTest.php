@@ -8,6 +8,8 @@ use App\Notifications\AiBudgetSoftLimitReached;
 use App\Notifications\MediaReplacementStatusChanged;
 use App\Notifications\ServiceUpdateAvailable;
 use App\Notifications\ServiceWarning;
+use App\Services\Notifications\PreferenceResolver;
+use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Support\Facades\Http;
 
 beforeEach(function (): void {
@@ -22,6 +24,7 @@ test('GET /settings/notifications returns the default catalog', function (): voi
         ->assertOk()
         ->assertInertia(fn ($page) => $page
             ->component('settings/Notifications')
+            ->where('channels', PreferenceResolver::CHANNELS)
             ->has('catalog')
             ->has('catalog.0.severities.warning.database')
             ->where('catalog.0.severities.warning.database', true)
@@ -42,7 +45,7 @@ test('PUT /settings/notifications persists overrides', function (): void {
                     'class' => ServiceWarning::class,
                     'severities' => [
                         'warning' => ['database' => true, 'broadcast' => false, 'mail' => false, 'ntfy' => true],
-                        'error' => ['database' => true, 'broadcast' => true, 'mail' => true, 'ntfy' => true, 'discord' => true],
+                        'error' => ['database' => true, 'broadcast' => true, 'mail' => true, 'ntfy' => true, 'discord' => true, 'telegram' => true, 'webhook' => true],
                     ],
                 ],
             ],
@@ -66,6 +69,8 @@ test('PUT /settings/notifications persists overrides', function (): void {
 
     expect($errorRow)->not->toBeNull();
     expect($errorRow->discord)->toBeTrue();
+    expect($errorRow->telegram)->toBeTrue();
+    expect($errorRow->webhook)->toBeTrue();
 });
 
 test('PUT silently drops unknown notification classes', function (): void {
@@ -276,4 +281,19 @@ test('test endpoint errors when the channel has no destination or delivery fails
     $this->actingAs($user)->post(route('settings.notifications.test'), ['channel' => 'telegram'])->assertSessionHasErrors('test_channel');
     $this->actingAs($user)->post(route('settings.notifications.test'), ['channel' => 'webhook'])->assertSessionHasErrors('test_channel');
     $this->actingAs($user)->post(route('settings.notifications.test'), ['channel' => 'pager'])->assertSessionHasErrors('channel');
+});
+
+test('a failed test send never leaks the telegram bot token to the user', function (): void {
+    config()->set('services.telegram.token', '123:abc');
+    Http::preventStrayRequests();
+    Http::fake([
+        'api.telegram.org/*' => fn () => throw new ConnectionException('cURL error 6: https://api.telegram.org/bot123:abc/sendMessage'),
+    ]);
+    $user = User::factory()->create(['telegram_chat_id' => '-1001']);
+
+    $this->actingAs($user)
+        ->post(route('settings.notifications.test'), ['channel' => 'telegram'])
+        ->assertSessionHasErrors('test_channel');
+
+    expect(session('errors')->first('test_channel'))->toBe('Telegram delivery failed: Could not reach the provider.');
 });
