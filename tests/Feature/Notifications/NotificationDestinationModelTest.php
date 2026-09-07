@@ -46,3 +46,10 @@ test('enabled scope excludes disabled destinations', function (): void {
     expect(NotificationDestination::query()->enabled()->count())->toBe(1)
         ->and(NotificationDestination::factory()->discord()->create()->channel)->toBe(PushChannelType::Discord);
 });
+
+test('config never appears in the serialized model', function (): void {
+    $destination = NotificationDestination::factory()->webhook()->create();
+
+    expect($destination->toArray())->not->toHaveKey('config')
+        ->and($destination->config['url'])->toBe('https://hooks.example.com/mm');
+});

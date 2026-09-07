@@ -9,9 +9,12 @@ use App\Enums\PushChannelType;
 use Carbon\CarbonImmutable;
 use Database\Factories\NotificationDestinationFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
+use Illuminate\Database\Eloquent\Attributes\Hidden;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Notifications\DatabaseNotification;
+use Illuminate\Notifications\DatabaseNotificationCollection;
 use Illuminate\Notifications\Notifiable;
 use Illuminate\Support\Str;
 use Override;
@@ -30,6 +33,8 @@ use Override;
  * @property NotificationSeverity $min_severity
  * @property CarbonImmutable|null $created_at
  * @property CarbonImmutable|null $updated_at
+ * @property-read DatabaseNotificationCollection<int, DatabaseNotification> $notifications
+ * @property-read int|null $notifications_count
  *
  * @method static Builder<static>|NotificationDestination newModelQuery()
  * @method static Builder<static>|NotificationDestination newQuery()
@@ -39,6 +44,7 @@ use Override;
  * @mixin \Eloquent
  */
 #[Fillable(['channel', 'label', 'config', 'is_enabled', 'min_severity'])]
+#[Hidden(['config'])]
 class NotificationDestination extends Model
 {
     /** @use HasFactory<NotificationDestinationFactory> */

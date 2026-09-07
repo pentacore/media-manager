@@ -19,6 +19,10 @@ use App\Notifications\ServiceUpdateAvailable;
  * tuple. Anything the user hasn't explicitly toggled falls back to the
  * defaults below — database + broadcast on by default; mail and the push
  * channels off unless toggled — all of them deliver.
+ *
+ * A `NotificationDestination` notifiable bypasses preferences entirely: it
+ * resolves to its own push channel when the severity meets its
+ * `min_severity` and it is enabled, otherwise to nothing.
  */
 class PreferenceResolver
 {
