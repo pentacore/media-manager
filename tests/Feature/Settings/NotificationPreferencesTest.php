@@ -190,6 +190,7 @@ test('test notification endpoint errors without a topic', function (): void {
 test('edit exposes masked destinations and which channels are configured', function (): void {
     config()->set('services.ntfy.server', 'https://ntfy.example.com');
     config()->set('services.telegram.token', '123:abc');
+
     $user = User::factory()->create([
         'ntfy_topic' => 'mm',
         'discord_webhook_url' => 'https://discord.com/api/webhooks/1/abcd9999',

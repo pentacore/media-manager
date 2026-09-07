@@ -25,7 +25,7 @@ test('deliver calls sendMessage with html-escaped text and the chat id', functio
 });
 
 test('deliver throws when the bot token is not configured', function (): void {
-    config()->set('services.telegram.token', null);
+    config()->set('services.telegram.token');
     Http::fake();
 
     new TelegramChannel()->deliver('-1001', new PushMessage(severity: 'info', title: 'T', body: 'B'));

@@ -26,13 +26,13 @@ test('PushMessage exposes its fields and array shape', function (): void {
 
 test('ServiceWarning builds a push message from its severity bucket', function (): void {
     $user = User::factory()->create();
-    $message = new ServiceWarning('sonarr', 'Health issue', 'Indexer down', 'disk_full')->toPush($user);
+    $pushMessage = new ServiceWarning('sonarr', 'Health issue', 'Indexer down', 'disk_full')->toPush($user);
 
-    expect($message)->toBeInstanceOf(PushMessage::class)
-        ->and($message->severity)->toBe('error')
-        ->and($message->title)->toBe('[sonarr] Health issue')
-        ->and($message->body)->toBe('Indexer down')
-        ->and($message->url)->toBe(route('monitoring.service-health'));
+    expect($pushMessage)->toBeInstanceOf(PushMessage::class)
+        ->and($pushMessage->severity)->toBe('error')
+        ->and($pushMessage->title)->toBe('[sonarr] Health issue')
+        ->and($pushMessage->body)->toBe('Indexer down')
+        ->and($pushMessage->url)->toBe(route('monitoring.service-health'));
 });
 
 test('every catalog notification returns a PushMessage', function (): void {

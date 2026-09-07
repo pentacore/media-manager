@@ -81,6 +81,7 @@ class NotificationPreferencesController extends Controller
                 foreach (PreferenceResolver::CHANNELS as $channel) {
                     $flags[$channel] = $row?->{$channel} ?? $defaults[$channel];
                 }
+
                 $perSeverity[$severity] = $flags;
             }
 
@@ -98,7 +99,7 @@ class NotificationPreferencesController extends Controller
             'severities' => PreferenceResolver::SEVERITIES,
             'destinations' => [
                 'ntfy_topic' => $user->ntfy_topic,
-                'discord_webhook_url_hint' => self::hint($user->discord_webhook_url),
+                'discord_webhook_url_hint' => $this->hint($user->discord_webhook_url),
                 'telegram_chat_id' => $user->telegram_chat_id,
                 'webhook_url' => $user->webhook_url,
                 'webhook_secret_set' => is_string($user->webhook_secret) && $user->webhook_secret !== '',
@@ -140,15 +141,15 @@ class NotificationPreferencesController extends Controller
         }
 
         $attributes = [
-            'ntfy_topic' => self::blankToNull($validated['ntfy_topic'] ?? null),
-            'telegram_chat_id' => self::blankToNull($validated['telegram_chat_id'] ?? null),
-            'webhook_url' => self::blankToNull($validated['webhook_url'] ?? null),
+            'ntfy_topic' => $this->blankToNull($validated['ntfy_topic'] ?? null),
+            'telegram_chat_id' => $this->blankToNull($validated['telegram_chat_id'] ?? null),
+            'webhook_url' => $this->blankToNull($validated['webhook_url'] ?? null),
         ];
 
         // Secrets are only touched when the key was submitted ('' clears).
         foreach (['discord_webhook_url', 'webhook_secret'] as $secret) {
             if (array_key_exists($secret, $validated)) {
-                $attributes[$secret] = self::blankToNull($validated[$secret]);
+                $attributes[$secret] = $this->blankToNull($validated[$secret]);
             }
         }
 
@@ -167,11 +168,11 @@ class NotificationPreferencesController extends Controller
     {
         $validated = $testNotificationChannelRequest->validated();
         $user = $testNotificationChannelRequest->user();
-        $type = PushChannelType::from($validated['channel']);
-        $channel = resolve($type->channelClass());
-        $route = $user->routeNotificationFor($type->value);
+        $pushChannelType = PushChannelType::from($validated['channel']);
+        $channel = resolve($pushChannelType->channelClass());
+        $route = $user->routeNotificationFor($pushChannelType->value);
 
-        if ($route === null || $route === '' || $route === []) {
+        if (in_array($route, [null, '', []], true)) {
             throw ValidationException::withMessages([
                 'test_channel' => __('Set and save a :channel destination first.', ['channel' => $channel->label()]),
             ]);
@@ -186,7 +187,7 @@ class NotificationPreferencesController extends Controller
             ));
         } catch (Throwable $throwable) {
             Log::warning('Push test delivery failed', [
-                'channel' => $type->value,
+                'channel' => $pushChannelType->value,
                 'user_id' => $user->id,
                 'exception' => $throwable::class,
                 'message' => $throwable->getMessage(),
@@ -205,12 +206,12 @@ class NotificationPreferencesController extends Controller
         return back();
     }
 
-    private static function hint(?string $secret): ?string
+    private function hint(?string $secret): ?string
     {
         return is_string($secret) && $secret !== '' ? '…'.Str::substr($secret, -4) : null;
     }
 
-    private static function blankToNull(?string $value): ?string
+    private function blankToNull(?string $value): ?string
     {
         return $value === null || trim($value) === '' ? null : trim($value);
     }

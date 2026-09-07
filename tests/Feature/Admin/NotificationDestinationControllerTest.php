@@ -38,7 +38,7 @@ test('index lists destinations with masked config and the available channels', f
 });
 
 test('index hides ntfy and telegram channel options when they are not configured', function (): void {
-    config()->set('services.telegram.token', null);
+    config()->set('services.telegram.token');
     config()->set('services.ntfy.server', '');
 
     $this->actingAs(User::factory()->admin()->create())
@@ -61,10 +61,10 @@ test('admin can store a discord destination', function (): void {
         ->assertRedirect(route('admin.notification-destinations.index'))
         ->assertSessionHasNoErrors();
 
-    $destination = NotificationDestination::query()->firstOrFail();
-    expect($destination->label)->toBe('Ops channel')
-        ->and($destination->min_severity)->toBe(NotificationSeverity::Warning)
-        ->and($destination->config)->toBe(['url' => 'https://discord.com/api/webhooks/1/abc']);
+    $notificationDestination = NotificationDestination::query()->firstOrFail();
+    expect($notificationDestination->label)->toBe('Ops channel')
+        ->and($notificationDestination->min_severity)->toBe(NotificationSeverity::Warning)
+        ->and($notificationDestination->config)->toBe(['url' => 'https://discord.com/api/webhooks/1/abc']);
 });
 
 test('store validates config per channel', function (): void {

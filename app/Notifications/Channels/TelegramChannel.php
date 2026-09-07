@@ -20,9 +20,7 @@ class TelegramChannel extends PushChannel
     {
         $token = config('services.telegram.token');
 
-        if (! is_string($token) || $token === '') {
-            throw new RuntimeException('Telegram bot token is not configured.');
-        }
+        throw_if(! is_string($token) || $token === '', RuntimeException::class, 'Telegram bot token is not configured.');
 
         $lines = [sprintf('<b>%s</b>', e($message->title)), e($message->body)];
 

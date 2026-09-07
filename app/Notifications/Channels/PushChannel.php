@@ -35,7 +35,7 @@ abstract class PushChannel
         try {
             $route = $notifiable->routeNotificationFor(static::DRIVER, $notification);
 
-            if ($route === null || $route === '' || $route === []) {
+            if (in_array($route, [null, '', []], true)) {
                 return;
             }
 

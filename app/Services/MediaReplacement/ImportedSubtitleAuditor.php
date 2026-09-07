@@ -45,7 +45,7 @@ final readonly class ImportedSubtitleAuditor
         private MediaReplacementTracker $mediaReplacementTracker,
         private ActionOrchestrator $actionOrchestrator,
         private LanguageNormalizer $languageNormalizer,
-        private readonly AdminNotifier $adminNotifier,
+        private AdminNotifier $adminNotifier,
     ) {}
 
     /**

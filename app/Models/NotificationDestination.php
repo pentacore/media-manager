@@ -70,7 +70,7 @@ class NotificationDestination extends Model
      * @param  Builder<static>  $query
      * @return Builder<static>
      */
-    public function scopeEnabled(Builder $query): Builder
+    protected function scopeEnabled(Builder $query): Builder
     {
         return $query->where('is_enabled', true);
     }

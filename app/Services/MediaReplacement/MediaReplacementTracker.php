@@ -45,7 +45,7 @@ final readonly class MediaReplacementTracker
         private MediaFileInspector $mediaFileInspector,
         private LanguageNormalizer $languageNormalizer,
         private CompetingGrabSweeper $competingGrabSweeper,
-        private readonly AdminNotifier $adminNotifier,
+        private AdminNotifier $adminNotifier,
     ) {}
 
     /**

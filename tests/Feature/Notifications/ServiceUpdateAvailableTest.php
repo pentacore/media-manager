@@ -36,10 +36,10 @@ test('via respects an explicit preference row over the class default', function 
 test('toPush carries the version bump with info severity', function (): void {
     $connection = ServiceConnection::factory()->sonarr()->create(['name' => 'Sonarr']);
     $user = User::factory()->create();
-    $message = new ServiceUpdateAvailable($connection, '4.1.0', '4.0.0')->toPush($user);
+    $pushMessage = new ServiceUpdateAvailable($connection, '4.1.0', '4.0.0')->toPush($user);
 
-    expect($message->severity)->toBe('info')
-        ->and($message->title)->toBe('Update available for Sonarr')
-        ->and($message->body)->toBe('4.0.0 → 4.1.0')
-        ->and($message->url)->toBe(route('monitoring.service-health'));
+    expect($pushMessage->severity)->toBe('info')
+        ->and($pushMessage->title)->toBe('Update available for Sonarr')
+        ->and($pushMessage->body)->toBe('4.0.0 → 4.1.0')
+        ->and($pushMessage->url)->toBe(route('monitoring.service-health'));
 });

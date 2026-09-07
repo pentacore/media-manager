@@ -30,7 +30,7 @@ class PushFailureMessage
         $token = config('services.telegram.token');
 
         if (is_string($token) && $token !== '') {
-            $message = str_replace($token, '***', $message);
+            return str_replace($token, '***', $message);
         }
 
         return $message;

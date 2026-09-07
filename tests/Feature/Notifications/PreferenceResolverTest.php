@@ -81,10 +81,10 @@ test('secret user destinations are encrypted at rest and hidden from arrays', fu
 
 test('a destination resolves to its own channel class when the severity qualifies', function (): void {
     $destination = NotificationDestination::factory()->telegram()->minSeverity(NotificationSeverity::Warning)->create();
-    $resolver = resolve(PreferenceResolver::class);
+    $preferenceResolver = resolve(PreferenceResolver::class);
 
-    expect($resolver->channelsFor($destination, ServiceWarning::class, 'error'))->toBe([TelegramChannel::class])
-        ->and($resolver->channelsFor($destination, ServiceWarning::class, 'info'))->toBe([]);
+    expect($preferenceResolver->channelsFor($destination, ServiceWarning::class, 'error'))->toBe([TelegramChannel::class])
+        ->and($preferenceResolver->channelsFor($destination, ServiceWarning::class, 'info'))->toBe([]);
 });
 
 test('a disabled destination resolves to no channels', function (): void {

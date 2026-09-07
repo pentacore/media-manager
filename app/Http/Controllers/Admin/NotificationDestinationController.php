@@ -66,21 +66,21 @@ class NotificationDestinationController extends Controller
     public function update(UpdateNotificationDestinationRequest $updateNotificationDestinationRequest, NotificationDestination $notificationDestination): RedirectResponse
     {
         $validated = $updateNotificationDestinationRequest->validated();
-        $type = PushChannelType::from($validated['channel']);
-        $config = $this->cleanConfig($type, $validated['config']);
+        $pushChannelType = PushChannelType::from($validated['channel']);
+        $config = $this->cleanConfig($pushChannelType, $validated['config']);
 
         // Blank encrypted fields mean "keep what is stored": the Discord URL
         // and the webhook secret are never prefilled in the edit dialog.
-        if ($type === PushChannelType::Discord && $config['url'] === null) {
+        if ($pushChannelType === PushChannelType::Discord && $config['url'] === null) {
             $config['url'] = $notificationDestination->config['url'] ?? null;
         }
 
-        if ($type === PushChannelType::Webhook && $config['secret'] === null) {
+        if ($pushChannelType === PushChannelType::Webhook && $config['secret'] === null) {
             $config['secret'] = $notificationDestination->config['secret'] ?? null;
         }
 
         $notificationDestination->update([
-            'channel' => $type,
+            'channel' => $pushChannelType,
             'label' => $validated['label'],
             'is_enabled' => (bool) ($validated['is_enabled'] ?? true),
             'min_severity' => $validated['min_severity'],
@@ -107,15 +107,13 @@ class NotificationDestinationController extends Controller
      */
     public function test(NotificationDestination $notificationDestination): RedirectResponse
     {
-        $channel = resolve($notificationDestination->channel->channelClass());
+        $pushChannel = resolve($notificationDestination->channel->channelClass());
         $route = $notificationDestination->routeNotificationFor($notificationDestination->channel->value);
 
         try {
-            if ($route === null || $route === '' || $route === []) {
-                throw new RuntimeException('Destination has no target configured.');
-            }
+            throw_if(in_array($route, [null, '', []], true), RuntimeException::class, 'Destination has no target configured.');
 
-            $channel->deliver($route, new PushMessage(
+            $pushChannel->deliver($route, new PushMessage(
                 severity: 'info',
                 title: __('MediaManager test notification'),
                 body: __(':label is wired up correctly.', ['label' => $notificationDestination->label]),
@@ -131,7 +129,7 @@ class NotificationDestinationController extends Controller
 
             throw ValidationException::withMessages([
                 'test' => __(':channel delivery failed: :error', [
-                    'channel' => $channel->label(),
+                    'channel' => $pushChannel->label(),
                     'error' => PushFailureMessage::for($throwable),
                 ]),
             ]);
