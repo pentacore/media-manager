@@ -7,14 +7,13 @@ namespace App\Jobs;
 use App\Ai\Agents\DecisionAgent;
 use App\Ai\Decision\DecisionRunContext;
 use App\Enums\AgentDecisionStatus;
-use App\Enums\UserRole;
 use App\Models\AgentDecision;
-use App\Models\User;
 use App\Models\WebhookEvent;
 use App\Notifications\DecisionAgentActed;
 use App\Providers\AIServiceProvider;
 use App\Services\AiBudget\AiBudgetExceededException;
 use App\Services\AiBudget\AiBudgetGuard;
+use App\Services\Notifications\AdminNotifier;
 use App\Settings\AiSettings;
 use App\Settings\DecisionAgentSettings;
 use Illuminate\Bus\Queueable;
@@ -25,7 +24,6 @@ use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Facades\Notification;
 use Illuminate\Support\Str;
 use Throwable;
 
@@ -238,12 +236,7 @@ PROMPT;
             default => 'suggested',
         };
 
-        $admins = User::query()->where('role', UserRole::Admin)->get();
-        if ($admins->isEmpty()) {
-            return;
-        }
-
-        Notification::send($admins, new DecisionAgentActed(
+        resolve(AdminNotifier::class)->send(new DecisionAgentActed(
             disposition: $disposition,
             actionCount: $decisionRunContext->count(),
             summary: Str::limit($summary, 500, '…'),

@@ -55,3 +55,36 @@ test('a saved empty ignore list overrides a non-empty config default', function 
 
     expect(resolve(AiSettings::class)->ignoredPricingProviders())->toBe([]);
 });
+
+test('auto-create pricing providers default to every provider except openrouter', function (): void {
+    expect(resolve(AiSettings::class)->autoCreatePricingProviders())
+        ->toBe(['openai', 'anthropic', 'gemini', 'xai', 'deepseek', 'mistral', 'groq', 'cohere']);
+});
+
+test('auto-create pricing providers fall back to the config default when unset', function (): void {
+    config()->set('mediamanager.ai.pricing.auto_create_providers', ['openai']);
+
+    expect(resolve(AiSettings::class)->autoCreatePricingProviders())->toBe(['openai']);
+});
+
+test('a saved auto-create provider list overrides and round-trips normalized', function (): void {
+    resolve(AiSettings::class)->setAutoCreatePricingProviders(['OpenRouter', ' groq ', '']);
+
+    expect(resolve(AiSettings::class)->autoCreatePricingProviders())->toBe(['openrouter', 'groq']);
+});
+
+test('a saved empty auto-create list makes every provider update-only', function (): void {
+    resolve(AiSettings::class)->setAutoCreatePricingProviders([]);
+
+    expect(resolve(AiSettings::class)->autoCreatePricingProviders())->toBe([]);
+});
+
+test('clearing the auto-create list restores the config default', function (): void {
+    config()->set('mediamanager.ai.pricing.auto_create_providers', ['openai']);
+    $aiSettings = resolve(AiSettings::class);
+
+    $aiSettings->setAutoCreatePricingProviders([]);
+    $aiSettings->setAutoCreatePricingProviders(null);
+
+    expect($aiSettings->autoCreatePricingProviders())->toBe(['openai']);
+});

@@ -49,6 +49,47 @@ class ExecuteActionRequest implements ShouldBeUnique, ShouldQueue
 
     public int $backoff = 30;
 
+    /**
+     * Every action type the queue can execute, mapped to its executor.
+     *
+     * This is the single source of truth for "known action types": the
+     * ActionTypeConfig seeder test asserts that every key here is seeded and
+     * every seeded type appears here, so a type added to one side without the
+     * other fails CI instead of silently no-op'ing at run time.
+     *
+     * @var array<string, class-string<ActionExecutor>>
+     */
+    public const array EXECUTORS = [
+        'delete_series' => SonarrActions::class,
+        'add_series' => SonarrActions::class,
+        'monitor_series' => SonarrActions::class,
+        'set_series_quality_profile' => SonarrActions::class,
+        'delete_movie' => RadarrActions::class,
+        'add_movie' => RadarrActions::class,
+        'monitor_movie' => RadarrActions::class,
+        'set_movie_quality_profile' => RadarrActions::class,
+        'whisparr_add_item' => WhisparrActions::class,
+        'whisparr_delete_item' => WhisparrActions::class,
+        'whisparr_monitor_item' => WhisparrActions::class,
+        'whisparr_set_quality_profile' => WhisparrActions::class,
+        'cleanup_seerr_request' => SeerrActions::class,
+        'approve_seerr_request' => SeerrActions::class,
+        'decline_seerr_request' => SeerrActions::class,
+        'emby_library_scan' => EmbyActions::class,
+        'resolve_manual_import' => ManualImportActions::class,
+        'remove_stuck_download' => RemoveStuckDownloadActions::class,
+        'replace_media_file' => MediaReplacementActions::class,
+        'bazarr_download_best' => BazarrActions::class,
+        'bazarr_download_exact' => BazarrActions::class,
+        'bazarr_upload_subtitle' => BazarrActions::class,
+        'bazarr_delete_subtitle' => BazarrActions::class,
+        'bazarr_sync_subtitle' => BazarrActions::class,
+        'bazarr_translate_subtitle' => BazarrActions::class,
+        'bazarr_modify_subtitle' => BazarrActions::class,
+        'bazarr_scan_media' => BazarrActions::class,
+        'bazarr_run_task' => BazarrActions::class,
+    ];
+
     public function __construct(public ActionRequest $actionRequest) {}
 
     public function handle(): void
@@ -191,26 +232,7 @@ class ExecuteActionRequest implements ShouldBeUnique, ShouldQueue
 
     private function resolveExecutor(string $type): ?ActionExecutor
     {
-        $class = match ($type) {
-            'delete_series', 'add_series', 'monitor_series', 'set_series_quality_profile' => SonarrActions::class,
-            'delete_movie', 'add_movie', 'monitor_movie', 'set_movie_quality_profile' => RadarrActions::class,
-            'whisparr_add_item', 'whisparr_delete_item', 'whisparr_monitor_item', 'whisparr_set_quality_profile' => WhisparrActions::class,
-            'cleanup_seerr_request', 'approve_seerr_request', 'decline_seerr_request' => SeerrActions::class,
-            'emby_library_scan' => EmbyActions::class,
-            'resolve_manual_import' => ManualImportActions::class,
-            'remove_stuck_download' => RemoveStuckDownloadActions::class,
-            'replace_media_file' => MediaReplacementActions::class,
-            'bazarr_download_best',
-            'bazarr_download_exact',
-            'bazarr_upload_subtitle',
-            'bazarr_delete_subtitle',
-            'bazarr_sync_subtitle',
-            'bazarr_translate_subtitle',
-            'bazarr_modify_subtitle',
-            'bazarr_scan_media',
-            'bazarr_run_task' => BazarrActions::class,
-            default => null,
-        };
+        $class = self::EXECUTORS[$type] ?? null;
 
         if ($class === null) {
             return null;

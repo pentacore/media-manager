@@ -5,13 +5,12 @@ declare(strict_types=1);
 namespace App\Console\Commands;
 
 use App\Enums\MediaReplacementStatus;
-use App\Enums\UserRole;
 use App\Events\MediaReplacementAttemptChanged;
 use App\Models\MediaReplacementAttempt;
-use App\Models\User;
 use App\Notifications\MediaReplacementStatusChanged;
 use App\Services\MediaReplacement\MediaReplacementExecutionLock;
 use App\Services\MediaReplacement\MediaReplacementTracker;
+use App\Services\Notifications\AdminNotifier;
 use Carbon\CarbonImmutable;
 use Illuminate\Console\Attributes\Description;
 use Illuminate\Console\Attributes\Signature;
@@ -19,7 +18,6 @@ use Illuminate\Console\Command;
 use Illuminate\Contracts\Database\Query\Builder;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Facades\Notification;
 use Throwable;
 
 #[Description('Flag media replacement attempts stuck in downloading past a timeout as needs_attention, so a stalled or silently-failed download does not leave the reviewed file deleted with no notification. Also restores monitoring on settled attempts whose suspension was never lifted.')]
@@ -56,7 +54,6 @@ class ReconcileMediaReplacementAttempts extends Command
             return self::SUCCESS;
         }
 
-        $admins = User::query()->where('role', UserRole::Admin)->get();
         $flagged = 0;
         $superseded = 0;
         $owned = 0;
@@ -145,15 +142,13 @@ class ReconcileMediaReplacementAttempts extends Command
                 // target silently stops getting upgrades forever.
                 $monitoringRestored = $mediaReplacementTracker->restoreSuspendedMonitoring($attempt);
 
-                if ($admins->isNotEmpty()) {
-                    Notification::send($admins, new MediaReplacementStatusChanged(
-                        service: (string) ($attempt->target['service'] ?? ''),
-                        title: (string) ($attempt->candidate['title'] ?? 'Media replacement'),
-                        message: $this->timeoutMessage($attempt, $hours, $monitoringRestored),
-                        level: 'warning',
-                        url: route('admin.media-replacement.attempts.show', $attempt, absolute: false),
-                    ));
-                }
+                resolve(AdminNotifier::class)->send(new MediaReplacementStatusChanged(
+                    service: (string) ($attempt->target['service'] ?? ''),
+                    title: (string) ($attempt->candidate['title'] ?? 'Media replacement'),
+                    message: $this->timeoutMessage($attempt, $hours, $monitoringRestored),
+                    level: 'warning',
+                    url: route('admin.media-replacement.attempts.show', $attempt, absolute: false),
+                ));
             } finally {
                 $executionLock->release();
             }

@@ -39,6 +39,10 @@ class AiSettings
 
     public const string IGNORED_PRICING_PROVIDERS_KEY = 'ai.pricing.ignored_providers';
 
+    public const string AUTO_CREATE_PRICING_PROVIDERS_KEY = 'ai.pricing.auto_create_providers';
+
+    public const string RATE_LIMITS_ENFORCED_KEY = 'ai.rate_limits.enforce';
+
     /**
      * Per-request override that takes precedence over the persisted mode.
      * Used by the chat surface so a user can flip between Advisory and
@@ -217,6 +221,33 @@ class AiSettings
     }
 
     /**
+     * Whether configured per-model rate limits block provider calls once
+     * their rolling window is exhausted. The config value
+     * (`MEDIAMANAGER_AI_ENFORCE_RATE_LIMITS`) is only the default until an
+     * admin saves an explicit value; a saved value then overrides env. Read
+     * fresh on every call so an unset value keeps tracking config.
+     */
+    public function rateLimitsEnforced(): bool
+    {
+        $stored = $this->appSettings->get(self::RATE_LIMITS_ENFORCED_KEY);
+
+        if ($stored === null) {
+            return (bool) config('mediamanager.ai.rate_limits.enforce', false);
+        }
+
+        return (bool) $stored;
+    }
+
+    /**
+     * Persist the enforcement gate. A null value clears the setting so the
+     * gate falls back to the config default again.
+     */
+    public function setRateLimitsEnforced(?bool $enforced): void
+    {
+        $this->appSettings->set(self::RATE_LIMITS_ENFORCED_KEY, $enforced);
+    }
+
+    /**
      * Providers excluded from every automatic pricing path (feed sync, agent
      * fallback, CLI scope). The config value (`AI_PRICING_IGNORED_PROVIDERS`)
      * is only the default until an admin saves an explicit list; a saved list
@@ -246,6 +277,43 @@ class AiSettings
         $this->appSettings->set(
             self::IGNORED_PRICING_PROVIDERS_KEY,
             $this->normalizeProviderList($providers),
+        );
+    }
+
+    /**
+     * Providers whose newly reported models the automatic price refresh may
+     * add to the catalog. Every other provider is update-only: its stored rows
+     * keep refreshing, but models it newly reports are skipped. The config
+     * value (`AI_PRICING_AUTO_CREATE_PROVIDERS`) is only the default until an
+     * admin saves an explicit list; a saved list (including an empty one) then
+     * overrides env.
+     *
+     * @return list<string>
+     */
+    public function autoCreatePricingProviders(): array
+    {
+        $stored = $this->appSettings->get(self::AUTO_CREATE_PRICING_PROVIDERS_KEY);
+
+        if (! is_array($stored)) {
+            /** @var list<string> $stored */
+            $stored = config('mediamanager.ai.pricing.auto_create_providers', []);
+        }
+
+        return $this->normalizeProviderList($stored);
+    }
+
+    /**
+     * Persist the auto-create provider list as a normalized string list. A
+     * null value clears the setting so the list falls back to the config
+     * default again.
+     *
+     * @param  list<string>|null  $providers
+     */
+    public function setAutoCreatePricingProviders(?array $providers): void
+    {
+        $this->appSettings->set(
+            self::AUTO_CREATE_PRICING_PROVIDERS_KEY,
+            $providers === null ? null : $this->normalizeProviderList($providers),
         );
     }
 
@@ -319,7 +387,11 @@ class AiSettings
         ];
     }
 
-    private function primaryProvider(): Lab
+    /**
+     * The provider every agent talks to first (`ai.default`), before any
+     * failover.
+     */
+    public function primaryProvider(): Lab
     {
         return Lab::tryFrom((string) config('ai.default', 'openai')) ?? Lab::OpenAI;
     }

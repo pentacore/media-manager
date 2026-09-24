@@ -33,7 +33,9 @@ class AiSettingsController extends Controller
                 'chat_timeout' => $aiSettings->chatTimeout(),
                 'failover_provider' => $aiSettings->failoverProvider()?->value ?? 'none',
                 'models_dev_pricing_enabled' => $aiSettings->modelsDevPricingEnabled(),
-                'ignored_pricing_providers' => $aiSettings->ignoredPricingProviders(),
+                'rate_limits_enforced' => $aiSettings->rateLimitsEnforced(),
+                'ignored_pricing_providers' => $this->canonicalPricingProviders($aiSettings->ignoredPricingProviders()),
+                'auto_create_pricing_providers' => $this->canonicalPricingProviders($aiSettings->autoCreatePricingProviders()),
             ],
             'budget' => [
                 'spend' => round($aiBudgetGuard->currentMonthSpend(), 4),
@@ -52,7 +54,7 @@ class AiSettingsController extends Controller
                 ['value' => Lab::Groq->value, 'label' => 'Groq'],
                 ['value' => Lab::Mistral->value, 'label' => 'Mistral'],
             ],
-            'ignorablePricingProviders' => $this->ignorablePricingProviders(),
+            'pricingProviders' => $this->pricingProviders(),
         ]);
     }
 
@@ -82,12 +84,12 @@ class AiSettingsController extends Controller
     }
 
     /**
-     * Canonical pricing providers offered as ignore-list options, in configured
-     * catalog order with human-friendly labels.
+     * Canonical pricing providers offered as ignore-list and auto-create
+     * options, in configured catalog order with human-friendly labels.
      *
      * @return list<array{value: string, label: string}>
      */
-    private function ignorablePricingProviders(): array
+    private function pricingProviders(): array
     {
         /** @var array<string, string> $map */
         $map = config('mediamanager.ai.pricing.providers', []);
@@ -112,6 +114,32 @@ class AiSettingsController extends Controller
                 'label' => $labels[$provider] ?? ucfirst($provider),
             ])
             ->all();
+    }
+
+    /**
+     * Map a provider list that may use upstream spellings (for example an env
+     * default naming `google`) onto the canonical identities the checkboxes and
+     * validation use, dropping unknown entries so a save round-trips cleanly.
+     *
+     * @param  list<string>  $providers
+     * @return list<string>
+     */
+    private function canonicalPricingProviders(array $providers): array
+    {
+        /** @var array<string, string> $map */
+        $map = config('mediamanager.ai.pricing.providers', []);
+
+        $canonical = [];
+
+        foreach ($providers as $provider) {
+            $id = $map[$provider] ?? (in_array($provider, $map, true) ? $provider : null);
+
+            if ($id !== null && ! in_array($id, $canonical, true)) {
+                $canonical[] = $id;
+            }
+        }
+
+        return $canonical;
     }
 
     public function update(
@@ -142,6 +170,18 @@ class AiSettingsController extends Controller
                 : null,
         );
         $aiSettings->setIgnoredPricingProviders($validated['ignored_pricing_providers'] ?? []);
+
+        // Absent means "not submitted" (leave the saved list alone); the page
+        // always submits it, as an empty list when every box is unchecked.
+        if (array_key_exists('auto_create_pricing_providers', $validated)) {
+            $aiSettings->setAutoCreatePricingProviders($validated['auto_create_pricing_providers']);
+        }
+
+        $aiSettings->setRateLimitsEnforced(
+            array_key_exists('rate_limits_enforced', $validated)
+                ? (bool) $validated['rate_limits_enforced']
+                : null,
+        );
 
         Inertia::flash('toast', ['type' => 'success', 'message' => __('AI settings updated.')]);
 

@@ -84,3 +84,24 @@ test('a saved ignore list overrides the config default', function (): void {
     expect($refreshScope->allowsProvider('groq'))->toBeFalse()
         ->and($refreshScope->allowsProvider('cohere'))->toBeTrue();
 });
+
+test('create permission follows the saved auto-create list, in either provider spelling', function (): void {
+    resolve(AiSettings::class)->setAutoCreatePricingProviders(['google', 'openrouter']);
+
+    $refreshScope = RefreshScope::all();
+
+    expect($refreshScope->allowsCreate('gemini'))->toBeTrue()
+        ->and($refreshScope->allowsCreate('google'))->toBeTrue()
+        ->and($refreshScope->allowsCreate('openrouter'))->toBeTrue()
+        ->and($refreshScope->allowsCreate('openai'))->toBeFalse();
+});
+
+test('an ignored or unsupported provider never creates even when on the auto-create list', function (): void {
+    resolve(AiSettings::class)->setAutoCreatePricingProviders(['groq', 'not-a-provider']);
+    resolve(AiSettings::class)->setIgnoredPricingProviders(['groq']);
+
+    $refreshScope = RefreshScope::all();
+
+    expect($refreshScope->allowsCreate('groq'))->toBeFalse()
+        ->and($refreshScope->allowsCreate('not-a-provider'))->toBeFalse();
+});

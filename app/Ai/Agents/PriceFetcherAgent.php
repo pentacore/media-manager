@@ -245,9 +245,15 @@ class PriceFetcherAgent implements Agent, HasMiddleware, HasTools
             $scopeModels = $this->scope?->modelsFor($provider);
             $checklist = $this->modelChecklists[$provider] ?? [];
 
+            $createsNewModels = $this->scope?->allowsCreate($provider) ?? false;
+
             $focus = match (true) {
                 // Scope narrows this provider to exact models: verify only those.
                 $scopeModels !== null && $scopeModels !== [] => 'only these models: '.implode(', ', $scopeModels),
+                // Update-only provider: new models are refused by the write
+                // tool, so point the agent at the stored rows alone.
+                ! $createsNewModels && $checklist !== [] => 'only these currently-stored models (adding new models is disabled for this provider): '.implode(', ', $checklist),
+                ! $createsNewModels => 'only models already in the catalog (adding new models is disabled for this provider)',
                 // Wildcard provider with a stored-model checklist: verify the
                 // whole catalog, and at minimum re-confirm each stored model
                 // (scope stays wide so newly published models remain writable).

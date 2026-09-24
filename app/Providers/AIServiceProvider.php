@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Providers;
 
 use App\Ai\Storage\HealingConversationStore;
+use App\Listeners\Ai\EnforceAiRateLimit;
 use App\Listeners\Ai\RecordAgentUsage;
 use App\Services\AiUsage\BatchPricingContext;
 use Illuminate\Contracts\Foundation\Application;
@@ -12,6 +13,7 @@ use Illuminate\Support\Facades\Event;
 use Illuminate\Support\ServiceProvider;
 use Laravel\Ai\Contracts\ConversationStore;
 use Laravel\Ai\Events\AgentStreamed;
+use Laravel\Ai\Events\StreamingAgent;
 use Override;
 
 class AIServiceProvider extends ServiceProvider
@@ -43,9 +45,14 @@ class AIServiceProvider extends ServiceProvider
     // usage and the budget guard goes blind. RecordAgentUsage dedupes by
     // invocation_id, so environments that dispatch both events (the fake
     // gateway) still produce exactly one row.
+    //
+    // EnforceAiRateLimit has the same shape: discovery binds it to
+    // PromptingAgent, and the streaming gateway dispatches only the
+    // StreamingAgent subclass, which needs its own registration.
     public function boot(): void
     {
         Event::listen(AgentStreamed::class, RecordAgentUsage::class);
+        Event::listen(StreamingAgent::class, EnforceAiRateLimit::class);
     }
 
     public static function enabled(): bool

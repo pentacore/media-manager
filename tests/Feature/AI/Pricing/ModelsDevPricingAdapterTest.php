@@ -8,6 +8,7 @@ use App\Services\AiUsage\Pricing\Data\PricingWarning;
 use App\Services\AiUsage\Pricing\Data\ProviderPricingResult;
 use App\Services\AiUsage\Pricing\ModelsDevPricingAdapter;
 use App\Services\AiUsage\Pricing\RefreshScope;
+use App\Settings\AiSettings;
 
 /**
  * Decode the shared Models.dev fixture as an associative provider map.
@@ -648,4 +649,14 @@ test('a list-shaped model collection is malformed, not a valid provider slice', 
 
     expect(candidateModels($results['openai']))->toBeEmpty()
         ->and($results['openai']->rejections[0]->code)->toBe(PricingRejection::MALFORMED_PROVIDER);
+});
+
+test('flags create suppression from the saved auto-create list for every provider', function (): void {
+    resolve(AiSettings::class)->setAutoCreatePricingProviders(['openrouter']);
+
+    $results = new ModelsDevPricingAdapter()->adapt(modelsDevDecoded(), RefreshScope::all());
+
+    expect($results['openrouter']->createSuppressed)->toBeFalse()
+        ->and($results['openai']->createSuppressed)->toBeTrue()
+        ->and($results['anthropic']->createSuppressed)->toBeTrue();
 });

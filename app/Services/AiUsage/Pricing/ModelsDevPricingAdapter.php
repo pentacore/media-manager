@@ -22,8 +22,9 @@ use DateTimeImmutable;
  * anomaly detection, and create-vs-update decisions belong to the writer and
  * coordinator, not here.
  *
- * Because it cannot query existing rows, OpenRouter's "update existing only,
- * never create" rule is represented as {@see ProviderPricingResult::$createSuppressed}
+ * Because it cannot query existing rows, an update-only provider's "update
+ * existing only, never create" rule (any provider missing from the auto-create
+ * provider list) is represented as {@see ProviderPricingResult::$createSuppressed}
  * on the result rather than by consulting the catalog; the writer still enforces
  * the rule through scope.
  */
@@ -111,7 +112,7 @@ final class ModelsDevPricingAdapter
      */
     private function adaptProvider(string $provider, mixed $providerData, RefreshScope $refreshScope): ProviderPricingResult
     {
-        $createSuppressed = $provider === 'openrouter' && ! $refreshScope->isOpenRouterCreateAllowed();
+        $createSuppressed = ! $refreshScope->allowsCreate($provider);
 
         $models = is_array($providerData) ? ($providerData['models'] ?? null) : null;
 

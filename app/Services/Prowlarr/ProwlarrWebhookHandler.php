@@ -4,15 +4,13 @@ declare(strict_types=1);
 
 namespace App\Services\Prowlarr;
 
-use App\Enums\UserRole;
 use App\Enums\WebhookHandlingStatus;
 use App\Jobs\FetchLatestServiceVersion;
 use App\Jobs\PingServiceHealth;
-use App\Models\User;
 use App\Models\WebhookEvent;
 use App\Notifications\ServiceWarning;
+use App\Services\Notifications\AdminNotifier;
 use App\Services\Webhook\AbstractWebhookHandler;
-use Illuminate\Support\Facades\Notification;
 
 class ProwlarrWebhookHandler extends AbstractWebhookHandler
 {
@@ -84,15 +82,12 @@ class ProwlarrWebhookHandler extends AbstractWebhookHandler
             return;
         }
 
-        $admins = User::query()->where('role', UserRole::Admin)->get();
-        if ($admins->isNotEmpty()) {
-            Notification::send($admins, new ServiceWarning(
-                service: 'prowlarr',
-                title: (string) ($payload['type'] ?? 'Prowlarr health'),
-                message: $message,
-                level: $level,
-            ));
-        }
+        resolve(AdminNotifier::class)->send(new ServiceWarning(
+            service: 'prowlarr',
+            title: (string) ($payload['type'] ?? 'Prowlarr health'),
+            message: $message,
+            level: $level,
+        ));
     }
 
     /**

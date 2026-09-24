@@ -4,12 +4,16 @@ declare(strict_types=1);
 
 use App\Ai\Agents\MediaAgent;
 use App\Jobs\Ai\GenerateConversationTitle;
+use App\Models\AiModelPrice;
 use App\Models\User;
+use App\Settings\AiSettings;
 use Illuminate\Foundation\Http\Middleware\PreventRequestForgery;
 use Illuminate\Support\Facades\Bus;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
+use Laravel\Ai\Enums\Lab;
+use Laravel\Ai\Exceptions\RateLimitedException;
 
 beforeEach(function (): void {
     config()->set('inertia.ssr.enabled', false);
@@ -180,4 +184,71 @@ test('exception messages are surfaced to the client in local env', function (): 
 
     expect($response->json('error'))->toBe('AI request failed.');
     expect($response->json('message'))->toBe('LOCAL-DEBUG-DETAIL');
+});
+
+/**
+ * Exhaust a one-request-per-minute limit on the configured chat model.
+ */
+function exhaustChatModelRateLimit(): void
+{
+    resolve(AiSettings::class)->setRateLimitsEnforced(true);
+
+    $price = AiModelPrice::factory()->create(['provider' => 'openai', 'model' => resolve(AiSettings::class)->model()]);
+    $price->rateLimits()->create(['metric' => 'requests', 'period' => 'minute', 'limit_value' => 1]);
+
+    DB::table('ai_usage_records')->insert([
+        'invocation_id' => 'inv-'.uniqid(),
+        'agent_class' => 'TestAgent',
+        'provider' => 'openai',
+        'model' => resolve(AiSettings::class)->model(),
+        'prompt_tokens' => 10,
+        'completion_tokens' => 5,
+        'cache_read_input_tokens' => 0,
+        'cache_write_input_tokens' => 0,
+        'reasoning_tokens' => 0,
+        'tool_calls_count' => 0,
+        'status' => 'success',
+        'created_at' => now(),
+        'updated_at' => now(),
+    ]);
+}
+
+test('send refuses with 429 when the chat model has exhausted its rate limit and no failover is configured', function (): void {
+    exhaustChatModelRateLimit();
+    MediaAgent::fake(['Should never run.']);
+    $admin = User::factory()->admin()->create();
+
+    $response = $this->actingAs($admin)
+        ->postJson(route('ai.chat.send'), ['message' => 'hi'])
+        ->assertStatus(429);
+
+    expect($response->json('error'))->toBe('rate_limited')
+        ->and($response->json('message'))->toContain('Rate limit reached for openai/');
+
+    expect($response->getContent())->not->toContain('Should never run.');
+});
+
+test('send lets an exhausted primary through when a failover provider can take the turn', function (): void {
+    exhaustChatModelRateLimit();
+    resolve(AiSettings::class)->setFailoverProvider(Lab::Anthropic);
+    MediaAgent::fake(['Served by the failover.']);
+    $admin = User::factory()->admin()->create();
+
+    $response = $this->actingAs($admin)
+        ->postJson(route('ai.chat.send'), ['message' => 'hi'])
+        ->assertOk();
+
+    expect($response->json('text'))->toBe('Served by the failover.');
+});
+
+test('send maps a rate limit raised during the run to 429 instead of a generic failure', function (): void {
+    MediaAgent::fake(fn (): never => throw RateLimitedException::forProvider('openai'));
+    $admin = User::factory()->admin()->create();
+
+    $response = $this->actingAs($admin)
+        ->postJson(route('ai.chat.send'), ['message' => 'hi'])
+        ->assertStatus(429);
+
+    expect($response->json('error'))->toBe('rate_limited')
+        ->and($response->json('message'))->toContain('rate limited');
 });

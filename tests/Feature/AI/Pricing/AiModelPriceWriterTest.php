@@ -14,6 +14,7 @@ use App\Services\AiUsage\Pricing\Data\ModelPriceCandidate;
 use App\Services\AiUsage\Pricing\Data\WriteOutcome;
 use App\Services\AiUsage\Pricing\PricingAnomalyPolicy;
 use App\Services\AiUsage\Pricing\RefreshScope;
+use App\Settings\AiSettings;
 
 /**
  * Build a candidate whose field map uses the exact AiModelPrice column names.
@@ -124,8 +125,9 @@ describe('RefreshScope', function (): void {
     });
 
     it('defaults OpenRouter create to disallowed', function (): void {
-        expect(RefreshScope::all()->isOpenRouterCreateAllowed())->toBeFalse()
-            ->and(RefreshScope::forProviders(['openrouter'])->isOpenRouterCreateAllowed())->toBeFalse();
+        expect(RefreshScope::all()->allowsCreate('openrouter'))->toBeFalse()
+            ->and(RefreshScope::forProviders(['openrouter'])->allowsCreate('openrouter'))->toBeFalse()
+            ->and(RefreshScope::all()->allowsCreate('openai'))->toBeTrue();
     });
 });
 
@@ -138,7 +140,8 @@ describe('WriteOutcome', function (): void {
             ->and(WriteOutcome::Rejected->value)->toBe('rejected')
             ->and(WriteOutcome::RejectedAnomalous->value)->toBe('rejected_anomalous')
             ->and(WriteOutcome::WouldCreate->value)->toBe('would_create')
-            ->and(WriteOutcome::WouldUpdate->value)->toBe('would_update');
+            ->and(WriteOutcome::WouldUpdate->value)->toBe('would_update')
+            ->and(WriteOutcome::CreateDisabled->value)->toBe('create_disabled');
     });
 });
 
@@ -756,7 +759,7 @@ describe('AiModelPriceWriter', function (): void {
         expect($row->input_per_mtok)->toBe('1.0000');
     });
 
-    it('rejects creating a new OpenRouter row but updates an existing one', function (): void {
+    it('skips creating a new OpenRouter row but updates an existing one', function (): void {
         $modelPriceCandidate = priceCandidate('openrouter', 'vendor/new-model', [
             'input_per_mtok' => '1.0000',
             'output_per_mtok' => '2.0000',
@@ -764,7 +767,7 @@ describe('AiModelPriceWriter', function (): void {
 
         $writeOutcome = priceWriter()->write($modelPriceCandidate, RefreshScope::all(), PricingSource::ModelsDev);
 
-        expect($writeOutcome)->toBe(WriteOutcome::Rejected)
+        expect($writeOutcome)->toBe(WriteOutcome::CreateDisabled)
             ->and(AiModelPrice::query()->where('provider', 'openrouter')->exists())->toBeFalse();
 
         $existing = AiModelPrice::factory()->create([
@@ -918,4 +921,70 @@ describe('identifier hygiene', function (): void {
         expect($writeOutcome)->toBe(WriteOutcome::Created)
             ->and(AiModelPrice::query()->where('model', 'gpt-5-mini')->exists())->toBeTrue();
     });
+});
+
+test('creates a new OpenRouter row once OpenRouter is on the auto-create list', function (): void {
+    resolve(AiSettings::class)->setAutoCreatePricingProviders(['openrouter']);
+
+    $writeOutcome = priceWriter()->write(
+        priceCandidate('openrouter', 'vendor/new-model', ['input_per_mtok' => '1.0000', 'output_per_mtok' => '2.0000']),
+        RefreshScope::all(),
+        PricingSource::ModelsDev,
+    );
+
+    expect($writeOutcome)->toBe(WriteOutcome::Created)
+        ->and(AiModelPrice::query()->where('provider', 'openrouter')->where('model', 'vendor/new-model')->exists())->toBeTrue();
+});
+
+test('an update-only provider skips new models but keeps updating stored rows', function (): void {
+    resolve(AiSettings::class)->setAutoCreatePricingProviders(['anthropic']);
+
+    $existing = AiModelPrice::factory()->create([
+        'provider' => 'openai',
+        'model' => 'gpt-5-mini',
+        'input_per_mtok' => '1.0000',
+        'output_per_mtok' => '2.0000',
+    ]);
+
+    $writeOutcome = priceWriter()->write(
+        priceCandidate('openai', 'gpt-9', ['input_per_mtok' => '1.0000', 'output_per_mtok' => '2.0000']),
+        RefreshScope::all(),
+        PricingSource::ModelsDev,
+    );
+
+    $updateOutcome = priceWriter()->write(
+        priceCandidate('openai', 'gpt-5-mini', ['input_per_mtok' => '1.5000']),
+        RefreshScope::all(),
+        PricingSource::ModelsDev,
+    );
+
+    expect($writeOutcome)->toBe(WriteOutcome::CreateDisabled)
+        ->and(AiModelPrice::query()->where('model', 'gpt-9')->exists())->toBeFalse()
+        ->and($updateOutcome)->toBe(WriteOutcome::Updated)
+        ->and($existing->refresh()->input_per_mtok)->toBe('1.5000');
+});
+
+test('a dry run reports create disabled rather than would create for an update-only provider', function (): void {
+    resolve(AiSettings::class)->setAutoCreatePricingProviders([]);
+
+    $writeOutcome = priceWriter()->write(
+        priceCandidate('anthropic', 'claude-new', ['input_per_mtok' => '1.0000', 'output_per_mtok' => '2.0000']),
+        RefreshScope::all(),
+        PricingSource::ModelsDev,
+        dryRun: true,
+    );
+
+    expect($writeOutcome)->toBe(WriteOutcome::CreateDisabled);
+});
+
+test('an invalid new-model candidate is still rejected for an update-only provider', function (): void {
+    resolve(AiSettings::class)->setAutoCreatePricingProviders([]);
+
+    $writeOutcome = priceWriter()->write(
+        priceCandidate('anthropic', 'claude-new', ['input_per_mtok' => '1.0000']),
+        RefreshScope::all(),
+        PricingSource::ModelsDev,
+    );
+
+    expect($writeOutcome)->toBe(WriteOutcome::Rejected);
 });

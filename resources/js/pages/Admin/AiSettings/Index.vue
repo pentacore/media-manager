@@ -40,10 +40,12 @@ interface AiSettingsState {
     chat_timeout: number;
     failover_provider: string;
     models_dev_pricing_enabled: boolean;
+    rate_limits_enforced: boolean;
     ignored_pricing_providers: string[];
+    auto_create_pricing_providers: string[];
 }
 
-interface IgnorableProviderOption {
+interface PricingProviderOption {
     value: string;
     label: string;
 }
@@ -62,7 +64,7 @@ const props = defineProps<{
     models: Record<string, string[]>;
     reasoningLevels: SelectOptionGroup<AiReasoningLevel>;
     failoverProviders: FailoverProviderOption[];
-    ignorablePricingProviders: IgnorableProviderOption[];
+    pricingProviders: PricingProviderOption[];
 }>();
 
 defineOptions({
@@ -80,8 +82,12 @@ const titleModel = ref(props.settings.title_model);
 const selectedReasoningLevel = ref(props.settings.advisor_reasoning_level);
 const selectedFailoverProvider = ref(props.settings.failover_provider);
 const modelsDevPricingEnabled = ref(props.settings.models_dev_pricing_enabled);
+const rateLimitsEnforced = ref(props.settings.rate_limits_enforced);
 const ignoredPricingProviders = ref<string[]>([
     ...props.settings.ignored_pricing_providers,
+]);
+const autoCreatePricingProviders = ref<string[]>([
+    ...props.settings.auto_create_pricing_providers,
 ]);
 
 function formatUsd(value: number | null): string {
@@ -438,6 +444,38 @@ const budgetState = computed<{
                 </div>
 
                 <div
+                    class="grid items-start gap-6"
+                    style="grid-template-columns: 200px 1fr"
+                >
+                    <Field
+                        label="Model rate limits"
+                        hint="When enforced, a model whose per-minute/hour/day limit (set on the AI Prices page) is already used up is refused, and the failover provider takes the turn if one is configured. When informational, limits are only shown on the AI Usage page."
+                    >
+                        <span />
+                    </Field>
+                    <div>
+                        <Toggle
+                            v-model="rateLimitsEnforced"
+                            data-rate-limits-toggle
+                            :label="
+                                rateLimitsEnforced
+                                    ? 'Enforced'
+                                    : 'Informational'
+                            "
+                        />
+                        <input
+                            type="hidden"
+                            name="rate_limits_enforced"
+                            :value="rateLimitsEnforced ? '1' : '0'"
+                        />
+                        <InputError
+                            :message="errors.rate_limits_enforced"
+                            class="mt-1"
+                        />
+                    </div>
+                </div>
+
+                <div
                     class="rounded-md border border-border bg-bg-elev px-3 py-2.5 text-[12px]"
                 >
                     <div class="flex items-center justify-between gap-3">
@@ -540,7 +578,7 @@ const budgetState = computed<{
                         <div>
                             <div class="flex flex-col gap-2">
                                 <label
-                                    v-for="provider in ignorablePricingProviders"
+                                    v-for="provider in pricingProviders"
                                     :key="provider.value"
                                     :for="`ignore-provider-${provider.value}`"
                                     class="flex cursor-pointer items-center gap-2 text-[13px]"
@@ -564,6 +602,69 @@ const budgetState = computed<{
                             />
                             <InputError
                                 :message="errors.ignored_pricing_providers"
+                                class="mt-1"
+                            />
+                        </div>
+                    </div>
+
+                    <div
+                        class="grid items-start gap-6"
+                        style="grid-template-columns: 200px 1fr"
+                    >
+                        <Field
+                            label="Add new models"
+                            hint="The refresh adds models these providers newly report to the catalog. Unchecked providers are update-only: their existing prices keep refreshing, but new models are skipped."
+                        >
+                            <span />
+                        </Field>
+                        <div data-auto-create-providers>
+                            <div class="flex flex-col gap-2">
+                                <label
+                                    v-for="provider in pricingProviders"
+                                    :key="provider.value"
+                                    :for="`auto-create-provider-${provider.value}`"
+                                    class="flex cursor-pointer items-center gap-2 text-[13px]"
+                                >
+                                    <input
+                                        :id="`auto-create-provider-${provider.value}`"
+                                        type="checkbox"
+                                        :value="provider.value"
+                                        v-model="autoCreatePricingProviders"
+                                        :disabled="
+                                            ignoredPricingProviders.includes(
+                                                provider.value,
+                                            )
+                                        "
+                                        class="size-4 rounded border-border accent-accent disabled:cursor-not-allowed disabled:opacity-50"
+                                    />
+                                    {{ provider.label }}
+                                    <span
+                                        v-if="
+                                            ignoredPricingProviders.includes(
+                                                provider.value,
+                                            )
+                                        "
+                                        class="text-[12px] text-muted-foreground"
+                                    >
+                                        (ignored)
+                                    </span>
+                                </label>
+                            </div>
+                            <!-- Blank placeholder so an all-unchecked list still submits as an empty list. -->
+                            <input
+                                type="hidden"
+                                name="auto_create_pricing_providers[]"
+                                value=""
+                            />
+                            <input
+                                v-for="provider in autoCreatePricingProviders"
+                                :key="provider"
+                                type="hidden"
+                                name="auto_create_pricing_providers[]"
+                                :value="provider"
+                            />
+                            <InputError
+                                :message="errors.auto_create_pricing_providers"
                                 class="mt-1"
                             />
                         </div>

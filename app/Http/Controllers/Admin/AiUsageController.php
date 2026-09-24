@@ -10,6 +10,7 @@ use App\Models\AiModelPrice;
 use App\Models\AiUsageRecord;
 use App\Services\AiUsage\AiUsageReporting;
 use App\Services\AiUsage\Scenario;
+use App\Settings\AiSettings;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -19,7 +20,7 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class AiUsageController extends Controller
 {
-    public function index(Request $request, AiUsageReporting $aiUsageReporting): Response
+    public function index(Request $request, AiUsageReporting $aiUsageReporting, AiSettings $aiSettings): Response
     {
         $timeWindow = TimeWindow::fromRequest($request->string('window')->value() ?: null);
         $since = $timeWindow->cutoff();
@@ -42,8 +43,10 @@ class AiUsageController extends Controller
             // so no window argument is passed.
             'free_pools' => $aiUsageReporting->freePoolStatus(),
             // Usage vs configured provider rate limits over rolling
-            // windows; display only.
+            // windows. Enforced by AiRateLimitGuard only when the admin has
+            // switched enforcement on; the page words the card accordingly.
             'rate_limits' => $aiUsageReporting->rateLimitStatus(),
+            'rate_limits_enforced' => $aiSettings->rateLimitsEnforced(),
         ];
 
         if ($scenario instanceof Scenario) {

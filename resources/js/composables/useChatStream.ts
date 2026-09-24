@@ -62,11 +62,13 @@ export async function streamChat(
         const data = await response
             .json()
             .catch(() => ({}) as Record<string, unknown>);
+        // `message` is the human-readable explanation (budget cap, rate
+        // limit); `error` is either a short code or a generic sentence.
         const message =
-            typeof data.error === 'string'
-                ? data.error
-                : typeof data.message === 'string'
-                  ? data.message
+            typeof data.message === 'string'
+                ? data.message
+                : typeof data.error === 'string'
+                  ? data.error
                   : `Request failed (${response.status})`;
 
         throw new Error(message);

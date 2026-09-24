@@ -5,14 +5,12 @@ declare(strict_types=1);
 namespace App\Services\Whisparr;
 
 use App\Cache\Services\WhisparrCache;
-use App\Enums\UserRole;
 use App\Enums\WebhookHandlingStatus;
-use App\Models\User;
 use App\Models\WebhookEvent;
 use App\Notifications\ServiceWarning;
 use App\Services\Library\InterventionCounter;
+use App\Services\Notifications\AdminNotifier;
 use App\Services\Webhook\AbstractWebhookHandler;
-use Illuminate\Support\Facades\Notification;
 
 class WhisparrWebhookHandler extends AbstractWebhookHandler
 {
@@ -184,15 +182,12 @@ class WhisparrWebhookHandler extends AbstractWebhookHandler
             return;
         }
 
-        $admins = User::query()->where('role', UserRole::Admin)->get();
-        if ($admins->isNotEmpty()) {
-            Notification::send($admins, new ServiceWarning(
-                service: 'whisparr',
-                title: (string) ($payload['type'] ?? 'Whisparr health'),
-                message: $message,
-                level: $level,
-            ));
-        }
+        resolve(AdminNotifier::class)->send(new ServiceWarning(
+            service: 'whisparr',
+            title: (string) ($payload['type'] ?? 'Whisparr health'),
+            message: $message,
+            level: $level,
+        ));
     }
 
     /**

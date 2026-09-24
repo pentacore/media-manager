@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use App\Jobs\ExecuteActionRequest;
 use App\Models\ActionTypeConfig;
 use Database\Seeders\ActionTypeConfigSeeder;
 
@@ -39,11 +40,17 @@ test('seeder preserves admin-owned toggles on existing rows but refreshes copy',
 test('every action type mapped by the executor is seeded', function (): void {
     $this->seed(ActionTypeConfigSeeder::class);
 
-    foreach ([
-        'whisparr_add_item', 'whisparr_delete_item', 'whisparr_monitor_item', 'whisparr_set_quality_profile',
-        'replace_media_file', 'bazarr_download_best',
-    ] as $type) {
-        expect(ActionTypeConfig::query()->where('type', $type)->exists())
-            ->toBeTrue("missing seeded action type: {$type}");
-    }
+    $seeded = ActionTypeConfig::query()->pluck('type')->all();
+
+    // Empty on success; otherwise lists the executor-mapped types missing from the seeder.
+    expect(array_values(array_diff(array_keys(ExecuteActionRequest::EXECUTORS), $seeded)))->toBe([]);
+});
+
+test('every seeded action type has an executor', function (): void {
+    $this->seed(ActionTypeConfigSeeder::class);
+
+    $seeded = ActionTypeConfig::query()->pluck('type')->all();
+
+    // Empty on success; otherwise lists seeded types the queue would fail with no_executor.
+    expect(array_values(array_diff($seeded, array_keys(ExecuteActionRequest::EXECUTORS))))->toBe([]);
 });
