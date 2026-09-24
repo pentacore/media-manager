@@ -50,8 +50,18 @@ test('ActionRequestCreated broadcasts on the shared members.actions channel', fu
         'id', 'type', 'source_service', 'target_service', 'status',
         'requires_approval', 'payload', 'result', 'approved_by',
         'webhook_source', 'created_at', 'updated_at',
+        'title', 'description', 'details', 'description_verified', 'agent_rationale',
     ]);
     expect($payload['id'])->toBe($actionRequest->id);
+
+    $describedActionRequest = ActionRequest::factory()->described()->create();
+    $describedPayload = new ActionRequestCreated($describedActionRequest)->broadcastWith();
+
+    expect($describedPayload['title'])->toBe('Delete series "Severance (2022)"');
+    expect($describedPayload['details'])->toBe([
+        ['label' => 'Series', 'value' => 'Severance (2022)'],
+        ['label' => 'Delete files', 'value' => 'Yes'],
+    ]);
 });
 
 test('ActionRequestCreated strips sensitive detail from broadcast payload', function (): void {
