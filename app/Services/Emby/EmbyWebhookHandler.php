@@ -9,13 +9,17 @@ use App\Events\EmbyPlaybackUpdated;
 use App\Models\EmbyActivity;
 use App\Models\EmbyUserLink;
 use App\Models\WebhookEvent;
+use App\Services\Actions\ActionDescriber;
 use App\Services\Actions\ActionOrchestrator;
 use App\Services\Webhook\AbstractWebhookHandler;
 use Illuminate\Support\Facades\Log;
 
 class EmbyWebhookHandler extends AbstractWebhookHandler
 {
-    public function __construct(private readonly ActionOrchestrator $actionOrchestrator) {}
+    public function __construct(
+        private readonly ActionOrchestrator $actionOrchestrator,
+        private readonly ActionDescriber $actionDescriber,
+    ) {}
 
     protected function serviceSlug(): string
     {
@@ -162,6 +166,10 @@ class EmbyWebhookHandler extends AbstractWebhookHandler
     {
         $itemType = $payload['Item']['Type'] ?? null;
         $providerIds = $payload['Item']['ProviderIds'] ?? [];
+        $itemName = is_string($payload['Item']['Name'] ?? null) && $payload['Item']['Name'] !== ''
+            ? $payload['Item']['Name']
+            : null;
+        $triggeredBy = sprintf('Emby › %s', $webhookEvent->serviceConnection?->name ?? 'unknown connection');
 
         if ($itemType === 'Series') {
             $sonarrId = isset($providerIds['SonarrSeriesId']) ? (int) $providerIds['SonarrSeriesId'] : null;
@@ -173,11 +181,19 @@ class EmbyWebhookHandler extends AbstractWebhookHandler
                 return;
             }
 
+            $actionPayload = ['sonarr_series_id' => $sonarrId, 'delete_files' => true];
+
             $this->actionOrchestrator->dispatch(
                 type: 'delete_series',
                 sourceService: 'emby',
                 targetService: 'sonarr',
-                payload: ['sonarr_series_id' => $sonarrId, 'delete_files' => true],
+                payload: $actionPayload,
+                // Emby's own item name is server data, not model output, so it
+                // may stand in (verified) when the Sonarr index misses.
+                description: $this->actionDescriber
+                    ->describe('delete_series', $actionPayload, fallbackName: $itemName, fallbackVerified: true)
+                    ->because(sprintf('Emby reported "%s" was removed from the library.', $itemName ?? 'a series'))
+                    ->withDetail('Triggered by', $triggeredBy),
                 webhookEvent: $webhookEvent,
             );
 
@@ -194,11 +210,19 @@ class EmbyWebhookHandler extends AbstractWebhookHandler
                 return;
             }
 
+            $actionPayload = ['radarr_movie_id' => $radarrId, 'delete_files' => true];
+
             $this->actionOrchestrator->dispatch(
                 type: 'delete_movie',
                 sourceService: 'emby',
                 targetService: 'radarr',
-                payload: ['radarr_movie_id' => $radarrId, 'delete_files' => true],
+                payload: $actionPayload,
+                // Emby's own item name is server data, not model output, so it
+                // may stand in (verified) when the Radarr index misses.
+                description: $this->actionDescriber
+                    ->describe('delete_movie', $actionPayload, fallbackName: $itemName, fallbackVerified: true)
+                    ->because(sprintf('Emby reported "%s" was removed from the library.', $itemName ?? 'a movie'))
+                    ->withDetail('Triggered by', $triggeredBy),
                 webhookEvent: $webhookEvent,
             );
 

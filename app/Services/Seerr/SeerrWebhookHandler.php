@@ -7,12 +7,16 @@ namespace App\Services\Seerr;
 use App\Cache\Services\SeerrCache;
 use App\Enums\WebhookHandlingStatus;
 use App\Models\WebhookEvent;
+use App\Services\Actions\ActionDescriber;
 use App\Services\Actions\ActionOrchestrator;
 use App\Services\Webhook\AbstractWebhookHandler;
 
 class SeerrWebhookHandler extends AbstractWebhookHandler
 {
-    public function __construct(private readonly ActionOrchestrator $actionOrchestrator) {}
+    public function __construct(
+        private readonly ActionOrchestrator $actionOrchestrator,
+        private readonly ActionDescriber $actionDescriber,
+    ) {}
 
     protected function serviceSlug(): string
     {
@@ -101,14 +105,16 @@ class SeerrWebhookHandler extends AbstractWebhookHandler
 
         // When Seerr reports media is available, it just appeared in Emby's library via
         // the corresponding *arr service. Refresh Emby so it picks up the file right away.
+        $scanPayload = ['trigger' => 'seerr_media_available', 'subject' => $payload['subject'] ?? null];
+
         $this->actionOrchestrator->dispatch(
             type: 'emby_library_scan',
             sourceService: 'seerr',
             targetService: 'emby',
-            payload: [
-                'trigger' => 'seerr_media_available',
-                'subject' => $payload['subject'] ?? null,
-            ],
+            payload: $scanPayload,
+            description: $this->actionDescriber->describe('emby_library_scan', $scanPayload)
+                ->because(sprintf('Seerr reported "%s" is now available.', (string) ($payload['subject'] ?? 'a title')))
+                ->withDetail('Triggered by', sprintf('Seerr › %s', $webhookEvent->serviceConnection?->name ?? 'unknown connection')),
             webhookEvent: $webhookEvent,
         );
     }
