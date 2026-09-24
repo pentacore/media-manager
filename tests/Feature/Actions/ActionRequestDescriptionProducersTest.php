@@ -46,6 +46,21 @@ test('an emby library delete queues a described series delete', function (): voi
         ->and($actionRequest->description_verified)->toBeTrue();
 });
 
+test('an emby library delete without an item name uses an unquoted fallback noun', function (): void {
+    ActionTypeConfig::factory()->create(['type' => 'delete_series', 'requires_approval' => true, 'is_enabled' => true]);
+    $sonarr = ServiceConnection::factory()->sonarr()->create(['url' => 'http://sonarr.local:8989']);
+    IndexedSeries::factory()->for($sonarr, 'serviceConnection')->create(['sonarr_id' => 142, 'title' => 'Severance', 'year' => 2022]);
+    $emby = ServiceConnection::factory()->emby()->create();
+    $webhookEvent = WebhookEvent::factory()->for($emby, 'serviceConnection')->create([
+        'event_type' => 'library.deleted',
+        'payload' => ['Event' => 'library.deleted', 'Item' => ['Type' => 'Series', 'ProviderIds' => ['SonarrSeriesId' => '142']]],
+    ]);
+
+    resolve(EmbyWebhookHandler::class)->handle($webhookEvent);
+
+    expect(ActionRequest::sole()->description)->toBe('Emby reported a series was removed from the library. Sonarr will delete the series and its files from disk.');
+});
+
 test('an emby delete for a series missing everywhere still names it from emby and stays verified', function (): void {
     ActionTypeConfig::factory()->create(['type' => 'delete_movie', 'requires_approval' => true, 'is_enabled' => true]);
     ServiceConnection::factory()->radarr()->create(['url' => 'http://radarr.local:7878']);
@@ -150,6 +165,20 @@ test('a seerr media available notification queues a described emby library scan'
         ->and($actionRequest->description)->toBe('Seerr reported "Dune: Part Two (2024)" is now available. Emby server "Living Room" will rescan its libraries to pick up changes.')
         ->and($actionRequest->details)->toContain(['label' => 'Triggered by', 'value' => 'Seerr › Seerr'])
         ->and($actionRequest->description_verified)->toBeTrue();
+});
+
+test('a seerr media available notification without a subject uses an unquoted fallback noun', function (): void {
+    ActionTypeConfig::factory()->create(['type' => 'emby_library_scan', 'requires_approval' => true, 'is_enabled' => true]);
+    ServiceConnection::factory()->emby()->create(['name' => 'Living Room']);
+    $seerr = ServiceConnection::factory()->seerr()->create(['name' => 'Seerr']);
+    $webhookEvent = WebhookEvent::factory()->for($seerr, 'serviceConnection')->create([
+        'event_type' => 'MEDIA_AVAILABLE',
+        'payload' => ['notification_type' => 'MEDIA_AVAILABLE'],
+    ]);
+
+    resolve(SeerrWebhookHandler::class)->handle($webhookEvent);
+
+    expect(producersLibraryScanRequest()->description)->toBe('Seerr reported a title is now available. Emby server "Living Room" will rescan its libraries to pick up changes.');
 });
 
 test('an automatic subtitle download is described with the case that queued it', function (): void {

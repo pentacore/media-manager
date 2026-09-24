@@ -59,6 +59,7 @@ class DemoFakeActions extends Command
             'title' => $scenario['title'],
             'description' => $scenario['description'],
             'details' => $scenario['details'] ?? [],
+            'description_verified' => true,
             'payload' => $scenario['payload'],
             'result' => $scenario['result'] ?? null,
         ]);
@@ -148,7 +149,7 @@ class DemoFakeActions extends Command
                 'target' => 'seerr',
                 'requires_approval' => false,
                 'status' => ActionRequestStatus::Failed,
-                'payload' => ['request_id' => 5099],
+                'payload' => ['seerr_request_id' => 5099],
                 'result' => ['success' => false, 'reason' => 'execution_failed'],
                 'title' => 'Clean up Seerr request for "Demo Movie"',
                 'description' => 'Emby reported "Demo Movie" was removed from the library. Seerr will delete the request.',

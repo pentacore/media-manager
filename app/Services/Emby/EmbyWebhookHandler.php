@@ -192,7 +192,7 @@ class EmbyWebhookHandler extends AbstractWebhookHandler
                 // may stand in (verified) when the Sonarr index misses.
                 description: $this->actionDescriber
                     ->describe('delete_series', $actionPayload, fallbackName: $itemName, fallbackVerified: true)
-                    ->because(sprintf('Emby reported "%s" was removed from the library.', $itemName ?? 'a series'))
+                    ->because(sprintf('Emby reported %s was removed from the library.', $itemName === null ? 'a series' : sprintf('"%s"', $itemName)))
                     ->withDetail('Triggered by', $triggeredBy),
                 webhookEvent: $webhookEvent,
             );
@@ -221,7 +221,7 @@ class EmbyWebhookHandler extends AbstractWebhookHandler
                 // may stand in (verified) when the Radarr index misses.
                 description: $this->actionDescriber
                     ->describe('delete_movie', $actionPayload, fallbackName: $itemName, fallbackVerified: true)
-                    ->because(sprintf('Emby reported "%s" was removed from the library.', $itemName ?? 'a movie'))
+                    ->because(sprintf('Emby reported %s was removed from the library.', $itemName === null ? 'a movie' : sprintf('"%s"', $itemName)))
                     ->withDetail('Triggered by', $triggeredBy),
                 webhookEvent: $webhookEvent,
             );

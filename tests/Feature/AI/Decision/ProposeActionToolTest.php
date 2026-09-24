@@ -11,6 +11,7 @@ use App\Models\IndexedSeries;
 use App\Models\MediaReplacementAttempt;
 use App\Models\ServiceConnection;
 use App\Models\WebhookEvent;
+use Illuminate\JsonSchema\JsonSchemaTypeFactory;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Queue;
 use Laravel\Ai\Tools\Request;
@@ -274,4 +275,12 @@ test('a proposal the server cannot resolve falls back to the model title and wai
         ->and($actionRequest->description)->toStartWith('Proposed by the decision agent. ')
         ->and($actionRequest->description_verified)->toBeFalse()
         ->and($actionRequest->requires_approval)->toBeTrue();
+});
+
+test('the payload schema example uses the delete_series target key the server requires', function (): void {
+    $schema = resolve(ProposeActionTool::class)->schema(new JsonSchemaTypeFactory);
+
+    expect($schema['payload']->toArray()['description'])
+        ->toContain('"sonarr_series_id": 42')
+        ->not->toContain('{"series_id"');
 });

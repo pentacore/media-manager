@@ -199,7 +199,7 @@ class ProposeActionTool implements Tool
                 ->description('Plain-English justification shown to the human approver: what triggered this and why this action.')
                 ->required(),
             'payload' => $schema->object([])
-                ->description('Action-specific arguments (e.g. {"series_id": 42, "delete_files": true}). Use IDs from the event payload or read tools — never invent them.'),
+                ->description('Action-specific arguments (e.g. {"sonarr_series_id": 42, "delete_files": true} for delete_series). Use IDs from the event payload or read tools — never invent them.'),
             'title' => $schema->string()
                 ->description('Optional human name of the target (e.g. the series title). Only shown if the server cannot resolve the id from the payload; such proposals always wait for human approval.'),
         ];

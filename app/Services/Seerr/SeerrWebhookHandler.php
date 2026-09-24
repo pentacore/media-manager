@@ -106,6 +106,7 @@ class SeerrWebhookHandler extends AbstractWebhookHandler
         // When Seerr reports media is available, it just appeared in Emby's library via
         // the corresponding *arr service. Refresh Emby so it picks up the file right away.
         $scanPayload = ['trigger' => 'seerr_media_available', 'subject' => $payload['subject'] ?? null];
+        $subject = is_string($payload['subject'] ?? null) && $payload['subject'] !== '' ? sprintf('"%s"', $payload['subject']) : 'a title';
 
         $this->actionOrchestrator->dispatch(
             type: 'emby_library_scan',
@@ -113,7 +114,7 @@ class SeerrWebhookHandler extends AbstractWebhookHandler
             targetService: 'emby',
             payload: $scanPayload,
             description: $this->actionDescriber->describe('emby_library_scan', $scanPayload)
-                ->because(sprintf('Seerr reported "%s" is now available.', (string) ($payload['subject'] ?? 'a title')))
+                ->because(sprintf('Seerr reported %s is now available.', $subject))
                 ->withDetail('Triggered by', sprintf('Seerr › %s', $webhookEvent->serviceConnection?->name ?? 'unknown connection')),
             webhookEvent: $webhookEvent,
         );
