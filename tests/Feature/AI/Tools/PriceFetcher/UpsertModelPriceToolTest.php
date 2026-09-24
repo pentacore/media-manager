@@ -8,6 +8,7 @@ use App\Enums\PricingSource;
 use App\Models\AiModelPrice;
 use App\Services\AiUsage\Pricing\PriceVerificationRun;
 use App\Services\AiUsage\Pricing\RefreshScope;
+use App\Settings\AiSettings;
 use Illuminate\JsonSchema\JsonSchemaTypeFactory;
 use Laravel\Ai\Tools\Request;
 
@@ -729,4 +730,18 @@ test('a source_url host with no provider mapping is rejected', function (): void
 
     expect($result['error'])->toBe('unverified_source')
         ->and(AiModelPrice::count())->toBe(0);
+});
+
+test('tells the agent a new model is refused for an update-only provider', function (): void {
+    resolve(AiSettings::class)->setAutoCreatePricingProviders([]);
+
+    $result = upsert(upsertTool(RefreshScope::all()), [
+        'provider' => 'openai',
+        'model' => 'gpt-brand-new',
+        'input_per_mtok' => 1.25,
+        'output_per_mtok' => 5,
+    ]);
+
+    expect($result['error'])->toBe('create_disabled')
+        ->and(AiModelPrice::query()->where('model', 'gpt-brand-new')->exists())->toBeFalse();
 });

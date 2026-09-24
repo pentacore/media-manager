@@ -36,6 +36,7 @@ final readonly class RefreshReport
      * @param  string|null  $modelsDevStatus  `ok`, `skipped`, `disabled`, or a transport failure category.
      * @param  list<string>  $fallbackProviders  Canonical providers handed to the verifier agent.
      * @param  string  $mode  One of the coordinator MODE_* constants (apply, dry-run, verify).
+     * @param  int  $modelsCreateDisabled  Newly reported models skipped because their provider is update-only.
      */
     public function __construct(
         public ?int $runId,
@@ -53,6 +54,7 @@ final readonly class RefreshReport
         public array $fallbackProviders = [],
         public ?string $errorMessage = null,
         public string $mode = AiPriceRefreshCoordinator::MODE_APPLY,
+        public int $modelsCreateDisabled = 0,
     ) {}
 
     /**
@@ -111,6 +113,13 @@ final readonly class RefreshReport
                 $this->modelsTiered,
             ),
         ];
+
+        if ($this->modelsCreateDisabled > 0) {
+            $lines[] = sprintf(
+                'New models skipped: %d from update-only providers.',
+                $this->modelsCreateDisabled,
+            );
+        }
 
         if ($this->fallbackProviders !== []) {
             $lines[] = sprintf('Verifier fallback: %s.', implode(', ', $this->fallbackProviders));

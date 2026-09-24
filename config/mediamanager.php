@@ -82,6 +82,16 @@ return [
                 trim(...),
                 explode(',', (string) env('AI_PRICING_IGNORED_PROVIDERS', '')),
             ), fn (string $provider): bool => $provider !== '')),
+            // Providers whose newly reported models the refresh adds to the
+            // catalog: comma-separated identifiers, upstream or canonical
+            // spelling. Any other provider is update-only — its existing rows
+            // keep refreshing but models it newly reports are skipped.
+            // OpenRouter is left out by default because it resells hundreds of
+            // third-party models that would flood the catalog.
+            'auto_create_providers' => array_values(array_filter(array_map(
+                trim(...),
+                explode(',', (string) env('AI_PRICING_AUTO_CREATE_PROVIDERS', 'openai,anthropic,gemini,xai,deepseek,mistral,groq,cohere')),
+            ), fn (string $provider): bool => $provider !== '')),
             'providers' => [
                 'openai' => 'openai',
                 'anthropic' => 'anthropic',

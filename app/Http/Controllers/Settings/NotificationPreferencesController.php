@@ -169,20 +169,20 @@ class NotificationPreferencesController extends Controller
         $validated = $testNotificationChannelRequest->validated();
         $user = $testNotificationChannelRequest->user();
         $pushChannelType = PushChannelType::from($validated['channel']);
-        $channel = resolve($pushChannelType->channelClass());
+        $pushChannel = resolve($pushChannelType->channelClass());
         $route = $user->routeNotificationFor($pushChannelType->value);
 
         if (in_array($route, [null, '', []], true)) {
             throw ValidationException::withMessages([
-                'test_channel' => __('Set and save a :channel destination first.', ['channel' => $channel->label()]),
+                'test_channel' => __('Set and save a :channel destination first.', ['channel' => $pushChannel->label()]),
             ]);
         }
 
         try {
-            $channel->deliver($route, new PushMessage(
+            $pushChannel->deliver($route, new PushMessage(
                 severity: 'info',
                 title: __('MediaManager test notification'),
-                body: __(':channel is wired up correctly.', ['channel' => $channel->label()]),
+                body: __(':channel is wired up correctly.', ['channel' => $pushChannel->label()]),
                 url: route('settings.notifications.edit'),
             ));
         } catch (Throwable $throwable) {
@@ -195,7 +195,7 @@ class NotificationPreferencesController extends Controller
 
             throw ValidationException::withMessages([
                 'test_channel' => __(':channel delivery failed: :error', [
-                    'channel' => $channel->label(),
+                    'channel' => $pushChannel->label(),
                     'error' => PushFailureMessage::for($throwable),
                 ]),
             ]);

@@ -39,6 +39,8 @@ class AiSettings
 
     public const string IGNORED_PRICING_PROVIDERS_KEY = 'ai.pricing.ignored_providers';
 
+    public const string AUTO_CREATE_PRICING_PROVIDERS_KEY = 'ai.pricing.auto_create_providers';
+
     public const string RATE_LIMITS_ENFORCED_KEY = 'ai.rate_limits.enforce';
 
     /**
@@ -275,6 +277,43 @@ class AiSettings
         $this->appSettings->set(
             self::IGNORED_PRICING_PROVIDERS_KEY,
             $this->normalizeProviderList($providers),
+        );
+    }
+
+    /**
+     * Providers whose newly reported models the automatic price refresh may
+     * add to the catalog. Every other provider is update-only: its stored rows
+     * keep refreshing, but models it newly reports are skipped. The config
+     * value (`AI_PRICING_AUTO_CREATE_PROVIDERS`) is only the default until an
+     * admin saves an explicit list; a saved list (including an empty one) then
+     * overrides env.
+     *
+     * @return list<string>
+     */
+    public function autoCreatePricingProviders(): array
+    {
+        $stored = $this->appSettings->get(self::AUTO_CREATE_PRICING_PROVIDERS_KEY);
+
+        if (! is_array($stored)) {
+            /** @var list<string> $stored */
+            $stored = config('mediamanager.ai.pricing.auto_create_providers', []);
+        }
+
+        return $this->normalizeProviderList($stored);
+    }
+
+    /**
+     * Persist the auto-create provider list as a normalized string list. A
+     * null value clears the setting so the list falls back to the config
+     * default again.
+     *
+     * @param  list<string>|null  $providers
+     */
+    public function setAutoCreatePricingProviders(?array $providers): void
+    {
+        $this->appSettings->set(
+            self::AUTO_CREATE_PRICING_PROVIDERS_KEY,
+            $providers === null ? null : $this->normalizeProviderList($providers),
         );
     }
 

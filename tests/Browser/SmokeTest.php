@@ -123,6 +123,37 @@ test('admin can save the pricing sync controls without browser errors', function
     $webpage->assertNoSmoke();
 });
 
+test('admin can choose which providers add new models during a price refresh', function (): void {
+    config()->set('mediamanager.ai.enabled', true);
+    config()->set('mediamanager.ai.pricing.ignored_providers', ['cohere']);
+    AiModelPrice::factory()->create([
+        'provider' => 'openai',
+        'model' => 'gpt-5-mini',
+    ]);
+
+    $this->actingAs(User::factory()->admin()->create());
+
+    $webpage = visit('/admin/ai-settings')
+        ->assertNoSmoke()
+        ->assertSeeIn('[data-auto-create-providers]', 'OpenRouter')
+        // Defaults: every provider adds new models except OpenRouter.
+        ->assertChecked('#auto-create-provider-openai')
+        ->assertNotChecked('#auto-create-provider-openrouter')
+        // An ignored provider cannot be toggled and is labelled as ignored.
+        ->assertScript('document.querySelector("#auto-create-provider-cohere").disabled === true')
+        ->assertSeeIn('[data-auto-create-providers]', '(ignored)')
+        ->uncheck('#auto-create-provider-openai')
+        ->check('#auto-create-provider-openrouter')
+        ->click('Save settings')
+        ->assertSee('AI settings updated.');
+
+    expect(resolve(AiSettings::class)->autoCreatePricingProviders())
+        ->toContain('openrouter')
+        ->not->toContain('openai');
+
+    $webpage->assertNoSmoke();
+});
+
 test('admin can classify imported Sonarr root folders without browser errors', function (): void {
     $connection = ServiceConnection::factory()->sonarr()->create([
         'name' => 'Main Sonarr',
