@@ -4,14 +4,12 @@ declare(strict_types=1);
 
 namespace App\Providers;
 
-use App\Ai\Storage\HealingConversationStore;
 use App\Listeners\Ai\EnforceAiRateLimit;
 use App\Listeners\Ai\RecordAgentUsage;
 use App\Services\AiUsage\BatchPricingContext;
 use Illuminate\Contracts\Foundation\Application;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\ServiceProvider;
-use Laravel\Ai\Contracts\ConversationStore;
 use Laravel\Ai\Events\AgentStreamed;
 use Laravel\Ai\Events\StreamingAgent;
 use Override;
@@ -24,11 +22,6 @@ class AIServiceProvider extends ServiceProvider
         $this->app->singleton('mediamanager.ai.enabled', fn (Application $application): bool => (bool) $application->make('config')->get('mediamanager.ai.enabled', false));
 
         $this->app->scoped(BatchPricingContext::class);
-
-        $this->app->extend(
-            ConversationStore::class,
-            fn (ConversationStore $conversationStore): HealingConversationStore => new HealingConversationStore($conversationStore),
-        );
     }
 
     // Note: RecordAgentUsage / RecordToolInvocation / RecordAgentFailover are
