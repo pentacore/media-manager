@@ -40,6 +40,10 @@ use Override;
  * @property string|null $avatar_url
  * @property array<string, mixed>|null $preferences
  * @property string|null $ntfy_topic
+ * @property string|null $discord_webhook_url
+ * @property string|null $telegram_chat_id
+ * @property string|null $webhook_url
+ * @property string|null $webhook_secret
  * @property CarbonImmutable|null $invite_accepted_at
  * @property-read Collection<int, ActivityLog> $activityLogs
  * @property-read int|null $activity_logs_count
@@ -71,8 +75,8 @@ use Override;
  *
  * @mixin \Eloquent
  */
-#[Fillable(['name', 'email', 'password', 'sso_provider', 'sso_id', 'role', 'avatar_url', 'preferences', 'ntfy_topic', 'invite_accepted_at'])]
-#[Hidden(['password', 'two_factor_secret', 'two_factor_recovery_codes', 'remember_token'])]
+#[Fillable(['name', 'email', 'password', 'sso_provider', 'sso_id', 'role', 'avatar_url', 'preferences', 'ntfy_topic', 'discord_webhook_url', 'telegram_chat_id', 'webhook_url', 'webhook_secret', 'invite_accepted_at'])]
+#[Hidden(['password', 'two_factor_secret', 'two_factor_recovery_codes', 'remember_token', 'discord_webhook_url', 'webhook_url', 'webhook_secret'])]
 class User extends Authenticatable implements MustVerifyEmail
 {
     use HasFactory;
@@ -92,6 +96,9 @@ class User extends Authenticatable implements MustVerifyEmail
             'two_factor_confirmed_at' => 'datetime',
             'invite_accepted_at' => 'datetime',
             'preferences' => 'array',
+            'discord_webhook_url' => 'encrypted',
+            'webhook_url' => 'encrypted',
+            'webhook_secret' => 'encrypted',
         ];
     }
 
@@ -126,6 +133,32 @@ class User extends Authenticatable implements MustVerifyEmail
     public function routeNotificationForNtfy(): ?string
     {
         return $this->ntfy_topic;
+    }
+
+    /** Discord routing: the user's own webhook URL. Null/empty skips the channel. */
+    public function routeNotificationForDiscord(): ?string
+    {
+        return $this->discord_webhook_url !== '' ? $this->discord_webhook_url : null;
+    }
+
+    /** Telegram routing: the user's chat id (bot token is global config). */
+    public function routeNotificationForTelegram(): ?string
+    {
+        return $this->telegram_chat_id !== '' ? $this->telegram_chat_id : null;
+    }
+
+    /**
+     * Webhook routing: URL plus optional HMAC secret. Null when no URL is set.
+     *
+     * @return array{url: string, secret: ?string}|null
+     */
+    public function routeNotificationForWebhook(): ?array
+    {
+        if (! is_string($this->webhook_url) || $this->webhook_url === '') {
+            return null;
+        }
+
+        return ['url' => $this->webhook_url, 'secret' => $this->webhook_secret];
     }
 
     /**

@@ -42,6 +42,12 @@ return [
         'token' => env('NTFY_TOKEN'),
     ],
 
+    'telegram' => [
+        // Bot token from @BotFather. Shared by per-user chat IDs and global
+        // destinations; the Telegram channel is hidden in the UI when empty.
+        'token' => env('TELEGRAM_BOT_TOKEN'),
+    ],
+
     'authentik' => [
         'client_id' => env('AUTHENTIK_CLIENT_ID'),
         'client_secret' => env('AUTHENTIK_CLIENT_SECRET'),

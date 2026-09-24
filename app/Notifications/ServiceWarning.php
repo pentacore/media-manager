@@ -4,8 +4,8 @@ declare(strict_types=1);
 
 namespace App\Notifications;
 
-use App\Services\Notifications\NtfyMessage;
 use App\Services\Notifications\PreferenceResolver;
+use App\Services\Notifications\PushMessage;
 use Illuminate\Bus\Queueable;
 use Illuminate\Notifications\Messages\BroadcastMessage;
 use Illuminate\Notifications\Notification;
@@ -54,16 +54,13 @@ class ServiceWarning extends Notification
         return new BroadcastMessage($this->toArray($notifiable));
     }
 
-    /**
-     * @return array{title: string, message: string, priority: int, tags: array<int, string>, click?: string}
-     */
-    public function toNtfy(object $notifiable): array
+    public function toPush(object $notifiable): PushMessage
     {
-        return NtfyMessage::for(
-            $this->severityKey(),
-            sprintf('[%s] %s', $this->service, $this->title),
-            $this->message,
-            route('monitoring.service-health'),
+        return new PushMessage(
+            severity: $this->severityKey(),
+            title: sprintf('[%s] %s', $this->service, $this->title),
+            body: $this->message,
+            url: route('monitoring.service-health'),
         );
     }
 

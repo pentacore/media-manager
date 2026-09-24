@@ -21,6 +21,9 @@ use Override;
  * @property bool $broadcast
  * @property bool $mail
  * @property bool $ntfy
+ * @property bool $discord
+ * @property bool $telegram
+ * @property bool $webhook
  * @property CarbonImmutable|null $created_at
  * @property CarbonImmutable|null $updated_at
  *
@@ -38,6 +41,9 @@ use Override;
     'broadcast',
     'mail',
     'ntfy',
+    'discord',
+    'telegram',
+    'webhook',
 ])]
 class NotificationPreference extends Model
 {
@@ -54,6 +60,9 @@ class NotificationPreference extends Model
             'broadcast' => 'boolean',
             'mail' => 'boolean',
             'ntfy' => 'boolean',
+            'discord' => 'boolean',
+            'telegram' => 'boolean',
+            'webhook' => 'boolean',
         ];
     }
 

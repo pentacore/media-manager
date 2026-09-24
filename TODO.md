@@ -15,7 +15,7 @@
 - [x] Admin view for `MediaReplacementAttempt` history/detail (outcomes currently only surface via the Action Queue panel + notifications; consider broadcasting `MediaReplacementAttemptChanged`)
 - [ ] Torrent download client support (qBittorrent first) alongside SABnzbd, reusing the Downloads-page patterns
 - [ ] Jellyfin support (Emby API fork — much of `EmbyClient`/webhook handling carries over)
-- [ ] More notification channels: Discord / Telegram / generic webhook alongside ntfy
+- [x] More notification channels: Discord / Telegram / generic webhook alongside ntfy
 
 # NEW
 - [ ] Make use of inertia pre-fetching to speed up page loading times (This will require some changes to the way we load data for the pages, but it should be worth it in the end)
