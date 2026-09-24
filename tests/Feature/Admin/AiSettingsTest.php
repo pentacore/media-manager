@@ -202,8 +202,9 @@ test('index exposes pricing sync settings and ignorable providers', function ():
             ->component('Admin/AiSettings/Index')
             ->where('settings.models_dev_pricing_enabled', true)
             ->where('settings.ignored_pricing_providers', [])
-            ->has('ignorablePricingProviders')
-            ->where('ignorablePricingProviders.0.value', 'openai')
+            ->where('settings.auto_create_pricing_providers', ['openai', 'anthropic', 'gemini', 'xai', 'deepseek', 'mistral', 'groq', 'cohere'])
+            ->has('pricingProviders')
+            ->where('pricingProviders.0.value', 'openai')
         );
 });
 
@@ -296,4 +297,108 @@ test('ai settings update no longer accepts media_replacement fields', function (
         ->assertSessionHasNoErrors();
 
     expect(resolve(MediaReplacementSettings::class)->automaticSelectionThreshold())->toBe(90);
+});
+
+test('index exposes whether model rate limits are enforced, defaulting to the config value', function (): void {
+    $admin = User::factory()->admin()->create();
+    config()->set('mediamanager.ai.rate_limits.enforce', true);
+
+    $this->actingAs($admin)
+        ->get(route('admin.ai-settings.index'))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->component('Admin/AiSettings/Index')
+            ->where('settings.rate_limits_enforced', true)
+        );
+});
+
+test('admin can turn rate limit enforcement on, overriding the config default', function (): void {
+    $admin = User::factory()->admin()->create();
+    config()->set('mediamanager.ai.rate_limits.enforce', false);
+
+    $this->actingAs($admin)
+        ->put(route('admin.ai-settings.update'), [
+            ...baseAiSettingsPayload(),
+            'rate_limits_enforced' => '1',
+        ])
+        ->assertRedirect(route('admin.ai-settings.index'))
+        ->assertSessionHasNoErrors();
+
+    expect(resolve(AiSettings::class)->rateLimitsEnforced())->toBeTrue();
+});
+
+test('omitting the rate limit enforcement field clears the override back to config', function (): void {
+    $admin = User::factory()->admin()->create();
+    config()->set('mediamanager.ai.rate_limits.enforce', false);
+    resolve(AiSettings::class)->setRateLimitsEnforced(true);
+
+    $this->actingAs($admin)
+        ->put(route('admin.ai-settings.update'), baseAiSettingsPayload())
+        ->assertRedirect(route('admin.ai-settings.index'))
+        ->assertSessionHasNoErrors();
+
+    expect(resolve(AiSettings::class)->rateLimitsEnforced())->toBeFalse();
+});
+
+test('admin can save the auto-create pricing providers list', function (): void {
+    $admin = User::factory()->admin()->create();
+
+    $this->actingAs($admin)
+        ->put(route('admin.ai-settings.update'), [
+            ...baseAiSettingsPayload(),
+            // The page always posts a blank placeholder entry first.
+            'auto_create_pricing_providers' => ['', 'openai', 'openrouter'],
+        ])
+        ->assertRedirect(route('admin.ai-settings.index'))
+        ->assertSessionHasNoErrors();
+
+    expect(resolve(AiSettings::class)->autoCreatePricingProviders())->toBe(['openai', 'openrouter']);
+});
+
+test('an all-unchecked auto-create list saves every provider as update-only', function (): void {
+    $admin = User::factory()->admin()->create();
+
+    $this->actingAs($admin)
+        ->put(route('admin.ai-settings.update'), [
+            ...baseAiSettingsPayload(),
+            'auto_create_pricing_providers' => [''],
+        ])
+        ->assertSessionHasNoErrors();
+
+    expect(resolve(AiSettings::class)->autoCreatePricingProviders())->toBe([]);
+});
+
+test('omitting the auto-create list leaves the saved setting untouched', function (): void {
+    $admin = User::factory()->admin()->create();
+    resolve(AiSettings::class)->setAutoCreatePricingProviders(['groq']);
+
+    $this->actingAs($admin)
+        ->put(route('admin.ai-settings.update'), baseAiSettingsPayload())
+        ->assertSessionHasNoErrors();
+
+    expect(resolve(AiSettings::class)->autoCreatePricingProviders())->toBe(['groq']);
+});
+
+test('update rejects an unknown auto-create pricing provider', function (): void {
+    $admin = User::factory()->admin()->create();
+
+    $this->actingAs($admin)
+        ->put(route('admin.ai-settings.update'), [
+            ...baseAiSettingsPayload(),
+            'auto_create_pricing_providers' => ['', 'not-a-provider'],
+        ])
+        ->assertSessionHasErrors('auto_create_pricing_providers.0');
+});
+
+test('index maps upstream provider spellings to the canonical checkbox values', function (): void {
+    $admin = User::factory()->admin()->create();
+    config()->set('mediamanager.ai.pricing.auto_create_providers', ['google', 'openai', 'not-a-provider']);
+    config()->set('mediamanager.ai.pricing.ignored_providers', ['google']);
+
+    $this->actingAs($admin)
+        ->get(route('admin.ai-settings.index'))
+        ->assertInertia(fn ($page) => $page
+            ->where('settings.auto_create_pricing_providers', ['gemini', 'openai'])
+            ->where('settings.ignored_pricing_providers', ['gemini'])
+        );
 });

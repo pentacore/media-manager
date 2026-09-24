@@ -6,8 +6,10 @@ namespace App\Services\AiUsage;
 
 use App\Enums\FreePoolOverflowBehavior;
 use App\Enums\RateLimitMetric;
+use App\Enums\RateLimitPeriod;
 use App\Models\AiFreeUsagePool;
 use App\Models\AiModelPrice;
+use App\Models\AiModelRateLimit;
 use App\Models\AiToolInvocation;
 use App\Models\AiUsageRecord;
 use App\Models\User;
@@ -128,11 +130,21 @@ class AiUsageReporting
     }
 
     /**
+     * Strip a trailing date-version suffix (e.g. "-2025-09-23") off a model id
+     * so dated variants match their catalog row. PHP twin of BASE_MODEL_REGEX.
+     */
+    public static function baseModel(string $model): string
+    {
+        return (string) preg_replace('/-\d{4}-\d{2}-\d{2}$/', '', $model);
+    }
+
+    /**
      * Per-model consumption against configured provider rate limits, each
      * limit measured over its rolling window (the last minute/hour/day —
      * rolling, unlike the free pools' calendar resets). Token limits count
      * prompt + completion tokens only (unlike pool accounting, which also
-     * counts cached read/write tokens). Display only.
+     * counts cached read/write tokens). AiRateLimitGuard enforces the same
+     * numbers when enforcement is switched on.
      *
      * @return array<int, array{provider: string, model: string, limits: array<int, array{metric: string, period: string, limit_value: int, used: int}>}>
      */
@@ -149,29 +161,9 @@ class AiUsageReporting
             return [];
         }
 
-        $periods = $prices
-            ->flatMap(fn (AiModelPrice $aiModelPrice) => $aiModelPrice->rateLimits->pluck('period'))
-            ->unique();
-
-        // One aggregate query per distinct window length, keyed by
-        // provider|base_model (dated suffixes stripped like poolUsageRows).
-        $usageByPeriod = [];
-
-        foreach ($periods as $period) {
-            $usageByPeriod[$period->value] = DB::table('ai_usage_records')
-                ->where('created_at', '>=', $period->windowStart())
-                ->whereNotNull('provider')
-                ->whereNotNull('model')
-                ->selectRaw("
-                    provider,
-                    regexp_replace(model, '".self::BASE_MODEL_REGEX."', '') AS base_model,
-                    COUNT(*) AS requests,
-                    COALESCE(SUM(prompt_tokens + completion_tokens), 0) AS tokens
-                ")
-                ->groupByRaw('provider, base_model')
-                ->get()
-                ->keyBy(fn (object $row): string => $row->provider.'|'.$row->base_model);
-        }
+        $usageByPeriod = $this->rateLimitUsageByPeriod(
+            $prices->flatMap(fn (AiModelPrice $aiModelPrice) => $aiModelPrice->rateLimits->pluck('period'))->unique(),
+        );
 
         $rows = [];
 
@@ -179,15 +171,14 @@ class AiUsageReporting
             $limits = [];
 
             foreach ($price->rateLimits as $rateLimit) {
-                $usage = $usageByPeriod[$rateLimit->period->value][$price->provider.'|'.$price->model] ?? null;
-
                 $limits[] = [
                     'metric' => $rateLimit->metric->value,
                     'period' => $rateLimit->period->value,
                     'limit_value' => $rateLimit->limit_value,
-                    'used' => (int) ($rateLimit->metric === RateLimitMetric::Requests
-                        ? ($usage->requests ?? 0)
-                        : ($usage->tokens ?? 0)),
+                    'used' => self::rateLimitUsed(
+                        $rateLimit,
+                        $usageByPeriod[$rateLimit->period->value][$price->provider.'|'.$price->model] ?? null,
+                    ),
                 ];
             }
 
@@ -199,6 +190,55 @@ class AiUsageReporting
         }
 
         return $rows;
+    }
+
+    /**
+     * Requests and prompt+completion tokens recorded inside each period's
+     * rolling window: one aggregate query per distinct window length, keyed
+     * `period value => provider|base_model => {requests, tokens}` (dated
+     * suffixes stripped like poolUsageRows). Pass a provider and base model
+     * to narrow the aggregate to a single catalog row.
+     *
+     * @param  iterable<int, RateLimitPeriod>  $periods
+     * @return array<string, Collection<string, object{requests: int|string, tokens: int|string}>>
+     */
+    public function rateLimitUsageByPeriod(iterable $periods, ?string $provider = null, ?string $baseModel = null): array
+    {
+        $usageByPeriod = [];
+
+        foreach ($periods as $period) {
+            $usageByPeriod[$period->value] = DB::table('ai_usage_records')
+                ->where('created_at', '>=', $period->windowStart())
+                ->whereNotNull('provider')
+                ->whereNotNull('model')
+                ->when($provider !== null, fn (Builder $builder): Builder => $builder->where('provider', $provider))
+                ->when($baseModel !== null, fn (Builder $builder): Builder => $builder->whereRaw(
+                    "regexp_replace(model, '".self::BASE_MODEL_REGEX."', '') = ?",
+                    [$baseModel],
+                ))
+                ->selectRaw("
+                    provider,
+                    regexp_replace(model, '".self::BASE_MODEL_REGEX."', '') AS base_model,
+                    COUNT(*) AS requests,
+                    COALESCE(SUM(prompt_tokens + completion_tokens), 0) AS tokens
+                ")
+                ->groupByRaw('provider, base_model')
+                ->get()
+                ->keyBy(fn (object $row): string => $row->provider.'|'.$row->base_model);
+        }
+
+        return $usageByPeriod;
+    }
+
+    /**
+     * The "used" figure a limit is compared against, read off one aggregate
+     * row from rateLimitUsageByPeriod() (null when nothing was recorded).
+     */
+    public static function rateLimitUsed(AiModelRateLimit $aiModelRateLimit, ?object $usage): int
+    {
+        return (int) ($aiModelRateLimit->metric === RateLimitMetric::Requests
+            ? ($usage->requests ?? 0)
+            : ($usage->tokens ?? 0));
     }
 
     /**
@@ -652,7 +692,7 @@ class AiUsageReporting
 
         $catalog = AiModelPrice::query()
             ->where('provider', $aiUsageRecord->provider)
-            ->where('model', preg_replace('/-\d{4}-\d{2}-\d{2}$/', '', (string) $aiUsageRecord->model))
+            ->where('model', self::baseModel((string) $aiUsageRecord->model))
             ->first();
 
         $rates = [

@@ -13,6 +13,8 @@ use App\Models\AiProposedWorkflow;
 use App\Models\User;
 use App\Services\AiBudget\AiBudgetExceededException;
 use App\Services\AiBudget\AiBudgetGuard;
+use App\Services\AiUsage\AiModelRateLimitExceededException;
+use App\Services\AiUsage\AiRateLimitGuard;
 use App\Settings\AiSettings;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\Client\RequestException;
@@ -23,6 +25,7 @@ use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 use Inertia\Inertia;
 use Inertia\Response;
+use Laravel\Ai\Exceptions\RateLimitedException;
 use Throwable;
 
 class ChatController extends Controller
@@ -49,6 +52,10 @@ class ChatController extends Controller
 
         if (($budgetResponse = $this->enforceBudget()) instanceof JsonResponse) {
             return $budgetResponse;
+        }
+
+        if (($rateLimitResponse = $this->enforceRateLimit()) instanceof JsonResponse) {
+            return $rateLimitResponse;
         }
 
         if ($conversationId !== null && ! $this->conversationIsAvailable($conversationId, $user)) {
@@ -119,6 +126,10 @@ class ChatController extends Controller
 
         if (($budgetResponse = $this->enforceBudget()) instanceof JsonResponse) {
             return $budgetResponse;
+        }
+
+        if (($rateLimitResponse = $this->enforceRateLimit()) instanceof JsonResponse) {
+            return $rateLimitResponse;
         }
 
         $conversationId = $validated['conversation_id'] ?? null;
@@ -249,11 +260,49 @@ class ChatController extends Controller
     }
 
     /**
+     * Refuse the turn up front when the chat model has exhausted a configured
+     * rate limit and there is no failover provider to take it. With a
+     * failover configured the turn proceeds: EnforceAiRateLimit vetoes the
+     * primary inside the SDK and the failover provider serves the turn
+     * (streams in particular cannot 429 once the response has started).
+     */
+    private function enforceRateLimit(): ?JsonResponse
+    {
+        $aiSettings = resolve(AiSettings::class);
+
+        if ($aiSettings->providerChain() !== null) {
+            return null;
+        }
+
+        try {
+            resolve(AiRateLimitGuard::class)->enforce($aiSettings->primaryProvider()->value, $aiSettings->model());
+        } catch (AiModelRateLimitExceededException $aiModelRateLimitExceededException) {
+            return $this->rateLimitedResponse($aiModelRateLimitExceededException);
+        }
+
+        return null;
+    }
+
+    private function rateLimitedResponse(RateLimitedException $rateLimitedException): JsonResponse
+    {
+        return response()->json([
+            'error' => 'rate_limited',
+            'message' => $rateLimitedException->getMessage(),
+        ], 429);
+    }
+
+    /**
      * Log an agent invocation failure and build the client-facing 500 response.
-     * The full message is only surfaced in local for debugging.
+     * The full message is only surfaced in local for debugging. A rate limit
+     * (ours or the provider's, after every failover was exhausted) is the one
+     * expected failure and becomes a 429 the chat UI can explain.
      */
     private function handleAgentFailure(Throwable $throwable, ?User $user): JsonResponse
     {
+        if ($throwable instanceof RateLimitedException) {
+            return $this->rateLimitedResponse($throwable);
+        }
+
         // Laravel's HTTP-client RequestException truncates response bodies
         // in getMessage(); pull the full body separately so OpenAI's
         // verbose error JSON is visible for debugging.

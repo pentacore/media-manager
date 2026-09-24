@@ -31,8 +31,11 @@ class UpdateAiSettingsRequest extends FormRequest
             'chat_timeout' => ['nullable', 'integer', 'between:30,600'],
             'failover_provider' => ['nullable', 'string', 'in:anthropic,openai,gemini,groq,mistral'],
             'models_dev_pricing_enabled' => ['nullable', 'boolean'],
+            'rate_limits_enforced' => ['nullable', 'boolean'],
             'ignored_pricing_providers' => ['nullable', 'array'],
             'ignored_pricing_providers.*' => ['string', Rule::in($this->supportedPricingProviders())],
+            'auto_create_pricing_providers' => ['sometimes', 'array'],
+            'auto_create_pricing_providers.*' => ['string', Rule::in($this->supportedPricingProviders())],
         ];
     }
 
@@ -55,10 +58,23 @@ class UpdateAiSettingsRequest extends FormRequest
         if ($this->input('chat_timeout') === '') {
             $this->merge(['chat_timeout' => null]);
         }
+
+        // The form always posts one blank placeholder entry so an all-unchecked
+        // list still reaches the server (as an empty list) instead of vanishing
+        // like an absent field, which leaves the saved setting untouched.
+        $autoCreate = $this->input('auto_create_pricing_providers');
+
+        if (is_array($autoCreate)) {
+            $this->merge(['auto_create_pricing_providers' => array_values(array_filter(
+                $autoCreate,
+                static fn (mixed $provider): bool => $provider !== null && $provider !== '',
+            ))]);
+        }
     }
 
     /**
-     * The canonical pricing providers an admin may add to the ignore list.
+     * The canonical pricing providers an admin may add to the ignore or
+     * auto-create lists.
      *
      * @return list<string>
      */

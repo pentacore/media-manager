@@ -1323,3 +1323,104 @@ test('the report exposes a broadcast array and console lines', function (): void
     expect($lines)->toBeArray()->not->toBeEmpty()
         ->and(implode("\n", $lines))->toContain('succeeded');
 });
+
+test('the feed skips new models for update-only providers while still updating their stored rows', function (): void {
+    PriceFetcherAgent::fake(['ok']);
+    resolve(AiSettings::class)->setAutoCreatePricingProviders(['anthropic']);
+
+    AiModelPrice::factory()->create([
+        'provider' => 'openai',
+        'model' => 'gpt-stored',
+        'input_per_mtok' => '1.0000',
+        'output_per_mtok' => '2.0000',
+    ]);
+
+    fakeFeed([
+        'openai' => ['models' => [
+            'gpt-stored' => feedModel(1.5, 2.0),
+            'gpt-brand-new' => feedModel(1.0, 2.0),
+        ]],
+        'anthropic' => ['models' => ['claude-brand-new' => feedModel(3.0, 15.0)]],
+    ]);
+
+    $refreshReport = runCoordinator(scope: RefreshScope::forProviders(['openai', 'anthropic']));
+
+    PriceFetcherAgent::assertNeverPrompted();
+
+    expect($refreshReport->finalResult)->toBe(RefreshReport::RESULT_SUCCEEDED)
+        ->and($refreshReport->modelsCreated)->toBe(1)
+        ->and($refreshReport->modelsUpdated)->toBe(1)
+        ->and($refreshReport->modelsRejected)->toBe(0)
+        ->and($refreshReport->modelsCreateDisabled)->toBe(1)
+        ->and($refreshReport->toConsoleLines())->toContain('New models skipped: 1 from update-only providers.')
+        ->and(AiModelPrice::query()->where('model', 'gpt-brand-new')->exists())->toBeFalse()
+        ->and(AiModelPrice::query()->where('model', 'claude-brand-new')->exists())->toBeTrue()
+        ->and(AiModelPrice::query()->where('model', 'gpt-stored')->value('input_per_mtok'))->toBe('1.5000');
+
+    $providerResults = AiPriceRefreshRun::query()->findOrFail($refreshReport->runId)->provider_results;
+
+    expect($providerResults['openai'])->toMatchArray(['status' => 'ok', 'updated' => 1, 'create_disabled' => 1])
+        ->and($providerResults['anthropic'])->not->toHaveKey('create_disabled');
+});
+
+test('the feed creates new openrouter models once openrouter is on the auto-create list', function (): void {
+    PriceFetcherAgent::fake(['ok']);
+    resolve(AiSettings::class)->setAutoCreatePricingProviders(['openrouter']);
+
+    fakeFeed([
+        'openrouter' => ['models' => ['vendor/brand-new' => feedModel(1.0, 2.0)]],
+    ]);
+
+    $refreshReport = runCoordinator(scope: RefreshScope::forProviders(['openrouter']));
+
+    expect($refreshReport->finalResult)->toBe(RefreshReport::RESULT_SUCCEEDED)
+        ->and($refreshReport->modelsCreated)->toBe(1)
+        ->and($refreshReport->modelsCreateDisabled)->toBe(0)
+        ->and(AiModelPrice::query()->where('provider', 'openrouter')->where('model', 'vendor/brand-new')->exists())->toBeTrue();
+});
+
+test('an update-only provider with no stored rows settles without waking the verifier', function (): void {
+    Sleep::fake();
+    PriceFetcherAgent::fake(['ok']);
+    resolve(AiSettings::class)->setAutoCreatePricingProviders([]);
+
+    Http::fake(['models.dev/*' => Http::response('upstream down', 500)]);
+
+    $refreshReport = runCoordinator(scope: RefreshScope::forProviders(['openai']));
+
+    PriceFetcherAgent::assertNeverPrompted();
+
+    expect($refreshReport->finalResult)->toBe(RefreshReport::RESULT_SUCCEEDED)
+        ->and($refreshReport->fallbackProviders)->toBe([])
+        ->and($refreshReport->providersSucceeded)->toBe(1);
+});
+
+test('the verifier is told an update-only provider may only refresh its stored models', function (): void {
+    Sleep::fake();
+    resolve(AiSettings::class)->setAutoCreatePricingProviders([]);
+
+    AiModelPrice::factory()->create([
+        'provider' => 'openai',
+        'model' => 'gpt-stored',
+        'input_per_mtok' => '1.0000',
+        'output_per_mtok' => '2.0000',
+    ]);
+
+    fakeVerifierWrites(['openai' => ['gpt-stored', 'gpt-brand-new']]);
+    Http::fake(['models.dev/*' => Http::response('upstream down', 500)]);
+
+    $refreshReport = runCoordinator(scope: RefreshScope::forProviders(['openai']));
+
+    PriceFetcherAgent::assertPrompted(fn (AgentPrompt $agentPrompt): bool => str_contains(
+        (string) $agentPrompt->agent->instructions(),
+        'only these currently-stored models (adding new models is disabled for this provider): gpt-stored',
+    ));
+
+    $providerResults = AiPriceRefreshRun::query()->findOrFail($refreshReport->runId)->provider_results;
+
+    expect($refreshReport->finalResult)->toBe(RefreshReport::RESULT_SUCCEEDED)
+        ->and($refreshReport->modelsCreated)->toBe(0)
+        ->and($refreshReport->modelsCreateDisabled)->toBe(1)
+        ->and($providerResults['openai'])->toMatchArray(['status' => 'fallback', 'create_disabled' => 1])
+        ->and(AiModelPrice::query()->where('model', 'gpt-brand-new')->exists())->toBeFalse();
+});

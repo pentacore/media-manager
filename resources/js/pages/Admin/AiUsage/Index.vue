@@ -179,6 +179,7 @@ const props = defineProps<{
     scenario_recent?: RecentRow[];
     free_pools: FreePoolRow[];
     rate_limits: RateLimitStatusRow[];
+    rate_limits_enforced: boolean;
 }>();
 
 defineOptions({
@@ -649,8 +650,15 @@ function formatTimestamp(value: string): string {
                 >
                     Rate limits
                 </span>
-                <span class="text-[11.5px] text-muted-foreground">
-                    Rolling windows ending now. Informational only.
+                <span
+                    class="text-[11.5px] text-muted-foreground"
+                    data-rate-limits-mode
+                >
+                    {{
+                        props.rate_limits_enforced
+                            ? 'Rolling windows ending now. Enforced: an exhausted limit blocks new requests.'
+                            : 'Rolling windows ending now. Informational only.'
+                    }}
                 </span>
             </div>
             <div class="divide-y divide-border">
@@ -679,9 +687,21 @@ function formatTimestamp(value: string): string {
                                 <span class="text-muted-foreground">{{
                                     rateLimitLabel(limit)
                                 }}</span>
-                                <span class="font-mono-tabular">
-                                    {{ formatNumber(limit.used) }} /
-                                    {{ formatNumber(limit.limit_value) }}
+                                <span class="flex items-center gap-1.5">
+                                    <span
+                                        v-if="
+                                            props.rate_limits_enforced &&
+                                            limit.used >= limit.limit_value
+                                        "
+                                        class="rounded-sm bg-destructive/15 px-1.5 py-0.5 text-[10px] font-semibold tracking-[0.04em] text-destructive uppercase"
+                                        data-rate-limit-blocked
+                                    >
+                                        Blocked
+                                    </span>
+                                    <span class="font-mono-tabular">
+                                        {{ formatNumber(limit.used) }} /
+                                        {{ formatNumber(limit.limit_value) }}
+                                    </span>
                                 </span>
                             </div>
                             <div

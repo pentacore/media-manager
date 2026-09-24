@@ -20,8 +20,8 @@ final readonly class ProviderPricingResult
      * @param  list<PricingRejection>  $rejections  Models the source described but the adapter could not safely accept.
      * @param  list<PricingWarning>  $warnings  Non-fatal notes attached to accepted candidates (for example context tiers).
      * @param  bool  $createSuppressed  When true, these candidates may only update existing rows and must never create new ones.
-     *                                  The pure adapter cannot query the catalog, so it flags OpenRouter results here rather than
-     *                                  consulting the database; the writer still enforces the rule via scope.
+     *                                  The pure adapter cannot query the catalog, so it flags update-only providers here rather
+     *                                  than consulting the database; the writer still enforces the rule via scope.
      */
     public function __construct(
         public string $provider,

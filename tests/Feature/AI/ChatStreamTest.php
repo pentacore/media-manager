@@ -236,3 +236,33 @@ test('admin cannot stream against another users conversation', function (): void
 
     MediaAgent::assertNeverPrompted();
 });
+
+test('streaming endpoint refuses with 429 when the chat model has exhausted its rate limit', function (): void {
+    resolve(AiSettings::class)->setRateLimitsEnforced(true);
+    $price = AiModelPrice::factory()->create(['provider' => 'openai', 'model' => resolve(AiSettings::class)->model()]);
+    $price->rateLimits()->create(['metric' => 'requests', 'period' => 'minute', 'limit_value' => 1]);
+    DB::table('ai_usage_records')->insert([
+        'invocation_id' => 'inv-'.uniqid(),
+        'agent_class' => 'TestAgent',
+        'provider' => 'openai',
+        'model' => resolve(AiSettings::class)->model(),
+        'prompt_tokens' => 10,
+        'completion_tokens' => 5,
+        'cache_read_input_tokens' => 0,
+        'cache_write_input_tokens' => 0,
+        'reasoning_tokens' => 0,
+        'tool_calls_count' => 0,
+        'status' => 'success',
+        'created_at' => now(),
+        'updated_at' => now(),
+    ]);
+    MediaAgent::fake(['Should never run.']);
+    $admin = User::factory()->admin()->create();
+
+    $response = $this->actingAs($admin)
+        ->postJson(route('ai.chat.stream'), ['message' => 'hi'])
+        ->assertStatus(429);
+
+    expect($response->json('error'))->toBe('rate_limited');
+    expect($response->getContent())->not->toContain('Should never run.');
+});

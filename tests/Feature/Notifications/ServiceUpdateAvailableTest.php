@@ -33,13 +33,13 @@ test('via respects an explicit preference row over the class default', function 
     expect($notification->via($user))->toEqual(['database', NtfyChannel::class]);
 });
 
-test('toNtfy carries the version bump with info priority', function (): void {
+test('toPush carries the version bump with info severity', function (): void {
+    $connection = ServiceConnection::factory()->sonarr()->create(['name' => 'Sonarr']);
     $user = User::factory()->create();
-    $connection = ServiceConnection::factory()->sonarr()->create(['name' => 'Sonarr Main']);
-    $payload = new ServiceUpdateAvailable($connection, '4.1.0', '4.0.0')->toNtfy($user);
+    $pushMessage = new ServiceUpdateAvailable($connection, '4.1.0', '4.0.0')->toPush($user);
 
-    expect($payload['priority'])->toBe(2)
-        ->and($payload['title'])->toContain('Sonarr Main')
-        ->and($payload['message'])->toContain('4.1.0')
-        ->and($payload['click'])->toContain('/monitoring/service-health');
+    expect($pushMessage->severity)->toBe('info')
+        ->and($pushMessage->title)->toBe('Update available for Sonarr')
+        ->and($pushMessage->body)->toBe('4.0.0 → 4.1.0')
+        ->and($pushMessage->url)->toBe(route('monitoring.service-health'));
 });

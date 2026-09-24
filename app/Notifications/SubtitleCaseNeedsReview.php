@@ -4,8 +4,8 @@ declare(strict_types=1);
 
 namespace App\Notifications;
 
-use App\Services\Notifications\NtfyMessage;
 use App\Services\Notifications\PreferenceResolver;
+use App\Services\Notifications\PushMessage;
 use Illuminate\Bus\Queueable;
 use Illuminate\Notifications\Messages\BroadcastMessage;
 use Illuminate\Notifications\Notification;
@@ -50,16 +50,13 @@ final class SubtitleCaseNeedsReview extends Notification
         return new BroadcastMessage($this->toArray($notifiable));
     }
 
-    /**
-     * @return array{title: string, message: string, priority: int, tags: list<string>, click?: string}
-     */
-    public function toNtfy(object $notifiable): array
+    public function toPush(object $notifiable): PushMessage
     {
-        return NtfyMessage::for(
-            'warning',
-            '[Bazarr] Subtitle case needs review',
-            sprintf('%s: %s', $this->displayName, $this->summary),
-            route('bazarr.escalations'),
+        return new PushMessage(
+            severity: 'warning',
+            title: '[Bazarr] Subtitle case needs review',
+            body: sprintf('%s: %s', $this->displayName, $this->summary),
+            url: route('bazarr.escalations'),
         );
     }
 }

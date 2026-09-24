@@ -43,6 +43,14 @@ return [
         // the admin AI Settings page (which persists on top of this default).
         'chat_timeout' => (int) env('MEDIAMANAGER_AI_CHAT_TIMEOUT', 120),
 
+        // Opt-in: refuse a provider call when the model's configured rate
+        // limit (Admin > AI Prices) is already exhausted over its rolling
+        // window, instead of only showing the usage on the AI Usage page.
+        // Overridable per-install via the admin AI Settings page.
+        'rate_limits' => [
+            'enforce' => (bool) env('MEDIAMANAGER_AI_ENFORCE_RATE_LIMITS', false),
+        ],
+
         // Opt-in: swap the PriceFetcherAgent's custom host-allowlisted HTTP
         // GET tool for the SDK's provider-native WebFetch. Only works on
         // providers that support it (OpenAI/Anthropic); unsupported providers
@@ -73,6 +81,16 @@ return [
             'ignored_providers' => array_values(array_filter(array_map(
                 trim(...),
                 explode(',', (string) env('AI_PRICING_IGNORED_PROVIDERS', '')),
+            ), fn (string $provider): bool => $provider !== '')),
+            // Providers whose newly reported models the refresh adds to the
+            // catalog: comma-separated identifiers, upstream or canonical
+            // spelling. Any other provider is update-only — its existing rows
+            // keep refreshing but models it newly reports are skipped.
+            // OpenRouter is left out by default because it resells hundreds of
+            // third-party models that would flood the catalog.
+            'auto_create_providers' => array_values(array_filter(array_map(
+                trim(...),
+                explode(',', (string) env('AI_PRICING_AUTO_CREATE_PROVIDERS', 'openai,anthropic,gemini,xai,deepseek,mistral,groq,cohere')),
             ), fn (string $provider): bool => $provider !== '')),
             'providers' => [
                 'openai' => 'openai',

@@ -5,18 +5,16 @@ declare(strict_types=1);
 namespace App\Services\Radarr;
 
 use App\Cache\Services\RadarrCache;
-use App\Enums\UserRole;
 use App\Enums\WebhookHandlingStatus;
 use App\Jobs\AuditImportedSubtitles;
-use App\Models\User;
 use App\Models\WebhookEvent;
 use App\Notifications\ServiceWarning;
 use App\Services\Actions\ActionOrchestrator;
 use App\Services\Library\InterventionCounter;
 use App\Services\MediaReplacement\MediaReplacementTracker;
+use App\Services\Notifications\AdminNotifier;
 use App\Services\Search\MovieIndexer;
 use App\Services\Webhook\AbstractWebhookHandler;
-use Illuminate\Support\Facades\Notification;
 
 class RadarrWebhookHandler extends AbstractWebhookHandler
 {
@@ -24,6 +22,7 @@ class RadarrWebhookHandler extends AbstractWebhookHandler
         private readonly ActionOrchestrator $actionOrchestrator,
         private readonly MovieIndexer $movieIndexer,
         private readonly MediaReplacementTracker $mediaReplacementTracker,
+        private readonly AdminNotifier $adminNotifier,
     ) {}
 
     protected function serviceSlug(): string
@@ -306,15 +305,12 @@ class RadarrWebhookHandler extends AbstractWebhookHandler
             return;
         }
 
-        $admins = User::query()->where('role', UserRole::Admin)->get();
-        if ($admins->isNotEmpty()) {
-            Notification::send($admins, new ServiceWarning(
-                service: 'radarr',
-                title: (string) ($payload['type'] ?? 'Radarr health'),
-                message: $message,
-                level: $level,
-            ));
-        }
+        $this->adminNotifier->send(new ServiceWarning(
+            service: 'radarr',
+            title: (string) ($payload['type'] ?? 'Radarr health'),
+            message: $message,
+            level: $level,
+        ));
     }
 
     /**

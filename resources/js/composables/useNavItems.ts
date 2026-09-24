@@ -1,6 +1,7 @@
 import { usePage } from '@inertiajs/vue3';
 import {
     Activity,
+    BellRing,
     Bot,
     Brain,
     Captions,
@@ -40,6 +41,7 @@ import AiUsageController from '@/actions/App/Http/Controllers/Admin/AiUsageContr
 import DecisionAgentSettingsController from '@/actions/App/Http/Controllers/Admin/DecisionAgentSettingsController';
 import JobsController from '@/actions/App/Http/Controllers/Admin/JobsController';
 import MediaReplacementSettingsController from '@/actions/App/Http/Controllers/Admin/MediaReplacementSettingsController';
+import NotificationDestinationController from '@/actions/App/Http/Controllers/Admin/NotificationDestinationController';
 import ServiceConnectionController from '@/actions/App/Http/Controllers/Admin/ServiceConnectionController';
 import AdminStatisticsController from '@/actions/App/Http/Controllers/Admin/StatisticsController';
 import UserController from '@/actions/App/Http/Controllers/Admin/UserController';
@@ -227,6 +229,11 @@ export function useNavItems(counts?: NavCounts): ComputedRef<NavGroup[]> {
                         badge: counts
                             ? () => counts.replacementAttention.value
                             : undefined,
+                    },
+                    {
+                        title: 'Notification destinations',
+                        href: NotificationDestinationController.index.url(),
+                        icon: BellRing,
                     },
                 ],
             },

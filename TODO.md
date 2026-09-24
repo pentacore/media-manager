@@ -7,15 +7,15 @@
 - [x] Add the supported `BAZARR_URL/API_KEY/WEBHOOK_TOKEN/NAME` vars to `.env.example` (Whisparr stays admin-UI-only by choice — no seeder prefix)
 - [x] Add SABnzbd (`sabnzbd/sabnzbd`) to the GitHub version-check repo map in `FetchLatestServiceVersion`
 - [x] Delete the empty `AiEffortLevel` enum stub (referenced nowhere)
-- [ ] Promote ExecuteActionRequest's executor match keys to a public constant and derive the "executor types are seeded" test from it (final-review recommendation — permanently closes the executor-mapped-but-unseeded bug class)
+- [x] Promote ExecuteActionRequest's executor match keys to a public constant and derive the "executor types are seeded" test from it (final-review recommendation — permanently closes the executor-mapped-but-unseeded bug class)
 
 # FEATURES (from 2026-08-12 project audit)
 - [x] Manual "Replace file" trigger in the media UI (series/movie pages) so media replacement works without AI — candidate finder/ranker/approval flow all already exist
-- [ ] Enforce AI model rate limits (currently display-only on the AI Usage page — admins can define limits but nothing throttles)
+- [x] Enforce AI model rate limits (currently display-only on the AI Usage page — admins can define limits but nothing throttles)
 - [x] Admin view for `MediaReplacementAttempt` history/detail (outcomes currently only surface via the Action Queue panel + notifications; consider broadcasting `MediaReplacementAttemptChanged`)
 - [ ] Torrent download client support (qBittorrent first) alongside SABnzbd, reusing the Downloads-page patterns
 - [ ] Jellyfin support (Emby API fork — much of `EmbyClient`/webhook handling carries over)
-- [ ] More notification channels: Discord / Telegram / generic webhook alongside ntfy
+- [x] More notification channels: Discord / Telegram / generic webhook alongside ntfy
 
 # NEW
 - [ ] Make use of inertia pre-fetching to speed up page loading times (This will require some changes to the way we load data for the pages, but it should be worth it in the end)

@@ -4,19 +4,17 @@ declare(strict_types=1);
 
 namespace App\Jobs;
 
-use App\Enums\UserRole;
 use App\Events\ServiceLatestVersionFetched;
 use App\Models\ServiceConnection;
-use App\Models\User;
 use App\Notifications\ServiceUpdateAvailable;
 use App\Services\GitHub\GitHubReleaseClient;
+use App\Services\Notifications\AdminNotifier;
 use Illuminate\Bus\Batchable;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
-use Illuminate\Support\Facades\Notification;
 
 class FetchLatestServiceVersion implements ShouldQueue
 {
@@ -81,15 +79,7 @@ class FetchLatestServiceVersion implements ShouldQueue
             return;
         }
 
-        $admins = User::query()
-            ->where('role', UserRole::Admin->value)
-            ->get();
-
-        if ($admins->isEmpty()) {
-            return;
-        }
-
-        Notification::send($admins, new ServiceUpdateAvailable(
+        resolve(AdminNotifier::class)->send(new ServiceUpdateAvailable(
             $this->serviceConnection,
             $latest,
             $current,
