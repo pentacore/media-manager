@@ -1,3 +1,10 @@
+## [1.18.1](https://github.com/pentacore/media-manager/compare/v1.18.0...v1.18.1) (2026-09-24)
+
+
+### Bug Fixes
+
+* **ai:** adapt to laravel/ai 0.11 stream errors and event signatures ([5b4534a](https://github.com/pentacore/media-manager/commit/5b4534a402607b6c461c13de0e55201e130566ca))
+
 # [1.18.0](https://github.com/pentacore/media-manager/compare/v1.17.0...v1.18.0) (2026-09-24)
 
 
