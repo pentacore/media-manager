@@ -1,3 +1,28 @@
+# [1.18.0](https://github.com/pentacore/media-manager/compare/v1.17.0...v1.18.0) (2026-09-24)
+
+
+### Bug Fixes
+
+* **notifications:** guard destination channel changes, share destination validation rules, pin once-per-destination fan-out ([822ce4e](https://github.com/pentacore/media-manager/commit/822ce4ea6bab343601cd38e99b56ae74c25da061))
+* **notifications:** guard PushChannel against an empty DRIVER and cover the base send() branches ([b685dc2](https://github.com/pentacore/media-manager/commit/b685dc267a1fbaa40f235ad0f6323b6ee6d499e8))
+* **notifications:** hide destination config from serialization and refresh docblocks ([90fc21d](https://github.com/pentacore/media-manager/commit/90fc21d8fe7f685a9598b456a238606e142c5796))
+* **notifications:** keep the preferences page to the channels it can persist until the push destinations land ([d4e35aa](https://github.com/pentacore/media-manager/commit/d4e35aac46f929aa15fcb8c080a64fd755dbaa10))
+* **notifications:** scrub push test failures, keep typed secrets on validation errors, tighten test-send guards ([43a4144](https://github.com/pentacore/media-manager/commit/43a414424e698a25d78fb6753e76bec3669ae5d6))
+
+
+### Features
+
+* **ai:** enforce configured model rate limits behind an admin toggle ([3fc3377](https://github.com/pentacore/media-manager/commit/3fc3377761b3c5ff3143b42cfeaf0b398be9e189))
+* **notifications:** add Discord webhook push channel ([b59976c](https://github.com/pentacore/media-manager/commit/b59976cc02fa1d9c4dda6cd732b4426e778f7bf2))
+* **notifications:** add global NotificationDestination model routed through the preference resolver ([5ba1dd3](https://github.com/pentacore/media-manager/commit/5ba1dd3295c729107e851d3ff3ff9d9789b19f9d))
+* **notifications:** add push channel type and severity enums, telegram token config ([1ffb6a5](https://github.com/pentacore/media-manager/commit/1ffb6a5559fb999b839d7758afc9b698bc04b7a4))
+* **notifications:** add signed generic webhook push channel ([0eda417](https://github.com/pentacore/media-manager/commit/0eda4175ce7a65fa03b21b3e021e605500376399))
+* **notifications:** add Telegram bot push channel ([69fe1e7](https://github.com/pentacore/media-manager/commit/69fe1e7a4769d16af877c889057db3157be7586b))
+* **notifications:** admin page to manage global notification destinations ([ceb0556](https://github.com/pentacore/media-manager/commit/ceb05567b7195999986a709e5ae8274edcfe5657))
+* **notifications:** let users set discord, telegram and webhook destinations and test each channel ([6e440a1](https://github.com/pentacore/media-manager/commit/6e440a1d366593e2b5c862cb059908ce09c6471e))
+* **notifications:** per-user discord, telegram and webhook destinations with preference flags ([666b3f9](https://github.com/pentacore/media-manager/commit/666b3f907b9cc4023950918ddaae2a74f092b6a6))
+* **pricing:** configure per provider whether the price refresh adds new models ([4fab365](https://github.com/pentacore/media-manager/commit/4fab365b6c0865bcc877664b583b8fa47efa1c60))
+
 # [1.17.0](https://github.com/pentacore/media-manager/compare/v1.16.2...v1.17.0) (2026-09-04)
 
 
