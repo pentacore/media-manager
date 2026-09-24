@@ -4,6 +4,7 @@ Before planning or editing, find the row whose globs match the file's path and r
 
 | Applies to | Rule file |
 | --- | --- |
+| app/Http/Controllers/Admin/AiSettingsController.php | .ai/rules/admin.md |
 | app/Ai/** | .ai/rules/ai.md |
 | app/** | .ai/rules/app.md |
 | tests/Browser/** | .ai/rules/browser.md |
@@ -28,6 +29,7 @@ Before planning or editing, find the row whose globs match the file's path and r
 | app/Notifications/** | .ai/rules/notifications.md |
 | app/Observers/*.php | .ai/rules/observers.md |
 | resources/js/pages/** | .ai/rules/pages.md |
+| app/Services/AiUsage/Pricing/** | .ai/rules/pricing.md |
 | app/Providers/*.php | .ai/rules/providers.md |
 | app/Http/Requests/** | .ai/rules/requests.md |
 | app/Http/Resources/** | .ai/rules/resources.md |
