@@ -10,10 +10,13 @@ use App\Models\AiUsageRecord;
 use App\Models\User;
 use App\Settings\AiSettings;
 use Illuminate\Support\Facades\Bus;
+use Illuminate\Support\Facades\Date;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Str;
 use Laravel\Ai\Events\AgentStreamed;
+use Laravel\Ai\Exceptions\StreamErrorException;
+use Laravel\Ai\Streaming\Events\Error;
 
 beforeEach(function (): void {
     config()->set('mediamanager.ai.enabled', true);
@@ -265,4 +268,31 @@ test('streaming endpoint refuses with 429 when the chat model has exhausted its 
 
     expect($response->json('error'))->toBe('rate_limited');
     expect($response->getContent())->not->toContain('Should never run.');
+});
+
+test('a provider stream error without an error event closes the stream with an error and DONE', function (): void {
+    MediaAgent::fake([fn () => throw new StreamErrorException]);
+    $admin = User::factory()->admin()->create();
+
+    $body = $this->actingAs($admin)
+        ->post(route('ai.chat.stream'), ['message' => 'Say hello'], ['Accept' => 'text/event-stream'])
+        ->assertOk()
+        ->streamedContent();
+
+    expect($body)->toContain('"type":"error"')
+        ->and($body)->toContain('The AI provider ended the response early.')
+        ->and($body)->toEndWith("data: [DONE]\n\n");
+});
+
+test('a provider stream error that carried its own error event is not reported twice', function (): void {
+    MediaAgent::fake([fn () => throw new StreamErrorException(new Error('evt-1', 'overloaded', 'Provider overloaded.', true, Date::now()->getTimestamp()))]);
+    $admin = User::factory()->admin()->create();
+
+    $body = $this->actingAs($admin)
+        ->post(route('ai.chat.stream'), ['message' => 'Say hello'], ['Accept' => 'text/event-stream'])
+        ->assertOk()
+        ->streamedContent();
+
+    expect($body)->not->toContain('The AI provider ended the response early.')
+        ->and($body)->toEndWith("data: [DONE]\n\n");
 });

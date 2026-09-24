@@ -7,6 +7,7 @@ use App\Jobs\Ai\GenerateConversationTitle;
 use App\Settings\AiSettings;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
+use Laravel\Ai\Ai;
 
 beforeEach(function (): void {
     config()->set('mediamanager.ai.enabled', true);
@@ -86,7 +87,13 @@ test('auto title model resolves the provider cheapest model', function (): void 
     new GenerateConversationTitle($id, 'audit my library')
         ->handle(resolve(AiSettings::class));
 
-    TitleAgent::assertPrompted(fn ($prompt): bool => $prompt->model === 'gpt-5.4-nano');
+    // Compared against the SDK rather than a literal: the provider's cheapest
+    // model changes between laravel/ai releases.
+    $cheapest = Ai::textProvider()->cheapestTextModel();
+
+    expect($cheapest)->not->toBe(AiSettings::AUTO_MODEL);
+
+    TitleAgent::assertPrompted(fn ($prompt): bool => $prompt->model === $cheapest);
 });
 
 test('AI failure leaves the fallback title intact', function (): void {

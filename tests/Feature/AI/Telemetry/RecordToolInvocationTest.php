@@ -24,6 +24,7 @@ test('writes one row per ToolInvoked event', function (): void {
         tool: resolve(SearchMediaTool::class),
         arguments: ['q' => 'breaking bad'],
         result: ['hits' => []],
+        time: 12.5,
     );
 
     (new RecordToolInvocation)->handle($event);
@@ -45,6 +46,7 @@ test('end-to-end: tool events fire before AgentPrompted, count rolls up to the p
         tool: resolve(SearchMediaTool::class),
         arguments: [],
         result: null,
+        time: 12.5,
     ));
     (new RecordToolInvocation)->handle(new ToolInvoked(
         invocationId: $invocationId,
@@ -53,6 +55,7 @@ test('end-to-end: tool events fire before AgentPrompted, count rolls up to the p
         tool: resolve(DeleteMediaTool::class),
         arguments: [],
         result: null,
+        time: 12.5,
     ));
 
     $agentPrompt = new ReflectionClass(AgentPrompt::class)->newInstanceWithoutConstructor();

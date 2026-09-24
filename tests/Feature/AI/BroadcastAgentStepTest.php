@@ -36,6 +36,7 @@ test('listener broadcasts AgentStepUpdate when conversation context is present',
         tool: resolve(GetServiceStatusTool::class),
         arguments: [],
         result: ['ok' => true],
+        time: 12.5,
     ));
 
     Event::assertDispatched(fn (AgentStepUpdate $agentStepUpdate): bool => $agentStepUpdate->userId === $user->id
@@ -56,6 +57,7 @@ test('listener silently skips when agent has no conversation context', function 
         tool: resolve(GetServiceStatusTool::class),
         arguments: [],
         result: ['ok' => true],
+        time: 12.5,
     ));
 
     Event::assertNotDispatched(AgentStepUpdate::class);

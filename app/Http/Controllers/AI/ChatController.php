@@ -26,6 +26,8 @@ use Illuminate\Support\Str;
 use Inertia\Inertia;
 use Inertia\Response;
 use Laravel\Ai\Exceptions\RateLimitedException;
+use Laravel\Ai\Exceptions\StreamErrorException;
+use Laravel\Ai\Streaming\Events\Error;
 use Throwable;
 
 class ChatController extends Controller
@@ -170,22 +172,44 @@ class ChatController extends Controller
             // consume provider tokens without billing them.
             ignore_user_abort(true);
 
-            foreach ($stream as $event) {
-                echo 'data: '.($event)."\n\n";
+            try {
+                foreach ($stream as $event) {
+                    echo 'data: '.($event)."\n\n";
 
-                // response()->stream() callbacks don't auto-flush per write —
-                // without this the whole SSE body buffers into one chunk. Only
-                // flush when output reaches the SAPI directly (level <= 1):
-                // deeper nesting means a capturing harness (browser tests)
-                // owns the buffer stack, and ob_flush there strands bytes in
-                // an intermediate buffer that never reaches the client.
-                if (ob_get_level() <= 1) {
-                    if (ob_get_level() === 1) {
-                        @ob_flush();
+                    // response()->stream() callbacks don't auto-flush per write —
+                    // without this the whole SSE body buffers into one chunk. Only
+                    // flush when output reaches the SAPI directly (level <= 1):
+                    // deeper nesting means a capturing harness (browser tests)
+                    // owns the buffer stack, and ob_flush there strands bytes in
+                    // an intermediate buffer that never reaches the client.
+                    if (ob_get_level() <= 1) {
+                        if (ob_get_level() === 1) {
+                            @ob_flush();
+                        }
+
+                        flush();
                     }
-
-                    flush();
                 }
+            } catch (StreamErrorException $streamErrorException) {
+                // laravel/ai >= 0.11 throws when a provider reports an error
+                // inside the stream body. The provider's own error event (when
+                // it sent one) was already relayed above; otherwise tell the
+                // client, then close the stream cleanly instead of letting the
+                // exception tear the response down mid-body.
+                Log::warning('AI chat stream ended with a provider error.', [
+                    'message' => $streamErrorException->getMessage(),
+                ]);
+
+                if (! $streamErrorException->error instanceof Error) {
+                    echo 'data: '.json_encode([
+                        'type' => 'error',
+                        'message' => __('The AI provider ended the response early. Please try again.'),
+                    ])."\n\n";
+                }
+
+                echo "data: [DONE]\n\n";
+
+                return;
             }
 
             // The conversation id is populated once the SDK events (and the
