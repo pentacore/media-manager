@@ -224,6 +224,36 @@ test('members create an approval-gated exact download from a fresh server-side c
     ])->and($actionRequest->status)->toBe(ActionRequestStatus::Pending);
 });
 
+test('a subtitle center operation is described with who requested it', function (): void {
+    $targetFingerprint = new BazarrMediaFingerprint()->make('movie', $this->rawMovie);
+
+    $this->actingAs(User::factory()->member()->create(['name' => 'Ada']))
+        ->postJson(route('bazarr.operations.store'), [
+            'operation' => 'download_best',
+            'connection' => $this->bazarr->id,
+            'media_type' => 'movie',
+            'media_id' => 801,
+            'target_fingerprint' => $targetFingerprint,
+            'language' => 'sv',
+            'forced' => false,
+            'hearing_impaired' => true,
+        ])
+        ->assertCreated();
+
+    $actionRequest = ActionRequest::query()->sole();
+
+    expect($actionRequest->title)->toBe('Download the best subtitle for Example Movie')
+        ->and($actionRequest->payload['title'])->toBe('Download the best subtitle for Example Movie')
+        ->and($actionRequest->description)->toBe('Requested from the Subtitle Center by Ada. Bazarr will search its providers and download the best-scoring subtitle.')
+        ->and($actionRequest->details)->toBe([
+            ['label' => 'Media', 'value' => 'Example Movie'],
+            ['label' => 'Language', 'value' => 'sv'],
+            ['label' => 'Forced', 'value' => 'No'],
+            ['label' => 'Hearing impaired', 'value' => 'Yes'],
+        ])
+        ->and($actionRequest->description_verified)->toBeTrue();
+});
+
 test('members read Bazarr capabilities without running a manual search', function (): void {
     $this->actingAs(User::factory()->member()->create())
         ->getJson(route('bazarr.capabilities', ['connection' => $this->bazarr->id]))

@@ -17,6 +17,7 @@ use App\Services\Actions\ActionOrchestrator;
 use App\Services\Bazarr\BazarrClient;
 use App\Services\Bazarr\SubtitleCaseFingerprint;
 use App\Services\Bazarr\SubtitleInventoryService;
+use App\Services\Bazarr\SubtitleOperationDescriber;
 use App\Settings\BazarrAutomationSettings;
 use Carbon\CarbonInterface;
 use finfo;
@@ -38,6 +39,7 @@ final class UploadController extends Controller
         UploadRequest $uploadRequest,
         SubtitleInventoryService $subtitleInventoryService,
         ActionOrchestrator $actionOrchestrator,
+        SubtitleOperationDescriber $subtitleOperationDescriber,
         BazarrAutomationSettings $bazarrAutomationSettings,
     ): JsonResponse {
         $validated = $uploadRequest->validated();
@@ -149,11 +151,19 @@ final class UploadController extends Controller
             ]);
         }
 
+        $description = $subtitleOperationDescriber
+            ->describe('upload_subtitle', $item, [
+                'language' => $validated['language'],
+                'forced' => (bool) $validated['forced'],
+                'hearing_impaired' => (bool) $validated['hearing_impaired'],
+            ])
+            ->because(sprintf('Uploaded from the Subtitle Center by %s.', $uploadRequest->user()->name));
+
         try {
             $actionRequest = DB::transaction(function () use (
                 $actionOrchestrator,
                 $connection,
-                $item,
+                $description,
                 $managingConnection,
                 $subtitleCase,
                 $subtitleUpload,
@@ -168,13 +178,14 @@ final class UploadController extends Controller
                             $connection,
                             $managingConnection,
                             $subtitleCase,
-                            $item,
+                            $description->title,
                         ),
                         'subtitle_upload_id' => $subtitleUpload->id,
                         'language' => $validated['language'],
                         'forced' => (bool) $validated['forced'],
                         'hearing_impaired' => (bool) $validated['hearing_impaired'],
                     ],
+                    description: $description,
                 );
 
                 throw_unless($actionRequest instanceof ActionRequest, ValidationException::withMessages([
@@ -265,17 +276,16 @@ final class UploadController extends Controller
     }
 
     /**
-     * @param  array<string, mixed>  $item
      * @return array<string, mixed>
      */
     private function commonPayload(
         ServiceConnection $bazarr,
         ServiceConnection $managingConnection,
         SubtitleCase $subtitleCase,
-        array $item,
+        string $title,
     ): array {
         return [
-            'title' => 'Upload a subtitle for '.$item['title'],
+            'title' => $title,
             'bazarr_connection_id' => $bazarr->id,
             'service_connection_id' => $managingConnection->id,
             'subtitle_case_id' => $subtitleCase->id,

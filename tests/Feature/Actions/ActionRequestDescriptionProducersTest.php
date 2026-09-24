@@ -2,11 +2,14 @@
 
 declare(strict_types=1);
 
+use App\Enums\SubtitleCaseStatus;
 use App\Models\ActionRequest;
 use App\Models\ActionTypeConfig;
 use App\Models\IndexedSeries;
 use App\Models\ServiceConnection;
+use App\Models\SubtitleCase;
 use App\Models\WebhookEvent;
+use App\Services\Bazarr\BazarrDownloadRequestCreator;
 use App\Services\Emby\EmbyWebhookHandler;
 use App\Services\Radarr\RadarrWebhookHandler;
 use App\Services\Seerr\SeerrWebhookHandler;
@@ -146,5 +149,26 @@ test('a seerr media available notification queues a described emby library scan'
     expect($actionRequest->title)->toBe('Scan the Emby library')
         ->and($actionRequest->description)->toBe('Seerr reported "Dune: Part Two (2024)" is now available. Emby server "Living Room" will rescan its libraries to pick up changes.')
         ->and($actionRequest->details)->toContain(['label' => 'Triggered by', 'value' => 'Seerr › Seerr'])
+        ->and($actionRequest->description_verified)->toBeTrue();
+});
+
+test('an automatic subtitle download is described with the case that queued it', function (): void {
+    ActionTypeConfig::factory()->create(['type' => 'bazarr_download_best', 'requires_approval' => true, 'is_enabled' => true]);
+    $subtitleCase = SubtitleCase::factory()->create([
+        'status' => SubtitleCaseStatus::BazarrSearching,
+        'evidence' => ['display_name' => 'Frieren — Part One', 'missing_languages' => ['eng']],
+    ]);
+
+    resolve(BazarrDownloadRequestCreator::class)->create($subtitleCase, ['code' => 'eng', 'forced' => false, 'hearing_impaired' => true]);
+
+    $actionRequest = ActionRequest::sole();
+    expect($actionRequest->title)->toBe('Download the best subtitle for Frieren — Part One')
+        ->and($actionRequest->description)->toBe(sprintf('Queued automatically for subtitle case #%d. Bazarr will search its providers and download the best-scoring subtitle.', $subtitleCase->id))
+        ->and($actionRequest->details)->toBe([
+            ['label' => 'Media', 'value' => 'Frieren — Part One'],
+            ['label' => 'Language', 'value' => 'eng'],
+            ['label' => 'Forced', 'value' => 'No'],
+            ['label' => 'Hearing impaired', 'value' => 'Yes'],
+        ])
         ->and($actionRequest->description_verified)->toBeTrue();
 });

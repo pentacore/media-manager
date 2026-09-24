@@ -14,6 +14,7 @@ use App\Services\Actions\ActionOrchestrator;
 use App\Services\Bazarr\BazarrCapabilityRegistry;
 use App\Services\Bazarr\BazarrClient;
 use App\Services\Bazarr\SubtitleInventoryService;
+use App\Services\Bazarr\SubtitleOperationDescriber;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Validation\ValidationException;
 
@@ -23,6 +24,7 @@ final class OperationController extends Controller
         OperationRequest $operationRequest,
         SubtitleInventoryService $subtitleInventoryService,
         ActionOrchestrator $actionOrchestrator,
+        SubtitleOperationDescriber $subtitleOperationDescriber,
     ): JsonResponse {
         $validated = $operationRequest->validated();
         $connection = $this->connection((int) $validated['connection']);
@@ -43,14 +45,17 @@ final class OperationController extends Controller
         $this->validateOpaqueSelection($operation, $validated, $item, $bazarrClient, $mediaType, $mediaId);
         $managingConnection = $this->managingConnection($connection, $mediaType);
         $type = 'bazarr_'.$operation;
+        $operationPayload = $this->operationPayload($operation, $validated);
+        $description = $subtitleOperationDescriber->describe($operation, $item, $operationPayload);
         $actionRequest = $actionOrchestrator->dispatch(
             type: $type,
             sourceService: ServiceType::Bazarr->value,
             targetService: ServiceType::Bazarr->value,
             payload: [
-                ...$this->commonPayload($connection, $managingConnection, $item, $operation),
-                ...$this->operationPayload($operation, $validated),
+                ...$this->commonPayload($connection, $managingConnection, $item, $description->title),
+                ...$operationPayload,
             ],
+            description: $description->because(sprintf('Requested from the Subtitle Center by %s.', $operationRequest->user()->name)),
         );
 
         if (! $actionRequest instanceof ActionRequest) {
@@ -127,13 +132,13 @@ final class OperationController extends Controller
         ServiceConnection $bazarr,
         ServiceConnection $managingConnection,
         array $item,
-        string $operation,
+        string $title,
     ): array {
         $mediaType = (string) $item['media_type'];
         $mediaId = (int) $item['media_id'];
 
         return [
-            'title' => $this->title($operation, (string) $item['title']),
+            'title' => $title,
             'bazarr_connection_id' => $bazarr->id,
             'service_connection_id' => $managingConnection->id,
             'media_type' => $mediaType,
@@ -169,20 +174,6 @@ final class OperationController extends Controller
             ], static fn (mixed $value): bool => $value !== null),
             'scan_media' => ['media_action' => $validated['media_action']],
             default => throw ValidationException::withMessages(['operation' => 'Unsupported Bazarr operation.']),
-        };
-    }
-
-    private function title(string $operation, string $mediaTitle): string
-    {
-        return match ($operation) {
-            'download_best' => 'Download the best subtitle for '.$mediaTitle,
-            'download_exact' => 'Download a selected subtitle for '.$mediaTitle,
-            'delete_subtitle' => 'Delete a subtitle for '.$mediaTitle,
-            'sync_subtitle' => 'Synchronize a subtitle for '.$mediaTitle,
-            'translate_subtitle' => 'Translate a subtitle for '.$mediaTitle,
-            'modify_subtitle' => 'Modify a subtitle for '.$mediaTitle,
-            'scan_media' => 'Scan subtitles for '.$mediaTitle,
-            default => 'Run a subtitle operation for '.$mediaTitle,
         };
     }
 
