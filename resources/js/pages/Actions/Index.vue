@@ -785,8 +785,8 @@ function pipelineState(
                         >
                             <AlertTriangle class="mt-0.5 size-4 shrink-0" />
                             <span
-                                >Target name is AI-provided and
-                                unverified.</span
+                                >Target name could not be verified by the
+                                server.</span
                             >
                         </div>
 
@@ -796,8 +796,8 @@ function pipelineState(
                             data-action-details
                         >
                             <Field
-                                v-for="detail in selected.details"
-                                :key="detail.label"
+                                v-for="(detail, index) in selected.details"
+                                :key="`${index}-${detail.label}`"
                                 :label="detail.label"
                             >
                                 <span class="text-[13px]">{{
@@ -837,13 +837,15 @@ function pipelineState(
                                 <Field label="Selection">{{
                                     replacementSelectionMode(selected)
                                 }}</Field>
-                                <Field label="Affected files">{{
-                                    replacementAffectedFiles(selected)
-                                }}</Field>
-                                <Field label="Evidence">{{
-                                    replacementEvidence(selected)
-                                }}</Field>
                             </template>
+                            <Field
+                                label="Affected files"
+                                data-replacement-affected-files
+                                >{{ replacementAffectedFiles(selected) }}</Field
+                            >
+                            <Field label="Evidence" data-replacement-evidence>{{
+                                replacementEvidence(selected)
+                            }}</Field>
                             <Field label="Replacement attempt">
                                 <template v-if="selected.replacement_attempt">
                                     <div

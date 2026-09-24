@@ -81,6 +81,41 @@ test('a replacement action request shows subtitle evidence in the detail panel',
         ->assertSee('season pack');
 });
 
+test('a described replacement action request keeps affected files and evidence beside its details', function (): void {
+    $this->actingAs(User::factory()->member()->create());
+    ActionRequest::factory()->create([
+        'status' => ActionRequestStatus::Pending,
+        'requires_approval' => true,
+        'type' => 'replace_media_file',
+        'source_service' => 'ai',
+        'target_service' => 'sonarr',
+        'title' => 'Replace Trusted Anime S01E01',
+        'description' => 'Sonarr will grab a release with English subtitles.',
+        'details' => [
+            ['label' => 'Required subtitles', 'value' => 'eng'],
+            ['label' => 'Confidence', 'value' => '98%'],
+            ['label' => 'Selection', 'value' => 'manual'],
+        ],
+        'description_verified' => true,
+        'payload' => [
+            'required_languages' => ['eng'],
+            'confidence' => 98,
+            'selection_mode' => 'manual',
+            'matched_rules' => [['name' => 'Crunchyroll English', 'strength' => 'guarantee']],
+            'target' => ['episode_file_ids' => [501, 502]],
+        ],
+    ]);
+
+    visit(route('actions.requests.index', absolute: false))
+        ->assertNoSmoke()
+        ->assertSeeIn('[data-action-details]', 'Required subtitles')
+        ->assertSeeIn('[data-action-details]', '98%')
+        ->assertSeeIn('[data-replacement-affected-files]', 'Affected files')
+        ->assertSeeIn('[data-replacement-affected-files]', '2')
+        ->assertSeeIn('[data-replacement-evidence]', 'Evidence')
+        ->assertSeeIn('[data-replacement-evidence]', 'Crunchyroll English');
+});
+
 test('switching from a filtered tab back to All renders the unfiltered rows', function (): void {
     $member = User::factory()->member()->create();
     ActionRequest::factory()->create([
@@ -157,7 +192,7 @@ test('an unverified action request warns that its target name is unverified', fu
 
     visit(route('actions.requests.index', absolute: false))
         ->assertNoSmoke()
-        ->assertSeeIn('[data-action-unverified]', 'Target name is AI-provided and unverified.');
+        ->assertSeeIn('[data-action-unverified]', 'Target name could not be verified by the server.');
 });
 
 test('a legacy action request still shows its payload title', function (): void {
