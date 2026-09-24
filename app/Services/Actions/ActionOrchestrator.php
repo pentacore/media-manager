@@ -44,7 +44,7 @@ class ActionOrchestrator
         string $sourceService,
         string $targetService,
         array $payload,
-        ?ActionDescription $description = null,
+        ActionDescription $description,
         ?WebhookEvent $webhookEvent = null,
         ?bool $forceRequiresApproval = null,
         bool $deferExecution = false,
@@ -75,7 +75,7 @@ class ActionOrchestrator
         $requiresApproval = $advisoryMode
             || $config->requires_approval
             || ($forceRequiresApproval ?? false)
-            || ($description instanceof ActionDescription && ! $description->verified);
+            || ! $description->verified;
 
         // Pin the originating connection so executors act on the instance
         // that emitted the event — media IDs overlap across same-type
@@ -89,7 +89,7 @@ class ActionOrchestrator
             'webhook_event_id' => $webhookEvent?->id,
             'type' => $type,
             'origin' => $origin,
-            ...($description?->toAttributes() ?? []),
+            ...$description->toAttributes(),
             'source_service' => $sourceService,
             'target_service' => $targetService,
             'status' => $requiresApproval
@@ -129,7 +129,7 @@ class ActionOrchestrator
         string $targetService,
         array $payload,
         string $rationale,
-        ?ActionDescription $description = null,
+        ActionDescription $description,
         ?int $webhookEventId = null,
         ?bool $forceRequiresApproval = null,
     ): ?ActionRequest {
@@ -147,7 +147,7 @@ class ActionOrchestrator
         // The override can only tighten the gate (force approval), never relax it.
         $requiresApproval = $config->requires_approval
             || ($forceRequiresApproval ?? false)
-            || ($description instanceof ActionDescription && ! $description->verified);
+            || ! $description->verified;
 
         // Same connection pinning as dispatch(): agent proposals originate
         // from a webhook event too.
@@ -163,7 +163,7 @@ class ActionOrchestrator
             'webhook_event_id' => $webhookEventId,
             'type' => $type,
             'origin' => 'agent',
-            ...($description?->toAttributes() ?? []),
+            ...$description->toAttributes(),
             'source_service' => $sourceService,
             'target_service' => $targetService,
             'status' => $requiresApproval

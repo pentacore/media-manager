@@ -161,7 +161,7 @@ class FakeSelfDescribedDestructiveTool extends FakeDestructiveTool
     }
 }
 
-class FakeUndescribedLegacyDestructiveTool extends FakeDestructiveTool
+class FakeUnsupportedTypeDestructiveTool extends FakeDestructiveTool
 {
     /**
      * @return array<string, array<never, never>|string>
@@ -278,13 +278,15 @@ test('a destructive tool that supplies its own description and origin is queued 
         ->and($actionRequest->origin)->toBe('system');
 });
 
-test('a destructive tool of a type the describer does not know still queues undescribed', function (): void {
+test('a destructive tool of a type the describer does not know is not queued', function (): void {
     ActionTypeConfig::factory()->create(['type' => 'replace_media_file', 'is_enabled' => true, 'requires_approval' => true]);
 
-    $result = json_decode((new FakeUndescribedLegacyDestructiveTool)->handle(makeFakeRequest()), true);
+    $result = json_decode((new FakeUnsupportedTypeDestructiveTool)->handle(makeFakeRequest()), true);
 
-    expect($result['queued'])->toBeTrue()
-        ->and(ActionRequest::firstWhere('type', 'replace_media_file')->title)->toBeNull();
+    expect($result['queued'])->toBeFalse()
+        ->and($result['reason'])->toBe('undescribable_action')
+        ->and($result['message'])->toContain('replace_media_file')
+        ->and(ActionRequest::count())->toBe(0);
 });
 
 test('handle returns valid JSON even when execute() result has invalid UTF-8', function (): void {

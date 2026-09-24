@@ -141,20 +141,16 @@ abstract class BaseTool implements Tool
      * ActionDescriber and attributed to the chat user. `fallback_title` is the
      * model's name for the target and only ever used, unverified, when the
      * server cannot resolve it. A candidate with no description whose type the
-     * describer does not know returns null and is queued undescribed; this is
-     * transitional and removed once every destructive tool supplies a description.
+     * describer does not know throws UndescribableAction, which handle() turns
+     * into the undescribable_action response.
      *
      * @param  array<string, mixed>  $payload
      * @param  array<string, mixed>  $candidate
      */
-    private function describeCandidate(string $type, array $payload, array $candidate): ?ActionDescription
+    private function describeCandidate(string $type, array $payload, array $candidate): ActionDescription
     {
         if (($candidate['description'] ?? null) instanceof ActionDescription) {
             return $candidate['description'];
-        }
-
-        if (! in_array($type, ActionDescriber::TYPES, true)) {
-            return null;
         }
 
         $fallbackTitle = $candidate['fallback_title'] ?? null;

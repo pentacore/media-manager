@@ -5,6 +5,7 @@ declare(strict_types=1);
 use App\Enums\ActionRequestStatus;
 use App\Events\ActionRequestCreated;
 use App\Jobs\ExecuteActionRequest;
+use App\Services\Actions\ActionDescription;
 use App\Services\Actions\ActionOrchestrator;
 use Database\Seeders\ActionTypeConfigSeeder;
 use Illuminate\Support\Facades\DB;
@@ -28,6 +29,7 @@ test('dispatch with forceRequiresApproval true forces pending even when config a
         sourceService: 'ai',
         targetService: 'sonarr',
         payload: ['service' => 'sonarr', 'download_id' => 'abc'],
+        description: new ActionDescription('Test action', 'Test effect.'),
         forceRequiresApproval: true,
     );
 
@@ -48,6 +50,7 @@ test('dispatch with forceRequiresApproval null keeps config behaviour', function
         sourceService: 'ai',
         targetService: 'sonarr',
         payload: ['service' => 'sonarr', 'download_id' => 'abc'],
+        description: new ActionDescription('Test action', 'Test effect.'),
     );
 
     expect($actionRequest->requires_approval)->toBeFalse();

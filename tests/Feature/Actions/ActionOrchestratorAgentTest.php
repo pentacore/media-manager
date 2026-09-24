@@ -7,6 +7,7 @@ use App\Enums\AiMode;
 use App\Events\ActionRequestCreated;
 use App\Jobs\ExecuteActionRequest;
 use App\Models\ActionTypeConfig;
+use App\Services\Actions\ActionDescription;
 use App\Services\Actions\ActionOrchestrator;
 use App\Settings\AiSettings;
 use Illuminate\Support\Facades\Event;
@@ -25,6 +26,7 @@ test('dispatchFromAgent creates a Pending request for requires_approval types', 
         sourceService: 'sonarr',
         targetService: 'sonarr',
         payload: ['series_id' => 42],
+        description: new ActionDescription('Test action', 'Test effect.'),
         rationale: 'Stuck import, no longer monitored.',
     );
 
@@ -46,6 +48,7 @@ test('dispatchFromAgent auto-executes when requires_approval=false', function ()
         sourceService: 'sonarr',
         targetService: 'emby',
         payload: [],
+        description: new ActionDescription('Test action', 'Test effect.'),
         rationale: 'Import resolved; rescan library.',
     );
 
@@ -64,6 +67,7 @@ test('dispatchFromAgent ignores the chat advisory mode override', function (): v
         sourceService: 'sonarr',
         targetService: 'emby',
         payload: [],
+        description: new ActionDescription('Test action', 'Test effect.'),
         rationale: 'Rescan.',
     );
 
@@ -80,6 +84,7 @@ test('dispatchFromAgent forceRequiresApproval can only tighten the gate', functi
         sourceService: 'sonarr',
         targetService: 'sonarr',
         payload: [],
+        description: new ActionDescription('Test action', 'Test effect.'),
         rationale: 'ambiguous',
         forceRequiresApproval: true,
     );
@@ -93,6 +98,7 @@ test('dispatchFromAgent forceRequiresApproval can only tighten the gate', functi
         sourceService: 'sonarr',
         targetService: 'sonarr',
         payload: [],
+        description: new ActionDescription('Test action', 'Test effect.'),
         rationale: 'x',
         forceRequiresApproval: false,
     );
@@ -105,6 +111,7 @@ test('dispatchFromAgent returns null when config missing or disabled', function 
         sourceService: 'sonarr',
         targetService: 'sonarr',
         payload: [],
+        description: new ActionDescription('Test action', 'Test effect.'),
         rationale: 'x',
     ))->toBeNull();
 
@@ -115,6 +122,7 @@ test('dispatchFromAgent returns null when config missing or disabled', function 
         sourceService: 'sonarr',
         targetService: 'sonarr',
         payload: [],
+        description: new ActionDescription('Test action', 'Test effect.'),
         rationale: 'x',
     ))->toBeNull();
 
