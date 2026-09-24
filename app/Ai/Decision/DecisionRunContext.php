@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Ai\Decision;
 
+use App\Models\WebhookEvent;
+
 /**
  * Per-run scratch state shared between RunDecisionAgent and ProposeActionTool.
  *
@@ -26,6 +28,42 @@ class DecisionRunContext
         public readonly int $maxActions,
         public readonly string $sourceService = 'agent',
     ) {}
+
+    /**
+     * The payload the describer resolves against: the triggering webhook's
+     * connection is pinned exactly as ActionOrchestrator::dispatchFromAgent()
+     * will pin it, so the named target is the one the executor acts on.
+     *
+     * @param  array<string, mixed>  $payload
+     * @return array<string, mixed>
+     */
+    public function pinContext(array $payload): array
+    {
+        if ($this->webhookEventId === null || array_key_exists('service_connection_id', $payload)) {
+            return $payload;
+        }
+
+        $connectionId = WebhookEvent::query()->whereKey($this->webhookEventId)->value('service_connection_id');
+
+        return $connectionId === null ? $payload : [...$payload, 'service_connection_id' => $connectionId];
+    }
+
+    public function proposalReason(): string
+    {
+        $webhookEvent = $this->webhookEventId === null
+            ? null
+            : WebhookEvent::query()->with('serviceConnection:id,name')->find($this->webhookEventId);
+
+        if (! $webhookEvent instanceof WebhookEvent) {
+            return 'Proposed by the decision agent.';
+        }
+
+        return sprintf(
+            'Proposed by the decision agent in response to a "%s" event from %s.',
+            $webhookEvent->event_type,
+            $webhookEvent->serviceConnection?->name ?? $this->sourceService,
+        );
+    }
 
     public function remainingBudget(): int
     {

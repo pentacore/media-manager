@@ -40,7 +40,12 @@ function cleanCandidate(): array
 
 function fakeCandidates(array $candidates): void
 {
-    Http::fake(['sonarr.local:8989/api/v3/manualimport*' => Http::response($candidates)]);
+    Http::fake([
+        'sonarr.local:8989/api/v3/manualimport*' => Http::response($candidates),
+        'sonarr.local:8989/api/v3/queue*' => Http::response(['records' => [
+            ['downloadId' => 'dl-1', 'title' => 'Show.S01E01.1080p', 'series' => ['title' => 'Show']],
+        ]]),
+    ]);
 }
 
 test('refuses when the manual-import capability is disabled', function (): void {
@@ -131,4 +136,19 @@ test('requires a download_id', function (): void {
 
     expect($result['queued'])->toBeFalse();
     expect($result['reason'])->toBe('missing_download_id');
+});
+
+test('describes the import from the arr queue record with the decision agent as the reason', function (): void {
+    ActionTypeConfig::factory()->create(['type' => 'resolve_manual_import', 'requires_approval' => true, 'is_enabled' => true]);
+    fakeCandidates([cleanCandidate()]);
+
+    (new ResolveManualImportTool)->handle(new Request([
+        'service' => 'sonarr', 'download_id' => 'dl-1',
+    ]));
+
+    $actionRequest = ActionRequest::sole();
+    expect($actionRequest->title)->toBe('Import download "Show.S01E01.1080p"')
+        ->and($actionRequest->description)->toBe('Proposed by the decision agent. Sonarr will import the 1 of 1 files it could match.')
+        ->and($actionRequest->description_verified)->toBeTrue()
+        ->and($actionRequest->details)->toContain(['label' => 'Importable files', 'value' => '1 of 1']);
 });

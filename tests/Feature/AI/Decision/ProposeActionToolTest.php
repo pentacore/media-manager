@@ -7,13 +7,16 @@ use App\Ai\Decision\ProposeActionTool;
 use App\Enums\MediaReplacementStatus;
 use App\Models\ActionRequest;
 use App\Models\ActionTypeConfig;
+use App\Models\IndexedSeries;
 use App\Models\MediaReplacementAttempt;
 use App\Models\ServiceConnection;
 use App\Models\WebhookEvent;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Queue;
 use Laravel\Ai\Tools\Request;
 
 beforeEach(function (): void {
+    Http::preventStrayRequests();
     Queue::fake();
 });
 
@@ -37,7 +40,7 @@ test('queues an ActionRequest tagged as agent with the rationale', function (): 
         'type' => 'delete_series',
         'target_service' => 'sonarr',
         'rationale' => 'Unmonitored and unwatched.',
-        'payload' => ['series_id' => 7],
+        'payload' => ['sonarr_series_id' => 7],
     ])), true);
 
     expect($result['queued'])->toBeTrue();
@@ -46,7 +49,7 @@ test('queues an ActionRequest tagged as agent with the rationale', function (): 
     $request = ActionRequest::firstWhere('type', 'delete_series');
     expect($request->origin)->toBe('agent');
     expect($request->source_service)->toBe('sonarr');
-    expect($request->payload['series_id'])->toBe(7);
+    expect($request->payload['sonarr_series_id'])->toBe(7);
     expect($request->payload['agent_rationale'])->toBe('Unmonitored and unwatched.');
     expect($decisionRunContext->count())->toBe(1);
 });
@@ -196,7 +199,7 @@ test('reports no_action_type_config when the rule is missing', function (): void
     bindDecisionContext();
 
     $result = json_decode((new ProposeActionTool)->handle(new Request([
-        'type' => 'delete_movie', 'target_service' => 'radarr', 'rationale' => 'x',
+        'type' => 'delete_movie', 'target_service' => 'radarr', 'rationale' => 'x', 'payload' => ['radarr_movie_id' => 9],
     ])), true);
 
     expect($result['queued'])->toBeFalse();
@@ -212,4 +215,63 @@ test('refuses to run without an active decision context', function (): void {
 
     expect($result['queued'])->toBeFalse();
     expect($result['reason'])->toBe('no_active_run');
+});
+
+test('a proposal is described from the server-resolved target with the triggering event as the reason', function (): void {
+    ActionTypeConfig::factory()->create(['type' => 'delete_series', 'is_enabled' => true, 'requires_approval' => true]);
+    $sonarr = ServiceConnection::factory()->sonarr()->create(['url' => 'http://sonarr.local:8989', 'name' => 'Sonarr']);
+    IndexedSeries::factory()->for($sonarr, 'serviceConnection')->create(['sonarr_id' => 142, 'title' => 'Severance', 'year' => 2022]);
+    $webhookEvent = WebhookEvent::factory()->for($sonarr, 'serviceConnection')->create(['event_type' => 'SeriesDelete']);
+    app()->instance(DecisionRunContext::class, new DecisionRunContext(webhookEventId: $webhookEvent->id, maxActions: 3, sourceService: 'sonarr'));
+
+    (new ProposeActionTool)->handle(new Request([
+        'type' => 'delete_series',
+        'target_service' => 'sonarr',
+        'rationale' => 'The series was removed upstream.',
+        'payload' => ['sonarr_series_id' => 142, 'delete_files' => true],
+        'title' => 'Something Else',
+    ]));
+
+    $actionRequest = ActionRequest::sole();
+    expect($actionRequest->title)->toBe('Delete series "Severance (2022)"')
+        ->and($actionRequest->description)->toBe('Proposed by the decision agent in response to a "SeriesDelete" event from Sonarr. Sonarr will delete the series and its files from disk.')
+        ->and($actionRequest->description_verified)->toBeTrue()
+        ->and($actionRequest->payload['agent_rationale'])->toBe('The series was removed upstream.');
+});
+
+test('a proposal without its target id is rejected as missing_target', function (): void {
+    ActionTypeConfig::factory()->create(['type' => 'delete_series', 'is_enabled' => true, 'requires_approval' => true]);
+    app()->instance(DecisionRunContext::class, new DecisionRunContext(webhookEventId: null, maxActions: 3));
+
+    $result = json_decode((new ProposeActionTool)->handle(new Request([
+        'type' => 'delete_series',
+        'target_service' => 'sonarr',
+        'rationale' => 'Remove it.',
+        'payload' => ['series_id' => 142],
+    ])), true);
+
+    expect($result['queued'])->toBeFalse()
+        ->and($result['reason'])->toBe('missing_target')
+        ->and($result['message'])->toContain('sonarr_series_id')
+        ->and(ActionRequest::count())->toBe(0);
+});
+
+test('a proposal the server cannot resolve falls back to the model title and waits for approval', function (): void {
+    ActionTypeConfig::factory()->create(['type' => 'delete_series', 'is_enabled' => true, 'requires_approval' => false]);
+    bindDecisionContext();
+
+    $result = json_decode((new ProposeActionTool)->handle(new Request([
+        'type' => 'delete_series',
+        'target_service' => 'sonarr',
+        'rationale' => 'Remove it.',
+        'payload' => ['sonarr_series_id' => 142],
+        'title' => 'Severance',
+    ])), true);
+
+    $actionRequest = ActionRequest::sole();
+    expect($result['requires_approval'])->toBeTrue()
+        ->and($actionRequest->title)->toBe('Delete series "Severance"')
+        ->and($actionRequest->description)->toStartWith('Proposed by the decision agent. ')
+        ->and($actionRequest->description_verified)->toBeFalse()
+        ->and($actionRequest->requires_approval)->toBeTrue();
 });

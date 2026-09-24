@@ -7,6 +7,7 @@ use App\Ai\Tools\Arr\ResolveManualImportChatTool;
 use App\Enums\AiMode;
 use App\Models\ActionRequest;
 use App\Models\ServiceConnection;
+use App\Models\User;
 use App\Settings\AiSettings;
 use Database\Seeders\ActionTypeConfigSeeder;
 use Illuminate\Support\Facades\Http;
@@ -29,6 +30,9 @@ function fakeSonarrManualImport(array $candidates): void
 
     Http::fake([
         'sonarr.local:8989/api/v3/manualimport*' => Http::response($candidates),
+        'sonarr.local:8989/api/v3/queue*' => Http::response(['records' => [
+            ['downloadId' => 'HASH-A', 'title' => 'Show.S01E01.1080p', 'series' => ['title' => 'Show']],
+        ]]),
     ]);
 }
 
@@ -136,4 +140,32 @@ test('advisory mode blocks the tool', function (): void {
     );
 
     expect($result['error'])->toBe('advisory_mode_blocks_destructive');
+});
+
+test('the queued import is described from the arr queue as requested in chat', function (): void {
+    $this->actingAs(User::factory()->admin()->create(['name' => 'Martin']));
+    fakeSonarrManualImport([
+        [
+            'path' => '/downloads/Show.S01E01.mkv',
+            'quality' => ['quality' => ['name' => 'WEBDL-1080p']],
+            'series' => ['id' => 5, 'title' => 'Show'],
+            'episodes' => [['id' => 42, 'seasonNumber' => 1, 'episodeNumber' => 1]],
+            'rejections' => [],
+        ],
+    ]);
+
+    $result = json_decode(
+        (new ResolveManualImportChatTool)->handle(new Request([
+            'service' => 'sonarr',
+            'download_id' => 'HASH-A',
+            'reason' => 'File maps cleanly.',
+        ])),
+        true,
+    );
+
+    $actionRequest = ActionRequest::findOrFail($result['action_request_id']);
+    expect($actionRequest->title)->toBe('Import download "Show.S01E01.1080p"')
+        ->and($actionRequest->description)->toBe('Requested in chat by Martin. Sonarr will import the 1 of 1 files it could match.')
+        ->and($actionRequest->description_verified)->toBeTrue()
+        ->and($actionRequest->origin)->toBe('chat');
 });
