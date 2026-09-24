@@ -11,7 +11,8 @@ use App\Enums\ServiceType;
  * download action types. Chat tools, webhook handlers and the decision agent
  * all describe the same types, so the title, effect sentence and target facts
  * live here; each producer only adds its "why" via ActionDescription::because()
- * and any trigger facts.
+ * and any trigger facts. Payload flags are coerced exactly as the executors
+ * coerce them, so the approval card never contradicts what runs.
  */
 final readonly class ActionDescriber
 {
@@ -48,7 +49,7 @@ final readonly class ActionDescriber
             'approve_seerr_request' => $this->seerr($this->actionTargets->seerrRequest($this->id($type, $payload, 'seerr_request_id'), $payload, $fallbackName), 'Approve', 'Seerr will approve the request and send it to Sonarr or Radarr.'),
             'decline_seerr_request' => $this->seerr($this->actionTargets->seerrRequest($this->id($type, $payload, 'seerr_request_id'), $payload, $fallbackName), 'Decline', 'Seerr will decline the request.'),
             'cleanup_seerr_request' => $this->seerr($this->actionTargets->seerrRequest($this->id($type, $payload, 'seerr_request_id'), $payload, $fallbackName), 'Clean up', 'Seerr will delete the request.'),
-            'emby_library_scan' => $this->libraryScan($payload),
+            'emby_library_scan' => $this->libraryScan(),
             'remove_stuck_download' => $this->removeStuckDownload($type, $payload, $fallbackName),
             'resolve_manual_import' => $this->resolveManualImport($type, $payload, $fallbackName),
             default => throw UndescribableAction::unsupportedType($type),
@@ -60,7 +61,7 @@ final readonly class ActionDescriber
      */
     private function delete(ActionTarget $target, string $service, array $payload): ActionDescription
     {
-        $deleteFiles = ($payload['delete_files'] ?? false) === true;
+        $deleteFiles = (bool) ($payload['delete_files'] ?? false);
 
         return $target->describe(
             sprintf('Delete %s', $target->label()),
@@ -82,10 +83,10 @@ final readonly class ActionDescriber
         )
             ->withDetail('Quality profile', $this->actionTargets->qualityProfileName($serviceType, $profileId, $payload) ?? sprintf('#%d', $profileId))
             ->withDetail('Root folder', is_string($payload['root_folder_path'] ?? null) ? $payload['root_folder_path'] : null)
-            ->withDetail('Monitored', ($payload['monitored'] ?? true) === true);
+            ->withDetail('Monitored', (bool) ($payload['monitored'] ?? true));
 
-        return array_key_exists('season_folder', $payload)
-            ? $actionDescription->withDetail('Season folders', $payload['season_folder'] === true)
+        return $serviceType === ServiceType::Sonarr
+            ? $actionDescription->withDetail('Season folders', (bool) ($payload['season_folder'] ?? true))
             : $actionDescription;
     }
 
@@ -94,7 +95,7 @@ final readonly class ActionDescriber
      */
     private function monitor(ActionTarget $target, string $service, array $payload): ActionDescription
     {
-        $monitored = ($payload['monitored'] ?? false) === true;
+        $monitored = (bool) ($payload['monitored'] ?? true);
 
         return $target->describe(
             sprintf('%s %s', $monitored ? 'Monitor' : 'Unmonitor', $target->label()),
@@ -121,12 +122,9 @@ final readonly class ActionDescriber
         return $target->describe(sprintf('%s Seerr request for "%s"', $verb, $target->name), $effect);
     }
 
-    /**
-     * @param  array<string, mixed>  $payload
-     */
-    private function libraryScan(array $payload): ActionDescription
+    private function libraryScan(): ActionDescription
     {
-        $actionTarget = $this->actionTargets->embyLibrary($payload);
+        $actionTarget = $this->actionTargets->embyLibrary();
 
         return $actionTarget->describe(
             'Scan the Emby library',

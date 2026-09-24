@@ -212,12 +212,13 @@ final readonly class ActionTargets
     }
 
     /**
-     * @param  array<string, mixed>  $pinContext
+     * Resolves the active Emby connection, like EmbyActions does when the scan
+     * runs; a pinned connection id is deliberately ignored here.
      */
-    public function embyLibrary(array $pinContext = []): ActionTarget
+    public function embyLibrary(): ActionTarget
     {
-        return $this->attempt('library', 'emby', 'Emby', true, function () use ($pinContext): ActionTarget {
-            $serviceConnection = ServiceConnection::resolvePinned($pinContext, ServiceType::Emby);
+        return $this->attempt('library', 'emby', 'Emby', true, function (): ActionTarget {
+            $serviceConnection = ServiceConnection::resolveActive(ServiceType::Emby);
 
             return new ActionTarget('library', $serviceConnection->name, [
                 ['label' => 'Emby server', 'value' => $serviceConnection->name],
