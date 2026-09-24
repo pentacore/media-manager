@@ -120,3 +120,52 @@ test('a viewer cannot reach the action requests page', function (): void {
     // the member-only "Action Requests" heading must not appear.
     visit('/actions/requests')->assertDontSee('Action Requests');
 });
+
+test('a described action request shows its description, details and agent reasoning', function (): void {
+    $this->actingAs(User::factory()->member()->create());
+    ActionRequest::factory()->described()->create([
+        'origin' => 'agent',
+        'payload' => ['sonarr_series_id' => 142, 'agent_rationale' => 'The series was removed from Emby.'],
+    ]);
+
+    visit(route('actions.requests.index', absolute: false))
+        ->assertNoSmoke()
+        ->assertSeeIn('[data-action-title]', 'Delete series "Severance (2022)"')
+        ->assertSeeIn('[data-action-description]', 'Sonarr will delete the series and its files from disk.')
+        ->assertSeeIn('[data-action-details]', 'Delete files')
+        ->assertSeeIn('[data-action-details]', 'Yes')
+        ->assertSeeIn('[data-action-ai-reasoning]', 'The series was removed from Emby.')
+        ->assertMissing('[data-action-unverified]');
+});
+
+test('a system action request does not label its server-written rationale as ai reasoning', function (): void {
+    $this->actingAs(User::factory()->member()->create());
+    ActionRequest::factory()->described()->create([
+        'origin' => 'system',
+        'payload' => ['sonarr_series_id' => 142, 'agent_rationale' => 'Automatic subtitle check found no English track.'],
+    ]);
+
+    visit(route('actions.requests.index', absolute: false))
+        ->assertNoSmoke()
+        ->assertSeeIn('[data-action-description]', 'Sonarr will delete the series and its files from disk.')
+        ->assertMissing('[data-action-ai-reasoning]');
+});
+
+test('an unverified action request warns that its target name is unverified', function (): void {
+    $this->actingAs(User::factory()->member()->create());
+    ActionRequest::factory()->described()->create(['description_verified' => false]);
+
+    visit(route('actions.requests.index', absolute: false))
+        ->assertNoSmoke()
+        ->assertSeeIn('[data-action-unverified]', 'Target name is AI-provided and unverified.');
+});
+
+test('a legacy action request still shows its payload title', function (): void {
+    $this->actingAs(User::factory()->member()->create());
+    ActionRequest::factory()->create(['payload' => ['title' => 'Legacy title', 'detail' => 'Legacy detail']]);
+
+    visit(route('actions.requests.index', absolute: false))
+        ->assertNoSmoke()
+        ->assertSeeIn('[data-action-title]', 'Legacy title')
+        ->assertSeeIn('[data-action-description]', 'Legacy detail');
+});
