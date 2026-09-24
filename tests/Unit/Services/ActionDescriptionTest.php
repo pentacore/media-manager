@@ -24,21 +24,21 @@ test('an action description rejects an empty title or description', function (st
 ])->throws(InvalidArgumentException::class);
 
 test('because prepends the reason to the effect sentence', function (): void {
-    $description = new ActionDescription('Scan the Emby library', 'Emby will rescan its libraries.')
+    $actionDescription = new ActionDescription('Scan the Emby library', 'Emby will rescan its libraries.')
         ->because('Radarr imported "Dune".');
 
-    expect($description->description)->toBe('Radarr imported "Dune". Emby will rescan its libraries.');
+    expect($actionDescription->description)->toBe('Radarr imported "Dune". Emby will rescan its libraries.');
 });
 
 test('withDetail formats booleans and drops empty values', function (): void {
-    $description = new ActionDescription('T', 'D')
+    $actionDescription = new ActionDescription('T', 'D')
         ->withDetail('Delete files', true)
         ->withDetail('Monitored', false)
         ->withDetail('Sonarr ID', 142)
         ->withDetail('Root folder', null)
         ->withDetail('Notes', '   ');
 
-    expect($description->details)->toBe([
+    expect($actionDescription->details)->toBe([
         ['label' => 'Delete files', 'value' => 'Yes'],
         ['label' => 'Monitored', 'value' => 'No'],
         ['label' => 'Sonarr ID', 'value' => '142'],
@@ -61,10 +61,10 @@ test('an action description bounds every string and the detail count', function 
 });
 
 test('unverified keeps content and flips the flag', function (): void {
-    $description = new ActionDescription('T', 'D', [['label' => 'A', 'value' => 'B']])->unverified();
+    $actionDescription = new ActionDescription('T', 'D', [['label' => 'A', 'value' => 'B']])->unverified();
 
-    expect($description->verified)->toBeFalse()
-        ->and($description->toAttributes())->toBe([
+    expect($actionDescription->verified)->toBeFalse()
+        ->and($actionDescription->toAttributes())->toBe([
             'title' => 'T',
             'description' => 'D',
             'details' => [['label' => 'A', 'value' => 'B']],
@@ -75,10 +75,10 @@ test('unverified keeps content and flips the flag', function (): void {
 test('an action target labels itself and seeds a description with its facts', function (): void {
     $target = new ActionTarget('series', 'Severance (2022)', [['label' => 'Sonarr ID', 'value' => '142']], verified: false);
 
-    $description = $target->describe(sprintf('Delete %s', $target->label()), 'Sonarr will delete the series.');
+    $actionDescription = $target->describe(sprintf('Delete %s', $target->label()), 'Sonarr will delete the series.');
 
     expect($target->label())->toBe('series "Severance (2022)"')
-        ->and($description->title)->toBe('Delete series "Severance (2022)"')
-        ->and($description->details)->toBe([['label' => 'Sonarr ID', 'value' => '142']])
-        ->and($description->verified)->toBeFalse();
+        ->and($actionDescription->title)->toBe('Delete series "Severance (2022)"')
+        ->and($actionDescription->details)->toBe([['label' => 'Sonarr ID', 'value' => '142']])
+        ->and($actionDescription->verified)->toBeFalse();
 });

@@ -34,20 +34,20 @@ final readonly class ActionTargets
     public function sonarrSeries(int $sonarrId, array $pinContext = [], ?string $fallbackName = null, bool $fallbackVerified = false): ActionTarget
     {
         return $this->attempt('series', $sonarrId, $fallbackName, $fallbackVerified, function () use ($sonarrId, $pinContext): ?ActionTarget {
-            $connection = ServiceConnection::resolvePinned($pinContext, ServiceType::Sonarr);
+            $serviceConnection = ServiceConnection::resolvePinned($pinContext, ServiceType::Sonarr);
             $indexed = IndexedSeries::query()
-                ->where('service_connection_id', $connection->id)
+                ->where('service_connection_id', $serviceConnection->id)
                 ->where('sonarr_id', $sonarrId)
                 ->first(['title', 'year']);
 
             $name = $indexed instanceof IndexedSeries
                 ? $this->withYear($indexed->title, $indexed->year)
-                : $this->nameFrom(new SonarrClient($connection)->getSeriesById($sonarrId));
+                : $this->nameFrom(new SonarrClient($serviceConnection)->getSeriesById($sonarrId));
 
             return $name === null ? null : new ActionTarget('series', $name, [
                 ['label' => 'Series', 'value' => $name],
                 ['label' => 'Sonarr ID', 'value' => (string) $sonarrId],
-                ['label' => 'Connection', 'value' => $connection->name],
+                ['label' => 'Connection', 'value' => $serviceConnection->name],
             ]);
         });
     }
@@ -58,20 +58,20 @@ final readonly class ActionTargets
     public function radarrMovie(int $radarrId, array $pinContext = [], ?string $fallbackName = null, bool $fallbackVerified = false): ActionTarget
     {
         return $this->attempt('movie', $radarrId, $fallbackName, $fallbackVerified, function () use ($radarrId, $pinContext): ?ActionTarget {
-            $connection = ServiceConnection::resolvePinned($pinContext, ServiceType::Radarr);
+            $serviceConnection = ServiceConnection::resolvePinned($pinContext, ServiceType::Radarr);
             $indexed = IndexedMovie::query()
-                ->where('service_connection_id', $connection->id)
+                ->where('service_connection_id', $serviceConnection->id)
                 ->where('radarr_id', $radarrId)
                 ->first(['title', 'year']);
 
             $name = $indexed instanceof IndexedMovie
                 ? $this->withYear($indexed->title, $indexed->year)
-                : $this->nameFrom(new RadarrClient($connection)->getMovieById($radarrId));
+                : $this->nameFrom(new RadarrClient($serviceConnection)->getMovieById($radarrId));
 
             return $name === null ? null : new ActionTarget('movie', $name, [
                 ['label' => 'Movie', 'value' => $name],
                 ['label' => 'Radarr ID', 'value' => (string) $radarrId],
-                ['label' => 'Connection', 'value' => $connection->name],
+                ['label' => 'Connection', 'value' => $serviceConnection->name],
             ]);
         });
     }
@@ -82,13 +82,13 @@ final readonly class ActionTargets
     public function sonarrLookup(int $tvdbId, array $pinContext = [], ?string $fallbackName = null): ActionTarget
     {
         return $this->attempt('series', $tvdbId, $fallbackName, false, function () use ($tvdbId, $pinContext): ?ActionTarget {
-            $connection = ServiceConnection::resolvePinned($pinContext, ServiceType::Sonarr);
-            $name = $this->nameFrom(new SonarrClient($connection)->searchSeries(sprintf('tvdb:%d', $tvdbId))[0] ?? []);
+            $serviceConnection = ServiceConnection::resolvePinned($pinContext, ServiceType::Sonarr);
+            $name = $this->nameFrom(new SonarrClient($serviceConnection)->searchSeries(sprintf('tvdb:%d', $tvdbId))[0] ?? []);
 
             return $name === null ? null : new ActionTarget('series', $name, [
                 ['label' => 'Series', 'value' => $name],
                 ['label' => 'TVDB ID', 'value' => (string) $tvdbId],
-                ['label' => 'Connection', 'value' => $connection->name],
+                ['label' => 'Connection', 'value' => $serviceConnection->name],
             ]);
         });
     }
@@ -99,13 +99,13 @@ final readonly class ActionTargets
     public function radarrLookup(int $tmdbId, array $pinContext = [], ?string $fallbackName = null): ActionTarget
     {
         return $this->attempt('movie', $tmdbId, $fallbackName, false, function () use ($tmdbId, $pinContext): ?ActionTarget {
-            $connection = ServiceConnection::resolvePinned($pinContext, ServiceType::Radarr);
-            $name = $this->nameFrom(new RadarrClient($connection)->searchMovies(sprintf('tmdb:%d', $tmdbId))[0] ?? []);
+            $serviceConnection = ServiceConnection::resolvePinned($pinContext, ServiceType::Radarr);
+            $name = $this->nameFrom(new RadarrClient($serviceConnection)->searchMovies(sprintf('tmdb:%d', $tmdbId))[0] ?? []);
 
             return $name === null ? null : new ActionTarget('movie', $name, [
                 ['label' => 'Movie', 'value' => $name],
                 ['label' => 'TMDB ID', 'value' => (string) $tmdbId],
-                ['label' => 'Connection', 'value' => $connection->name],
+                ['label' => 'Connection', 'value' => $serviceConnection->name],
             ]);
         });
     }
@@ -116,13 +116,13 @@ final readonly class ActionTargets
     public function whisparrItem(int $itemId, array $pinContext = [], ?string $fallbackName = null): ActionTarget
     {
         return $this->attempt('item', $itemId, $fallbackName, false, function () use ($itemId, $pinContext): ?ActionTarget {
-            $connection = ServiceConnection::resolvePinned($pinContext, ServiceType::Whisparr);
-            $name = $this->nameFrom(new WhisparrClient($connection)->getItemById($itemId));
+            $serviceConnection = ServiceConnection::resolvePinned($pinContext, ServiceType::Whisparr);
+            $name = $this->nameFrom(new WhisparrClient($serviceConnection)->getItemById($itemId));
 
             return $name === null ? null : new ActionTarget('item', $name, [
                 ['label' => 'Item', 'value' => $name],
                 ['label' => 'Whisparr ID', 'value' => (string) $itemId],
-                ['label' => 'Connection', 'value' => $connection->name],
+                ['label' => 'Connection', 'value' => $serviceConnection->name],
             ]);
         });
     }
@@ -133,13 +133,13 @@ final readonly class ActionTargets
     public function whisparrLookup(int $tmdbId, array $pinContext = [], ?string $fallbackName = null): ActionTarget
     {
         return $this->attempt('item', $tmdbId, $fallbackName, false, function () use ($tmdbId, $pinContext): ?ActionTarget {
-            $connection = ServiceConnection::resolvePinned($pinContext, ServiceType::Whisparr);
-            $name = $this->nameFrom(new WhisparrClient($connection)->searchItems(sprintf('tmdb:%d', $tmdbId))[0] ?? []);
+            $serviceConnection = ServiceConnection::resolvePinned($pinContext, ServiceType::Whisparr);
+            $name = $this->nameFrom(new WhisparrClient($serviceConnection)->searchItems(sprintf('tmdb:%d', $tmdbId))[0] ?? []);
 
             return $name === null ? null : new ActionTarget('item', $name, [
                 ['label' => 'Item', 'value' => $name],
                 ['label' => 'TMDB ID', 'value' => (string) $tmdbId],
-                ['label' => 'Connection', 'value' => $connection->name],
+                ['label' => 'Connection', 'value' => $serviceConnection->name],
             ]);
         });
     }
@@ -185,11 +185,11 @@ final readonly class ActionTargets
     public function download(ServiceType $serviceType, string $downloadId, array $pinContext = [], ?string $fallbackName = null): ActionTarget
     {
         return $this->attempt('download', $downloadId, $fallbackName, false, function () use ($serviceType, $downloadId, $pinContext): ?ActionTarget {
-            $connection = ServiceConnection::resolvePinned($pinContext, $serviceType);
+            $serviceConnection = ServiceConnection::resolvePinned($pinContext, $serviceType);
             $params = $serviceType === ServiceType::Sonarr
                 ? ['page' => 1, 'pageSize' => 200, 'includeUnknownSeriesItems' => 'true', 'includeSeries' => 'true']
                 : ['page' => 1, 'pageSize' => 200, 'includeUnknownMovieItems' => 'true', 'includeMovie' => 'true'];
-            $records = $this->arrClient($serviceType, $connection)->getQueue($params)['records'] ?? [];
+            $records = $this->arrClient($serviceType, $serviceConnection)->getQueue($params)['records'] ?? [];
 
             foreach (is_array($records) ? $records : [] as $record) {
                 if (($record['downloadId'] ?? null) !== $downloadId || ! is_string($record['title'] ?? null)) {
@@ -217,10 +217,10 @@ final readonly class ActionTargets
     public function embyLibrary(array $pinContext = []): ActionTarget
     {
         return $this->attempt('library', 'emby', 'Emby', true, function () use ($pinContext): ActionTarget {
-            $connection = ServiceConnection::resolvePinned($pinContext, ServiceType::Emby);
+            $serviceConnection = ServiceConnection::resolvePinned($pinContext, ServiceType::Emby);
 
-            return new ActionTarget('library', $connection->name, [
-                ['label' => 'Emby server', 'value' => $connection->name],
+            return new ActionTarget('library', $serviceConnection->name, [
+                ['label' => 'Emby server', 'value' => $serviceConnection->name],
             ]);
         });
     }

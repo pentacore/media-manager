@@ -76,7 +76,7 @@ final readonly class ActionDescriber
     private function add(ActionTarget $target, ServiceType $serviceType, array $payload): ActionDescription
     {
         $profileId = (int) ($payload['quality_profile_id'] ?? 0);
-        $description = $target->describe(
+        $actionDescription = $target->describe(
             sprintf('Add %s', $target->label()),
             sprintf('%s will add the %s and search for it.', $this->serviceName($serviceType), $target->noun),
         )
@@ -85,8 +85,8 @@ final readonly class ActionDescriber
             ->withDetail('Monitored', ($payload['monitored'] ?? true) === true);
 
         return array_key_exists('season_folder', $payload)
-            ? $description->withDetail('Season folders', $payload['season_folder'] === true)
-            : $description;
+            ? $actionDescription->withDetail('Season folders', $payload['season_folder'] === true)
+            : $actionDescription;
     }
 
     /**
@@ -126,11 +126,11 @@ final readonly class ActionDescriber
      */
     private function libraryScan(array $payload): ActionDescription
     {
-        $target = $this->actionTargets->embyLibrary($payload);
+        $actionTarget = $this->actionTargets->embyLibrary($payload);
 
-        return $target->describe(
+        return $actionTarget->describe(
             'Scan the Emby library',
-            sprintf('Emby server "%s" will rescan its libraries to pick up changes.', $target->name),
+            sprintf('Emby server "%s" will rescan its libraries to pick up changes.', $actionTarget->name),
         );
     }
 
@@ -140,12 +140,12 @@ final readonly class ActionDescriber
     private function removeStuckDownload(string $type, array $payload, ?string $fallbackName): ActionDescription
     {
         $serviceType = $this->downloadService($type, $payload);
-        $target = $this->actionTargets->download($serviceType, $this->downloadId($type, $payload), $payload, $fallbackName);
+        $actionTarget = $this->actionTargets->download($serviceType, $this->downloadId($type, $payload), $payload, $fallbackName);
         $blocklist = ($payload['blocklist'] ?? false) === true;
         $searchReplacement = ($payload['search_replacement'] ?? false) === true;
 
-        return $target->describe(
-            sprintf('Remove stuck %s', $target->label()),
+        return $actionTarget->describe(
+            sprintf('Remove stuck %s', $actionTarget->label()),
             sprintf(
                 '%s will remove the download from its queue and delete its data%s%s.',
                 $this->serviceName($serviceType),
@@ -163,14 +163,14 @@ final readonly class ActionDescriber
     private function resolveManualImport(string $type, array $payload, ?string $fallbackName): ActionDescription
     {
         $serviceType = $this->downloadService($type, $payload);
-        $target = $this->actionTargets->download($serviceType, $this->downloadId($type, $payload), $payload, $fallbackName);
+        $actionTarget = $this->actionTargets->download($serviceType, $this->downloadId($type, $payload), $payload, $fallbackName);
         $assessment = is_array($payload['assessment'] ?? null) ? $payload['assessment'] : [];
         $importable = (int) ($assessment['importable'] ?? 0);
         $total = (int) ($assessment['total'] ?? 0);
         $reasons = is_array($assessment['reasons'] ?? null) ? array_filter($assessment['reasons'], is_string(...)) : [];
 
-        return $target->describe(
-            sprintf('Import %s', $target->label()),
+        return $actionTarget->describe(
+            sprintf('Import %s', $actionTarget->label()),
             sprintf('%s will import the %d of %d files it could match.', $this->serviceName($serviceType), $importable, $total),
         )
             ->withDetail('Importable files', sprintf('%d of %d', $importable, $total))

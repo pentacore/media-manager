@@ -68,14 +68,14 @@ final class RequestSubtitleOperationTool extends BaseTool
 
         $operationPayload = $this->operationPayload($operation, $arguments, $item, $bazarrClient, $mediaType, $mediaId);
         $managingConnection = $this->managingConnection($connection, $mediaType);
-        $description = resolve(SubtitleOperationDescriber::class)->describe($operation, $item, $operationPayload);
+        $actionDescription = resolve(SubtitleOperationDescriber::class)->describe($operation, $item, $operationPayload);
 
         return [
             'type' => 'bazarr_'.$operation,
             'source_service' => 'ai',
             'target_service' => ServiceType::Bazarr->value,
             'payload' => [
-                'title' => $description->title,
+                'title' => $actionDescription->title,
                 'bazarr_connection_id' => $connection->id,
                 'service_connection_id' => $managingConnection->id,
                 'media_type' => $mediaType,
@@ -85,7 +85,7 @@ final class RequestSubtitleOperationTool extends BaseTool
                 'target_fingerprint' => (string) ($item['target_fingerprint'] ?? ''),
                 ...$operationPayload,
             ],
-            'description' => $description->because($this->requestedInChat()),
+            'description' => $actionDescription->because($this->requestedInChat()),
         ];
     }
 

@@ -151,7 +151,7 @@ final class UploadController extends Controller
             ]);
         }
 
-        $description = $subtitleOperationDescriber
+        $actionDescription = $subtitleOperationDescriber
             ->describe('upload_subtitle', $item, [
                 'language' => $validated['language'],
                 'forced' => (bool) $validated['forced'],
@@ -163,7 +163,7 @@ final class UploadController extends Controller
             $actionRequest = DB::transaction(function () use (
                 $actionOrchestrator,
                 $connection,
-                $description,
+                $actionDescription,
                 $managingConnection,
                 $subtitleCase,
                 $subtitleUpload,
@@ -178,14 +178,14 @@ final class UploadController extends Controller
                             $connection,
                             $managingConnection,
                             $subtitleCase,
-                            $description->title,
+                            $actionDescription->title,
                         ),
                         'subtitle_upload_id' => $subtitleUpload->id,
                         'language' => $validated['language'],
                         'forced' => (bool) $validated['forced'],
                         'hearing_impaired' => (bool) $validated['hearing_impaired'],
                     ],
-                    description: $description,
+                    description: $actionDescription,
                 );
 
                 throw_unless($actionRequest instanceof ActionRequest, ValidationException::withMessages([

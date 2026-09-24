@@ -26,8 +26,8 @@ test('dispatchFromAgent creates a Pending request for requires_approval types', 
         sourceService: 'sonarr',
         targetService: 'sonarr',
         payload: ['series_id' => 42],
-        description: new ActionDescription('Test action', 'Test effect.'),
         rationale: 'Stuck import, no longer monitored.',
+        description: new ActionDescription('Test action', 'Test effect.'),
     );
 
     expect($request)->not->toBeNull();
@@ -48,8 +48,8 @@ test('dispatchFromAgent auto-executes when requires_approval=false', function ()
         sourceService: 'sonarr',
         targetService: 'emby',
         payload: [],
-        description: new ActionDescription('Test action', 'Test effect.'),
         rationale: 'Import resolved; rescan library.',
+        description: new ActionDescription('Test action', 'Test effect.'),
     );
 
     expect($request->status)->toBe(ActionRequestStatus::Approved);
@@ -67,8 +67,8 @@ test('dispatchFromAgent ignores the chat advisory mode override', function (): v
         sourceService: 'sonarr',
         targetService: 'emby',
         payload: [],
-        description: new ActionDescription('Test action', 'Test effect.'),
         rationale: 'Rescan.',
+        description: new ActionDescription('Test action', 'Test effect.'),
     );
 
     expect($request->status)->toBe(ActionRequestStatus::Approved);
@@ -84,8 +84,8 @@ test('dispatchFromAgent forceRequiresApproval can only tighten the gate', functi
         sourceService: 'sonarr',
         targetService: 'sonarr',
         payload: [],
-        description: new ActionDescription('Test action', 'Test effect.'),
         rationale: 'ambiguous',
+        description: new ActionDescription('Test action', 'Test effect.'),
         forceRequiresApproval: true,
     );
     expect($forced->status)->toBe(ActionRequestStatus::Pending);
@@ -98,8 +98,8 @@ test('dispatchFromAgent forceRequiresApproval can only tighten the gate', functi
         sourceService: 'sonarr',
         targetService: 'sonarr',
         payload: [],
-        description: new ActionDescription('Test action', 'Test effect.'),
         rationale: 'x',
+        description: new ActionDescription('Test action', 'Test effect.'),
         forceRequiresApproval: false,
     );
     expect($notRelaxed->status)->toBe(ActionRequestStatus::Pending);
@@ -111,8 +111,8 @@ test('dispatchFromAgent returns null when config missing or disabled', function 
         sourceService: 'sonarr',
         targetService: 'sonarr',
         payload: [],
-        description: new ActionDescription('Test action', 'Test effect.'),
         rationale: 'x',
+        description: new ActionDescription('Test action', 'Test effect.'),
     ))->toBeNull();
 
     ActionTypeConfig::factory()->create(['type' => 'delete_series', 'requires_approval' => true, 'is_enabled' => false]);
@@ -122,8 +122,8 @@ test('dispatchFromAgent returns null when config missing or disabled', function 
         sourceService: 'sonarr',
         targetService: 'sonarr',
         payload: [],
-        description: new ActionDescription('Test action', 'Test effect.'),
         rationale: 'x',
+        description: new ActionDescription('Test action', 'Test effect.'),
     ))->toBeNull();
 
     Event::assertNotDispatched(ActionRequestCreated::class);

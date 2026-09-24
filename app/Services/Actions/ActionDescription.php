@@ -32,12 +32,10 @@ final readonly class ActionDescription
     /** @var list<array{label: string, value: string}> */
     public array $details;
 
-    public bool $verified;
-
     /**
      * @param  array<int, array{label: string, value: string}>  $details
      */
-    public function __construct(string $title, string $description, array $details = [], bool $verified = true)
+    public function __construct(string $title, string $description, array $details = [], public bool $verified = true)
     {
         $title = trim($title);
         $description = trim($description);
@@ -47,8 +45,7 @@ final readonly class ActionDescription
 
         $this->title = mb_substr($title, 0, self::TITLE_LIMIT);
         $this->description = mb_substr($description, 0, self::DESCRIPTION_LIMIT);
-        $this->details = self::normalizeDetails($details);
-        $this->verified = $verified;
+        $this->details = $this->normalizeDetails($details);
     }
 
     /**
@@ -65,7 +62,7 @@ final readonly class ActionDescription
         return new self(
             $this->title,
             $this->description,
-            [...$this->details, ['label' => $label, 'value' => self::stringify($value)]],
+            [...$this->details, ['label' => $label, 'value' => $this->stringify($value)]],
             $this->verified,
         );
     }
@@ -92,7 +89,7 @@ final readonly class ActionDescription
      * @param  array<int, array{label: string, value: string}>  $details
      * @return list<array{label: string, value: string}>
      */
-    private static function normalizeDetails(array $details): array
+    private function normalizeDetails(array $details): array
     {
         $normalized = [];
 
@@ -121,7 +118,7 @@ final readonly class ActionDescription
         return $normalized;
     }
 
-    private static function stringify(string|int|float|bool|null $value): string
+    private function stringify(string|int|float|bool|null $value): string
     {
         return match (true) {
             $value === null => '',

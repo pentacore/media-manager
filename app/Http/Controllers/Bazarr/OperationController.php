@@ -46,16 +46,16 @@ final class OperationController extends Controller
         $managingConnection = $this->managingConnection($connection, $mediaType);
         $type = 'bazarr_'.$operation;
         $operationPayload = $this->operationPayload($operation, $validated);
-        $description = $subtitleOperationDescriber->describe($operation, $item, $operationPayload);
+        $actionDescription = $subtitleOperationDescriber->describe($operation, $item, $operationPayload);
         $actionRequest = $actionOrchestrator->dispatch(
             type: $type,
             sourceService: ServiceType::Bazarr->value,
             targetService: ServiceType::Bazarr->value,
             payload: [
-                ...$this->commonPayload($connection, $managingConnection, $item, $description->title),
+                ...$this->commonPayload($connection, $managingConnection, $item, $actionDescription->title),
                 ...$operationPayload,
             ],
-            description: $description->because(sprintf('Requested from the Subtitle Center by %s.', $operationRequest->user()->name)),
+            description: $actionDescription->because(sprintf('Requested from the Subtitle Center by %s.', $operationRequest->user()->name)),
         );
 
         if (! $actionRequest instanceof ActionRequest) {

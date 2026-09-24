@@ -19,14 +19,14 @@ function targetsSonarr(): ServiceConnection
 }
 
 test('a sonarr series resolves from the local index without calling sonarr', function (): void {
-    $sonarr = targetsSonarr();
-    IndexedSeries::factory()->for($sonarr, 'serviceConnection')->create(['sonarr_id' => 142, 'title' => 'Severance', 'year' => 2022]);
+    $serviceConnection = targetsSonarr();
+    IndexedSeries::factory()->for($serviceConnection, 'serviceConnection')->create(['sonarr_id' => 142, 'title' => 'Severance', 'year' => 2022]);
 
-    $target = resolve(ActionTargets::class)->sonarrSeries(142);
+    $actionTarget = resolve(ActionTargets::class)->sonarrSeries(142);
 
-    expect($target->verified)->toBeTrue()
-        ->and($target->label())->toBe('series "Severance (2022)"')
-        ->and($target->details)->toBe([
+    expect($actionTarget->verified)->toBeTrue()
+        ->and($actionTarget->label())->toBe('series "Severance (2022)"')
+        ->and($actionTarget->details)->toBe([
             ['label' => 'Series', 'value' => 'Severance (2022)'],
             ['label' => 'Sonarr ID', 'value' => '142'],
             ['label' => 'Connection', 'value' => 'Sonarr 4K'],
@@ -39,35 +39,35 @@ test('a sonarr series missing from the index resolves through the live client', 
     targetsSonarr();
     Http::fake(['sonarr.local:8989/api/v3/series/7' => Http::response(['id' => 7, 'title' => 'Andor', 'year' => 2022])]);
 
-    $target = resolve(ActionTargets::class)->sonarrSeries(7);
+    $actionTarget = resolve(ActionTargets::class)->sonarrSeries(7);
 
-    expect($target->verified)->toBeTrue()->and($target->name)->toBe('Andor (2022)');
+    expect($actionTarget->verified)->toBeTrue()->and($actionTarget->name)->toBe('Andor (2022)');
 });
 
 test('an unresolvable series uses the fallback name and is unverified', function (): void {
     targetsSonarr();
     Http::fake(['sonarr.local:8989/api/v3/series/9' => Http::response([], 404)]);
 
-    $target = resolve(ActionTargets::class)->sonarrSeries(9, fallbackName: 'Old Show');
+    $actionTarget = resolve(ActionTargets::class)->sonarrSeries(9, fallbackName: 'Old Show');
 
-    expect($target->verified)->toBeFalse()
-        ->and($target->name)->toBe('Old Show')
-        ->and($target->details)->toBe([['label' => 'ID', 'value' => '9']]);
+    expect($actionTarget->verified)->toBeFalse()
+        ->and($actionTarget->name)->toBe('Old Show')
+        ->and($actionTarget->details)->toBe([['label' => 'ID', 'value' => '9']]);
 });
 
 test('a trusted fallback name stays verified', function (): void {
     targetsSonarr();
     Http::fake(['sonarr.local:8989/api/v3/series/9' => Http::response([], 404)]);
 
-    $target = resolve(ActionTargets::class)->sonarrSeries(9, fallbackName: 'Severance', fallbackVerified: true);
+    $actionTarget = resolve(ActionTargets::class)->sonarrSeries(9, fallbackName: 'Severance', fallbackVerified: true);
 
-    expect($target->verified)->toBeTrue()->and($target->name)->toBe('Severance');
+    expect($actionTarget->verified)->toBeTrue()->and($actionTarget->name)->toBe('Severance');
 });
 
 test('an unresolvable series without a fallback is marked not found', function (): void {
-    $target = resolve(ActionTargets::class)->sonarrSeries(9);
+    $actionTarget = resolve(ActionTargets::class)->sonarrSeries(9);
 
-    expect($target->verified)->toBeFalse()->and($target->name)->toBe('#9 (not found)');
+    expect($actionTarget->verified)->toBeFalse()->and($actionTarget->name)->toBe('#9 (not found)');
 });
 
 test('a radarr movie resolves from the index of the pinned connection', function (): void {
@@ -75,21 +75,21 @@ test('a radarr movie resolves from the index of the pinned connection', function
     ServiceConnection::factory()->radarr()->create(['url' => 'http://radarr2.local:7878']);
     IndexedMovie::factory()->for($pinned, 'serviceConnection')->create(['radarr_id' => 55, 'title' => 'Dune', 'year' => 2021]);
 
-    $target = resolve(ActionTargets::class)->radarrMovie(55, ['service_connection_id' => $pinned->id]);
+    $actionTarget = resolve(ActionTargets::class)->radarrMovie(55, ['service_connection_id' => $pinned->id]);
 
-    expect($target->verified)->toBeTrue()
-        ->and($target->name)->toBe('Dune (2021)')
-        ->and($target->details[2])->toBe(['label' => 'Connection', 'value' => 'Radarr UHD']);
+    expect($actionTarget->verified)->toBeTrue()
+        ->and($actionTarget->name)->toBe('Dune (2021)')
+        ->and($actionTarget->details[2])->toBe(['label' => 'Connection', 'value' => 'Radarr UHD']);
 });
 
 test('a series to add resolves through the sonarr lookup', function (): void {
     targetsSonarr();
     Http::fake(['sonarr.local:8989/api/v3/series/lookup*' => Http::response([['title' => 'Shogun', 'year' => 2024, 'tvdbId' => 999]])]);
 
-    $target = resolve(ActionTargets::class)->sonarrLookup(999);
+    $actionTarget = resolve(ActionTargets::class)->sonarrLookup(999);
 
-    expect($target->name)->toBe('Shogun (2024)')
-        ->and($target->details[1])->toBe(['label' => 'TVDB ID', 'value' => '999']);
+    expect($actionTarget->name)->toBe('Shogun (2024)')
+        ->and($actionTarget->details[1])->toBe(['label' => 'TVDB ID', 'value' => '999']);
     Http::assertSent(fn ($request): bool => str_contains(urldecode($request->url()), 'term=tvdb:999'));
 });
 
@@ -105,11 +105,11 @@ test('a seerr request resolves its media title and requester', function (): void
         'seerr.local:5055/api/v1/movie/438631' => Http::response(['title' => 'Dune', 'releaseDate' => '2021-10-22']),
     ]);
 
-    $target = resolve(ActionTargets::class)->seerrRequest(12);
+    $actionTarget = resolve(ActionTargets::class)->seerrRequest(12);
 
-    expect($target->verified)->toBeTrue()
-        ->and($target->name)->toBe('Dune (2021)')
-        ->and($target->details)->toBe([
+    expect($actionTarget->verified)->toBeTrue()
+        ->and($actionTarget->name)->toBe('Dune (2021)')
+        ->and($actionTarget->details)->toBe([
             ['label' => 'Title', 'value' => 'Dune (2021)'],
             ['label' => 'Media type', 'value' => 'Movie'],
             ['label' => 'Requested by', 'value' => 'Alex'],
@@ -124,11 +124,11 @@ test('a download resolves its release from the arr queue', function (): void {
         ['id' => 2, 'downloadId' => 'ABC123', 'title' => 'Severance.S02E01.1080p', 'series' => ['title' => 'Severance'], 'downloadClient' => 'SABnzbd'],
     ]])]);
 
-    $target = resolve(ActionTargets::class)->download(ServiceType::Sonarr, 'ABC123');
+    $actionTarget = resolve(ActionTargets::class)->download(ServiceType::Sonarr, 'ABC123');
 
-    expect($target->verified)->toBeTrue()
-        ->and($target->label())->toBe('download "Severance.S02E01.1080p"')
-        ->and($target->details)->toBe([
+    expect($actionTarget->verified)->toBeTrue()
+        ->and($actionTarget->label())->toBe('download "Severance.S02E01.1080p"')
+        ->and($actionTarget->details)->toBe([
             ['label' => 'Release', 'value' => 'Severance.S02E01.1080p'],
             ['label' => 'Media', 'value' => 'Severance'],
             ['label' => 'Download client', 'value' => 'SABnzbd'],

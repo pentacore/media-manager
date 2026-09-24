@@ -22,22 +22,22 @@ final readonly class SubtitleOperationDescriber
     public function describe(string $operation, array $item, array $operationPayload): ActionDescription
     {
         $mediaTitle = is_string($item['title'] ?? null) && $item['title'] !== '' ? $item['title'] : 'media';
-        $description = new ActionDescription(
+        $actionDescription = new ActionDescription(
             title: $this->title($operation, $mediaTitle),
             description: $this->effect($operation),
             details: [['label' => 'Media', 'value' => $mediaTitle]],
         );
 
         return match ($operation) {
-            'download_best', 'upload_subtitle' => $description
+            'download_best', 'upload_subtitle' => $actionDescription
                 ->withDetail('Language', $this->string($operationPayload['language'] ?? null))
                 ->withDetail('Forced', ($operationPayload['forced'] ?? false) === true)
                 ->withDetail('Hearing impaired', ($operationPayload['hearing_impaired'] ?? false) === true),
-            'delete_subtitle', 'sync_subtitle', 'translate_subtitle', 'modify_subtitle' => $description
+            'delete_subtitle', 'sync_subtitle', 'translate_subtitle', 'modify_subtitle' => $actionDescription
                 ->withDetail('Subtitle', $this->trackName($item, $operationPayload['subtitle_fingerprint'] ?? null))
                 ->withDetail('Tool', $this->string($operationPayload['tool_action'] ?? null)),
-            'scan_media' => $description->withDetail('Scan', $this->string($operationPayload['media_action'] ?? null)),
-            default => $description,
+            'scan_media' => $actionDescription->withDetail('Scan', $this->string($operationPayload['media_action'] ?? null)),
+            default => $actionDescription,
         };
     }
 
