@@ -5,14 +5,16 @@ declare(strict_types=1);
 namespace App\Services\MediaReplacement;
 
 use App\Enums\SeasonPackPolicy;
+use App\Services\Actions\ActionDescription;
 use App\Settings\MediaReplacementSettings;
 
 /**
- * Builds the `replace_media_file` ActionRequest payload and its approval
- * override. Three entry points dispatch the same action — the arr AI tool, the
- * automatic subtitle check, and the Bazarr subtitle advisor — so a second
- * hand-built copy of the shape would drift. Thirteen of the fifteen base
- * payload keys are read by MediaReplacementActions or the approval card;
+ * Builds the `replace_media_file` ActionRequest payload, its approval
+ * override, and the approval-card ActionDescription. Three entry points
+ * dispatch the same action — the arr AI tool, the automatic subtitle check,
+ * and the Bazarr subtitle advisor — so a second hand-built copy of the shape
+ * would drift. Thirteen of the fifteen base payload keys are read by
+ * MediaReplacementActions or the approval card;
  * `agent_rationale` is stored for audit only and read by neither, and
  * `verify_subtitles` is read only by MediaReplacementTracker's post-import
  * verification, via the attempt's ActionRequest.
@@ -51,7 +53,7 @@ final readonly class ReplacementRequestBuilder
      *                                     operator- and agent-initiated requests.
      * @param  int|null  $subtitleCaseId  The Bazarr advisor case that owns this
      *                                    replacement; null for every other caller.
-     * @return array{payload: array<string, mixed>, force_requires_approval: bool}
+     * @return array{payload: array<string, mixed>, force_requires_approval: bool, description: ActionDescription}
      */
     public function build(
         array $snapshot,
@@ -106,6 +108,36 @@ final readonly class ReplacementRequestBuilder
             'force_requires_approval' => $candidateRequiresApproval
                 || ($isSeasonPack
                     && $this->mediaReplacementSettings->seasonPackPolicy() === SeasonPackPolicy::ApprovalRequired),
+            'description' => $this->describe($payload['title'], $snapshot, $candidate, $requiredLanguages, $selectionMode, $boundedReason),
         ];
+    }
+
+    /**
+     * @param  array<string, mixed>  $snapshot
+     * @param  array<string, mixed>  $candidate
+     * @param  list<string>  $requiredLanguages
+     */
+    private function describe(
+        string $title,
+        array $snapshot,
+        array $candidate,
+        array $requiredLanguages,
+        string $selectionMode,
+        string $reason,
+    ): ActionDescription {
+        $confidence = $candidate['confidence'] ?? null;
+
+        return new ActionDescription(
+            title: $title,
+            description: sprintf(
+                '%s will grab the selected release and replace the current file once it imports.',
+                ($snapshot['service'] ?? null) === 'radarr' ? 'Radarr' : 'Sonarr',
+            ),
+        )
+            ->withDetail('Release', is_string($candidate['title'] ?? null) ? $candidate['title'] : null)
+            ->withDetail('Required subtitles', $requiredLanguages === [] ? null : implode(', ', $requiredLanguages))
+            ->withDetail('Confidence', is_int($confidence) || is_float($confidence) ? sprintf('%s%%', $confidence) : null)
+            ->withDetail('Selection', $selectionMode)
+            ->withDetail('Reason', $reason === '' ? null : $reason);
     }
 }

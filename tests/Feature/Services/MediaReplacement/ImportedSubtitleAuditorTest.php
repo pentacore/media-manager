@@ -145,7 +145,9 @@ test('a tagged import missing a required language dispatches a replacement', fun
     expect($actionRequest->payload['selection_mode'])->toBe('automatic')
         ->and($actionRequest->payload['auto_check_key'])->toBe(sprintf('sonarr:%d:42-101', $this->connection->id))
         ->and($actionRequest->payload['candidate_fingerprint'])->not->toBeEmpty()
-        ->and($actionRequest->requires_approval)->toBeFalse();
+        ->and($actionRequest->requires_approval)->toBeFalse()
+        ->and($actionRequest->description)->toStartWith('The automatic subtitle check found this import is missing required subtitles.')
+        ->and($actionRequest->description_verified)->toBeTrue();
 
     Notification::assertSentTo(
         $this->admin,

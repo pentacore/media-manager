@@ -344,8 +344,9 @@ test('replace queues an ActionRequest with manual selection and the verify flag'
     fakeRadarrReleases(movieId: 10);
     $fingerprint = replacementCurrentFingerprintFor($connection);
     $candidate = replacementCandidateFingerprintFor($connection); // helper: GET candidates, return first fingerprint
+    $member = User::factory()->member()->create();
 
-    $response = $this->actingAs(User::factory()->member()->create())
+    $response = $this->actingAs($member)
         ->postJson(route('media.replacement.replace'), [
             ...replacementInspectParams($connection),
             'target_fingerprint' => $fingerprint,
@@ -359,7 +360,8 @@ test('replace queues an ActionRequest with manual selection and the verify flag'
         ->and($actionRequest->payload['verify_subtitles'])->toBeFalse()
         ->and($actionRequest->payload['candidate_fingerprint'])->toBe($candidate)
         ->and($actionRequest->status)->toBe(ActionRequestStatus::Pending) // replace_media_file requires approval by default
-        ->and($response->json('requires_approval'))->toBeTrue();
+        ->and($response->json('requires_approval'))->toBeTrue()
+        ->and($actionRequest->description)->toStartWith(sprintf('Requested from the replace-file dialog by %s.', $member->name));
 });
 
 test('replace rejects a concurrent submission for the same target while one is already in flight', function (): void {

@@ -13,6 +13,7 @@ use App\Enums\SubtitleCaseStatus;
 use App\Models\ActionRequest;
 use App\Models\SubtitleCase;
 use App\Models\SubtitleCaseAttempt;
+use App\Services\Actions\ActionDescription;
 use App\Services\Bazarr\SubtitleAdvisorProjection;
 use App\Services\Bazarr\SubtitleCaseFingerprint;
 use App\Services\Bazarr\SubtitleCaseLifecycle;
@@ -43,7 +44,9 @@ final class QueueAutomaticReplacementTool extends BaseTool
      *     target_service: string,
      *     force_requires_approval: bool,
      *     defer_execution: true,
-     *     payload: array<string, mixed>
+     *     payload: array<string, mixed>,
+     *     description: ActionDescription,
+     *     origin: string
      * }
      */
     protected function execute(Request $request): array
@@ -118,6 +121,8 @@ final class QueueAutomaticReplacementTool extends BaseTool
             'force_requires_approval' => $built['force_requires_approval'],
             'defer_execution' => true,
             'payload' => $built['payload'],
+            'description' => $built['description']->because(sprintf('Queued by the subtitle advisor for subtitle case #%d.', $subtitleCase->id)),
+            'origin' => 'agent',
         ];
     }
 

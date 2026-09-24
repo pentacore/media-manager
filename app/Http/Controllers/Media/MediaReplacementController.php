@@ -198,6 +198,7 @@ class MediaReplacementController extends Controller
                 sourceService: $isRadarr ? 'radarr' : 'sonarr',
                 targetService: $isRadarr ? 'radarr' : 'sonarr',
                 payload: $built['payload'],
+                description: $built['description']->because(sprintf('Requested from the replace-file dialog by %s.', $request->user()->name)),
                 forceRequiresApproval: $built['force_requires_approval'],
             );
 
