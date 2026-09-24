@@ -7,7 +7,10 @@ namespace App\Ai\Tools;
 use App\Ai\Risk;
 use App\Enums\AiMode;
 use App\Models\ActionRequest;
+use App\Services\Actions\ActionDescriber;
+use App\Services\Actions\ActionDescription;
 use App\Services\Actions\ActionOrchestrator;
+use App\Services\Actions\UndescribableAction;
 use App\Settings\AiSettings;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -55,8 +58,10 @@ abstract class BaseTool implements Tool
     }
 
     /**
-     * Subclass entry point. Read/SafeWrite tools return any array; Destructive
-     * tools must return ['type' => string, 'target_service' => string, 'payload' => array].
+     * Subclass entry point. Read/SafeWrite tools return any array. Destructive
+     * tools must return ['type' => string, 'target_service' => string, 'payload' => array]
+     * and may add 'description' (ActionDescription), 'fallback_title' (string, the
+     * model's name for the target), 'origin' (string, default 'chat').
      *
      * @return array<string, mixed>
      */
@@ -70,16 +75,30 @@ abstract class BaseTool implements Tool
     protected function queueAsActionRequest(array $candidate): string
     {
         $actionOrchestrator = resolve(ActionOrchestrator::class);
+        $type = (string) ($candidate['type'] ?? '');
+        $payload = is_array($candidate['payload'] ?? null) ? $candidate['payload'] : [];
+
+        try {
+            $description = $this->describeCandidate($type, $payload, $candidate);
+        } catch (UndescribableAction $undescribableAction) {
+            return $this->safeEncode([
+                'queued' => false,
+                'reason' => 'undescribable_action',
+                'message' => sprintf('%s Tell the user the action could not be queued.', $undescribableAction->getMessage()),
+            ]);
+        }
 
         $forceRequiresApproval = ($candidate['force_requires_approval'] ?? null) === true ? true : null;
         $deferExecution = ($candidate['defer_execution'] ?? false) === true;
         $dispatch = fn (): ?ActionRequest => $actionOrchestrator->dispatch(
-            type: (string) ($candidate['type'] ?? ''),
+            type: $type,
             sourceService: (string) ($candidate['source_service'] ?? 'ai'),
             targetService: (string) ($candidate['target_service'] ?? ''),
-            payload: is_array($candidate['payload'] ?? null) ? $candidate['payload'] : [],
+            payload: $payload,
+            description: $description,
             forceRequiresApproval: $forceRequiresApproval,
             deferExecution: $deferExecution,
+            origin: (string) ($candidate['origin'] ?? 'chat'),
         );
 
         if ($deferExecution) {
@@ -114,6 +133,40 @@ abstract class BaseTool implements Tool
             'status' => $actionRequest->status->value,
             'requires_approval' => $actionRequest->requires_approval,
         ]);
+    }
+
+    /**
+     * Tools with bespoke wording (subtitle operations, media replacement) hand
+     * over a ready description; every other type is worded by the shared
+     * ActionDescriber and attributed to the chat user. `fallback_title` is the
+     * model's name for the target and only ever used, unverified, when the
+     * server cannot resolve it. A candidate with no description whose type the
+     * describer does not know returns null and is queued undescribed; this is
+     * transitional and removed once every destructive tool supplies a description.
+     *
+     * @param  array<string, mixed>  $payload
+     * @param  array<string, mixed>  $candidate
+     */
+    private function describeCandidate(string $type, array $payload, array $candidate): ?ActionDescription
+    {
+        if (($candidate['description'] ?? null) instanceof ActionDescription) {
+            return $candidate['description'];
+        }
+
+        if (! in_array($type, ActionDescriber::TYPES, true)) {
+            return null;
+        }
+
+        $fallbackTitle = $candidate['fallback_title'] ?? null;
+
+        return resolve(ActionDescriber::class)
+            ->describe($type, $payload, is_string($fallbackTitle) ? $fallbackTitle : null)
+            ->because($this->requestedInChat());
+    }
+
+    protected function requestedInChat(): string
+    {
+        return sprintf('Requested in chat by %s.', auth()->user()?->name ?? 'an unknown user');
     }
 
     /**

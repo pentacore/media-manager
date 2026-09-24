@@ -10,7 +10,28 @@ use App\Ai\Tools\Arr\SetMediaQualityProfileTool;
 use App\Enums\ActionRequestStatus;
 use App\Models\ActionRequest;
 use App\Models\ActionTypeConfig;
+use App\Models\IndexedSeries;
+use App\Models\ServiceConnection;
+use App\Models\User;
+use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Queue;
 use Laravel\Ai\Tools\Request;
+
+beforeEach(function (): void {
+    Http::preventStrayRequests();
+});
+
+/**
+ * Index a Sonarr series on the active connection so the server can name the
+ * target; an unresolved name would hold the request at Pending.
+ */
+function mediaWriteIndexSonarrSeries(int $sonarrId): ServiceConnection
+{
+    $sonarr = ServiceConnection::factory()->sonarr()->create(['url' => 'http://sonarr.local:8989']);
+    IndexedSeries::factory()->for($sonarr, 'serviceConnection')->create(['sonarr_id' => $sonarrId, 'title' => 'Severance', 'year' => 2022]);
+
+    return $sonarr;
+}
 
 test('AddMediaTool queues an add_series ActionRequest for sonarr', function (): void {
     ActionTypeConfig::factory()->create(['type' => 'add_series', 'is_enabled' => true, 'requires_approval' => true]);
@@ -132,6 +153,7 @@ test('DeleteMediaTool reports no_action_type_config when the rule is missing', f
 
 test('MonitorMediaTool queues a monitor_series ActionRequest for sonarr', function (): void {
     ActionTypeConfig::factory()->create(['type' => 'monitor_series', 'is_enabled' => true, 'requires_approval' => false]);
+    mediaWriteIndexSonarrSeries(42);
 
     $result = json_decode((new MonitorMediaTool)->handle(new Request([
         'service' => 'sonarr', 'item_id' => 42, 'monitored' => false,
@@ -169,6 +191,8 @@ test('MonitorMediaTool queues a whisparr_monitor_item ActionRequest for whisparr
 
 test('SetMediaQualityProfileTool queues a set_series_quality_profile ActionRequest for sonarr', function (): void {
     ActionTypeConfig::factory()->create(['type' => 'set_series_quality_profile', 'is_enabled' => true, 'requires_approval' => false]);
+    mediaWriteIndexSonarrSeries(42);
+    Http::fake(['sonarr.local:8989/api/v3/qualityprofile' => Http::response([['id' => 7, 'name' => 'HD-1080p']])]);
 
     $result = json_decode((new SetMediaQualityProfileTool)->handle(new Request([
         'service' => 'sonarr', 'item_id' => 42, 'quality_profile_id' => 7,
@@ -218,4 +242,31 @@ test('all write tools are Destructive', function (): void {
     expect((new DeleteMediaTool)->risk())->toBe(Risk::Destructive);
     expect((new MonitorMediaTool)->risk())->toBe(Risk::Destructive);
     expect((new SetMediaQualityProfileTool)->risk())->toBe(Risk::Destructive);
+});
+
+test('DeleteMediaTool describes the delete with the indexed series name and the chat user', function (): void {
+    ActionTypeConfig::factory()->create(['type' => 'delete_series', 'is_enabled' => true, 'requires_approval' => false]);
+    mediaWriteIndexSonarrSeries(142);
+    $this->actingAs(User::factory()->admin()->create(['name' => 'Martin']));
+    Queue::fake();
+
+    (new DeleteMediaTool)->handle(new Request(['service' => 'sonarr', 'item_id' => 142, 'delete_files' => true, 'title' => 'Wrong Name']));
+
+    $actionRequest = ActionRequest::firstWhere('type', 'delete_series');
+    expect($actionRequest->title)->toBe('Delete series "Severance (2022)"')
+        ->and($actionRequest->description)->toBe('Requested in chat by Martin. Sonarr will delete the series and its files from disk.')
+        ->and($actionRequest->origin)->toBe('chat')
+        ->and($actionRequest->description_verified)->toBeTrue()
+        ->and($actionRequest->status)->toBe(ActionRequestStatus::Approved);
+});
+
+test('DeleteMediaTool falls back to the model title, unverified and pending, when the series cannot be resolved', function (): void {
+    ActionTypeConfig::factory()->create(['type' => 'delete_series', 'is_enabled' => true, 'requires_approval' => false]);
+
+    (new DeleteMediaTool)->handle(new Request(['service' => 'sonarr', 'item_id' => 9, 'delete_files' => false, 'title' => 'Old Show']));
+
+    $actionRequest = ActionRequest::firstWhere('type', 'delete_series');
+    expect($actionRequest->title)->toBe('Delete series "Old Show"')
+        ->and($actionRequest->description_verified)->toBeFalse()
+        ->and($actionRequest->status)->toBe(ActionRequestStatus::Pending);
 });

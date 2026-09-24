@@ -8,13 +8,24 @@ use App\Ai\Tools\Seerr\DeclineRequestTool;
 use App\Enums\ActionRequestStatus;
 use App\Models\ActionRequest;
 use App\Models\ActionTypeConfig;
+use App\Models\ServiceConnection;
+use Illuminate\Support\Facades\Http;
 use Laravel\Ai\Tools\Request;
+
+beforeEach(function (): void {
+    Http::preventStrayRequests();
+});
 
 test('ApproveRequestTool queues an approve_seerr_request ActionRequest', function (): void {
     ActionTypeConfig::factory()->create([
         'type' => 'approve_seerr_request',
         'is_enabled' => true,
         'requires_approval' => false,
+    ]);
+    ServiceConnection::factory()->seerr()->create(['url' => 'http://seerr.local:5055']);
+    Http::fake([
+        'seerr.local:5055/api/v1/request/5101' => Http::response(['type' => 'movie', 'media' => ['tmdbId' => 438631]]),
+        'seerr.local:5055/api/v1/movie/438631' => Http::response(['title' => 'Dune', 'releaseDate' => '2021-10-22']),
     ]);
 
     $result = json_decode((new ApproveRequestTool)->handle(new Request([
@@ -27,6 +38,7 @@ test('ApproveRequestTool queues an approve_seerr_request ActionRequest', functio
     $ar = ActionRequest::firstWhere('type', 'approve_seerr_request');
     expect($ar->target_service)->toBe('seerr');
     expect($ar->payload)->toEqual(['seerr_request_id' => 5101]);
+    expect($ar->title)->toBe('Approve Seerr request for "Dune (2021)"');
 });
 
 test('DeclineRequestTool queues a decline_seerr_request ActionRequest', function (): void {

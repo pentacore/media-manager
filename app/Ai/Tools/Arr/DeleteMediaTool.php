@@ -27,7 +27,7 @@ class DeleteMediaTool extends BaseTool
     }
 
     /**
-     * @return array{type: string, target_service: string, payload: array<string, mixed>}
+     * @return array{type: string, target_service: string, payload: array<string, mixed>, fallback_title: ?string}
      */
     protected function execute(Request $request): array
     {
@@ -38,7 +38,7 @@ class DeleteMediaTool extends BaseTool
 
         throw_if($itemId <= 0, InvalidArgumentException::class, 'item_id must be a positive service-native id — look it up with SearchMediaTool/GetMediaTool, never guess.');
 
-        return match ($service) {
+        return [...match ($service) {
             'sonarr' => [
                 'type' => 'delete_series',
                 'target_service' => 'sonarr',
@@ -55,7 +55,7 @@ class DeleteMediaTool extends BaseTool
                 'payload' => ['whisparr_item_id' => $itemId, 'delete_files' => $deleteFiles],
             ],
             default => throw new InvalidArgumentException('service must be "sonarr", "radarr", or "whisparr".'),
-        };
+        }, 'fallback_title' => is_string($args['title'] ?? null) ? $args['title'] : null];
     }
 
     /**
@@ -74,6 +74,10 @@ class DeleteMediaTool extends BaseTool
             'delete_files' => $schema->boolean()
                 ->description('Delete the underlying media files too. Default false (just removes from the service).')
                 ->required(),
+            'title' => $schema->string()
+                ->description('Human name of the item (e.g. the series title) as shown to the user. Only displayed if the server cannot look the id up; such requests always wait for approval.')
+                ->required()
+                ->nullable(),
         ];
     }
 }

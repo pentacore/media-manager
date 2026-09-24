@@ -8,6 +8,7 @@ use App\Enums\ActionRequestStatus;
 use App\Enums\AiMode;
 use App\Models\ActionRequest;
 use App\Models\ActionTypeConfig;
+use App\Services\Actions\ActionDescription;
 use App\Settings\AiSettings;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
 use Laravel\Ai\Tools\Request;
@@ -130,6 +131,48 @@ class FakeDestructiveTool extends BaseTool
     }
 }
 
+class FakeUndescribableDestructiveTool extends FakeDestructiveTool
+{
+    /**
+     * @return array<string, array<never, never>|string>
+     */
+    #[Override]
+    protected function execute(Request $request): array
+    {
+        return ['type' => 'delete_series', 'target_service' => 'sonarr', 'payload' => []];
+    }
+}
+
+class FakeSelfDescribedDestructiveTool extends FakeDestructiveTool
+{
+    /**
+     * @return array<string, mixed>
+     */
+    #[Override]
+    protected function execute(Request $request): array
+    {
+        return [
+            'type' => 'replace_media_file',
+            'target_service' => 'sonarr',
+            'payload' => [],
+            'description' => new ActionDescription('Replace the file', 'Sonarr will grab a better release.'),
+            'origin' => 'system',
+        ];
+    }
+}
+
+class FakeUndescribedLegacyDestructiveTool extends FakeDestructiveTool
+{
+    /**
+     * @return array<string, array<never, never>|string>
+     */
+    #[Override]
+    protected function execute(Request $request): array
+    {
+        return ['type' => 'replace_media_file', 'target_service' => 'sonarr', 'payload' => []];
+    }
+}
+
 class FakeHookedDestructiveTool extends FakeDestructiveTool
 {
     public ?int $queuedActionRequestId = null;
@@ -211,6 +254,37 @@ test('Destructive tool returns no_action_type_config when type is unknown', func
     $decoded = json_decode($result, true);
     expect($decoded['queued'])->toBeFalse();
     expect($decoded['reason'])->toBe('no_action_type_config');
+});
+
+test('a destructive tool whose target cannot be described is not queued', function (): void {
+    ActionTypeConfig::factory()->create(['type' => 'delete_series', 'is_enabled' => true, 'requires_approval' => true]);
+
+    $result = json_decode((new FakeUndescribableDestructiveTool)->handle(makeFakeRequest()), true);
+
+    expect($result['queued'])->toBeFalse()
+        ->and($result['reason'])->toBe('undescribable_action')
+        ->and($result['message'])->toContain('sonarr_series_id')
+        ->and(ActionRequest::count())->toBe(0);
+});
+
+test('a destructive tool that supplies its own description and origin is queued with them as-is', function (): void {
+    ActionTypeConfig::factory()->create(['type' => 'replace_media_file', 'is_enabled' => true, 'requires_approval' => true]);
+
+    (new FakeSelfDescribedDestructiveTool)->handle(makeFakeRequest());
+
+    $actionRequest = ActionRequest::firstWhere('type', 'replace_media_file');
+    expect($actionRequest->title)->toBe('Replace the file')
+        ->and($actionRequest->description)->toBe('Sonarr will grab a better release.')
+        ->and($actionRequest->origin)->toBe('system');
+});
+
+test('a destructive tool of a type the describer does not know still queues undescribed', function (): void {
+    ActionTypeConfig::factory()->create(['type' => 'replace_media_file', 'is_enabled' => true, 'requires_approval' => true]);
+
+    $result = json_decode((new FakeUndescribedLegacyDestructiveTool)->handle(makeFakeRequest()), true);
+
+    expect($result['queued'])->toBeTrue()
+        ->and(ActionRequest::firstWhere('type', 'replace_media_file')->title)->toBeNull();
 });
 
 test('handle returns valid JSON even when execute() result has invalid UTF-8', function (): void {
