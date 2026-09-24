@@ -108,11 +108,18 @@ final readonly class ReplacementRequestBuilder
             'force_requires_approval' => $candidateRequiresApproval
                 || ($isSeasonPack
                     && $this->mediaReplacementSettings->seasonPackPolicy() === SeasonPackPolicy::ApprovalRequired),
-            'description' => $this->describe($payload['title'], $snapshot, $candidate, $requiredLanguages, $selectionMode, $boundedReason),
+            'description' => $this->describe($payload['title'], $snapshot, $candidate, $requiredLanguages, $selectionMode),
         ];
     }
 
     /**
+     * `$reason` is deliberately never surfaced here: for the two AI-driven
+     * callers (ReplaceMediaFileTool, QueueAutomaticReplacementTool) it is
+     * LLM-written text, and per the binding constraint LLM-written text may
+     * only enter `title`/`details` when the description is marked
+     * unverified. It remains available to reviewers via payload `detail` /
+     * `agent_rationale`, and to the AI reasoning block, unchanged.
+     *
      * @param  array<string, mixed>  $snapshot
      * @param  array<string, mixed>  $candidate
      * @param  list<string>  $requiredLanguages
@@ -123,7 +130,6 @@ final readonly class ReplacementRequestBuilder
         array $candidate,
         array $requiredLanguages,
         string $selectionMode,
-        string $reason,
     ): ActionDescription {
         $confidence = $candidate['confidence'] ?? null;
 
@@ -137,7 +143,6 @@ final readonly class ReplacementRequestBuilder
             ->withDetail('Release', is_string($candidate['title'] ?? null) ? $candidate['title'] : null)
             ->withDetail('Required subtitles', $requiredLanguages === [] ? null : implode(', ', $requiredLanguages))
             ->withDetail('Confidence', is_int($confidence) || is_float($confidence) ? sprintf('%s%%', $confidence) : null)
-            ->withDetail('Selection', $selectionMode)
-            ->withDetail('Reason', $reason === '' ? null : $reason);
+            ->withDetail('Selection', $selectionMode);
     }
 }

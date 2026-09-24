@@ -315,6 +315,5 @@ test('the builder describes the replacement for the approval card', function ():
             ['label' => 'Required subtitles', 'value' => 'en, sv'],
             ['label' => 'Confidence', 'value' => '92%'],
             ['label' => 'Selection', 'value' => 'automatic'],
-            ['label' => 'Reason', 'value' => 'Current file has no Swedish subtitles.'],
         ]);
 });
