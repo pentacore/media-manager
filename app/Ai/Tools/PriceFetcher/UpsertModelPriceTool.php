@@ -326,6 +326,10 @@ class UpsertModelPriceTool extends BaseTool
                 'provider' => $provider,
                 'model' => $model,
             ],
+            WriteOutcome::CreateDisabled => [
+                'error' => 'create_disabled',
+                'message' => sprintf('%s/%s is not in the catalog and adding new models is disabled for this provider; only existing rows can be updated. Do not retry it.', $provider, $model),
+            ],
             WriteOutcome::Locked => [
                 'error' => 'price_locked',
                 'message' => sprintf('%s/%s is locked for manual editing; the automatic write was skipped. Report it in your summary and move on.', $provider, $model),

@@ -145,7 +145,7 @@ final class AiPriceRefreshCoordinator
     /**
      * Provider => outcome counters and rejection codes accumulated per run.
      *
-     * @var array<string, array{status: string, created: int, updated: int, unchanged: int, locked: int, rejected: int, anomalous: int, tiered: int, discrepancies: int, rejections: array<string, int>}>
+     * @var array<string, array{status: string, created: int, updated: int, unchanged: int, locked: int, rejected: int, anomalous: int, tiered: int, discrepancies: int, create_disabled: int, rejections: array<string, int>}>
      */
     private array $providerStates = [];
 
@@ -386,13 +386,14 @@ final class AiPriceRefreshCoordinator
                         WriteOutcome::Locked => $state['locked']++,
                         WriteOutcome::Rejected => $state['rejected']++,
                         WriteOutcome::RejectedAnomalous => $state['anomalous']++,
+                        WriteOutcome::CreateDisabled => $state['create_disabled']++,
                     };
 
                     if ($outcome === WriteOutcome::RejectedAnomalous) {
                         $anomalousModels[] = $candidate->model;
                     }
 
-                    if ($candidate->tiered && $outcome !== WriteOutcome::Rejected && $outcome !== WriteOutcome::RejectedAnomalous) {
+                    if ($candidate->tiered && ! in_array($outcome, [WriteOutcome::Rejected, WriteOutcome::RejectedAnomalous, WriteOutcome::CreateDisabled], true)) {
                         $state['tiered']++;
                     }
                 }
@@ -420,7 +421,7 @@ final class AiPriceRefreshCoordinator
 
             if ($fallbackAllowed && $this->isFallbackEligible($provider, $refreshScope)) {
                 $this->providerStates[$provider] = $stateBeforeWrites;
-                $this->queueFallback($provider, $refreshScope);
+                $this->enqueueFallback($provider, $refreshScope);
 
                 return;
             }
@@ -646,6 +647,7 @@ final class AiPriceRefreshCoordinator
         $this->providerStates[$provider]['unchanged'] += $counts[WriteOutcome::Unchanged->value] ?? 0;
         $this->providerStates[$provider]['locked'] += $counts[WriteOutcome::Locked->value] ?? 0;
         $this->providerStates[$provider]['rejected'] += ($counts[WriteOutcome::Rejected->value] ?? 0) + ($counts[WriteOutcome::RejectedAnomalous->value] ?? 0);
+        $this->providerStates[$provider]['create_disabled'] += $counts[WriteOutcome::CreateDisabled->value] ?? 0;
 
         // In verify mode an agent Update means the first-party page disagreed
         // with the value the feed just synced: that is a discrepancy the run
@@ -749,7 +751,27 @@ final class AiPriceRefreshCoordinator
         ];
     }
 
+    /**
+     * Queue a provider for verifier fallback, settling it as succeeded instead
+     * when there is nothing the verifier could refresh for it.
+     */
     private function queueFallback(string $provider, RefreshScope $refreshScope): void
+    {
+        if ($this->hasNothingToRefresh($provider, $refreshScope)) {
+            $this->resolveWithNothingToRefresh($provider);
+
+            return;
+        }
+
+        $this->enqueueFallback($provider, $refreshScope);
+    }
+
+    /**
+     * Queue a provider for verifier fallback unconditionally. Used directly by
+     * the isolated write-failure path, where a failed write must never be
+     * settled as "nothing to refresh".
+     */
+    private function enqueueFallback(string $provider, RefreshScope $refreshScope): void
     {
         $this->fallbackTargets[$provider] = $refreshScope->modelsFor($provider) ?? [];
         $this->providerLevelFallback[] = $provider;
@@ -784,12 +806,41 @@ final class AiPriceRefreshCoordinator
                 continue;
             }
 
+            if ($this->hasNothingToRefresh($provider, $refreshScope)) {
+                $this->resolveWithNothingToRefresh($provider);
+
+                continue;
+            }
+
             $this->fallbackTargets[$provider] = $refreshScope->modelsFor($provider) ?? [];
             $this->providerLevelFallback[] = $provider;
 
             $this->providerState($provider, self::PROVIDER_FALLBACK_SKIPPED);
             $this->providerStates[$provider]['status'] = self::PROVIDER_FALLBACK_SKIPPED;
         }
+    }
+
+    /**
+     * Whether a provider-wide verifier target would be pointless: the provider
+     * is update-only (off the auto-create list) and has no stored rows, so the
+     * agent could neither update nor create anything for it. Model-pinned
+     * scopes are never short-circuited — their exact targets stay audited.
+     */
+    private function hasNothingToRefresh(string $provider, RefreshScope $refreshScope): bool
+    {
+        return $refreshScope->modelsFor($provider) === null
+            && ! $refreshScope->allowsCreate($provider)
+            && $this->providerStoredModels($provider) === [];
+    }
+
+    /**
+     * Settle a provider that has nothing to refresh as succeeded without
+     * spending an agent run on it, keeping any counters recorded so far.
+     */
+    private function resolveWithNothingToRefresh(string $provider): void
+    {
+        $this->providerState($provider, self::PROVIDER_OK);
+        $this->providerStates[$provider]['status'] = self::PROVIDER_OK;
     }
 
     /**
@@ -847,7 +898,7 @@ final class AiPriceRefreshCoordinator
     /**
      * Fetch (or initialize) the mutable per-provider counter state.
      *
-     * @return array{status: string, created: int, updated: int, unchanged: int, locked: int, rejected: int, anomalous: int, tiered: int, discrepancies: int, rejections: array<string, int>}
+     * @return array{status: string, created: int, updated: int, unchanged: int, locked: int, rejected: int, anomalous: int, tiered: int, discrepancies: int, create_disabled: int, rejections: array<string, int>}
      */
     private function providerState(string $provider, string $initialStatus): array
     {
@@ -861,6 +912,7 @@ final class AiPriceRefreshCoordinator
             'anomalous' => 0,
             'tiered' => 0,
             'discrepancies' => 0,
+            'create_disabled' => 0,
             'rejections' => [],
         ];
     }
@@ -899,7 +951,7 @@ final class AiPriceRefreshCoordinator
         ?string $errorMessage,
     ): RefreshReport {
         $succeeded = 0;
-        $totals = ['created' => 0, 'updated' => 0, 'unchanged' => 0, 'locked' => 0, 'rejected' => 0, 'tiered' => 0];
+        $totals = ['created' => 0, 'updated' => 0, 'unchanged' => 0, 'locked' => 0, 'rejected' => 0, 'tiered' => 0, 'create_disabled' => 0];
         $providerResults = [];
 
         foreach ($this->providerStates as $provider => $state) {
@@ -984,6 +1036,7 @@ final class AiPriceRefreshCoordinator
             fallbackProviders: array_keys($this->fallbackTargets),
             errorMessage: $errorMessage,
             mode: $mode,
+            modelsCreateDisabled: $totals['create_disabled'],
         );
     }
 

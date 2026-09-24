@@ -187,10 +187,6 @@ final readonly class AiModelPriceWriter
         bool $dryRun,
         bool $firstPartyVerified,
     ): WriteOutcome {
-        if ($provider === 'openrouter' && ! $scope->isOpenRouterCreateAllowed()) {
-            return WriteOutcome::Rejected;
-        }
-
         // A date-suffixed snapshot of a model whose base row already exists is
         // catalog noise: the base row carries the pricing every consumer
         // resolves against. The feed adapter skips these within a source
@@ -205,6 +201,12 @@ final readonly class AiModelPriceWriter
             if (! isset($supplied[$column])) {
                 return WriteOutcome::Rejected;
             }
+        }
+
+        // Checked after validation so the outcome counts only genuinely new,
+        // otherwise-creatable models that an update-only provider skipped.
+        if (! $scope->allowsCreate($provider)) {
+            return WriteOutcome::CreateDisabled;
         }
 
         if ($dryRun) {

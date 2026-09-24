@@ -46,7 +46,6 @@ final readonly class RefreshScope
     private function __construct(
         private ?array $providers,
         private ?array $providerModels,
-        private bool $openRouterCreateAllowed = false,
     ) {}
 
     /**
@@ -194,12 +193,24 @@ final readonly class RefreshScope
     }
 
     /**
-     * Whether OpenRouter rows may be created (as opposed to only updated).
-     * Defaults to false: OpenRouter never expands the catalog automatically.
+     * Whether an automatic write may create a new row for the given provider,
+     * as opposed to only updating rows that already exist. Governed by the
+     * admin-managed auto-create provider list ({@see AiSettings::autoCreatePricingProviders()}),
+     * which defaults to every supported provider except OpenRouter. An
+     * unsupported or ignored provider never creates.
      */
-    public function isOpenRouterCreateAllowed(): bool
+    public function allowsCreate(string $provider): bool
     {
-        return $this->openRouterCreateAllowed;
+        $id = self::canonicalize($provider);
+
+        if ($id === null) {
+            return false;
+        }
+
+        /** @var array<string, string> $map */
+        $map = config('mediamanager.ai.pricing.providers', self::DEFAULT_PROVIDER_MAP);
+
+        return in_array($id, self::canonicalList(resolve(AiSettings::class)->autoCreatePricingProviders(), $map), true);
     }
 
     /**
@@ -289,11 +300,23 @@ final readonly class RefreshScope
      */
     private static function ignoredProviders(array $map): array
     {
-        $ignored = resolve(AiSettings::class)->ignoredPricingProviders();
+        return self::canonicalList(resolve(AiSettings::class)->ignoredPricingProviders(), $map);
+    }
 
+    /**
+     * Resolve an operator-supplied provider list (upstream or canonical
+     * spelling) to canonical identities against the provider map, dropping
+     * blanks and unknown entries. Does not apply the ignore list.
+     *
+     * @param  list<string>  $entries
+     * @param  array<string, string>  $map
+     * @return list<string>
+     */
+    private static function canonicalList(array $entries, array $map): array
+    {
         $canonical = [];
 
-        foreach ($ignored as $entry) {
+        foreach ($entries as $entry) {
             $entry = strtolower(trim((string) $entry));
 
             if ($entry === '') {

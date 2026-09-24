@@ -47,6 +47,13 @@ enum WriteOutcome: string
     case RejectedAnomalous = 'rejected_anomalous';
 
     /**
+     * The candidate is a model the catalog does not have yet, but its provider
+     * is update-only (not on the auto-create provider list), so no row was
+     * created. Dry runs report this outcome too, instead of WouldCreate.
+     */
+    case CreateDisabled = 'create_disabled';
+
+    /**
      * Dry run: a create would have occurred.
      */
     case WouldCreate = 'would_create';
