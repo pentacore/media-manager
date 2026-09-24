@@ -14,7 +14,7 @@ use Laravel\Ai\Events\ToolInvoked;
 use Laravel\Ai\Prompts\AgentPrompt;
 use Laravel\Ai\Responses\AgentResponse;
 use Laravel\Ai\Responses\Data\Meta;
-use Laravel\Ai\Responses\Data\Usage;
+use Laravel\Ai\Responses\Data\TextUsage;
 
 test('writes one row per ToolInvoked event', function (): void {
     $event = new ToolInvoked(
@@ -61,7 +61,7 @@ test('end-to-end: tool events fire before AgentPrompted, count rolls up to the p
     $agentPrompt = new ReflectionClass(AgentPrompt::class)->newInstanceWithoutConstructor();
     new ReflectionProperty(AgentPrompt::class, 'agent')->setValue($agentPrompt, new MediaAgent);
 
-    $response = new AgentResponse($invocationId, 'ok', new Usage, new Meta(provider: 'openai', model: 'gpt-5-mini'));
+    $response = new AgentResponse($invocationId, 'ok', new TextUsage, new Meta(provider: 'openai', model: 'gpt-5-mini'));
 
     (new RecordAgentUsage)->handle(new AgentPrompted($invocationId, $agentPrompt, $response));
 

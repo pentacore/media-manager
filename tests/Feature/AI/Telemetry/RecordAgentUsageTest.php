@@ -15,12 +15,12 @@ use Laravel\Ai\Events\AgentPrompted;
 use Laravel\Ai\Prompts\AgentPrompt;
 use Laravel\Ai\Responses\AgentResponse;
 use Laravel\Ai\Responses\Data\Meta;
-use Laravel\Ai\Responses\Data\Usage;
+use Laravel\Ai\Responses\Data\TextUsage;
 
 function makeAgentPrompted(
     string $invocationId,
     object $agent,
-    Usage $usage,
+    TextUsage $usage,
     Meta $meta,
     ?string $conversationId = null,
     ?object $conversationUser = null,
@@ -42,7 +42,7 @@ test('writes one usage row with token counts and meta', function (): void {
     $agentPrompted = makeAgentPrompted(
         invocationId: 'inv-abc',
         agent: new MediaAgent,
-        usage: new Usage(promptTokens: 1234, completionTokens: 567, cacheWriteInputTokens: 50, cacheReadInputTokens: 100, reasoningTokens: 25),
+        usage: new TextUsage(inputTokens: 1384, outputTokens: 592, cacheReadInputTokens: 100, cacheWriteInputTokens: 50, reasoningTokens: 25),
         meta: new Meta(provider: 'openai', model: 'gpt-5-mini'),
         conversationId: 'conv-uuid',
         conversationUser: $user,
@@ -84,7 +84,7 @@ test('tool_calls_count reflects rows already written for the same invocation', f
     $agentPrompted = makeAgentPrompted(
         invocationId: 'inv-multi',
         agent: new MediaAgent,
-        usage: new Usage(promptTokens: 10, completionTokens: 5),
+        usage: new TextUsage(inputTokens: 10, outputTokens: 5),
         meta: new Meta(provider: 'openai', model: 'gpt-5-mini'),
     );
 
@@ -97,7 +97,7 @@ test('handles missing conversation user gracefully', function (): void {
     $agentPrompted = makeAgentPrompted(
         invocationId: 'inv-anon',
         agent: new MediaAgent,
-        usage: new Usage,
+        usage: new TextUsage,
         meta: new Meta(provider: 'openai', model: 'gpt-5-mini'),
     );
 
@@ -112,7 +112,7 @@ test('persists the agent response text on the row', function (): void {
     $agentPrompted = makeAgentPrompted(
         invocationId: 'inv-with-text',
         agent: new MediaAgent,
-        usage: new Usage,
+        usage: new TextUsage,
         meta: new Meta(provider: 'openai', model: 'gpt-5-mini'),
         responseText: 'Found 3 series matching "severance".',
     );
@@ -128,7 +128,7 @@ test('truncates response text past 64 KB with an ellipsis suffix', function (): 
     $agentPrompted = makeAgentPrompted(
         invocationId: 'inv-long',
         agent: new MediaAgent,
-        usage: new Usage,
+        usage: new TextUsage,
         meta: new Meta(provider: 'openai', model: 'gpt-5-mini'),
         responseText: $longText,
     );
@@ -156,7 +156,7 @@ test('batch usage is priced with batch rates when available', function (): void 
     $agentPrompted = makeAgentPrompted(
         invocationId: 'inv-batch',
         agent: new MediaAgent,
-        usage: new Usage(promptTokens: 100, completionTokens: 50),
+        usage: new TextUsage(inputTokens: 100, outputTokens: 50),
         meta: new Meta(provider: 'openai', model: 'gpt-5-mini'),
     );
 
@@ -184,7 +184,7 @@ test('batch flag falls back to standard rates when batch columns are zero', func
     $agentPrompted = makeAgentPrompted(
         invocationId: 'inv-batch-zero',
         agent: new MediaAgent,
-        usage: new Usage(promptTokens: 100, completionTokens: 50),
+        usage: new TextUsage(inputTokens: 100, outputTokens: 50),
         meta: new Meta(provider: 'openai', model: 'gpt-5-mini'),
     );
 
@@ -210,7 +210,7 @@ test('non-batch usage is priced with standard rates', function (): void {
     $agentPrompted = makeAgentPrompted(
         invocationId: 'inv-standard',
         agent: new MediaAgent,
-        usage: new Usage(promptTokens: 100, completionTokens: 50),
+        usage: new TextUsage(inputTokens: 100, outputTokens: 50),
         meta: new Meta(provider: 'openai', model: 'gpt-5-mini'),
     );
 

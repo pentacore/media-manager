@@ -9,6 +9,7 @@ use App\Models\AiToolInvocation;
 use App\Models\AiUsageRecord;
 use App\Services\AiBudget\AiBudgetGuard;
 use App\Services\AiUsage\BatchPricingContext;
+use App\Services\AiUsage\UsageColumns;
 use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Cache;
@@ -57,11 +58,7 @@ class RecordAgentUsage
             'agent_class' => $agentPrompted->prompt->agent::class,
             'provider' => $meta->provider,
             'model' => $meta->model,
-            'prompt_tokens' => $usage->promptTokens,
-            'completion_tokens' => $usage->completionTokens,
-            'cache_read_input_tokens' => $usage->cacheReadInputTokens,
-            'cache_write_input_tokens' => $usage->cacheWriteInputTokens,
-            'reasoning_tokens' => $usage->reasoningTokens,
+            ...UsageColumns::fromText($usage),
             // Cap at 64 KB so a runaway tool-stuffed reply can't bloat the
             // row. Detail-modal use only — we don't index or search this.
             'response_text' => $this->truncateResponseText($response->text ?? null),
