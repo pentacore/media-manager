@@ -10,6 +10,7 @@ use App\Ai\Tools\Bazarr\InspectSubtitleEscalationTool;
 use App\Ai\Tools\Bazarr\QueueAutomaticReplacementTool;
 use App\Settings\AiSettings;
 use Laravel\Ai\Attributes\MaxSteps;
+use Laravel\Ai\Attributes\RepairToolCalls;
 use Laravel\Ai\Contracts\Agent;
 use Laravel\Ai\Contracts\HasMiddleware;
 use Laravel\Ai\Contracts\HasTools;
@@ -17,6 +18,7 @@ use Laravel\Ai\Contracts\Tool;
 use Laravel\Ai\Promptable;
 
 #[MaxSteps(4)]
+#[RepairToolCalls]
 final class SubtitleAdvisorAgent implements Agent, HasMiddleware, HasTools
 {
     use Promptable;

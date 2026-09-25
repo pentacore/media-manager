@@ -18,7 +18,10 @@ use App\Ai\Tools\Seerr\ListPendingRequestsTool;
 use App\Ai\Tools\System\GetServiceStatusTool;
 use App\Ai\Tools\System\QueryActivityTool;
 use App\Settings\DecisionAgentSettings;
+use Laravel\Ai\Attributes\CacheInstructions;
+use Laravel\Ai\Attributes\CacheToolDefinitions;
 use Laravel\Ai\Attributes\MaxSteps;
+use Laravel\Ai\Attributes\RepairToolCalls;
 use Laravel\Ai\Contracts\Agent;
 use Laravel\Ai\Contracts\HasMiddleware;
 use Laravel\Ai\Contracts\HasProviderOptions;
@@ -35,6 +38,9 @@ use Stringable;
  * context toolset plus the one proposal tool, and it never talks to a user.
  */
 #[MaxSteps(16)]
+#[RepairToolCalls]
+#[CacheInstructions]
+#[CacheToolDefinitions]
 class DecisionAgent implements Agent, HasMiddleware, HasProviderOptions, HasTools
 {
     use Promptable;

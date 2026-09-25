@@ -52,7 +52,10 @@ use App\Enums\ServiceType;
 use App\Models\ServiceConnection;
 use App\Settings\AiSettings;
 use Illuminate\Support\Facades\Log;
+use Laravel\Ai\Attributes\CacheInstructions;
+use Laravel\Ai\Attributes\CacheToolDefinitions;
 use Laravel\Ai\Attributes\MaxSteps;
+use Laravel\Ai\Attributes\RepairToolCalls;
 use Laravel\Ai\Concerns\RemembersConversations;
 use Laravel\Ai\Contracts\Agent;
 use Laravel\Ai\Contracts\Conversational;
@@ -65,6 +68,9 @@ use Laravel\Ai\Promptable;
 use Stringable;
 
 #[MaxSteps(24)]
+#[RepairToolCalls]
+#[CacheInstructions]
+#[CacheToolDefinitions]
 class MediaAgent implements Agent, Conversational, HasMiddleware, HasProviderOptions, HasTools
 {
     use Promptable;

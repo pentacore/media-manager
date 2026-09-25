@@ -12,7 +12,10 @@ use App\Ai\Tools\PriceFetcher\WebFetchTool;
 use App\Services\AiUsage\Pricing\PriceVerificationRun;
 use App\Services\AiUsage\Pricing\RefreshScope;
 use App\Settings\AiSettings;
+use Laravel\Ai\Attributes\CacheInstructions;
+use Laravel\Ai\Attributes\CacheToolDefinitions;
 use Laravel\Ai\Attributes\MaxSteps;
+use Laravel\Ai\Attributes\RepairToolCalls;
 use Laravel\Ai\Contracts\Agent;
 use Laravel\Ai\Contracts\HasMiddleware;
 use Laravel\Ai\Contracts\HasTools;
@@ -24,6 +27,9 @@ use Laravel\Ai\Providers\Tools\WebFetch;
 use Stringable;
 
 #[MaxSteps(40)]
+#[RepairToolCalls]
+#[CacheInstructions]
+#[CacheToolDefinitions]
 class PriceFetcherAgent implements Agent, HasMiddleware, HasTools
 {
     use Promptable;
