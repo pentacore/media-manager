@@ -5,72 +5,37 @@ declare(strict_types=1);
 namespace App\Listeners\Ai;
 
 use App\Ai\AiRunAttribution;
-use App\Models\AiModelPrice;
+use App\Enums\AiUsageKind;
 use App\Models\AiToolInvocation;
-use App\Models\AiUsageRecord;
-use App\Services\AiBudget\AiBudgetGuard;
-use App\Services\AiUsage\BatchPricingContext;
 use App\Services\AiUsage\UsageColumns;
-use Illuminate\Database\UniqueConstraintViolationException;
+use App\Services\AiUsage\UsageRecordWriter;
 use Illuminate\Support\Facades\Auth;
-use Illuminate\Support\Facades\Cache;
 use Laravel\Ai\Events\AgentPrompted;
 
 class RecordAgentUsage
 {
+    private const int RESPONSE_TEXT_MAX_BYTES = 65_536;
+
     public function handle(AgentPrompted $agentPrompted): void
     {
         // Streamed runs are registered for both AgentStreamed (explicitly,
         // AIServiceProvider) and — under the fake gateway — AgentPrompted.
-        // Dedupe on invocation_id so a double dispatch never double-bills.
-        // The fast-path check avoids the insert work; the DB unique
-        // constraint (caught below) closes the concurrent window the
-        // check-then-create alone left open.
-        if (AiUsageRecord::where('invocation_id', $agentPrompted->invocationId)->exists()) {
-            return;
-        }
-
-        $meta = $agentPrompted->response->meta;
-
-        $isBatch = resolve(BatchPricingContext::class)->enabled;
-        $snapshot = $this->priceSnapshotFor($meta->provider, $meta->model, $isBatch);
-
-        try {
-            $this->createRecord($agentPrompted, $isBatch, $snapshot);
-            // New spend invalidates the budget guard's cached month total.
-            Cache::forget(AiBudgetGuard::spendCacheKey());
-        } catch (UniqueConstraintViolationException) {
-            // A concurrent dispatch for the same invocation won the insert
-            // race — exactly the double-billing this guards against.
-        }
-    }
-
-    /**
-     * @param  array<string, mixed>|null  $snapshot
-     */
-    private function createRecord(AgentPrompted $agentPrompted, bool $isBatch, ?array $snapshot): void
-    {
+        // UsageRecordWriter dedupes on invocation_id (fast-path check plus
+        // the DB unique constraint) so a double dispatch never double-bills.
         $response = $agentPrompted->response;
-        $usage = $response->usage;
         $meta = $response->meta;
 
-        AiUsageRecord::create([
+        resolve(UsageRecordWriter::class)->record([
             'invocation_id' => $agentPrompted->invocationId,
+            'kind' => AiUsageKind::Text,
             'agent_class' => $agentPrompted->prompt->agent::class,
             'provider' => $meta->provider,
             'model' => $meta->model,
-            ...UsageColumns::fromText($usage),
+            ...UsageColumns::fromText($response->usage),
             // Cap at 64 KB so a runaway tool-stuffed reply can't bloat the
             // row. Detail-modal use only — we don't index or search this.
             'response_text' => $this->truncateResponseText($response->text ?? null),
             'tool_calls_count' => AiToolInvocation::where('invocation_id', $agentPrompted->invocationId)->count(),
-            'input_per_mtok' => $snapshot['input_per_mtok'] ?? null,
-            'output_per_mtok' => $snapshot['output_per_mtok'] ?? null,
-            'cache_read_per_mtok' => $snapshot['cache_read_per_mtok'] ?? null,
-            'cache_write_per_mtok' => $snapshot['cache_write_per_mtok'] ?? null,
-            'reasoning_per_mtok' => $snapshot['reasoning_per_mtok'] ?? null,
-            'is_batch' => $isBatch,
-            'price_source' => $snapshot === null ? null : 'live',
             // Conversational agents (chat) carry a participant on the response.
             // Non-conversational agents (e.g. PriceFetcherAgent) don't, so we
             // attribute usage to the run's AiRunAttribution user (set by
@@ -79,11 +44,8 @@ class RecordAgentUsage
                 ?? resolve(AiRunAttribution::class)->user()?->id
                 ?? Auth::id(),
             'conversation_id' => $response->conversationId,
-            'status' => 'success',
         ]);
     }
-
-    private const int RESPONSE_TEXT_MAX_BYTES = 65_536;
 
     private function truncateResponseText(?string $text): ?string
     {
@@ -96,56 +58,5 @@ class RecordAgentUsage
         }
 
         return mb_strcut($text, 0, self::RESPONSE_TEXT_MAX_BYTES - 3, 'UTF-8').'…';
-    }
-
-    /**
-     * Snapshot the catalog rates onto the usage row. When the run is
-     * batch-flagged, each token tier prefers its `batch_*_per_mtok` rate,
-     * falling back to the standard rate when the batch column is unset or
-     * zero. Snapshotting the batch rates into the standard snapshot keys
-     * keeps downstream reporting unchanged.
-     *
-     * @return array<string, string>|null
-     */
-    private function priceSnapshotFor(?string $provider, ?string $model, bool $isBatch): ?array
-    {
-        if ($provider === null || $provider === '' || $model === null || $model === '') {
-            return null;
-        }
-
-        // Strip a trailing dated suffix (e.g. "-2025-09-23") so a snapshot
-        // recorded against the base model id still resolves for dated
-        // variants. Mirrors the JOIN logic in AiUsageReporting.
-        $baseModel = preg_replace('/-\d{4}-\d{2}-\d{2}$/', '', $model);
-
-        $price = AiModelPrice::query()
-            ->where('provider', $provider)
-            ->where('model', $baseModel)
-            ->first();
-
-        if (! $price instanceof AiModelPrice) {
-            return null;
-        }
-
-        return [
-            'input_per_mtok' => $this->rateFor($price->input_per_mtok, $price->batch_input_per_mtok, $isBatch),
-            'output_per_mtok' => $this->rateFor($price->output_per_mtok, $price->batch_output_per_mtok, $isBatch),
-            'cache_read_per_mtok' => $this->rateFor($price->cache_read_per_mtok, $price->batch_cache_read_per_mtok, $isBatch),
-            'cache_write_per_mtok' => $this->rateFor($price->cache_write_per_mtok, $price->batch_cache_write_per_mtok, $isBatch),
-            'reasoning_per_mtok' => $this->rateFor($price->reasoning_per_mtok, $price->batch_reasoning_per_mtok, $isBatch),
-        ];
-    }
-
-    /**
-     * Pick the batch rate for a token tier when the run is batch-flagged and
-     * the batch rate is set and positive; otherwise use the standard rate.
-     */
-    private function rateFor(string $standard, ?string $batch, bool $isBatch): string
-    {
-        if ($isBatch && $batch !== null && (float) $batch > 0.0) {
-            return $batch;
-        }
-
-        return $standard;
     }
 }
