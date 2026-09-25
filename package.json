@@ -22,7 +22,7 @@
         "@stylistic/eslint-plugin": "^5.10.0",
         "@tailwindcss/vite": "^4.3.3",
         "@types/node": "^26.1.2",
-        "@vitejs/plugin-vue": "^6.0.8",
+        "@vitejs/plugin-vue": "^6.0.9",
         "@vue/eslint-config-typescript": "^14.3.0",
         "concurrently": "^10.0.5",
         "eslint": "^9.17.0",
