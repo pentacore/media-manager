@@ -10,6 +10,7 @@ use App\Services\AiBudget\AiBudgetExceededException;
 use App\Services\AiBudget\AiBudgetGuard;
 use App\Settings\AiSettings;
 use Carbon\CarbonImmutable;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Notification;
 
 beforeEach(function (): void {
@@ -146,3 +147,22 @@ test('spend is scoped to the current calendar month', function (): void {
     // No current-month spend → guard is a no-op.
     resolve(AiBudgetGuard::class)->enforce();
 })->throwsNoExceptions();
+
+test('failed runs, embeddings, reranking and classification all count toward the month spend', function (): void {
+    foreach (['failed', 'embeddings', 'reranking', 'classification'] as $state) {
+        AiUsageRecord::factory()->{$state}()->create([
+            'prompt_tokens' => 1_000_000,
+            'completion_tokens' => 0,
+            'cache_read_input_tokens' => 0,
+            'cache_write_input_tokens' => 0,
+            'reasoning_tokens' => 0,
+            'search_units' => 0,
+            'input_per_mtok' => 1.0,
+            'output_per_mtok' => 0,
+        ]);
+    }
+
+    Cache::forget(AiBudgetGuard::spendCacheKey());
+
+    expect(resolve(AiBudgetGuard::class)->currentMonthSpend())->toBe(4.0);
+});
