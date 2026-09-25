@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Providers;
 
+use App\Ai\AiRunAttribution;
 use App\Listeners\Ai\EnforceAiRateLimit;
 use App\Listeners\Ai\RecordAgentUsage;
 use App\Services\AiUsage\BatchPricingContext;
@@ -22,6 +23,10 @@ class AIServiceProvider extends ServiceProvider
         $this->app->singleton('mediamanager.ai.enabled', fn (Application $application): bool => (bool) $application->make('config')->get('mediamanager.ai.enabled', false));
 
         $this->app->scoped(BatchPricingContext::class);
+
+        // Holds the user who triggered the in-flight AI run; scoped so it
+        // cannot leak into the next Octane request or queued job.
+        $this->app->scoped(AiRunAttribution::class);
     }
 
     // Note: RecordAgentUsage / RecordToolInvocation / RecordAgentFailover are

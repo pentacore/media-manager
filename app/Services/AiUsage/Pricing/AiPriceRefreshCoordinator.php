@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Services\AiUsage\Pricing;
 
 use App\Ai\Agents\PriceFetcherAgent;
+use App\Ai\AiRunAttribution;
 use App\Enums\PricingSource;
 use App\Models\AiModelPrice;
 use App\Models\AiPriceRefreshRun;
@@ -478,22 +479,18 @@ final class AiPriceRefreshCoordinator
 
             $before = AiModelPrice::query()->count();
 
-            $agent = new PriceFetcherAgent;
-
-            if ($user instanceof User) {
-                $agent = $agent->forUser($user);
-            }
-
-            $agent = $agent->forScope($this->agentScope(), $providers, $this->providerChecklists(), $priceVerificationRun, dryRun: $dryRun);
+            $agent = new PriceFetcherAgent()->forScope($this->agentScope(), $providers, $this->providerChecklists(), $priceVerificationRun, dryRun: $dryRun);
 
             $prompt = 'Verify and correct the catalog pricing for your scoped providers now. Fetch each canonical pricing page first, then upsert the rates you read.';
 
             $aiSettings = resolve(AiSettings::class);
             $chain = $aiSettings->providerChainWithModel($aiSettings->model());
 
-            $chain === null
+            // Queued refreshes have no authenticated user, so attribute the
+            // verifier's usage to whoever triggered the run.
+            resolve(AiRunAttribution::class)->during($user, fn (): mixed => $chain === null
                 ? $agent->prompt($prompt)
-                : $agent->prompt($prompt, provider: $chain);
+                : $agent->prompt($prompt, provider: $chain));
 
             // Fold the real per-provider tool outcomes into the audit counters
             // (created/updated/unchanged/locked/rejected), for every provider

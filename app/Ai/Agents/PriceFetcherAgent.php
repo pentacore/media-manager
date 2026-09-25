@@ -4,16 +4,13 @@ declare(strict_types=1);
 
 namespace App\Ai\Agents;
 
-use App\Ai\Middleware\AttributesToUser;
 use App\Ai\Tools\PriceFetcher\UpsertModelPriceTool;
 use App\Ai\Tools\PriceFetcher\WebFetchTool;
-use App\Models\User;
 use App\Services\AiUsage\Pricing\PriceVerificationRun;
 use App\Services\AiUsage\Pricing\RefreshScope;
 use App\Settings\AiSettings;
 use Laravel\Ai\Attributes\MaxSteps;
 use Laravel\Ai\Contracts\Agent;
-use Laravel\Ai\Contracts\HasMiddleware;
 use Laravel\Ai\Contracts\HasTools;
 use Laravel\Ai\Contracts\Tool;
 use Laravel\Ai\Promptable;
@@ -21,7 +18,7 @@ use Laravel\Ai\Providers\Tools\WebFetch;
 use Stringable;
 
 #[MaxSteps(40)]
-class PriceFetcherAgent implements Agent, HasMiddleware, HasTools
+class PriceFetcherAgent implements Agent, HasTools
 {
     use Promptable;
 
@@ -43,8 +40,6 @@ class PriceFetcherAgent implements Agent, HasMiddleware, HasTools
         'cohere' => ['https://cohere.com/pricing'],
         'openrouter' => ['https://openrouter.ai/api/v1/models'],
     ];
-
-    private ?User $user = null;
 
     /**
      * Per-run write allowlist. Null until {@see forScope()} binds one; the
@@ -88,24 +83,12 @@ class PriceFetcherAgent implements Agent, HasMiddleware, HasTools
     private ?PriceVerificationRun $run = null;
 
     /**
-     * Stamp the run with the user who kicked it off so RecordAgentUsage can
-     * attribute spend / budget impact. Required when invoked from a queued
-     * job where Auth::id() resolves to null.
-     */
-    public function forUser(User $user): static
-    {
-        $this->user = $user;
-
-        return $this;
-    }
-
-    /**
      * Bind the per-run write scope and the exact provider/model targets the
      * coordinator wants re-read. The {@see RefreshScope} is what the write tool
      * enforces (it rejects any out-of-scope pair); the provider and model lists
      * shape the targeted instructions so the agent fetches only the canonical
-     * pages it needs and stays inside {@see MaxSteps}. Follows the {@see forUser}
-     * convention of mutating and returning the per-run agent instance.
+     * pages it needs and stays inside {@see MaxSteps}. Mutates and returns the
+     * per-run agent instance.
      *
      * @param  list<string>  $providers  Provider identities (upstream or canonical) to verify.
      * @param  array<string, list<string>>  $modelChecklists  Canonical provider => models to re-confirm (display only; does not narrow scope).
@@ -218,16 +201,6 @@ class PriceFetcherAgent implements Agent, HasMiddleware, HasTools
             $webFetch,
             resolve(UpsertModelPriceTool::class)->withScope($scope)->withRun($run)->withDryRun($this->dryRun),
         ];
-    }
-
-    /**
-     * @return array<int, object>
-     */
-    public function middleware(): array
-    {
-        return $this->user instanceof User
-            ? [new AttributesToUser($this->user)]
-            : [];
     }
 
     /**

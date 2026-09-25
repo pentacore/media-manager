@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Listeners\Ai;
 
+use App\Ai\AiRunAttribution;
 use App\Models\AiModelPrice;
 use App\Models\AiToolInvocation;
 use App\Models\AiUsageRecord;
@@ -72,9 +73,11 @@ class RecordAgentUsage
             'price_source' => $snapshot === null ? null : 'live',
             // Conversational agents (chat) carry a participant on the response.
             // Non-conversational agents (e.g. PriceFetcherAgent) don't, so we
-            // attribute usage to whoever's authenticated in the current request
-            // — the user who triggered the run — for cost / budget reporting.
-            'user_id' => $response->conversationUser?->id ?? Auth::id(),
+            // attribute usage to the run's AiRunAttribution user (set by
+            // queued callers), then whoever is authenticated in the request.
+            'user_id' => $response->conversationUser?->id
+                ?? resolve(AiRunAttribution::class)->user()?->id
+                ?? Auth::id(),
             'conversation_id' => $response->conversationId,
             'status' => 'success',
         ]);

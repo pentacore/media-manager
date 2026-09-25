@@ -3,6 +3,8 @@
 declare(strict_types=1);
 
 use App\Ai\Agents\MediaAgent;
+use App\Ai\Agents\PriceFetcherAgent;
+use App\Ai\AiRunAttribution;
 use App\Ai\Tools\Arr\DeleteMediaTool;
 use App\Ai\Tools\Arr\SearchMediaTool;
 use App\Listeners\Ai\RecordAgentUsage;
@@ -221,4 +223,19 @@ test('non-batch usage is priced with standard rates', function (): void {
     expect($record->is_batch)->toBeFalse()
         ->and((float) $record->input_per_mtok)->toBe(1.00)
         ->and((float) $record->output_per_mtok)->toBe(4.00);
+});
+
+test('usage is attributed to the run attribution user when no conversation user exists', function (): void {
+    $user = User::factory()->admin()->create();
+
+    resolve(AiRunAttribution::class)->during($user, function (): void {
+        (new RecordAgentUsage)->handle(makeAgentPrompted(
+            invocationId: 'inv-attr',
+            agent: new PriceFetcherAgent,
+            usage: new TextUsage(inputTokens: 10, outputTokens: 5),
+            meta: new Meta(provider: 'openai', model: 'gpt-5-mini'),
+        ));
+    });
+
+    expect(AiUsageRecord::where('invocation_id', 'inv-attr')->value('user_id'))->toBe($user->id);
 });
