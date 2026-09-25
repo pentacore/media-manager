@@ -43,6 +43,26 @@ interface AiSettingsState {
     rate_limits_enforced: boolean;
     ignored_pricing_providers: string[];
     auto_create_pricing_providers: string[];
+    classification_provider: string;
+    classification_model: string | null;
+    decision_gate_enabled: boolean;
+    decision_gate_threshold: number;
+    subtitle_triage_enabled: boolean;
+    subtitle_triage_threshold: number;
+    chat_routing_enabled: boolean;
+    reranking_provider: string;
+    reranking_model: string | null;
+    sub_agent_model: string | null;
+}
+
+interface ProviderOption {
+    value: string;
+    label: string;
+}
+
+interface AdvancedTools {
+    tool_search: boolean;
+    code_execution: boolean;
 }
 
 interface PricingProviderOption {
@@ -65,6 +85,10 @@ const props = defineProps<{
     reasoningLevels: SelectOptionGroup<AiReasoningLevel>;
     failoverProviders: FailoverProviderOption[];
     pricingProviders: PricingProviderOption[];
+    classificationProviders: ProviderOption[];
+    rerankingProviders: ProviderOption[];
+    providerKeys: Record<string, boolean>;
+    advancedTools: AdvancedTools;
 }>();
 
 defineOptions({
@@ -89,6 +113,29 @@ const ignoredPricingProviders = ref<string[]>([
 const autoCreatePricingProviders = ref<string[]>([
     ...props.settings.auto_create_pricing_providers,
 ]);
+const selectedClassificationProvider = ref(
+    props.settings.classification_provider,
+);
+const classificationModel = ref(props.settings.classification_model ?? '');
+const decisionGateEnabled = ref(props.settings.decision_gate_enabled);
+const subtitleTriageEnabled = ref(props.settings.subtitle_triage_enabled);
+const chatRoutingEnabled = ref(props.settings.chat_routing_enabled);
+const selectedRerankingProvider = ref(props.settings.reranking_provider);
+const rerankingModel = ref(props.settings.reranking_model ?? '');
+
+/**
+ * Select items cannot carry an empty value, so "Same as chat model" uses a
+ * sentinel in the select and posts an empty string through a hidden input.
+ */
+const SAME_AS_CHAT_MODEL = '__same_as_chat_model__';
+const selectedSubAgentModel = ref(
+    props.settings.sub_agent_model ?? SAME_AS_CHAT_MODEL,
+);
+const subAgentModelValue = computed(() =>
+    selectedSubAgentModel.value === SAME_AS_CHAT_MODEL
+        ? ''
+        : selectedSubAgentModel.value,
+);
 
 function formatUsd(value: number | null): string {
     if (value === null) {
@@ -368,6 +415,440 @@ const budgetState = computed<{
                             :message="errors.title_model"
                             class="mt-1"
                         />
+                    </div>
+                </div>
+
+                <Separator />
+
+                <!-- Classification -->
+                <div class="flex flex-col gap-5" data-classification-settings>
+                    <div>
+                        <h2
+                            class="text-[15px] leading-tight font-semibold tracking-tight"
+                        >
+                            Classification
+                        </h2>
+                        <p
+                            class="mt-0.5 max-w-[560px] text-[12px] text-muted-foreground"
+                        >
+                            Cheap classification calls that decide whether a
+                            full agent run is worth it. Every gate fails open
+                            when classification is unavailable.
+                        </p>
+                    </div>
+
+                    <div
+                        class="grid items-start gap-6"
+                        style="grid-template-columns: 200px 1fr"
+                    >
+                        <Field
+                            label="Provider"
+                            hint="Provider that answers classification calls."
+                        >
+                            <span />
+                        </Field>
+                        <div>
+                            <div class="flex flex-wrap items-center gap-2">
+                                <Select
+                                    v-model="selectedClassificationProvider"
+                                    name="classification_provider"
+                                    :default-value="
+                                        settings.classification_provider
+                                    "
+                                >
+                                    <SelectTrigger class="h-8 w-48 text-sm">
+                                        <SelectValue
+                                            placeholder="Select a provider"
+                                        />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem
+                                            v-for="provider in classificationProviders"
+                                            :key="provider.value"
+                                            :value="provider.value"
+                                        >
+                                            {{ provider.label }}
+                                        </SelectItem>
+                                    </SelectContent>
+                                </Select>
+                                <Pill
+                                    v-if="
+                                        !providerKeys[
+                                            selectedClassificationProvider
+                                        ]
+                                    "
+                                    variant="warn"
+                                    data-classification-key-missing
+                                >
+                                    No API key configured
+                                </Pill>
+                            </div>
+                            <InputError
+                                :message="errors.classification_provider"
+                                class="mt-1"
+                            />
+                        </div>
+                    </div>
+
+                    <div
+                        class="grid items-start gap-6"
+                        style="grid-template-columns: 200px 1fr"
+                    >
+                        <Field
+                            label="Model"
+                            hint="Classification model. Leave blank to use the provider's default."
+                        >
+                            <span />
+                        </Field>
+                        <div>
+                            <Input
+                                id="classification_model"
+                                name="classification_model"
+                                type="text"
+                                class="h-8 max-w-[320px] text-sm"
+                                v-model="classificationModel"
+                                placeholder="Provider default"
+                            />
+                            <InputError
+                                :message="errors.classification_model"
+                                class="mt-1"
+                            />
+                        </div>
+                    </div>
+
+                    <div
+                        class="grid items-start gap-6"
+                        style="grid-template-columns: 200px 1fr"
+                    >
+                        <Field
+                            label="Webhook decision gate"
+                            hint="Skips the run when classification says the event is unlikely to need action. Stuck-import events always run."
+                        >
+                            <span />
+                        </Field>
+                        <div class="flex flex-col gap-2">
+                            <div>
+                                <Toggle
+                                    v-model="decisionGateEnabled"
+                                    data-decision-gate-toggle
+                                    :label="
+                                        decisionGateEnabled
+                                            ? 'Enabled'
+                                            : 'Disabled'
+                                    "
+                                />
+                                <input
+                                    type="hidden"
+                                    name="decision_gate_enabled"
+                                    :value="decisionGateEnabled ? '1' : '0'"
+                                />
+                            </div>
+                            <label
+                                for="decision_gate_threshold"
+                                class="flex items-center gap-2 text-[12px] text-muted-foreground"
+                            >
+                                Threshold
+                                <Input
+                                    id="decision_gate_threshold"
+                                    name="decision_gate_threshold"
+                                    type="number"
+                                    step="0.05"
+                                    min="0"
+                                    max="1"
+                                    class="h-8 w-24 text-sm"
+                                    :default-value="
+                                        settings.decision_gate_threshold
+                                    "
+                                />
+                            </label>
+                            <InputError
+                                :message="
+                                    errors.decision_gate_enabled ??
+                                    errors.decision_gate_threshold
+                                "
+                            />
+                        </div>
+                    </div>
+
+                    <div
+                        class="grid items-start gap-6"
+                        style="grid-template-columns: 200px 1fr"
+                    >
+                        <Field
+                            label="Subtitle escalation triage"
+                            hint="Sends cases unlikely to benefit from an automatic replacement straight to review."
+                        >
+                            <span />
+                        </Field>
+                        <div class="flex flex-col gap-2">
+                            <div>
+                                <Toggle
+                                    v-model="subtitleTriageEnabled"
+                                    data-subtitle-triage-toggle
+                                    :label="
+                                        subtitleTriageEnabled
+                                            ? 'Enabled'
+                                            : 'Disabled'
+                                    "
+                                />
+                                <input
+                                    type="hidden"
+                                    name="subtitle_triage_enabled"
+                                    :value="subtitleTriageEnabled ? '1' : '0'"
+                                />
+                            </div>
+                            <label
+                                for="subtitle_triage_threshold"
+                                class="flex items-center gap-2 text-[12px] text-muted-foreground"
+                            >
+                                Threshold
+                                <Input
+                                    id="subtitle_triage_threshold"
+                                    name="subtitle_triage_threshold"
+                                    type="number"
+                                    step="0.05"
+                                    min="0"
+                                    max="1"
+                                    class="h-8 w-24 text-sm"
+                                    :default-value="
+                                        settings.subtitle_triage_threshold
+                                    "
+                                />
+                            </label>
+                            <InputError
+                                :message="
+                                    errors.subtitle_triage_enabled ??
+                                    errors.subtitle_triage_threshold
+                                "
+                            />
+                        </div>
+                    </div>
+
+                    <div
+                        class="grid items-start gap-6"
+                        style="grid-template-columns: 200px 1fr"
+                    >
+                        <Field
+                            label="Chat tool routing"
+                            hint="Sends MediaAgent only the tools a message needs."
+                        >
+                            <span />
+                        </Field>
+                        <div>
+                            <Toggle
+                                v-model="chatRoutingEnabled"
+                                data-chat-routing-toggle
+                                :label="
+                                    chatRoutingEnabled ? 'Enabled' : 'Disabled'
+                                "
+                            />
+                            <input
+                                type="hidden"
+                                name="chat_routing_enabled"
+                                :value="chatRoutingEnabled ? '1' : '0'"
+                            />
+                            <InputError
+                                :message="errors.chat_routing_enabled"
+                                class="mt-1"
+                            />
+                        </div>
+                    </div>
+                </div>
+
+                <Separator />
+
+                <!-- Reranking -->
+                <div class="flex flex-col gap-5" data-reranking-settings>
+                    <div>
+                        <h2
+                            class="text-[15px] leading-tight font-semibold tracking-tight"
+                        >
+                            Reranking
+                        </h2>
+                        <p
+                            class="mt-0.5 max-w-[560px] text-[12px] text-muted-foreground"
+                        >
+                            Reorders semantic library search results by
+                            relevance.
+                        </p>
+                    </div>
+
+                    <div
+                        class="grid items-start gap-6"
+                        style="grid-template-columns: 200px 1fr"
+                    >
+                        <Field
+                            label="Provider"
+                            hint="Provider that reranks semantic search results."
+                        >
+                            <span />
+                        </Field>
+                        <div>
+                            <div class="flex flex-wrap items-center gap-2">
+                                <Select
+                                    v-model="selectedRerankingProvider"
+                                    name="reranking_provider"
+                                    :default-value="settings.reranking_provider"
+                                >
+                                    <SelectTrigger class="h-8 w-48 text-sm">
+                                        <SelectValue
+                                            placeholder="Select a provider"
+                                        />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem
+                                            v-for="provider in rerankingProviders"
+                                            :key="provider.value"
+                                            :value="provider.value"
+                                        >
+                                            {{ provider.label }}
+                                        </SelectItem>
+                                    </SelectContent>
+                                </Select>
+                                <Pill
+                                    v-if="
+                                        !providerKeys[selectedRerankingProvider]
+                                    "
+                                    variant="warn"
+                                    data-reranking-key-missing
+                                >
+                                    No API key configured
+                                </Pill>
+                            </div>
+                            <InputError
+                                :message="errors.reranking_provider"
+                                class="mt-1"
+                            />
+                        </div>
+                    </div>
+
+                    <div
+                        class="grid items-start gap-6"
+                        style="grid-template-columns: 200px 1fr"
+                    >
+                        <Field
+                            label="Model"
+                            hint="Reranking model. Leave blank to use the provider's default."
+                        >
+                            <span />
+                        </Field>
+                        <div>
+                            <Input
+                                id="reranking_model"
+                                name="reranking_model"
+                                type="text"
+                                class="h-8 max-w-[320px] text-sm"
+                                v-model="rerankingModel"
+                                placeholder="Provider default"
+                            />
+                            <InputError
+                                :message="errors.reranking_model"
+                                class="mt-1"
+                            />
+                        </div>
+                    </div>
+                </div>
+
+                <Separator />
+
+                <!-- Sub-agent model -->
+                <div
+                    class="grid items-start gap-6"
+                    style="grid-template-columns: 200px 1fr"
+                    data-sub-agent-model
+                >
+                    <Field
+                        label="Sub-agent model"
+                        hint="Model the investigation sub-agents run on. Pick a cheaper model than the chat model to keep investigations inexpensive."
+                    >
+                        <span />
+                    </Field>
+                    <div>
+                        <Select v-model="selectedSubAgentModel">
+                            <SelectTrigger class="h-8 max-w-[320px] text-sm">
+                                <SelectValue placeholder="Select a model" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem :value="SAME_AS_CHAT_MODEL">
+                                    Same as chat model
+                                </SelectItem>
+                                <SelectGroup
+                                    v-for="(modelList, provider) in models"
+                                    :key="provider"
+                                >
+                                    <SelectLabel class="capitalize">
+                                        {{ provider }}
+                                    </SelectLabel>
+                                    <SelectItem
+                                        v-for="modelId in modelList"
+                                        :key="modelId"
+                                        :value="modelId"
+                                    >
+                                        {{ modelId }}
+                                    </SelectItem>
+                                </SelectGroup>
+                            </SelectContent>
+                        </Select>
+                        <input
+                            type="hidden"
+                            name="sub_agent_model"
+                            :value="subAgentModelValue"
+                        />
+                        <InputError
+                            :message="errors.sub_agent_model"
+                            class="mt-1"
+                        />
+                    </div>
+                </div>
+
+                <!-- Advanced tools -->
+                <div
+                    class="grid items-start gap-6"
+                    style="grid-template-columns: 200px 1fr"
+                >
+                    <Field
+                        label="Advanced tools"
+                        hint="Provider-hosted tools register only when every provider in the failover chain supports them."
+                    >
+                        <span />
+                    </Field>
+                    <div
+                        class="flex flex-col gap-1.5 text-[12px] text-muted-foreground"
+                        data-advanced-tools
+                    >
+                        <div data-advanced-tool="tool_search">
+                            Hosted tool search:
+                            <Pill
+                                :variant="
+                                    advancedTools.tool_search ? 'ok' : 'default'
+                                "
+                            >
+                                {{
+                                    advancedTools.tool_search
+                                        ? 'active'
+                                        : 'inactive'
+                                }}
+                            </Pill>
+                            — needs every provider in the failover chain to be
+                            OpenAI or Anthropic
+                        </div>
+                        <div data-advanced-tool="code_execution">
+                            Code execution (price verifier):
+                            <Pill
+                                :variant="
+                                    advancedTools.code_execution
+                                        ? 'ok'
+                                        : 'default'
+                                "
+                            >
+                                {{
+                                    advancedTools.code_execution
+                                        ? 'active'
+                                        : 'inactive'
+                                }}
+                            </Pill>
+                            — needs every provider in the chain to support it
+                        </div>
                     </div>
                 </div>
 

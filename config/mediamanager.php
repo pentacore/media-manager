@@ -51,6 +51,16 @@ return [
             'enforce' => (bool) env('MEDIAMANAGER_AI_ENFORCE_RATE_LIMITS', false),
         ],
 
+        // Cheap classification calls gating agent runs (Admin > AI Settings
+        // persists on top). Every gate fails open when unconfigured.
+        'classification' => [
+            'provider' => env('MEDIAMANAGER_AI_CLASSIFICATION_PROVIDER', 'openrouter'),
+            'model' => env('MEDIAMANAGER_AI_CLASSIFICATION_MODEL'),
+        ],
+
+        // Model for investigation sub-agents; empty follows the chat model.
+        'sub_agent_model' => env('MEDIAMANAGER_AI_SUB_AGENT_MODEL', ''),
+
         // Opt-in: swap the PriceFetcherAgent's custom host-allowlisted HTTP
         // GET tool for the SDK's provider-native WebFetch. Only works on
         // providers that support it (OpenAI/Anthropic); unsupported providers
