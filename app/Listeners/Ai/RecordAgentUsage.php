@@ -45,6 +45,9 @@ class RecordAgentUsage
                 ?? resolve(AiRunAttribution::class)->user()?->id
                 ?? Auth::id(),
             'conversation_id' => $response->conversationId,
+            // Set when this run is a sub-agent invoked as a tool; its usage is
+            // not folded into the parent's response, so each row bills once.
+            'parent_invocation_id' => $agentPrompted->prompt->parentInvocationId ?? null,
         ]);
 
         // The run finished; its step totals were only needed had it failed.
