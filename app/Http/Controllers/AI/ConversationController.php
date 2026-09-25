@@ -7,16 +7,21 @@ namespace App\Http\Controllers\AI;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\AI\RenameConversationRequest;
 use App\Models\User;
+use App\Services\Chat\ChatAttachmentStore;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Date;
 use Illuminate\Support\Facades\DB;
 use Laravel\Ai\Contracts\ConversationStore;
+use Laravel\Ai\Contracts\PaginatesConversations;
 use Laravel\Ai\Contracts\VerifiesConversationOwnership;
+use Laravel\Ai\Enums\MessageStatus;
+use Laravel\Ai\Storage\StoredMessage;
 
 class ConversationController extends Controller
 {
     private const int RECENT_LIMIT = 20;
+
+    private const int HISTORY_PAGE_SIZE = 30;
 
     public function index(Request $request): JsonResponse
     {
@@ -43,7 +48,7 @@ class ConversationController extends Controller
         ]);
     }
 
-    public function show(Request $request, string $conversation): JsonResponse
+    public function show(Request $request, ChatAttachmentStore $chatAttachmentStore, string $conversation): JsonResponse
     {
         $user = $request->user();
 
@@ -59,16 +64,26 @@ class ConversationController extends Controller
             return response()->json(['message' => 'Conversation not found.'], 404);
         }
 
-        $messages = DB::table('agent_conversation_messages')
-            ->where('conversation_id', $conversation)
-            ->orderBy('id')
-            ->get(['role', 'content', 'created_at'])
-            ->filter(fn ($message): bool => in_array($message->role, ['user', 'assistant'], true)
-                && trim((string) $message->content) !== '')
-            ->map(fn ($message): array => [
-                'role' => $message->role,
-                'text' => (string) $message->content,
-                'ts' => Date::parse((string) $message->created_at)->getTimestamp() * 1000,
+        $conversationStore = resolve(ConversationStore::class);
+        abort_unless($conversationStore instanceof PaginatesConversations, 500);
+
+        $cursorPaginator = $conversationStore->paginateConversationMessages(
+            $conversation,
+            self::HISTORY_PAGE_SIZE,
+            cursor: $request->string('cursor')->value() ?: null,
+        );
+
+        $messages = collect($cursorPaginator->items())
+            ->reverse()
+            ->filter(fn (StoredMessage $storedMessage): bool => in_array($storedMessage->role, ['user', 'assistant'], true)
+                && (trim($storedMessage->content) !== '' || $storedMessage->status === MessageStatus::Failed || $storedMessage->attachments !== []))
+            ->map(fn (StoredMessage $storedMessage): array => [
+                'role' => $storedMessage->role,
+                'text' => $storedMessage->content,
+                'ts' => ($storedMessage->createdAt?->getTimestamp() ?? 0) * 1000,
+                'reasoning' => collect($storedMessage->steps)->pluck('reasoning')->filter()->implode("\n\n"),
+                'attachments' => $chatAttachmentStore->forMessage($storedMessage->attachments),
+                'failed' => $storedMessage->status === MessageStatus::Failed,
             ])
             ->values()
             ->all();
@@ -78,6 +93,7 @@ class ConversationController extends Controller
             'title' => (string) $row->title,
             'updated_at' => $row->updated_at,
             'messages' => $messages,
+            'next_cursor' => $cursorPaginator->nextCursor()?->encode(),
         ]);
     }
 

@@ -31,6 +31,14 @@ export interface ConversationMessage {
     failed?: boolean;
 }
 
+export interface ConversationPage {
+    id: string;
+    title: string;
+    updated_at: string;
+    messages: ConversationMessage[];
+    next_cursor: string | null;
+}
+
 export interface AgentStep {
     conversationId: string;
     toolName: string;
@@ -199,20 +207,26 @@ export function useAiChat() {
         return data;
     };
 
+    /**
+     * Fetch one page of a conversation's history (30 messages, newest page
+     * first, oldest to newest within the page). Pass the previous page's
+     * `next_cursor` to fetch the page before it.
+     */
     const loadConversation = async (
         id: string,
-    ): Promise<{
-        id: string;
-        title: string;
-        updated_at: string;
-        messages: ConversationMessage[];
-    }> => {
-        const data = await jsonRequest<{
-            id: string;
-            title: string;
-            updated_at: string;
-            messages: ConversationMessage[];
-        }>('GET', ConversationController.show.url(id));
+        cursor: string | null = null,
+    ): Promise<ConversationPage> => {
+        const data = await jsonRequest<ConversationPage>(
+            'GET',
+            ConversationController.show.url(id, {
+                query: cursor ? { cursor } : {},
+            }),
+        );
+
+        if (cursor) {
+            return data;
+        }
+
         activeConversationId.value = data.id;
         upsertConversation({
             id: data.id,

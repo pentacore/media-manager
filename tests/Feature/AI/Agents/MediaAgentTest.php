@@ -5,12 +5,14 @@ declare(strict_types=1);
 use App\Ai\Agents\MediaAgent;
 use App\Ai\Decision\InspectStuckImportTool;
 use App\Ai\Tools\BaseTool;
+use App\Enums\AiReasoningLevel;
 use App\Models\ServiceConnection;
 use App\Settings\AiSettings;
 use Laravel\Ai\Contracts\Agent;
 use Laravel\Ai\Contracts\Conversational;
 use Laravel\Ai\Contracts\HasTools;
 use Laravel\Ai\Contracts\Tool;
+use Laravel\Ai\Enums\Lab;
 
 beforeEach(function (): void {
     config()->set('services.tmdb.api_key');
@@ -210,4 +212,12 @@ test('instructions cover the behavioral guidance the schemas cannot express', fu
     expect($instructions)->toContain('InspectSubtitleTool')
         ->toContain('SearchSubtitlesTool')
         ->toContain('RequestSubtitleOperationTool');
+});
+
+test('MediaAgent asks OpenAI for a reasoning summary at the configured effort', function (): void {
+    resolve(AiSettings::class)->setAdvisorReasoningLevel(AiReasoningLevel::Medium);
+
+    expect((new MediaAgent)->providerOptions(Lab::OpenAI))
+        ->toBe(['reasoning' => ['effort' => 'medium', 'summary' => 'auto']])
+        ->and((new MediaAgent)->providerOptions(Lab::Anthropic))->toBe([]);
 });

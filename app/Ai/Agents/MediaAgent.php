@@ -91,7 +91,7 @@ class MediaAgent implements Agent, Conversational, HasMiddleware, HasProviderOpt
     {
         $options = match ($provider) {
             Lab::OpenAI => [
-                'reasoning' => ['effort' => resolve(AiSettings::class)->advisorReasoningLevel()],
+                'reasoning' => ['effort' => resolve(AiSettings::class)->advisorReasoningLevel(), 'summary' => 'auto'],
             ],
             default => [],
         };

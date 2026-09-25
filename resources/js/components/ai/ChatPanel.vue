@@ -93,6 +93,10 @@ const input = ref('');
 const sending = ref(false);
 const error = ref<string | null>(null);
 const loading = ref(false);
+/** Cursor for the page of history before the oldest loaded message. */
+const olderCursor = ref<string | null>(null);
+const loadingEarlier = ref(false);
+let lastScrollTop = 0;
 const mode = ref<'advisory' | 'executive'>('executive');
 const renaming = ref(false);
 const renameDraft = ref('');
@@ -221,6 +225,7 @@ watch(
 
         if (id !== prev && !id) {
             messages.value = [];
+            olderCursor.value = null;
         }
     },
     { immediate: true },
@@ -521,6 +526,7 @@ async function resolveWorkflow(
 function newConversation(): void {
     startNewConversation();
     messages.value = [];
+    olderCursor.value = null;
     error.value = null;
     inputRef.value?.focus();
 }
@@ -532,6 +538,7 @@ async function pickConversation(id: string): Promise<void> {
 
     setActiveConversation(id);
     messages.value = [];
+    olderCursor.value = null;
     error.value = null;
     loading.value = true;
 
@@ -541,6 +548,7 @@ async function pickConversation(id: string): Promise<void> {
             ...m,
             uid: messageUid(),
         }));
+        olderCursor.value = data.next_cursor;
 
         // Persisted messages carry no workflow payload, so an unresolved
         // proposal would lose its approve/decline buttons on reload. Reattach
@@ -569,6 +577,69 @@ async function pickConversation(id: string): Promise<void> {
     } finally {
         loading.value = false;
         await scrollToBottom();
+    }
+}
+
+/**
+ * Prepend the page of history before the oldest loaded message, keeping the
+ * viewport anchored on what the user was reading.
+ */
+async function loadEarlier(): Promise<void> {
+    const conversationId = activeConversationId.value;
+    const cursor = olderCursor.value;
+
+    if (!conversationId || !cursor || loadingEarlier.value) {
+        return;
+    }
+
+    loadingEarlier.value = true;
+
+    try {
+        const page = await loadConversation(conversationId, cursor);
+
+        if (activeConversationId.value !== conversationId) {
+            return;
+        }
+
+        const before = scrollRef.value?.scrollHeight ?? 0;
+        messages.value = [
+            ...page.messages.map((m) => ({ ...m, uid: messageUid() })),
+            ...messages.value,
+        ];
+        olderCursor.value = page.next_cursor;
+
+        await nextTick();
+
+        if (scrollRef.value) {
+            scrollRef.value.scrollTop += scrollRef.value.scrollHeight - before;
+        }
+    } catch (e) {
+        toast.error(
+            e instanceof Error ? e.message : 'Failed to load earlier messages.',
+        );
+    } finally {
+        loadingEarlier.value = false;
+    }
+}
+
+/**
+ * Auto-load older history when the user scrolls up to the top of the thread.
+ * Only upward scrolls count, so the smooth scroll-to-bottom after opening a
+ * conversation never triggers it.
+ */
+function onThreadScroll(): void {
+    const scrollTop = scrollRef.value?.scrollTop ?? 0;
+    const scrolledUp = scrollTop < lastScrollTop;
+    lastScrollTop = scrollTop;
+
+    if (
+        scrolledUp &&
+        scrollTop < 40 &&
+        olderCursor.value &&
+        !loadingEarlier.value &&
+        !loading.value
+    ) {
+        void loadEarlier();
     }
 }
 
@@ -726,7 +797,24 @@ function onRenameKey(event: KeyboardEvent): void {
                     isSheet ? 'px-4 py-4' : 'px-6 py-5',
                 )
             "
+            data-chat-thread
+            @scroll="onThreadScroll"
         >
+            <button
+                v-if="olderCursor && !loading"
+                type="button"
+                class="self-center text-[12px] text-muted-foreground hover:text-foreground disabled:opacity-60"
+                :disabled="loadingEarlier"
+                data-load-earlier
+                @click="loadEarlier"
+            >
+                {{
+                    loadingEarlier
+                        ? 'Loading earlier messages…'
+                        : 'Load earlier messages'
+                }}
+            </button>
+
             <div
                 v-if="loading"
                 class="flex h-full items-center justify-center text-sm text-muted-foreground"
