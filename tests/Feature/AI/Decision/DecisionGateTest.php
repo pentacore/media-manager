@@ -39,7 +39,8 @@ test('an event classified below the threshold is skipped and recorded', function
     DecisionAgent::assertNeverPrompted();
     expect(AgentDecision::sole())
         ->status->toBe(AgentDecisionStatus::SkippedByGate)
-        ->summary->toContain('10%');
+        ->summary->toContain('10%')
+        ->summary->toContain('Does this media-server webhook event require an operator action');
 });
 
 test('an event above the threshold runs the agent', function (): void {

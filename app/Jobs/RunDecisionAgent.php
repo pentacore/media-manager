@@ -50,6 +50,9 @@ class RunDecisionAgent implements ShouldBeUnique, ShouldQueue
     /** Minimum seconds between agent runs about the same subject. */
     public const int SUBJECT_COOLDOWN_SECONDS = 600;
 
+    /** The yes/no question the classification gate asks about each event. */
+    private const string GATE_QUESTION = 'Does this media-server webhook event require an operator action (import, remove, approve, re-search or fix something) rather than being purely informational?';
+
     /**
      * @param  array<string, mixed>  $payload
      */
@@ -171,7 +174,7 @@ class RunDecisionAgent implements ShouldBeUnique, ShouldQueue
         $probability = $classifier->probability(
             self::class,
             ['service' => $this->service, 'event_type' => $this->eventType, 'payload' => Str::limit((string) json_encode($this->payload), 4000)],
-            'Does this media-server webhook event require an operator action (import, remove, approve, re-search or fix something) rather than being purely informational?',
+            self::GATE_QUESTION,
         );
 
         $threshold = $aiSettings->decisionGateThreshold();
@@ -181,9 +184,10 @@ class RunDecisionAgent implements ShouldBeUnique, ShouldQueue
         }
 
         $this->record($webhookEventId, AgentDecisionStatus::SkippedByGate, sprintf(
-            'Skipped by the classification gate: %d%% likely to need action (threshold %d%%).',
+            'Skipped by the classification gate: %d%% likely to need action (threshold %d%%). Asked: "%s"',
             (int) round($probability * 100),
             (int) round($threshold * 100),
+            self::GATE_QUESTION,
         ), null);
 
         return true;
