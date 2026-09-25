@@ -21,9 +21,9 @@ beforeEach(function (): void {
     DecisionAgent::fake(['Nothing to do.']);
 });
 
-function runGateJob(string $eventType): void
+function runGateJob(string $eventType, ?int $seriesId = null): void
 {
-    (new RunDecisionAgent(null, 'sonarr', $eventType, ['series' => ['id' => random_int(1, 99999)], 'eventType' => $eventType]))->handle(
+    (new RunDecisionAgent(null, 'sonarr', $eventType, ['series' => ['id' => $seriesId ?? random_int(1, 99999)], 'eventType' => $eventType]))->handle(
         resolve(DecisionAgentSettings::class),
         resolve(AiBudgetGuard::class),
         resolve(AiSettings::class),
@@ -75,4 +75,23 @@ test('a disabled gate never classifies', function (): void {
 
     DecisionAgent::assertPrompted(fn (): bool => true);
     Classification::assertNothingClassified();
+});
+
+test('an event the gate skips does not start the subject cooldown', function (): void {
+    Classification::fake([['decision' => new BooleanAnswer(0.1)]]);
+
+    runGateJob('Grab', seriesId: 42);
+    runGateJob('ManualInteractionRequired', seriesId: 42);
+
+    DecisionAgent::assertPrompted(fn (): bool => true);
+    expect(AgentDecision::query()->orderBy('id')->pluck('status')->all())->toBe([AgentDecisionStatus::SkippedByGate, AgentDecisionStatus::NoAction]);
+});
+
+test('an agent run still starts the subject cooldown', function (): void {
+    Classification::fake([['decision' => new BooleanAnswer(0.9)], ['decision' => new BooleanAnswer(0.9)]]);
+
+    runGateJob('Grab', seriesId: 43);
+    runGateJob('Grab', seriesId: 43);
+
+    expect(AgentDecision::count())->toBe(1);
 });

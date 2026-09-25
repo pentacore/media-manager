@@ -95,15 +95,12 @@ class RunDecisionAgent implements ShouldBeUnique, ShouldQueue
         // movie / request (including ones caused by MediaManager's own
         // actions) must not trigger a paid agent run each — one decision per
         // subject per window bounds feedback loops and webhook-flood cost.
+        // Only an agent run claims the window: an event the gate skips must
+        // not block the next one (a stuck import always runs past the gate).
         $subjectKey = $this->subjectCooldownKey();
 
-        if ($subjectKey !== null && ! Cache::add($subjectKey, true, self::SUBJECT_COOLDOWN_SECONDS)) {
-            Log::info('RunDecisionAgent: subject in cooldown, skipping run', [
-                'webhook_event_id' => $webhookEventId,
-                'service' => $this->service,
-                'event_type' => $this->eventType,
-                'subject_key' => $subjectKey,
-            ]);
+        if ($subjectKey !== null && Cache::has($subjectKey)) {
+            $this->logCooldownSkip($webhookEventId, $subjectKey);
 
             return;
         }
@@ -117,6 +114,12 @@ class RunDecisionAgent implements ShouldBeUnique, ShouldQueue
         }
 
         if ($this->skippedByGate($webhookEventId, $aiSettings, $classifier)) {
+            return;
+        }
+
+        if ($subjectKey !== null && ! Cache::add($subjectKey, true, self::SUBJECT_COOLDOWN_SECONDS)) {
+            $this->logCooldownSkip($webhookEventId, $subjectKey);
+
             return;
         }
 
@@ -184,6 +187,16 @@ class RunDecisionAgent implements ShouldBeUnique, ShouldQueue
         ), null);
 
         return true;
+    }
+
+    private function logCooldownSkip(?int $webhookEventId, string $subjectKey): void
+    {
+        Log::info('RunDecisionAgent: subject in cooldown, skipping run', [
+            'webhook_event_id' => $webhookEventId,
+            'service' => $this->service,
+            'event_type' => $this->eventType,
+            'subject_key' => $subjectKey,
+        ]);
     }
 
     /**
