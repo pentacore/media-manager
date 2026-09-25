@@ -278,12 +278,22 @@ class ChatController extends Controller
      * Log an agent invocation failure and build the client-facing 500 response.
      * The full message is only surfaced in local for debugging. A rate limit
      * (ours or the provider's, after every failover was exhausted) is the one
-     * expected failure and becomes a 429 the chat UI can explain.
+     * expected failure and becomes a 429 the chat UI can explain; a hard
+     * cap reached mid-run becomes the same 402 as the pre-flight check.
      */
     private function handleAgentFailure(Throwable $throwable, ?User $user): JsonResponse
     {
         if ($throwable instanceof RateLimitedException) {
             return $this->rateLimitedResponse($throwable);
+        }
+
+        // EnforceBudgetEachStep stops a run that crosses the hard cap mid-way;
+        // answer it exactly like the pre-flight budget check does.
+        if ($throwable instanceof AiBudgetExceededException) {
+            return response()->json([
+                'error' => ChatFailure::code($throwable),
+                'message' => ChatFailure::message($throwable),
+            ], 402);
         }
 
         if ($throwable instanceof ProviderConnectionException) {
