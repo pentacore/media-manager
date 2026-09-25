@@ -1,6 +1,14 @@
 <script setup lang="ts">
 import { usePage } from '@inertiajs/vue3';
-import { ArrowRight, Check, Cpu, Pencil, Sparkles, X } from '@lucide/vue';
+import {
+    ArrowRight,
+    Check,
+    Cpu,
+    Paperclip,
+    Pencil,
+    Sparkles,
+    X,
+} from '@lucide/vue';
 import {
     computed,
     nextTick,
@@ -16,13 +24,16 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { jsonRequest, useAiChat } from '@/composables/useAiChat';
 import type { AgentStep, ConversationMessage } from '@/composables/useAiChat';
-import { streamChat } from '@/composables/useChatStream';
+import { useChatStream } from '@/composables/useChatStream';
 import { useMarkdown } from '@/composables/useMarkdown';
 import { useWebSocket } from '@/composables/useWebSocket';
 import type { ChannelLease } from '@/composables/useWebSocket';
 import { cn } from '@/lib/utils';
+import AttachmentChips from './AttachmentChips.vue';
 import ConversationPicker from './ConversationPicker.vue';
+import ReasoningBlock from './ReasoningBlock.vue';
 import StepLivenessBanner from './StepLivenessBanner.vue';
+import ToolCallChip from './ToolCallChip.vue';
 
 const props = withDefaults(
     defineProps<{
@@ -73,6 +84,8 @@ const userId = computed(() => Number(page.props.auth.user?.id ?? 0));
 
 const { render: renderMarkdown } = useMarkdown();
 
+const { streamChat } = useChatStream();
+
 const { acquirePrivateChannel } = useWebSocket();
 
 const messages = ref<ChatMessage[]>([]);
@@ -84,9 +97,80 @@ const mode = ref<'advisory' | 'executive'>('executive');
 const renaming = ref(false);
 const renameDraft = ref('');
 
+/** Matches the server's chat attachment rules (count and extensions). */
+const MAX_ATTACHMENTS = 3;
+const ATTACHMENT_EXTENSIONS = [
+    'png',
+    'jpg',
+    'jpeg',
+    'webp',
+    'gif',
+    'txt',
+    'log',
+    'json',
+    'pdf',
+];
+
+interface PendingFile {
+    key: string;
+    file: File;
+    previewUrl?: string;
+}
+
+const pendingFiles = ref<PendingFile[]>([]);
+const streamingIndex = ref<number | null>(null);
+let nextFileKey = 0;
+
 const scrollRef = useTemplateRef<HTMLDivElement>('scroll');
 const inputRef = useTemplateRef<HTMLTextAreaElement>('inputArea');
 const renameRef = useTemplateRef<HTMLInputElement>('renameInput');
+const fileInput = useTemplateRef<HTMLInputElement>('fileInput');
+
+/**
+ * Queue picked or dropped files for the next turn, keeping at most three and
+ * only the types the server accepts. Images get an object-URL preview.
+ */
+function addFiles(list: FileList | null): void {
+    if (!list) {
+        return;
+    }
+
+    for (const file of Array.from(list)) {
+        if (pendingFiles.value.length >= MAX_ATTACHMENTS) {
+            break;
+        }
+
+        const extension = file.name.split('.').pop()?.toLowerCase() ?? '';
+
+        if (!ATTACHMENT_EXTENSIONS.includes(extension)) {
+            continue;
+        }
+
+        pendingFiles.value.push({
+            key: `file-${nextFileKey++}`,
+            file,
+            previewUrl: file.type.startsWith('image/')
+                ? URL.createObjectURL(file)
+                : undefined,
+        });
+    }
+}
+
+function removeFile(key: string): void {
+    const pending = pendingFiles.value.find((p) => p.key === key);
+
+    if (pending?.previewUrl) {
+        URL.revokeObjectURL(pending.previewUrl);
+    }
+
+    pendingFiles.value = pendingFiles.value.filter((p) => p.key !== key);
+}
+
+function onFileInputChange(event: Event): void {
+    const target = event.target as HTMLInputElement;
+    addFiles(target.files);
+    target.value = '';
+}
 
 const activeTitle = computed<string>(() => {
     const id = activeConversationId.value;
@@ -162,6 +246,7 @@ async function sendMessage(continuationPayload?: {
 }): Promise<void> {
     let bodyMessage: string;
     let extraBody: Record<string, unknown> = {};
+    let files: File[] = [];
 
     if (continuationPayload) {
         bodyMessage = continuationPayload.syntheticUserText;
@@ -177,12 +262,21 @@ async function sendMessage(continuationPayload?: {
         }
 
         bodyMessage = text;
+        // The object URLs stay alive so the sent bubble keeps its previews.
         messages.value.push({
             role: 'user',
             text,
             ts: Date.now(),
             uid: messageUid(),
+            attachments: pendingFiles.value.map((p) => ({
+                id: 0,
+                name: p.file.name,
+                mime: p.file.type,
+                url: p.previewUrl ?? '',
+            })),
         });
+        files = pendingFiles.value.map((p) => p.file);
+        pendingFiles.value = [];
         input.value = '';
     }
 
@@ -196,12 +290,19 @@ async function sendMessage(continuationPayload?: {
         if (continuationPayload) {
             await sendBlockingTurn(bodyMessage, extraBody);
         } else {
-            await sendStreamingTurn(bodyMessage);
+            await sendStreamingTurn(bodyMessage, files);
         }
     } catch (e) {
         error.value = e instanceof Error ? e.message : 'Unknown error';
+
+        const last = messages.value[messages.value.length - 1];
+
+        if (last?.role === 'assistant' && !last.text) {
+            last.failed = true;
+        }
     } finally {
         sending.value = false;
+        streamingIndex.value = null;
         setPendingStep(null);
         await scrollToBottom();
     }
@@ -284,7 +385,10 @@ async function sendBlockingTurn(
  * SSE text deltas, mark tool starts as pending steps, then (once the stream
  * ends) resolve the conversation id and poll for any proposed workflow.
  */
-async function sendStreamingTurn(bodyMessage: string): Promise<void> {
+async function sendStreamingTurn(
+    bodyMessage: string,
+    files: File[],
+): Promise<void> {
     // Read the element back out of the reactive array so mutations to `.text`
     // during streaming go through Vue's proxy and re-render the bubble.
     const index =
@@ -293,10 +397,13 @@ async function sendStreamingTurn(bodyMessage: string): Promise<void> {
             text: '',
             ts: Date.now(),
             uid: messageUid(),
+            reasoning: '',
+            toolCalls: [],
             workflow: null,
             workflowResolved: null,
         }) - 1;
     const assistantMessage = messages.value[index];
+    streamingIndex.value = index;
 
     const knownConversationId = activeConversationId.value;
 
@@ -304,23 +411,32 @@ async function sendStreamingTurn(bodyMessage: string): Promise<void> {
         message: bodyMessage,
         conversationId: knownConversationId,
         mode: mode.value,
-        onDelta: (accumulated) => {
+        attachments: files,
+        onText: (accumulated) => {
             assistantMessage.text = accumulated;
         },
-        onToolCall: (toolName) => {
+        onReasoning: (accumulated) => {
+            assistantMessage.reasoning = accumulated;
+        },
+        onToolCall: (call) => {
+            const calls = assistantMessage.toolCalls ?? [];
+            const existing = calls.findIndex((c) => c.id === call.id);
+            assistantMessage.toolCalls =
+                existing === -1
+                    ? [...calls, call]
+                    : calls.map((c, i) => (i === existing ? call : c));
             setPendingStep({
                 conversationId: activeConversationId.value ?? '',
-                toolName,
-                status: 'started',
+                toolName: call.name,
+                status: call.status === 'running' ? 'started' : 'finished',
                 occurredAt: new Date().toISOString(),
             });
         },
     });
 
-    // The stream's terminal `conversation_id` event makes the id deterministic:
-    // for an existing conversation it echoes what we sent, for a brand-new one it
-    // carries the id the SDK minted during the turn. Adopt it directly — no
-    // recency guessing.
+    // RUN_STARTED/RUN_FINISHED carry the conversation id as `threadId`: for an
+    // existing conversation it echoes what we sent, for a brand-new one it is
+    // the id minted for the turn. Adopt it directly — no recency guessing.
     const conversationId = result.conversationId;
 
     if (conversationId) {
@@ -725,6 +841,43 @@ function onRenameKey(event: KeyboardEvent): void {
                             }}
                         </p>
                     </div>
+                    <AttachmentChips
+                        v-if="m.attachments?.length"
+                        :items="
+                            m.attachments.map((a, i) => ({
+                                key: `${m.uid}-${i}`,
+                                name: a.name,
+                                mime: a.mime,
+                                url: a.url || undefined,
+                            }))
+                        "
+                        class="mb-1.5"
+                    />
+                    <ReasoningBlock
+                        v-if="m.reasoning"
+                        :reasoning="m.reasoning"
+                        :streaming="
+                            sending && streamingIndex === messages.indexOf(m)
+                        "
+                    />
+                    <div
+                        v-if="m.toolCalls?.length"
+                        class="mb-2 flex flex-wrap gap-1.5"
+                        data-tool-calls
+                    >
+                        <ToolCallChip
+                            v-for="call in m.toolCalls"
+                            :key="call.id"
+                            :call="call"
+                        />
+                    </div>
+                    <p
+                        v-if="m.failed && !m.text"
+                        class="text-[13px] text-destructive"
+                        data-failed-turn
+                    >
+                        This reply failed.
+                    </p>
                     <!-- v-html is fed by useMarkdown which sanitizes via DOMPurify. -->
                     <div
                         class="mm-markdown text-[14px] leading-relaxed"
@@ -754,9 +907,47 @@ function onRenameKey(event: KeyboardEvent): void {
             >
                 {{ error }}
             </div>
+            <AttachmentChips
+                :items="
+                    pendingFiles.map((p) => ({
+                        key: p.key,
+                        name: p.file.name,
+                        mime: p.file.type,
+                        previewUrl: p.previewUrl,
+                    }))
+                "
+                removable
+                class="mb-2"
+                @remove="removeFile"
+            />
             <div
                 class="flex items-end gap-2.5 rounded-xl border border-border bg-card p-2.5"
+                @dragover.prevent
+                @drop.prevent="addFiles($event.dataTransfer?.files ?? null)"
             >
+                <input
+                    ref="fileInput"
+                    type="file"
+                    multiple
+                    class="hidden"
+                    accept=".png,.jpg,.jpeg,.webp,.gif,.txt,.log,.json,.pdf"
+                    data-attachment-input
+                    @change="onFileInputChange"
+                />
+                <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    class="size-7 p-0 text-muted-foreground"
+                    title="Attach files"
+                    data-attach-button
+                    :disabled="
+                        sending || pendingFiles.length >= MAX_ATTACHMENTS
+                    "
+                    @click="fileInput?.click()"
+                >
+                    <Paperclip class="size-3.5" />
+                </Button>
                 <textarea
                     ref="inputArea"
                     v-model="input"

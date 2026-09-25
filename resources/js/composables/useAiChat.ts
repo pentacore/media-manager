@@ -7,10 +7,28 @@ export interface ConversationSummary {
     updated_at: string;
 }
 
+export interface ChatToolCall {
+    id: string;
+    name: string;
+    status: 'running' | 'done' | 'failed';
+    activity: string[];
+}
+
+export interface ChatAttachmentRef {
+    id: number;
+    name: string;
+    mime: string;
+    url: string;
+}
+
 export interface ConversationMessage {
     role: 'user' | 'assistant';
     text: string;
     ts: number;
+    reasoning?: string;
+    toolCalls?: ChatToolCall[];
+    attachments?: ChatAttachmentRef[];
+    failed?: boolean;
 }
 
 export interface AgentStep {
