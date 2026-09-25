@@ -8,6 +8,8 @@ use App\Ai\Agents\MediaAgent;
 use App\Enums\AiMode;
 use App\Enums\AiProposedWorkflowStatus;
 use App\Http\Controllers\Controller;
+use App\Http\Requests\AI\SendChatRequest;
+use App\Http\Requests\AI\StreamChatRequest;
 use App\Jobs\Ai\GenerateConversationTitle;
 use App\Models\AiProposedWorkflow;
 use App\Models\User;
@@ -15,6 +17,7 @@ use App\Services\AiBudget\AiBudgetExceededException;
 use App\Services\AiBudget\AiBudgetGuard;
 use App\Services\AiUsage\AiModelRateLimitExceededException;
 use App\Services\AiUsage\AiRateLimitGuard;
+use App\Services\Chat\ChatAttachmentStore;
 use App\Settings\AiSettings;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\Client\RequestException;
@@ -37,18 +40,12 @@ class ChatController extends Controller
         return Inertia::render('AI/Chat', []);
     }
 
-    public function send(Request $request): JsonResponse
+    public function send(SendChatRequest $sendChatRequest, ChatAttachmentStore $chatAttachmentStore): JsonResponse
     {
-        $validated = $request->validate([
-            'message' => ['required', 'string', 'max:4000'],
-            'conversation_id' => ['nullable', 'string', 'uuid'],
-            'workflow_id' => ['nullable', 'string', 'uuid'],
-            'workflow_action' => ['nullable', 'string', 'in:approved,declined'],
-            'mode' => ['nullable', 'string', 'in:advisory,executive'],
-        ]);
+        $validated = $sendChatRequest->validated();
 
         $conversationId = $validated['conversation_id'] ?? null;
-        $user = $request->user();
+        $user = $sendChatRequest->user();
 
         $this->applyRequestedMode($validated['mode'] ?? null);
 
@@ -72,6 +69,7 @@ class ChatController extends Controller
         $isNewConversation = $conversationId === null;
         $messageToSend = $continuation ?? $validated['message'];
         $turnStartedAt = CarbonImmutable::now();
+        $attachments = $chatAttachmentStore->store($user, $sendChatRequest->file('attachments', []));
 
         try {
             $agent = $conversationId
@@ -79,9 +77,10 @@ class ChatController extends Controller
                 : (new MediaAgent)->forUser($user);
             $aiSettings = resolve(AiSettings::class);
             $chain = $aiSettings->providerChainWithModel($aiSettings->model());
+            $sdkAttachments = $chatAttachmentStore->toSdkAttachments($attachments);
             $response = $chain === null
-                ? $agent->prompt($messageToSend)
-                : $agent->prompt($messageToSend, provider: $chain);
+                ? $agent->prompt($messageToSend, attachments: $sdkAttachments)
+                : $agent->prompt($messageToSend, attachments: $sdkAttachments, provider: $chain);
         } catch (Throwable $throwable) {
             return $this->handleAgentFailure($throwable, $user);
         }
@@ -89,6 +88,7 @@ class ChatController extends Controller
         $workflowPayload = $this->attachFreshlyProposedWorkflow($user, $turnStartedAt, $response->conversationId ?? null);
 
         $newConversationId = $response->conversationId ?? null;
+        $chatAttachmentStore->assignConversation($attachments, $newConversationId);
 
         if ($isNewConversation && $newConversationId !== null) {
             $this->seedConversationTitle($newConversationId, $validated['message']);
@@ -114,15 +114,11 @@ class ChatController extends Controller
      * on a recency heuristic. Workflow continuations are intentionally NOT supported
      * here — they stay on send().
      */
-    public function stream(Request $request): mixed
+    public function stream(StreamChatRequest $streamChatRequest, ChatAttachmentStore $chatAttachmentStore): mixed
     {
-        $validated = $request->validate([
-            'message' => ['required', 'string', 'max:4000'],
-            'conversation_id' => ['nullable', 'string', 'uuid'],
-            'mode' => ['nullable', 'string', 'in:advisory,executive'],
-        ]);
+        $validated = $streamChatRequest->validated();
 
-        $user = $request->user();
+        $user = $streamChatRequest->user();
 
         $this->applyRequestedMode($validated['mode'] ?? null);
 
@@ -142,6 +138,7 @@ class ChatController extends Controller
 
         $isNewConversation = $conversationId === null;
         $message = $validated['message'];
+        $attachments = $chatAttachmentStore->store($user, $streamChatRequest->file('attachments', []));
 
         try {
             $agent = $conversationId
@@ -149,15 +146,17 @@ class ChatController extends Controller
                 : (new MediaAgent)->forUser($user);
             $aiSettings = resolve(AiSettings::class);
             $chain = $aiSettings->providerChainWithModel($aiSettings->model());
+            $sdkAttachments = $chatAttachmentStore->toSdkAttachments($attachments);
             $stream = $chain === null
-                ? $agent->stream($message)
-                : $agent->stream($message, provider: $chain);
+                ? $agent->stream($message, attachments: $sdkAttachments)
+                : $agent->stream($message, attachments: $sdkAttachments, provider: $chain);
         } catch (Throwable $throwable) {
             return $this->handleAgentFailure($throwable, $user);
         }
 
-        $stream->then(function ($response) use ($isNewConversation, $message): void {
+        $stream->then(function ($response) use ($isNewConversation, $message, $attachments, $chatAttachmentStore): void {
             $newConversationId = $response->conversationId ?? null;
+            $chatAttachmentStore->assignConversation($attachments, $newConversationId);
 
             if ($isNewConversation && $newConversationId !== null) {
                 $this->seedConversationTitle($newConversationId, $message);
