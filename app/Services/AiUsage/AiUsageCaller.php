@@ -7,8 +7,8 @@ namespace App\Services\AiUsage;
 use Closure;
 
 /**
- * Labels embeddings/reranking usage rows with the service that asked for
- * them — the SDK events carry no caller.
+ * Labels embeddings, reranking and classification usage rows with the
+ * service that asked for them — the SDK events carry no caller.
  */
 final class AiUsageCaller
 {
