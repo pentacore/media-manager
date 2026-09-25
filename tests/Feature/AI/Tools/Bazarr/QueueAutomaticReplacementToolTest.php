@@ -148,6 +148,18 @@ test('it refuses missing or mismatched run context', function (): void {
         ->and(ActionRequest::query()->count())->toBe(0);
 });
 
+test('a blank reason is reported as invalid arguments', function (): void {
+    $result = json_decode(new QueueAutomaticReplacementTool()->handle(new Request([
+        'case_id' => $this->case->id,
+        'candidate_fingerprint' => advisorReleaseFingerprint(),
+        'reason' => '   ',
+    ])), true, flags: JSON_THROW_ON_ERROR);
+
+    expect($result['error'])->toBe('invalid_arguments')
+        ->and($result['errors'])->toHaveKey('reason')
+        ->and(ActionRequest::query()->count())->toBe(0);
+});
+
 test('it refuses a case in the wrong status', function (): void {
     $this->case->update(['status' => SubtitleCaseStatus::NeedsReview]);
 

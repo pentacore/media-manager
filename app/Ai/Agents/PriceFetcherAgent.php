@@ -4,23 +4,32 @@ declare(strict_types=1);
 
 namespace App\Ai\Agents;
 
-use App\Ai\Middleware\AttributesToUser;
+use App\Ai\Middleware\AnswerOnFinalStep;
+use App\Ai\Middleware\EnforceBudgetEachStep;
+use App\Ai\ProviderCapabilities;
 use App\Ai\Tools\PriceFetcher\UpsertModelPriceTool;
 use App\Ai\Tools\PriceFetcher\WebFetchTool;
-use App\Models\User;
 use App\Services\AiUsage\Pricing\PriceVerificationRun;
 use App\Services\AiUsage\Pricing\RefreshScope;
 use App\Settings\AiSettings;
+use Laravel\Ai\Attributes\CacheInstructions;
+use Laravel\Ai\Attributes\CacheToolDefinitions;
 use Laravel\Ai\Attributes\MaxSteps;
+use Laravel\Ai\Attributes\RepairToolCalls;
 use Laravel\Ai\Contracts\Agent;
 use Laravel\Ai\Contracts\HasMiddleware;
 use Laravel\Ai\Contracts\HasTools;
+use Laravel\Ai\Contracts\Providers\SupportsCodeExecution;
 use Laravel\Ai\Contracts\Tool;
 use Laravel\Ai\Promptable;
+use Laravel\Ai\Providers\Tools\CodeExecution;
 use Laravel\Ai\Providers\Tools\WebFetch;
 use Stringable;
 
 #[MaxSteps(40)]
+#[RepairToolCalls]
+#[CacheInstructions]
+#[CacheToolDefinitions]
 class PriceFetcherAgent implements Agent, HasMiddleware, HasTools
 {
     use Promptable;
@@ -43,8 +52,6 @@ class PriceFetcherAgent implements Agent, HasMiddleware, HasTools
         'cohere' => ['https://cohere.com/pricing'],
         'openrouter' => ['https://openrouter.ai/api/v1/models'],
     ];
-
-    private ?User $user = null;
 
     /**
      * Per-run write allowlist. Null until {@see forScope()} binds one; the
@@ -88,24 +95,12 @@ class PriceFetcherAgent implements Agent, HasMiddleware, HasTools
     private ?PriceVerificationRun $run = null;
 
     /**
-     * Stamp the run with the user who kicked it off so RecordAgentUsage can
-     * attribute spend / budget impact. Required when invoked from a queued
-     * job where Auth::id() resolves to null.
-     */
-    public function forUser(User $user): static
-    {
-        $this->user = $user;
-
-        return $this;
-    }
-
-    /**
      * Bind the per-run write scope and the exact provider/model targets the
      * coordinator wants re-read. The {@see RefreshScope} is what the write tool
      * enforces (it rejects any out-of-scope pair); the provider and model lists
      * shape the targeted instructions so the agent fetches only the canonical
-     * pages it needs and stays inside {@see MaxSteps}. Follows the {@see forUser}
-     * convention of mutating and returning the per-run agent instance.
+     * pages it needs and stays inside {@see MaxSteps}. Mutates and returns the
+     * per-run agent instance.
      *
      * @param  list<string>  $providers  Provider identities (upstream or canonical) to verify.
      * @param  array<string, list<string>>  $modelChecklists  Canonical provider => models to re-confirm (display only; does not narrow scope).
@@ -141,6 +136,10 @@ class PriceFetcherAgent implements Agent, HasMiddleware, HasTools
             PROMPT;
         }
 
+        $codeExecution = $this->codeExecutionAvailable()
+            ? "\n\nYou have hosted code execution. For large machine-readable sources (for example OpenRouter's /models JSON or long pricing tables), load the fetched content in code and compute the per-million-token rates programmatically instead of reading them by eye."
+            : '';
+
         return <<<PROMPT
         You are PriceFetcherAgent, running as a scope-bound verifier. The refresh coordinator has already tried its structured source and is asking you to re-read the canonical pricing pages for a specific set of providers and correct the local AI model price catalog from what those pages currently say.
 
@@ -162,6 +161,7 @@ class PriceFetcherAgent implements Agent, HasMiddleware, HasTools
            - model: exactly the identifier the provider's API expects (e.g. `gpt-5-mini`, `claude-sonnet-4-6`, `gemini-2.5-pro`, `deepseek-chat`, `grok-4`).
            - input_per_mtok / output_per_mtok: USD per 1,000,000 tokens.
            - cache_read_per_mtok / cache_write_per_mtok / reasoning_per_mtok / batch_*_per_mtok: the tier rate if the page lists it; 0 for an explicit zero the page states; null for any tier you cannot read.
+           - search_unit_per_k: For rerank models (Cohere, Jina, OpenRouter), record the price per 1,000 searches in search_unit_per_k and leave token rates at 0 unless the page lists them. null for every other model.
            - source_url: the exact URL of the pricing page you fetched these rates from (the `url` WebFetchTool returned).
            - source_updated_at: the last-updated date the page itself states, formatted YYYY-MM-DD, or null when the page states none.
 
@@ -175,8 +175,19 @@ class PriceFetcherAgent implements Agent, HasMiddleware, HasTools
         - Don't upsert pricing for embedding-only or non-LLM products (image, audio, embeddings) — only chat / instruct / reasoning text models.
         - Always use the stable, non-dated model alias (e.g. `claude-haiku-4-5`, never `claude-haiku-4-5-20251001`). Writes for a dated snapshot of a model that already has a base row are rejected.
 
-        When done, output a short final summary: how many rows you upserted per provider, and which providers you skipped and why.
+        When done, output a short final summary: how many rows you upserted per provider, and which providers you skipped and why.{$codeExecution}
         PROMPT;
+    }
+
+    /**
+     * Wrap every generation step: refuse a step once the hard budget is
+     * crossed mid-run, and force a plain answer on the final allowed step.
+     *
+     * @return array<int, object>
+     */
+    public function middleware(): array
+    {
+        return [new AnswerOnFinalStep, new EnforceBudgetEachStep];
     }
 
     /**
@@ -193,7 +204,11 @@ class PriceFetcherAgent implements Agent, HasMiddleware, HasTools
      * no receipts, so its writes are a best-effort refresh: the anomaly guard
      * still applies and rows are never stamped verified.
      *
-     * @return iterable<int, Tool|WebFetch>
+     * Hosted code execution is added only when every provider in the failover
+     * chain supports it: the SDK rejects an unsupported provider tool with a
+     * non-failoverable LogicException before the request is sent.
+     *
+     * @return iterable<int, Tool|WebFetch|CodeExecution>
      */
     public function tools(): iterable
     {
@@ -214,20 +229,24 @@ class PriceFetcherAgent implements Agent, HasMiddleware, HasTools
             $webFetch = resolve(WebFetchTool::class)->withRun($run);
         }
 
-        return [
+        $tools = [
             $webFetch,
             resolve(UpsertModelPriceTool::class)->withScope($scope)->withRun($run)->withDryRun($this->dryRun),
         ];
+
+        if ($this->codeExecutionAvailable()) {
+            $tools[] = new CodeExecution;
+        }
+
+        return $tools;
     }
 
     /**
-     * @return array<int, object>
+     * Whether every provider the run may reach supports hosted code execution.
      */
-    public function middleware(): array
+    private function codeExecutionAvailable(): bool
     {
-        return $this->user instanceof User
-            ? [new AttributesToUser($this->user)]
-            : [];
+        return resolve(ProviderCapabilities::class)->everyProviderSupports(SupportsCodeExecution::class);
     }
 
     /**

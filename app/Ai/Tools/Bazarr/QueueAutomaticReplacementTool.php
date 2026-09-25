@@ -48,14 +48,18 @@ final class QueueAutomaticReplacementTool extends BaseTool
      */
     protected function execute(Request $request): array
     {
-        $arguments = $request->toArray();
-        $caseId = (int) ($arguments['case_id'] ?? 0);
-        $requestedFingerprint = (string) ($arguments['candidate_fingerprint'] ?? '');
-        $reason = trim((string) ($arguments['reason'] ?? ''));
+        $validated = $request->validate([
+            'case_id' => ['required', 'integer', 'min:1'],
+            'candidate_fingerprint' => ['required', 'string'],
+            'reason' => ['required', 'string'],
+        ]);
+        $caseId = (int) $validated['case_id'];
+        $requestedFingerprint = (string) $validated['candidate_fingerprint'];
+        $reason = trim((string) $validated['reason']);
         $context = $this->context();
 
         throw_unless(
-            $caseId > 0 && $caseId === $context->caseId && ! $context->capReached(),
+            $caseId === $context->caseId && ! $context->capReached(),
             InvalidArgumentException::class,
             'The replacement request is outside this Advisor run boundary.',
         );
@@ -86,13 +90,11 @@ final class QueueAutomaticReplacementTool extends BaseTool
             'No unique automatic candidate is available.',
         );
         throw_unless(
-            $requestedFingerprint !== ''
-                && is_string($automatic['fingerprint'] ?? null)
+            is_string($automatic['fingerprint'] ?? null)
                 && hash_equals($automatic['fingerprint'], $requestedFingerprint),
             InvalidArgumentException::class,
             'The automatic candidate changed.',
         );
-        throw_if($reason === '', InvalidArgumentException::class, 'A concise replacement reason is required.');
 
         $target = $replacementContext['target'];
 

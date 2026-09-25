@@ -31,12 +31,14 @@ class DeleteMediaTool extends BaseTool
      */
     protected function execute(Request $request): array
     {
+        $validated = $request->validate(
+            ['item_id' => ['required', 'integer', 'min:1']],
+            ['item_id' => 'item_id must be a positive service-native id — look it up with SearchMediaTool/GetMediaTool, never guess.'],
+        );
         $args = $request->toArray();
         $service = mb_strtolower((string) ($args['service'] ?? ''));
-        $itemId = (int) ($args['item_id'] ?? 0);
+        $itemId = (int) $validated['item_id'];
         $deleteFiles = (bool) ($args['delete_files'] ?? false);
-
-        throw_if($itemId <= 0, InvalidArgumentException::class, 'item_id must be a positive service-native id — look it up with SearchMediaTool/GetMediaTool, never guess.');
 
         return match ($service) {
             'sonarr' => [

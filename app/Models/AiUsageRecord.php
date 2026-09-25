@@ -4,7 +4,9 @@ declare(strict_types=1);
 
 namespace App\Models;
 
+use App\Enums\AiUsageKind;
 use Carbon\CarbonImmutable;
+use Database\Factories\AiUsageRecordFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -36,6 +38,11 @@ use Override;
  * @property int|null $user_id
  * @property string|null $conversation_id
  * @property string $status
+ * @property AiUsageKind $kind
+ * @property string|null $error_message
+ * @property string|null $parent_invocation_id
+ * @property string $search_units
+ * @property string|null $search_unit_per_k
  * @property CarbonImmutable|null $created_at
  * @property CarbonImmutable|null $updated_at
  *
@@ -67,10 +74,17 @@ use Override;
     'user_id',
     'conversation_id',
     'status',
+    'kind',
+    'error_message',
+    'parent_invocation_id',
+    'search_units',
+    'search_unit_per_k',
 ])]
 class AiUsageRecord extends Model
 {
+    /** @use HasFactory<AiUsageRecordFactory> */
     use HasFactory;
+
     use MassPrunable;
 
     /**
@@ -86,6 +100,9 @@ class AiUsageRecord extends Model
             'cache_write_per_mtok' => 'decimal:4',
             'reasoning_per_mtok' => 'decimal:4',
             'is_batch' => 'boolean',
+            'kind' => AiUsageKind::class,
+            'search_units' => 'decimal:3',
+            'search_unit_per_k' => 'decimal:4',
         ];
     }
 

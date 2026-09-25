@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Jobs;
 
 use App\Ai\Agents\SubtitleAdvisorAgent;
+use App\Ai\Classification\Classifier;
 use App\Ai\SubtitleAdvisor\SubtitleAdvisorRunContext;
 use App\Enums\ActionRequestStatus;
 use App\Enums\SubtitleCaseAttemptOutcome;
@@ -75,6 +76,7 @@ final class RunSubtitleAdvisor implements ShouldBeUnique, ShouldQueue
         SubtitleCaseLifecycle $subtitleCaseLifecycle,
         AiBudgetGuard $aiBudgetGuard,
         AiSettings $aiSettings,
+        Classifier $classifier,
     ): void {
         $subtitleCase = SubtitleCase::query()->find($this->subtitleCaseId);
 
@@ -119,6 +121,23 @@ final class RunSubtitleAdvisor implements ShouldBeUnique, ShouldQueue
                 'AI budget cap prevented Advisor investigation.',
                 'budget_exceeded',
                 $aiBudgetExceededException,
+            );
+
+            return;
+        }
+
+        $probability = $aiSettings->subtitleTriageEnabled()
+            ? $classifier->probability(self::class, $this->triageState($subtitleCase), 'Is downloading a different release of this media file likely to provide the missing required subtitles?')
+            : null;
+
+        if ($probability !== null && $probability < $aiSettings->subtitleTriageThreshold()) {
+            $this->finishWithReview(
+                $subtitleCase,
+                $subtitleCaseAttempt,
+                $subtitleCaseLifecycle,
+                sprintf('Triaged out: %d%% likely that an automatic replacement would help.', (int) round($probability * 100)),
+                'triaged_out',
+                extra: ['triage_probability' => $probability],
             );
 
             return;
@@ -232,6 +251,24 @@ final class RunSubtitleAdvisor implements ShouldBeUnique, ShouldQueue
         );
     }
 
+    /**
+     * @return array<string, mixed>
+     */
+    private function triageState(SubtitleCase $subtitleCase): array
+    {
+        return [
+            'media_type' => $subtitleCase->media_type,
+            'scope' => $subtitleCase->scope,
+            'required_languages' => $subtitleCase->required_languages,
+            'failure_reason' => $subtitleCase->failure_reason,
+            'bazarr_attempts' => $subtitleCase->attempts()->count(),
+            'evidence' => Str::limit((string) json_encode($subtitleCase->evidence), 2000),
+        ];
+    }
+
+    /**
+     * @param  array<string, mixed>  $extra
+     */
     private function finishWithReview(
         SubtitleCase $subtitleCase,
         SubtitleCaseAttempt $subtitleCaseAttempt,
@@ -239,14 +276,16 @@ final class RunSubtitleAdvisor implements ShouldBeUnique, ShouldQueue
         string $summary,
         string $errorCategory,
         ?Throwable $throwable = null,
+        array $extra = [],
     ): void {
         $summary = $this->boundedSummary($summary);
         $subtitleCaseAttempt->forceFill([
             'summary' => [
+                ...$extra,
                 'result' => 'needs_review',
                 'summary' => $summary,
             ],
-            'outcome' => $errorCategory === 'no_automatic_candidate'
+            'outcome' => in_array($errorCategory, ['no_automatic_candidate', 'triaged_out'], true)
                 ? SubtitleCaseAttemptOutcome::NeedsReview
                 : SubtitleCaseAttemptOutcome::Failed,
             'error_category' => $errorCategory,

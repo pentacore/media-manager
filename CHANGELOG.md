@@ -1,3 +1,50 @@
+# [1.19.0](https://github.com/pentacore/media-manager/compare/v1.18.1...v1.19.0) (2026-09-25)
+
+
+### Bug Fixes
+
+* **ai-usage:** bill steps completed before a provider failover ([0410e81](https://github.com/pentacore/media-manager/commit/0410e8170e8ebe20fbed8382b9c3dc648f976bc8))
+* **ai-usage:** keep exclusive token columns under 1.0 inclusive usage ([170947d](https://github.com/pentacore/media-manager/commit/170947d39eed2b1ecc901f631edd420d73e9162a))
+* **ai:** run structured sub-agents as prompts when a parent streams ([83c0f1e](https://github.com/pentacore/media-manager/commit/83c0f1e49a83e6a60c669a5409c384cdba8f2e89))
+* **chat:** answer a mid-run hard-cap stop on send() with the budget message ([a178401](https://github.com/pentacore/media-manager/commit/a1784016616b5b7c906f8c508bf24c06eb216fab))
+* **chat:** keep a failed turn's stored conversation active ([16b71f6](https://github.com/pentacore/media-manager/commit/16b71f6c6ba91dd202c9188e021dd6fbdd2e0505))
+* **chat:** keep AG-UI frames inside a capturing output buffer ([4933cb3](https://github.com/pentacore/media-manager/commit/4933cb32ad54a60f9441f19ab2688a238d1752ff))
+* **chat:** serve non-image attachments as hardened downloads ([1885f7a](https://github.com/pentacore/media-manager/commit/1885f7aa1664789a331d17499cd739f3bcb89808))
+* **chat:** show a running sub-agent's output under its tool chip ([c26aff5](https://github.com/pentacore/media-manager/commit/c26aff5b9b07ee59552af226900ee8e98a9bbaf7))
+* **chat:** show Files API attachments in conversation history ([0c6a7ea](https://github.com/pentacore/media-manager/commit/0c6a7ea193088e3a81927946c24c0a1691f5fd61))
+* **chat:** show the explanation, not the error code, when a blocking turn fails ([ffe0dd6](https://github.com/pentacore/media-manager/commit/ffe0dd6f1bc814ce98d51f685bb4a2ee1ea82de8))
+* **decision-agent:** claim the subject cooldown only for an agent run ([c2fecbe](https://github.com/pentacore/media-manager/commit/c2fecbea2090b6446a774df0e7c5b085bd1fa334))
+* **decision-agent:** record the gate question in skipped_by_gate summaries ([86281c4](https://github.com/pentacore/media-manager/commit/86281c4126504f24d0d962bf26be7760aa3d0d48))
+
+
+### Features
+
+* **admin:** paginate AI conversation transcripts ([a1aaf79](https://github.com/pentacore/media-manager/commit/a1aaf79878501e09eeb198427c93c0cb846ea1f4))
+* **admin:** render 1.0 conversation steps and turn status in transcripts ([4cf0a5e](https://github.com/pentacore/media-manager/commit/4cf0a5e88d8b068b7e6dd89f3b2f814610c61097))
+* **ai-settings:** classification, reranking and sub-agent settings with capability checks ([976d3e4](https://github.com/pentacore/media-manager/commit/976d3e4f6f3723054f65ee91050800d938049c8e))
+* **ai-tools:** validate tool arguments and report invalid_arguments ([f809f40](https://github.com/pentacore/media-manager/commit/f809f407187d3a59d69f8cdd14970e48b44850eb))
+* **ai-usage:** add kind, failure and sub-agent telemetry columns ([39332a3](https://github.com/pentacore/media-manager/commit/39332a3162b91e9de6b23901ffa4b73f12463d80))
+* **ai-usage:** bill completed steps of failed agent runs ([49cbbbe](https://github.com/pentacore/media-manager/commit/49cbbbeae640d856b0335a4cf5df5a00fdd1b6e4))
+* **ai-usage:** bill embeddings and reranking, add search-unit pricing ([b6cd2cf](https://github.com/pentacore/media-manager/commit/b6cd2cfa77e4987cc8f9625e6d9dfcd3a9d72e14))
+* **ai-usage:** kind filter, failed runs, tool stats and sub-agent drill-down ([92dc07b](https://github.com/pentacore/media-manager/commit/92dc07b3abd54e813d0286d557d7cfa87be0a167))
+* **ai-usage:** link sub-agent usage rows to their parent run ([377859f](https://github.com/pentacore/media-manager/commit/377859f5f867e904f486788160995af624b19e20))
+* **ai-usage:** record tool duration and failures ([694637c](https://github.com/pentacore/media-manager/commit/694637ccc349813ce5b4e3ea7fc587f83de3d6fd))
+* **ai:** answer-on-final-step and per-step budget middleware ([2957295](https://github.com/pentacore/media-manager/commit/2957295da178c709bbd6c864d47ae8129013f3a9))
+* **ai:** fail-open classifier with usage billing ([2521b76](https://github.com/pentacore/media-manager/commit/2521b76559bf4d23182b902cb51889ec4171a8df))
+* **ai:** migrate conversation messages to 1.0 steps storage ([fe15564](https://github.com/pentacore/media-manager/commit/fe15564d2a8835ae44e55a3543b6b3f1645d520c))
+* **ai:** read-only investigation sub-agents for stuck downloads and media files ([06863e8](https://github.com/pentacore/media-manager/commit/06863e81b94d90000213dc7d786196ffa68d1615))
+* **ai:** repair unknown tool calls and cache stable prompts ([e39a6e7](https://github.com/pentacore/media-manager/commit/e39a6e7333f5a9da79e8510cb7f9ff66745b1000))
+* **chat:** accept image, text and PDF attachments on chat turns ([0028faa](https://github.com/pentacore/media-manager/commit/0028faab943afafe597d1b5a65c8098c00044431))
+* **chat:** classification-routed MediaAgent toolsets ([c16276b](https://github.com/pentacore/media-manager/commit/c16276b7ff3a7c944adbce152bb3ad130aa0ee06))
+* **chat:** defer non-core tools behind hosted ToolSearch when the chain supports it ([4f42577](https://github.com/pentacore/media-manager/commit/4f425774fbb20ee45cc33d0d3f7d63cfcf41e374))
+* **chat:** paginate history and show reasoning, attachments and failed turns ([a4ff6f5](https://github.com/pentacore/media-manager/commit/a4ff6f58781c51015cc2c98586b57d142af76ece))
+* **chat:** parse AG-UI streams with tool chips, reasoning and attachments ([55f6d53](https://github.com/pentacore/media-manager/commit/55f6d53cd6a22194b18093a6dd8fba04addba605))
+* **chat:** stream turns over AG-UI with friendly errors and fix channel ownership ([708183d](https://github.com/pentacore/media-manager/commit/708183dfdbbebd38ebf0e0ab13ba3d5a643edba1))
+* **decision-agent:** classification gate before webhook agent runs ([1c1efe5](https://github.com/pentacore/media-manager/commit/1c1efe5579715e2a3f0c7014142a6b913c5c075f))
+* **pricing:** code execution for the price verifier and citation audit trail ([4096490](https://github.com/pentacore/media-manager/commit/409649081ff7e48a697edf1d2fa826d356518000))
+* **search:** admin-selectable reranking provider ([3fe6ee0](https://github.com/pentacore/media-manager/commit/3fe6ee095f9e95cfbe9016253e30eb299b3429f8))
+* **subtitles:** classification triage before Media Advisor runs ([afbb193](https://github.com/pentacore/media-manager/commit/afbb193dad21d4ab9b8fffc2836a066241f608e0))
+
 ## [1.18.1](https://github.com/pentacore/media-manager/compare/v1.18.0...v1.18.1) (2026-09-24)
 
 

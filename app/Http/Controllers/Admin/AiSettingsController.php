@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers\Admin;
 
+use App\Ai\ProviderCapabilities;
 use App\Enums\AiMode;
 use App\Enums\AiReasoningLevel;
 use App\Http\Controllers\Controller;
@@ -14,6 +15,8 @@ use App\Settings\AiSettings;
 use Illuminate\Http\RedirectResponse;
 use Inertia\Inertia;
 use Inertia\Response;
+use Laravel\Ai\Contracts\Providers\SupportsCodeExecution;
+use Laravel\Ai\Contracts\Providers\SupportsToolSearch;
 use Laravel\Ai\Enums\Lab;
 
 class AiSettingsController extends Controller
@@ -21,6 +24,7 @@ class AiSettingsController extends Controller
     public function index(
         AiSettings $aiSettings,
         AiBudgetGuard $aiBudgetGuard,
+        ProviderCapabilities $providerCapabilities,
     ): Response {
         return Inertia::render('Admin/AiSettings/Index', [
             'settings' => [
@@ -36,6 +40,16 @@ class AiSettingsController extends Controller
                 'rate_limits_enforced' => $aiSettings->rateLimitsEnforced(),
                 'ignored_pricing_providers' => $this->canonicalPricingProviders($aiSettings->ignoredPricingProviders()),
                 'auto_create_pricing_providers' => $this->canonicalPricingProviders($aiSettings->autoCreatePricingProviders()),
+                'classification_provider' => $aiSettings->classificationProvider(),
+                'classification_model' => $aiSettings->classificationModel(),
+                'decision_gate_enabled' => $aiSettings->decisionGateEnabled(),
+                'decision_gate_threshold' => $aiSettings->decisionGateThreshold(),
+                'subtitle_triage_enabled' => $aiSettings->subtitleTriageEnabled(),
+                'subtitle_triage_threshold' => $aiSettings->subtitleTriageThreshold(),
+                'chat_routing_enabled' => $aiSettings->chatRoutingEnabled(),
+                'reranking_provider' => $aiSettings->rerankingProvider(),
+                'reranking_model' => $aiSettings->rerankingModel(),
+                'sub_agent_model' => $aiSettings->rawSubAgentModel(),
             ],
             'budget' => [
                 'spend' => round($aiBudgetGuard->currentMonthSpend(), 4),
@@ -55,6 +69,22 @@ class AiSettingsController extends Controller
                 ['value' => Lab::Mistral->value, 'label' => 'Mistral'],
             ],
             'pricingProviders' => $this->pricingProviders(),
+            'classificationProviders' => [
+                ['value' => 'openrouter', 'label' => 'OpenRouter'],
+                ['value' => 'typesafe', 'label' => 'TypeSafe'],
+            ],
+            'rerankingProviders' => [
+                ['value' => 'cohere', 'label' => 'Cohere'],
+                ['value' => 'jina', 'label' => 'Jina'],
+                ['value' => 'openrouter', 'label' => 'OpenRouter'],
+            ],
+            'providerKeys' => collect(['openrouter', 'typesafe', 'cohere', 'jina'])
+                ->mapWithKeys(fn (string $provider): array => [$provider => filled(config(sprintf('ai.providers.%s.key', $provider)))])
+                ->all(),
+            'advancedTools' => [
+                'tool_search' => $providerCapabilities->everyProviderSupports(SupportsToolSearch::class),
+                'code_execution' => $providerCapabilities->everyProviderSupports(SupportsCodeExecution::class),
+            ],
         ]);
     }
 
@@ -183,8 +213,60 @@ class AiSettingsController extends Controller
                 : null,
         );
 
+        $this->updateClassificationSettings($aiSettings, $validated);
+
         Inertia::flash('toast', ['type' => 'success', 'message' => __('AI settings updated.')]);
 
         return to_route('admin.ai-settings.index');
+    }
+
+    /**
+     * Persist the classification, reranking and sub-agent fields that were
+     * submitted. An absent field leaves its saved setting untouched; a blank
+     * model (normalized to null by the request) clears it back to the default.
+     *
+     * @param  array<string, mixed>  $validated
+     */
+    private function updateClassificationSettings(AiSettings $aiSettings, array $validated): void
+    {
+        if (array_key_exists('classification_provider', $validated)) {
+            $aiSettings->setClassificationProvider($validated['classification_provider']);
+        }
+
+        if (array_key_exists('classification_model', $validated)) {
+            $aiSettings->setClassificationModel($validated['classification_model']);
+        }
+
+        if (array_key_exists('decision_gate_enabled', $validated)) {
+            $aiSettings->setDecisionGateEnabled((bool) $validated['decision_gate_enabled']);
+        }
+
+        if (array_key_exists('decision_gate_threshold', $validated)) {
+            $aiSettings->setDecisionGateThreshold((float) $validated['decision_gate_threshold']);
+        }
+
+        if (array_key_exists('subtitle_triage_enabled', $validated)) {
+            $aiSettings->setSubtitleTriageEnabled((bool) $validated['subtitle_triage_enabled']);
+        }
+
+        if (array_key_exists('subtitle_triage_threshold', $validated)) {
+            $aiSettings->setSubtitleTriageThreshold((float) $validated['subtitle_triage_threshold']);
+        }
+
+        if (array_key_exists('chat_routing_enabled', $validated)) {
+            $aiSettings->setChatRoutingEnabled((bool) $validated['chat_routing_enabled']);
+        }
+
+        if (array_key_exists('reranking_provider', $validated)) {
+            $aiSettings->setRerankingProvider($validated['reranking_provider']);
+        }
+
+        if (array_key_exists('reranking_model', $validated)) {
+            $aiSettings->setRerankingModel($validated['reranking_model']);
+        }
+
+        if (array_key_exists('sub_agent_model', $validated)) {
+            $aiSettings->setSubAgentModel($validated['sub_agent_model']);
+        }
     }
 }

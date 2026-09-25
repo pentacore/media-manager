@@ -43,6 +43,46 @@ class AiSettings
 
     public const string RATE_LIMITS_ENFORCED_KEY = 'ai.rate_limits.enforce';
 
+    public const string CLASSIFICATION_PROVIDER_KEY = 'ai.classification.provider';
+
+    public const string CLASSIFICATION_MODEL_KEY = 'ai.classification.model';
+
+    public const string DECISION_GATE_ENABLED_KEY = 'ai.classification.decision_gate.enabled';
+
+    public const string DECISION_GATE_THRESHOLD_KEY = 'ai.classification.decision_gate.threshold';
+
+    public const string SUBTITLE_TRIAGE_ENABLED_KEY = 'ai.classification.subtitle_triage.enabled';
+
+    public const string SUBTITLE_TRIAGE_THRESHOLD_KEY = 'ai.classification.subtitle_triage.threshold';
+
+    public const string CHAT_ROUTING_ENABLED_KEY = 'ai.classification.chat_routing.enabled';
+
+    public const string RERANKING_PROVIDER_KEY = 'ai.reranking.provider';
+
+    public const string RERANKING_MODEL_KEY = 'ai.reranking.model';
+
+    public const string SUB_AGENT_MODEL_KEY = 'ai.sub_agent_model';
+
+    /**
+     * Providers that can serve classification calls.
+     *
+     * @var list<string>
+     */
+    public const array CLASSIFICATION_PROVIDERS = ['openrouter', 'typesafe'];
+
+    /**
+     * Providers that can serve reranking calls.
+     *
+     * @var list<string>
+     */
+    public const array RERANKING_PROVIDERS = ['cohere', 'jina', 'openrouter'];
+
+    /**
+     * Classification probability below which a gate treats a case as
+     * unlikely to need the agent, when nothing is persisted.
+     */
+    private const float DEFAULT_GATE_THRESHOLD = 0.3;
+
     /**
      * Per-request override that takes precedence over the persisted mode.
      * Used by the chat surface so a user can flip between Advisory and
@@ -245,6 +285,233 @@ class AiSettings
     public function setRateLimitsEnforced(?bool $enforced): void
     {
         $this->appSettings->set(self::RATE_LIMITS_ENFORCED_KEY, $enforced);
+    }
+
+    /**
+     * The provider classification gates call (`openrouter` or `typesafe`). A
+     * saved value overrides the `mediamanager.ai.classification.provider`
+     * config default; an unknown value falls back to OpenRouter.
+     */
+    public function classificationProvider(): string
+    {
+        return $this->supportedProvider(
+            $this->appSettings->get(self::CLASSIFICATION_PROVIDER_KEY)
+                ?? config('mediamanager.ai.classification.provider', 'openrouter'),
+            self::CLASSIFICATION_PROVIDERS,
+        );
+    }
+
+    /**
+     * Persist the classification provider. A null value clears the setting
+     * so the provider falls back to the config default again.
+     */
+    public function setClassificationProvider(?string $provider): void
+    {
+        $this->appSettings->set(self::CLASSIFICATION_PROVIDER_KEY, $provider);
+    }
+
+    /**
+     * The classification model, or null to use the provider's default model.
+     */
+    public function classificationModel(): ?string
+    {
+        return $this->optionalString(
+            $this->appSettings->get(self::CLASSIFICATION_MODEL_KEY)
+                ?? config('mediamanager.ai.classification.model'),
+        );
+    }
+
+    /**
+     * Persist the classification model. A null value clears the setting so
+     * the model falls back to the config default again.
+     */
+    public function setClassificationModel(?string $model): void
+    {
+        $this->appSettings->set(self::CLASSIFICATION_MODEL_KEY, $model);
+    }
+
+    /**
+     * Whether webhook-triggered decision runs are gated by a classification
+     * call first. Off until an admin enables it.
+     */
+    public function decisionGateEnabled(): bool
+    {
+        return (bool) ($this->appSettings->get(self::DECISION_GATE_ENABLED_KEY) ?? false);
+    }
+
+    /**
+     * Persist the decision gate toggle. A null value clears the setting so the
+     * gate falls back to off again.
+     */
+    public function setDecisionGateEnabled(?bool $enabled): void
+    {
+        $this->appSettings->set(self::DECISION_GATE_ENABLED_KEY, $enabled);
+    }
+
+    /**
+     * Classification probability below which the decision gate skips the run,
+     * clamped to [0, 1].
+     */
+    public function decisionGateThreshold(): float
+    {
+        return $this->threshold(self::DECISION_GATE_THRESHOLD_KEY);
+    }
+
+    /**
+     * Persist the decision gate threshold. A null value clears the setting so
+     * the threshold falls back to the default again.
+     */
+    public function setDecisionGateThreshold(?float $threshold): void
+    {
+        $this->appSettings->set(self::DECISION_GATE_THRESHOLD_KEY, $threshold);
+    }
+
+    /**
+     * Whether subtitle escalations are triaged by a classification call before
+     * an automatic replacement is attempted. Off until an admin enables it.
+     */
+    public function subtitleTriageEnabled(): bool
+    {
+        return (bool) ($this->appSettings->get(self::SUBTITLE_TRIAGE_ENABLED_KEY) ?? false);
+    }
+
+    /**
+     * Persist the subtitle triage toggle. A null value clears the setting so
+     * the triage falls back to off again.
+     */
+    public function setSubtitleTriageEnabled(?bool $enabled): void
+    {
+        $this->appSettings->set(self::SUBTITLE_TRIAGE_ENABLED_KEY, $enabled);
+    }
+
+    /**
+     * Classification probability below which subtitle triage sends a case
+     * straight to review, clamped to [0, 1].
+     */
+    public function subtitleTriageThreshold(): float
+    {
+        return $this->threshold(self::SUBTITLE_TRIAGE_THRESHOLD_KEY);
+    }
+
+    /**
+     * Persist the subtitle triage threshold. A null value clears the setting
+     * so the threshold falls back to the default again.
+     */
+    public function setSubtitleTriageThreshold(?float $threshold): void
+    {
+        $this->appSettings->set(self::SUBTITLE_TRIAGE_THRESHOLD_KEY, $threshold);
+    }
+
+    /**
+     * Whether chat turns send MediaAgent only the tool groups a message needs.
+     * Off until an admin enables it.
+     */
+    public function chatRoutingEnabled(): bool
+    {
+        return (bool) ($this->appSettings->get(self::CHAT_ROUTING_ENABLED_KEY) ?? false);
+    }
+
+    /**
+     * Persist the chat routing toggle. A null value clears the setting so
+     * routing falls back to off again.
+     */
+    public function setChatRoutingEnabled(?bool $enabled): void
+    {
+        $this->appSettings->set(self::CHAT_ROUTING_ENABLED_KEY, $enabled);
+    }
+
+    /**
+     * The provider semantic search reranks with (`cohere`, `jina` or
+     * `openrouter`). A saved value overrides the `ai.default_for_reranking`
+     * config default; an unknown value falls back to Cohere.
+     */
+    public function rerankingProvider(): string
+    {
+        return $this->supportedProvider(
+            $this->appSettings->get(self::RERANKING_PROVIDER_KEY)
+                ?? config('ai.default_for_reranking', 'cohere'),
+            self::RERANKING_PROVIDERS,
+        );
+    }
+
+    /**
+     * Persist the reranking provider. A null value clears the setting so the
+     * provider falls back to the config default again.
+     */
+    public function setRerankingProvider(?string $provider): void
+    {
+        $this->appSettings->set(self::RERANKING_PROVIDER_KEY, $provider);
+    }
+
+    /**
+     * The reranking model, or null to use the provider's default model.
+     */
+    public function rerankingModel(): ?string
+    {
+        return $this->optionalString($this->appSettings->get(self::RERANKING_MODEL_KEY));
+    }
+
+    /**
+     * Persist the reranking model. A null value clears the setting so the
+     * provider default model applies again.
+     */
+    public function setRerankingModel(?string $model): void
+    {
+        $this->appSettings->set(self::RERANKING_MODEL_KEY, $model);
+    }
+
+    /**
+     * The model investigation sub-agents run on. Empty (nothing saved and no
+     * `mediamanager.ai.sub_agent_model` default) follows the chat model.
+     */
+    public function subAgentModel(): string
+    {
+        return $this->rawSubAgentModel() ?? $this->model();
+    }
+
+    /**
+     * The sub-agent model as configured, or null when it follows the chat
+     * model. The admin form shows this so "Same as chat model" round-trips.
+     */
+    public function rawSubAgentModel(): ?string
+    {
+        return $this->optionalString(
+            $this->appSettings->get(self::SUB_AGENT_MODEL_KEY)
+                ?? config('mediamanager.ai.sub_agent_model', ''),
+        );
+    }
+
+    /**
+     * Persist the sub-agent model. A null value clears the setting so the
+     * model falls back to the config default (or the chat model) again.
+     */
+    public function setSubAgentModel(?string $model): void
+    {
+        $this->appSettings->set(self::SUB_AGENT_MODEL_KEY, $model);
+    }
+
+    private function threshold(string $key): float
+    {
+        $stored = $this->appSettings->get($key) ?? self::DEFAULT_GATE_THRESHOLD;
+
+        return max(0.0, min(1.0, (float) $stored));
+    }
+
+    /**
+     * @param  list<string>  $supported
+     */
+    private function supportedProvider(mixed $value, array $supported): string
+    {
+        $provider = strtolower(trim((string) $value));
+
+        return in_array($provider, $supported, true) ? $provider : $supported[0];
+    }
+
+    private function optionalString(mixed $value): ?string
+    {
+        $string = trim((string) $value);
+
+        return $string !== '' ? $string : null;
     }
 
     /**

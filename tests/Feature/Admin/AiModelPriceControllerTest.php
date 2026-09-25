@@ -579,6 +579,71 @@ test('a batch-price change locks the row and marks the source manual', function 
     expect($fresh->pricing_source)->toBe(PricingSource::Manual);
 });
 
+test('admin can add a rerank price billed per thousand search units', function (): void {
+    $this->actingAs(User::factory()->admin()->create())
+        ->post(route('admin.ai-prices.store'), [
+            'provider' => 'cohere',
+            'model' => 'rerank-v3.5',
+            'input_per_mtok' => 0,
+            'output_per_mtok' => 0,
+            'cache_read_per_mtok' => 0,
+            'cache_write_per_mtok' => 0,
+            'reasoning_per_mtok' => 0,
+            'search_unit_per_k' => 2.5,
+            'batch_search_unit_per_k' => 1.25,
+        ])
+        ->assertRedirect(route('admin.ai-prices.index'));
+
+    $aiModelPrice = AiModelPrice::where('provider', 'cohere')->where('model', 'rerank-v3.5')->sole();
+
+    expect($aiModelPrice->search_unit_per_k)->toBe('2.5000')
+        ->and($aiModelPrice->batch_search_unit_per_k)->toBe('1.2500');
+});
+
+test('store rejects a negative search-unit rate', function (): void {
+    $this->actingAs(User::factory()->admin()->create())
+        ->post(route('admin.ai-prices.store'), [
+            'provider' => 'cohere',
+            'model' => 'rerank-v3.5',
+            'input_per_mtok' => 0,
+            'output_per_mtok' => 0,
+            'cache_read_per_mtok' => 0,
+            'cache_write_per_mtok' => 0,
+            'reasoning_per_mtok' => 0,
+            'search_unit_per_k' => -1,
+        ])
+        ->assertSessionHasErrors('search_unit_per_k');
+});
+
+test('a search-unit rate change locks the row and a blank rate stores zero', function (): void {
+    $aiModelPrice = AiModelPrice::factory()->create([
+        'provider' => 'cohere',
+        'model' => 'rerank-v3.5',
+        'input_per_mtok' => 0,
+        'output_per_mtok' => 0,
+        'search_unit_per_k' => 2.0,
+        'pricing_source' => PricingSource::ModelsDev,
+        'is_price_locked' => false,
+    ]);
+
+    $this->actingAs(User::factory()->admin()->create())
+        ->put(route('admin.ai-prices.update', $aiModelPrice), [
+            'input_per_mtok' => 0,
+            'output_per_mtok' => 0,
+            'cache_read_per_mtok' => 0,
+            'cache_write_per_mtok' => 0,
+            'reasoning_per_mtok' => 0,
+            'search_unit_per_k' => '',
+        ])
+        ->assertRedirect(route('admin.ai-prices.index'));
+
+    $fresh = $aiModelPrice->fresh();
+
+    expect($fresh->search_unit_per_k)->toBe('0.0000')
+        ->and($fresh->is_price_locked)->toBeTrue()
+        ->and($fresh->pricing_source)->toBe(PricingSource::Manual);
+});
+
 test('index exposes provenance, lock, and derived automatic updates fields', function (): void {
     $admin = User::factory()->admin()->create();
     AiModelPrice::factory()->create([

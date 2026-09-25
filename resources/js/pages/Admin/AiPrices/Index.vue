@@ -50,6 +50,8 @@ interface PriceRow {
     batch_cache_read_per_mtok: string | null;
     batch_cache_write_per_mtok: string | null;
     batch_reasoning_per_mtok: string | null;
+    search_unit_per_k: string;
+    batch_search_unit_per_k: string | null;
     free_usage_pool_id: number | null;
     pricing_source:
         'seed' | 'models_dev' | 'first_party' | 'manual' | 'legacy' | null;
@@ -567,6 +569,28 @@ const priciest = ref(
                                     />
                                     <InputError
                                         :message="errors.reasoning_per_mtok"
+                                    />
+                                </div>
+                                <div
+                                    class="col-span-2 space-y-2"
+                                    data-search-unit-field
+                                >
+                                    <Label for="search_unit_per_k"
+                                        >Search units ($/1k)</Label
+                                    >
+                                    <Input
+                                        id="search_unit_per_k"
+                                        name="search_unit_per_k"
+                                        type="number"
+                                        step="0.0001"
+                                        min="0"
+                                    />
+                                    <p class="text-[11px] text-fg-subtle">
+                                        Rerank models only — price per 1,000
+                                        searches.
+                                    </p>
+                                    <InputError
+                                        :message="errors.search_unit_per_k"
                                     />
                                 </div>
                                 <div class="col-span-2 space-y-2">
@@ -1200,6 +1224,26 @@ const priciest = ref(
                                 :default-value="editing.reasoning_per_mtok"
                             />
                             <InputError :message="errors.reasoning_per_mtok" />
+                        </div>
+                        <div
+                            class="col-span-2 space-y-2"
+                            data-search-unit-field
+                        >
+                            <Label for="edit_search_unit"
+                                >Search units ($/1k)</Label
+                            >
+                            <Input
+                                id="edit_search_unit"
+                                name="search_unit_per_k"
+                                type="number"
+                                step="0.0001"
+                                min="0"
+                                :default-value="editing.search_unit_per_k"
+                            />
+                            <p class="text-[11px] text-fg-subtle">
+                                Rerank models only — price per 1,000 searches.
+                            </p>
+                            <InputError :message="errors.search_unit_per_k" />
                         </div>
                         <div class="col-span-2 space-y-2">
                             <Label for="edit_free_usage_pool_id"

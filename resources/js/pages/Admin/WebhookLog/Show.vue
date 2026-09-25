@@ -235,11 +235,15 @@ function formatTime(iso: string | null): string {
                             ? 'ok'
                             : 'default'
                     "
+                    :data-decision-status="event.agent_decision.status"
                 >
-                    {{ event.agent_decision.status.replace('_', ' ') }}
+                    {{ event.agent_decision.status.replaceAll('_', ' ') }}
                 </Pill>
             </div>
-            <p class="mt-3 text-[13px] whitespace-pre-wrap">
+            <p
+                class="mt-3 text-[13px] whitespace-pre-wrap"
+                data-decision-summary
+            >
                 {{ event.agent_decision.summary ?? '—' }}
             </p>
             <p class="mt-2 text-[12px] text-muted-foreground">

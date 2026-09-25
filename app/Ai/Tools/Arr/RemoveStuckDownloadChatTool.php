@@ -8,7 +8,6 @@ use App\Ai\Risk;
 use App\Ai\Tools\BaseTool;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
 use Illuminate\JsonSchema\Types\Type;
-use InvalidArgumentException;
 use Laravel\Ai\Tools\Request;
 use Stringable;
 
@@ -41,16 +40,18 @@ class RemoveStuckDownloadChatTool extends BaseTool
      */
     protected function execute(Request $request): array
     {
+        $validated = $request->validate([
+            'service' => ['required', 'string', 'regex:/^(sonarr|radarr)$/Di'],
+            'download_id' => ['required', 'string'],
+            'reason' => ['required', 'string'],
+        ], [
+            'service.regex' => 'service must be "sonarr" or "radarr".',
+            'reason.required' => 'reason is required so the approver understands why removal beats importing.',
+        ]);
         $args = $request->toArray();
-        $service = mb_strtolower((string) ($args['service'] ?? ''));
-        $downloadId = (string) ($args['download_id'] ?? '');
-        $reason = trim((string) ($args['reason'] ?? ''));
-
-        throw_unless(in_array($service, ['sonarr', 'radarr'], true), InvalidArgumentException::class, 'service must be "sonarr" or "radarr".');
-
-        throw_if($downloadId === '', InvalidArgumentException::class, 'download_id is required.');
-
-        throw_if($reason === '', InvalidArgumentException::class, 'reason is required so the approver understands why removal beats importing.');
+        $service = mb_strtolower((string) $validated['service']);
+        $downloadId = (string) $validated['download_id'];
+        $reason = trim((string) $validated['reason']);
 
         return [
             'type' => 'remove_stuck_download',

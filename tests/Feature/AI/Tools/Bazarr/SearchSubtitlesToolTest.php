@@ -55,7 +55,24 @@ test('search defaults to five and rejects limits outside one through ten', funct
     ])), true, flags: JSON_THROW_ON_ERROR);
 
     expect($default['candidates'])->toHaveCount(5)
-        ->and($invalid['error'])->toBe('tool_failed');
+        ->and($invalid['error'])->toBe('invalid_arguments')
+        ->and($invalid['errors'])->toHaveKey('limit');
+});
+
+test('an out-of-range limit is reported as invalid arguments before any Bazarr call', function (): void {
+    $serviceConnection = searchToolConnection();
+    Http::fake();
+
+    $result = json_decode((new SearchSubtitlesTool)->handle(new Request([
+        'bazarr_connection_id' => $serviceConnection->id,
+        'media_type' => 'movie',
+        'media_id' => 801,
+        'limit' => 50,
+    ])), true, flags: JSON_THROW_ON_ERROR);
+
+    expect($result['error'])->toBe('invalid_arguments')
+        ->and($result['errors'])->toHaveKey('limit');
+    Http::assertNothingSent();
 });
 
 function searchToolConnection(): ServiceConnection

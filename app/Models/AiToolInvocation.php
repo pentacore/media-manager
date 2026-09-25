@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Models;
 
 use Carbon\CarbonImmutable;
+use Database\Factories\AiToolInvocationFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -18,6 +19,8 @@ use Illuminate\Database\Eloquent\Model;
  * @property string $tool_class
  * @property string|null $agent_class
  * @property string $status
+ * @property int|null $duration_ms
+ * @property string|null $error_code
  * @property CarbonImmutable|null $created_at
  * @property CarbonImmutable|null $updated_at
  *
@@ -33,10 +36,14 @@ use Illuminate\Database\Eloquent\Model;
     'tool_class',
     'agent_class',
     'status',
+    'duration_ms',
+    'error_code',
 ])]
 class AiToolInvocation extends Model
 {
+    /** @use HasFactory<AiToolInvocationFactory> */
     use HasFactory;
+
     use MassPrunable;
 
     /**

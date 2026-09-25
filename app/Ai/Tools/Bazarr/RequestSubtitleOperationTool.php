@@ -14,6 +14,7 @@ use App\Services\Bazarr\BazarrClient;
 use App\Services\Bazarr\SubtitleInventoryService;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
 use Illuminate\JsonSchema\Types\Type;
+use Illuminate\Validation\Rule;
 use InvalidArgumentException;
 use Laravel\Ai\Tools\Request;
 
@@ -27,6 +28,8 @@ final class RequestSubtitleOperationTool extends BaseTool
         'translate_subtitle',
         'scan_media',
     ];
+
+    private const array MEDIA_ACTIONS = ['scan-disk', 'search-missing', 'search-wanted', 'sync'];
 
     public function description(): string
     {
@@ -44,13 +47,16 @@ final class RequestSubtitleOperationTool extends BaseTool
      */
     protected function execute(Request $request): array
     {
-        $arguments = $request->toArray();
+        $validated = $request->validate([
+            'operation' => ['required', 'string', Rule::in(self::OPERATIONS)],
+            'language' => ['exclude_unless:operation,download_best', 'required', 'string', 'regex:/^[a-z]{2,3}(?:-[a-z0-9]+)?$/Di'],
+            'media_action' => ['exclude_unless:operation,scan_media', 'required', 'string', Rule::in(self::MEDIA_ACTIONS)],
+        ]);
+        $arguments = [...$request->toArray(), ...$validated];
         $connection = $this->connection((int) ($arguments['bazarr_connection_id'] ?? 0));
         $mediaType = (string) ($arguments['media_type'] ?? '');
         $mediaId = (int) ($arguments['media_id'] ?? 0);
-        $operation = (string) ($arguments['operation'] ?? '');
-
-        throw_unless(in_array($operation, self::OPERATIONS, true), InvalidArgumentException::class, 'Unsupported Bazarr operation.');
+        $operation = (string) $validated['operation'];
 
         $inspection = resolve(SubtitleInventoryService::class)->inspect($connection, $mediaType, $mediaId);
         $item = $inspection['item'];
@@ -100,11 +106,8 @@ final class RequestSubtitleOperationTool extends BaseTool
         int $mediaId,
     ): array {
         if ($operation === 'download_best') {
-            $language = mb_strtolower(trim((string) ($arguments['language'] ?? '')));
-            throw_unless(preg_match('/^[a-z]{2,3}(?:-[a-z0-9]+)?$/D', $language) === 1, InvalidArgumentException::class, 'A valid language is required.');
-
             return [
-                'language' => $language,
+                'language' => mb_strtolower((string) $arguments['language']),
                 'forced' => ($arguments['forced'] ?? false) === true,
                 'hearing_impaired' => ($arguments['hearing_impaired'] ?? false) === true,
             ];
@@ -137,14 +140,7 @@ final class RequestSubtitleOperationTool extends BaseTool
             return ['subtitle_fingerprint' => $fingerprint];
         }
 
-        $mediaAction = (string) ($arguments['media_action'] ?? '');
-        throw_unless(
-            in_array($mediaAction, ['scan-disk', 'search-missing', 'search-wanted', 'sync'], true),
-            InvalidArgumentException::class,
-            'A valid media action is required.',
-        );
-
-        return ['media_action' => $mediaAction];
+        return ['media_action' => (string) $arguments['media_action']];
     }
 
     /**
@@ -162,7 +158,7 @@ final class RequestSubtitleOperationTool extends BaseTool
             'hearing_impaired' => $schema->boolean()->description('Hearing-impaired flag for download_best, otherwise null.')->required()->nullable(),
             'candidate_fingerprint' => $schema->string()->description('Opaque candidate fingerprint for download_exact, otherwise null.')->required()->nullable(),
             'subtitle_fingerprint' => $schema->string()->description('Opaque track fingerprint for delete, sync, or translate; otherwise null.')->required()->nullable(),
-            'media_action' => $schema->string()->enum(['scan-disk', 'search-missing', 'search-wanted', 'sync'])->description('Action for scan_media, otherwise null.')->required()->nullable(),
+            'media_action' => $schema->string()->enum(self::MEDIA_ACTIONS)->description('Action for scan_media, otherwise null.')->required()->nullable(),
         ];
     }
 

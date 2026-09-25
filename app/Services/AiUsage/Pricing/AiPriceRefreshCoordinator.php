@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Services\AiUsage\Pricing;
 
 use App\Ai\Agents\PriceFetcherAgent;
+use App\Ai\AiRunAttribution;
 use App\Enums\PricingSource;
 use App\Models\AiModelPrice;
 use App\Models\AiPriceRefreshRun;
@@ -19,6 +20,9 @@ use Carbon\CarbonImmutable;
 use Illuminate\Database\DetectsLostConnections;
 use Illuminate\Support\Facades\DB;
 use InvalidArgumentException;
+use Laravel\Ai\Responses\AgentResponse;
+use Laravel\Ai\Responses\Data\Citation;
+use Laravel\Ai\Responses\Data\UrlCitation;
 use Throwable;
 
 /**
@@ -193,6 +197,14 @@ final class AiPriceRefreshCoordinator
      */
     private bool $verifyMode = false;
 
+    /**
+     * De-duplicated URL citations the verifier's final response carried, kept
+     * on the run row as an audit trail of the pages the model relied on.
+     *
+     * @var list<array{url: string, title: string|null}>
+     */
+    private array $sourceCitations = [];
+
     public function __construct(
         private readonly ModelsDevPricingClient $modelsDevPricingClient,
         private readonly ModelsDevPricingAdapter $modelsDevPricingAdapter,
@@ -225,6 +237,7 @@ final class AiPriceRefreshCoordinator
         $this->providerLevelFallback = [];
         $this->unverifiedTargets = [];
         $this->writeFailureMessage = null;
+        $this->sourceCitations = [];
 
         // Dry runs suppress writes. A plain dry run also skips the agent (its
         // writes would persist), while `--verify --dry-run` (spec §22) still
@@ -478,22 +491,25 @@ final class AiPriceRefreshCoordinator
 
             $before = AiModelPrice::query()->count();
 
-            $agent = new PriceFetcherAgent;
-
-            if ($user instanceof User) {
-                $agent = $agent->forUser($user);
-            }
-
-            $agent = $agent->forScope($this->agentScope(), $providers, $this->providerChecklists(), $priceVerificationRun, dryRun: $dryRun);
+            $agent = new PriceFetcherAgent()->forScope($this->agentScope(), $providers, $this->providerChecklists(), $priceVerificationRun, dryRun: $dryRun);
 
             $prompt = 'Verify and correct the catalog pricing for your scoped providers now. Fetch each canonical pricing page first, then upsert the rates you read.';
 
             $aiSettings = resolve(AiSettings::class);
             $chain = $aiSettings->providerChainWithModel($aiSettings->model());
 
-            $chain === null
+            // Queued refreshes have no authenticated user, so attribute the
+            // verifier's usage to whoever triggered the run.
+            $agentResponse = resolve(AiRunAttribution::class)->during($user, fn (): AgentResponse => $chain === null
                 ? $agent->prompt($prompt)
-                : $agent->prompt($prompt, provider: $chain);
+                : $agent->prompt($prompt, provider: $chain));
+
+            $this->sourceCitations = $agentResponse->meta->citations
+                ->filter(fn (Citation $citation): bool => $citation instanceof UrlCitation)
+                ->map(fn (UrlCitation $urlCitation): array => ['url' => $urlCitation->url, 'title' => $urlCitation->title])
+                ->unique('url')
+                ->values()
+                ->all();
 
             // Fold the real per-provider tool outcomes into the audit counters
             // (created/updated/unchanged/locked/rejected), for every provider
@@ -1009,6 +1025,7 @@ final class AiPriceRefreshCoordinator
             'fallback_targets' => $this->flattenFallbackTargets(),
             'unverified_targets' => $auditTargets === [] ? null : $auditTargets,
             'provider_results' => $providerResults,
+            'source_citations' => $this->sourceCitations === [] ? null : $this->sourceCitations,
             'error_message' => $errorMessage,
             'completed_at' => CarbonImmutable::now(),
         ]);

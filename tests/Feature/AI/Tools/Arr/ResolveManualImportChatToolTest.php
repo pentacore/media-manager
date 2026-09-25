@@ -123,6 +123,25 @@ test('nothing importable returns tool_failed without queueing', function (): voi
         ->and(ActionRequest::count())->toBe(0);
 });
 
+test('missing download id or reason is reported as invalid arguments before any Sonarr call', function (array $arguments, string $invalidKey): void {
+    Http::fake();
+
+    $result = json_decode((new ResolveManualImportChatTool)->handle(new Request([
+        'service' => 'sonarr',
+        'download_id' => 'HASH-A',
+        'reason' => 'File maps cleanly.',
+        ...$arguments,
+    ])), true);
+
+    expect($result['error'])->toBe('invalid_arguments')
+        ->and($result['errors'])->toHaveKey($invalidKey)
+        ->and(ActionRequest::count())->toBe(0);
+    Http::assertNothingSent();
+})->with([
+    'missing download id' => [['download_id' => ''], 'download_id'],
+    'blank reason' => [['reason' => ' '], 'reason'],
+]);
+
 test('advisory mode blocks the tool', function (): void {
     resolve(AiSettings::class)->withMode(AiMode::Advisory);
 

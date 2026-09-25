@@ -36,6 +36,8 @@ class StoreAiModelPriceRequest extends FormRequest
             'batch_cache_read_per_mtok' => ['nullable', 'numeric', 'min:0', 'max:9999.9999'],
             'batch_cache_write_per_mtok' => ['nullable', 'numeric', 'min:0', 'max:9999.9999'],
             'batch_reasoning_per_mtok' => ['nullable', 'numeric', 'min:0', 'max:9999.9999'],
+            'search_unit_per_k' => ['nullable', 'numeric', 'min:0', 'max:9999.9999'],
+            'batch_search_unit_per_k' => ['nullable', 'numeric', 'min:0', 'max:9999.9999'],
             'free_usage_pool_id' => ['nullable', 'integer', 'exists:ai_free_usage_pools,id'],
             'automatic_updates_enabled' => ['nullable', 'boolean'],
             ...$this->rateLimitRules(),

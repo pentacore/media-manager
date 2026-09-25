@@ -5,7 +5,8 @@ declare(strict_types=1);
 use App\Enums\UserRole;
 use App\Models\User;
 use Illuminate\Support\Facades\Broadcast;
-use Illuminate\Support\Facades\DB;
+use Laravel\Ai\Contracts\ConversationStore;
+use Laravel\Ai\Contracts\VerifiesConversationOwnership;
 
 Broadcast::channel('App.Models.User.{id}', fn (User $user, int $id): bool => $user->id === $id);
 
@@ -48,9 +49,9 @@ Broadcast::channel(
             return false;
         }
 
-        return DB::table('agent_conversations')
-            ->where('id', $conversationId)
-            ->where('user_id', $user->id)
-            ->exists();
+        $conversationStore = resolve(ConversationStore::class);
+
+        return $conversationStore instanceof VerifiesConversationOwnership
+            && $conversationStore->conversationBelongsTo($conversationId, $user->getMorphClass(), $user->id);
     },
 );

@@ -43,20 +43,22 @@ class ResolveManualImportChatTool extends BaseTool
      */
     protected function execute(Request $request): array
     {
+        $validated = $request->validate([
+            'download_id' => ['required', 'string'],
+            'reason' => ['required', 'string'],
+        ], [
+            'reason.required' => 'reason is required so the approver understands the decision.',
+        ]);
         $args = $request->toArray();
         $service = mb_strtolower((string) ($args['service'] ?? ''));
-        $downloadId = (string) ($args['download_id'] ?? '');
-        $reason = trim((string) ($args['reason'] ?? ''));
+        $downloadId = (string) $validated['download_id'];
+        $reason = trim((string) $validated['reason']);
 
         $type = match ($service) {
             'sonarr' => ServiceType::Sonarr,
             'radarr' => ServiceType::Radarr,
             default => throw new InvalidArgumentException('service must be "sonarr" or "radarr".'),
         };
-
-        throw_if($downloadId === '', InvalidArgumentException::class, 'download_id is required.');
-
-        throw_if($reason === '', InvalidArgumentException::class, 'reason is required so the approver understands the decision.');
 
         $serviceConnection = ServiceConnection::resolveActive($type);
         $client = $type === ServiceType::Sonarr

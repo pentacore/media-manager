@@ -36,7 +36,8 @@ final readonly class AiModelPriceWriter
 
     /**
      * Standard optional rates that default to `0.0000` on a new row when the
-     * source omits them.
+     * source omits them. `search_unit_per_k` is the per-1,000-search rate
+     * rerank models bill instead of (or alongside) token rates.
      *
      * @var list<string>
      */
@@ -44,6 +45,7 @@ final readonly class AiModelPriceWriter
         'cache_read_per_mtok',
         'cache_write_per_mtok',
         'reasoning_per_mtok',
+        'search_unit_per_k',
     ];
 
     /**

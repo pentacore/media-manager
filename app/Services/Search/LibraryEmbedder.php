@@ -6,9 +6,11 @@ namespace App\Services\Search;
 
 use App\Models\IndexedMovie;
 use App\Models\IndexedSeries;
+use App\Services\AiUsage\AiUsageCaller;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Log;
 use Laravel\Ai\Embeddings;
+use Laravel\Ai\Responses\EmbeddingsResponse;
 use Throwable;
 
 /**
@@ -62,10 +64,10 @@ class LibraryEmbedder
         $texts = $items->map(fn (IndexedMovie|IndexedSeries $item): string => $this->embeddingText($item))->all();
 
         try {
-            $response = Embeddings::for($texts)
+            $response = resolve(AiUsageCaller::class)->during(self::class, fn (): EmbeddingsResponse => Embeddings::for($texts)
                 ->dimensions(self::DIMENSIONS)
                 ->cache()
-                ->generate();
+                ->generate());
         } catch (Throwable $throwable) {
             Log::warning('LibraryEmbedder: embedding generation failed', [
                 'count' => count($texts),

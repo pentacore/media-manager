@@ -19,12 +19,16 @@ enum AgentDecisionStatus: string
     /** The agent run itself errored (LLM/tool failure, budget, etc.). */
     case Failed = 'failed';
 
+    /** Classification judged the event unlikely to need action; the agent did not run. */
+    case SkippedByGate = 'skipped_by_gate';
+
     public function label(): string
     {
         return match ($this) {
             self::NoAction => 'No action',
             self::Completed => 'Completed',
             self::Failed => 'Failed',
+            self::SkippedByGate => 'Skipped by gate',
         };
     }
 }

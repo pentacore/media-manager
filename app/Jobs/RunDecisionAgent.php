@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Jobs;
 
 use App\Ai\Agents\DecisionAgent;
+use App\Ai\Classification\Classifier;
 use App\Ai\Decision\DecisionRunContext;
 use App\Enums\AgentDecisionStatus;
 use App\Models\AgentDecision;
@@ -49,6 +50,9 @@ class RunDecisionAgent implements ShouldBeUnique, ShouldQueue
     /** Minimum seconds between agent runs about the same subject. */
     public const int SUBJECT_COOLDOWN_SECONDS = 600;
 
+    /** The yes/no question the classification gate asks about each event. */
+    private const string GATE_QUESTION = 'Does this media-server webhook event require an operator action (import, remove, approve, re-search or fix something) rather than being purely informational?';
+
     /**
      * @param  array<string, mixed>  $payload
      */
@@ -69,6 +73,8 @@ class RunDecisionAgent implements ShouldBeUnique, ShouldQueue
     public function handle(
         DecisionAgentSettings $decisionAgentSettings,
         AiBudgetGuard $aiBudgetGuard,
+        AiSettings $aiSettings,
+        Classifier $classifier,
     ): void {
         if (! AIServiceProvider::enabled() || ! $decisionAgentSettings->enabled()) {
             return;
@@ -92,15 +98,12 @@ class RunDecisionAgent implements ShouldBeUnique, ShouldQueue
         // movie / request (including ones caused by MediaManager's own
         // actions) must not trigger a paid agent run each — one decision per
         // subject per window bounds feedback loops and webhook-flood cost.
+        // Only an agent run claims the window: an event the gate skips must
+        // not block the next one (a stuck import always runs past the gate).
         $subjectKey = $this->subjectCooldownKey();
 
-        if ($subjectKey !== null && ! Cache::add($subjectKey, true, self::SUBJECT_COOLDOWN_SECONDS)) {
-            Log::info('RunDecisionAgent: subject in cooldown, skipping run', [
-                'webhook_event_id' => $webhookEventId,
-                'service' => $this->service,
-                'event_type' => $this->eventType,
-                'subject_key' => $subjectKey,
-            ]);
+        if ($subjectKey !== null && Cache::has($subjectKey)) {
+            $this->logCooldownSkip($webhookEventId, $subjectKey);
 
             return;
         }
@@ -109,6 +112,16 @@ class RunDecisionAgent implements ShouldBeUnique, ShouldQueue
             $aiBudgetGuard->enforce();
         } catch (AiBudgetExceededException $aiBudgetExceededException) {
             $this->record($webhookEventId, AgentDecisionStatus::Failed, 'Skipped: AI budget hard cap reached. '.$aiBudgetExceededException->getMessage(), null);
+
+            return;
+        }
+
+        if ($this->skippedByGate($webhookEventId, $aiSettings, $classifier)) {
+            return;
+        }
+
+        if ($subjectKey !== null && ! Cache::add($subjectKey, true, self::SUBJECT_COOLDOWN_SECONDS)) {
+            $this->logCooldownSkip($webhookEventId, $subjectKey);
 
             return;
         }
@@ -122,7 +135,7 @@ class RunDecisionAgent implements ShouldBeUnique, ShouldQueue
 
         try {
             $decisionAgent = new DecisionAgent;
-            $chain = resolve(AiSettings::class)->providerChainWithModel($decisionAgentSettings->model());
+            $chain = $aiSettings->providerChainWithModel($decisionAgentSettings->model());
             $response = $chain === null
                 ? $decisionAgent->prompt($this->buildPrompt())
                 : $decisionAgent->prompt($this->buildPrompt(), provider: $chain);
@@ -145,6 +158,49 @@ class RunDecisionAgent implements ShouldBeUnique, ShouldQueue
         $status = $decisionRunContext->count() > 0 ? AgentDecisionStatus::Completed : AgentDecisionStatus::NoAction;
         $this->record($webhookEventId, $status, $summary, $decisionRunContext);
         $this->notify($decisionRunContext, $summary, $decisionAgentSettings);
+    }
+
+    /**
+     * Cheap classification before a paid 16-step run. Stuck imports always
+     * run — a wrong skip there leaves a download stuck — and any classifier
+     * failure falls through to the agent.
+     */
+    private function skippedByGate(?int $webhookEventId, AiSettings $aiSettings, Classifier $classifier): bool
+    {
+        if (! $aiSettings->decisionGateEnabled() || $this->eventType === 'ManualInteractionRequired') {
+            return false;
+        }
+
+        $probability = $classifier->probability(
+            self::class,
+            ['service' => $this->service, 'event_type' => $this->eventType, 'payload' => Str::limit((string) json_encode($this->payload), 4000)],
+            self::GATE_QUESTION,
+        );
+
+        $threshold = $aiSettings->decisionGateThreshold();
+
+        if ($probability === null || $probability >= $threshold) {
+            return false;
+        }
+
+        $this->record($webhookEventId, AgentDecisionStatus::SkippedByGate, sprintf(
+            'Skipped by the classification gate: %d%% likely to need action (threshold %d%%). Asked: "%s"',
+            (int) round($probability * 100),
+            (int) round($threshold * 100),
+            self::GATE_QUESTION,
+        ), null);
+
+        return true;
+    }
+
+    private function logCooldownSkip(?int $webhookEventId, string $subjectKey): void
+    {
+        Log::info('RunDecisionAgent: subject in cooldown, skipping run', [
+            'webhook_event_id' => $webhookEventId,
+            'service' => $this->service,
+            'event_type' => $this->eventType,
+            'subject_key' => $subjectKey,
+        ]);
     }
 
     /**
