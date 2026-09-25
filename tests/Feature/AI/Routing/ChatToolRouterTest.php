@@ -15,6 +15,8 @@ use App\Settings\AiSettings;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Laravel\Ai\Classification;
+use Laravel\Ai\Prompts\AgentPrompt;
+use Laravel\Ai\Providers\Tools\ToolSearch;
 use Laravel\Ai\Responses\Data\BooleanAnswer;
 
 /**
@@ -25,6 +27,21 @@ function routerGroupAnswers(array $probabilities): array
 {
     return collect(ToolGroup::cases())
         ->mapWithKeys(fn (ToolGroup $toolGroup): array => [$toolGroup->value => new BooleanAnswer($probabilities[$toolGroup->value] ?? 0.05)])
+        ->all();
+}
+
+/**
+ * Class names of the tools a prompt carried, with any ToolSearch wrapper
+ * expanded so the assertions hold whether or not the chain defers tools.
+ *
+ * @return list<class-string>
+ */
+function routerPromptedToolClasses(AgentPrompt $agentPrompt): array
+{
+    return collect($agentPrompt->tools ?? [])
+        ->flatMap(fn (object $tool): array => $tool instanceof ToolSearch ? $tool->tools : [$tool])
+        ->map(fn (object $tool): string => $tool::class)
+        ->values()
         ->all();
 }
 
@@ -108,8 +125,8 @@ test('a routed chat turn only sends the routed tools to the agent', function ():
         ->postJson(route('ai.chat.send'), ['message' => 'What is playing right now?'])
         ->assertOk();
 
-    MediaAgent::assertPrompted(fn ($prompt): bool => collect($prompt->tools ?? [])->contains(fn (object $tool): bool => $tool instanceof NowPlayingTool)
-        && collect($prompt->tools ?? [])->doesntContain(fn (object $tool): bool => $tool instanceof DeleteMediaTool));
+    MediaAgent::assertPrompted(fn (AgentPrompt $agentPrompt): bool => in_array(NowPlayingTool::class, routerPromptedToolClasses($agentPrompt), true)
+        && ! in_array(DeleteMediaTool::class, routerPromptedToolClasses($agentPrompt), true));
 });
 
 test('an approved workflow continuation keeps the full toolset without classifying', function (): void {
@@ -142,5 +159,5 @@ test('an approved workflow continuation keeps the full toolset without classifyi
         ->assertOk();
 
     Classification::assertNothingClassified();
-    MediaAgent::assertPrompted(fn ($prompt): bool => collect($prompt->tools ?? [])->contains(fn (object $tool): bool => $tool instanceof DeleteMediaTool));
+    MediaAgent::assertPrompted(fn (AgentPrompt $agentPrompt): bool => in_array(DeleteMediaTool::class, routerPromptedToolClasses($agentPrompt), true));
 });
