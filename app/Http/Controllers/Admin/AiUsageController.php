@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers\Admin;
 
+use App\Enums\AiUsageKind;
 use App\Enums\TimeWindow;
 use App\Http\Controllers\Controller;
 use App\Models\AiModelPrice;
@@ -25,13 +26,19 @@ class AiUsageController extends Controller
         $timeWindow = TimeWindow::fromRequest($request->string('window')->value() ?: null);
         $since = $timeWindow->cutoff();
         $scenario = Scenario::fromArray((array) $request->input('scenario', []));
+        // Unknown kinds fall back to "all kinds" rather than erroring, like
+        // an unknown window falls back to the default.
+        $kind = AiUsageKind::tryFrom($request->string('kind')->value());
 
         $page = [
             'window' => $timeWindow->value,
-            'totals' => $aiUsageReporting->totals($since),
-            'by_model' => $aiUsageReporting->aggregateBy('model', $since),
-            'by_provider' => $aiUsageReporting->aggregateBy('provider', $since),
-            'recent' => $aiUsageReporting->recentInvocations($since),
+            'kind' => $kind?->value,
+            'kinds' => AiUsageKind::mapForSelect(labelKey: 'label'),
+            'totals' => $aiUsageReporting->totals($since, kind: $kind),
+            'by_model' => $aiUsageReporting->aggregateBy('model', $since, kind: $kind),
+            'by_provider' => $aiUsageReporting->aggregateBy('provider', $since, kind: $kind),
+            'recent' => $aiUsageReporting->recentInvocations($since, kind: $kind),
+            'tool_stats' => $aiUsageReporting->toolStats($since),
             'priced_models' => AiModelPrice::query()
                 ->orderBy('provider')
                 ->orderBy('model')
@@ -50,10 +57,10 @@ class AiUsageController extends Controller
         ];
 
         if ($scenario instanceof Scenario) {
-            $page['scenario_totals'] = $aiUsageReporting->totals($since, $scenario);
-            $page['scenario_by_model'] = $aiUsageReporting->aggregateBy('model', $since, $scenario);
-            $page['scenario_by_provider'] = $aiUsageReporting->aggregateBy('provider', $since, $scenario);
-            $page['scenario_recent'] = $aiUsageReporting->recentInvocations($since, $scenario);
+            $page['scenario_totals'] = $aiUsageReporting->totals($since, $scenario, $kind);
+            $page['scenario_by_model'] = $aiUsageReporting->aggregateBy('model', $since, $scenario, $kind);
+            $page['scenario_by_provider'] = $aiUsageReporting->aggregateBy('provider', $since, $scenario, $kind);
+            $page['scenario_recent'] = $aiUsageReporting->recentInvocations($since, $scenario, kind: $kind);
         }
 
         return Inertia::render('Admin/AiUsage/Index', $page);
@@ -111,16 +118,17 @@ class AiUsageController extends Controller
 
     /**
      * Stream the priced invocation rows for the active window as CSV.
-     * Honours the same window + optional scenario as index() so the file
-     * mirrors the on-screen totals.
+     * Honours the same window, kind and optional scenario as index() so the
+     * file mirrors the on-screen totals.
      */
     public function export(Request $request, AiUsageReporting $aiUsageReporting): StreamedResponse
     {
         $timeWindow = TimeWindow::fromRequest($request->string('window')->value() ?: null);
         $since = $timeWindow->cutoff();
         $scenario = Scenario::fromArray((array) $request->input('scenario', []));
+        $kind = AiUsageKind::tryFrom($request->string('kind')->value());
 
-        $rows = $aiUsageReporting->recentInvocations($since, $scenario, 10_000);
+        $rows = $aiUsageReporting->recentInvocations($since, $scenario, 10_000, $kind);
 
         $filename = sprintf('ai-usage-%s-%s.csv', $timeWindow->value, now()->format('Ymd-His'));
 
