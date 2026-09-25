@@ -6,6 +6,7 @@ namespace App\Ai\Agents;
 
 use App\Ai\Middleware\AnswerOnFinalStep;
 use App\Ai\Middleware\EnforceBudgetEachStep;
+use App\Ai\ProviderCapabilities;
 use App\Ai\Tools\PriceFetcher\UpsertModelPriceTool;
 use App\Ai\Tools\PriceFetcher\WebFetchTool;
 use App\Services\AiUsage\Pricing\PriceVerificationRun;
@@ -15,8 +16,10 @@ use Laravel\Ai\Attributes\MaxSteps;
 use Laravel\Ai\Contracts\Agent;
 use Laravel\Ai\Contracts\HasMiddleware;
 use Laravel\Ai\Contracts\HasTools;
+use Laravel\Ai\Contracts\Providers\SupportsCodeExecution;
 use Laravel\Ai\Contracts\Tool;
 use Laravel\Ai\Promptable;
+use Laravel\Ai\Providers\Tools\CodeExecution;
 use Laravel\Ai\Providers\Tools\WebFetch;
 use Stringable;
 
@@ -127,6 +130,10 @@ class PriceFetcherAgent implements Agent, HasMiddleware, HasTools
             PROMPT;
         }
 
+        $codeExecution = $this->codeExecutionAvailable()
+            ? "\n\nYou have hosted code execution. For large machine-readable sources (for example OpenRouter's /models JSON or long pricing tables), load the fetched content in code and compute the per-million-token rates programmatically instead of reading them by eye."
+            : '';
+
         return <<<PROMPT
         You are PriceFetcherAgent, running as a scope-bound verifier. The refresh coordinator has already tried its structured source and is asking you to re-read the canonical pricing pages for a specific set of providers and correct the local AI model price catalog from what those pages currently say.
 
@@ -162,7 +169,7 @@ class PriceFetcherAgent implements Agent, HasMiddleware, HasTools
         - Don't upsert pricing for embedding-only or non-LLM products (image, audio, embeddings) — only chat / instruct / reasoning text models.
         - Always use the stable, non-dated model alias (e.g. `claude-haiku-4-5`, never `claude-haiku-4-5-20251001`). Writes for a dated snapshot of a model that already has a base row are rejected.
 
-        When done, output a short final summary: how many rows you upserted per provider, and which providers you skipped and why.
+        When done, output a short final summary: how many rows you upserted per provider, and which providers you skipped and why.{$codeExecution}
         PROMPT;
     }
 
@@ -191,7 +198,11 @@ class PriceFetcherAgent implements Agent, HasMiddleware, HasTools
      * no receipts, so its writes are a best-effort refresh: the anomaly guard
      * still applies and rows are never stamped verified.
      *
-     * @return iterable<int, Tool|WebFetch>
+     * Hosted code execution is added only when every provider in the failover
+     * chain supports it: the SDK rejects an unsupported provider tool with a
+     * non-failoverable LogicException before the request is sent.
+     *
+     * @return iterable<int, Tool|WebFetch|CodeExecution>
      */
     public function tools(): iterable
     {
@@ -212,10 +223,24 @@ class PriceFetcherAgent implements Agent, HasMiddleware, HasTools
             $webFetch = resolve(WebFetchTool::class)->withRun($run);
         }
 
-        return [
+        $tools = [
             $webFetch,
             resolve(UpsertModelPriceTool::class)->withScope($scope)->withRun($run)->withDryRun($this->dryRun),
         ];
+
+        if ($this->codeExecutionAvailable()) {
+            $tools[] = new CodeExecution;
+        }
+
+        return $tools;
+    }
+
+    /**
+     * Whether every provider the run may reach supports hosted code execution.
+     */
+    private function codeExecutionAvailable(): bool
+    {
+        return resolve(ProviderCapabilities::class)->everyProviderSupports(SupportsCodeExecution::class);
     }
 
     /**

@@ -9,8 +9,11 @@ use App\Models\AiModelPrice;
 use App\Models\AiUsageRecord;
 use App\Models\User;
 use App\Services\AiUsage\Pricing\RefreshScope;
+use App\Settings\AiSettings;
 use Laravel\Ai\Attributes\MaxSteps;
 use Laravel\Ai\Contracts\HasTools;
+use Laravel\Ai\Enums\Lab;
+use Laravel\Ai\Providers\Tools\CodeExecution;
 use Laravel\Ai\Providers\Tools\WebFetch;
 
 /**
@@ -293,4 +296,19 @@ test('verifier keeps the 40-step ceiling', function (): void {
 
 test('agent is a tool provider', function (): void {
     expect(new PriceFetcherAgent)->toBeInstanceOf(HasTools::class);
+});
+
+test('code execution is offered only when every provider in the chain supports it', function (): void {
+    config()->set('ai.default', 'openai');
+    resolve(AiSettings::class)->setFailoverProvider(null);
+
+    $priceFetcherAgent = (new PriceFetcherAgent)->forScope(RefreshScope::forProviders(['openai']), ['openai']);
+
+    expect(collect($priceFetcherAgent->tools())->contains(fn (object $tool): bool => $tool instanceof CodeExecution))->toBeTrue()
+        ->and((string) $priceFetcherAgent->instructions())->toContain('code execution');
+
+    resolve(AiSettings::class)->setFailoverProvider(Lab::Groq);
+
+    expect(collect($priceFetcherAgent->tools())->contains(fn (object $tool): bool => $tool instanceof CodeExecution))->toBeFalse()
+        ->and((string) $priceFetcherAgent->instructions())->not->toContain('code execution');
 });
