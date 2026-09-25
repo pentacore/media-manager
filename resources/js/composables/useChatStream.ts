@@ -105,6 +105,19 @@ function toolResultFailed(event: AgUiEvent): boolean {
     }
 }
 
+const ACTIVITY_EXCERPT_LENGTH = 160;
+
+/**
+ * The newest part of a running sub-agent's output, on one line.
+ */
+function activityExcerpt(output: string): string {
+    const line = output.replace(/\s+/g, ' ');
+
+    return line.length <= ACTIVITY_EXCERPT_LENGTH
+        ? line
+        : `…${line.slice(-ACTIVITY_EXCERPT_LENGTH)}`;
+}
+
 /**
  * Consume `POST /ai/chat/stream` — the Laravel AI SDK's AG-UI protocol
  * (ChatStreamProtocol): RUN_STARTED/FINISHED carry the conversation id as
@@ -192,12 +205,19 @@ export function useChatStream(): UseChatStreamReturn {
                     break;
                 }
                 case 'ACTIVITY_SNAPSHOT': {
+                    // A sub-agent still running: `content.toolName` is the
+                    // parent tool call itself, and `content.output` restates
+                    // the sub-agent's whole output so far — show its tail.
                     const call = calls.get(String(event.messageId));
                     const content = event.content as
-                        { toolName?: string } | undefined;
+                        { output?: unknown } | undefined;
+                    const output =
+                        typeof content?.output === 'string'
+                            ? content.output.trim()
+                            : '';
 
-                    if (call && content?.toolName) {
-                        call.activity = [...call.activity, content.toolName];
+                    if (call && output !== '') {
+                        call.activity = [activityExcerpt(output)];
                         options.onToolCall?.({ ...call });
                     }
 

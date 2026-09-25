@@ -32,7 +32,7 @@ const label = computed(() =>
         <span
             v-for="(step, i) in call.activity"
             :key="i"
-            class="pl-4 text-[11px] text-fg-subtle"
+            class="max-w-80 truncate pl-4 text-[11px] text-fg-subtle"
             data-tool-activity
         >
             ↳ {{ step }}

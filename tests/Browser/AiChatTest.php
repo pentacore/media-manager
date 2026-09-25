@@ -252,6 +252,30 @@ test('a failed first turn joins its stored conversation so a retry continues it'
     expect(DB::table('agent_conversations')->where('participant_id', $admin->id)->count())->toBe(1);
 });
 
+test('a running sub-agent shows its output under the tool chip', function (): void {
+    StuckDownloadInvestigatorAgent::fake([[
+        'service' => 'sonarr', 'download_id' => 'abc', 'title' => 'Show S01E01',
+        'files' => ['/dl/show.mkv | mapped | not an upgrade'], 'recommendation' => 'remove',
+        'blocklist' => false, 'search_replacement' => false,
+        'reason' => 'The existing file already has the better Custom Format score, so this grab is not an upgrade and the release sits in the queue waiting for manual action.',
+    ]]);
+    MediaAgent::fake([
+        new ToolCall(id: 'c1', name: 'InvestigateStuckDownload', arguments: ['task' => 'Why is download abc stuck?']),
+        'It is not an upgrade; I can remove it.',
+    ]);
+    Http::preventStrayRequests();
+    Http::allowStrayRequests([config('inertia.ssr.url').'/*']);
+
+    $this->actingAs(User::factory()->admin()->create());
+
+    visit('/ai/chat')
+        ->assertNoSmoke()
+        ->type('textarea[placeholder^="Ask"]', 'why is it stuck?')
+        ->click('Send')
+        ->assertSee('It is not an upgrade; I can remove it.')
+        ->assertSeeIn('[data-tool-chip="done"] [data-tool-activity]', 'waiting for manual action');
+});
+
 test('a picked attachment shows as a removable chip in the composer', function (): void {
     $this->actingAs(User::factory()->admin()->create());
 
