@@ -252,6 +252,25 @@ test('a failed first turn joins its stored conversation so a retry continues it'
     expect(DB::table('agent_conversations')->where('participant_id', $admin->id)->count())->toBe(1);
 });
 
+test('a tool that reports an error renders a failed chip', function (): void {
+    MediaAgent::fake([
+        new ToolCall(id: 'c1', name: 'RemoveStuckDownloadChatTool', arguments: []),
+        'I could not remove that download.',
+    ]);
+    Http::preventStrayRequests();
+    Http::allowStrayRequests([config('inertia.ssr.url').'/*']);
+
+    $this->actingAs(User::factory()->admin()->create());
+
+    visit('/ai/chat')
+        ->assertNoSmoke()
+        ->type('textarea[placeholder^="Ask"]', 'remove the stuck download')
+        ->click('Send')
+        ->assertSee('I could not remove that download.')
+        ->assertVisible('[data-tool-chip="failed"]')
+        ->assertMissing('[data-tool-chip="done"]');
+});
+
 test('a running sub-agent shows its output under the tool chip', function (): void {
     StuckDownloadInvestigatorAgent::fake([[
         'service' => 'sonarr', 'download_id' => 'abc', 'title' => 'Show S01E01',
@@ -274,6 +293,24 @@ test('a running sub-agent shows its output under the tool chip', function (): vo
         ->click('Send')
         ->assertSee('It is not an upgrade; I can remove it.')
         ->assertSeeIn('[data-tool-chip="done"] [data-tool-activity]', 'waiting for manual action');
+});
+
+test('a stored failed turn renders as a failed reply when reopened', function (): void {
+    $admin = User::factory()->admin()->create();
+    $conversationId = (string) Str::uuid7();
+
+    aiChatInsertConversation($admin, $conversationId, 'Broken chat');
+    aiChatInsertMessage($admin, $conversationId, 1, 'user', 'Is Sonarr up?');
+    aiChatInsertMessage($admin, $conversationId, 2, 'assistant', '', status: 'failed');
+
+    $this->actingAs($admin);
+
+    visit('/ai/chat')
+        ->assertNoSmoke()
+        ->click('[data-conversation-picker]')
+        ->click("[data-conversation-id=\"{$conversationId}\"]")
+        ->assertSee('Is Sonarr up?')
+        ->assertSeeIn('[data-chat-thread] [data-failed-turn]', 'This reply failed.');
 });
 
 test('a picked attachment shows as a removable chip in the composer', function (): void {
@@ -350,7 +387,7 @@ function aiChatInsertConversation(User $user, string $conversationId, string $ti
 /**
  * @param  list<array<string, mixed>>  $attachments
  */
-function aiChatInsertMessage(User $user, string $conversationId, int $position, string $role, string $content, array $attachments = []): void
+function aiChatInsertMessage(User $user, string $conversationId, int $position, string $role, string $content, array $attachments = [], string $status = 'completed'): void
 {
     DB::table('agent_conversation_messages')->insert([
         'id' => (string) Str::uuid7(),
@@ -366,7 +403,7 @@ function aiChatInsertMessage(User $user, string $conversationId, int $position, 
             : json_encode([['content' => $content, 'tool_calls' => [], 'reasoning' => '', 'replay_blocks' => [], 'provider_tool_calls' => []]]),
         'usage' => '{}',
         'meta' => '{}',
-        'status' => 'completed',
+        'status' => $status,
         'created_at' => now()->addSeconds($position),
         'updated_at' => now()->addSeconds($position),
     ]);
