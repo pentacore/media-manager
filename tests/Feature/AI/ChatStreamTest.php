@@ -355,6 +355,26 @@ test('a first turn that fails before any step completes dispatches no title job'
 /**
  * The first SSE frame of the given AG-UI event type.
  */
+test('a capturing output buffer receives every stream frame', function (): void {
+    MediaAgent::fake(['Hello from the stream.']);
+    $admin = User::factory()->admin()->create();
+
+    $response = $this->actingAs($admin)
+        ->post(route('ai.chat.stream'), [
+            'message' => 'Say hello',
+        ], ['Accept' => 'text/event-stream']);
+
+    // The browser-test server captures a response with a plain ob_start()
+    // nested inside PHPUnit's own buffer; an ob_flush() at that depth would
+    // push the frames past the capture and the client would get nothing.
+    ob_start();
+    $response->baseResponse->sendContent();
+    $captured = (string) ob_get_clean();
+
+    expect($captured)->toContain('"type":"TEXT_MESSAGE_CONTENT"')
+        ->and($captured)->toContain('"type":"RUN_FINISHED"');
+});
+
 function chatStreamFrame(string $body, string $type): string
 {
     foreach (explode("\n\n", $body) as $frame) {
