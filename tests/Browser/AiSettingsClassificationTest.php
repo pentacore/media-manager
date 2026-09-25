@@ -61,3 +61,22 @@ test('the AI settings page shows which advanced tools the provider chain allows'
         ->assertSeeIn('[data-advanced-tool="code_execution"]', 'active')
         ->assertDontSeeIn('[data-advanced-tool="code_execution"]', 'inactive');
 });
+
+test('admin can switch the reranking provider and model', function (): void {
+    config()->set('ai.providers.jina.key', 'jina-test-key');
+    $this->actingAs(User::factory()->admin()->create());
+
+    visit(route('admin.ai-settings.index', absolute: false))
+        ->assertNoSmoke()
+        ->click('#reranking_provider')
+        ->click('[role="option"][aria-label="Jina"]')
+        ->assertMissing('[data-reranking-key-missing]')
+        ->type('#reranking_model', 'jina-reranker-v3')
+        ->click('Save settings')
+        ->assertSee('AI settings updated.');
+
+    $settings = resolve(AiSettings::class);
+
+    expect($settings->rerankingProvider())->toBe('jina')
+        ->and($settings->rerankingModel())->toBe('jina-reranker-v3');
+});

@@ -690,7 +690,10 @@ const budgetState = computed<{
                                     name="reranking_provider"
                                     :default-value="settings.reranking_provider"
                                 >
-                                    <SelectTrigger class="h-8 w-48 text-sm">
+                                    <SelectTrigger
+                                        id="reranking_provider"
+                                        class="h-8 w-48 text-sm"
+                                    >
                                         <SelectValue
                                             placeholder="Select a provider"
                                         />
@@ -700,6 +703,7 @@ const budgetState = computed<{
                                             v-for="provider in rerankingProviders"
                                             :key="provider.value"
                                             :value="provider.value"
+                                            :aria-label="provider.label"
                                         >
                                             {{ provider.label }}
                                         </SelectItem>
