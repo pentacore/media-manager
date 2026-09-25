@@ -210,6 +210,24 @@ export function useChatStream(): UseChatStreamReturn {
             }
         };
 
+        const handleRawEvent = (rawEvent: string): void => {
+            for (const line of rawEvent.split('\n')) {
+                if (!line.startsWith('data:')) {
+                    continue;
+                }
+
+                let event: AgUiEvent;
+
+                try {
+                    event = JSON.parse(line.slice(5).trim()) as AgUiEvent;
+                } catch {
+                    continue;
+                }
+
+                handle(event);
+            }
+        };
+
         for (;;) {
             const { done, value } = await reader.read();
 
@@ -224,23 +242,16 @@ export function useChatStream(): UseChatStreamReturn {
             while ((boundary = buffer.indexOf('\n\n')) !== -1) {
                 const rawEvent = buffer.slice(0, boundary);
                 buffer = buffer.slice(boundary + 2);
-
-                for (const line of rawEvent.split('\n')) {
-                    if (!line.startsWith('data:')) {
-                        continue;
-                    }
-
-                    let event: AgUiEvent;
-
-                    try {
-                        event = JSON.parse(line.slice(5).trim()) as AgUiEvent;
-                    } catch {
-                        continue;
-                    }
-
-                    handle(event);
-                }
+                handleRawEvent(rawEvent);
             }
+        }
+
+        // The closing frame (RUN_FINISHED / RUN_ERROR) can arrive without its
+        // trailing blank line — handle whatever is left once the stream ends.
+        buffer += decoder.decode();
+
+        if (buffer.trim() !== '') {
+            handleRawEvent(buffer);
         }
 
         return { text, reasoning, conversationId };
