@@ -13,7 +13,6 @@ use App\Services\Bazarr\BazarrClient;
 use App\Services\Bazarr\SubtitleInventoryService;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
 use Illuminate\JsonSchema\Types\Type;
-use InvalidArgumentException;
 use Laravel\Ai\Tools\Request;
 
 final class SearchSubtitlesTool extends BaseTool
@@ -34,13 +33,12 @@ final class SearchSubtitlesTool extends BaseTool
      */
     protected function execute(Request $request): array
     {
+        $validated = $request->validate(['limit' => ['nullable', 'integer', 'between:1,10']]);
         $arguments = $request->toArray();
+        $limit = (int) ($validated['limit'] ?? 5);
         $connection = $this->connection((int) ($arguments['bazarr_connection_id'] ?? 0));
         $mediaType = (string) ($arguments['media_type'] ?? '');
         $mediaId = (int) ($arguments['media_id'] ?? 0);
-        $limit = is_numeric($arguments['limit'] ?? null) ? (int) $arguments['limit'] : 5;
-
-        throw_unless($limit >= 1 && $limit <= 10, InvalidArgumentException::class, 'Search limit must be between 1 and 10.');
 
         $inspection = resolve(SubtitleInventoryService::class)->inspect($connection, $mediaType, $mediaId);
         $bazarrClient = new BazarrClient($connection);

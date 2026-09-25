@@ -126,6 +126,34 @@ test('a disabled Action Rule returns a non-queued result', function (): void {
         ->and(ActionRequest::query()->count())->toBe(0);
 });
 
+test('malformed operation arguments are reported as invalid arguments before any Bazarr call', function (array $arguments, string $invalidKey): void {
+    $serviceConnection = requestToolConnection();
+    Http::fake();
+
+    $result = json_decode((new RequestSubtitleOperationTool)->handle(new Request([
+        'bazarr_connection_id' => $serviceConnection->id,
+        'media_type' => 'movie',
+        'media_id' => 801,
+        'forced' => null,
+        'hearing_impaired' => null,
+        'candidate_fingerprint' => null,
+        'subtitle_fingerprint' => null,
+        'language' => null,
+        'media_action' => null,
+        ...$arguments,
+    ])), true, flags: JSON_THROW_ON_ERROR);
+
+    expect($result['error'])->toBe('invalid_arguments')
+        ->and($result['errors'])->toHaveKey($invalidKey)
+        ->and(ActionRequest::query()->count())->toBe(0);
+    Http::assertNothingSent();
+})->with([
+    'unknown operation' => [['operation' => 'rename_subtitle'], 'operation'],
+    'malformed language' => [['operation' => 'download_best', 'language' => 'english!'], 'language'],
+    'missing language' => [['operation' => 'download_best'], 'language'],
+    'unknown media action' => [['operation' => 'scan_media', 'media_action' => 'rescan-everything'], 'media_action'],
+]);
+
 function requestToolConnection(): ServiceConnection
 {
     $bazarr = ServiceConnection::factory()->bazarr()->create(['url' => 'http://bazarr.test']);

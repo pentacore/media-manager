@@ -106,15 +106,33 @@ test('search_replacement defaults to false when omitted', function (): void {
     expect($actionRequest->payload['search_replacement'])->toBeFalse();
 });
 
-test('missing reason fails without queueing', function (): void {
+test('missing or malformed arguments are reported as invalid arguments without queueing', function (array $arguments, string $invalidKey): void {
     $result = json_decode(
         (new RemoveStuckDownloadChatTool)->handle(new Request([
             'service' => 'radarr',
             'download_id' => 'HASH-B',
+            'reason' => 'Not an upgrade for existing file.',
+            ...$arguments,
         ])),
         true,
     );
 
-    expect($result['error'])->toBe('tool_failed')
+    expect($result['error'])->toBe('invalid_arguments')
+        ->and($result['errors'])->toHaveKey($invalidKey)
         ->and(ActionRequest::count())->toBe(0);
+})->with([
+    'missing reason' => [['reason' => null], 'reason'],
+    'missing download id' => [['download_id' => ''], 'download_id'],
+    'unknown service' => [['service' => 'emby'], 'service'],
+]);
+
+test('the service name is matched case-insensitively', function (): void {
+    $result = json_decode((new RemoveStuckDownloadChatTool)->handle(new Request([
+        'service' => 'Radarr',
+        'download_id' => 'HASH-C',
+        'reason' => 'Not an upgrade for existing file.',
+    ])), true);
+
+    expect($result['queued'])->toBeTrue()
+        ->and(ActionRequest::findOrFail($result['action_request_id'])->target_service)->toBe('radarr');
 });

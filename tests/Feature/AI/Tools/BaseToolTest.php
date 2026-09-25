@@ -101,6 +101,37 @@ class FakeBinaryTool extends BaseTool
     }
 }
 
+class FakeValidatingTool extends BaseTool
+{
+    public function description(): Stringable|string
+    {
+        return 'fake';
+    }
+
+    /**
+     * @return array{}
+     */
+    public function schema(JsonSchema $schema): array
+    {
+        return [];
+    }
+
+    public function risk(): Risk
+    {
+        return Risk::Read;
+    }
+
+    /**
+     * @return array{limit: int}
+     */
+    protected function execute(Request $request): array
+    {
+        $validated = $request->validate(['limit' => ['required', 'integer', 'between:1,10']]);
+
+        return ['limit' => (int) $validated['limit']];
+    }
+}
+
 class FakeDestructiveTool extends BaseTool
 {
     public function description(): Stringable|string
@@ -222,4 +253,18 @@ test('handle returns valid JSON even when execute() result has invalid UTF-8', f
     // Either the partial-output flag salvaged it (title key present, possibly null),
     // or our error envelope kicked in (error key present).
     expect(array_key_exists('title', $decoded) || array_key_exists('error', $decoded))->toBeTrue();
+});
+
+test('a validation failure inside execute returns an invalid_arguments envelope', function (): void {
+    $result = json_decode((new FakeValidatingTool)->handle(makeFakeRequest(['limit' => 50])), true);
+
+    expect($result['error'])->toBe('invalid_arguments')
+        ->and($result['errors'])->toHaveKey('limit')
+        ->and($result['message'])->toContain('call the tool again');
+});
+
+test('arguments that pass validation reach the tool result unchanged', function (): void {
+    $result = json_decode((new FakeValidatingTool)->handle(makeFakeRequest(['limit' => 3])), true);
+
+    expect($result)->toBe(['limit' => 3]);
 });
