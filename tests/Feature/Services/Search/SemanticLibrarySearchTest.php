@@ -9,6 +9,7 @@ use Laravel\Ai\Prompts\RerankingPrompt;
 use Laravel\Ai\Reranking;
 use Laravel\Ai\Responses\Data\Meta;
 use Laravel\Ai\Responses\Data\RankedDocument;
+use Laravel\Ai\Responses\Data\RerankingUsage;
 use Laravel\Ai\Responses\RerankingResponse;
 
 test('returns unavailable when ai disabled', function (): void {
@@ -132,7 +133,7 @@ test('reranking reorders and rescores hits when a provider is configured', funct
     Reranking::fake(fn (RerankingPrompt $rerankingPrompt): RerankingResponse => new RerankingResponse([
         new RankedDocument(index: 1, document: $rerankingPrompt->documents[1], score: 0.99),
         new RankedDocument(index: 0, document: $rerankingPrompt->documents[0], score: 0.42),
-    ], new Meta('cohere', 'rerank-english-v3.0')));
+    ], new RerankingUsage, new Meta('cohere', 'rerank-english-v3.0')));
 
     $semanticLibrarySearch = makeSearchWithHits([
         'movies' => [
