@@ -103,6 +103,31 @@ class AiConversationController extends Controller
         ]);
     }
 
+    /**
+     * One stored message as the transcript renders it: 1.0 keeps each model
+     * round trip as a step, with every tool result on the call that made it.
+     *
+     * @return array{role: string, text: string, status: string, error: string|null, steps: list<array{content: string, reasoning: string, tool_calls: list<array<string, mixed>>}>, created_at: string}
+     */
+    private function transcriptMessage(object $message): array
+    {
+        $meta = json_decode((string) $message->meta, true) ?: [];
+        $steps = json_decode((string) $message->steps, true) ?: [];
+
+        return [
+            'role' => (string) $message->role,
+            'text' => (string) $message->content,
+            'status' => (string) $message->status,
+            'error' => is_string($meta['error'] ?? null) ? $meta['error'] : null,
+            'steps' => array_values(array_map(static fn (array $step): array => [
+                'content' => (string) ($step['content'] ?? ''),
+                'reasoning' => (string) ($step['reasoning'] ?? ''),
+                'tool_calls' => array_values($step['tool_calls'] ?? []),
+            ], $steps)),
+            'created_at' => (string) $message->created_at,
+        ];
+    }
+
     public function show(string $conversation): Response
     {
         $row = DB::table('agent_conversations')
@@ -118,14 +143,8 @@ class AiConversationController extends Controller
         $messages = DB::table('agent_conversation_messages')
             ->where('conversation_id', $conversation)
             ->orderBy('id')
-            ->get(['role', 'content', 'tool_calls', 'tool_results', 'created_at'])
-            ->map(fn ($message): array => [
-                'role' => (string) $message->role,
-                'text' => (string) $message->content,
-                'tool_calls' => json_decode((string) $message->tool_calls, true) ?: [],
-                'tool_results' => json_decode((string) $message->tool_results, true) ?: [],
-                'created_at' => $message->created_at,
-            ])
+            ->get(['role', 'content', 'steps', 'status', 'meta', 'created_at'])
+            ->map(fn (object $message): array => $this->transcriptMessage($message))
             ->all();
 
         return Inertia::render('Admin/AiConversations/Show', [

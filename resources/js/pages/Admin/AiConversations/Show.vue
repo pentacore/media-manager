@@ -21,12 +21,41 @@ import {
 } from '@/components/ui/dialog';
 import { dashboard } from '@/routes';
 
+interface TranscriptToolCall {
+    id: string;
+    name: string;
+    arguments: Record<string, unknown>;
+    result?: string;
+    failed?: boolean;
+    denied?: boolean;
+}
+
+interface TranscriptStep {
+    content: string;
+    reasoning: string;
+    tool_calls: TranscriptToolCall[];
+}
+
 interface MessageRow {
     role: string;
     text: string;
-    tool_calls: Array<Record<string, unknown>>;
-    tool_results: Array<Record<string, unknown>>;
+    status: 'completed' | 'paused' | 'failed';
+    error: string | null;
+    steps: TranscriptStep[];
     created_at: string;
+}
+
+function toolCallState(call: TranscriptToolCall): {
+    label: string;
+    variant: 'ok' | 'warn' | 'danger';
+} {
+    if (call.failed || call.denied) {
+        return { label: call.denied ? 'denied' : 'failed', variant: 'danger' };
+    }
+
+    return call.result === undefined
+        ? { label: 'no result', variant: 'warn' }
+        : { label: 'ok', variant: 'ok' };
 }
 
 interface ConversationDetail {
@@ -227,35 +256,70 @@ function formatDate(iso: string | null): string {
                     >
                         {{ message.text }}
                     </div>
-                    <div
-                        v-if="message.tool_calls.length > 0"
-                        class="mt-2 rounded-md border border-border bg-bg-elev p-2 text-[11.5px] text-muted-foreground"
+                    <Pill
+                        v-if="message.status !== 'completed'"
+                        :variant="
+                            message.status === 'failed' ? 'danger' : 'warn'
+                        "
+                        class="mt-1 text-[10px]"
+                        data-transcript-status
                     >
-                        <div
-                            class="mb-1 text-[10px] font-semibold tracking-wide uppercase"
-                        >
-                            Tool calls
-                        </div>
-                        <pre
-                            class="font-mono-tabular text-[11px] whitespace-pre-wrap"
-                            >{{
-                                JSON.stringify(message.tool_calls, null, 2)
-                            }}</pre>
-                    </div>
-                    <div
-                        v-if="message.tool_results.length > 0"
-                        class="mt-2 rounded-md border border-border bg-bg-elev p-2 text-[11.5px] text-muted-foreground"
+                        {{ message.status }}
+                    </Pill>
+                    <p
+                        v-if="message.error"
+                        class="mt-1 text-[12px] text-destructive"
+                        data-transcript-error
                     >
-                        <div
-                            class="mb-1 text-[10px] font-semibold tracking-wide uppercase"
+                        {{ message.error }}
+                    </p>
+                    <div
+                        v-for="(step, s) in message.steps"
+                        :key="s"
+                        class="mt-2 space-y-1.5"
+                        data-transcript-step
+                    >
+                        <details
+                            v-if="step.reasoning"
+                            class="rounded-md border border-border bg-bg-elev p-2 text-[11.5px] text-muted-foreground"
+                            data-transcript-reasoning
                         >
-                            Tool results
+                            <summary
+                                class="cursor-pointer text-[10px] font-semibold tracking-wide uppercase"
+                            >
+                                Reasoning · step {{ s + 1 }}
+                            </summary>
+                            <p class="mt-1 whitespace-pre-wrap">
+                                {{ step.reasoning }}
+                            </p>
+                        </details>
+                        <div
+                            v-for="call in step.tool_calls"
+                            :key="call.id"
+                            class="rounded-md border border-border bg-bg-elev p-2 text-[11.5px] text-muted-foreground"
+                            data-transcript-tool-call
+                        >
+                            <div
+                                class="mb-1 flex items-center gap-2 text-[10px] font-semibold tracking-wide uppercase"
+                            >
+                                {{ call.name }}
+                                <Pill
+                                    :variant="toolCallState(call).variant"
+                                    class="text-[10px]"
+                                >
+                                    {{ toolCallState(call).label }}
+                                </Pill>
+                            </div>
+                            <pre
+                                class="font-mono-tabular text-[11px] whitespace-pre-wrap"
+                                >{{
+                                    JSON.stringify(call.arguments, null, 2)
+                                }}</pre>
+                            <pre
+                                v-if="call.result !== undefined"
+                                class="font-mono-tabular mt-1 text-[11px] whitespace-pre-wrap"
+                                >{{ call.result }}</pre>
                         </div>
-                        <pre
-                            class="font-mono-tabular text-[11px] whitespace-pre-wrap"
-                            >{{
-                                JSON.stringify(message.tool_results, null, 2)
-                            }}</pre>
                     </div>
                 </div>
             </div>
