@@ -171,3 +171,29 @@ test('history links a user turn to its stored attachments', function (): void {
         ->and($messages[0]['attachments'][0]['id'])->toBe($chatAttachment->id)
         ->and($messages[0]['attachments'][0]['url'])->toBe(route('ai.chat.attachments.show', $chatAttachment));
 });
+
+test('history links a user turn to attachments sent through the provider Files API', function (): void {
+    $admin = User::factory()->admin()->create();
+    $conversationId = seedConversationWithMessages($admin, 0);
+    $image = ChatAttachment::factory()->for($admin)->create(['provider_file_ids' => ['openai' => 'file-image-1']]);
+    $document = ChatAttachment::factory()->for($admin)->create([
+        'original_name' => 'notes.pdf',
+        'mime_type' => 'application/pdf',
+        'provider_file_ids' => ['anthropic' => 'file-doc-2'],
+    ]);
+
+    insertConversationRow($conversationId, $admin, [
+        'role' => 'user',
+        'content' => 'see attached',
+        'steps' => '[]',
+        'attachments' => json_encode([
+            ['type' => 'provider-image', 'id' => 'file-image-1', 'name' => null],
+            ['type' => 'provider-document', 'id' => 'file-doc-2', 'name' => null],
+        ]),
+    ]);
+
+    $messages = $this->actingAs($admin)->getJson(route('ai.conversations.show', $conversationId))->json('messages');
+
+    expect(collect($messages[0]['attachments'])->pluck('id')->all())->toEqualCanonicalizing([$image->id, $document->id])
+        ->and(collect($messages[0]['attachments'])->pluck('name')->all())->toContain('notes.pdf');
+});

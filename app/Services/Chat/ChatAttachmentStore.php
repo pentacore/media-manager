@@ -7,6 +7,7 @@ namespace App\Services\Chat;
 use App\Models\ChatAttachment;
 use App\Models\User;
 use App\Settings\AiSettings;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Log;
@@ -92,30 +93,54 @@ final readonly class ChatAttachmentStore
     }
 
     /**
-     * Map a stored user message's `attachments` JSON (StoredImage /
-     * StoredDocument arrays carrying a `path`) back to downloadable rows.
+     * Map a stored user message's `attachments` JSON back to downloadable
+     * rows: StoredImage / StoredDocument entries carry a `path`, while an
+     * attachment sent through a provider Files API is stored as a
+     * ProviderImage / ProviderDocument carrying only the provider file `id`.
      *
      * @param  array<int, array<string, mixed>>  $storedAttachments
      * @return list<array{id: int, name: string, mime: string, url: string}>
      */
     public function forMessage(array $storedAttachments): array
     {
-        $paths = array_values(array_filter(array_map(
-            static fn (array $storedAttachment): ?string => is_string($storedAttachment['path'] ?? null) ? $storedAttachment['path'] : null,
-            $storedAttachments,
-        )));
+        $paths = $this->storedAttachmentValues($storedAttachments, 'path');
+        $providerFileIds = $this->storedAttachmentValues($storedAttachments, 'id');
 
-        if ($paths === []) {
+        if ($paths === [] && $providerFileIds === []) {
             return [];
         }
 
-        return ChatAttachment::query()->whereIn('path', $paths)->get()
+        return ChatAttachment::query()
+            ->where(function (Builder $builder) use ($paths, $providerFileIds): void {
+                $builder->whereIn('path', $paths);
+
+                if ($providerFileIds !== []) {
+                    $builder->orWhereRaw(
+                        sprintf('exists (select 1 from json_each_text(provider_file_ids) where value in (%s))', implode(', ', array_fill(0, count($providerFileIds), '?'))),
+                        $providerFileIds,
+                    );
+                }
+            })
+            ->orderBy('id')
+            ->get()
             ->map(fn (ChatAttachment $chatAttachment): array => [
                 'id' => $chatAttachment->id,
                 'name' => $chatAttachment->original_name,
                 'mime' => $chatAttachment->mime_type,
                 'url' => route('ai.chat.attachments.show', $chatAttachment),
             ])->values()->all();
+    }
+
+    /**
+     * @param  array<int, array<string, mixed>>  $storedAttachments
+     * @return list<string>
+     */
+    private function storedAttachmentValues(array $storedAttachments, string $key): array
+    {
+        return array_values(array_filter(array_map(
+            static fn (array $storedAttachment): ?string => is_string($storedAttachment[$key] ?? null) ? $storedAttachment[$key] : null,
+            $storedAttachments,
+        )));
     }
 
     /**
