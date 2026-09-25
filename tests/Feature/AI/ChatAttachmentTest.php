@@ -53,3 +53,18 @@ test('only the owner can download an attachment', function (): void {
     $this->actingAs($attachment->user)->get(route('ai.chat.attachments.show', $attachment))->assertOk();
     $this->actingAs(User::factory()->admin()->create())->get(route('ai.chat.attachments.show', $attachment))->assertForbidden();
 });
+
+test('raster images are served inline and everything else as a hardened download', function (string $mime, string $name, string $disposition): void {
+    $attachment = ChatAttachment::factory()->create(['mime_type' => $mime, 'original_name' => $name]);
+
+    $response = $this->actingAs($attachment->user)->get(route('ai.chat.attachments.show', $attachment))->assertOk();
+
+    expect($response->headers->get('Content-Disposition'))->toStartWith($disposition)
+        ->and($response->headers->get('X-Content-Type-Options'))->toBe('nosniff')
+        ->and($response->headers->get('Content-Security-Policy'))->toBe("default-src 'none'; sandbox");
+})->with([
+    'png' => ['image/png', 'shot.png', 'inline'],
+    'pdf' => ['application/pdf', 'report.pdf', 'attachment'],
+    'text' => ['text/plain', 'sonarr.log', 'attachment'],
+    'svg is never inline' => ['image/svg+xml', 'x.svg', 'attachment'],
+]);
