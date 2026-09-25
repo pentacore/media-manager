@@ -678,11 +678,12 @@ class AiUsageReporting
      *         output_per_mtok: float,
      *         cache_read_per_mtok: float,
      *         cache_write_per_mtok: float,
-     *         reasoning_per_mtok: float
+     *         reasoning_per_mtok: float,
+     *         search_unit_per_k: float
      *     },
-     *     breakdown: array<int, array{label: string, tokens: int, rate: float, cost: float}>,
+     *     breakdown: array<int, array{label: string, tokens: int|float, rate: float, cost: float}>,
      *     total_cost: float,
-     *     scenario_breakdown: array<int, array{label: string, tokens: int, rate: float, cost: float}>|null,
+     *     scenario_breakdown: array<int, array{label: string, tokens: int|float, rate: float, cost: float}>|null,
      *     scenario_total_cost: float|null
      * }
      */
@@ -701,6 +702,7 @@ class AiUsageReporting
             'cache_read_per_mtok' => $this->resolveRate($aiUsageRecord->cache_read_per_mtok, $catalog?->cache_read_per_mtok),
             'cache_write_per_mtok' => $this->resolveRate($aiUsageRecord->cache_write_per_mtok, $catalog?->cache_write_per_mtok),
             'reasoning_per_mtok' => $this->resolveRate($aiUsageRecord->reasoning_per_mtok, $catalog?->reasoning_per_mtok),
+            'search_unit_per_k' => $this->resolveRate($aiUsageRecord->search_unit_per_k, $catalog?->search_unit_per_k),
         ];
 
         $rateSource = match (true) {
@@ -715,6 +717,7 @@ class AiUsageReporting
             'cache_read' => $aiUsageRecord->cache_read_input_tokens,
             'cache_write' => $aiUsageRecord->cache_write_input_tokens,
             'reasoning' => $aiUsageRecord->reasoning_tokens,
+            'search_units' => (float) $aiUsageRecord->search_units,
         ];
 
         $breakdown = $this->buildBreakdown($tokens, [
@@ -723,6 +726,7 @@ class AiUsageReporting
             'cache_read' => $rates['cache_read_per_mtok'],
             'cache_write' => $rates['cache_write_per_mtok'],
             'reasoning' => $rates['reasoning_per_mtok'],
+            'search_units' => $rates['search_unit_per_k'],
         ]);
 
         $tools = AiToolInvocation::query()
@@ -738,7 +742,7 @@ class AiUsageReporting
             ])
             ->all();
 
-        [$scenarioBreakdown, $scenarioTotal] = $this->scenarioBreakdown($tokens, $scenario);
+        [$scenarioBreakdown, $scenarioTotal] = $this->scenarioBreakdown($tokens, $scenario, (float) ($aiUsageRecord->search_unit_per_k ?? 0));
 
         return [
             'record' => [
@@ -757,6 +761,10 @@ class AiUsageReporting
                 'price_source' => $aiUsageRecord->price_source,
                 'conversation_id' => $aiUsageRecord->conversation_id,
                 'status' => $aiUsageRecord->status,
+                'kind' => $aiUsageRecord->kind->value,
+                'error_message' => $aiUsageRecord->error_message,
+                'parent_invocation_id' => $aiUsageRecord->parent_invocation_id,
+                'search_units' => (float) $aiUsageRecord->search_units,
                 'created_at' => $aiUsageRecord->created_at?->toIso8601String(),
             ],
             'user' => $aiUsageRecord->user instanceof User ? [
@@ -786,9 +794,13 @@ class AiUsageReporting
     }
 
     /**
-     * @param  array<string, int>  $tokens
+     * Token tiers are priced per million; search units per thousand. The
+     * search-units line appears only for rows that billed search units, so
+     * token-only runs keep their five-tier breakdown.
+     *
+     * @param  array<string, int|float>  $tokens
      * @param  array<string, float>  $rates
-     * @return array<int, array{label: string, tokens: int, rate: float, cost: float}>
+     * @return array<int, array{label: string, tokens: int|float, rate: float, cost: float}>
      */
     private function buildBreakdown(array $tokens, array $rates): array
     {
@@ -798,16 +810,21 @@ class AiUsageReporting
             'cache_read' => 'Cache read',
             'cache_write' => 'Cache write',
             'reasoning' => 'Reasoning',
+            'search_units' => 'Search units',
         ];
 
         $rows = [];
 
         foreach ($labels as $key => $label) {
+            if ($key === 'search_units' && (float) ($tokens[$key] ?? 0) <= 0.0) {
+                continue;
+            }
+
             $rows[] = [
                 'label' => $label,
                 'tokens' => $tokens[$key],
                 'rate' => $rates[$key],
-                'cost' => $tokens[$key] * $rates[$key] / 1_000_000,
+                'cost' => $tokens[$key] * $rates[$key] / ($key === 'search_units' ? 1_000 : 1_000_000),
             ];
         }
 
@@ -815,10 +832,13 @@ class AiUsageReporting
     }
 
     /**
-     * @param  array<string, int>  $tokens
-     * @return array{0: array<int, array{label: string, tokens: int, rate: float, cost: float}>|null, 1: float|null}
+     * Scenarios model token rates only; search units keep the row's
+     * snapshotted per-1k rate, mirroring costExpression().
+     *
+     * @param  array<string, int|float>  $tokens
+     * @return array{0: array<int, array{label: string, tokens: int|float, rate: float, cost: float}>|null, 1: float|null}
      */
-    private function scenarioBreakdown(array $tokens, ?Scenario $scenario): array
+    private function scenarioBreakdown(array $tokens, ?Scenario $scenario, float $searchUnitPerK): array
     {
         if (! $scenario instanceof Scenario) {
             return [null, null];
@@ -830,6 +850,7 @@ class AiUsageReporting
             'cache_read' => $scenario->cacheReadPerMtok,
             'cache_write' => $scenario->cacheWritePerMtok,
             'reasoning' => $scenario->reasoningPerMtok,
+            'search_units' => $searchUnitPerK,
         ]);
 
         return [$breakdown, array_sum(array_column($breakdown, 'cost'))];
@@ -842,7 +863,8 @@ class AiUsageReporting
      *   time (or assigned retroactively); falls back to live ai_model_prices
      *   when the snapshot is null. Cost is zero for rows that match neither.
      * - With scenario: uses the scenario's flat rates uniformly across all
-     *   rows, ignoring both snapshot and catalog.
+     *   rows, ignoring both snapshot and catalog. Scenarios model token
+     *   rates only, so reranking search units keep their snapshot rate.
      *
      * @return array{0: string, 1: array<int, float>}
      */
@@ -858,6 +880,7 @@ class AiUsageReporting
                         + ai_usage_records.cache_write_input_tokens * COALESCE(ai_usage_records.cache_write_per_mtok, ai_model_prices.cache_write_per_mtok, 0)
                         + ai_usage_records.reasoning_tokens * COALESCE(ai_usage_records.reasoning_per_mtok, ai_model_prices.reasoning_per_mtok, 0)
                     ) / 1000000.0
+                    + ai_usage_records.search_units * COALESCE(ai_usage_records.search_unit_per_k, ai_model_prices.search_unit_per_k, 0) / 1000.0
                 ',
                 [],
             ];
@@ -878,6 +901,7 @@ class AiUsageReporting
                     + ai_usage_records.cache_write_input_tokens * ?::numeric
                     + ai_usage_records.reasoning_tokens * ?::numeric
                 ) / 1000000.0
+                + ai_usage_records.search_units * COALESCE(ai_usage_records.search_unit_per_k, 0) / 1000.0
             ',
             [
                 $scenario->inputPerMtok,

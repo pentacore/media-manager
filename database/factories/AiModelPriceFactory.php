@@ -31,6 +31,7 @@ class AiModelPriceFactory extends Factory
             'batch_cache_read_per_mtok' => 0,
             'batch_cache_write_per_mtok' => 0,
             'batch_reasoning_per_mtok' => 0,
+            'search_unit_per_k' => 0,
             'pricing_source' => PricingSource::Legacy,
             'is_price_locked' => false,
         ];

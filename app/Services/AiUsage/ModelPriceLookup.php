@@ -16,12 +16,12 @@ final class ModelPriceLookup
 {
     /**
      * Snapshot the catalog rates for a usage row. When the run is
-     * batch-flagged, each token tier prefers its `batch_*_per_mtok` rate,
-     * falling back to the standard rate when the batch column is unset or
-     * zero. Snapshotting the batch rates into the standard snapshot keys
-     * keeps downstream reporting unchanged.
+     * batch-flagged, each token tier and the per-1k search-unit rate prefer
+     * their `batch_*` rate, falling back to the standard rate when the batch
+     * column is unset or zero. Snapshotting the batch rates into the standard
+     * snapshot keys keeps downstream reporting unchanged.
      *
-     * @return array{input_per_mtok: string, output_per_mtok: string, cache_read_per_mtok: string, cache_write_per_mtok: string, reasoning_per_mtok: string}|null
+     * @return array{input_per_mtok: string, output_per_mtok: string, cache_read_per_mtok: string, cache_write_per_mtok: string, reasoning_per_mtok: string, search_unit_per_k: string}|null
      */
     public function snapshotFor(?string $provider, ?string $model, bool $isBatch): ?array
     {
@@ -49,6 +49,7 @@ final class ModelPriceLookup
             'cache_read_per_mtok' => $this->rateFor($price->cache_read_per_mtok, $price->batch_cache_read_per_mtok, $isBatch),
             'cache_write_per_mtok' => $this->rateFor($price->cache_write_per_mtok, $price->batch_cache_write_per_mtok, $isBatch),
             'reasoning_per_mtok' => $this->rateFor($price->reasoning_per_mtok, $price->batch_reasoning_per_mtok, $isBatch),
+            'search_unit_per_k' => $this->rateFor($price->search_unit_per_k, $price->batch_search_unit_per_k, $isBatch),
         ];
     }
 

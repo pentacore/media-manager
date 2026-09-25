@@ -2,6 +2,8 @@
 
 declare(strict_types=1);
 
+use App\Enums\AiUsageKind;
+use App\Models\AiUsageRecord;
 use App\Services\Search\LibraryEmbedder;
 use App\Services\Search\SemanticLibrarySearch;
 use Laravel\Ai\Embeddings;
@@ -148,6 +150,25 @@ test('reranking reorders and rescores hits when a provider is configured', funct
     expect(array_column($result['results'], 'title'))->toBe(['Arrival', 'Blade Runner']);
     expect($result['results'][0]['score'])->toBe(0.99)
         ->and($result['results'][1]['score'])->toBe(0.42);
+});
+
+test('the query embedding and the rerank are billed to the search service', function (): void {
+    config()->set('mediamanager.ai.enabled', true);
+    config()->set('scout.driver', 'typesense');
+    config()->set('ai.default_for_reranking', 'cohere');
+    config()->set('ai.providers.cohere.key', 'test-key');
+    Embeddings::fake();
+    Reranking::fake();
+
+    $semanticLibrarySearch = makeSearchWithHits([
+        'movies' => [hit(['radarr_id' => 11, 'title' => 'Blade Runner', 'year' => 1982, 'overview' => 'a'], 0.05)],
+        'series' => [],
+    ]);
+
+    $semanticLibrarySearch->search('moody sci-fi', 10);
+
+    expect(AiUsageRecord::where('kind', AiUsageKind::Embeddings)->sole()->agent_class)->toBe(SemanticLibrarySearch::class)
+        ->and(AiUsageRecord::where('kind', AiUsageKind::Reranking)->sole()->agent_class)->toBe(SemanticLibrarySearch::class);
 });
 
 test('reranking failure falls back to vector ordering', function (): void {

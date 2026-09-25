@@ -7,6 +7,7 @@ namespace App\Providers;
 use App\Ai\AiRunAttribution;
 use App\Listeners\Ai\EnforceAiRateLimit;
 use App\Listeners\Ai\RecordAgentUsage;
+use App\Services\AiUsage\AiUsageCaller;
 use App\Services\AiUsage\BatchPricingContext;
 use App\Services\AiUsage\RunUsageAccumulator;
 use Illuminate\Contracts\Foundation\Application;
@@ -32,6 +33,10 @@ class AIServiceProvider extends ServiceProvider
         // Per-run step usage keyed by invocation id; scoped so partial runs
         // never bleed into the next Octane request or queued job.
         $this->app->scoped(RunUsageAccumulator::class);
+
+        // Caller label for the in-flight embeddings/reranking call; scoped so
+        // it never mislabels the next Octane request or queued job.
+        $this->app->scoped(AiUsageCaller::class);
     }
 
     // Note: RecordAgentUsage / RecordToolInvocation / RecordAgentFailover are

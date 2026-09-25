@@ -145,6 +145,7 @@ class PriceFetcherAgent implements Agent, HasTools
            - model: exactly the identifier the provider's API expects (e.g. `gpt-5-mini`, `claude-sonnet-4-6`, `gemini-2.5-pro`, `deepseek-chat`, `grok-4`).
            - input_per_mtok / output_per_mtok: USD per 1,000,000 tokens.
            - cache_read_per_mtok / cache_write_per_mtok / reasoning_per_mtok / batch_*_per_mtok: the tier rate if the page lists it; 0 for an explicit zero the page states; null for any tier you cannot read.
+           - search_unit_per_k: For rerank models (Cohere, Jina, OpenRouter), record the price per 1,000 searches in search_unit_per_k and leave token rates at 0 unless the page lists them. null for every other model.
            - source_url: the exact URL of the pricing page you fetched these rates from (the `url` WebFetchTool returned).
            - source_updated_at: the last-updated date the page itself states, formatted YYYY-MM-DD, or null when the page states none.
 

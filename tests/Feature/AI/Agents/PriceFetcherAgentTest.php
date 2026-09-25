@@ -214,7 +214,8 @@ test('verifier instructions state the fetch-before-write contract', function ():
         ->toContain('null')              // pass null for unreadable tiers
         ->toContain('scope')             // out-of-scope writes forbidden
         ->toContain('source_url')        // provenance URL required per write
-        ->toContain('source_updated_at'); // page-stated date or null
+        ->toContain('source_updated_at') // page-stated date or null
+        ->toContain('search_unit_per_k'); // rerank models bill per 1k searches
     expect($instructions)->toContain('gemini'); // canonical Google identity
 });
 

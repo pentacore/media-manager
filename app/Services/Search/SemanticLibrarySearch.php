@@ -6,9 +6,11 @@ namespace App\Services\Search;
 
 use App\Models\IndexedMovie;
 use App\Models\IndexedSeries;
+use App\Services\AiUsage\AiUsageCaller;
 use Illuminate\Support\Facades\Log;
 use Laravel\Ai\Embeddings;
 use Laravel\Ai\Reranking;
+use Laravel\Ai\Responses\RerankingResponse;
 use Laravel\Scout\EngineManager;
 use Throwable;
 
@@ -31,11 +33,11 @@ class SemanticLibrarySearch
         }
 
         try {
-            $vector = Embeddings::for([$query])
+            $vector = resolve(AiUsageCaller::class)->during(self::class, fn (): array => Embeddings::for([$query])
                 ->dimensions(LibraryEmbedder::DIMENSIONS)
                 ->cache()
                 ->generate()
-                ->first();
+                ->first());
         } catch (Throwable $throwable) {
             Log::warning('SemanticLibrarySearch: query embedding failed', [
                 'exception' => $throwable::class,
@@ -131,7 +133,7 @@ class SemanticLibrarySearch
                 $hits,
             );
 
-            $response = Reranking::of($documents)->limit($limit)->rerank($query);
+            $response = resolve(AiUsageCaller::class)->during(self::class, fn (): RerankingResponse => Reranking::of($documents)->limit($limit)->rerank($query));
 
             $reranked = [];
 
