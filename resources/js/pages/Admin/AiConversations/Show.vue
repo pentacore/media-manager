@@ -70,6 +70,7 @@ interface ConversationDetail {
 const props = defineProps<{
     conversation: ConversationDetail;
     messages: MessageRow[];
+    next_cursor: string | null;
 }>();
 
 defineOptions({
@@ -87,7 +88,24 @@ defineOptions({
 const confirming = ref(false);
 const deleting = ref(false);
 
-const messageCount = computed(() => props.messages.length);
+/** Only one page of the transcript is loaded, so a further page shows as "+". */
+const messageCount = computed(
+    () => `${props.messages.length}${props.next_cursor ? '+' : ''}`,
+);
+
+function loadOlder(): void {
+    if (!props.next_cursor) {
+        return;
+    }
+
+    router.get(
+        AiConversationController.show.url(props.conversation.id, {
+            query: { cursor: props.next_cursor },
+        }),
+        {},
+        { preserveScroll: true, only: ['messages', 'next_cursor'] },
+    );
+}
 
 function archive(): void {
     router.post(
@@ -220,6 +238,19 @@ function formatDate(iso: string | null): string {
         <div
             class="flex flex-col gap-4 rounded-xl border border-border bg-card p-5"
         >
+            <div
+                v-if="next_cursor"
+                class="flex justify-center"
+                data-transcript-older
+            >
+                <button
+                    type="button"
+                    class="text-[12px] text-muted-foreground hover:text-foreground hover:underline"
+                    @click="loadOlder"
+                >
+                    Older messages
+                </button>
+            </div>
             <div
                 v-if="messages.length === 0"
                 class="text-center text-sm text-muted-foreground"

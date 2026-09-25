@@ -12,10 +12,15 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Inertia\Inertia;
 use Inertia\Response;
+use Laravel\Ai\Contracts\ConversationStore;
+use Laravel\Ai\Contracts\PaginatesConversations;
+use Laravel\Ai\Storage\StoredMessage;
 
 class AiConversationController extends Controller
 {
     private const int PER_PAGE = 25;
+
+    private const int TRANSCRIPT_PAGE_SIZE = 50;
 
     private const array STATES = ['active', 'archived', 'all'];
 
@@ -109,26 +114,25 @@ class AiConversationController extends Controller
      *
      * @return array{role: string, text: string, status: string, error: string|null, steps: list<array{content: string, reasoning: string, tool_calls: list<array<string, mixed>>}>, created_at: string}
      */
-    private function transcriptMessage(object $message): array
+    private function transcriptMessage(StoredMessage $storedMessage): array
     {
-        $meta = json_decode((string) $message->meta, true) ?: [];
-        $steps = json_decode((string) $message->steps, true) ?: [];
+        $error = $storedMessage->meta['error'] ?? null;
 
         return [
-            'role' => (string) $message->role,
-            'text' => (string) $message->content,
-            'status' => (string) $message->status,
-            'error' => is_string($meta['error'] ?? null) ? $meta['error'] : null,
+            'role' => $storedMessage->role,
+            'text' => $storedMessage->content,
+            'status' => $storedMessage->status->value,
+            'error' => is_string($error) ? $error : null,
             'steps' => array_values(array_map(static fn (array $step): array => [
                 'content' => (string) ($step['content'] ?? ''),
                 'reasoning' => (string) ($step['reasoning'] ?? ''),
                 'tool_calls' => array_values($step['tool_calls'] ?? []),
-            ], $steps)),
-            'created_at' => (string) $message->created_at,
+            ], $storedMessage->steps)),
+            'created_at' => (string) $storedMessage->createdAt?->toJSON(),
         ];
     }
 
-    public function show(string $conversation): Response
+    public function show(Request $request, string $conversation): Response
     {
         $row = DB::table('agent_conversations')
             ->where('id', $conversation)
@@ -140,11 +144,19 @@ class AiConversationController extends Controller
             ? User::query()->find($row->participant_id, ['id', 'name', 'email'])
             : null;
 
-        $messages = DB::table('agent_conversation_messages')
-            ->where('conversation_id', $conversation)
-            ->orderBy('id')
-            ->get(['role', 'content', 'steps', 'status', 'meta', 'created_at'])
-            ->map(fn (object $message): array => $this->transcriptMessage($message))
+        $conversationStore = resolve(ConversationStore::class);
+        abort_unless($conversationStore instanceof PaginatesConversations, 500);
+
+        $cursorPaginator = $conversationStore->paginateConversationMessages(
+            $conversation,
+            self::TRANSCRIPT_PAGE_SIZE,
+            cursor: $request->string('cursor')->value() ?: null,
+        );
+
+        $messages = collect($cursorPaginator->items())
+            ->reverse()
+            ->map(fn (StoredMessage $storedMessage): array => $this->transcriptMessage($storedMessage))
+            ->values()
             ->all();
 
         return Inertia::render('Admin/AiConversations/Show', [
@@ -161,6 +173,7 @@ class AiConversationController extends Controller
                 ] : null,
             ],
             'messages' => $messages,
+            'next_cursor' => $cursorPaginator->nextCursor()?->encode(),
         ]);
     }
 
