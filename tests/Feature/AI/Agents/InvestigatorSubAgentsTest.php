@@ -11,6 +11,7 @@ use App\Ai\Tools\Arr\ReplaceMediaFileTool;
 use App\Models\AiUsageRecord;
 use App\Settings\AiSettings;
 use Laravel\Ai\Responses\Data\ToolCall;
+use Laravel\Ai\Streaming\Events\ToolResult as StreamedToolResult;
 
 test('MediaAgent delegates investigations and keeps the destructive tools', function (): void {
     $classes = collect((new MediaAgent)->tools())->map(fn (object $tool): string => $tool::class);
@@ -49,4 +50,48 @@ test('sub-agents use the sub-agent model setting', function (): void {
 test('a sub-agent called in the previous turn keeps its tool group loaded', function (): void {
     expect(ToolGroup::forToolName('InvestigateStuckDownload'))->toBe([ToolGroup::Downloads])
         ->and(ToolGroup::forToolName('InspectMediaFile'))->toBe([ToolGroup::SubtitlesReplacement]);
+});
+
+test('a streamed turn hands the investigator structured findings to the parent', function (): void {
+    StuckDownloadInvestigatorAgent::fake([[
+        'service' => 'sonarr', 'download_id' => 'abc', 'title' => 'Show S01E01',
+        'files' => ['/dl/show.mkv | mapped | not an upgrade'], 'recommendation' => 'remove',
+        'blocklist' => false, 'search_replacement' => false, 'reason' => 'Existing file is better.',
+    ]]);
+    MediaAgent::fake([
+        new ToolCall(id: 'c1', name: 'InvestigateStuckDownload', arguments: ['task' => 'Why is download abc stuck?']),
+        'It is not an upgrade; I can remove it.',
+    ]);
+
+    $stream = (new MediaAgent)->stream('why is my download stuck?');
+    $events = iterator_to_array($stream, false);
+
+    $toolResult = collect($events)->first(fn (object $event): bool => $event instanceof StreamedToolResult && ! $event->preliminary);
+
+    expect($stream->text)->toBe('It is not an upgrade; I can remove it.')
+        ->and($toolResult)->toBeInstanceOf(StreamedToolResult::class)
+        ->and((string) $toolResult->toolResult->result)->toContain('"recommendation":"remove"')
+        ->not->toContain('Agent failed');
+
+    StuckDownloadInvestigatorAgent::assertPromptedTimes(1);
+    expect(AiUsageRecord::where('parent_invocation_id', $stream->invocationId)->sole()->agent_class)->toBe(StuckDownloadInvestigatorAgent::class);
+});
+
+test('a streamed turn hands the media file inspector structured findings to the parent', function (): void {
+    MediaFileInspectorAgent::fake([[
+        'service' => 'sonarr', 'target' => 'series 42 S01E01', 'ambiguous' => false, 'choices' => [],
+        'affected_files' => ['/tv/show.mkv'], 'subtitle_tracks' => ['eng'], 'candidate_fingerprints' => ['fp1'],
+        'candidates' => ['1080p WEB'], 'automatic_candidate' => 'fp1',
+    ]]);
+    MediaAgent::fake([
+        new ToolCall(id: 'c1', name: 'InspectMediaFile', arguments: ['task' => 'Inspect Show S01E01 on sonarr']),
+        'I found one replacement.',
+    ]);
+
+    $stream = (new MediaAgent)->stream('replace show s01e01');
+    $events = iterator_to_array($stream, false);
+
+    $toolResult = collect($events)->first(fn (object $event): bool => $event instanceof StreamedToolResult && ! $event->preliminary);
+
+    expect((string) $toolResult->toolResult->result)->toContain('"automatic_candidate":"fp1"');
 });
