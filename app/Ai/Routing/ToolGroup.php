@@ -4,14 +4,11 @@ declare(strict_types=1);
 
 namespace App\Ai\Routing;
 
-use App\Ai\Decision\InspectStuckImportTool;
+use App\Ai\Agents\MediaFileInspectorAgent;
+use App\Ai\Agents\StuckDownloadInvestigatorAgent;
 use App\Ai\Tools\Arr\AddMediaTool;
 use App\Ai\Tools\Arr\DeleteMediaTool;
-use App\Ai\Tools\Arr\FindReplacementCandidatesTool;
-use App\Ai\Tools\Arr\GetDownloadHistoryTool;
-use App\Ai\Tools\Arr\GetDownloadQueueTool;
 use App\Ai\Tools\Arr\GetMediaTool;
-use App\Ai\Tools\Arr\InspectMediaFileTool;
 use App\Ai\Tools\Arr\MonitorMediaTool;
 use App\Ai\Tools\Arr\RemoveStuckDownloadChatTool;
 use App\Ai\Tools\Arr\ReplaceMediaFileTool;
@@ -47,6 +44,7 @@ use App\Ai\Tools\Trakt\TraktGetPopularTool;
 use App\Ai\Tools\Trakt\TraktGetTrendingTool;
 use App\Ai\Tools\Workflow\ProposeWorkflowTool;
 use App\Concerns\EnumUtils;
+use Laravel\Ai\Contracts\CanActAsTool;
 
 /**
  * A routable slice of MediaAgent's toolset. ChatToolRouter asks one yes/no
@@ -101,9 +99,7 @@ enum ToolGroup: string
     {
         return match ($this) {
             self::Downloads => [
-                GetDownloadQueueTool::class,
-                GetDownloadHistoryTool::class,
-                InspectStuckImportTool::class,
+                StuckDownloadInvestigatorAgent::class,
                 ResolveManualImportChatTool::class,
                 RemoveStuckDownloadChatTool::class,
             ],
@@ -141,8 +137,7 @@ enum ToolGroup: string
                 MarkAsUnwatchedTool::class,
             ],
             self::SubtitlesReplacement => [
-                InspectMediaFileTool::class,
-                FindReplacementCandidatesTool::class,
+                MediaFileInspectorAgent::class,
                 ReplaceMediaFileTool::class,
                 InspectSubtitleTool::class,
                 SearchSubtitlesTool::class,
@@ -173,7 +168,8 @@ enum ToolGroup: string
     }
 
     /**
-     * The groups containing the tool the model called by this name.
+     * The groups containing the tool the model called by this name. Plain
+     * tools are called by class basename; sub-agents by their name().
      *
      * @return list<self>
      */
@@ -181,7 +177,15 @@ enum ToolGroup: string
     {
         return array_values(array_filter(
             self::cases(),
-            static fn (self $toolGroup): bool => in_array($name, array_map(class_basename(...), $toolGroup->toolClasses()), true),
+            static fn (self $toolGroup): bool => in_array($name, array_map(self::toolName(...), $toolGroup->toolClasses()), true),
         ));
+    }
+
+    /**
+     * @param  class-string  $class
+     */
+    private static function toolName(string $class): string
+    {
+        return is_subclass_of($class, CanActAsTool::class) ? resolve($class)->name() : class_basename($class);
     }
 }

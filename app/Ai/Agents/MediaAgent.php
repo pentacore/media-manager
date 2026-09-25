@@ -4,16 +4,11 @@ declare(strict_types=1);
 
 namespace App\Ai\Agents;
 
-use App\Ai\Decision\InspectStuckImportTool;
 use App\Ai\Middleware\AnswerOnFinalStep;
 use App\Ai\Middleware\EnforceBudgetEachStep;
 use App\Ai\Tools\Arr\AddMediaTool;
 use App\Ai\Tools\Arr\DeleteMediaTool;
-use App\Ai\Tools\Arr\FindReplacementCandidatesTool;
-use App\Ai\Tools\Arr\GetDownloadHistoryTool;
-use App\Ai\Tools\Arr\GetDownloadQueueTool;
 use App\Ai\Tools\Arr\GetMediaTool;
-use App\Ai\Tools\Arr\InspectMediaFileTool;
 use App\Ai\Tools\Arr\MonitorMediaTool;
 use App\Ai\Tools\Arr\RemoveStuckDownloadChatTool;
 use App\Ai\Tools\Arr\ReplaceMediaFileTool;
@@ -122,18 +117,17 @@ The media library tools (SearchMediaTool, GetMediaTool, AddMediaTool, DeleteMedi
 - Destructive (always queues an ActionRequest — auto-executes or pending approval per admin rules): the add/delete/monitor/quality-profile media tools, Seerr ApproveRequestTool / DeclineRequestTool / CleanupRequestTool, and LibraryScanTool. After calling one you get back `{queued: true, status: 'pending'|'approved', requires_approval: bool}`. Tell the user the outcome plainly: "I've queued a deletion of X — it's pending approval" or "…and it'll auto-execute."
 
 **Stuck downloads (manual intervention required):**
-- Find them via GetDownloadQueueTool with stuck_only=true; see what happened to a specific download via GetDownloadHistoryTool with its download_id.
-- Before importing or removing a stuck download, ALWAYS call InspectStuckImportTool and summarize the rejection reasons for the user in plain language.
-- Import via ResolveManualImportChatTool (partially-mapped file sets always need human approval). Discard via RemoveStuckDownloadChatTool: pass blocklist=true when the release itself is bad (corrupt/fake/wrong content) so it is never grabbed again; pass search_replacement=true when a replacement should be grabbed.
-- Decision guide: import when files map cleanly and the rejection is benign (e.g. "matched by series id"); remove when the rejection says it is not an upgrade; when unsure, inspect, explain, and let the user decide.
+- Call InvestigateStuckDownload with the service and download (download_id if known, otherwise the title). It is read-only and runs the queue, history and stuck-import inspection for you. Summarise its rejection reasons and recommendation for the user in plain language.
+- To act, use ResolveManualImportChatTool or RemoveStuckDownloadChatTool with the download_id it returned (and its blocklist/search_replacement flags when removing). Partially-mapped file sets always need human approval.
+- When the recommendation is manual or you are unsure, explain the findings and let the user decide.
 
 **Replacing imported media with missing/incorrect subtitles:**
-- Bazarr plays NO part in this flow. A replacement is on the table precisely because Bazarr could not supply the subtitle, so never call InspectSubtitleTool, SearchSubtitlesTool or RequestSubtitleOperationTool as a step towards a replacement, and never make a replacement wait on a Bazarr result. Read the installed file's subtitle tracks from InspectMediaFileTool alone.
+- Bazarr plays NO part in this flow. A replacement is on the table precisely because Bazarr could not supply the subtitle, so never call InspectSubtitleTool, SearchSubtitlesTool or RequestSubtitleOperationTool as a step towards a replacement, and never make a replacement wait on a Bazarr result. Read the installed file's subtitle tracks from InspectMediaFile alone.
 - When the user asks for a replacement, go straight to the steps below. Do not re-check Bazarr first, even if you searched it earlier in the conversation and found nothing.
-- Resolve IDs, then call InspectMediaFileTool. Never guess a series, episode, movie, or file id. If it returns ambiguous=true, present the choices/affected episodes and ask the user which target they mean.
-- Call FindReplacementCandidatesTool with the user's language override, or null to use configured defaults.
-- If automatic_candidate is present, you may select exactly that fingerprint. Otherwise present the ranked candidates and wait for the user to choose.
-- Before ReplaceMediaFileTool, state every affected episode/file. Season packs may replace multiple files.
+- Call InspectMediaFile with the title (and season/episode), the service and any subtitle-language override. It is read-only; it resolves the ids, reads the installed file's tracks and ranks replacement candidates. Never guess a series, episode, movie, or file id — take them from its target.
+- If it returns ambiguous=true, show the choices and ask the user which target they mean.
+- If automatic_candidate is set, you may select exactly that fingerprint. Otherwise present the ranked candidates and wait for the user to choose.
+- Before ReplaceMediaFileTool, state every affected file. Season packs may replace multiple files. Pass the fingerprint exactly as returned, with the same language override.
 - A queued/completed ActionRequest means replacement was requested/initiated, not fixed. Say subtitles are fixed only when verification reports verified.
 - Do not retry a failed replacement autonomously.
 
@@ -165,7 +159,7 @@ PROMPT;
      * Optional integrations only contribute their tools when configured —
      * every schema the model never sees is base-prompt tokens saved.
      *
-     * @return iterable<int, Tool>
+     * @return iterable<int, Agent|Tool>
      */
     public function tools(): iterable
     {
@@ -174,10 +168,8 @@ PROMPT;
             resolve(GetServiceStatusTool::class),
             resolve(QueryActivityTool::class),
             resolve(SemanticLibrarySearchTool::class),
-            // Downloads (Sonarr/Radarr queue + history + stuck imports)
-            resolve(GetDownloadQueueTool::class),
-            resolve(GetDownloadHistoryTool::class),
-            resolve(InspectStuckImportTool::class),
+            // Downloads — read-only investigation runs in a sub-agent
+            resolve(StuckDownloadInvestigatorAgent::class),
             resolve(ResolveManualImportChatTool::class),
             resolve(RemoveStuckDownloadChatTool::class),
             // Media library (Sonarr/Radarr/Whisparr via `service` param)
@@ -187,9 +179,8 @@ PROMPT;
             resolve(MonitorMediaTool::class),
             resolve(SetMediaQualityProfileTool::class),
             resolve(DeleteMediaTool::class),
-
-            resolve(InspectMediaFileTool::class),
-            resolve(FindReplacementCandidatesTool::class),
+            // Replacement — read-only inspection runs in a sub-agent
+            resolve(MediaFileInspectorAgent::class),
             resolve(ReplaceMediaFileTool::class),
             // Emby
             resolve(NowPlayingTool::class),

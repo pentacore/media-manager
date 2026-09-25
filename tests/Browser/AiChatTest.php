@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use App\Ai\Agents\MediaAgent;
+use App\Ai\Agents\StuckDownloadInvestigatorAgent;
 use App\Enums\AiProposedWorkflowStatus;
 use App\Models\AiProposedWorkflow;
 use App\Models\ChatAttachment;
@@ -177,6 +178,31 @@ test('streamed tool calls render as status chips and reasoning collapses', funct
         ->assertSee('All services are healthy.')
         ->assertVisible('[data-tool-chip="done"]')
         ->assertSeeIn('[data-reasoning-block]', 'Thought process');
+});
+
+test('a delegated stuck-download investigation renders as a tool chip', function (): void {
+    StuckDownloadInvestigatorAgent::fake([[
+        'service' => 'sonarr', 'download_id' => 'abc', 'title' => 'Show S01E01',
+        'files' => ['/dl/show.mkv | mapped | not an upgrade'], 'recommendation' => 'remove',
+        'blocklist' => false, 'search_replacement' => false, 'reason' => 'Existing file is better.',
+    ]]);
+    MediaAgent::fake([
+        new ToolCall(id: 'c1', name: 'InvestigateStuckDownload', arguments: ['task' => 'Why is download abc stuck?']),
+        'It is not an upgrade; I can remove it.',
+    ]);
+    Http::preventStrayRequests();
+    Http::allowStrayRequests([config('inertia.ssr.url').'/*']);
+
+    $this->actingAs(User::factory()->admin()->create());
+
+    visit('/ai/chat')
+        ->assertNoSmoke()
+        ->type('textarea[placeholder^="Ask"]', 'why is it stuck?')
+        ->click('Send')
+        ->assertSee('It is not an upgrade; I can remove it.')
+        ->assertVisible('[data-tool-chip="done"]');
+
+    StuckDownloadInvestigatorAgent::assertPromptedTimes(1);
 });
 
 test('a failed turn shows a friendly error', function (): void {
