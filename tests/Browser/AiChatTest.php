@@ -5,9 +5,11 @@ declare(strict_types=1);
 use App\Ai\Agents\MediaAgent;
 use App\Ai\Agents\StuckDownloadInvestigatorAgent;
 use App\Enums\AiProposedWorkflowStatus;
+use App\Jobs\Ai\GenerateConversationTitle;
 use App\Models\AiProposedWorkflow;
 use App\Models\ChatAttachment;
 use App\Models\User;
+use Illuminate\Support\Facades\Bus;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Storage;
@@ -217,6 +219,37 @@ test('a failed turn shows a friendly error', function (): void {
         ->type('textarea[placeholder^="Ask"]', 'Hello?')
         ->click('Send')
         ->assertSee("Couldn't reach the AI provider");
+});
+
+test('a failed first turn joins its stored conversation so a retry continues it', function (): void {
+    Bus::fake([GenerateConversationTitle::class]);
+    $calls = 0;
+    MediaAgent::fake(function () use (&$calls): ToolCall|string {
+        $calls++;
+
+        return match ($calls) {
+            1 => new ToolCall(id: 'c1', name: 'GetServiceStatusTool', arguments: []),
+            2 => throw new ProviderConnectionException('down'),
+            default => 'Recovered on the retry.',
+        };
+    });
+    Http::preventStrayRequests();
+    Http::allowStrayRequests([config('inertia.ssr.url').'/*']);
+
+    $admin = User::factory()->admin()->create();
+    $this->actingAs($admin);
+
+    visit('/ai/chat')
+        ->assertNoSmoke()
+        ->type('textarea[placeholder^="Ask"]', 'Are my services up?')
+        ->click('Send')
+        ->assertSee("Couldn't reach the AI provider")
+        ->assertVisible('[data-failed-turn]')
+        ->type('textarea[placeholder^="Ask"]', 'Try again please')
+        ->click('Send')
+        ->assertSee('Recovered on the retry.');
+
+    expect(DB::table('agent_conversations')->where('participant_id', $admin->id)->count())->toBe(1);
 });
 
 test('a picked attachment shows as a removable chip in the composer', function (): void {

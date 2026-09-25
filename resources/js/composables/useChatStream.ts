@@ -28,6 +28,21 @@ export interface UseChatStreamReturn {
 
 type AgUiEvent = Record<string, unknown> & { type?: string };
 
+/**
+ * A RUN_ERROR that ended the stream. `conversationId` is set when the server
+ * stored the failed turn, so the caller can adopt that conversation instead
+ * of starting a new one on retry.
+ */
+export class ChatStreamError extends Error {
+    readonly conversationId: string | null;
+
+    constructor(message: string, conversationId: string | null) {
+        super(message);
+        this.name = 'ChatStreamError';
+        this.conversationId = conversationId;
+    }
+}
+
 function csrfToken(): string {
     return (
         document.querySelector<HTMLMetaElement>('meta[name="csrf-token"]')
@@ -93,7 +108,8 @@ function toolResultFailed(event: AgUiEvent): boolean {
 /**
  * Consume `POST /ai/chat/stream` — the Laravel AI SDK's AG-UI protocol
  * (ChatStreamProtocol): RUN_STARTED/FINISHED carry the conversation id as
- * `threadId`; RUN_ERROR ends the run with a user-facing message.
+ * `threadId`; RUN_ERROR ends the run with a user-facing message (and the
+ * stored conversation's `threadId` when the failed turn was kept).
  */
 export function useChatStream(): UseChatStreamReturn {
     async function streamChat(
@@ -200,10 +216,13 @@ export function useChatStream(): UseChatStreamReturn {
                     break;
                 }
                 case 'RUN_ERROR':
-                    throw new Error(
+                    throw new ChatStreamError(
                         typeof event.message === 'string'
                             ? event.message
                             : 'The AI stream reported an error.',
+                        typeof event.threadId === 'string'
+                            ? event.threadId
+                            : null,
                     );
                 default:
                     break;

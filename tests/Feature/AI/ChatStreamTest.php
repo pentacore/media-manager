@@ -352,6 +352,36 @@ test('a first turn that fails before any step completes dispatches no title job'
     Bus::assertNotDispatched(GenerateConversationTitle::class);
 });
 
+test('a failed first turn names its stored conversation on the RUN_ERROR frame', function (): void {
+    Bus::fake([GenerateConversationTitle::class]);
+    MediaAgent::fake([
+        new ToolCall(id: 'call-1', name: 'GetServiceStatusTool', arguments: []),
+        fn (): never => throw new RuntimeException('boom'),
+    ]);
+    $admin = User::factory()->admin()->create();
+
+    $body = $this->actingAs($admin)
+        ->post(route('ai.chat.stream'), ['message' => 'Find me something to watch tonight'], ['Accept' => 'text/event-stream'])
+        ->streamedContent();
+
+    $conversationId = DB::table('agent_conversations')->where('participant_id', $admin->id)->sole()->id;
+
+    expect(chatStreamFrame($body, 'RUN_ERROR'))->toContain(sprintf('"threadId":"%s"', $conversationId));
+});
+
+test('a RUN_ERROR frame names no conversation when none was stored', function (): void {
+    MediaAgent::fake(function (): never {
+        throw new RuntimeException('boom');
+    });
+
+    $body = $this->actingAs(User::factory()->admin()->create())
+        ->post(route('ai.chat.stream'), ['message' => 'Hi'], ['Accept' => 'text/event-stream'])
+        ->streamedContent();
+
+    expect(chatStreamFrame($body, 'RUN_ERROR'))->not->toBe('')
+        ->not->toContain('threadId');
+});
+
 /**
  * The first SSE frame of the given AG-UI event type.
  */

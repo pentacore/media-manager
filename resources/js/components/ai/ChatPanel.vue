@@ -24,7 +24,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { jsonRequest, useAiChat } from '@/composables/useAiChat';
 import type { AgentStep, ConversationMessage } from '@/composables/useAiChat';
-import { useChatStream } from '@/composables/useChatStream';
+import { ChatStreamError, useChatStream } from '@/composables/useChatStream';
 import { useMarkdown } from '@/composables/useMarkdown';
 import { useWebSocket } from '@/composables/useWebSocket';
 import type { ChannelLease } from '@/composables/useWebSocket';
@@ -437,6 +437,14 @@ async function sendStreamingTurn(
                 occurredAt: new Date().toISOString(),
             });
         },
+    }).catch((e: unknown) => {
+        // A failed turn the server stored still belongs to a conversation
+        // the user can continue — adopt it so a retry doesn't start over.
+        if (e instanceof ChatStreamError && e.conversationId) {
+            adoptConversation(e.conversationId, knownConversationId);
+        }
+
+        throw e;
     });
 
     // RUN_STARTED/RUN_FINISHED carry the conversation id as `threadId`: for an
@@ -445,11 +453,7 @@ async function sendStreamingTurn(
     const conversationId = result.conversationId;
 
     if (conversationId) {
-        if (conversationId !== knownConversationId) {
-            setActiveConversation(conversationId);
-        }
-
-        rememberConversation(conversationId);
+        adoptConversation(conversationId, knownConversationId);
     }
 
     if (conversationId) {
@@ -463,6 +467,17 @@ async function sendStreamingTurn(
         );
         assistantMessage.workflow = pending.workflow;
     }
+}
+
+function adoptConversation(
+    conversationId: string,
+    knownConversationId: string | null,
+): void {
+    if (conversationId !== knownConversationId) {
+        setActiveConversation(conversationId);
+    }
+
+    rememberConversation(conversationId);
 }
 
 /**
