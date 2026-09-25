@@ -17,7 +17,11 @@ use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Sleep;
 use Illuminate\Support\Str;
 use Laravel\Ai\Prompts\AgentPrompt;
+use Laravel\Ai\Responses\Data\Meta;
+use Laravel\Ai\Responses\Data\TextUsage;
 use Laravel\Ai\Responses\Data\ToolCall;
+use Laravel\Ai\Responses\Data\UrlCitation;
+use Laravel\Ai\Responses\TextResponse;
 
 beforeEach(function (): void {
     config()->set('mediamanager.ai.pricing.models_dev.enabled', true);
@@ -1423,4 +1427,48 @@ test('the verifier is told an update-only provider may only refresh its stored m
         ->and($refreshReport->modelsCreateDisabled)->toBe(1)
         ->and($providerResults['openai'])->toMatchArray(['status' => 'fallback', 'create_disabled' => 1])
         ->and(AiModelPrice::query()->where('model', 'gpt-brand-new')->exists())->toBeFalse();
+});
+
+test('the verifier run bills its usage to the triggering user without an authenticated request', function (): void {
+    PriceFetcherAgent::fake(['I could not read the anthropic pricing page, skipping.']);
+
+    fakeFeed(['openai' => ['models' => ['gpt-feed' => feedModel()]]]);
+
+    $user = User::factory()->admin()->create();
+
+    expect(auth()->check())->toBeFalse();
+
+    runCoordinator(scope: RefreshScope::forProviders(['openai', 'anthropic']), triggeredBy: $user);
+
+    expect(AiUsageRecord::query()->where('agent_class', PriceFetcherAgent::class)->latest('id')->value('user_id'))->toBe($user->id);
+});
+
+test('the verifier response citations are stored on the run as an audit trail', function (): void {
+    PriceFetcherAgent::fake([
+        new TextResponse('done', new TextUsage, new Meta('anthropic', 'claude-x', citations: collect([
+            new UrlCitation('https://claude.com/pricing', 'Pricing'),
+            new UrlCitation('https://claude.com/pricing', 'Pricing again'),
+        ]))),
+    ]);
+    Http::fake();
+
+    $refreshReport = runCoordinator(
+        source: AiPriceRefreshCoordinator::SOURCE_AGENT,
+        scope: RefreshScope::forProviders(['anthropic']),
+    );
+
+    expect(AiPriceRefreshRun::query()->findOrFail($refreshReport->runId)->source_citations)
+        ->toBe([['url' => 'https://claude.com/pricing', 'title' => 'Pricing']]);
+});
+
+test('a verifier run without citations leaves the citation audit empty', function (): void {
+    PriceFetcherAgent::fake(['done']);
+    Http::fake();
+
+    $refreshReport = runCoordinator(
+        source: AiPriceRefreshCoordinator::SOURCE_AGENT,
+        scope: RefreshScope::forProviders(['anthropic']),
+    );
+
+    expect(AiPriceRefreshRun::query()->findOrFail($refreshReport->runId)->source_citations)->toBeNull();
 });

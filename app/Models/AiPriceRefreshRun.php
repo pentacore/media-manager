@@ -32,6 +32,7 @@ use Override;
  * @property array<int, string>|null $fallback_targets
  * @property array<int, string>|null $unverified_targets
  * @property array<string, mixed>|null $provider_results
+ * @property list<array{url: string, title: string|null}>|null $source_citations
  * @property string|null $error_message
  * @property CarbonImmutable $started_at
  * @property CarbonImmutable|null $completed_at
@@ -64,6 +65,7 @@ use Override;
     'fallback_targets',
     'unverified_targets',
     'provider_results',
+    'source_citations',
     'error_message',
     'started_at',
     'completed_at',
@@ -93,6 +95,7 @@ class AiPriceRefreshRun extends Model
             'fallback_targets' => 'array',
             'unverified_targets' => 'array',
             'provider_results' => 'array',
+            'source_citations' => 'array',
             'started_at' => 'immutable_datetime',
             'completed_at' => 'immutable_datetime',
         ];

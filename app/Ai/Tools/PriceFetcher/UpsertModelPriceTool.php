@@ -61,6 +61,7 @@ class UpsertModelPriceTool extends BaseTool
         'batch_cache_read_per_mtok',
         'batch_cache_write_per_mtok',
         'batch_reasoning_per_mtok',
+        'search_unit_per_k',
     ];
 
     /**
@@ -128,7 +129,7 @@ class UpsertModelPriceTool extends BaseTool
 
     public function description(): Stringable|string
     {
-        return 'Upsert one AI model pricing row by provider + model. All rates are dollars per million tokens (per_mtok). Pass null for a tier you cannot read from the page (it leaves any existing value untouched); pass 0 only to record an explicit zero (e.g. cache_write_per_mtok for OpenAI). Returns the resulting row.';
+        return 'Upsert one AI model pricing row by provider + model. Token rates are dollars per million tokens (per_mtok); search_unit_per_k is dollars per 1,000 rerank searches. Pass null for a tier you cannot read from the page (it leaves any existing value untouched); pass 0 only to record an explicit zero (e.g. cache_write_per_mtok for OpenAI). Returns the resulting row.';
     }
 
     public function risk(): Risk
@@ -430,6 +431,10 @@ class UpsertModelPriceTool extends BaseTool
                 ->nullable(),
             'batch_reasoning_per_mtok' => $schema->number()
                 ->description('USD per 1,000,000 batch reasoning tokens. 0 for an explicit zero; null if N/A.')
+                ->required()
+                ->nullable(),
+            'search_unit_per_k' => $schema->number()
+                ->description('USD per 1,000 rerank searches; only for rerank models. null for every other model.')
                 ->required()
                 ->nullable(),
             'source_url' => $schema->string()

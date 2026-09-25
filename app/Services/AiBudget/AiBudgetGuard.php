@@ -57,6 +57,23 @@ class AiBudgetGuard
     }
 
     /**
+     * Hard-cap check that also counts spend an in-flight run has not recorded
+     * yet. Used between agent steps; the soft-cap notification stays with enforce().
+     */
+    public function enforceIncluding(float $inFlightSpend): void
+    {
+        $hard = $this->aiSettings->hardBudgetUsd();
+
+        if ($hard === null) {
+            return;
+        }
+
+        $spend = $this->currentMonthSpend() + $inFlightSpend;
+
+        throw_if($spend >= $hard, AiBudgetExceededException::class, $spend, $hard);
+    }
+
+    /**
      * Cache key for the current month's spend. Busted by RecordAgentUsage on
      * every new usage row, so the cache only ever absorbs the repeated
      * enforce() calls between turns — totals() replays every usage row of

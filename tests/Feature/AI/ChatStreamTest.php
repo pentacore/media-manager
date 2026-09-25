@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use App\Ai\Agents\MediaAgent;
+use App\Http\Streaming\ChatStreamProtocol;
 use App\Jobs\Ai\GenerateConversationTitle;
 use App\Listeners\Ai\RecordAgentUsage;
 use App\Models\AiModelPrice;
@@ -14,9 +15,14 @@ use Illuminate\Support\Facades\Date;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Str;
+use Illuminate\Testing\TestResponse;
 use Laravel\Ai\Events\AgentStreamed;
+use Laravel\Ai\Exceptions\ProviderConnectionException;
 use Laravel\Ai\Exceptions\StreamErrorException;
+use Laravel\Ai\Responses\Data\ToolCall;
+use Laravel\Ai\Responses\StreamableAgentResponse;
 use Laravel\Ai\Streaming\Events\Error;
+use Laravel\Ai\Streaming\Events\StreamStart;
 
 beforeEach(function (): void {
     config()->set('mediamanager.ai.enabled', true);
@@ -37,15 +43,16 @@ test('admin can stream a chat response as SSE', function (): void {
 
     $body = $response->streamedContent();
     // The fake gateway streams the response one space-delimited word per
-    // text_delta event, so assert on the first word to prove the faked text
-    // actually reached the SSE body rather than just the framing.
-    expect($body)->toContain('data:')
-        ->and($body)->toContain('text_delta')
+    // text delta, so assert on the first word to prove the faked text
+    // actually reached the AG-UI body rather than just the framing.
+    expect($body)->toContain('"type":"RUN_STARTED"')
+        ->and($body)->toContain('"type":"TEXT_MESSAGE_CONTENT"')
         ->and($body)->toContain('Hello')
-        ->and($body)->toContain('[DONE]');
+        ->and($body)->toContain('"type":"RUN_FINISHED"')
+        ->and($body)->not->toContain('[DONE]');
 });
 
-test('streaming a first turn appends the minted conversation id before DONE', function (): void {
+test('streaming a first turn reports the minted conversation id as the run thread', function (): void {
     MediaAgent::fake(['Hello from the stream.']);
     $admin = User::factory()->admin()->create();
 
@@ -64,15 +71,10 @@ test('streaming a first turn appends the minted conversation id before DONE', fu
         ->value('id');
 
     expect($conversationId)->not->toBeNull()
-        ->and($body)->toContain('"type":"conversation_id"')
-        ->and($body)->toContain($conversationId);
-
-    // The id event must precede the terminal [DONE] marker.
-    expect(strpos((string) $body, (string) $conversationId))
-        ->toBeLessThan(strpos((string) $body, '[DONE]'));
+        ->and(chatStreamFrame($body, 'RUN_FINISHED'))->toContain('"threadId":"'.$conversationId.'"');
 });
 
-test('streaming an existing conversation echoes its id in the terminal event', function (): void {
+test('streaming an existing conversation echoes its id as the run thread', function (): void {
     MediaAgent::fake(['Continuing.']);
     $admin = User::factory()->admin()->create();
 
@@ -95,9 +97,10 @@ test('streaming an existing conversation echoes its id in the terminal event', f
 
     $response->assertOk();
 
-    expect($response->streamedContent())
-        ->toContain('"type":"conversation_id"')
-        ->and($response->streamedContent())->toContain($conversationId);
+    $body = $response->streamedContent();
+
+    expect(chatStreamFrame($body, 'RUN_STARTED'))->toContain('"threadId":"'.$conversationId.'"')
+        ->and(chatStreamFrame($body, 'RUN_FINISHED'))->toContain('"threadId":"'.$conversationId.'"');
 });
 
 test('streaming endpoint enforces budget guard', function (): void {
@@ -270,7 +273,21 @@ test('streaming endpoint refuses with 429 when the chat model has exhausted its 
     expect($response->getContent())->not->toContain('Should never run.');
 });
 
-test('a provider stream error without an error event closes the stream with an error and DONE', function (): void {
+test('a provider failure mid-stream ends with a friendly RUN_ERROR', function (): void {
+    MediaAgent::fake(function (): never {
+        throw new ProviderConnectionException('connect timeout');
+    });
+
+    $body = $this->actingAs(User::factory()->admin()->create())
+        ->post(route('ai.chat.stream'), ['message' => 'Hi'], ['Accept' => 'text/event-stream'])
+        ->streamedContent();
+
+    expect($body)->toContain('"type":"RUN_ERROR"')
+        ->and($body)->toContain('provider_unreachable')
+        ->and($body)->not->toContain('An error occurred.');
+});
+
+test('a provider stream error without an error event ends with a friendly RUN_ERROR', function (): void {
     MediaAgent::fake([fn () => throw new StreamErrorException]);
     $admin = User::factory()->admin()->create();
 
@@ -279,20 +296,122 @@ test('a provider stream error without an error event closes the stream with an e
         ->assertOk()
         ->streamedContent();
 
-    expect($body)->toContain('"type":"error"')
-        ->and($body)->toContain('The AI provider ended the response early.')
-        ->and($body)->toEndWith("data: [DONE]\n\n");
+    expect(chatStreamFrame($body, 'RUN_ERROR'))->toContain('"code":"ai_error"')
+        ->and($body)->toContain('The AI provider returned an error. Please try again.')
+        ->and($body)->not->toContain('[DONE]');
 });
 
 test('a provider stream error that carried its own error event is not reported twice', function (): void {
-    MediaAgent::fake([fn () => throw new StreamErrorException(new Error('evt-1', 'overloaded', 'Provider overloaded.', true, Date::now()->getTimestamp()))]);
+    $error = new Error('evt-1', 'overloaded', 'Provider overloaded.', true, Date::now()->getTimestamp());
+    $streamableAgentResponse = new StreamableAgentResponse('inv-1', function () use ($error): Generator {
+        yield new StreamStart('evt-0', 'openai', 'gpt-test', Date::now()->getTimestamp());
+        yield $error;
+
+        throw new StreamErrorException($error);
+    });
+
+    $body = TestResponse::fromBaseResponse((new ChatStreamProtocol)->response($streamableAgentResponse))->streamedContent();
+
+    expect(substr_count($body, '"type":"RUN_ERROR"'))->toBe(1)
+        ->and(chatStreamFrame($body, 'RUN_ERROR'))->toContain('Provider overloaded.')
+        ->and($body)->not->toContain('The AI provider returned an error.');
+});
+
+test('a failed first turn still gets a conversation title', function (): void {
+    Bus::fake([GenerateConversationTitle::class]);
+    // 1.0 stores a failed turn only once a step completed, so fail on step 2.
+    MediaAgent::fake([
+        new ToolCall(id: 'call-1', name: 'GetServiceStatusTool', arguments: []),
+        fn (): never => throw new RuntimeException('boom'),
+    ]);
+    $admin = User::factory()->admin()->create();
+
+    $this->actingAs($admin)
+        ->post(route('ai.chat.stream'), ['message' => 'Find me something to watch tonight'], ['Accept' => 'text/event-stream'])
+        ->streamedContent();
+
+    $row = DB::table('agent_conversations')->where('participant_id', $admin->id)->sole();
+
+    expect($row->title)->toBe('Find me something to watch tonight');
+    Bus::assertDispatched(GenerateConversationTitle::class);
+});
+
+test('a first turn that fails before any step completes dispatches no title job', function (): void {
+    Bus::fake([GenerateConversationTitle::class]);
+    MediaAgent::fake(function (): never {
+        throw new RuntimeException('boom');
+    });
     $admin = User::factory()->admin()->create();
 
     $body = $this->actingAs($admin)
-        ->post(route('ai.chat.stream'), ['message' => 'Say hello'], ['Accept' => 'text/event-stream'])
-        ->assertOk()
+        ->post(route('ai.chat.stream'), ['message' => 'Find me something to watch tonight'], ['Accept' => 'text/event-stream'])
         ->streamedContent();
 
-    expect($body)->not->toContain('The AI provider ended the response early.')
-        ->and($body)->toEndWith("data: [DONE]\n\n");
+    expect($body)->toContain('"type":"RUN_ERROR"')
+        ->and(DB::table('agent_conversations')->where('participant_id', $admin->id)->exists())->toBeFalse();
+    Bus::assertNotDispatched(GenerateConversationTitle::class);
 });
+
+test('a failed first turn names its stored conversation on the RUN_ERROR frame', function (): void {
+    Bus::fake([GenerateConversationTitle::class]);
+    MediaAgent::fake([
+        new ToolCall(id: 'call-1', name: 'GetServiceStatusTool', arguments: []),
+        fn (): never => throw new RuntimeException('boom'),
+    ]);
+    $admin = User::factory()->admin()->create();
+
+    $body = $this->actingAs($admin)
+        ->post(route('ai.chat.stream'), ['message' => 'Find me something to watch tonight'], ['Accept' => 'text/event-stream'])
+        ->streamedContent();
+
+    $conversationId = DB::table('agent_conversations')->where('participant_id', $admin->id)->sole()->id;
+
+    expect(chatStreamFrame($body, 'RUN_ERROR'))->toContain(sprintf('"threadId":"%s"', $conversationId));
+});
+
+test('a RUN_ERROR frame names no conversation when none was stored', function (): void {
+    MediaAgent::fake(function (): never {
+        throw new RuntimeException('boom');
+    });
+
+    $body = $this->actingAs(User::factory()->admin()->create())
+        ->post(route('ai.chat.stream'), ['message' => 'Hi'], ['Accept' => 'text/event-stream'])
+        ->streamedContent();
+
+    expect(chatStreamFrame($body, 'RUN_ERROR'))->not->toBe('')
+        ->not->toContain('threadId');
+});
+
+/**
+ * The first SSE frame of the given AG-UI event type.
+ */
+test('a capturing output buffer receives every stream frame', function (): void {
+    MediaAgent::fake(['Hello from the stream.']);
+    $admin = User::factory()->admin()->create();
+
+    $response = $this->actingAs($admin)
+        ->post(route('ai.chat.stream'), [
+            'message' => 'Say hello',
+        ], ['Accept' => 'text/event-stream']);
+
+    // The browser-test server captures a response with a plain ob_start()
+    // nested inside PHPUnit's own buffer; an ob_flush() at that depth would
+    // push the frames past the capture and the client would get nothing.
+    ob_start();
+    $response->baseResponse->sendContent();
+    $captured = (string) ob_get_clean();
+
+    expect($captured)->toContain('"type":"TEXT_MESSAGE_CONTENT"')
+        ->and($captured)->toContain('"type":"RUN_FINISHED"');
+});
+
+function chatStreamFrame(string $body, string $type): string
+{
+    foreach (explode("\n\n", $body) as $frame) {
+        if (str_contains($frame, sprintf('"type":"%s"', $type))) {
+            return $frame;
+        }
+    }
+
+    return '';
+}

@@ -56,7 +56,30 @@ interface RecentRow {
     cost: string;
     conversation_id: string | null;
     status: string;
+    kind: string;
+    error_message: string | null;
     user_name: string | null;
+}
+
+interface ToolStatRow {
+    tool_class: string;
+    calls: number;
+    failures: number;
+    p50_ms: number | null;
+    p95_ms: number | null;
+}
+
+interface KindOption {
+    value: string;
+    label: string;
+}
+
+interface ChildRun {
+    id: number;
+    agent_class: string | null;
+    model: string | null;
+    status: string;
+    total_tokens: number;
 }
 
 interface PricedModel {
@@ -101,6 +124,8 @@ interface InvocationDetail {
         price_source: string | null;
         conversation_id: string | null;
         status: string;
+        kind: string;
+        error_message: string | null;
         created_at: string | null;
     };
     user: { id: number; name: string } | null;
@@ -109,8 +134,11 @@ interface InvocationDetail {
         tool_class: string;
         tool_invocation_id: string | null;
         status: string;
+        error_code: string | null;
+        duration_ms: number | null;
         created_at: string | null;
     }>;
+    children: ChildRun[];
     rates: {
         source: 'snapshot' | 'catalog' | 'unpriced';
         input_per_mtok: number;
@@ -167,6 +195,9 @@ interface RateLimitStatusRow {
 const props = defineProps<{
     window: WindowKey;
     windows: WindowOption[];
+    kind: string | null;
+    kinds: KindOption[];
+    tool_stats: ToolStatRow[];
     totals: Totals;
     by_model: AggregateRow[];
     by_provider: AggregateRow[];
@@ -231,20 +262,67 @@ function setWindow(value: string) {
     );
 }
 
+function setKind(value: string) {
+    router.get(
+        AiUsageController.index.url({
+            query: buildQuery({
+                window: props.window,
+                kind: value === 'all' ? undefined : value,
+            }),
+        }),
+        {},
+        { preserveScroll: true },
+    );
+}
+
 const exportUrl = computed(() =>
     AiUsageController.exportMethod.url({
         query: buildQuery({ window: props.window }),
     }),
 );
 
-function buildQuery(extra: Record<string, string>): QueryParams {
-    const query: QueryParams = { ...extra };
+/**
+ * Query for a visit that keeps the active kind filter and scenario. Pass
+ * `kind: undefined` explicitly to drop the kind filter.
+ */
+function buildQuery(extra: Record<string, string | undefined>): QueryParams {
+    const merged: Record<string, string | undefined> = {
+        kind: props.kind ?? undefined,
+        ...extra,
+    };
+    const query: QueryParams = {};
+
+    for (const [key, value] of Object.entries(merged)) {
+        if (value !== undefined) {
+            query[key] = value;
+        }
+    }
 
     if (props.scenario) {
         query.scenario = { ...props.scenario };
     }
 
     return query;
+}
+
+function kindLabel(value: string): string {
+    return props.kinds.find((kind) => kind.value === value)?.label ?? value;
+}
+
+function shortClass(value: string | null): string {
+    return value?.split('\\').pop() ?? '—';
+}
+
+function failureRate(row: ToolStatRow): string {
+    if (row.calls === 0) {
+        return '0%';
+    }
+
+    return `${Math.round((row.failures / row.calls) * 100)}%`;
+}
+
+function formatMs(value: number | null): string {
+    return value === null ? '—' : `${formatNumber(value)} ms`;
 }
 
 function loadFromModel(key: string) {
@@ -277,6 +355,7 @@ function applyScenario() {
         AiUsageController.index.url({
             query: {
                 window: props.window,
+                ...(props.kind ? { kind: props.kind } : {}),
                 scenario: {
                     input: form.value.input,
                     output: form.value.output,
@@ -292,7 +371,12 @@ function applyScenario() {
 
 function clearScenario() {
     router.visit(
-        AiUsageController.index.url({ query: { window: props.window } }),
+        AiUsageController.index.url({
+            query: {
+                window: props.window,
+                ...(props.kind ? { kind: props.kind } : {}),
+            },
+        }),
         { preserveScroll: true },
     );
 }
@@ -503,6 +587,38 @@ function formatTimestamp(value: string): string {
                 </p>
             </div>
             <div class="flex items-center gap-2">
+                <div data-usage-kind-filter>
+                    <Select
+                        :model-value="props.kind ?? 'all'"
+                        @update:model-value="
+                            (value) =>
+                                setKind(
+                                    typeof value === 'string' ? value : 'all',
+                                )
+                        "
+                    >
+                        <SelectTrigger
+                            id="usage-kind"
+                            class="h-7 w-[150px] text-xs"
+                            aria-label="Usage kind"
+                        >
+                            <SelectValue placeholder="All kinds" />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="all" aria-label="All kinds"
+                                >All kinds</SelectItem
+                            >
+                            <SelectItem
+                                v-for="option in props.kinds"
+                                :key="option.value"
+                                :value="option.value"
+                                :aria-label="option.label"
+                            >
+                                {{ option.label }}
+                            </SelectItem>
+                        </SelectContent>
+                    </Select>
+                </div>
                 <TimeWindowFilter
                     :options="props.windows"
                     :model-value="props.window"
@@ -1000,6 +1116,85 @@ function formatTimestamp(value: string): string {
             </div>
         </div>
 
+        <!-- Tool stats -->
+        <div
+            class="overflow-hidden rounded-xl border border-border bg-card"
+            data-tool-stats
+        >
+            <div
+                class="flex items-center justify-between border-b border-border px-4 py-3"
+            >
+                <span
+                    class="text-[12px] font-semibold tracking-[0.06em] text-muted-foreground uppercase"
+                >
+                    Tools
+                </span>
+                <span class="text-[11.5px] text-muted-foreground">
+                    Calls, failure rate and latency in this window.
+                </span>
+            </div>
+            <div class="overflow-x-auto">
+                <table class="w-full border-collapse text-[13px]">
+                    <thead>
+                        <tr>
+                            <th
+                                class="border-b border-border px-3 py-2 text-left text-[11.5px] font-medium tracking-[0.05em] text-muted-foreground uppercase"
+                            >
+                                Tool
+                            </th>
+                            <th
+                                v-for="h in ['Calls', 'Failures', 'p50', 'p95']"
+                                :key="h"
+                                class="border-b border-border px-3 py-2 text-right text-[11.5px] font-medium tracking-[0.05em] text-muted-foreground uppercase"
+                            >
+                                {{ h }}
+                            </th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr
+                            v-for="row in props.tool_stats"
+                            :key="row.tool_class"
+                            class="border-b border-border last:border-b-0 hover:bg-bg-hover"
+                            data-tool-stat-row
+                        >
+                            <td
+                                class="font-mono-tabular px-3 py-2 text-[12px]"
+                                :title="row.tool_class"
+                            >
+                                {{ shortClass(row.tool_class) }}
+                            </td>
+                            <td class="font-mono-tabular px-3 py-2 text-right">
+                                {{ formatNumber(row.calls) }}
+                            </td>
+                            <td
+                                class="font-mono-tabular px-3 py-2 text-right"
+                                :class="
+                                    row.failures > 0 ? 'text-destructive' : ''
+                                "
+                            >
+                                {{ failureRate(row) }}
+                            </td>
+                            <td class="font-mono-tabular px-3 py-2 text-right">
+                                {{ formatMs(row.p50_ms) }}
+                            </td>
+                            <td class="font-mono-tabular px-3 py-2 text-right">
+                                {{ formatMs(row.p95_ms) }}
+                            </td>
+                        </tr>
+                        <tr v-if="props.tool_stats.length === 0">
+                            <td
+                                colspan="5"
+                                class="px-3 py-6 text-center text-sm text-fg-subtle"
+                            >
+                                No tool calls in this window.
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
         <!-- Recent calls ledger -->
         <div class="overflow-hidden rounded-xl border border-border bg-card">
             <div
@@ -1034,6 +1229,7 @@ function formatTimestamp(value: string): string {
                             v-for="row in recent"
                             :key="row.id"
                             class="cursor-pointer border-b border-border last:border-b-0 hover:bg-bg-hover"
+                            :data-usage-row="row.id"
                             @click="openDetail(row)"
                         >
                             <td
@@ -1051,7 +1247,15 @@ function formatTimestamp(value: string): string {
                                 </span>
                             </td>
                             <td class="font-mono-tabular px-3 py-2 text-[12px]">
-                                {{ row.model ?? '—' }}
+                                <span class="flex items-center gap-1.5">
+                                    <span>{{ row.model ?? '—' }}</span>
+                                    <Pill
+                                        v-if="row.kind !== 'text'"
+                                        data-usage-kind
+                                    >
+                                        {{ kindLabel(row.kind) }}
+                                    </Pill>
+                                </span>
                             </td>
                             <td class="font-mono-tabular px-3 py-2 text-right">
                                 {{ formatNumber(row.total_tokens) }}
@@ -1073,7 +1277,27 @@ function formatTimestamp(value: string): string {
                                 }}
                             </td>
                             <td class="px-3 py-2">
+                                <span
+                                    v-if="row.status === 'failed'"
+                                    class="flex max-w-[260px] flex-col gap-0.5"
+                                >
+                                    <Pill
+                                        variant="danger"
+                                        dot
+                                        class="self-start"
+                                        >failed</Pill
+                                    >
+                                    <span
+                                        v-if="row.error_message"
+                                        class="truncate text-[11px] text-destructive"
+                                        :title="row.error_message"
+                                        data-usage-error
+                                    >
+                                        {{ row.error_message }}
+                                    </span>
+                                </span>
                                 <Pill
+                                    v-else
                                     :variant="
                                         row.status === 'success'
                                             ? 'ok'
@@ -1379,18 +1603,85 @@ function formatTimestamp(value: string): string {
                                 >
                                     {{ tool.tool_class.split('\\').pop() }}
                                 </span>
-                                <Pill
-                                    :variant="
-                                        tool.status === 'success'
-                                            ? 'ok'
-                                            : 'danger'
-                                    "
-                                    dot
-                                >
-                                    {{ tool.status }}
-                                </Pill>
+                                <span class="flex items-center gap-1.5">
+                                    <span
+                                        v-if="tool.duration_ms !== null"
+                                        class="font-mono-tabular text-[11px] text-muted-foreground"
+                                    >
+                                        {{ formatMs(tool.duration_ms) }}
+                                    </span>
+                                    <Pill
+                                        v-if="tool.error_code"
+                                        variant="danger"
+                                        data-usage-tool-error
+                                    >
+                                        {{ tool.error_code }}
+                                    </Pill>
+                                    <Pill
+                                        :variant="
+                                            tool.status === 'success'
+                                                ? 'ok'
+                                                : 'danger'
+                                        "
+                                        dot
+                                    >
+                                        {{ tool.status }}
+                                    </Pill>
+                                </span>
                             </li>
                         </ul>
+                    </div>
+
+                    <!-- Sub-agent runs -->
+                    <div v-if="detail.children.length > 0" data-usage-children>
+                        <div
+                            class="mb-2 text-[11px] font-semibold tracking-[0.06em] text-muted-foreground uppercase"
+                        >
+                            Sub-agent runs ({{ detail.children.length }})
+                        </div>
+                        <ul class="space-y-1">
+                            <li
+                                v-for="child in detail.children"
+                                :key="child.id"
+                                class="flex items-center justify-between rounded border border-border bg-card px-3 py-1.5 text-[12px]"
+                            >
+                                <span
+                                    class="font-mono-tabular truncate"
+                                    :title="child.agent_class ?? ''"
+                                >
+                                    {{ shortClass(child.agent_class) }}
+                                    <span class="text-muted-foreground">
+                                        · {{ child.model ?? '—' }}
+                                    </span>
+                                </span>
+                                <span class="flex items-center gap-1.5">
+                                    <span
+                                        class="font-mono-tabular text-[11px] text-muted-foreground"
+                                    >
+                                        {{ formatNumber(child.total_tokens) }}
+                                        tok
+                                    </span>
+                                    <Pill
+                                        :variant="
+                                            child.status === 'success'
+                                                ? 'ok'
+                                                : 'danger'
+                                        "
+                                        dot
+                                    >
+                                        {{ child.status }}
+                                    </Pill>
+                                </span>
+                            </li>
+                        </ul>
+                    </div>
+
+                    <!-- Failure message -->
+                    <div
+                        v-if="detail.record.error_message"
+                        class="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-[12px] text-destructive"
+                    >
+                        {{ detail.record.error_message }}
                     </div>
 
                     <!-- Retroactive price assignment -->

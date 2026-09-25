@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Database\Factories;
 
 use App\Ai\Agents\MediaAgent;
+use App\Enums\AiUsageKind;
 use App\Models\AiUsageRecord;
 use Illuminate\Database\Eloquent\Factories\Factory;
 
@@ -32,5 +33,25 @@ class AiUsageRecordFactory extends Factory
             'is_batch' => false,
             'status' => 'success',
         ];
+    }
+
+    public function failed(): static
+    {
+        return $this->state(fn (array $attributes): array => ['status' => 'failed', 'error_message' => 'Provider returned 500.']);
+    }
+
+    public function embeddings(): static
+    {
+        return $this->state(fn (array $attributes): array => ['kind' => AiUsageKind::Embeddings, 'completion_tokens' => 0]);
+    }
+
+    public function reranking(): static
+    {
+        return $this->state(fn (array $attributes): array => ['kind' => AiUsageKind::Reranking, 'completion_tokens' => 0, 'search_units' => 1]);
+    }
+
+    public function classification(): static
+    {
+        return $this->state(fn (array $attributes): array => ['kind' => AiUsageKind::Classification]);
     }
 }

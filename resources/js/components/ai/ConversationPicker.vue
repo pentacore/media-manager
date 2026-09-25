@@ -64,6 +64,7 @@ function rename(): void {
                     variant="ghost"
                     size="sm"
                     class="h-7 max-w-[360px] gap-1 px-2 text-xs"
+                    data-conversation-picker
                 >
                     <MessageSquare class="size-3.5 shrink-0" />
                     <span :title="activeTitle" class="truncate">{{
@@ -102,6 +103,7 @@ function rename(): void {
                     <DropdownMenuItem
                         v-for="convo in recent"
                         :key="convo.id"
+                        :data-conversation-id="convo.id"
                         class="flex cursor-pointer flex-col items-start gap-0.5 text-xs"
                         :class="
                             convo.id === activeConversationId

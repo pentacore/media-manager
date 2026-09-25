@@ -103,8 +103,9 @@ test('admin can save the pricing sync controls without browser errors', function
         ->assertSee('Pricing sync')
         ->assertSee('Models.dev feed')
         ->assertSee('Ignored providers')
-        // Toggle the feed on (default label is "Disabled").
-        ->click('Disabled')
+        // Toggle the feed on. Target it by hook: the classification toggles
+        // on the same page also read "Disabled".
+        ->click('[data-models-dev-toggle]')
         ->assertScript(
             'document.querySelector(\'input[name="models_dev_pricing_enabled"]\').value === "1"',
         )

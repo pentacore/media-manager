@@ -203,6 +203,16 @@ test('SetMediaQualityProfileTool queues a whisparr_set_quality_profile ActionReq
     expect($ar->payload)->toEqual(['whisparr_item_id' => 9, 'quality_profile_id' => 7]);
 });
 
+test('DeleteMediaTool reports a non-positive item_id as invalid arguments', function (): void {
+    $result = json_decode((new DeleteMediaTool)->handle(new Request([
+        'service' => 'sonarr', 'item_id' => 0, 'delete_files' => false,
+    ])), true);
+
+    expect($result['error'])->toBe('invalid_arguments')
+        ->and($result['errors']['item_id'][0])->toContain('never guess')
+        ->and(ActionRequest::count())->toBe(0);
+});
+
 test('unknown service returns tool_failed for every write tool', function (): void {
     foreach ([new AddMediaTool, new DeleteMediaTool, new MonitorMediaTool, new SetMediaQualityProfileTool] as $tool) {
         $result = json_decode($tool->handle(new Request(['service' => 'emby', 'item_id' => 1])), true);
