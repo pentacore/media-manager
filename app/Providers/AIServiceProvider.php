@@ -8,6 +8,7 @@ use App\Ai\AiRunAttribution;
 use App\Listeners\Ai\EnforceAiRateLimit;
 use App\Listeners\Ai\RecordAgentUsage;
 use App\Services\AiUsage\BatchPricingContext;
+use App\Services\AiUsage\RunUsageAccumulator;
 use Illuminate\Contracts\Foundation\Application;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\ServiceProvider;
@@ -27,6 +28,10 @@ class AIServiceProvider extends ServiceProvider
         // Holds the user who triggered the in-flight AI run; scoped so it
         // cannot leak into the next Octane request or queued job.
         $this->app->scoped(AiRunAttribution::class);
+
+        // Per-run step usage keyed by invocation id; scoped so partial runs
+        // never bleed into the next Octane request or queued job.
+        $this->app->scoped(RunUsageAccumulator::class);
     }
 
     // Note: RecordAgentUsage / RecordToolInvocation / RecordAgentFailover are

@@ -7,6 +7,7 @@ namespace App\Listeners\Ai;
 use App\Ai\AiRunAttribution;
 use App\Enums\AiUsageKind;
 use App\Models\AiToolInvocation;
+use App\Services\AiUsage\RunUsageAccumulator;
 use App\Services\AiUsage\UsageColumns;
 use App\Services\AiUsage\UsageRecordWriter;
 use Illuminate\Support\Facades\Auth;
@@ -45,6 +46,9 @@ class RecordAgentUsage
                 ?? Auth::id(),
             'conversation_id' => $response->conversationId,
         ]);
+
+        // The run finished; its step totals were only needed had it failed.
+        resolve(RunUsageAccumulator::class)->forget($agentPrompted->invocationId);
     }
 
     private function truncateResponseText(?string $text): ?string
