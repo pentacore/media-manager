@@ -1028,6 +1028,7 @@ const budgetState = computed<{
                         <div>
                             <Toggle
                                 v-model="modelsDevPricingEnabled"
+                                data-models-dev-toggle
                                 :label="
                                     modelsDevPricingEnabled
                                         ? 'Enabled'
