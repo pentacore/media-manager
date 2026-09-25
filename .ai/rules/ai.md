@@ -16,3 +16,6 @@ Tools validate argument shape with `$request->validate([...])` inside `execute()
 
 ## Per-step middleware and provider-gated tools
 Agent middleware (1.0) wraps each step: `handle(PendingStep, Closure): mixed` in `app/Ai/Middleware`; tool-using agents use `AnswerOnFinalStep` + `EnforceBudgetEachStep`. Register `ToolSearch` or provider tools (`CodeExecution`) only when `ProviderCapabilities::everyProviderSupports()` is true for the whole failover chain — the SDK throws a non-failoverable LogicException otherwise.
+
+## Structured sub-agents must answer stream() with a prompt
+laravel/ai 1.0 throws "Streaming structured output is not currently supported" for any HasStructuredOutput agent, and a streamed parent run delegates to sub-agents through AgentTool::stream(); AgentTool swallows the throw into an 'Agent failed: …' tool result. Every HasStructuredOutput sub-agent overrides stream() to run prompt() and yield its JSON as one TextDelta (see StuckDownloadInvestigatorAgent). Test sub-agents through the parent's stream(), not only prompt().
