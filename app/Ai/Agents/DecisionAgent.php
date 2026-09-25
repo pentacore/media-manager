@@ -8,6 +8,8 @@ use App\Ai\Decision\InspectStuckImportTool;
 use App\Ai\Decision\ProposeActionTool;
 use App\Ai\Decision\RemoveStuckDownloadTool;
 use App\Ai\Decision\ResolveManualImportTool;
+use App\Ai\Middleware\AnswerOnFinalStep;
+use App\Ai\Middleware\EnforceBudgetEachStep;
 use App\Ai\Tools\Arr\GetMediaTool;
 use App\Ai\Tools\Arr\SearchMediaTool;
 use App\Ai\Tools\Emby\NowPlayingTool;
@@ -18,6 +20,7 @@ use App\Ai\Tools\System\QueryActivityTool;
 use App\Settings\DecisionAgentSettings;
 use Laravel\Ai\Attributes\MaxSteps;
 use Laravel\Ai\Contracts\Agent;
+use Laravel\Ai\Contracts\HasMiddleware;
 use Laravel\Ai\Contracts\HasProviderOptions;
 use Laravel\Ai\Contracts\HasTools;
 use Laravel\Ai\Contracts\Tool;
@@ -32,7 +35,7 @@ use Stringable;
  * context toolset plus the one proposal tool, and it never talks to a user.
  */
 #[MaxSteps(16)]
-class DecisionAgent implements Agent, HasProviderOptions, HasTools
+class DecisionAgent implements Agent, HasMiddleware, HasProviderOptions, HasTools
 {
     use Promptable;
 
@@ -92,6 +95,17 @@ JUDGEMENT
 - Be conservative: when the right action is genuinely ambiguous, propose nothing and explain, rather than guessing.
 - Your final reply is an audit record a human will read. Make it a concise, factual summary of what you observed and what you proposed (or why you proposed nothing).
 PROMPT;
+    }
+
+    /**
+     * Wrap every generation step: refuse a step once the hard budget is
+     * crossed mid-run, and force a plain answer on the final allowed step.
+     *
+     * @return array<int, object>
+     */
+    public function middleware(): array
+    {
+        return [new AnswerOnFinalStep, new EnforceBudgetEachStep];
     }
 
     /**

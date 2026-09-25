@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Ai\Agents;
 
+use App\Ai\Middleware\AnswerOnFinalStep;
+use App\Ai\Middleware\EnforceBudgetEachStep;
 use App\Ai\Tools\PriceFetcher\UpsertModelPriceTool;
 use App\Ai\Tools\PriceFetcher\WebFetchTool;
 use App\Services\AiUsage\Pricing\PriceVerificationRun;
@@ -11,6 +13,7 @@ use App\Services\AiUsage\Pricing\RefreshScope;
 use App\Settings\AiSettings;
 use Laravel\Ai\Attributes\MaxSteps;
 use Laravel\Ai\Contracts\Agent;
+use Laravel\Ai\Contracts\HasMiddleware;
 use Laravel\Ai\Contracts\HasTools;
 use Laravel\Ai\Contracts\Tool;
 use Laravel\Ai\Promptable;
@@ -18,7 +21,7 @@ use Laravel\Ai\Providers\Tools\WebFetch;
 use Stringable;
 
 #[MaxSteps(40)]
-class PriceFetcherAgent implements Agent, HasTools
+class PriceFetcherAgent implements Agent, HasMiddleware, HasTools
 {
     use Promptable;
 
@@ -161,6 +164,17 @@ class PriceFetcherAgent implements Agent, HasTools
 
         When done, output a short final summary: how many rows you upserted per provider, and which providers you skipped and why.
         PROMPT;
+    }
+
+    /**
+     * Wrap every generation step: refuse a step once the hard budget is
+     * crossed mid-run, and force a plain answer on the final allowed step.
+     *
+     * @return array<int, object>
+     */
+    public function middleware(): array
+    {
+        return [new AnswerOnFinalStep, new EnforceBudgetEachStep];
     }
 
     /**

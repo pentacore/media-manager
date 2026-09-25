@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace App\Ai\Agents;
 
 use App\Ai\Decision\InspectStuckImportTool;
+use App\Ai\Middleware\AnswerOnFinalStep;
+use App\Ai\Middleware\EnforceBudgetEachStep;
 use App\Ai\Tools\Arr\AddMediaTool;
 use App\Ai\Tools\Arr\DeleteMediaTool;
 use App\Ai\Tools\Arr\FindReplacementCandidatesTool;
@@ -54,6 +56,7 @@ use Laravel\Ai\Attributes\MaxSteps;
 use Laravel\Ai\Concerns\RemembersConversations;
 use Laravel\Ai\Contracts\Agent;
 use Laravel\Ai\Contracts\Conversational;
+use Laravel\Ai\Contracts\HasMiddleware;
 use Laravel\Ai\Contracts\HasProviderOptions;
 use Laravel\Ai\Contracts\HasTools;
 use Laravel\Ai\Contracts\Tool;
@@ -62,7 +65,7 @@ use Laravel\Ai\Promptable;
 use Stringable;
 
 #[MaxSteps(24)]
-class MediaAgent implements Agent, Conversational, HasProviderOptions, HasTools
+class MediaAgent implements Agent, Conversational, HasMiddleware, HasProviderOptions, HasTools
 {
     use Promptable;
     use RemembersConversations;
@@ -139,6 +142,17 @@ Important rules:
 - If a tool returns `{error: 'tool_failed', ...}` or `{error: 'advisory_mode_blocks_destructive', ...}`, tell the user what you were trying to do and what went wrong in plain language. Don't retry the exact same call.
 - If a tool returns `{queued: false, reason: 'no_action_type_config'}`, tell the user the relevant Action Rule isn't enabled (Admin → Action Rules).
 PROMPT;
+    }
+
+    /**
+     * Wrap every generation step: refuse a step once the hard budget is
+     * crossed mid-run, and force a plain answer on the final allowed step.
+     *
+     * @return array<int, object>
+     */
+    public function middleware(): array
+    {
+        return [new AnswerOnFinalStep, new EnforceBudgetEachStep];
     }
 
     /**
