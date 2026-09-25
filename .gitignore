@@ -46,3 +46,6 @@ boost.json
 ward-report.*
 docs/superpowers
 graphify-out
+
+# Local SSR wrapper for filtered browser test runs
+/browser-filter.sh
