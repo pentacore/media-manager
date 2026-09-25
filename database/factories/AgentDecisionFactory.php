@@ -45,4 +45,12 @@ class AgentDecisionFactory extends Factory
             'status' => AgentDecisionStatus::Failed,
         ]);
     }
+
+    public function skippedByGate(): static
+    {
+        return $this->state(fn (array $attributes): array => [
+            'status' => AgentDecisionStatus::SkippedByGate,
+            'summary' => 'Skipped by the classification gate: 10% likely to need action (threshold 30%).',
+        ]);
+    }
 }

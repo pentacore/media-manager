@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Jobs;
 
 use App\Ai\Agents\DecisionAgent;
+use App\Ai\Classification\Classifier;
 use App\Ai\Decision\DecisionRunContext;
 use App\Enums\AgentDecisionStatus;
 use App\Models\AgentDecision;
@@ -69,6 +70,8 @@ class RunDecisionAgent implements ShouldBeUnique, ShouldQueue
     public function handle(
         DecisionAgentSettings $decisionAgentSettings,
         AiBudgetGuard $aiBudgetGuard,
+        AiSettings $aiSettings,
+        Classifier $classifier,
     ): void {
         if (! AIServiceProvider::enabled() || ! $decisionAgentSettings->enabled()) {
             return;
@@ -113,6 +116,10 @@ class RunDecisionAgent implements ShouldBeUnique, ShouldQueue
             return;
         }
 
+        if ($this->skippedByGate($webhookEventId, $aiSettings, $classifier)) {
+            return;
+        }
+
         $decisionRunContext = new DecisionRunContext(
             webhookEventId: $webhookEventId,
             maxActions: $decisionAgentSettings->maxActionsPerRun(),
@@ -122,7 +129,7 @@ class RunDecisionAgent implements ShouldBeUnique, ShouldQueue
 
         try {
             $decisionAgent = new DecisionAgent;
-            $chain = resolve(AiSettings::class)->providerChainWithModel($decisionAgentSettings->model());
+            $chain = $aiSettings->providerChainWithModel($decisionAgentSettings->model());
             $response = $chain === null
                 ? $decisionAgent->prompt($this->buildPrompt())
                 : $decisionAgent->prompt($this->buildPrompt(), provider: $chain);
@@ -145,6 +152,38 @@ class RunDecisionAgent implements ShouldBeUnique, ShouldQueue
         $status = $decisionRunContext->count() > 0 ? AgentDecisionStatus::Completed : AgentDecisionStatus::NoAction;
         $this->record($webhookEventId, $status, $summary, $decisionRunContext);
         $this->notify($decisionRunContext, $summary, $decisionAgentSettings);
+    }
+
+    /**
+     * Cheap classification before a paid 16-step run. Stuck imports always
+     * run — a wrong skip there leaves a download stuck — and any classifier
+     * failure falls through to the agent.
+     */
+    private function skippedByGate(?int $webhookEventId, AiSettings $aiSettings, Classifier $classifier): bool
+    {
+        if (! $aiSettings->decisionGateEnabled() || $this->eventType === 'ManualInteractionRequired') {
+            return false;
+        }
+
+        $probability = $classifier->probability(
+            self::class,
+            ['service' => $this->service, 'event_type' => $this->eventType, 'payload' => Str::limit((string) json_encode($this->payload), 4000)],
+            'Does this media-server webhook event require an operator action (import, remove, approve, re-search or fix something) rather than being purely informational?',
+        );
+
+        $threshold = $aiSettings->decisionGateThreshold();
+
+        if ($probability === null || $probability >= $threshold) {
+            return false;
+        }
+
+        $this->record($webhookEventId, AgentDecisionStatus::SkippedByGate, sprintf(
+            'Skipped by the classification gate: %d%% likely to need action (threshold %d%%).',
+            (int) round($probability * 100),
+            (int) round($threshold * 100),
+        ), null);
+
+        return true;
     }
 
     /**
