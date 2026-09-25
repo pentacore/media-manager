@@ -9,6 +9,7 @@ use App\Jobs\Ai\GenerateConversationTitle;
 use App\Models\AiProposedWorkflow;
 use App\Models\ChatAttachment;
 use App\Models\User;
+use App\Services\AiBudget\AiBudgetExceededException;
 use Illuminate\Support\Facades\Bus;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
@@ -159,6 +160,41 @@ test('proposed workflow can be declined from confirm card', function (): void {
         ->assertSee('Understood, what next?');
 
     expect(AiProposedWorkflow::find($workflowId)->status)->toBe(AiProposedWorkflowStatus::Declined);
+});
+
+test('a workflow continuation stopped by the hard cap explains the budget', function (): void {
+    $admin = User::factory()->admin()->create();
+    $callCount = 0;
+
+    MediaAgent::fake(function () use ($admin, &$callCount): string {
+        $callCount++;
+
+        if ($callCount === 1) {
+            AiProposedWorkflow::create([
+                'id' => (string) Str::uuid7(),
+                'user_id' => $admin->id,
+                'conversation_id' => null,
+                'rationale' => 'Cleaning up unwatched series',
+                'steps' => [['action' => 'delete_series', 'target' => 'Demo', 'reason' => 'Unwatched']],
+                'status' => AiProposedWorkflowStatus::Proposed,
+            ]);
+
+            return 'Here is a proposed workflow.';
+        }
+
+        throw new AiBudgetExceededException(101.0, 100.0);
+    });
+
+    $this->actingAs($admin);
+
+    visit('/ai/chat')
+        ->assertNoSmoke()
+        ->type('textarea[placeholder^="Ask"]', 'Clean up my old shows please.')
+        ->click('Send')
+        ->assertSee('Proposed workflow')
+        ->click('Approve')
+        ->assertSee('Monthly AI hard cap reached')
+        ->assertDontSee('budget_exceeded');
 });
 
 test('streamed tool calls render as status chips and reasoning collapses', function (): void {
