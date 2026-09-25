@@ -6,6 +6,7 @@ namespace App\Http\Controllers\AI;
 
 use App\Ai\Agents\MediaAgent;
 use App\Ai\ChatFailure;
+use App\Ai\Routing\ChatToolRouter;
 use App\Enums\AiMode;
 use App\Enums\AiProposedWorkflowStatus;
 use App\Http\Controllers\Controller;
@@ -44,7 +45,7 @@ class ChatController extends Controller
         return Inertia::render('AI/Chat', []);
     }
 
-    public function send(SendChatRequest $sendChatRequest, ChatAttachmentStore $chatAttachmentStore): JsonResponse
+    public function send(SendChatRequest $sendChatRequest, ChatAttachmentStore $chatAttachmentStore, ChatToolRouter $chatToolRouter): JsonResponse
     {
         $validated = $sendChatRequest->validated();
 
@@ -76,7 +77,11 @@ class ChatController extends Controller
         $attachments = $chatAttachmentStore->store($user, $sendChatRequest->file('attachments', []));
 
         try {
-            $agent = (new MediaAgent)->continueOrStart($conversationId, as: $user);
+            // A workflow continuation executes whichever destructive tools the
+            // approved steps name, so it always gets the full toolset.
+            $groups = $continuation === null ? $chatToolRouter->route($messageToSend, $conversationId) : null;
+            $agent = (new MediaAgent)->continueOrStart($conversationId, as: $user)
+                ->withTools(fn (array $declared): array => $groups === null ? $declared : $chatToolRouter->filter($declared, $groups));
             $aiSettings = resolve(AiSettings::class);
             $chain = $aiSettings->providerChainWithModel($aiSettings->model());
             $sdkAttachments = $chatAttachmentStore->toSdkAttachments($attachments);
@@ -113,7 +118,7 @@ class ChatController extends Controller
      * Workflow continuations are intentionally NOT supported here — they stay on
      * send().
      */
-    public function stream(StreamChatRequest $streamChatRequest, ChatAttachmentStore $chatAttachmentStore): JsonResponse|StreamableAgentResponse
+    public function stream(StreamChatRequest $streamChatRequest, ChatAttachmentStore $chatAttachmentStore, ChatToolRouter $chatToolRouter): JsonResponse|StreamableAgentResponse
     {
         $validated = $streamChatRequest->validated();
 
@@ -140,7 +145,9 @@ class ChatController extends Controller
         $attachments = $chatAttachmentStore->store($user, $streamChatRequest->file('attachments', []));
 
         try {
-            $agent = (new MediaAgent)->continueOrStart($conversationId, as: $user);
+            $groups = $chatToolRouter->route($message, $conversationId);
+            $agent = (new MediaAgent)->continueOrStart($conversationId, as: $user)
+                ->withTools(fn (array $declared): array => $groups === null ? $declared : $chatToolRouter->filter($declared, $groups));
             $aiSettings = resolve(AiSettings::class);
             $chain = $aiSettings->providerChainWithModel($aiSettings->model());
             $sdkAttachments = $chatAttachmentStore->toSdkAttachments($attachments);
