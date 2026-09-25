@@ -5,11 +5,13 @@ declare(strict_types=1);
 namespace App\Http\Controllers\AI;
 
 use App\Ai\Agents\MediaAgent;
+use App\Ai\ChatFailure;
 use App\Enums\AiMode;
 use App\Enums\AiProposedWorkflowStatus;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\AI\SendChatRequest;
 use App\Http\Requests\AI\StreamChatRequest;
+use App\Http\Streaming\ChatStreamProtocol;
 use App\Jobs\Ai\GenerateConversationTitle;
 use App\Models\AiProposedWorkflow;
 use App\Models\User;
@@ -28,9 +30,11 @@ use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 use Inertia\Inertia;
 use Inertia\Response;
+use Laravel\Ai\Contracts\ConversationStore;
+use Laravel\Ai\Contracts\VerifiesConversationOwnership;
+use Laravel\Ai\Exceptions\ProviderConnectionException;
 use Laravel\Ai\Exceptions\RateLimitedException;
-use Laravel\Ai\Exceptions\StreamErrorException;
-use Laravel\Ai\Streaming\Events\Error;
+use Laravel\Ai\Responses\StreamableAgentResponse;
 use Throwable;
 
 class ChatController extends Controller
@@ -72,9 +76,7 @@ class ChatController extends Controller
         $attachments = $chatAttachmentStore->store($user, $sendChatRequest->file('attachments', []));
 
         try {
-            $agent = $conversationId
-                ? (new MediaAgent)->continue($conversationId, as: $user)
-                : (new MediaAgent)->forUser($user);
+            $agent = (new MediaAgent)->continueOrStart($conversationId, as: $user);
             $aiSettings = resolve(AiSettings::class);
             $chain = $aiSettings->providerChainWithModel($aiSettings->model());
             $sdkAttachments = $chatAttachmentStore->toSdkAttachments($attachments);
@@ -103,18 +105,15 @@ class ChatController extends Controller
     }
 
     /**
-     * Stream a chat turn back to the client as Server-Sent Events.
+     * Stream a chat turn back to the client as AG-UI events (ChatStreamProtocol).
      *
-     * Mirrors send()'s pre-flight (mode, budget, ownership). We drive the SSE
-     * response ourselves (rather than returning the SDK's StreamableAgentResponse
-     * directly) so we can append a terminal `conversation_id` event: for a brand-new
-     * conversation the id is only minted by the SDK's RememberConversation middleware
-     * once the stream is consumed, and no SDK event carries it. Emitting it before
-     * `[DONE]` makes the client's active conversation deterministic instead of relying
-     * on a recency heuristic. Workflow continuations are intentionally NOT supported
-     * here — they stay on send().
+     * Mirrors send()'s pre-flight (mode, budget, ownership). The conversation id
+     * travels as the run's `threadId` on RUN_STARTED/RUN_FINISHED, so the client's
+     * active conversation is deterministic for brand-new conversations too.
+     * Workflow continuations are intentionally NOT supported here — they stay on
+     * send().
      */
-    public function stream(StreamChatRequest $streamChatRequest, ChatAttachmentStore $chatAttachmentStore): mixed
+    public function stream(StreamChatRequest $streamChatRequest, ChatAttachmentStore $chatAttachmentStore): JsonResponse|StreamableAgentResponse
     {
         $validated = $streamChatRequest->validated();
 
@@ -141,9 +140,7 @@ class ChatController extends Controller
         $attachments = $chatAttachmentStore->store($user, $streamChatRequest->file('attachments', []));
 
         try {
-            $agent = $conversationId
-                ? (new MediaAgent)->continue($conversationId, as: $user)
-                : (new MediaAgent)->forUser($user);
+            $agent = (new MediaAgent)->continueOrStart($conversationId, as: $user);
             $aiSettings = resolve(AiSettings::class);
             $chain = $aiSettings->providerChainWithModel($aiSettings->model());
             $sdkAttachments = $chatAttachmentStore->toSdkAttachments($attachments);
@@ -164,66 +161,21 @@ class ChatController extends Controller
             }
         });
 
-        return response()->stream(function () use ($stream): void {
-            // Keep draining the SDK stream even if the browser disconnects:
-            // AgentStreamed (and therefore usage recording / budget guard)
-            // only fires once iteration completes, so aborting here would
-            // consume provider tokens without billing them.
-            ignore_user_abort(true);
-
-            try {
-                foreach ($stream as $event) {
-                    echo 'data: '.($event)."\n\n";
-
-                    // response()->stream() callbacks don't auto-flush per write —
-                    // without this the whole SSE body buffers into one chunk. Only
-                    // flush when output reaches the SAPI directly (level <= 1):
-                    // deeper nesting means a capturing harness (browser tests)
-                    // owns the buffer stack, and ob_flush there strands bytes in
-                    // an intermediate buffer that never reaches the client.
-                    if (ob_get_level() <= 1) {
-                        if (ob_get_level() === 1) {
-                            @ob_flush();
-                        }
-
-                        flush();
-                    }
-                }
-            } catch (StreamErrorException $streamErrorException) {
-                // laravel/ai >= 0.11 throws when a provider reports an error
-                // inside the stream body. The provider's own error event (when
-                // it sent one) was already relayed above; otherwise tell the
-                // client, then close the stream cleanly instead of letting the
-                // exception tear the response down mid-body.
-                Log::warning('AI chat stream ended with a provider error.', [
-                    'message' => $streamErrorException->getMessage(),
-                ]);
-
-                if (! $streamErrorException->error instanceof Error) {
-                    echo 'data: '.json_encode([
-                        'type' => 'error',
-                        'message' => __('The AI provider ended the response early. Please try again.'),
-                    ])."\n\n";
-                }
-
-                echo "data: [DONE]\n\n";
-
-                return;
+        $stream->catch(function () use ($stream, $isNewConversation, $message): void {
+            // 1.0 stores a failed first turn once a step completed, so the
+            // conversation exists — give it the same readable title a
+            // successful turn gets. A turn that died before its first step
+            // leaves only the pending id behind, with no row to title.
+            if ($isNewConversation
+                && $stream->conversationId !== null
+                && DB::table('agent_conversations')->where('id', $stream->conversationId)->exists()
+            ) {
+                $this->seedConversationTitle($stream->conversationId, $message);
+                dispatch(new GenerateConversationTitle($stream->conversationId, $message));
             }
+        });
 
-            // The conversation id is populated once the SDK events (and the
-            // then() callbacks) have run during iteration above.
-            $conversationId = $stream->conversationId ?? null;
-
-            if ($conversationId !== null) {
-                echo 'data: '.json_encode([
-                    'type' => 'conversation_id',
-                    'conversation_id' => $conversationId,
-                ])."\n\n";
-            }
-
-            echo "data: [DONE]\n\n";
-        }, headers: ['Content-Type' => 'text/event-stream']);
+        return $stream->usingProtocol(new ChatStreamProtocol);
     }
 
     /**
@@ -324,6 +276,13 @@ class ChatController extends Controller
     {
         if ($throwable instanceof RateLimitedException) {
             return $this->rateLimitedResponse($throwable);
+        }
+
+        if ($throwable instanceof ProviderConnectionException) {
+            return response()->json([
+                'error' => ChatFailure::code($throwable),
+                'message' => ChatFailure::message($throwable),
+            ], 503);
         }
 
         // Laravel's HTTP-client RequestException truncates response bodies
@@ -479,15 +438,11 @@ class ChatController extends Controller
 
     private function conversationIsAvailable(string $conversationId, ?User $user): bool
     {
-        if (! $user instanceof User) {
-            return false;
-        }
+        $conversationStore = resolve(ConversationStore::class);
 
-        return DB::table('agent_conversations')
-            ->where('id', $conversationId)
-            ->where('participant_type', $user->getMorphClass())
-            ->where('participant_id', $user->id)
-            ->whereNull('archived_at')
-            ->exists();
+        return $user instanceof User
+            && $conversationStore instanceof VerifiesConversationOwnership
+            && $conversationStore->conversationBelongsTo($conversationId, $user->getMorphClass(), $user->id)
+            && DB::table('agent_conversations')->where('id', $conversationId)->whereNull('archived_at')->exists();
     }
 }

@@ -11,6 +11,8 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Date;
 use Illuminate\Support\Facades\DB;
+use Laravel\Ai\Contracts\ConversationStore;
+use Laravel\Ai\Contracts\VerifiesConversationOwnership;
 
 class ConversationController extends Controller
 {
@@ -45,14 +47,15 @@ class ConversationController extends Controller
     {
         $user = $request->user();
 
+        if (! $this->conversationBelongsTo($conversation, $user)) {
+            return response()->json(['message' => 'Conversation not found.'], 404);
+        }
+
         $row = DB::table('agent_conversations')
             ->where('id', $conversation)
             ->first();
 
-        if ($row === null
-            || ($user instanceof User && ($row->participant_type !== $user->getMorphClass() || (int) $row->participant_id !== (int) $user->id))
-            || $row->archived_at !== null
-        ) {
+        if ($row === null || $row->archived_at !== null) {
             return response()->json(['message' => 'Conversation not found.'], 404);
         }
 
@@ -82,11 +85,11 @@ class ConversationController extends Controller
     {
         $user = $renameConversationRequest->user();
 
-        $row = DB::table('agent_conversations')
-            ->where('id', $conversation)
-            ->first(['id', 'participant_type', 'participant_id']);
+        $row = $this->conversationBelongsTo($conversation, $user)
+            ? DB::table('agent_conversations')->where('id', $conversation)->first(['id'])
+            : null;
 
-        if ($row === null || ! $user instanceof User || $row->participant_type !== $user->getMorphClass() || (int) $row->participant_id !== (int) $user->id) {
+        if ($row === null) {
             return response()->json(['message' => 'Conversation not found.'], 404);
         }
 
@@ -104,5 +107,14 @@ class ConversationController extends Controller
             'title' => $title,
             'updated_at' => now()->toIso8601String(),
         ]);
+    }
+
+    private function conversationBelongsTo(string $conversationId, ?User $user): bool
+    {
+        $conversationStore = resolve(ConversationStore::class);
+
+        return $user instanceof User
+            && $conversationStore instanceof VerifiesConversationOwnership
+            && $conversationStore->conversationBelongsTo($conversationId, $user->getMorphClass(), $user->id);
     }
 }
