@@ -7,6 +7,7 @@ namespace App\Services\Search;
 use App\Models\IndexedMovie;
 use App\Models\IndexedSeries;
 use App\Services\AiUsage\AiUsageCaller;
+use App\Settings\AiSettings;
 use Illuminate\Support\Facades\Log;
 use Laravel\Ai\Embeddings;
 use Laravel\Ai\Reranking;
@@ -17,11 +18,14 @@ use Throwable;
 /**
  * k-NN semantic search over the Typesense library collections using the
  * stored embedding vectors. Optionally reranks merged movie+series hits
- * with the configured reranking provider (Cohere/Jina).
+ * with the admin-selected reranking provider (Cohere/Jina/OpenRouter).
  */
 class SemanticLibrarySearch
 {
-    public function __construct(private readonly LibraryEmbedder $libraryEmbedder) {}
+    public function __construct(
+        private readonly LibraryEmbedder $libraryEmbedder,
+        private readonly AiSettings $aiSettings,
+    ) {}
 
     /**
      * @return array{available: bool, results: array<int, array<string, mixed>>}
@@ -133,7 +137,10 @@ class SemanticLibrarySearch
                 $hits,
             );
 
-            $response = resolve(AiUsageCaller::class)->during(self::class, fn (): RerankingResponse => Reranking::of($documents)->limit($limit)->rerank($query));
+            $response = resolve(AiUsageCaller::class)->during(self::class, fn (): RerankingResponse => Reranking::of($documents)
+                ->limit($limit)
+                ->timeout(15)
+                ->rerank($query, provider: $this->aiSettings->rerankingProvider(), model: $this->aiSettings->rerankingModel()));
 
             $reranked = [];
 
@@ -156,8 +163,6 @@ class SemanticLibrarySearch
 
     private function rerankingConfigured(): bool
     {
-        $provider = (string) config('ai.default_for_reranking', '');
-
-        return $provider !== '' && (string) config(sprintf('ai.providers.%s.key', $provider)) !== '';
+        return (string) config(sprintf('ai.providers.%s.key', $this->aiSettings->rerankingProvider())) !== '';
     }
 }
