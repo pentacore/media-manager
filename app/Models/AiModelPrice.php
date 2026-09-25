@@ -31,6 +31,8 @@ use Override;
  * @property string|null $batch_cache_read_per_mtok
  * @property string|null $batch_cache_write_per_mtok
  * @property string|null $batch_reasoning_per_mtok
+ * @property string $search_unit_per_k
+ * @property string|null $batch_search_unit_per_k
  * @property int|null $free_usage_pool_id
  * @property PricingSource|null $pricing_source
  * @property string|null $pricing_source_url
@@ -63,6 +65,8 @@ use Override;
     'batch_cache_read_per_mtok',
     'batch_cache_write_per_mtok',
     'batch_reasoning_per_mtok',
+    'search_unit_per_k',
+    'batch_search_unit_per_k',
     'free_usage_pool_id',
     'pricing_source',
     'pricing_source_url',
@@ -93,6 +97,8 @@ class AiModelPrice extends Model
             'batch_cache_read_per_mtok' => 'decimal:4',
             'batch_cache_write_per_mtok' => 'decimal:4',
             'batch_reasoning_per_mtok' => 'decimal:4',
+            'search_unit_per_k' => 'decimal:4',
+            'batch_search_unit_per_k' => 'decimal:4',
             'free_usage_pool_id' => 'integer',
             'pricing_source' => PricingSource::class,
             'pricing_source_updated_at' => 'immutable_date',

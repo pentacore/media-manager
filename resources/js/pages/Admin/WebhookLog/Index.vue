@@ -412,10 +412,13 @@ function decisionVariant(status: string): PillVariant {
                                             event.agent_decision.status,
                                         )
                                     "
+                                    :data-decision-status="
+                                        event.agent_decision.status
+                                    "
                                     dot
                                 >
                                     {{
-                                        event.agent_decision.status.replace(
+                                        event.agent_decision.status.replaceAll(
                                             '_',
                                             ' ',
                                         )

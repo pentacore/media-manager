@@ -160,6 +160,47 @@ test('an explicit zero writes a zero rate while a missing rate stays null', func
         ->and($aiModelPrice->batch_output_per_mtok)->toBeNull();
 });
 
+test('writes a rerank model search-unit rate alongside zero token rates', function (): void {
+    $result = upsert(upsertTool(RefreshScope::all()), [
+        'provider' => 'cohere',
+        'model' => 'rerank-v3.5',
+        'input_per_mtok' => 0,
+        'output_per_mtok' => 0,
+        'search_unit_per_k' => 2.0,
+    ]);
+
+    expect($result['upserted'])->toBeTrue();
+
+    $aiModelPrice = AiModelPrice::query()->where('provider', 'cohere')->where('model', 'rerank-v3.5')->firstOrFail();
+    expect($aiModelPrice->search_unit_per_k)->toBe('2.0000');
+});
+
+test('a null search-unit rate leaves the stored rate untouched', function (): void {
+    AiModelPrice::factory()->create([
+        'provider' => 'cohere',
+        'model' => 'rerank-v3.5',
+        'input_per_mtok' => 0,
+        'output_per_mtok' => 0,
+        'search_unit_per_k' => 2.0,
+    ]);
+
+    upsert(upsertTool(RefreshScope::all()), [
+        'provider' => 'cohere',
+        'model' => 'rerank-v3.5',
+        'input_per_mtok' => 0,
+        'output_per_mtok' => 0,
+        'search_unit_per_k' => null,
+    ]);
+
+    expect(AiModelPrice::query()->where('provider', 'cohere')->sole()->search_unit_per_k)->toBe('2.0000');
+});
+
+test('the schema documents the per-thousand search-unit rate', function (): void {
+    $schema = resolve(UpsertModelPriceTool::class)->schema(new JsonSchemaTypeFactory);
+
+    expect($schema['search_unit_per_k']->toArray()['description'])->toContain('1,000 rerank searches');
+});
+
 test('rejects a new row when a primary rate is missing', function (): void {
     $result = upsert(upsertTool(RefreshScope::all()), [
         'provider' => 'openai',

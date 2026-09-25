@@ -21,6 +21,7 @@ return [
     'default_for_transcription' => 'openai',
     'default_for_embeddings' => 'openai',
     'default_for_reranking' => 'cohere',
+    'default_for_classification' => env('AI_DEFAULT_CLASSIFICATION_PROVIDER', 'openrouter'),
 
     /*
     |--------------------------------------------------------------------------
@@ -37,6 +38,9 @@ return [
         'embeddings' => [
             'cache' => env('AI_EMBEDDINGS_CACHE', true),
             'store' => env('CACHE_STORE', 'database'),
+            // 1.0: cache each input's vector separately so a batch re-embed
+            // only pays for the items whose text changed.
+            'individually' => env('AI_EMBEDDINGS_CACHE_INDIVIDUALLY', true),
         ],
     ],
 
@@ -119,6 +123,11 @@ return [
         'openrouter' => [
             'driver' => 'openrouter',
             'key' => env('OPENROUTER_API_KEY'),
+        ],
+
+        'typesafe' => [
+            'driver' => 'typesafe',
+            'key' => env('TYPESAFE_API_KEY'),
         ],
 
         'voyageai' => [

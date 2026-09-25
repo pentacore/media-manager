@@ -269,6 +269,29 @@ test('editing a rate while flipping the toggle on keeps an unlocked row unlocked
     expect((float) $price->input_per_mtok)->toBe(5.0);
 });
 
+test('admin can set a rerank model search-unit rate from the edit dialog', function (): void {
+    $price = AiModelPrice::factory()->create([
+        'provider' => 'cohere',
+        'model' => 'rerank-v3.5',
+        'input_per_mtok' => 0,
+        'output_per_mtok' => 0,
+        'search_unit_per_k' => 0,
+        'pricing_source' => PricingSource::ModelsDev,
+        'is_price_locked' => false,
+    ]);
+
+    visit('/admin/ai-prices')
+        ->assertNoSmoke()
+        ->click('Edit')
+        ->assertSee('Edit cohere / rerank-v3.5')
+        ->assertSeeIn('[data-search-unit-field]', 'Search units ($/1k)')
+        ->fill('search_unit_per_k', '2.0000')
+        ->click('Save')
+        ->assertSee('Model price updated.');
+
+    expect($price->fresh()->search_unit_per_k)->toBe('2.0000');
+});
+
 test('a succeeded broadcast shows the success toast and reloads prices', function (): void {
     AiModelPrice::factory()->create([
         'provider' => 'openai',

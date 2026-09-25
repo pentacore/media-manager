@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use App\Ai\Agents\MediaAgent;
+use App\Enums\AiUsageKind;
 use App\Enums\FreePoolOverflowBehavior;
 use App\Enums\FreeUsagePeriod;
 use App\Models\AiFreeUsagePool;
@@ -734,4 +735,45 @@ test('freePoolStatus counts cached tokens for fit-or-paid pools', function (): v
     expect($rows)->toHaveCount(1);
     expect($rows[0]['used_input'])->toBe(150_000);
     expect($rows[0]['models'][0]['used_input'])->toBe(150_000);
+});
+
+test('a kind filter narrows totals and only nets out that kind\'s share of a split pool', function (): void {
+    $pool = AiFreeUsagePool::factory()->overflow(FreePoolOverflowBehavior::Split)->create([
+        'free_input_tokens' => 500_000,
+        'free_output_tokens' => 200_000,
+    ]);
+    seedPooledPrice($pool, 'openai', 'gpt-5-mini', input: 0.40, output: 1.60);
+
+    seedUsage(['prompt_tokens' => 1_000_000, 'completion_tokens' => 500_000]);
+    seedUsage(['prompt_tokens' => 1_000_000, 'kind' => AiUsageKind::Embeddings->value]);
+
+    $reporting = resolve(AiUsageReporting::class);
+    $since = CarbonImmutable::now()->subDay();
+
+    // Input forgiveness ratio 0.5M / 2M = 0.25 across both kinds; output 0.2M / 0.5M = 0.4.
+    // Embeddings: 0.40 gross − 1M × 0.40 × 0.25 = 0.30.
+    // Text: 1.20 gross − (0.10 + 0.5M × 1.60 × 0.4) = 0.78.
+    expect((float) $reporting->totals($since, kind: AiUsageKind::Embeddings)['total_cost'])->toBe(0.3)
+        ->and((float) $reporting->totals($since, kind: AiUsageKind::Text)['total_cost'])->toBe(0.78)
+        ->and((float) $reporting->totals($since)['total_cost'])->toBe(1.08)
+        ->and($reporting->totals($since, kind: AiUsageKind::Embeddings)['total_invocations'])->toBe(1);
+});
+
+test('a kind filter only forgives fitting requests of that kind in a fit-or-paid pool', function (): void {
+    $pool = AiFreeUsagePool::factory()->create([
+        'free_input_tokens' => 1_500_000,
+        'free_output_tokens' => 500_000,
+    ]);
+    seedPooledPrice($pool, 'openai', 'gpt-5-mini', input: 0.40, output: 1.60);
+
+    seedUsage(['prompt_tokens' => 1_000_000, 'completion_tokens' => 500_000, 'created_at' => now()->subMinutes(2)]);
+    seedUsage(['prompt_tokens' => 1_000_000, 'kind' => AiUsageKind::Embeddings->value, 'created_at' => now()->subMinute()]);
+
+    $reporting = resolve(AiUsageReporting::class);
+    $since = CarbonImmutable::now()->subDay();
+
+    // The text run fits and is forgiven in full; the later embeddings call
+    // no longer fits the remaining 0.5M input and is billed whole.
+    expect((float) $reporting->totals($since, kind: AiUsageKind::Text)['total_cost'])->toBe(0.0)
+        ->and((float) $reporting->totals($since, kind: AiUsageKind::Embeddings)['total_cost'])->toBe(0.4);
 });

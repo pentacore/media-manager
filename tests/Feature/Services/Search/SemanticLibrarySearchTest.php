@@ -2,13 +2,17 @@
 
 declare(strict_types=1);
 
+use App\Enums\AiUsageKind;
+use App\Models\AiUsageRecord;
 use App\Services\Search\LibraryEmbedder;
 use App\Services\Search\SemanticLibrarySearch;
+use App\Settings\AiSettings;
 use Laravel\Ai\Embeddings;
 use Laravel\Ai\Prompts\RerankingPrompt;
 use Laravel\Ai\Reranking;
 use Laravel\Ai\Responses\Data\Meta;
 use Laravel\Ai\Responses\Data\RankedDocument;
+use Laravel\Ai\Responses\Data\RerankingUsage;
 use Laravel\Ai\Responses\RerankingResponse;
 
 test('returns unavailable when ai disabled', function (): void {
@@ -44,8 +48,8 @@ test('returns unavailable when query embedding generation throws', function (): 
 test('vector search returns scored library hits merged and ordered by score', function (): void {
     config()->set('mediamanager.ai.enabled', true);
     config()->set('scout.driver', 'typesense');
-    // No reranking provider configured -> vector order is preserved.
-    config()->set('ai.default_for_reranking', '');
+    // No key for the reranking provider -> vector order is preserved.
+    config()->set('ai.providers.cohere.key', '');
     Embeddings::fake();
 
     $semanticLibrarySearch = makeSearchWithHits([
@@ -85,7 +89,7 @@ test('vector search returns scored library hits merged and ordered by score', fu
 test('kind filter restricts the collections that are queried', function (): void {
     config()->set('mediamanager.ai.enabled', true);
     config()->set('scout.driver', 'typesense');
-    config()->set('ai.default_for_reranking', '');
+    config()->set('ai.providers.cohere.key', '');
     Embeddings::fake();
 
     $semanticLibrarySearch = makeSearchWithHits([
@@ -102,7 +106,7 @@ test('kind filter restricts the collections that are queried', function (): void
 test('limit truncates the merged result set', function (): void {
     config()->set('mediamanager.ai.enabled', true);
     config()->set('scout.driver', 'typesense');
-    config()->set('ai.default_for_reranking', '');
+    config()->set('ai.providers.cohere.key', '');
     Embeddings::fake();
 
     $semanticLibrarySearch = makeSearchWithHits([
@@ -132,7 +136,7 @@ test('reranking reorders and rescores hits when a provider is configured', funct
     Reranking::fake(fn (RerankingPrompt $rerankingPrompt): RerankingResponse => new RerankingResponse([
         new RankedDocument(index: 1, document: $rerankingPrompt->documents[1], score: 0.99),
         new RankedDocument(index: 0, document: $rerankingPrompt->documents[0], score: 0.42),
-    ], new Meta('cohere', 'rerank-english-v3.0')));
+    ], new RerankingUsage, new Meta('cohere', 'rerank-english-v3.0')));
 
     $semanticLibrarySearch = makeSearchWithHits([
         'movies' => [
@@ -147,6 +151,25 @@ test('reranking reorders and rescores hits when a provider is configured', funct
     expect(array_column($result['results'], 'title'))->toBe(['Arrival', 'Blade Runner']);
     expect($result['results'][0]['score'])->toBe(0.99)
         ->and($result['results'][1]['score'])->toBe(0.42);
+});
+
+test('the query embedding and the rerank are billed to the search service', function (): void {
+    config()->set('mediamanager.ai.enabled', true);
+    config()->set('scout.driver', 'typesense');
+    config()->set('ai.default_for_reranking', 'cohere');
+    config()->set('ai.providers.cohere.key', 'test-key');
+    Embeddings::fake();
+    Reranking::fake();
+
+    $semanticLibrarySearch = makeSearchWithHits([
+        'movies' => [hit(['radarr_id' => 11, 'title' => 'Blade Runner', 'year' => 1982, 'overview' => 'a'], 0.05)],
+        'series' => [],
+    ]);
+
+    $semanticLibrarySearch->search('moody sci-fi', 10);
+
+    expect(AiUsageRecord::where('kind', AiUsageKind::Embeddings)->sole()->agent_class)->toBe(SemanticLibrarySearch::class)
+        ->and(AiUsageRecord::where('kind', AiUsageKind::Reranking)->sole()->agent_class)->toBe(SemanticLibrarySearch::class);
 });
 
 test('reranking failure falls back to vector ordering', function (): void {
@@ -172,6 +195,24 @@ test('reranking failure falls back to vector ordering', function (): void {
     expect(array_column($result['results'], 'title'))->toBe(['Blade Runner', 'Arrival']);
 });
 
+test('reranking uses the admin-selected provider', function (): void {
+    config()->set('mediamanager.ai.enabled', true);
+    config()->set('scout.driver', 'typesense');
+    config()->set('ai.providers.jina.key', 'test');
+    resolve(AiSettings::class)->setRerankingProvider('jina');
+    Embeddings::fake();
+    Reranking::fake();
+
+    $semanticLibrarySearch = makeSearchWithHits([
+        'movies' => [hit(['radarr_id' => 11, 'title' => 'Blade Runner', 'year' => 1982, 'overview' => 'a'], 0.05)],
+        'series' => [],
+    ]);
+
+    $semanticLibrarySearch->search('moody sci-fi', 10);
+
+    Reranking::assertReranked(fn (RerankingPrompt $rerankingPrompt): bool => $rerankingPrompt->provider->name() === 'jina');
+});
+
 /**
  * Build a Typesense-hit array shaped like a multi_search document hit.
  *
@@ -191,14 +232,14 @@ function hit(array $document, float $distance): array
  */
 function makeSearchWithHits(array $hitsByCollection): SemanticLibrarySearch
 {
-    return new class(resolve(LibraryEmbedder::class), $hitsByCollection) extends SemanticLibrarySearch
+    return new class(resolve(LibraryEmbedder::class), resolve(AiSettings::class), $hitsByCollection) extends SemanticLibrarySearch
     {
         /**
          * @param  array<string, array<int, array<string, mixed>>>  $hitsByCollection
          */
-        public function __construct(LibraryEmbedder $libraryEmbedder, private readonly array $hitsByCollection)
+        public function __construct(LibraryEmbedder $libraryEmbedder, AiSettings $aiSettings, private readonly array $hitsByCollection)
         {
-            parent::__construct($libraryEmbedder);
+            parent::__construct($libraryEmbedder, $aiSettings);
         }
 
         protected function rawVectorSearch(array $vector, string $collection, int $k): array

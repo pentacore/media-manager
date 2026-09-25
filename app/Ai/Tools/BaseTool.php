@@ -11,6 +11,7 @@ use App\Services\Actions\ActionOrchestrator;
 use App\Settings\AiSettings;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Validation\ValidationException;
 use Laravel\Ai\Contracts\Tool;
 use Laravel\Ai\Tools\Request;
 use Throwable;
@@ -29,6 +30,14 @@ abstract class BaseTool implements Tool
 
         try {
             $result = $this->execute($request);
+        } catch (ValidationException $validationException) {
+            // $request->validate() inside execute(): tell the model exactly
+            // which argument to fix instead of a generic tool failure.
+            return $this->safeEncode([
+                'error' => 'invalid_arguments',
+                'errors' => $validationException->errors(),
+                'message' => 'Some arguments were invalid. Fix them and call the tool again.',
+            ]);
         } catch (Throwable $throwable) {
             // Argument KEYS only: tool arguments can carry user chat content
             // (titles, notes, free text) that doesn't belong in the log.

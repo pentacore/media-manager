@@ -6,6 +6,7 @@ use App\Ai\Agents\MediaAgent;
 use App\Jobs\Ai\GenerateConversationTitle;
 use App\Models\AiModelPrice;
 use App\Models\User;
+use App\Services\AiBudget\AiBudgetExceededException;
 use App\Settings\AiSettings;
 use Illuminate\Foundation\Http\Middleware\PreventRequestForgery;
 use Illuminate\Support\Facades\Bus;
@@ -251,4 +252,16 @@ test('send maps a rate limit raised during the run to 429 instead of a generic f
 
     expect($response->json('error'))->toBe('rate_limited')
         ->and($response->json('message'))->toContain('rate limited');
+});
+
+test('send maps a hard cap reached mid-run to the budget message instead of a generic failure', function (): void {
+    MediaAgent::fake(fn (): never => throw new AiBudgetExceededException(101.0, 100.0));
+    $admin = User::factory()->admin()->create();
+
+    $response = $this->actingAs($admin)
+        ->postJson(route('ai.chat.send'), ['message' => 'hi'])
+        ->assertPaymentRequired();
+
+    expect($response->json('error'))->toBe('budget_exceeded')
+        ->and($response->json('message'))->toContain('Monthly AI hard cap reached');
 });

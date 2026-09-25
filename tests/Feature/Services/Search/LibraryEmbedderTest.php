@@ -2,6 +2,8 @@
 
 declare(strict_types=1);
 
+use App\Enums\AiUsageKind;
+use App\Models\AiUsageRecord;
 use App\Models\IndexedMovie;
 use App\Models\IndexedSeries;
 use App\Services\Search\LibraryEmbedder;
@@ -35,6 +37,15 @@ test('embed returns a vector of the configured dimensions when enabled', functio
 
     expect($vector)->toBeArray()->toHaveCount(LibraryEmbedder::DIMENSIONS);
     Embeddings::assertGenerated(fn (): bool => true);
+});
+
+test('embeddings generated for library items are billed to the embedder', function (): void {
+    config()->set('mediamanager.ai.enabled', true);
+    Embeddings::fake();
+
+    (new LibraryEmbedder)->embed(IndexedMovie::factory()->make(['title' => 'Dune']));
+
+    expect(AiUsageRecord::where('kind', AiUsageKind::Embeddings)->sole()->agent_class)->toBe(LibraryEmbedder::class);
 });
 
 test('embed returns null when ai is disabled', function (): void {

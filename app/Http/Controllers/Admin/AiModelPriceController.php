@@ -23,8 +23,8 @@ use Inertia\Response;
 class AiModelPriceController extends Controller
 {
     /**
-     * The ten standard and batch per-MTok rate columns that constitute a
-     * manual price edit. A change to any of these takes the row under manual
+     * The standard and batch per-MTok rate columns, plus the per-1k
+     * search-unit rates, that constitute a manual price edit. A change to any of these takes the row under manual
      * control; free-pool and rate-limit changes are deliberately excluded.
      *
      * @var list<string>
@@ -40,6 +40,8 @@ class AiModelPriceController extends Controller
         'batch_cache_read_per_mtok',
         'batch_cache_write_per_mtok',
         'batch_reasoning_per_mtok',
+        'search_unit_per_k',
+        'batch_search_unit_per_k',
     ];
 
     public function index(): Response
@@ -65,6 +67,7 @@ class AiModelPriceController extends Controller
         $validated = $storeAiModelPriceRequest->validated();
         $rateLimits = Arr::pull($validated, 'rate_limits') ?? [];
         $automaticUpdatesEnabled = $this->pullBooleanFlag($validated, 'automatic_updates_enabled');
+        $this->zeroBlankSearchUnitRate($validated);
 
         // A manually entered price is owned by the admin: it defaults to
         // locked and marked manual so a sync never overwrites it, unless the
@@ -85,6 +88,7 @@ class AiModelPriceController extends Controller
         $validated = $updateAiModelPriceRequest->validated();
         $rateLimits = Arr::pull($validated, 'rate_limits') ?? [];
         $automaticUpdatesEnabled = $this->pullBooleanFlag($validated, 'automatic_updates_enabled');
+        $this->zeroBlankSearchUnitRate($validated);
 
         $priceChanged = $this->pricingFieldsChanged($aiModelPrice, $validated);
 
@@ -142,7 +146,21 @@ class AiModelPriceController extends Controller
     }
 
     /**
-     * Whether any of the ten standard/batch price fields present in the
+     * The standard search-unit rate column is NOT NULL (token-only models
+     * bill zero search units), so a blank form field means "free", not
+     * "unset". The batch rate stays nullable like the other batch columns.
+     *
+     * @param  array<string, mixed>  $validated
+     */
+    private function zeroBlankSearchUnitRate(array &$validated): void
+    {
+        if (array_key_exists('search_unit_per_k', $validated) && $validated['search_unit_per_k'] === null) {
+            $validated['search_unit_per_k'] = 0;
+        }
+    }
+
+    /**
+     * Whether any of the standard/batch price fields present in the
      * validated payload differs from the stored value. Comparison is done on
      * normalized 4-decimal strings to avoid binary float equality pitfalls.
      *

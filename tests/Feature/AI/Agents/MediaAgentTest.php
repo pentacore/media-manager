@@ -3,14 +3,18 @@
 declare(strict_types=1);
 
 use App\Ai\Agents\MediaAgent;
-use App\Ai\Decision\InspectStuckImportTool;
+use App\Ai\Agents\MediaFileInspectorAgent;
+use App\Ai\Agents\StuckDownloadInvestigatorAgent;
 use App\Ai\Tools\BaseTool;
+use App\Enums\AiReasoningLevel;
 use App\Models\ServiceConnection;
 use App\Settings\AiSettings;
 use Laravel\Ai\Contracts\Agent;
+use Laravel\Ai\Contracts\CanActAsTool;
 use Laravel\Ai\Contracts\Conversational;
 use Laravel\Ai\Contracts\HasTools;
 use Laravel\Ai\Contracts\Tool;
+use Laravel\Ai\Enums\Lab;
 
 beforeEach(function (): void {
     config()->set('services.tmdb.api_key');
@@ -33,21 +37,24 @@ test('MediaAgent takes its prompt timeout from AiSettings', function (): void {
     expect((new MediaAgent)->timeout())->toBe(300);
 });
 
-test('every tool returned by tools() is a usable SDK Tool', function (): void {
+test('every tool returned by tools() is a BaseTool or a read-only sub-agent', function (): void {
     $tools = iterator_to_array((new MediaAgent)->tools(), false);
 
     foreach ($tools as $tool) {
-        // Most tools extend BaseTool; the context-free InspectStuckImportTool
-        // implements the SDK Tool contract directly. Both are valid.
-        expect($tool)->toBeInstanceOf(Tool::class);
-
-        // Advisory-mode enforcement lives in BaseTool::handle(). Any tool that
-        // bypasses BaseTool must be read-only by design and consciously
+        // Advisory-mode enforcement lives in BaseTool::handle(). Anything
+        // outside BaseTool must be read-only by design and consciously
         // whitelisted here — a Destructive tool outside BaseTool would skip
-        // the advisory gate entirely.
-        if (! $tool instanceof BaseTool) {
-            expect($tool::class)->toBe(InspectStuckImportTool::class);
+        // the advisory gate entirely. The investigation sub-agents are
+        // read-only and the SDK wraps them as tools by their name().
+        if ($tool instanceof Agent) {
+            expect($tool)->toBeInstanceOf(CanActAsTool::class)
+                ->and($tool::class)->toBeIn([StuckDownloadInvestigatorAgent::class, MediaFileInspectorAgent::class]);
+
+            continue;
         }
+
+        expect($tool)->toBeInstanceOf(Tool::class)
+            ->toBeInstanceOf(BaseTool::class);
     }
 });
 
@@ -74,14 +81,12 @@ test('tool list includes the core tool families', function (): void {
     expect($shortNames)->toContain('ProposeWorkflowTool');
 });
 
-test('tool list includes the download queue/history/stuck-import tools', function (): void {
+test('tool list includes the stuck-download investigator and acting tools', function (): void {
     $tools = collect(iterator_to_array((new MediaAgent)->tools(), false));
 
     $shortNames = $tools->map(fn ($t): string => class_basename($t))->all();
 
-    expect($shortNames)->toContain('GetDownloadQueueTool');
-    expect($shortNames)->toContain('GetDownloadHistoryTool');
-    expect($shortNames)->toContain('InspectStuckImportTool');
+    expect($shortNames)->toContain('StuckDownloadInvestigatorAgent');
     expect($shortNames)->toContain('ResolveManualImportChatTool');
     expect($shortNames)->toContain('RemoveStuckDownloadChatTool');
 });
@@ -90,9 +95,10 @@ test('tool list includes the subtitle replacement tools', function (): void {
     $shortNames = collect(iterator_to_array((new MediaAgent)->tools(), false))
         ->map(fn ($t): string => class_basename($t))->all();
 
-    expect($shortNames)->toContain('InspectMediaFileTool')
-        ->toContain('FindReplacementCandidatesTool')
-        ->toContain('ReplaceMediaFileTool');
+    expect($shortNames)->toContain('MediaFileInspectorAgent')
+        ->toContain('ReplaceMediaFileTool')
+        ->not->toContain('InspectMediaFileTool')
+        ->not->toContain('FindReplacementCandidatesTool');
 });
 
 test('the replacement instructions keep Bazarr out of the replacement flow', function (): void {
@@ -111,10 +117,10 @@ test('the replacement instructions keep Bazarr out of the replacement flow', fun
         ->and($replacementSection)->toContain('Do not re-check Bazarr first');
 });
 
-test('tool list has the 31 core tools when no optional integration is configured', function (): void {
+test('tool list has the 28 core tools when no optional integration is configured', function (): void {
     $tools = collect(iterator_to_array((new MediaAgent)->tools(), false));
 
-    expect($tools->count())->toBe(31);
+    expect($tools->count())->toBe(28);
 });
 
 test('Prowlarr tools appear only with an active Prowlarr connection', function (): void {
@@ -188,7 +194,7 @@ test('instructions cover the behavioral guidance the schemas cannot express', fu
     // Tool routing that lives in the prompt (not in any schema)
     expect($instructions)->toContain('SemanticLibrarySearchTool')
         ->toContain('ProposeWorkflowTool')
-        ->toContain('InspectStuckImportTool')
+        ->toContain('InvestigateStuckDownload')
         ->toContain('ResolveManualImportChatTool')
         ->toContain('RemoveStuckDownloadChatTool')
         ->toContain('SearchMediaTool')
@@ -201,8 +207,9 @@ test('instructions cover the behavioral guidance the schemas cannot express', fu
         ->toContain('awaiting_confirmation');
 
     // Subtitle replacement workflow guidance
-    expect($instructions)->toContain('InspectMediaFileTool')
-        ->toContain('FindReplacementCandidatesTool')
+    expect($instructions)->toContain('InspectMediaFile')
+        ->not->toContain('InspectMediaFileTool')
+        ->not->toContain('FindReplacementCandidatesTool')
         ->toContain('ReplaceMediaFileTool')
         ->toContain('automatic_candidate')
         ->toContain('verified');
@@ -210,4 +217,12 @@ test('instructions cover the behavioral guidance the schemas cannot express', fu
     expect($instructions)->toContain('InspectSubtitleTool')
         ->toContain('SearchSubtitlesTool')
         ->toContain('RequestSubtitleOperationTool');
+});
+
+test('MediaAgent asks OpenAI for a reasoning summary at the configured effort', function (): void {
+    resolve(AiSettings::class)->setAdvisorReasoningLevel(AiReasoningLevel::Medium);
+
+    expect((new MediaAgent)->providerOptions(Lab::OpenAI))
+        ->toBe(['reasoning' => ['effort' => 'medium', 'summary' => 'auto']])
+        ->and((new MediaAgent)->providerOptions(Lab::Anthropic))->toBe([]);
 });

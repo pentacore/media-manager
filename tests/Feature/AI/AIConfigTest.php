@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 use App\Providers\AIServiceProvider;
+use Composer\InstalledVersions;
 
 test('ai feature is disabled by default', function (): void {
     config()->set('mediamanager.ai.enabled', false);
@@ -29,4 +30,14 @@ test('default ai model is set', function (): void {
 
 test('AIServiceProvider is registered', function (): void {
     expect(app()->getLoadedProviders())->toHaveKey(AIServiceProvider::class);
+});
+
+test('ai config exposes the 1.0 classification defaults', function (): void {
+    expect(config('ai.default_for_classification'))->toBe('openrouter')
+        ->and(config('ai.providers.typesafe.driver'))->toBe('typesafe')
+        ->and(config('ai.caching.embeddings.individually'))->toBeTrue();
+});
+
+test('installed laravel/ai is 1.x', function (): void {
+    expect(InstalledVersions::getVersion('laravel/ai'))->toStartWith('1.');
 });

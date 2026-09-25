@@ -1,6 +1,14 @@
 <script setup lang="ts">
 import { usePage } from '@inertiajs/vue3';
-import { ArrowRight, Check, Cpu, Pencil, Sparkles, X } from '@lucide/vue';
+import {
+    ArrowRight,
+    Check,
+    Cpu,
+    Paperclip,
+    Pencil,
+    Sparkles,
+    X,
+} from '@lucide/vue';
 import {
     computed,
     nextTick,
@@ -16,13 +24,16 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { jsonRequest, useAiChat } from '@/composables/useAiChat';
 import type { AgentStep, ConversationMessage } from '@/composables/useAiChat';
-import { streamChat } from '@/composables/useChatStream';
+import { ChatStreamError, useChatStream } from '@/composables/useChatStream';
 import { useMarkdown } from '@/composables/useMarkdown';
 import { useWebSocket } from '@/composables/useWebSocket';
 import type { ChannelLease } from '@/composables/useWebSocket';
 import { cn } from '@/lib/utils';
+import AttachmentChips from './AttachmentChips.vue';
 import ConversationPicker from './ConversationPicker.vue';
+import ReasoningBlock from './ReasoningBlock.vue';
 import StepLivenessBanner from './StepLivenessBanner.vue';
+import ToolCallChip from './ToolCallChip.vue';
 
 const props = withDefaults(
     defineProps<{
@@ -73,6 +84,8 @@ const userId = computed(() => Number(page.props.auth.user?.id ?? 0));
 
 const { render: renderMarkdown } = useMarkdown();
 
+const { streamChat } = useChatStream();
+
 const { acquirePrivateChannel } = useWebSocket();
 
 const messages = ref<ChatMessage[]>([]);
@@ -80,13 +93,88 @@ const input = ref('');
 const sending = ref(false);
 const error = ref<string | null>(null);
 const loading = ref(false);
+/** Cursor for the page of history before the oldest loaded message. */
+const olderCursor = ref<string | null>(null);
+const loadingEarlier = ref(false);
+let lastScrollTop = 0;
 const mode = ref<'advisory' | 'executive'>('executive');
 const renaming = ref(false);
 const renameDraft = ref('');
 
+/** Matches the server's chat attachment rules (count and extensions). */
+const MAX_ATTACHMENTS = 3;
+const ATTACHMENT_EXTENSIONS = [
+    'png',
+    'jpg',
+    'jpeg',
+    'webp',
+    'gif',
+    'txt',
+    'log',
+    'json',
+    'pdf',
+];
+
+interface PendingFile {
+    key: string;
+    file: File;
+    previewUrl?: string;
+}
+
+const pendingFiles = ref<PendingFile[]>([]);
+const streamingIndex = ref<number | null>(null);
+let nextFileKey = 0;
+
 const scrollRef = useTemplateRef<HTMLDivElement>('scroll');
 const inputRef = useTemplateRef<HTMLTextAreaElement>('inputArea');
 const renameRef = useTemplateRef<HTMLInputElement>('renameInput');
+const fileInput = useTemplateRef<HTMLInputElement>('fileInput');
+
+/**
+ * Queue picked or dropped files for the next turn, keeping at most three and
+ * only the types the server accepts. Images get an object-URL preview.
+ */
+function addFiles(list: FileList | null): void {
+    if (!list) {
+        return;
+    }
+
+    for (const file of Array.from(list)) {
+        if (pendingFiles.value.length >= MAX_ATTACHMENTS) {
+            break;
+        }
+
+        const extension = file.name.split('.').pop()?.toLowerCase() ?? '';
+
+        if (!ATTACHMENT_EXTENSIONS.includes(extension)) {
+            continue;
+        }
+
+        pendingFiles.value.push({
+            key: `file-${nextFileKey++}`,
+            file,
+            previewUrl: file.type.startsWith('image/')
+                ? URL.createObjectURL(file)
+                : undefined,
+        });
+    }
+}
+
+function removeFile(key: string): void {
+    const pending = pendingFiles.value.find((p) => p.key === key);
+
+    if (pending?.previewUrl) {
+        URL.revokeObjectURL(pending.previewUrl);
+    }
+
+    pendingFiles.value = pendingFiles.value.filter((p) => p.key !== key);
+}
+
+function onFileInputChange(event: Event): void {
+    const target = event.target as HTMLInputElement;
+    addFiles(target.files);
+    target.value = '';
+}
 
 const activeTitle = computed<string>(() => {
     const id = activeConversationId.value;
@@ -137,6 +225,7 @@ watch(
 
         if (id !== prev && !id) {
             messages.value = [];
+            olderCursor.value = null;
         }
     },
     { immediate: true },
@@ -162,6 +251,7 @@ async function sendMessage(continuationPayload?: {
 }): Promise<void> {
     let bodyMessage: string;
     let extraBody: Record<string, unknown> = {};
+    let files: File[] = [];
 
     if (continuationPayload) {
         bodyMessage = continuationPayload.syntheticUserText;
@@ -177,12 +267,21 @@ async function sendMessage(continuationPayload?: {
         }
 
         bodyMessage = text;
+        // The object URLs stay alive so the sent bubble keeps its previews.
         messages.value.push({
             role: 'user',
             text,
             ts: Date.now(),
             uid: messageUid(),
+            attachments: pendingFiles.value.map((p) => ({
+                id: 0,
+                name: p.file.name,
+                mime: p.file.type,
+                url: p.previewUrl ?? '',
+            })),
         });
+        files = pendingFiles.value.map((p) => p.file);
+        pendingFiles.value = [];
         input.value = '';
     }
 
@@ -196,12 +295,19 @@ async function sendMessage(continuationPayload?: {
         if (continuationPayload) {
             await sendBlockingTurn(bodyMessage, extraBody);
         } else {
-            await sendStreamingTurn(bodyMessage);
+            await sendStreamingTurn(bodyMessage, files);
         }
     } catch (e) {
         error.value = e instanceof Error ? e.message : 'Unknown error';
+
+        const last = messages.value[messages.value.length - 1];
+
+        if (last?.role === 'assistant' && !last.text) {
+            last.failed = true;
+        }
     } finally {
         sending.value = false;
+        streamingIndex.value = null;
         setPendingStep(null);
         await scrollToBottom();
     }
@@ -242,11 +348,13 @@ async function sendBlockingTurn(
         const data = await response
             .json()
             .catch(() => ({}) as Record<string, unknown>);
+        // `message` is the human-readable explanation (budget cap, rate
+        // limit); `error` is either a short code or a generic sentence.
         const errMsg =
-            typeof data.error === 'string'
-                ? data.error
-                : typeof data.message === 'string'
-                  ? data.message
+            typeof data.message === 'string'
+                ? data.message
+                : typeof data.error === 'string'
+                  ? data.error
                   : `Request failed (${response.status})`;
 
         throw new Error(errMsg);
@@ -284,7 +392,10 @@ async function sendBlockingTurn(
  * SSE text deltas, mark tool starts as pending steps, then (once the stream
  * ends) resolve the conversation id and poll for any proposed workflow.
  */
-async function sendStreamingTurn(bodyMessage: string): Promise<void> {
+async function sendStreamingTurn(
+    bodyMessage: string,
+    files: File[],
+): Promise<void> {
     // Read the element back out of the reactive array so mutations to `.text`
     // during streaming go through Vue's proxy and re-render the bubble.
     const index =
@@ -293,10 +404,13 @@ async function sendStreamingTurn(bodyMessage: string): Promise<void> {
             text: '',
             ts: Date.now(),
             uid: messageUid(),
+            reasoning: '',
+            toolCalls: [],
             workflow: null,
             workflowResolved: null,
         }) - 1;
     const assistantMessage = messages.value[index];
+    streamingIndex.value = index;
 
     const knownConversationId = activeConversationId.value;
 
@@ -304,31 +418,44 @@ async function sendStreamingTurn(bodyMessage: string): Promise<void> {
         message: bodyMessage,
         conversationId: knownConversationId,
         mode: mode.value,
-        onDelta: (accumulated) => {
+        attachments: files,
+        onText: (accumulated) => {
             assistantMessage.text = accumulated;
         },
-        onToolCall: (toolName) => {
+        onReasoning: (accumulated) => {
+            assistantMessage.reasoning = accumulated;
+        },
+        onToolCall: (call) => {
+            const calls = assistantMessage.toolCalls ?? [];
+            const existing = calls.findIndex((c) => c.id === call.id);
+            assistantMessage.toolCalls =
+                existing === -1
+                    ? [...calls, call]
+                    : calls.map((c, i) => (i === existing ? call : c));
             setPendingStep({
                 conversationId: activeConversationId.value ?? '',
-                toolName,
-                status: 'started',
+                toolName: call.name,
+                status: call.status === 'running' ? 'started' : 'finished',
                 occurredAt: new Date().toISOString(),
             });
         },
+    }).catch((e: unknown) => {
+        // A failed turn the server stored still belongs to a conversation
+        // the user can continue — adopt it so a retry doesn't start over.
+        if (e instanceof ChatStreamError && e.conversationId) {
+            adoptConversation(e.conversationId, knownConversationId);
+        }
+
+        throw e;
     });
 
-    // The stream's terminal `conversation_id` event makes the id deterministic:
-    // for an existing conversation it echoes what we sent, for a brand-new one it
-    // carries the id the SDK minted during the turn. Adopt it directly — no
-    // recency guessing.
+    // RUN_STARTED/RUN_FINISHED carry the conversation id as `threadId`: for an
+    // existing conversation it echoes what we sent, for a brand-new one it is
+    // the id minted for the turn. Adopt it directly — no recency guessing.
     const conversationId = result.conversationId;
 
     if (conversationId) {
-        if (conversationId !== knownConversationId) {
-            setActiveConversation(conversationId);
-        }
-
-        rememberConversation(conversationId);
+        adoptConversation(conversationId, knownConversationId);
     }
 
     if (conversationId) {
@@ -342,6 +469,17 @@ async function sendStreamingTurn(bodyMessage: string): Promise<void> {
         );
         assistantMessage.workflow = pending.workflow;
     }
+}
+
+function adoptConversation(
+    conversationId: string,
+    knownConversationId: string | null,
+): void {
+    if (conversationId !== knownConversationId) {
+        setActiveConversation(conversationId);
+    }
+
+    rememberConversation(conversationId);
 }
 
 /**
@@ -405,6 +543,7 @@ async function resolveWorkflow(
 function newConversation(): void {
     startNewConversation();
     messages.value = [];
+    olderCursor.value = null;
     error.value = null;
     inputRef.value?.focus();
 }
@@ -416,6 +555,7 @@ async function pickConversation(id: string): Promise<void> {
 
     setActiveConversation(id);
     messages.value = [];
+    olderCursor.value = null;
     error.value = null;
     loading.value = true;
 
@@ -425,6 +565,7 @@ async function pickConversation(id: string): Promise<void> {
             ...m,
             uid: messageUid(),
         }));
+        olderCursor.value = data.next_cursor;
 
         // Persisted messages carry no workflow payload, so an unresolved
         // proposal would lose its approve/decline buttons on reload. Reattach
@@ -453,6 +594,69 @@ async function pickConversation(id: string): Promise<void> {
     } finally {
         loading.value = false;
         await scrollToBottom();
+    }
+}
+
+/**
+ * Prepend the page of history before the oldest loaded message, keeping the
+ * viewport anchored on what the user was reading.
+ */
+async function loadEarlier(): Promise<void> {
+    const conversationId = activeConversationId.value;
+    const cursor = olderCursor.value;
+
+    if (!conversationId || !cursor || loadingEarlier.value) {
+        return;
+    }
+
+    loadingEarlier.value = true;
+
+    try {
+        const page = await loadConversation(conversationId, cursor);
+
+        if (activeConversationId.value !== conversationId) {
+            return;
+        }
+
+        const before = scrollRef.value?.scrollHeight ?? 0;
+        messages.value = [
+            ...page.messages.map((m) => ({ ...m, uid: messageUid() })),
+            ...messages.value,
+        ];
+        olderCursor.value = page.next_cursor;
+
+        await nextTick();
+
+        if (scrollRef.value) {
+            scrollRef.value.scrollTop += scrollRef.value.scrollHeight - before;
+        }
+    } catch (e) {
+        toast.error(
+            e instanceof Error ? e.message : 'Failed to load earlier messages.',
+        );
+    } finally {
+        loadingEarlier.value = false;
+    }
+}
+
+/**
+ * Auto-load older history when the user scrolls up to the top of the thread.
+ * Only upward scrolls count, so the smooth scroll-to-bottom after opening a
+ * conversation never triggers it.
+ */
+function onThreadScroll(): void {
+    const scrollTop = scrollRef.value?.scrollTop ?? 0;
+    const scrolledUp = scrollTop < lastScrollTop;
+    lastScrollTop = scrollTop;
+
+    if (
+        scrolledUp &&
+        scrollTop < 40 &&
+        olderCursor.value &&
+        !loadingEarlier.value &&
+        !loading.value
+    ) {
+        void loadEarlier();
     }
 }
 
@@ -610,7 +814,24 @@ function onRenameKey(event: KeyboardEvent): void {
                     isSheet ? 'px-4 py-4' : 'px-6 py-5',
                 )
             "
+            data-chat-thread
+            @scroll="onThreadScroll"
         >
+            <button
+                v-if="olderCursor && !loading"
+                type="button"
+                class="self-center text-[12px] text-muted-foreground hover:text-foreground disabled:opacity-60"
+                :disabled="loadingEarlier"
+                data-load-earlier
+                @click="loadEarlier"
+            >
+                {{
+                    loadingEarlier
+                        ? 'Loading earlier messages…'
+                        : 'Load earlier messages'
+                }}
+            </button>
+
             <div
                 v-if="loading"
                 class="flex h-full items-center justify-center text-sm text-muted-foreground"
@@ -725,6 +946,43 @@ function onRenameKey(event: KeyboardEvent): void {
                             }}
                         </p>
                     </div>
+                    <AttachmentChips
+                        v-if="m.attachments?.length"
+                        :items="
+                            m.attachments.map((a, i) => ({
+                                key: `${m.uid}-${i}`,
+                                name: a.name,
+                                mime: a.mime,
+                                url: a.url || undefined,
+                            }))
+                        "
+                        class="mb-1.5"
+                    />
+                    <ReasoningBlock
+                        v-if="m.reasoning"
+                        :reasoning="m.reasoning"
+                        :streaming="
+                            sending && streamingIndex === messages.indexOf(m)
+                        "
+                    />
+                    <div
+                        v-if="m.toolCalls?.length"
+                        class="mb-2 flex flex-wrap gap-1.5"
+                        data-tool-calls
+                    >
+                        <ToolCallChip
+                            v-for="call in m.toolCalls"
+                            :key="call.id"
+                            :call="call"
+                        />
+                    </div>
+                    <p
+                        v-if="m.failed && !m.text"
+                        class="text-[13px] text-destructive"
+                        data-failed-turn
+                    >
+                        This reply failed.
+                    </p>
                     <!-- v-html is fed by useMarkdown which sanitizes via DOMPurify. -->
                     <div
                         class="mm-markdown text-[14px] leading-relaxed"
@@ -754,9 +1012,47 @@ function onRenameKey(event: KeyboardEvent): void {
             >
                 {{ error }}
             </div>
+            <AttachmentChips
+                :items="
+                    pendingFiles.map((p) => ({
+                        key: p.key,
+                        name: p.file.name,
+                        mime: p.file.type,
+                        previewUrl: p.previewUrl,
+                    }))
+                "
+                removable
+                class="mb-2"
+                @remove="removeFile"
+            />
             <div
                 class="flex items-end gap-2.5 rounded-xl border border-border bg-card p-2.5"
+                @dragover.prevent
+                @drop.prevent="addFiles($event.dataTransfer?.files ?? null)"
             >
+                <input
+                    ref="fileInput"
+                    type="file"
+                    multiple
+                    class="hidden"
+                    accept=".png,.jpg,.jpeg,.webp,.gif,.txt,.log,.json,.pdf"
+                    data-attachment-input
+                    @change="onFileInputChange"
+                />
+                <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    class="size-7 p-0 text-muted-foreground"
+                    title="Attach files"
+                    data-attach-button
+                    :disabled="
+                        sending || pendingFiles.length >= MAX_ATTACHMENTS
+                    "
+                    @click="fileInput?.click()"
+                >
+                    <Paperclip class="size-3.5" />
+                </Button>
                 <textarea
                     ref="inputArea"
                     v-model="input"

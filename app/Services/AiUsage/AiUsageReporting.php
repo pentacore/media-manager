@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Services\AiUsage;
 
+use App\Enums\AiUsageKind;
 use App\Enums\FreePoolOverflowBehavior;
 use App\Enums\RateLimitMetric;
 use App\Enums\RateLimitPeriod;
@@ -40,15 +41,16 @@ class AiUsageReporting
     ';
 
     /**
-     * A null $since means no lower bound (the "All" window).
+     * A null $since means no lower bound (the "All" window); a null $kind
+     * spans every usage kind (the budget guard relies on that default).
      *
      * @return array{total_invocations: int, total_tool_calls: int, total_tokens: int, total_cost: string}
      */
-    public function totals(?CarbonImmutable $since, ?Scenario $scenario = null): array
+    public function totals(?CarbonImmutable $since, ?Scenario $scenario = null, ?AiUsageKind $kind = null): array
     {
         [$costSql, $costBindings] = $this->costExpression($scenario);
 
-        $row = $this->query($since, $scenario)
+        $row = $this->query($since, $scenario, $kind)
             ->selectRaw('
                 COUNT(*) AS total_invocations,
                 COALESCE(SUM(ai_usage_records.tool_calls_count), 0) AS total_tool_calls,
@@ -63,7 +65,7 @@ class AiUsageReporting
         // (the user is asking "what if rates were X?", not "what would I
         // bill?"), so only net out the included tokens for the live view.
         if (! $scenario instanceof Scenario) {
-            $totalCost = max(0.0, $totalCost - $this->freePoolDiscount($since));
+            $totalCost = max(0.0, $totalCost - $this->freePoolDiscount($since, $kind));
         }
 
         return [
@@ -257,8 +259,11 @@ class AiUsageReporting
      *   proportionally across member models by their share of the bucket's
      *   usage — pools group same-family models, so exact chronological
      *   allocation isn't worth the extra SQL.
+     *
+     * A $kind narrows only which rows' forgiveness is counted: quota
+     * consumption is still measured against every kind sharing the pool.
      */
-    private function freePoolDiscount(?CarbonImmutable $since): float
+    private function freePoolDiscount(?CarbonImmutable $since, ?AiUsageKind $kind = null): float
     {
         $pools = AiFreeUsagePool::query()->with('prices')->get();
 
@@ -281,12 +286,12 @@ class AiUsageReporting
             }
 
             if ($pool->overflow_behavior === FreePoolOverflowBehavior::FitOrPaid) {
-                $discount += $this->fitOrPaidDiscount($pool, $rates, $since);
+                $discount += $this->fitOrPaidDiscount($pool, $rates, $since, $kind);
 
                 continue;
             }
 
-            $buckets = $this->poolUsageRows($pool, $since, bucketed: true)
+            $buckets = $this->poolUsageRows($pool, $since, bucketed: true, kind: $kind)
                 ->groupBy('bucket');
 
             foreach ($buckets as $bucket) {
@@ -354,12 +359,12 @@ class AiUsageReporting
      * Bucketed rows fetch from the START of the period containing $since —
      * not $since itself — so per-bucket caps are measured against the full
      * period's usage. used_* covers the whole bucket; window_* only the
-     * rows at or after $since, split per token class so forgiveness can be
-     * valued at each class's own rate.
+     * rows at or after $since (and of $kind, when given), split per token
+     * class so forgiveness can be valued at each class's own rate.
      *
      * @return Collection<int, object{provider: string, base_model: string, bucket?: string, used_input: int|string, used_output: int|string, window_input?: int|string, window_cache_read?: int|string, window_cache_write?: int|string, window_output?: int|string}>
      */
-    private function poolUsageRows(AiFreeUsagePool $aiFreeUsagePool, ?CarbonImmutable $since, bool $bucketed = false): Collection
+    private function poolUsageRows(AiFreeUsagePool $aiFreeUsagePool, ?CarbonImmutable $since, bool $bucketed = false, ?AiUsageKind $kind = null): Collection
     {
         $memberProviders = $aiFreeUsagePool->prices
             ->map(fn (AiModelPrice $aiModelPrice): string => $aiModelPrice->provider)
@@ -388,22 +393,30 @@ class AiUsageReporting
             $selects[] = sprintf("date_trunc('%s', ai_usage_records.created_at) AS bucket", $aiFreeUsagePool->period->sqlDateTrunc());
             $groupBy[] = 'bucket';
 
+            $windowConditions = [];
+            $windowBindings = [];
+
             if ($since instanceof CarbonImmutable) {
-                $selects[] = '
-                    COALESCE(SUM(ai_usage_records.prompt_tokens) FILTER (WHERE ai_usage_records.created_at >= ?), 0) AS window_input,
-                    COALESCE(SUM(ai_usage_records.cache_read_input_tokens) FILTER (WHERE ai_usage_records.created_at >= ?), 0) AS window_cache_read,
-                    COALESCE(SUM(ai_usage_records.cache_write_input_tokens) FILTER (WHERE ai_usage_records.created_at >= ?), 0) AS window_cache_write,
-                    COALESCE(SUM(ai_usage_records.completion_tokens) FILTER (WHERE ai_usage_records.created_at >= ?), 0) AS window_output
-                ';
-                $bindings = [$since, $since, $since, $since];
-            } else {
-                $selects[] = '
-                    COALESCE(SUM(ai_usage_records.prompt_tokens), 0) AS window_input,
-                    COALESCE(SUM(ai_usage_records.cache_read_input_tokens), 0) AS window_cache_read,
-                    COALESCE(SUM(ai_usage_records.cache_write_input_tokens), 0) AS window_cache_write,
-                    COALESCE(SUM(ai_usage_records.completion_tokens), 0) AS window_output
-                ';
+                $windowConditions[] = 'ai_usage_records.created_at >= ?';
+                $windowBindings[] = $since;
             }
+
+            if ($kind instanceof AiUsageKind) {
+                $windowConditions[] = 'ai_usage_records.kind = ?';
+                $windowBindings[] = $kind->value;
+            }
+
+            $windowFilter = $windowConditions === []
+                ? ''
+                : sprintf(' FILTER (WHERE %s)', implode(' AND ', $windowConditions));
+
+            $selects[] = sprintf('
+                COALESCE(SUM(ai_usage_records.prompt_tokens)%1$s, 0) AS window_input,
+                COALESCE(SUM(ai_usage_records.cache_read_input_tokens)%1$s, 0) AS window_cache_read,
+                COALESCE(SUM(ai_usage_records.cache_write_input_tokens)%1$s, 0) AS window_cache_write,
+                COALESCE(SUM(ai_usage_records.completion_tokens)%1$s, 0) AS window_output
+            ', $windowFilter);
+            $bindings = [...$windowBindings, ...$windowBindings, ...$windowBindings, ...$windowBindings];
         }
 
         $fetchStart = $bucketed && $since instanceof CarbonImmutable
@@ -427,16 +440,21 @@ class AiUsageReporting
      * quota spent before the window isn't re-granted), but only fitting
      * requests at or after $since convert to USD. Uncapped split dimensions
      * hold no free budget, so their tokens stay billed even on fitting
-     * requests — matching the split branch's treatment of null caps.
+     * requests — matching the split branch's treatment of null caps. A $kind
+     * limits which fitting requests convert to USD, not the replay itself.
      *
      * @param  array<string, array{input: float, output: float}>  $rates
      */
-    private function fitOrPaidDiscount(AiFreeUsagePool $aiFreeUsagePool, array $rates, ?CarbonImmutable $since): float
+    private function fitOrPaidDiscount(AiFreeUsagePool $aiFreeUsagePool, array $rates, ?CarbonImmutable $since, ?AiUsageKind $kind = null): float
     {
         $discount = 0.0;
 
         foreach ($this->replayFitOrPaid($aiFreeUsagePool, $since) as $row) {
             if (! $row->fits) {
+                continue;
+            }
+
+            if ($kind instanceof AiUsageKind && $row->kind !== $kind->value) {
                 continue;
             }
 
@@ -510,7 +528,7 @@ class AiUsageReporting
      * together; split pools require every capped dimension to fit its own.
      * Input includes cached read/write tokens.
      *
-     * @return Collection<int, object{provider: string, base_model: string, prompt_tokens: int|string, completion_tokens: int|string, cache_read_input_tokens: int|string, cache_write_input_tokens: int|string, created_at: string, fits: bool}>
+     * @return Collection<int, object{provider: string, base_model: string, kind: string, prompt_tokens: int|string, completion_tokens: int|string, cache_read_input_tokens: int|string, cache_write_input_tokens: int|string, created_at: string, fits: bool}>
      */
     private function replayFitOrPaid(AiFreeUsagePool $aiFreeUsagePool, ?CarbonImmutable $since): Collection
     {
@@ -559,7 +577,7 @@ class AiUsageReporting
      * order, fetched from the start of the period containing $since (null =
      * all history) so replays always see the bucket's full usage.
      *
-     * @return Collection<int, object{provider: string, base_model: string, prompt_tokens: int|string, completion_tokens: int|string, cache_read_input_tokens: int|string, cache_write_input_tokens: int|string, created_at: string}>
+     * @return Collection<int, object{provider: string, base_model: string, kind: string, prompt_tokens: int|string, completion_tokens: int|string, cache_read_input_tokens: int|string, cache_write_input_tokens: int|string, created_at: string}>
      */
     private function poolUsageRecords(AiFreeUsagePool $aiFreeUsagePool, ?CarbonImmutable $since): Collection
     {
@@ -587,6 +605,7 @@ class AiUsageReporting
             ->selectRaw("
                 ai_usage_records.provider,
                 regexp_replace(ai_usage_records.model, '".self::BASE_MODEL_REGEX."', '') AS base_model,
+                ai_usage_records.kind,
                 ai_usage_records.prompt_tokens,
                 ai_usage_records.completion_tokens,
                 ai_usage_records.cache_read_input_tokens,
@@ -603,13 +622,13 @@ class AiUsageReporting
     /**
      * @return Collection<int, object{key: string|null, invocations: int, total_tokens: int, total_cost: string}>
      */
-    public function aggregateBy(string $column, ?CarbonImmutable $since, ?Scenario $scenario = null): Collection
+    public function aggregateBy(string $column, ?CarbonImmutable $since, ?Scenario $scenario = null, ?AiUsageKind $kind = null): Collection
     {
         throw_unless(in_array($column, self::AGGREGATABLE_COLUMNS, true), InvalidArgumentException::class, sprintf("Cannot aggregate by '%s'.", $column));
 
         [$costSql, $costBindings] = $this->costExpression($scenario);
 
-        return $this->query($since, $scenario)
+        return $this->query($since, $scenario, $kind)
             ->selectRaw("
                 ai_usage_records.{$column} AS key,
                 COUNT(*) AS invocations,
@@ -624,11 +643,11 @@ class AiUsageReporting
     /**
      * @return Collection<int, object>
      */
-    public function recentInvocations(?CarbonImmutable $since, ?Scenario $scenario = null, int $limit = 50): Collection
+    public function recentInvocations(?CarbonImmutable $since, ?Scenario $scenario = null, int $limit = 50, ?AiUsageKind $kind = null): Collection
     {
         [$costSql, $costBindings] = $this->costExpression($scenario);
 
-        return $this->query($since, $scenario)
+        return $this->query($since, $scenario, $kind)
             ->leftJoin('users', 'ai_usage_records.user_id', '=', 'users.id')
             ->selectRaw('
                 ai_usage_records.id,
@@ -640,6 +659,8 @@ class AiUsageReporting
                 ai_usage_records.tool_calls_count,
                 ai_usage_records.conversation_id,
                 ai_usage_records.status,
+                ai_usage_records.kind,
+                ai_usage_records.error_message,
                 users.name AS user_name,
                 ('.self::TOKEN_SUM_EXPR.') AS total_tokens,
                 ('.$costSql.') AS cost
@@ -662,6 +683,37 @@ class AiUsageReporting
     }
 
     /**
+     * Per-tool call counts, failures and latency percentiles inside the
+     * window. Percentiles skip rows recorded before duration tracking
+     * existed (null duration_ms), so they are null for such tools.
+     *
+     * @return Collection<int, object{tool_class: string, calls: int, failures: int, p50_ms: int|null, p95_ms: int|null}>
+     */
+    public function toolStats(?CarbonImmutable $since): Collection
+    {
+        return DB::table('ai_tool_invocations')
+            ->when($since instanceof CarbonImmutable, fn (Builder $builder) => $builder->where('created_at', '>=', $since))
+            ->selectRaw("
+                tool_class,
+                COUNT(*) AS calls,
+                COUNT(*) FILTER (WHERE status = 'failed') AS failures,
+                percentile_cont(0.5) WITHIN GROUP (ORDER BY duration_ms) AS p50_ms,
+                percentile_cont(0.95) WITHIN GROUP (ORDER BY duration_ms) AS p95_ms
+            ")
+            ->groupBy('tool_class')
+            ->orderByDesc('calls')
+            ->orderBy('tool_class')
+            ->get()
+            ->map(fn (object $row): object => (object) [
+                'tool_class' => (string) $row->tool_class,
+                'calls' => (int) $row->calls,
+                'failures' => (int) $row->failures,
+                'p50_ms' => $row->p50_ms === null ? null : (int) round((float) $row->p50_ms),
+                'p95_ms' => $row->p95_ms === null ? null : (int) round((float) $row->p95_ms),
+            ]);
+    }
+
+    /**
      * Per-invocation detail for the admin drill-down: token counts, the
      * pricing source actually used to cost it, the breakdown that produced
      * the total, the tools the agent called, plus an optional scenario
@@ -672,17 +724,19 @@ class AiUsageReporting
      *     record: array<string, mixed>,
      *     user: array{id: int, name: string}|null,
      *     tools: array<int, array<string, mixed>>,
+     *     children: list<array{id: int, agent_class: string|null, model: string|null, status: string, total_tokens: int}>,
      *     rates: array{
      *         source: 'snapshot'|'catalog'|'unpriced',
      *         input_per_mtok: float,
      *         output_per_mtok: float,
      *         cache_read_per_mtok: float,
      *         cache_write_per_mtok: float,
-     *         reasoning_per_mtok: float
+     *         reasoning_per_mtok: float,
+     *         search_unit_per_k: float
      *     },
-     *     breakdown: array<int, array{label: string, tokens: int, rate: float, cost: float}>,
+     *     breakdown: array<int, array{label: string, tokens: int|float, rate: float, cost: float}>,
      *     total_cost: float,
-     *     scenario_breakdown: array<int, array{label: string, tokens: int, rate: float, cost: float}>|null,
+     *     scenario_breakdown: array<int, array{label: string, tokens: int|float, rate: float, cost: float}>|null,
      *     scenario_total_cost: float|null
      * }
      */
@@ -701,6 +755,7 @@ class AiUsageReporting
             'cache_read_per_mtok' => $this->resolveRate($aiUsageRecord->cache_read_per_mtok, $catalog?->cache_read_per_mtok),
             'cache_write_per_mtok' => $this->resolveRate($aiUsageRecord->cache_write_per_mtok, $catalog?->cache_write_per_mtok),
             'reasoning_per_mtok' => $this->resolveRate($aiUsageRecord->reasoning_per_mtok, $catalog?->reasoning_per_mtok),
+            'search_unit_per_k' => $this->resolveRate($aiUsageRecord->search_unit_per_k, $catalog?->search_unit_per_k),
         ];
 
         $rateSource = match (true) {
@@ -715,6 +770,7 @@ class AiUsageReporting
             'cache_read' => $aiUsageRecord->cache_read_input_tokens,
             'cache_write' => $aiUsageRecord->cache_write_input_tokens,
             'reasoning' => $aiUsageRecord->reasoning_tokens,
+            'search_units' => (float) $aiUsageRecord->search_units,
         ];
 
         $breakdown = $this->buildBreakdown($tokens, [
@@ -723,22 +779,43 @@ class AiUsageReporting
             'cache_read' => $rates['cache_read_per_mtok'],
             'cache_write' => $rates['cache_write_per_mtok'],
             'reasoning' => $rates['reasoning_per_mtok'],
+            'search_units' => $rates['search_unit_per_k'],
         ]);
 
         $tools = AiToolInvocation::query()
             ->where('invocation_id', $aiUsageRecord->invocation_id)
             ->orderBy('id')
-            ->get(['id', 'tool_class', 'tool_invocation_id', 'status', 'created_at'])
+            ->get(['id', 'tool_class', 'tool_invocation_id', 'status', 'error_code', 'duration_ms', 'created_at'])
             ->map(fn (AiToolInvocation $aiToolInvocation): array => [
                 'id' => $aiToolInvocation->id,
                 'tool_class' => $aiToolInvocation->tool_class,
                 'tool_invocation_id' => $aiToolInvocation->tool_invocation_id,
                 'status' => $aiToolInvocation->status,
+                'error_code' => $aiToolInvocation->error_code,
+                'duration_ms' => $aiToolInvocation->duration_ms,
                 'created_at' => $aiToolInvocation->created_at?->toIso8601String(),
             ])
             ->all();
 
-        [$scenarioBreakdown, $scenarioTotal] = $this->scenarioBreakdown($tokens, $scenario);
+        $children = AiUsageRecord::query()
+            ->where('parent_invocation_id', $aiUsageRecord->invocation_id)
+            ->orderBy('id')
+            ->get()
+            ->map(fn (AiUsageRecord $child): array => [
+                'id' => $child->id,
+                'agent_class' => $child->agent_class,
+                'model' => $child->model,
+                'status' => $child->status,
+                'total_tokens' => $child->prompt_tokens
+                    + $child->completion_tokens
+                    + $child->cache_read_input_tokens
+                    + $child->cache_write_input_tokens
+                    + $child->reasoning_tokens,
+            ])
+            ->values()
+            ->all();
+
+        [$scenarioBreakdown, $scenarioTotal] = $this->scenarioBreakdown($tokens, $scenario, (float) ($aiUsageRecord->search_unit_per_k ?? 0));
 
         return [
             'record' => [
@@ -757,6 +834,10 @@ class AiUsageReporting
                 'price_source' => $aiUsageRecord->price_source,
                 'conversation_id' => $aiUsageRecord->conversation_id,
                 'status' => $aiUsageRecord->status,
+                'kind' => $aiUsageRecord->kind->value,
+                'error_message' => $aiUsageRecord->error_message,
+                'parent_invocation_id' => $aiUsageRecord->parent_invocation_id,
+                'search_units' => (float) $aiUsageRecord->search_units,
                 'created_at' => $aiUsageRecord->created_at?->toIso8601String(),
             ],
             'user' => $aiUsageRecord->user instanceof User ? [
@@ -764,6 +845,7 @@ class AiUsageReporting
                 'name' => $aiUsageRecord->user->name,
             ] : null,
             'tools' => $tools,
+            'children' => $children,
             'rates' => array_merge(['source' => $rateSource], $rates),
             'breakdown' => $breakdown,
             'total_cost' => array_sum(array_column($breakdown, 'cost')),
@@ -786,9 +868,13 @@ class AiUsageReporting
     }
 
     /**
-     * @param  array<string, int>  $tokens
+     * Token tiers are priced per million; search units per thousand. The
+     * search-units line appears only for rows that billed search units, so
+     * token-only runs keep their five-tier breakdown.
+     *
+     * @param  array<string, int|float>  $tokens
      * @param  array<string, float>  $rates
-     * @return array<int, array{label: string, tokens: int, rate: float, cost: float}>
+     * @return array<int, array{label: string, tokens: int|float, rate: float, cost: float}>
      */
     private function buildBreakdown(array $tokens, array $rates): array
     {
@@ -798,16 +884,21 @@ class AiUsageReporting
             'cache_read' => 'Cache read',
             'cache_write' => 'Cache write',
             'reasoning' => 'Reasoning',
+            'search_units' => 'Search units',
         ];
 
         $rows = [];
 
         foreach ($labels as $key => $label) {
+            if ($key === 'search_units' && (float) ($tokens[$key] ?? 0) <= 0.0) {
+                continue;
+            }
+
             $rows[] = [
                 'label' => $label,
                 'tokens' => $tokens[$key],
                 'rate' => $rates[$key],
-                'cost' => $tokens[$key] * $rates[$key] / 1_000_000,
+                'cost' => $tokens[$key] * $rates[$key] / ($key === 'search_units' ? 1_000 : 1_000_000),
             ];
         }
 
@@ -815,10 +906,13 @@ class AiUsageReporting
     }
 
     /**
-     * @param  array<string, int>  $tokens
-     * @return array{0: array<int, array{label: string, tokens: int, rate: float, cost: float}>|null, 1: float|null}
+     * Scenarios model token rates only; search units keep the row's
+     * snapshotted per-1k rate, mirroring costExpression().
+     *
+     * @param  array<string, int|float>  $tokens
+     * @return array{0: array<int, array{label: string, tokens: int|float, rate: float, cost: float}>|null, 1: float|null}
      */
-    private function scenarioBreakdown(array $tokens, ?Scenario $scenario): array
+    private function scenarioBreakdown(array $tokens, ?Scenario $scenario, float $searchUnitPerK): array
     {
         if (! $scenario instanceof Scenario) {
             return [null, null];
@@ -830,6 +924,7 @@ class AiUsageReporting
             'cache_read' => $scenario->cacheReadPerMtok,
             'cache_write' => $scenario->cacheWritePerMtok,
             'reasoning' => $scenario->reasoningPerMtok,
+            'search_units' => $searchUnitPerK,
         ]);
 
         return [$breakdown, array_sum(array_column($breakdown, 'cost'))];
@@ -842,7 +937,8 @@ class AiUsageReporting
      *   time (or assigned retroactively); falls back to live ai_model_prices
      *   when the snapshot is null. Cost is zero for rows that match neither.
      * - With scenario: uses the scenario's flat rates uniformly across all
-     *   rows, ignoring both snapshot and catalog.
+     *   rows, ignoring both snapshot and catalog. Scenarios model token
+     *   rates only, so reranking search units keep their snapshot rate.
      *
      * @return array{0: string, 1: array<int, float>}
      */
@@ -858,6 +954,7 @@ class AiUsageReporting
                         + ai_usage_records.cache_write_input_tokens * COALESCE(ai_usage_records.cache_write_per_mtok, ai_model_prices.cache_write_per_mtok, 0)
                         + ai_usage_records.reasoning_tokens * COALESCE(ai_usage_records.reasoning_per_mtok, ai_model_prices.reasoning_per_mtok, 0)
                     ) / 1000000.0
+                    + ai_usage_records.search_units * COALESCE(ai_usage_records.search_unit_per_k, ai_model_prices.search_unit_per_k, 0) / 1000.0
                 ',
                 [],
             ];
@@ -878,6 +975,7 @@ class AiUsageReporting
                     + ai_usage_records.cache_write_input_tokens * ?::numeric
                     + ai_usage_records.reasoning_tokens * ?::numeric
                 ) / 1000000.0
+                + ai_usage_records.search_units * COALESCE(ai_usage_records.search_unit_per_k, 0) / 1000.0
             ',
             [
                 $scenario->inputPerMtok,
@@ -889,7 +987,7 @@ class AiUsageReporting
         ];
     }
 
-    private function query(?CarbonImmutable $since, ?Scenario $scenario = null): Builder
+    private function query(?CarbonImmutable $since, ?Scenario $scenario = null, ?AiUsageKind $kind = null): Builder
     {
         $builder = DB::table('ai_usage_records');
 
@@ -912,6 +1010,8 @@ class AiUsageReporting
             });
         }
 
-        return $builder->when($since instanceof CarbonImmutable, fn (Builder $builder) => $builder->where('ai_usage_records.created_at', '>=', $since));
+        return $builder
+            ->when($since instanceof CarbonImmutable, fn (Builder $builder) => $builder->where('ai_usage_records.created_at', '>=', $since))
+            ->when($kind instanceof AiUsageKind, fn (Builder $builder) => $builder->where('ai_usage_records.kind', $kind->value));
     }
 }
