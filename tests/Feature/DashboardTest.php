@@ -217,3 +217,13 @@ test('dashboard deferred nowPlaying falls back to empty array on emby http failu
             )
         );
 });
+
+test('pending approvals use the action title and description', function (): void {
+    ActionRequest::factory()->described()->create();
+
+    $this->actingAs(User::factory()->member()->create())
+        ->get(route('dashboard'))
+        ->assertInertia(fn ($page) => $page
+            ->where('pendingApprovals.0.subject_label', 'Delete series "Severance (2022)"')
+            ->where('pendingApprovals.0.description', 'Emby reported "Severance" was removed from the library. Sonarr will delete the series and its files from disk.'));
+});

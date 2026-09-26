@@ -106,13 +106,17 @@ test('manual selection queues an approval-gated replacement action request', fun
     expect($result['queued'])->toBeTrue()
         ->and($result['requires_approval'])->toBeTrue();
 
-    expect(ActionRequest::first()->payload)->toMatchArray([
+    $actionRequest = ActionRequest::first();
+
+    expect($actionRequest->payload)->toMatchArray([
         'selection_mode' => 'manual',
         'required_languages' => ['eng'],
         'candidate_fingerprint' => $fingerprint,
         'scope' => 'anime',
         'original_history_id' => 999,
-    ]);
+    ])
+        ->and($actionRequest->description)->toStartWith('Requested in chat by an unknown user.')
+        ->and($actionRequest->description_verified)->toBeTrue();
 });
 
 test('a Sonarr-rejected candidate forces approval even when the action type is configured to auto-execute', function (): void {

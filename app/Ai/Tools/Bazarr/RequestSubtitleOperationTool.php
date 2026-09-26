@@ -12,6 +12,7 @@ use App\Models\ServiceConnection;
 use App\Services\Bazarr\BazarrCapabilityRegistry;
 use App\Services\Bazarr\BazarrClient;
 use App\Services\Bazarr\SubtitleInventoryService;
+use App\Services\Bazarr\SubtitleOperationDescriber;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
 use Illuminate\JsonSchema\Types\Type;
 use Illuminate\Validation\Rule;
@@ -73,13 +74,14 @@ final class RequestSubtitleOperationTool extends BaseTool
 
         $operationPayload = $this->operationPayload($operation, $arguments, $item, $bazarrClient, $mediaType, $mediaId);
         $managingConnection = $this->managingConnection($connection, $mediaType);
+        $actionDescription = resolve(SubtitleOperationDescriber::class)->describe($operation, $item, $operationPayload);
 
         return [
             'type' => 'bazarr_'.$operation,
             'source_service' => 'ai',
             'target_service' => ServiceType::Bazarr->value,
             'payload' => [
-                'title' => sprintf('%s for %s', str_replace('_', ' ', ucfirst($operation)), (string) ($item['title'] ?? 'media')),
+                'title' => $actionDescription->title,
                 'bazarr_connection_id' => $connection->id,
                 'service_connection_id' => $managingConnection->id,
                 'media_type' => $mediaType,
@@ -89,6 +91,7 @@ final class RequestSubtitleOperationTool extends BaseTool
                 'target_fingerprint' => (string) ($item['target_fingerprint'] ?? ''),
                 ...$operationPayload,
             ],
+            'description' => $actionDescription->because($this->requestedInChat()),
         ];
     }
 

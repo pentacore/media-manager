@@ -28,7 +28,7 @@ class AddMediaTool extends BaseTool
     }
 
     /**
-     * @return array{type: string, target_service: string, payload: array<string, mixed>}
+     * @return array{type: string, target_service: string, payload: array<string, mixed>, fallback_title: ?string}
      */
     protected function execute(Request $request): array
     {
@@ -41,7 +41,7 @@ class AddMediaTool extends BaseTool
             'monitored' => (bool) ($args['monitored'] ?? true),
         ];
 
-        return match ($service) {
+        return [...match ($service) {
             'sonarr' => [
                 'type' => 'add_series',
                 'target_service' => 'sonarr',
@@ -62,7 +62,7 @@ class AddMediaTool extends BaseTool
                 'payload' => ['tmdb_id' => (int) ($args['remote_id'] ?? 0), ...$payload],
             ],
             default => throw new InvalidArgumentException('service must be "sonarr", "radarr", or "whisparr".'),
-        };
+        }, 'fallback_title' => is_string($args['title'] ?? null) ? $args['title'] : null];
     }
 
     /**
@@ -89,6 +89,10 @@ class AddMediaTool extends BaseTool
                 ->required(),
             'season_folder' => $schema->boolean()
                 ->description('Sonarr only: use per-season subfolders. Default true. Pass null for radarr/whisparr.')
+                ->required()
+                ->nullable(),
+            'title' => $schema->string()
+                ->description('Human name of the item (e.g. the series title) as shown to the user. Only displayed if the server cannot look the id up; such requests always wait for approval.')
                 ->required()
                 ->nullable(),
         ];

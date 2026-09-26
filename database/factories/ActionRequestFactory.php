@@ -47,4 +47,17 @@ class ActionRequestFactory extends Factory
             'result' => ['success' => true],
         ]);
     }
+
+    public function described(): static
+    {
+        return $this->state(fn (array $attributes): array => [
+            'title' => 'Delete series "Severance (2022)"',
+            'description' => 'Emby reported "Severance" was removed from the library. Sonarr will delete the series and its files from disk.',
+            'details' => [
+                ['label' => 'Series', 'value' => 'Severance (2022)'],
+                ['label' => 'Delete files', 'value' => 'Yes'],
+            ],
+            'description_verified' => true,
+        ]);
+    }
 }

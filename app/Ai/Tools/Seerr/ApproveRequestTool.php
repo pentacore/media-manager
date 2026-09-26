@@ -24,7 +24,7 @@ class ApproveRequestTool extends BaseTool
     }
 
     /**
-     * @return array{type: string, target_service: string, payload: array<string, mixed>}
+     * @return array{type: string, target_service: string, payload: array<string, mixed>, fallback_title: ?string}
      */
     protected function execute(Request $request): array
     {
@@ -36,6 +36,7 @@ class ApproveRequestTool extends BaseTool
             'payload' => [
                 'seerr_request_id' => (int) ($args['seerr_request_id'] ?? 0),
             ],
+            'fallback_title' => is_string($args['title'] ?? null) ? $args['title'] : null,
         ];
     }
 
@@ -48,6 +49,10 @@ class ApproveRequestTool extends BaseTool
             'seerr_request_id' => $schema->integer()
                 ->description('Seerr request id to approve (use ListPendingRequestsTool to find).')
                 ->required(),
+            'title' => $schema->string()
+                ->description('Title of the requested media as shown to the user. Only displayed if the server cannot look the request up; such requests always wait for approval.')
+                ->required()
+                ->nullable(),
         ];
     }
 }

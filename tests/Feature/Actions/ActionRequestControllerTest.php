@@ -279,3 +279,30 @@ test('retry fails for non-failed status', function (): void {
     expect($request->fresh()->status)->toBe(ActionRequestStatus::Completed);
     Queue::assertNotPushed(ExecuteActionRequest::class);
 });
+
+test('the action queue exposes the description, details and agent reasoning', function (): void {
+    ActionRequest::factory()->described()->create([
+        'payload' => ['sonarr_series_id' => 142, 'agent_rationale' => str_repeat('r', 1200)],
+        'description_verified' => false,
+    ]);
+
+    $this->actingAs(User::factory()->member()->create())
+        ->get(route('actions.requests.index'))
+        ->assertInertia(fn ($page) => $page
+            ->component('Actions/Index')
+            ->where('requests.data.0.title', 'Delete series "Severance (2022)"')
+            ->where('requests.data.0.details.1', ['label' => 'Delete files', 'value' => 'Yes'])
+            ->where('requests.data.0.description_verified', false)
+            ->where('requests.data.0.agent_rationale', str_repeat('r', 1000)));
+});
+
+test('a legacy action request exposes null description fields', function (): void {
+    ActionRequest::factory()->create();
+
+    $this->actingAs(User::factory()->member()->create())
+        ->get(route('actions.requests.index'))
+        ->assertInertia(fn ($page) => $page
+            ->where('requests.data.0.title', null)
+            ->where('requests.data.0.details', [])
+            ->where('requests.data.0.agent_rationale', null));
+});

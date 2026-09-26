@@ -211,6 +211,9 @@ class DemoActivitySeeder extends Seeder
                 'status' => $statuses[$i],
                 'requires_approval' => $statuses[$i] === ActionRequestStatus::Pending,
                 'approved_by' => null,
+                'title' => $row['title'],
+                'description' => $row['detail'],
+                'details' => [['label' => 'Service', 'value' => $row['svc']]],
                 'payload' => ['title' => $row['title'], 'detail' => $row['detail']],
                 'result' => $statuses[$i] === ActionRequestStatus::Completed
                     ? ['success' => true, 'message' => $row['detail']]

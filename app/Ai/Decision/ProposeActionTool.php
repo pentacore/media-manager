@@ -7,7 +7,9 @@ namespace App\Ai\Decision;
 use App\Enums\MediaReplacementStatus;
 use App\Models\MediaReplacementAttempt;
 use App\Models\WebhookEvent;
+use App\Services\Actions\ActionDescriber;
 use App\Services\Actions\ActionOrchestrator;
+use App\Services\Actions\UndescribableAction;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
 use Illuminate\JsonSchema\Types\Type;
 use Illuminate\Support\Facades\Log;
@@ -123,12 +125,25 @@ class ProposeActionTool implements Tool
         }
 
         try {
+            $description = resolve(ActionDescriber::class)
+                ->describe($type, $context->pinContext($payload), is_string($args['title'] ?? null) ? $args['title'] : null)
+                ->because($context->proposalReason());
+        } catch (UndescribableAction $undescribableAction) {
+            return $this->encode([
+                'queued' => false,
+                'reason' => 'missing_target',
+                'message' => sprintf('%s Take the id from the event payload or a read tool and propose again.', $undescribableAction->getMessage()),
+            ]);
+        }
+
+        try {
             $actionRequest = resolve(ActionOrchestrator::class)->dispatchFromAgent(
                 type: $type,
                 sourceService: $context->sourceService,
                 targetService: $targetService !== '' ? $targetService : $context->sourceService,
                 payload: $payload,
                 rationale: Str::limit($rationale, 1000, ''),
+                description: $description,
                 webhookEventId: $context->webhookEventId,
                 forceRequiresApproval: in_array($type, self::FORCED_APPROVAL_TYPES, true) ? true : null,
             );
@@ -184,7 +199,9 @@ class ProposeActionTool implements Tool
                 ->description('Plain-English justification shown to the human approver: what triggered this and why this action.')
                 ->required(),
             'payload' => $schema->object([])
-                ->description('Action-specific arguments (e.g. {"series_id": 42, "delete_files": true}). Use IDs from the event payload or read tools — never invent them.'),
+                ->description('Action-specific arguments (e.g. {"sonarr_series_id": 42, "delete_files": true} for delete_series). Use IDs from the event payload or read tools — never invent them.'),
+            'title' => $schema->string()
+                ->description('Optional human name of the target (e.g. the series title). Only shown if the server cannot resolve the id from the payload; such proposals always wait for human approval.'),
         ];
     }
 

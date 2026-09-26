@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Ai\Decision;
 
+use App\Services\Actions\ActionDescriber;
 use App\Services\Actions\ActionOrchestrator;
 use App\Settings\DecisionAgentSettings;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
@@ -72,12 +73,17 @@ class RemoveStuckDownloadTool implements Tool
         }
 
         try {
+            $actionPayload = ['service' => $service, 'download_id' => $downloadId, 'blocklist' => $blocklist, 'search_replacement' => $searchReplacement];
+
             $actionRequest = resolve(ActionOrchestrator::class)->dispatchFromAgent(
                 type: 'remove_stuck_download',
                 sourceService: $service,
                 targetService: $service,
-                payload: ['service' => $service, 'download_id' => $downloadId, 'blocklist' => $blocklist, 'search_replacement' => $searchReplacement],
+                payload: $actionPayload,
                 rationale: Str::limit(sprintf('Remove stuck %s download %s: %s', $service, $downloadId, $reason), 1000, ''),
+                description: resolve(ActionDescriber::class)
+                    ->describe('remove_stuck_download', $context->pinContext($actionPayload))
+                    ->because($context->proposalReason()),
                 webhookEventId: $context->webhookEventId,
             );
         } catch (Throwable $throwable) {

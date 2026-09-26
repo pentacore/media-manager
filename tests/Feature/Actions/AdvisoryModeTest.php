@@ -7,6 +7,7 @@ use App\Enums\AiMode;
 use App\Events\ActionRequestCreated;
 use App\Jobs\ExecuteActionRequest;
 use App\Models\ActionTypeConfig;
+use App\Services\Actions\ActionDescription;
 use App\Services\Actions\ActionOrchestrator;
 use App\Settings\AiSettings;
 use Illuminate\Support\Facades\Cache;
@@ -33,6 +34,7 @@ test('advisory mode forces Pending even when ActionTypeConfig auto-approves', fu
         sourceService: 'sonarr',
         targetService: 'emby',
         payload: [],
+        description: new ActionDescription('Test action', 'Test effect.'),
     );
 
     expect($request->status)->toBe(ActionRequestStatus::Pending);
@@ -54,6 +56,7 @@ test('advisory mode still emits ActionRequestCreated for UI notification', funct
         sourceService: 'emby',
         targetService: 'sonarr',
         payload: ['sonarr_series_id' => 1],
+        description: new ActionDescription('Test action', 'Test effect.'),
     );
 
     Event::assertDispatched(ActionRequestCreated::class);
@@ -73,6 +76,7 @@ test('executive mode preserves auto-approve behavior', function (): void {
         sourceService: 'sonarr',
         targetService: 'emby',
         payload: [],
+        description: new ActionDescription('Test action', 'Test effect.'),
     );
 
     expect($request->status)->toBe(ActionRequestStatus::Approved);

@@ -9,6 +9,7 @@ use App\Enums\WebhookHandlingStatus;
 use App\Jobs\AuditImportedSubtitles;
 use App\Models\WebhookEvent;
 use App\Notifications\ServiceWarning;
+use App\Services\Actions\ActionDescriber;
 use App\Services\Actions\ActionOrchestrator;
 use App\Services\Library\InterventionCounter;
 use App\Services\MediaReplacement\MediaReplacementTracker;
@@ -23,6 +24,7 @@ class SonarrWebhookHandler extends AbstractWebhookHandler
         private readonly SeriesIndexer $seriesIndexer,
         private readonly MediaReplacementTracker $mediaReplacementTracker,
         private readonly AdminNotifier $adminNotifier,
+        private readonly ActionDescriber $actionDescriber,
     ) {}
 
     protected function serviceSlug(): string
@@ -136,14 +138,16 @@ class SonarrWebhookHandler extends AbstractWebhookHandler
             AuditImportedSubtitles::queueFor($webhookEvent);
         }
 
+        $scanPayload = ['trigger' => 'sonarr_download', 'series_title' => $payload['series']['title'] ?? null];
+
         $this->actionOrchestrator->dispatch(
             type: 'emby_library_scan',
             sourceService: 'sonarr',
             targetService: 'emby',
-            payload: [
-                'trigger' => 'sonarr_download',
-                'series_title' => $payload['series']['title'] ?? null,
-            ],
+            payload: $scanPayload,
+            description: $this->actionDescriber->describe('emby_library_scan', $scanPayload)
+                ->because(sprintf('Sonarr imported "%s".', $seriesTitle))
+                ->withDetail('Triggered by', sprintf('Sonarr › %s', $webhookEvent->serviceConnection?->name ?? 'unknown connection')),
             webhookEvent: $webhookEvent,
         );
     }
@@ -219,14 +223,16 @@ class SonarrWebhookHandler extends AbstractWebhookHandler
             $this->seriesIndexer->forget($sonarrId, $webhookEvent->serviceConnection);
         }
 
+        $scanPayload = ['trigger' => 'sonarr_series_deleted', 'series_title' => $seriesTitle];
+
         $this->actionOrchestrator->dispatch(
             type: 'emby_library_scan',
             sourceService: 'sonarr',
             targetService: 'emby',
-            payload: [
-                'trigger' => 'sonarr_series_deleted',
-                'series_title' => $seriesTitle,
-            ],
+            payload: $scanPayload,
+            description: $this->actionDescriber->describe('emby_library_scan', $scanPayload)
+                ->because(sprintf('Sonarr deleted "%s".', $seriesTitle))
+                ->withDetail('Triggered by', sprintf('Sonarr › %s', $webhookEvent->serviceConnection?->name ?? 'unknown connection')),
             webhookEvent: $webhookEvent,
         );
     }

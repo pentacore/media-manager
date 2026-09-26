@@ -33,6 +33,10 @@ class ActionOrchestrator
      * requirement for a single instance — e.g. a partially-mapped manual import
      * is forced to Pending even when its ActionTypeConfig auto-executes.
      *
+     * $description is the approval card's title/description/details. When it is
+     * unverified (the target's name was not resolved server-side) the request is
+     * forced to Pending — like $forceRequiresApproval, it only tightens the gate.
+     *
      * @param  array<string, mixed>  $payload
      */
     public function dispatch(
@@ -40,9 +44,11 @@ class ActionOrchestrator
         string $sourceService,
         string $targetService,
         array $payload,
+        ActionDescription $description,
         ?WebhookEvent $webhookEvent = null,
         ?bool $forceRequiresApproval = null,
         bool $deferExecution = false,
+        string $origin = 'system',
     ): ?ActionRequest {
         $config = ActionTypeConfig::where('type', $type)->first();
 
@@ -66,7 +72,10 @@ class ActionOrchestrator
 
         $advisoryMode = $this->aiSettings->mode() === AiMode::Advisory;
         // The override can only tighten the gate (force approval), never relax it.
-        $requiresApproval = $advisoryMode || $config->requires_approval || ($forceRequiresApproval ?? false);
+        $requiresApproval = $advisoryMode
+            || $config->requires_approval
+            || ($forceRequiresApproval ?? false)
+            || ! $description->verified;
 
         // Pin the originating connection so executors act on the instance
         // that emitted the event — media IDs overlap across same-type
@@ -79,6 +88,8 @@ class ActionOrchestrator
         $actionRequest = ActionRequest::create([
             'webhook_event_id' => $webhookEvent?->id,
             'type' => $type,
+            'origin' => $origin,
+            ...$description->toAttributes(),
             'source_service' => $sourceService,
             'target_service' => $targetService,
             'status' => $requiresApproval
@@ -118,6 +129,7 @@ class ActionOrchestrator
         string $targetService,
         array $payload,
         string $rationale,
+        ActionDescription $description,
         ?int $webhookEventId = null,
         ?bool $forceRequiresApproval = null,
     ): ?ActionRequest {
@@ -133,7 +145,9 @@ class ActionOrchestrator
         }
 
         // The override can only tighten the gate (force approval), never relax it.
-        $requiresApproval = $config->requires_approval || ($forceRequiresApproval ?? false);
+        $requiresApproval = $config->requires_approval
+            || ($forceRequiresApproval ?? false)
+            || ! $description->verified;
 
         // Same connection pinning as dispatch(): agent proposals originate
         // from a webhook event too.
@@ -149,6 +163,7 @@ class ActionOrchestrator
             'webhook_event_id' => $webhookEventId,
             'type' => $type,
             'origin' => 'agent',
+            ...$description->toAttributes(),
             'source_service' => $sourceService,
             'target_service' => $targetService,
             'status' => $requiresApproval
