@@ -142,6 +142,29 @@ test('members privately stage a validated upload and approval-gated action atomi
     Storage::disk('local')->assertExists($subtitleUpload->path);
 });
 
+test('a staged upload is described on the Action Queue with who uploaded it', function (): void {
+    $this->actingAs(User::factory()->member()->create(['name' => 'Ada']))
+        ->withHeader('Accept', 'application/json')
+        ->post(route('bazarr.uploads.store'), [
+            ...uploadPayload($this),
+            'subtitle_file' => validSubtitleUpload(),
+        ])
+        ->assertCreated();
+
+    $actionRequest = ActionRequest::query()->sole();
+
+    expect($actionRequest->title)->toBe('Upload a subtitle for Example Movie')
+        ->and($actionRequest->payload['title'])->toBe('Upload a subtitle for Example Movie')
+        ->and($actionRequest->description)->toBe('Uploaded from the Subtitle Center by Ada. Bazarr will add the uploaded subtitle file to this media.')
+        ->and($actionRequest->details)->toBe([
+            ['label' => 'Media', 'value' => 'Example Movie'],
+            ['label' => 'Language', 'value' => 'eng'],
+            ['label' => 'Forced', 'value' => 'No'],
+            ['label' => 'Hearing impaired', 'value' => 'No'],
+        ])
+        ->and($actionRequest->description_verified)->toBeTrue();
+});
+
 test('subtitle uploads honor the configured size limit and staging expiry', function (): void {
     resolve(BazarrAutomationSettings::class)->setConfiguration([
         'upload_max_kilobytes' => 64,

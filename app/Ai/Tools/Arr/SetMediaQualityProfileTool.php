@@ -26,7 +26,7 @@ class SetMediaQualityProfileTool extends BaseTool
     }
 
     /**
-     * @return array{type: string, target_service: string, payload: array<string, mixed>}
+     * @return array{type: string, target_service: string, payload: array<string, mixed>, fallback_title: ?string}
      */
     protected function execute(Request $request): array
     {
@@ -35,7 +35,7 @@ class SetMediaQualityProfileTool extends BaseTool
         $itemId = (int) ($args['item_id'] ?? 0);
         $qualityProfileId = (int) ($args['quality_profile_id'] ?? 0);
 
-        return match ($service) {
+        return [...match ($service) {
             'sonarr' => [
                 'type' => 'set_series_quality_profile',
                 'target_service' => 'sonarr',
@@ -52,7 +52,7 @@ class SetMediaQualityProfileTool extends BaseTool
                 'payload' => ['whisparr_item_id' => $itemId, 'quality_profile_id' => $qualityProfileId],
             ],
             default => throw new InvalidArgumentException('service must be "sonarr", "radarr", or "whisparr".'),
-        };
+        }, 'fallback_title' => is_string($args['title'] ?? null) ? $args['title'] : null];
     }
 
     /**
@@ -71,6 +71,10 @@ class SetMediaQualityProfileTool extends BaseTool
             'quality_profile_id' => $schema->integer()
                 ->description('Quality profile id to apply (from the target service).')
                 ->required(),
+            'title' => $schema->string()
+                ->description('Human name of the item (e.g. the series title) as shown to the user. Only displayed if the server cannot look the id up; such requests always wait for approval.')
+                ->required()
+                ->nullable(),
         ];
     }
 }

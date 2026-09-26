@@ -9,6 +9,7 @@ use App\Enums\WebhookHandlingStatus;
 use App\Jobs\AuditImportedSubtitles;
 use App\Models\WebhookEvent;
 use App\Notifications\ServiceWarning;
+use App\Services\Actions\ActionDescriber;
 use App\Services\Actions\ActionOrchestrator;
 use App\Services\Library\InterventionCounter;
 use App\Services\MediaReplacement\MediaReplacementTracker;
@@ -23,6 +24,7 @@ class RadarrWebhookHandler extends AbstractWebhookHandler
         private readonly MovieIndexer $movieIndexer,
         private readonly MediaReplacementTracker $mediaReplacementTracker,
         private readonly AdminNotifier $adminNotifier,
+        private readonly ActionDescriber $actionDescriber,
     ) {}
 
     protected function serviceSlug(): string
@@ -130,14 +132,16 @@ class RadarrWebhookHandler extends AbstractWebhookHandler
             AuditImportedSubtitles::queueFor($webhookEvent);
         }
 
+        $scanPayload = ['trigger' => 'radarr_download', 'movie_title' => $movieTitle];
+
         $this->actionOrchestrator->dispatch(
             type: 'emby_library_scan',
             sourceService: 'radarr',
             targetService: 'emby',
-            payload: [
-                'trigger' => 'radarr_download',
-                'movie_title' => $movieTitle,
-            ],
+            payload: $scanPayload,
+            description: $this->actionDescriber->describe('emby_library_scan', $scanPayload)
+                ->because(sprintf('Radarr imported "%s".', $movieTitle))
+                ->withDetail('Triggered by', sprintf('Radarr › %s', $webhookEvent->serviceConnection?->name ?? 'unknown connection')),
             webhookEvent: $webhookEvent,
         );
     }
@@ -213,14 +217,16 @@ class RadarrWebhookHandler extends AbstractWebhookHandler
             $this->movieIndexer->forget($radarrId, $webhookEvent->serviceConnection);
         }
 
+        $scanPayload = ['trigger' => 'radarr_movie_deleted', 'movie_title' => $movieTitle];
+
         $this->actionOrchestrator->dispatch(
             type: 'emby_library_scan',
             sourceService: 'radarr',
             targetService: 'emby',
-            payload: [
-                'trigger' => 'radarr_movie_deleted',
-                'movie_title' => $movieTitle,
-            ],
+            payload: $scanPayload,
+            description: $this->actionDescriber->describe('emby_library_scan', $scanPayload)
+                ->because(sprintf('Radarr deleted "%s".', $movieTitle))
+                ->withDetail('Triggered by', sprintf('Radarr › %s', $webhookEvent->serviceConnection?->name ?? 'unknown connection')),
             webhookEvent: $webhookEvent,
         );
     }

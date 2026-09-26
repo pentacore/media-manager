@@ -56,6 +56,7 @@ interface PendingApproval {
     type: string;
     target_service: string;
     subject_label: string;
+    description: string | null;
     requested_by: string;
     trigger: string;
     created_at: string | null;
@@ -614,8 +615,17 @@ onMounted(() => {
                                 >{{ actionLabel(action.type) }}</span
                             >
                             <span class="text-fg-subtle"> · </span>
-                            <span>{{ action.subject_label }}</span>
+                            <span data-pending-approval-title>{{
+                                action.subject_label
+                            }}</span>
                         </div>
+                        <p
+                            v-if="action.description"
+                            class="mt-1 line-clamp-2 text-[12px] text-muted-foreground"
+                            data-pending-approval-description
+                        >
+                            {{ action.description }}
+                        </p>
                         <div class="mt-1.5 flex items-center justify-between">
                             <span class="text-xs text-muted-foreground">
                                 via {{ action.trigger }} · by

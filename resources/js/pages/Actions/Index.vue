@@ -351,6 +351,10 @@ function goToPage(url: string | null): void {
 }
 
 function payloadTitle(row: ActionRequestRow): string {
+    if (row.title) {
+        return row.title;
+    }
+
     const t = row.payload?.['title'] ?? row.payload?.['name'];
 
     return typeof t === 'string' && t.length > 0
@@ -359,9 +363,24 @@ function payloadTitle(row: ActionRequestRow): string {
 }
 
 function payloadDetail(row: ActionRequestRow): string {
+    if (row.description) {
+        return row.description;
+    }
+
     const detail = row.payload?.['detail'] ?? row.payload?.['summary'];
 
     return typeof detail === 'string' ? detail : '';
+}
+
+/**
+ * Only agent- and chat-originated rationale is LLM-written; manual-dialog and
+ * automatic-check replacements store server-written text in the same field.
+ */
+function showsAiReasoning(row: ActionRequestRow): boolean {
+    return (
+        !!row.agent_rationale &&
+        (row.origin === 'agent' || row.origin === 'chat')
+    );
 }
 
 function replacementLanguages(row: ActionRequestRow): string {
@@ -701,6 +720,7 @@ function pipelineState(
                         </div>
                         <h2
                             class="font-serif text-[22px] leading-tight text-foreground italic"
+                            data-action-title
                         >
                             {{ payloadTitle(selected) }}
                         </h2>
@@ -750,26 +770,80 @@ function pipelineState(
                         <Field label="Created">
                             <TimeStamp :iso="selected.created_at" />
                         </Field>
-                        <Field v-if="payloadDetail(selected)" label="Detail">
-                            <span class="text-[13px] text-muted-foreground">{{
-                                payloadDetail(selected)
-                            }}</span>
-                        </Field>
+                        <p
+                            v-if="payloadDetail(selected)"
+                            class="text-[13px] leading-relaxed text-muted-foreground"
+                            data-action-description
+                        >
+                            {{ payloadDetail(selected) }}
+                        </p>
+
+                        <div
+                            v-if="selected.description_verified === false"
+                            class="flex gap-2.5 rounded-lg border border-warning/30 bg-warning/10 p-3 text-xs text-warning"
+                            data-action-unverified
+                        >
+                            <AlertTriangle class="mt-0.5 size-4 shrink-0" />
+                            <span
+                                >Target name could not be verified by the
+                                server.</span
+                            >
+                        </div>
+
+                        <div
+                            v-if="selected.details?.length"
+                            class="flex flex-col gap-3.5"
+                            data-action-details
+                        >
+                            <Field
+                                v-for="(detail, index) in selected.details"
+                                :key="`${index}-${detail.label}`"
+                                :label="detail.label"
+                            >
+                                <span class="text-[13px]">{{
+                                    detail.value
+                                }}</span>
+                            </Field>
+                        </div>
+
+                        <div
+                            v-if="showsAiReasoning(selected)"
+                            class="flex gap-2.5 rounded-lg border border-border bg-bg-elev p-3"
+                            data-action-ai-reasoning
+                        >
+                            <Sparkles
+                                class="mt-0.5 size-4 shrink-0 text-accent"
+                            />
+                            <div class="flex flex-col gap-1">
+                                <span
+                                    class="text-[11px] font-medium tracking-wide text-fg-subtle uppercase"
+                                    >AI reasoning</span
+                                >
+                                <span
+                                    class="text-[12.5px] text-muted-foreground"
+                                    >{{ selected.agent_rationale }}</span
+                                >
+                            </div>
+                        </div>
 
                         <template v-if="selected.type === 'replace_media_file'">
-                            <Field label="Required subtitles">{{
-                                replacementLanguages(selected)
-                            }}</Field>
-                            <Field label="Confidence">{{
-                                replacementConfidence(selected)
-                            }}</Field>
-                            <Field label="Selection">{{
-                                replacementSelectionMode(selected)
-                            }}</Field>
-                            <Field label="Affected files">{{
-                                replacementAffectedFiles(selected)
-                            }}</Field>
-                            <Field label="Evidence">{{
+                            <template v-if="!selected.details?.length">
+                                <Field label="Required subtitles">{{
+                                    replacementLanguages(selected)
+                                }}</Field>
+                                <Field label="Confidence">{{
+                                    replacementConfidence(selected)
+                                }}</Field>
+                                <Field label="Selection">{{
+                                    replacementSelectionMode(selected)
+                                }}</Field>
+                            </template>
+                            <Field
+                                label="Affected files"
+                                data-replacement-affected-files
+                                >{{ replacementAffectedFiles(selected) }}</Field
+                            >
+                            <Field label="Evidence" data-replacement-evidence>{{
                                 replacementEvidence(selected)
                             }}</Field>
                             <Field label="Replacement attempt">

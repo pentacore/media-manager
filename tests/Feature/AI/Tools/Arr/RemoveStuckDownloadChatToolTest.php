@@ -6,12 +6,16 @@ use App\Ai\Risk;
 use App\Ai\Tools\Arr\RemoveStuckDownloadChatTool;
 use App\Enums\AiMode;
 use App\Models\ActionRequest;
+use App\Models\ServiceConnection;
+use App\Models\User;
 use App\Settings\AiSettings;
 use Database\Seeders\ActionTypeConfigSeeder;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Queue;
 use Laravel\Ai\Tools\Request;
 
 beforeEach(function (): void {
+    Http::preventStrayRequests();
     Queue::fake();
     $this->seed(ActionTypeConfigSeeder::class);
     resolve(AiSettings::class)->withMode(AiMode::Executive);
@@ -135,4 +139,27 @@ test('the service name is matched case-insensitively', function (): void {
 
     expect($result['queued'])->toBeTrue()
         ->and(ActionRequest::findOrFail($result['action_request_id'])->target_service)->toBe('radarr');
+});
+
+test('the queued removal is described from the arr queue as requested in chat', function (): void {
+    $this->actingAs(User::factory()->admin()->create(['name' => 'Martin']));
+    ServiceConnection::factory()->radarr()->create(['url' => 'http://radarr.local:7878', 'is_active' => true]);
+    Http::fake(['radarr.local:7878/api/v3/queue*' => Http::response(['records' => [
+        ['downloadId' => 'HASH-B', 'title' => 'Movie.2024.1080p', 'movie' => ['title' => 'Movie']],
+    ]])]);
+
+    $result = json_decode(
+        (new RemoveStuckDownloadChatTool)->handle(new Request([
+            'service' => 'radarr',
+            'download_id' => 'HASH-B',
+            'reason' => 'Not an upgrade for existing file.',
+        ])),
+        true,
+    );
+
+    $actionRequest = ActionRequest::findOrFail($result['action_request_id']);
+    expect($actionRequest->title)->toBe('Remove stuck download "Movie.2024.1080p"')
+        ->and($actionRequest->description)->toStartWith('Requested in chat by Martin. Radarr will remove the download')
+        ->and($actionRequest->description_verified)->toBeTrue()
+        ->and($actionRequest->origin)->toBe('chat');
 });

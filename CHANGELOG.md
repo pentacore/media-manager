@@ -1,3 +1,30 @@
+# [1.20.0](https://github.com/pentacore/media-manager/compare/v1.19.0...v1.20.0) (2026-09-26)
+
+
+### Bug Fixes
+
+* **actions:** keep replacement files and evidence beside described details ([87d2fc8](https://github.com/pentacore/media-manager/commit/87d2fc899126d240714dcc4828d19d2d90f06f98))
+* **actions:** read describer payload flags the way the executors do ([a862799](https://github.com/pentacore/media-manager/commit/a86279964df2462ef519c73b943fbfccfa43dbdc))
+* **actions:** tidy fallback nouns, agent schema example and demo actions ([76087a8](https://github.com/pentacore/media-manager/commit/76087a88577a67193bbfb7717ecdcea70ff30112))
+* **chat:** write AG-UI frames when Octane hands back the generator ([ceace1b](https://github.com/pentacore/media-manager/commit/ceace1bbd97e7a89815cbea8a7762e57fcd74c11))
+* **media-replacement:** drop LLM-written reason from the approval-card details ([ef6b490](https://github.com/pentacore/media-manager/commit/ef6b49035265861f18d4255770463e2edc989721))
+
+
+### Features
+
+* **actions:** add action request description columns and value objects ([8947c50](https://github.com/pentacore/media-manager/commit/8947c509da4695482447fbcf9ae1e54208baa3a8))
+* **actions:** describe arr, seerr, emby and download actions ([5a53170](https://github.com/pentacore/media-manager/commit/5a5317075a121becb0ad448ef33553c73b7d1290))
+* **actions:** describe webhook-triggered deletes and library scans ([2d6209b](https://github.com/pentacore/media-manager/commit/2d6209b26c33d07a7abbff7ab6215f5f75bdb945))
+* **actions:** expose action descriptions to the queue and dashboard ([ae564ef](https://github.com/pentacore/media-manager/commit/ae564ef80ccda6968e9244b4dae3fa845b264c31))
+* **actions:** persist action descriptions and gate unverified ones ([687e37c](https://github.com/pentacore/media-manager/commit/687e37ce371ff24ead6e1e12a1dca0969bbaf4f4))
+* **actions:** require a description on every action request ([96521ea](https://github.com/pentacore/media-manager/commit/96521ea954a3440211662ba4f993926f28cfa7a8))
+* **actions:** resolve action target names server-side ([23c6566](https://github.com/pentacore/media-manager/commit/23c656673efb561f72f8725f48cd1d7607f128a9))
+* **actions:** show action descriptions, details and ai reasoning ([3925763](https://github.com/pentacore/media-manager/commit/39257636979384cdd35a9bc9e2500616cb15cd41))
+* **ai:** describe chat-queued actions and tag them as chat origin ([3e96665](https://github.com/pentacore/media-manager/commit/3e966650ba52beefad84c86aff426c8f1f7f46dc))
+* **ai:** describe decision agent proposals and download actions ([5c6ebe3](https://github.com/pentacore/media-manager/commit/5c6ebe3961e3a61284023bdc00899a88424f0a9a))
+* **bazarr:** describe subtitle operations on the action queue ([6df285e](https://github.com/pentacore/media-manager/commit/6df285e1d55e70c2143d5e91bf18999fb5af370b))
+* **media-replacement:** describe replacement requests on the action queue ([7e87453](https://github.com/pentacore/media-manager/commit/7e874531a5a277250c829a9e7b75491626db2e79))
+
 # [1.19.0](https://github.com/pentacore/media-manager/compare/v1.18.1...v1.19.0) (2026-09-25)
 
 

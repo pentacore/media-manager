@@ -92,9 +92,11 @@ class DashboardController extends Controller
                     'id' => $actionRequest->id,
                     'type' => $actionRequest->type,
                     'target_service' => $actionRequest->target_service,
-                    'subject_label' => is_string($actionRequest->payload['title'] ?? null)
-                        ? $actionRequest->payload['title']
-                        : ($actionRequest->payload['name'] ?? '—'),
+                    'subject_label' => $actionRequest->title
+                        ?? (is_string($actionRequest->payload['title'] ?? null)
+                            ? $actionRequest->payload['title']
+                            : ($actionRequest->payload['name'] ?? '—')),
+                    'description' => $actionRequest->description,
                     'requested_by' => $actionRequest->approvedByUser?->name
                         ?? $actionRequest->webhookEvent?->serviceConnection?->name
                         ?? 'system',

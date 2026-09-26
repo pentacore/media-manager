@@ -8,6 +8,7 @@ use App\Ai\Risk;
 use App\Ai\Tools\BaseTool;
 use App\Enums\ServiceType;
 use App\Models\ServiceConnection;
+use App\Services\Actions\ActionDescription;
 use App\Services\MediaReplacement\MediaFileInspector;
 use App\Services\MediaReplacement\ReplacementCandidateFinder;
 use App\Services\MediaReplacement\ReplacementRequestBuilder;
@@ -34,7 +35,7 @@ class ReplaceMediaFileTool extends BaseTool
     }
 
     /**
-     * @return array{type: string, source_service: string, target_service: string, force_requires_approval: bool, payload: array<string, mixed>}
+     * @return array{type: string, source_service: string, target_service: string, force_requires_approval: bool, payload: array<string, mixed>, description: ActionDescription}
      */
     protected function execute(Request $request): array
     {
@@ -102,6 +103,7 @@ class ReplaceMediaFileTool extends BaseTool
             'target_service' => $service,
             'force_requires_approval' => $built['force_requires_approval'],
             'payload' => $built['payload'],
+            'description' => $built['description']->because($this->requestedInChat()),
         ];
     }
 

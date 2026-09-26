@@ -4,6 +4,7 @@ Before planning or editing, find the row whose globs match the file's path and r
 
 | Applies to | Rule file |
 | --- | --- |
+| app/Services/Actions/** | .ai/rules/actions.md |
 | app/Http/Controllers/Admin/AiSettingsController.php | .ai/rules/admin.md |
 | app/Ai/** | .ai/rules/ai.md |
 | app/** | .ai/rules/app.md |

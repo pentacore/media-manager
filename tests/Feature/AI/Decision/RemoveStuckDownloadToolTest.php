@@ -6,11 +6,14 @@ use App\Ai\Decision\DecisionRunContext;
 use App\Ai\Decision\RemoveStuckDownloadTool;
 use App\Models\ActionRequest;
 use App\Models\ActionTypeConfig;
+use App\Models\ServiceConnection;
 use App\Settings\DecisionAgentSettings;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Queue;
 use Laravel\Ai\Tools\Request;
 
 beforeEach(function (): void {
+    Http::preventStrayRequests();
     Queue::fake();
     resolve(DecisionAgentSettings::class)->setAllowManualImport(true);
     app()->instance(DecisionRunContext::class, new DecisionRunContext(null, 3, 'sonarr'));
@@ -119,4 +122,22 @@ test('rejects an invalid service', function (): void {
 
     expect($result['queued'])->toBeFalse();
     expect($result['reason'])->toBe('invalid_service');
+});
+
+test('describes the removal from the arr queue record with the decision agent as the reason', function (): void {
+    ActionTypeConfig::factory()->create(['type' => 'remove_stuck_download', 'requires_approval' => true, 'is_enabled' => true]);
+    ServiceConnection::factory()->sonarr()->create(['url' => 'http://sonarr.local:8989', 'api_key' => 'k']);
+    Http::fake(['sonarr.local:8989/api/v3/queue*' => Http::response(['records' => [
+        ['downloadId' => 'dl-1', 'title' => 'Bad.Release', 'series' => ['title' => 'Severance'], 'downloadClient' => 'SABnzbd'],
+    ]])]);
+
+    (new RemoveStuckDownloadTool)->handle(new Request([
+        'service' => 'sonarr', 'download_id' => 'dl-1', 'reason' => 'Not an upgrade', 'blocklist' => true,
+    ]));
+
+    $actionRequest = ActionRequest::sole();
+    expect($actionRequest->title)->toBe('Remove stuck download "Bad.Release"')
+        ->and($actionRequest->description)->toBe('Proposed by the decision agent. Sonarr will remove the download from its queue and delete its data, blocklist the release.')
+        ->and($actionRequest->description_verified)->toBeTrue()
+        ->and($actionRequest->details)->toContain(['label' => 'Media', 'value' => 'Severance']);
 });

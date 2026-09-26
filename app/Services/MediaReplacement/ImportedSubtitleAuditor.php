@@ -288,6 +288,7 @@ final readonly class ImportedSubtitleAuditor
             sourceService: $isRadarr ? 'radarr' : 'sonarr',
             targetService: $isRadarr ? 'radarr' : 'sonarr',
             payload: $built['payload'],
+            description: $built['description']->because('The automatic subtitle check found this import is missing required subtitles.'),
             webhookEvent: $webhookEvent,
             // No confident candidate means nothing may be picked without a
             // human, so the operator must approve even if the action type is
