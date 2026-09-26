@@ -382,9 +382,6 @@ test('a RUN_ERROR frame names no conversation when none was stored', function ()
         ->not->toContain('threadId');
 });
 
-/**
- * The first SSE frame of the given AG-UI event type.
- */
 test('a capturing output buffer receives every stream frame', function (): void {
     MediaAgent::fake(['Hello from the stream.']);
     $admin = User::factory()->admin()->create();
@@ -405,6 +402,31 @@ test('a capturing output buffer receives every stream frame', function (): void 
         ->and($captured)->toContain('"type":"RUN_FINISHED"');
 });
 
+test('the stream body is written under Octane', function (): void {
+    MediaAgent::fake(['Hello from the stream.']);
+    $admin = User::factory()->admin()->create();
+
+    // Under Octane, response()->stream() keeps the generator itself as the
+    // callback and leaves iterating it to the server; FrankenPHP only calls
+    // send(), so an uniterated generator reaches the client as an empty body.
+    $_SERVER['LARAVEL_OCTANE'] = 1;
+
+    try {
+        $body = $this->actingAs($admin)
+            ->post(route('ai.chat.stream'), ['message' => 'Say hello'], ['Accept' => 'text/event-stream'])
+            ->streamedContent();
+    } finally {
+        unset($_SERVER['LARAVEL_OCTANE']);
+    }
+
+    expect($body)->toContain('"type":"RUN_STARTED"')
+        ->and($body)->toContain('Hello')
+        ->and($body)->toContain('"type":"RUN_FINISHED"');
+});
+
+/**
+ * The first SSE frame of the given AG-UI event type.
+ */
 function chatStreamFrame(string $body, string $type): string
 {
     foreach (explode("\n\n", $body) as $frame) {

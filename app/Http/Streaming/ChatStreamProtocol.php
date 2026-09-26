@@ -14,13 +14,14 @@ use Laravel\Ai\Streaming\Protocols\AgentUserInteractionProtocol;
 use Override;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\HttpFoundation\StreamedResponse;
+use Throwable;
 
 /**
- * AG-UI for the chat panel, with three app behaviours on top: keep draining
+ * AG-UI for the chat panel, with four app behaviours on top: keep draining
  * after a browser disconnect (usage is only recorded once the stream ends),
- * keep frames inside a capturing output buffer, and explain failures instead
- * of the SDK's masked "An error occurred." (naming the stored conversation
- * of a failed turn).
+ * write the frames under Octane, keep them inside a capturing output buffer,
+ * and explain failures instead of the SDK's masked "An error occurred."
+ * (naming the stored conversation of a failed turn).
  * The SDK's own terminal cases (an interrupt that already finished the run,
  * the unmasked approval-mismatch frame) are left to the parent.
  */
@@ -45,7 +46,7 @@ final class ChatStreamProtocol extends AgentUserInteractionProtocol
             // the frames past its capture — so give the flushes a buffer of
             // our own that drains into the harness's buffer instead.
             if (ob_get_level() <= 1) {
-                $write();
+                self::writeFrames($write);
 
                 return;
             }
@@ -53,17 +54,42 @@ final class ChatStreamProtocol extends AgentUserInteractionProtocol
             ob_start();
 
             try {
-                $write();
+                self::writeFrames($write);
             } finally {
                 ob_end_flush();
             }
         });
     }
 
+    /**
+     * Run the stream callback, iterating it here when it is a generator.
+     * Under Octane, response()->stream() keeps the generator as the callback
+     * and leaves iterating it to the server, which FrankenPHP never does, so
+     * without this the client receives an empty body.
+     */
+    private static function writeFrames(Closure $write): void
+    {
+        $frames = $write();
+
+        if (! $frames instanceof Generator) {
+            return;
+        }
+
+        foreach ($frames as $frame) {
+            echo $frame;
+
+            if (ob_get_level() > 0) {
+                ob_flush();
+            }
+
+            flush();
+        }
+    }
+
     #[Override]
     protected function maskedErrorParts(): Generator
     {
-        if ($this->finished || $this->exception === null || $this->exception instanceof ApprovalMismatchException) {
+        if ($this->finished || ! $this->exception instanceof Throwable || $this->exception instanceof ApprovalMismatchException) {
             yield from parent::maskedErrorParts();
 
             return;
