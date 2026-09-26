@@ -7,6 +7,7 @@ use App\Events\ActionRequestCreated;
 use App\Jobs\ExecuteActionRequest;
 use App\Models\ActionTypeConfig;
 use App\Models\WebhookEvent;
+use App\Services\Actions\ActionDescription;
 use App\Services\Actions\ActionOrchestrator;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Queue;
@@ -28,6 +29,7 @@ test('dispatch creates a Pending ActionRequest for requires_approval types', fun
         sourceService: 'emby',
         targetService: 'sonarr',
         payload: ['sonarr_series_id' => 42],
+        description: new ActionDescription('Test action', 'Test effect.'),
     );
 
     expect($request)->not->toBeNull();
@@ -51,6 +53,7 @@ test('dispatch auto-executes when config has requires_approval=false', function 
         sourceService: 'sonarr',
         targetService: 'emby',
         payload: [],
+        description: new ActionDescription('Test action', 'Test effect.'),
     );
 
     expect($request->status)->toBe(ActionRequestStatus::Approved);
@@ -65,6 +68,7 @@ test('dispatch returns null when config is missing', function (): void {
         sourceService: 'emby',
         targetService: 'sonarr',
         payload: [],
+        description: new ActionDescription('Test action', 'Test effect.'),
     );
 
     expect($request)->toBeNull();
@@ -84,6 +88,7 @@ test('dispatch returns null when config is disabled', function (): void {
         sourceService: 'emby',
         targetService: 'sonarr',
         payload: [],
+        description: new ActionDescription('Test action', 'Test effect.'),
     );
 
     expect($request)->toBeNull();
@@ -100,6 +105,7 @@ test('dispatch links to source WebhookEvent when provided', function (): void {
         sourceService: 'emby',
         targetService: 'sonarr',
         payload: [],
+        description: new ActionDescription('Test action', 'Test effect.'),
         webhookEvent: $webhookEvent,
     );
 

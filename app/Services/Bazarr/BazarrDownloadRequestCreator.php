@@ -27,6 +27,7 @@ final readonly class BazarrDownloadRequestCreator
     public function __construct(
         private ActionOrchestrator $actionOrchestrator,
         private SubtitleCaseLifecycle $subtitleCaseLifecycle,
+        private SubtitleOperationDescriber $subtitleOperationDescriber,
     ) {}
 
     /**
@@ -96,6 +97,13 @@ final readonly class BazarrDownloadRequestCreator
                     'forced' => $forced,
                     'hearing_impaired' => $hearingImpaired,
                 ],
+                description: $this->subtitleOperationDescriber
+                    ->describe('download_best', ['title' => $displayName], [
+                        'language' => $language,
+                        'forced' => $forced,
+                        'hearing_impaired' => $hearingImpaired,
+                    ])
+                    ->because(sprintf('Queued automatically for subtitle case #%d.', $lockedCase->id)),
             );
 
             if (! $actionRequest instanceof ActionRequest) {

@@ -6,6 +6,7 @@ namespace App\Ai\Decision;
 
 use App\Enums\ServiceType;
 use App\Models\ServiceConnection;
+use App\Services\Actions\ActionDescriber;
 use App\Services\Actions\ActionOrchestrator;
 use App\Services\Arr\ManualImportResolver;
 use App\Services\Radarr\RadarrClient;
@@ -112,16 +113,17 @@ class ResolveManualImportTool implements Tool
         $rationale = $this->buildRationale($service, $downloadId, $assessment, $partial);
 
         try {
+            $actionPayload = ['service' => $service, 'download_id' => $downloadId, 'assessment' => $assessment];
+
             $actionRequest = resolve(ActionOrchestrator::class)->dispatchFromAgent(
                 type: 'resolve_manual_import',
                 sourceService: $service,
                 targetService: $service,
-                payload: [
-                    'service' => $service,
-                    'download_id' => $downloadId,
-                    'assessment' => $assessment,
-                ],
+                payload: $actionPayload,
                 rationale: $rationale,
+                description: resolve(ActionDescriber::class)
+                    ->describe('resolve_manual_import', $context->pinContext($actionPayload))
+                    ->because($context->proposalReason()),
                 webhookEventId: $context->webhookEventId,
                 forceRequiresApproval: $partial ? true : null,
             );

@@ -22,6 +22,10 @@ use Override;
  * @property int|null $webhook_event_id
  * @property string $type
  * @property string $origin
+ * @property string|null $title
+ * @property string|null $description
+ * @property list<array{label: string, value: string}>|null $details
+ * @property bool $description_verified
  * @property string $source_service
  * @property string $target_service
  * @property ActionRequestStatus $status
@@ -41,6 +45,9 @@ use Override;
  * @method static Builder<static>|ActionRequest query()
  * @method static Builder<static>|ActionRequest whereApprovedBy($value)
  * @method static Builder<static>|ActionRequest whereCreatedAt($value)
+ * @method static Builder<static>|ActionRequest whereDescription($value)
+ * @method static Builder<static>|ActionRequest whereDescriptionVerified($value)
+ * @method static Builder<static>|ActionRequest whereDetails($value)
  * @method static Builder<static>|ActionRequest whereId($value)
  * @method static Builder<static>|ActionRequest whereOrigin($value)
  * @method static Builder<static>|ActionRequest wherePayload($value)
@@ -49,6 +56,7 @@ use Override;
  * @method static Builder<static>|ActionRequest whereSourceService($value)
  * @method static Builder<static>|ActionRequest whereStatus($value)
  * @method static Builder<static>|ActionRequest whereTargetService($value)
+ * @method static Builder<static>|ActionRequest whereTitle($value)
  * @method static Builder<static>|ActionRequest whereType($value)
  * @method static Builder<static>|ActionRequest whereUpdatedAt($value)
  * @method static Builder<static>|ActionRequest whereWebhookEventId($value)
@@ -56,7 +64,7 @@ use Override;
  * @mixin \Eloquent
  */
 #[ObservedBy(ActionRequestObserver::class)]
-#[Fillable(['webhook_event_id', 'type', 'origin', 'source_service', 'target_service', 'status', 'requires_approval', 'approved_by', 'payload', 'result'])]
+#[Fillable(['webhook_event_id', 'type', 'origin', 'title', 'description', 'details', 'description_verified', 'source_service', 'target_service', 'status', 'requires_approval', 'approved_by', 'payload', 'result'])]
 class ActionRequest extends Model
 {
     /** @use HasFactory<ActionRequestFactory> */
@@ -73,6 +81,8 @@ class ActionRequest extends Model
             'requires_approval' => 'boolean',
             'payload' => 'array',
             'result' => 'array',
+            'details' => 'array',
+            'description_verified' => 'boolean',
         ];
     }
 

@@ -10,6 +10,7 @@ use App\Models\ActionRequest;
 use App\Models\ActionTypeConfig;
 use App\Models\BazarrServiceLink;
 use App\Models\ServiceConnection;
+use App\Models\User;
 use App\Settings\AiSettings;
 use Database\Seeders\ActionTypeConfigSeeder;
 use Illuminate\Http\Client\Request as HttpRequest;
@@ -51,6 +52,38 @@ test('request tool is destructive and queues a server-inspected download request
             'language' => 'eng',
             'target_ids' => ['radarr_id' => 801],
         ]);
+});
+
+test('a chat-queued subtitle operation is described from the inspected item', function (): void {
+    $this->actingAs(User::factory()->member()->create(['name' => 'Ada']));
+    $serviceConnection = requestToolConnection();
+    fakeRequestToolMovie();
+
+    (new RequestSubtitleOperationTool)->handle(new Request([
+        'bazarr_connection_id' => $serviceConnection->id,
+        'media_type' => 'movie',
+        'media_id' => 801,
+        'operation' => 'download_best',
+        'language' => 'eng',
+        'forced' => true,
+        'hearing_impaired' => false,
+        'candidate_fingerprint' => null,
+        'subtitle_fingerprint' => null,
+        'media_action' => null,
+    ]));
+
+    $actionRequest = ActionRequest::query()->sole();
+
+    expect($actionRequest->title)->toBe('Download the best subtitle for Example Movie')
+        ->and($actionRequest->payload['title'])->toBe('Download the best subtitle for Example Movie')
+        ->and($actionRequest->description)->toBe('Requested in chat by Ada. Bazarr will search its providers and download the best-scoring subtitle.')
+        ->and($actionRequest->details)->toBe([
+            ['label' => 'Media', 'value' => 'Example Movie'],
+            ['label' => 'Language', 'value' => 'eng'],
+            ['label' => 'Forced', 'value' => 'Yes'],
+            ['label' => 'Hearing impaired', 'value' => 'No'],
+        ])
+        ->and($actionRequest->description_verified)->toBeTrue();
 });
 
 test('an operation this Bazarr cannot perform never becomes an Action Request', function (): void {

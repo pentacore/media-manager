@@ -39,6 +39,29 @@ final readonly class ActionRequestBrowserPayload
         );
     }
 
+    /**
+     * The approval card's description fields, shared by the resource and the
+     * ActionRequestCreated broadcast. Legacy rows (created before descriptions
+     * existed) return nulls and let the page fall back to payload keys.
+     *
+     * @return array{title: string|null, description: string|null, details: list<array{label: string, value: string}>, description_verified: bool, agent_rationale: string|null}
+     */
+    public function description(ActionRequest $actionRequest): array
+    {
+        $rationale = $actionRequest->payload['agent_rationale'] ?? null;
+
+        return [
+            'title' => $actionRequest->title,
+            'description' => $actionRequest->description,
+            'details' => array_values(array_filter(
+                $actionRequest->details ?? [],
+                static fn (mixed $detail): bool => is_array($detail) && is_string($detail['label'] ?? null) && is_string($detail['value'] ?? null),
+            )),
+            'description_verified' => $actionRequest->description_verified,
+            'agent_rationale' => is_string($rationale) && $rationale !== '' ? mb_substr($rationale, 0, 1_000) : null,
+        ];
+    }
+
     private function boundedString(ActionRequest $actionRequest, string $key, int $length): ?string
     {
         $value = $actionRequest->payload[$key] ?? null;

@@ -44,7 +44,7 @@ class DemoFakeActions extends Command
     }
 
     /**
-     * @param  array{type: string, source: string, target: string, requires_approval: bool, status: ActionRequestStatus, payload: array<string, mixed>, result?: array<string, mixed>}  $scenario
+     * @param  array{type: string, source: string, target: string, requires_approval: bool, status: ActionRequestStatus, payload: array<string, mixed>, title: string, description: string, details?: list<array{label: string, value: string}>, result?: array<string, mixed>}  $scenario
      */
     private function createAction(array $scenario): void
     {
@@ -56,6 +56,10 @@ class DemoFakeActions extends Command
             'status' => $scenario['status'],
             'requires_approval' => $scenario['requires_approval'],
             'approved_by' => null,
+            'title' => $scenario['title'],
+            'description' => $scenario['description'],
+            'details' => $scenario['details'] ?? [],
+            'description_verified' => true,
             'payload' => $scenario['payload'],
             'result' => $scenario['result'] ?? null,
         ]);
@@ -94,7 +98,7 @@ class DemoFakeActions extends Command
     }
 
     /**
-     * @return list<array{type: string, source: string, target: string, requires_approval: bool, status: ActionRequestStatus, payload: array<string, mixed>, result?: array<string, mixed>}>
+     * @return list<array{type: string, source: string, target: string, requires_approval: bool, status: ActionRequestStatus, payload: array<string, mixed>, title: string, description: string, details?: list<array{label: string, value: string}>, result?: array<string, mixed>}>
      */
     private function scenarios(): array
     {
@@ -106,6 +110,11 @@ class DemoFakeActions extends Command
                 'requires_approval' => true,
                 'status' => ActionRequestStatus::Pending,
                 'payload' => ['sonarr_series_id' => 42, 'delete_files' => true],
+                'title' => 'Delete series "Severance (2022)"',
+                'description' => 'Emby reported "Severance" was removed from the library. Sonarr will delete the series and its files from disk.',
+                'details' => [
+                    ['label' => 'Delete files', 'value' => 'Yes'],
+                ],
             ],
             [
                 'type' => 'delete_movie',
@@ -114,6 +123,11 @@ class DemoFakeActions extends Command
                 'requires_approval' => true,
                 'status' => ActionRequestStatus::Pending,
                 'payload' => ['radarr_movie_id' => 200, 'delete_files' => true],
+                'title' => 'Delete movie "Dune: Part Two (2024)"',
+                'description' => 'Emby reported "Dune: Part Two" was removed from the library. Radarr will delete the movie and its files from disk.',
+                'details' => [
+                    ['label' => 'Delete files', 'value' => 'Yes'],
+                ],
             ],
             [
                 'type' => 'emby_library_scan',
@@ -123,6 +137,11 @@ class DemoFakeActions extends Command
                 'status' => ActionRequestStatus::Completed,
                 'payload' => ['trigger' => 'sonarr_download', 'series_title' => 'Demo Show'],
                 'result' => ['success' => true, 'reason' => 'scan_dispatched'],
+                'title' => 'Scan the Emby library',
+                'description' => 'Sonarr downloaded a new episode of "Demo Show". Emby server "Demo Server" will rescan its libraries to pick up changes.',
+                'details' => [
+                    ['label' => 'Trigger', 'value' => 'Sonarr download'],
+                ],
             ],
             [
                 'type' => 'cleanup_seerr_request',
@@ -130,8 +149,13 @@ class DemoFakeActions extends Command
                 'target' => 'seerr',
                 'requires_approval' => false,
                 'status' => ActionRequestStatus::Failed,
-                'payload' => ['request_id' => 5099],
+                'payload' => ['seerr_request_id' => 5099],
                 'result' => ['success' => false, 'reason' => 'execution_failed'],
+                'title' => 'Clean up Seerr request for "Demo Movie"',
+                'description' => 'Emby reported "Demo Movie" was removed from the library. Seerr will delete the request.',
+                'details' => [
+                    ['label' => 'Request ID', 'value' => '5099'],
+                ],
             ],
             [
                 'type' => 'delete_series',
@@ -140,6 +164,11 @@ class DemoFakeActions extends Command
                 'requires_approval' => true,
                 'status' => ActionRequestStatus::Rejected,
                 'payload' => ['sonarr_series_id' => 99, 'delete_files' => false],
+                'title' => 'Delete series "Industry (2020)"',
+                'description' => 'Emby reported "Industry" was removed from the library. Sonarr will remove the series but keep its files on disk.',
+                'details' => [
+                    ['label' => 'Delete files', 'value' => 'No'],
+                ],
             ],
             [
                 'type' => 'emby_library_scan',
@@ -148,6 +177,11 @@ class DemoFakeActions extends Command
                 'requires_approval' => false,
                 'status' => ActionRequestStatus::Executing,
                 'payload' => ['trigger' => 'seerr_media_available', 'subject' => 'Demo Movie'],
+                'title' => 'Scan the Emby library',
+                'description' => 'Seerr reported "Demo Movie" is now available. Emby server "Demo Server" will rescan its libraries to pick up changes.',
+                'details' => [
+                    ['label' => 'Trigger', 'value' => 'Seerr media available'],
+                ],
             ],
         ];
     }

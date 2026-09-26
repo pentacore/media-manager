@@ -298,3 +298,22 @@ test('the rationale is truncated to a thousand characters', function (): void {
 
     expect(mb_strlen($built['payload']['agent_rationale']))->toBe(1000);
 });
+
+test('the builder describes the replacement for the approval card', function (): void {
+    $built = resolve(ReplacementRequestBuilder::class)->build(
+        snapshot: ['display_name' => 'Severance S01E01', 'service' => 'sonarr'],
+        candidate: ['title' => 'Severance.S01E01.1080p.WEB', 'confidence' => 92],
+        requiredLanguages: ['en', 'sv'],
+        selectionMode: 'automatic',
+        reason: 'Current file has no Swedish subtitles.',
+    );
+
+    expect($built['description']->title)->toBe('Replace Severance S01E01')
+        ->and($built['description']->description)->toBe('Sonarr will grab the selected release and replace the current file once it imports.')
+        ->and($built['description']->details)->toBe([
+            ['label' => 'Release', 'value' => 'Severance.S01E01.1080p.WEB'],
+            ['label' => 'Required subtitles', 'value' => 'en, sv'],
+            ['label' => 'Confidence', 'value' => '92%'],
+            ['label' => 'Selection', 'value' => 'automatic'],
+        ]);
+});

@@ -86,7 +86,11 @@ test('it queues the unique automatic candidate and records the action in the run
         ->and($this->case->fresh()->status)->toBe(SubtitleCaseStatus::ReplacementRequested)
         ->and($this->case->fresh()->replacement_action_request_id)->toBe($result['action_request_id']);
 
-    $payload = ActionRequest::query()->findOrFail($result['action_request_id'])->payload;
+    $actionRequest = ActionRequest::query()->findOrFail($result['action_request_id']);
+    $payload = $actionRequest->payload;
+
+    expect($actionRequest->origin)->toBe('agent')
+        ->and($actionRequest->description)->toStartWith(sprintf('Queued by the subtitle advisor for subtitle case #%d.', $this->case->id));
 
     expect($payload)
         ->toMatchArray([
