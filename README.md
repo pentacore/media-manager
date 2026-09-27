@@ -187,7 +187,7 @@ For Sonarr, Radarr, Prowlarr, and Whisparr, the **Configure webhook** button reg
 
 Three sign-in paths are available. Enable whichever combination you want:
 
-- **Local email/password** (Fortify, with optional two-factor auth) — always available. Users can be created via the invite flow (admin → Users → Invite) which emails a signed `/invite/{user}/accept` link; the invitee sets a password on their first sign-in via the `password.set` middleware gate. `artisan users:create` creates a user directly.
+- **Local email/password** (Fortify, with optional two-factor auth) — always available. Self-registration (`/register`) is only open for the bootstrap admin (no users yet); afterwards it 404s unless `MEDIAMANAGER_REGISTRATION_ENABLED=true`. Users can be created via the invite flow (admin → Users → Invite) which emails a signed `/invite/{user}/accept` link; the invitee sets a password on their first sign-in via the `password.set` middleware gate. `artisan users:create` creates a user directly.
 - **Authentik SSO** — set `AUTHENTIK_CLIENT_ID`, `AUTHENTIK_CLIENT_SECRET`, `AUTHENTIK_BASE_URL`, and (usually) leave `AUTHENTIK_REDIRECT_URI` as the default `${APP_URL}/auth/authentik/callback`.
 - **Emby credentials** — set `EMBY_URL` + `EMBY_API_KEY` (via the connection form or seeder). Users sign in with their Emby username/password; MediaManager brokers the auth via the Emby connection.
 

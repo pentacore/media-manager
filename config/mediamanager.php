@@ -5,6 +5,19 @@ declare(strict_types=1);
 return [
     /*
     |--------------------------------------------------------------------------
+    | Registration
+    |--------------------------------------------------------------------------
+    |
+    | Self-registration (POST /register) is always open for the very first
+    | user (bootstrapping the admin account) and closed afterwards unless
+    | explicitly enabled here. See App\Support\RegistrationGate.
+    |
+    */
+
+    'registration_enabled' => (bool) env('MEDIAMANAGER_REGISTRATION_ENABLED', false),
+
+    /*
+    |--------------------------------------------------------------------------
     | AI Assistant
     |--------------------------------------------------------------------------
     |

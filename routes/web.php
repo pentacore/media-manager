@@ -10,11 +10,12 @@ use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\HeartbeatController;
 use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\StatisticsController;
+use App\Support\RegistrationGate;
 use Illuminate\Support\Facades\Route;
 use Laravel\Fortify\Features;
 
 Route::inertia('/', 'Welcome', [
-    'canRegister' => Features::enabled(Features::registration()),
+    'canRegister' => Features::enabled(Features::registration()) && RegistrationGate::isOpen(),
 ])->name('home');
 
 Route::middleware(['auth', 'verified', 'password.set'])->group(function (): void {
