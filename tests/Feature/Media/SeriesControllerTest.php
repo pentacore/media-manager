@@ -278,7 +278,9 @@ test('destroy queues a delete_series action request instead of calling sonarr', 
 
     $this->actingAs($member)
         ->delete(route('media.series.destroy', 42), ['delete_files' => true])
-        ->assertRedirect();
+        ->assertRedirect()
+        ->assertSessionHas('inertia.flash_data.toast.type', 'info')
+        ->assertSessionHas('inertia.flash_data.toast.message', 'Deletion queued for approval in the Action Queue.');
 
     Http::assertNotSent(fn ($request): bool => $request->method() === 'DELETE');
 
@@ -311,7 +313,9 @@ test('destroy auto-executes when the rule does not require approval', function (
 
     $this->actingAs($member)
         ->delete(route('media.series.destroy', 42))
-        ->assertRedirect(route('media.series.index'));
+        ->assertRedirect(route('media.series.index'))
+        ->assertSessionHas('inertia.flash_data.toast.type', 'success')
+        ->assertSessionHas('inertia.flash_data.toast.message', 'Series deletion queued.');
 
     Http::assertNotSent(fn ($request): bool => $request->method() === 'DELETE');
 
@@ -337,7 +341,9 @@ test('destroy reports a disabled rule', function (): void {
 
     $this->actingAs($member)
         ->delete(route('media.series.destroy', 42))
-        ->assertRedirect();
+        ->assertRedirect()
+        ->assertSessionHas('inertia.flash_data.toast.type', 'error')
+        ->assertSessionHas('inertia.flash_data.toast.message', 'Deleting series is disabled in Action Rules.');
 
     Http::assertNotSent(fn ($request): bool => $request->method() === 'DELETE');
     expect(ActionRequest::query()->where('type', 'delete_series')->exists())->toBeFalse();
