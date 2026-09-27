@@ -31,13 +31,13 @@ test('the investigator returns structured findings to the parent and is billed a
         'It is not an upgrade; I can remove it.',
     ]);
 
-    $response = (new MediaAgent)->prompt('why is my download stuck?');
+    $agentResponse = (new MediaAgent)->prompt('why is my download stuck?');
 
-    expect($response->text)->toBe('It is not an upgrade; I can remove it.')
-        ->and($response->toolResults->first()->result)->toContain('"recommendation":"remove"');
+    expect($agentResponse->text)->toBe('It is not an upgrade; I can remove it.')
+        ->and($agentResponse->toolResults->first()->result)->toContain('"recommendation":"remove"');
 
     StuckDownloadInvestigatorAgent::assertPromptedTimes(1);
-    expect(AiUsageRecord::where('parent_invocation_id', $response->invocationId)->sole()->agent_class)->toBe(StuckDownloadInvestigatorAgent::class);
+    expect(AiUsageRecord::where('parent_invocation_id', $agentResponse->invocationId)->sole()->agent_class)->toBe(StuckDownloadInvestigatorAgent::class);
 });
 
 test('sub-agents use the sub-agent model setting', function (): void {

@@ -36,6 +36,7 @@ test('a chain reaching a provider without tool search gets plain tools', functio
 test('a streamed chat turn on a mixed chain never sends a ToolSearch wrapper', function (): void {
     config()->set('mediamanager.ai.enabled', true);
     config()->set('ai.default', 'openai');
+
     resolve(AiSettings::class)->setFailoverProvider(Lab::Gemini);
     MediaAgent::fake(['ok']);
 
@@ -51,6 +52,7 @@ test('a streamed chat turn on a mixed chain never sends a ToolSearch wrapper', f
 test('a streamed chat turn on a tool-search chain defers non-core tools', function (): void {
     config()->set('mediamanager.ai.enabled', true);
     config()->set('ai.default', 'openai');
+
     resolve(AiSettings::class)->setFailoverProvider(Lab::Anthropic);
     MediaAgent::fake(['ok']);
 

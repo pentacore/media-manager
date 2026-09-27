@@ -199,6 +199,7 @@ test('reranking uses the admin-selected provider', function (): void {
     config()->set('mediamanager.ai.enabled', true);
     config()->set('scout.driver', 'typesense');
     config()->set('ai.providers.jina.key', 'test');
+
     resolve(AiSettings::class)->setRerankingProvider('jina');
     Embeddings::fake();
     Reranking::fake();

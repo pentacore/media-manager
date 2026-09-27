@@ -89,14 +89,14 @@ return new class extends AiMigration
             ->get();
 
         // A result was recorded on the row of the request that produced it, which may be a later row than its call...
-        $results = $rows->flatMap(fn (object $row) => $this->decoded($row->tool_results))->keyBy('id');
+        $results = $rows->flatMap(fn (object $row): array => $this->decoded($row->tool_results))->keyBy('id');
 
         foreach ($rows as $row) {
             $meta = $this->decoded($row->meta);
 
             $calls = collect($this->decoded($row->tool_calls))
                 ->filter(fn (array $call) => $results->has($call['id'] ?? ''))
-                ->map(fn (array $call) => [
+                ->map(fn (array $call): array => [
                     ...$call,
                     'result' => $results[$call['id']]['result'] ?? null,
                     ...array_filter([
