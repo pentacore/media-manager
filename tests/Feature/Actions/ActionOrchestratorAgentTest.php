@@ -7,6 +7,8 @@ use App\Enums\AiMode;
 use App\Events\ActionRequestCreated;
 use App\Jobs\ExecuteActionRequest;
 use App\Models\ActionTypeConfig;
+use App\Models\ServiceConnection;
+use App\Models\WebhookEvent;
 use App\Services\Actions\ActionDescription;
 use App\Services\Actions\ActionOrchestrator;
 use App\Settings\AiSettings;
@@ -128,4 +130,23 @@ test('dispatchFromAgent returns null when config missing or disabled', function 
 
     Event::assertNotDispatched(ActionRequestCreated::class);
     Queue::assertNotPushed(ExecuteActionRequest::class);
+});
+
+test('dispatchFromAgent ignores a model-supplied service_connection_id', function (): void {
+    ActionTypeConfig::factory()->create(['type' => 'monitor_series', 'requires_approval' => true, 'is_enabled' => true]);
+    $connectionA = ServiceConnection::factory()->sonarr()->create(['url' => 'http://sonarr-a.local:8989']);
+    $connectionB = ServiceConnection::factory()->sonarr()->create(['url' => 'http://sonarr-b.local:8989']);
+    $webhookEvent = WebhookEvent::factory()->for($connectionB, 'serviceConnection')->create();
+
+    $actionRequest = resolve(ActionOrchestrator::class)->dispatchFromAgent(
+        type: 'monitor_series',
+        sourceService: 'sonarr',
+        targetService: 'sonarr',
+        payload: ['series_id' => 42, 'service_connection_id' => $connectionA->id],
+        rationale: 'Monitor it.',
+        description: new ActionDescription('Test action', 'Test effect.'),
+        webhookEventId: $webhookEvent->id,
+    );
+
+    expect($actionRequest->fresh()->payload['service_connection_id'])->toBe($connectionB->id);
 });

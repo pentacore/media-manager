@@ -32,17 +32,20 @@ class DecisionRunContext
     /**
      * The payload the describer resolves against: the triggering webhook's
      * connection is pinned exactly as ActionOrchestrator::dispatchFromAgent()
-     * will pin it, so the named target is the one the executor acts on.
+     * will pin it — always overwriting any model-supplied
+     * service_connection_id — so the named target is the one the executor
+     * acts on.
      *
      * @param  array<string, mixed>  $payload
      * @return array<string, mixed>
      */
     public function pinContext(array $payload): array
     {
-        if ($this->webhookEventId === null || array_key_exists('service_connection_id', $payload)) {
+        if ($this->webhookEventId === null) {
             return $payload;
         }
 
+        unset($payload['service_connection_id']);
         $connectionId = WebhookEvent::query()->whereKey($this->webhookEventId)->value('service_connection_id');
 
         return $connectionId === null ? $payload : [...$payload, 'service_connection_id' => $connectionId];

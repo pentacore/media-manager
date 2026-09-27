@@ -149,9 +149,12 @@ class ActionOrchestrator
             || ($forceRequiresApproval ?? false)
             || ! $description->verified;
 
-        // Same connection pinning as dispatch(): agent proposals originate
-        // from a webhook event too.
-        if ($webhookEventId !== null && ! array_key_exists('service_connection_id', $payload)) {
+        // Pin the originating connection like dispatch() does, but always
+        // overwrite: the payload is model-authored, and a prompt-injected
+        // service_connection_id must not redirect the action to another
+        // instance. DecisionRunContext::pinContext() mirrors this exactly.
+        if ($webhookEventId !== null) {
+            unset($payload['service_connection_id']);
             $originConnectionId = WebhookEvent::query()->whereKey($webhookEventId)->value('service_connection_id');
 
             if ($originConnectionId !== null) {

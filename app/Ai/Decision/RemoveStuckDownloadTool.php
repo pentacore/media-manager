@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Ai\Decision;
 
+use App\Models\WebhookEvent;
 use App\Services\Actions\ActionDescriber;
 use App\Services\Actions\ActionOrchestrator;
 use App\Settings\DecisionAgentSettings;
@@ -23,15 +24,16 @@ use Throwable;
  * when the release itself is bad so the arr never grabs it again, and/or triggers
  * an immediate search for a replacement release (payload.search_replacement).
  *
- * Gated behind the same manual-import capability as importing. Suggest-vs-act
- * is governed by the remove_stuck_download action rule (approval-required by
- * default, since this deletes the downloaded data).
+ * Gated behind the same manual-import capability as importing. Removals are
+ * always queued for human approval regardless of the remove_stuck_download
+ * action rule, since this deletes the downloaded data and the agent's prompt
+ * embeds third-party-authored webhook text.
  */
 class RemoveStuckDownloadTool implements Tool
 {
     public function description(): Stringable|string
     {
-        return 'Remove a stuck Sonarr/Radarr download from the queue — use when an inspected stuck import should NOT be imported, e.g. it is "not an upgrade for existing episode file(s)". Provide the service, the download_id, and a short reason. Optionally pass blocklist=true to also blocklist the release so the arr never grabs it again (only when the release itself is bad — corrupt/fake/wrong content), and/or search_replacement=true to have the arr immediately search for a replacement release after removal (combine with blocklist=true to retry with a different release). This deletes the downloaded data and defaults to requiring human approval.';
+        return 'Remove a stuck Sonarr/Radarr download from the queue — use when an inspected stuck import should NOT be imported, e.g. it is "not an upgrade for existing episode file(s)". Provide the service, the download_id, and a short reason. Optionally pass blocklist=true to also blocklist the release so the arr never grabs it again (only when the release itself is bad — corrupt/fake/wrong content), and/or search_replacement=true to have the arr immediately search for a replacement release after removal (combine with blocklist=true to retry with a different release). This deletes the downloaded data and always requires human approval.';
     }
 
     public function handle(Request $request): Stringable|string
@@ -72,6 +74,11 @@ class RemoveStuckDownloadTool implements Tool
             return $this->encode(['queued' => false, 'reason' => 'missing_reason', 'message' => 'A short reason is required so the human approver understands why.']);
         }
 
+        $subjectMismatch = $this->rejectForeignDownload($downloadId, $context);
+        if ($subjectMismatch !== null) {
+            return $this->encode($subjectMismatch);
+        }
+
         try {
             $actionPayload = ['service' => $service, 'download_id' => $downloadId, 'blocklist' => $blocklist, 'search_replacement' => $searchReplacement];
 
@@ -85,6 +92,7 @@ class RemoveStuckDownloadTool implements Tool
                     ->describe('remove_stuck_download', $context->pinContext($actionPayload))
                     ->because($context->proposalReason()),
                 webhookEventId: $context->webhookEventId,
+                forceRequiresApproval: true,
             );
         } catch (Throwable $throwable) {
             Log::warning('RemoveStuckDownloadTool: dispatch failed', [
@@ -141,6 +149,34 @@ class RemoveStuckDownloadTool implements Tool
                 ->description('After removing, have the arr immediately search for a replacement release. Combine with blocklist=true to retry with a different release; leave false when the content should not be re-grabbed at all. Default false.')
                 ->required()
                 ->nullable(),
+        ];
+    }
+
+    /**
+     * A removal may only target the download that triggered this run when the
+     * event names one. Without this, injected payload text could steer the
+     * agent into deleting an unrelated download's data.
+     *
+     * @return array<string, mixed>|null structured rejection, or null when OK
+     */
+    private function rejectForeignDownload(string $downloadId, DecisionRunContext $decisionRunContext): ?array
+    {
+        $eventDownloadId = $decisionRunContext->webhookEventId === null
+            ? null
+            : (WebhookEvent::query()->find($decisionRunContext->webhookEventId)?->payload['downloadId'] ?? null);
+
+        if (! is_string($eventDownloadId) || $eventDownloadId === '' || $eventDownloadId === $downloadId) {
+            return null;
+        }
+
+        return [
+            'queued' => false,
+            'reason' => 'subject_mismatch',
+            'message' => sprintf(
+                'download_id %s does not match the download that triggered this event (%s). Only the triggering download may be removed.',
+                $downloadId,
+                $eventDownloadId,
+            ),
         ];
     }
 
