@@ -37,6 +37,12 @@ class AiSettings
 
     public const string MODELS_DEV_PRICING_ENABLED_KEY = 'ai.pricing.models_dev_enabled';
 
+    public const string OPENROUTER_PRICING_ENABLED_KEY = 'ai.pricing.openrouter_enabled';
+
+    public const string LITELLM_PRICING_ENABLED_KEY = 'ai.pricing.litellm_enabled';
+
+    public const string XAI_PRICING_ENABLED_KEY = 'ai.pricing.xai_enabled';
+
     public const string IGNORED_PRICING_PROVIDERS_KEY = 'ai.pricing.ignored_providers';
 
     public const string AUTO_CREATE_PRICING_PROVIDERS_KEY = 'ai.pricing.auto_create_providers';
@@ -260,6 +266,76 @@ class AiSettings
     public function setModelsDevPricingEnabled(?bool $enabled): void
     {
         $this->appSettings->set(self::MODELS_DEV_PRICING_ENABLED_KEY, $enabled);
+    }
+
+    /**
+     * Whether the refresh prices `openrouter` rows from OpenRouter's models
+     * API. Config (`AI_PRICING_OPENROUTER_ENABLED`) is the default until an
+     * admin saves a value.
+     */
+    public function openRouterPricingEnabled(): bool
+    {
+        return $this->pricingSourceEnabled(self::OPENROUTER_PRICING_ENABLED_KEY, 'openrouter');
+    }
+
+    /**
+     * Persist the OpenRouter source gate; null falls back to config.
+     */
+    public function setOpenRouterPricingEnabled(?bool $enabled): void
+    {
+        $this->appSettings->set(self::OPENROUTER_PRICING_ENABLED_KEY, $enabled);
+    }
+
+    /**
+     * Whether the refresh cross-checks models.dev against the LiteLLM price
+     * map. Config (`AI_PRICING_LITELLM_ENABLED`) is the default until an admin
+     * saves a value.
+     */
+    public function liteLlmPricingEnabled(): bool
+    {
+        return $this->pricingSourceEnabled(self::LITELLM_PRICING_ENABLED_KEY, 'litellm');
+    }
+
+    /**
+     * Persist the LiteLLM source gate; null falls back to config.
+     */
+    public function setLiteLlmPricingEnabled(?bool $enabled): void
+    {
+        $this->appSettings->set(self::LITELLM_PRICING_ENABLED_KEY, $enabled);
+    }
+
+    /**
+     * Whether the refresh prices `xai` rows from xAI's first-party pricing
+     * API. Config (`AI_PRICING_XAI_ENABLED`) is the default until an admin
+     * saves a value. The source is still skipped when no xAI key exists.
+     */
+    public function xaiPricingEnabled(): bool
+    {
+        return $this->pricingSourceEnabled(self::XAI_PRICING_ENABLED_KEY, 'xai');
+    }
+
+    /**
+     * Persist the xAI source gate; null falls back to config.
+     */
+    public function setXaiPricingEnabled(?bool $enabled): void
+    {
+        $this->appSettings->set(self::XAI_PRICING_ENABLED_KEY, $enabled);
+    }
+
+    /**
+     * A saved pricing-source gate, or its `mediamanager.ai.pricing.{source}.enabled`
+     * config default when nothing is saved. Read fresh on every call so an
+     * unset value keeps tracking config.
+     */
+    private function pricingSourceEnabled(string $key, string $source): bool
+    {
+        $stored = $this->appSettings->get($key);
+
+        if ($stored === null) {
+            return (bool) config(sprintf('mediamanager.ai.pricing.%s.enabled', $source), false);
+        }
+
+        return (bool) $stored;
     }
 
     /**
