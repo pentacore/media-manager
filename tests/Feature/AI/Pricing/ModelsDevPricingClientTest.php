@@ -3,7 +3,7 @@
 declare(strict_types=1);
 
 use App\Services\AiUsage\Pricing\ModelsDevPricingClient;
-use App\Services\AiUsage\Pricing\ModelsDevTransportException;
+use App\Services\AiUsage\Pricing\PricingTransportException;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Sleep;
@@ -77,7 +77,7 @@ test('fetch returns the decoded top-level provider map on success', function ():
         'models.dev/*' => Http::response(modelsDevFixture('api.json'), 200),
     ]);
 
-    $map = new ModelsDevPricingClient()->fetch();
+    $map = resolve(ModelsDevPricingClient::class)->fetch();
 
     expect($map)->toBeArray()
         ->and(array_is_list($map))->toBeFalse()
@@ -94,7 +94,7 @@ test('fetch sends json accept and an application user agent', function (): void 
         'models.dev/*' => Http::response('{"openai":{"models":{}}}', 200),
     ]);
 
-    new ModelsDevPricingClient()->fetch();
+    resolve(ModelsDevPricingClient::class)->fetch();
 
     Http::assertSent(fn ($request): bool => $request->hasHeader('Accept', 'application/json')
         && str_starts_with((string) $request->header('User-Agent')[0], 'MediaManager/'));
@@ -110,7 +110,7 @@ test('fetch retries a transient server error and returns the eventual success', 
             ->push(modelsDevFixture('api.json'), 200),
     ]);
 
-    $map = new ModelsDevPricingClient()->fetch();
+    $map = resolve(ModelsDevPricingClient::class)->fetch();
 
     expect($map)->toHaveKey('openai');
     Http::assertSentCount(2);
@@ -127,13 +127,13 @@ test('fetch throws a classified server error after exhausting retries without le
     $caught = null;
 
     try {
-        new ModelsDevPricingClient()->fetch();
-    } catch (ModelsDevTransportException $modelsDevTransportException) {
+        resolve(ModelsDevPricingClient::class)->fetch();
+    } catch (PricingTransportException $modelsDevTransportException) {
         $caught = $modelsDevTransportException;
     }
 
     expect($caught)->not->toBeNull()
-        ->and($caught->category)->toBe(ModelsDevTransportException::CATEGORY_SERVER_ERROR)
+        ->and($caught->category)->toBe(PricingTransportException::CATEGORY_SERVER_ERROR)
         ->and($caught->getMessage())->not->toContain('SECRET-UPSTREAM-BODY');
 
     Http::assertSentCount(3);
@@ -150,13 +150,13 @@ test('fetch retries a rate limited response and classifies it when persistent', 
     $caught = null;
 
     try {
-        new ModelsDevPricingClient()->fetch();
-    } catch (ModelsDevTransportException $modelsDevTransportException) {
+        resolve(ModelsDevPricingClient::class)->fetch();
+    } catch (PricingTransportException $modelsDevTransportException) {
         $caught = $modelsDevTransportException;
     }
 
     expect($caught)->not->toBeNull()
-        ->and($caught->category)->toBe(ModelsDevTransportException::CATEGORY_RATE_LIMITED);
+        ->and($caught->category)->toBe(PricingTransportException::CATEGORY_RATE_LIMITED);
 
     Http::assertSentCount(3);
 });
@@ -172,13 +172,13 @@ test('fetch does not retry a deterministic client error', function (): void {
     $caught = null;
 
     try {
-        new ModelsDevPricingClient()->fetch();
-    } catch (ModelsDevTransportException $modelsDevTransportException) {
+        resolve(ModelsDevPricingClient::class)->fetch();
+    } catch (PricingTransportException $modelsDevTransportException) {
         $caught = $modelsDevTransportException;
     }
 
     expect($caught)->not->toBeNull()
-        ->and($caught->category)->toBe(ModelsDevTransportException::CATEGORY_CLIENT_ERROR);
+        ->and($caught->category)->toBe(PricingTransportException::CATEGORY_CLIENT_ERROR);
 
     Http::assertSentCount(1);
 });
@@ -191,13 +191,13 @@ test('fetch classifies a connection failure', function (): void {
     $caught = null;
 
     try {
-        new ModelsDevPricingClient()->fetch();
-    } catch (ModelsDevTransportException $modelsDevTransportException) {
+        resolve(ModelsDevPricingClient::class)->fetch();
+    } catch (PricingTransportException $modelsDevTransportException) {
         $caught = $modelsDevTransportException;
     }
 
     expect($caught)->not->toBeNull()
-        ->and($caught->category)->toBe(ModelsDevTransportException::CATEGORY_CONNECTION);
+        ->and($caught->category)->toBe(PricingTransportException::CATEGORY_CONNECTION);
 });
 
 test('fetch classifies a timeout distinctly from a plain connection failure', function (): void {
@@ -208,13 +208,13 @@ test('fetch classifies a timeout distinctly from a plain connection failure', fu
     $caught = null;
 
     try {
-        new ModelsDevPricingClient()->fetch();
-    } catch (ModelsDevTransportException $modelsDevTransportException) {
+        resolve(ModelsDevPricingClient::class)->fetch();
+    } catch (PricingTransportException $modelsDevTransportException) {
         $caught = $modelsDevTransportException;
     }
 
     expect($caught)->not->toBeNull()
-        ->and($caught->category)->toBe(ModelsDevTransportException::CATEGORY_TIMEOUT);
+        ->and($caught->category)->toBe(PricingTransportException::CATEGORY_TIMEOUT);
 });
 
 test('fetch rejects an oversized body before attempting to decode it', function (): void {
@@ -229,13 +229,13 @@ test('fetch rejects an oversized body before attempting to decode it', function 
     $caught = null;
 
     try {
-        new ModelsDevPricingClient()->fetch();
-    } catch (ModelsDevTransportException $modelsDevTransportException) {
+        resolve(ModelsDevPricingClient::class)->fetch();
+    } catch (PricingTransportException $modelsDevTransportException) {
         $caught = $modelsDevTransportException;
     }
 
     expect($caught)->not->toBeNull()
-        ->and($caught->category)->toBe(ModelsDevTransportException::CATEGORY_OVERSIZED);
+        ->and($caught->category)->toBe(PricingTransportException::CATEGORY_OVERSIZED);
 
     Http::assertSentCount(1);
 });
@@ -251,13 +251,13 @@ test('fetch rejects invalid json without retrying', function (): void {
     $caught = null;
 
     try {
-        new ModelsDevPricingClient()->fetch();
-    } catch (ModelsDevTransportException $modelsDevTransportException) {
+        resolve(ModelsDevPricingClient::class)->fetch();
+    } catch (PricingTransportException $modelsDevTransportException) {
         $caught = $modelsDevTransportException;
     }
 
     expect($caught)->not->toBeNull()
-        ->and($caught->category)->toBe(ModelsDevTransportException::CATEGORY_INVALID_JSON);
+        ->and($caught->category)->toBe(PricingTransportException::CATEGORY_INVALID_JSON);
 
     Http::assertSentCount(1);
 });
@@ -273,13 +273,30 @@ test('fetch rejects a list-shaped top level payload without retrying', function 
     $caught = null;
 
     try {
-        new ModelsDevPricingClient()->fetch();
-    } catch (ModelsDevTransportException $modelsDevTransportException) {
+        resolve(ModelsDevPricingClient::class)->fetch();
+    } catch (PricingTransportException $modelsDevTransportException) {
         $caught = $modelsDevTransportException;
     }
 
     expect($caught)->not->toBeNull()
-        ->and($caught->category)->toBe(ModelsDevTransportException::CATEGORY_INVALID_SHAPE);
+        ->and($caught->category)->toBe(PricingTransportException::CATEGORY_INVALID_SHAPE);
 
     Http::assertSentCount(1);
+});
+
+test('transport failure messages name the models.dev source', function (): void {
+    Sleep::fake();
+    config()->set('mediamanager.ai.pricing.models_dev.retries', 0);
+
+    Http::fake(['models.dev/*' => Http::response('nope', 503)]);
+
+    try {
+        resolve(ModelsDevPricingClient::class)->fetch();
+        $caught = null;
+    } catch (PricingTransportException $pricingTransportException) {
+        $caught = $pricingTransportException;
+    }
+
+    expect($caught)->not->toBeNull()
+        ->and($caught->getMessage())->toBe('Models.dev pricing API responded with HTTP 503.');
 });

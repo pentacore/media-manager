@@ -301,8 +301,8 @@ final class AiPriceRefreshCoordinator
     ): string {
         try {
             $decoded = $this->modelsDevPricingClient->fetch();
-        } catch (ModelsDevTransportException $modelsDevTransportException) {
-            $errorMessage = $modelsDevTransportException->getMessage();
+        } catch (PricingTransportException $pricingTransportException) {
+            $errorMessage = $pricingTransportException->getMessage();
 
             $this->queueAllForFallback(
                 $requested,
@@ -311,7 +311,7 @@ final class AiPriceRefreshCoordinator
                 fallbackAllowed: $source === self::SOURCE_HYBRID,
             );
 
-            return $modelsDevTransportException->category;
+            return $pricingTransportException->category;
         }
 
         $results = $this->modelsDevPricingAdapter->adapt($decoded, $refreshScope);
