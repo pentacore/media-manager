@@ -121,6 +121,11 @@ class ActionOrchestrator
      * requirement for a single instance — e.g. an ambiguous manual import is
      * forced to Pending even when its ActionTypeConfig auto-executes.
      *
+     * $pinnedConnectionId is the triggering event's connection as carried by
+     * the run's snapshot (DecisionRunContext::$originConnectionId). It wins
+     * over a lookup through $webhookEventId, and keeps pinning enforced when
+     * webhook capture already trimmed the event row.
+     *
      * @param  array<string, mixed>  $payload
      */
     public function dispatchFromAgent(
@@ -132,6 +137,7 @@ class ActionOrchestrator
         ActionDescription $description,
         ?int $webhookEventId = null,
         ?bool $forceRequiresApproval = null,
+        ?int $pinnedConnectionId = null,
     ): ?ActionRequest {
         $config = ActionTypeConfig::where('type', $type)->first();
 
@@ -153,9 +159,10 @@ class ActionOrchestrator
         // overwrite: the payload is model-authored, and a prompt-injected
         // service_connection_id must not redirect the action to another
         // instance. DecisionRunContext::pinContext() mirrors this exactly.
-        if ($webhookEventId !== null) {
+        if ($webhookEventId !== null || $pinnedConnectionId !== null) {
             unset($payload['service_connection_id']);
-            $originConnectionId = WebhookEvent::query()->whereKey($webhookEventId)->value('service_connection_id');
+            $originConnectionId = $pinnedConnectionId
+                ?? WebhookEvent::query()->whereKey($webhookEventId)->value('service_connection_id');
 
             if ($originConnectionId !== null) {
                 $payload['service_connection_id'] = $originConnectionId;

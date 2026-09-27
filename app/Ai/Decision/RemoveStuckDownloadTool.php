@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace App\Ai\Decision;
 
-use App\Models\WebhookEvent;
 use App\Services\Actions\ActionDescriber;
 use App\Services\Actions\ActionOrchestrator;
 use App\Settings\DecisionAgentSettings;
@@ -93,6 +92,7 @@ class RemoveStuckDownloadTool implements Tool
                     ->because($context->proposalReason()),
                 webhookEventId: $context->webhookEventId,
                 forceRequiresApproval: true,
+                pinnedConnectionId: $context->originConnectionId,
             );
         } catch (Throwable $throwable) {
             Log::warning('RemoveStuckDownloadTool: dispatch failed', [
@@ -163,9 +163,7 @@ class RemoveStuckDownloadTool implements Tool
      */
     private function rejectForeignDownload(string $downloadId, DecisionRunContext $decisionRunContext): ?array
     {
-        $eventPayload = $decisionRunContext->webhookEventId === null
-            ? []
-            : (WebhookEvent::query()->find($decisionRunContext->webhookEventId)?->payload ?? []);
+        $eventPayload = $decisionRunContext->eventPayload;
         $eventDownloadId = $eventPayload['downloadId'] ?? ($eventPayload['downloadInfo']['downloadId'] ?? null);
 
         if (! is_string($eventDownloadId) || $eventDownloadId === '' || $eventDownloadId === $downloadId) {

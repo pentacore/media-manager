@@ -126,6 +126,7 @@ class ResolveManualImportTool implements Tool
                     ->because($context->proposalReason()),
                 webhookEventId: $context->webhookEventId,
                 forceRequiresApproval: $partial ? true : null,
+                pinnedConnectionId: $context->originConnectionId,
             );
         } catch (Throwable $throwable) {
             Log::warning('ResolveManualImportTool: dispatch failed', [

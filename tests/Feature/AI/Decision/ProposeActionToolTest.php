@@ -24,9 +24,20 @@ beforeEach(function (): void {
     Queue::fake();
 });
 
+/**
+ * Binds a context the way RunDecisionAgent builds it for a persisted event:
+ * the event id plus its payload and connection snapshot.
+ */
 function bindDecisionContext(int $maxActions = 3, ?int $webhookEventId = null): DecisionRunContext
 {
-    $context = new DecisionRunContext($webhookEventId, $maxActions, 'sonarr');
+    $webhookEvent = $webhookEventId === null ? null : WebhookEvent::query()->findOrFail($webhookEventId);
+    $context = new DecisionRunContext(
+        webhookEventId: $webhookEventId,
+        maxActions: $maxActions,
+        sourceService: 'sonarr',
+        eventPayload: $webhookEvent->payload ?? [],
+        originConnectionId: $webhookEvent?->service_connection_id,
+    );
     app()->instance(DecisionRunContext::class, $context);
 
     return $context;
@@ -228,7 +239,7 @@ test('a proposal is described from the server-resolved target with the triggerin
     $sonarr = ServiceConnection::factory()->sonarr()->create(['url' => 'http://sonarr.local:8989', 'name' => 'Sonarr']);
     IndexedSeries::factory()->for($sonarr, 'serviceConnection')->create(['sonarr_id' => 142, 'title' => 'Severance', 'year' => 2022]);
     $webhookEvent = WebhookEvent::factory()->for($sonarr, 'serviceConnection')->create(['event_type' => 'SeriesDelete', 'payload' => ['series' => ['id' => 142]]]);
-    app()->instance(DecisionRunContext::class, new DecisionRunContext(webhookEventId: $webhookEvent->id, maxActions: 3, sourceService: 'sonarr'));
+    bindDecisionContext(webhookEventId: $webhookEvent->id);
 
     (new ProposeActionTool)->handle(new Request([
         'type' => 'delete_series',
@@ -419,5 +430,83 @@ test('a model-supplied service_connection_id cannot redirect the proposal to ano
 
     $actionRequest = ActionRequest::sole();
     expect($actionRequest->payload['service_connection_id'])->toBe($origin->id)
+        ->and($actionRequest->title)->toContain('Severance');
+});
+
+/**
+ * Binds a context the way RunDecisionAgent builds it after webhook capture
+ * trimmed the event row: no webhook event id, only the job's snapshot.
+ *
+ * @param  array<string, mixed>  $payload
+ */
+function bindTrimmedDecisionContext(ServiceConnection $serviceConnection, array $payload): DecisionRunContext
+{
+    $context = new DecisionRunContext(
+        webhookEventId: null,
+        maxActions: 3,
+        sourceService: 'sonarr',
+        eventPayload: $payload,
+        originConnectionId: $serviceConnection->id,
+    );
+    app()->instance(DecisionRunContext::class, $context);
+
+    return $context;
+}
+
+test('a trimmed event snapshot still binds series proposals to the event subject', function (string $type, array $payload): void {
+    ActionTypeConfig::factory()->create(['type' => $type, 'requires_approval' => true, 'is_enabled' => true]);
+    bindTrimmedDecisionContext(ServiceConnection::factory()->sonarr()->create(), ['series' => ['id' => 42]]);
+
+    $result = json_decode((new ProposeActionTool)->handle(new Request([
+        'type' => $type,
+        'target_service' => 'sonarr',
+        'rationale' => 'Act on a different title.',
+        'payload' => $payload,
+    ])), true);
+
+    expect($result['queued'])->toBeFalse()
+        ->and($result['reason'])->toBe('subject_mismatch')
+        ->and(ActionRequest::count())->toBe(0);
+})->with([
+    'monitor_series' => ['monitor_series', ['series_id' => 999, 'monitored' => false]],
+    'set_series_quality_profile' => ['set_series_quality_profile', ['series_id' => 999, 'quality_profile_id' => 4]],
+    'delete_series' => ['delete_series', ['sonarr_series_id' => 999]],
+]);
+
+test('a trimmed event snapshot still binds seerr mutations to the triggering request', function (): void {
+    ActionTypeConfig::factory()->create(['type' => 'decline_seerr_request', 'requires_approval' => true, 'is_enabled' => true]);
+    bindTrimmedDecisionContext(ServiceConnection::factory()->seerr()->create(), ['request' => ['request_id' => 42]]);
+
+    $result = json_decode((new ProposeActionTool)->handle(new Request([
+        'type' => 'decline_seerr_request',
+        'target_service' => 'seerr',
+        'rationale' => 'Decline the other request.',
+        'payload' => ['seerr_request_id' => 999],
+    ])), true);
+
+    expect($result['queued'])->toBeFalse()
+        ->and($result['reason'])->toBe('subject_mismatch')
+        ->and(ActionRequest::count())->toBe(0);
+});
+
+test('a trimmed event snapshot still pins the proposal to the originating connection', function (): void {
+    ActionTypeConfig::factory()->create(['type' => 'monitor_series', 'requires_approval' => true, 'is_enabled' => true]);
+    $other = ServiceConnection::factory()->sonarr()->create(['url' => 'http://sonarr-other.local:8989', 'name' => 'Other Sonarr']);
+    $origin = ServiceConnection::factory()->sonarr()->create(['url' => 'http://sonarr.local:8989', 'name' => 'Sonarr']);
+    IndexedSeries::factory()->for($other, 'serviceConnection')->create(['sonarr_id' => 142, 'title' => 'Wrong Show', 'year' => 2001]);
+    IndexedSeries::factory()->for($origin, 'serviceConnection')->create(['sonarr_id' => 142, 'title' => 'Severance', 'year' => 2022]);
+    bindTrimmedDecisionContext($origin, ['series' => ['id' => 142]]);
+
+    $result = json_decode((new ProposeActionTool)->handle(new Request([
+        'type' => 'monitor_series',
+        'target_service' => 'sonarr',
+        'rationale' => 'Monitor it.',
+        'payload' => ['series_id' => 142, 'monitored' => true, 'service_connection_id' => $other->id],
+    ])), true);
+
+    $actionRequest = ActionRequest::sole();
+    expect($result['queued'])->toBeTrue()
+        ->and($actionRequest->webhook_event_id)->toBeNull()
+        ->and($actionRequest->payload['service_connection_id'])->toBe($origin->id)
         ->and($actionRequest->title)->toContain('Severance');
 });

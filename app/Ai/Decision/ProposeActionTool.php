@@ -6,7 +6,6 @@ namespace App\Ai\Decision;
 
 use App\Enums\MediaReplacementStatus;
 use App\Models\MediaReplacementAttempt;
-use App\Models\WebhookEvent;
 use App\Services\Actions\ActionDescriber;
 use App\Services\Actions\ActionOrchestrator;
 use App\Services\Actions\UndescribableAction;
@@ -175,6 +174,7 @@ class ProposeActionTool implements Tool
                 description: $description,
                 webhookEventId: $context->webhookEventId,
                 forceRequiresApproval: in_array($type, self::FORCED_APPROVAL_TYPES, true) ? true : null,
+                pinnedConnectionId: $context->originConnectionId,
             );
         } catch (Throwable $throwable) {
             Log::warning('ProposeActionTool: dispatch failed', [
@@ -251,11 +251,9 @@ class ProposeActionTool implements Tool
 
         $proposedId = (int) ($payload['seerr_request_id'] ?? 0);
 
-        $eventRequestId = $decisionRunContext->webhookEventId === null
-            ? null
-            : (int) (WebhookEvent::query()->find($decisionRunContext->webhookEventId)?->payload['request']['request_id'] ?? 0);
+        $eventRequestId = (int) ($decisionRunContext->eventPayload['request']['request_id'] ?? 0);
 
-        if ($eventRequestId === null || $eventRequestId <= 0) {
+        if ($eventRequestId <= 0) {
             return [
                 'queued' => false,
                 'reason' => 'subject_not_verifiable',
@@ -306,9 +304,7 @@ class ProposeActionTool implements Tool
             return null;
         }
 
-        $eventSubjectId = $decisionRunContext->webhookEventId === null
-            ? 0
-            : (int) (WebhookEvent::query()->find($decisionRunContext->webhookEventId)?->payload[$binding['subject']]['id'] ?? 0);
+        $eventSubjectId = (int) ($decisionRunContext->eventPayload[$binding['subject']]['id'] ?? 0);
 
         if ($eventSubjectId <= 0) {
             return str_starts_with($type, 'delete_')

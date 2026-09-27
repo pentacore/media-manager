@@ -152,7 +152,7 @@ test('removals are forced to approval even when the rule auto-executes', functio
         ['downloadId' => 'dl-1', 'title' => 'Bad.Release', 'series' => ['title' => 'Severance'], 'downloadClient' => 'SABnzbd'],
     ]])]);
     $webhookEvent = WebhookEvent::factory()->for($sonarr, 'serviceConnection')->create(['payload' => ['eventType' => 'ManualInteractionRequired', 'downloadId' => 'dl-1']]);
-    app()->instance(DecisionRunContext::class, new DecisionRunContext($webhookEvent->id, 3, 'sonarr'));
+    bindRemovalContextForEvent($webhookEvent);
 
     $result = json_decode((new RemoveStuckDownloadTool)->handle(new Request([
         'service' => 'sonarr', 'download_id' => 'dl-1', 'reason' => 'Not an upgrade',
@@ -170,7 +170,7 @@ test('a removal must target the download that triggered the event', function ():
     ActionTypeConfig::factory()->create(['type' => 'remove_stuck_download', 'requires_approval' => true, 'is_enabled' => true]);
     $webhookEvent = WebhookEvent::factory()->for(ServiceConnection::factory()->sonarr(), 'serviceConnection')
         ->create(['payload' => ['eventType' => 'ManualInteractionRequired', 'downloadId' => 'dl-1']]);
-    app()->instance(DecisionRunContext::class, new DecisionRunContext($webhookEvent->id, 3, 'sonarr'));
+    bindRemovalContextForEvent($webhookEvent);
 
     $result = json_decode((new RemoveStuckDownloadTool)->handle(new Request([
         'service' => 'sonarr', 'download_id' => 'dl-other', 'reason' => 'Not an upgrade',
@@ -185,7 +185,7 @@ test('a removal must target the triggering download when the event carries it on
     ActionTypeConfig::factory()->create(['type' => 'remove_stuck_download', 'requires_approval' => true, 'is_enabled' => true]);
     $webhookEvent = WebhookEvent::factory()->for(ServiceConnection::factory()->sonarr(), 'serviceConnection')
         ->create(['payload' => ['eventType' => 'ManualInteractionRequired', 'downloadInfo' => ['downloadId' => 'dl-1', 'title' => 'Some.Release']]]);
-    app()->instance(DecisionRunContext::class, new DecisionRunContext($webhookEvent->id, 3, 'sonarr'));
+    bindRemovalContextForEvent($webhookEvent);
 
     $result = json_decode((new RemoveStuckDownloadTool)->handle(new Request([
         'service' => 'sonarr', 'download_id' => 'dl-other', 'reason' => 'Not an upgrade',
@@ -195,3 +195,36 @@ test('a removal must target the triggering download when the event carries it on
         ->and($result['reason'])->toBe('subject_mismatch')
         ->and(ActionRequest::count())->toBe(0);
 });
+
+test('a removal stays bound to the triggering download after the event row is trimmed', function (): void {
+    ActionTypeConfig::factory()->create(['type' => 'remove_stuck_download', 'requires_approval' => true, 'is_enabled' => true]);
+    app()->instance(DecisionRunContext::class, new DecisionRunContext(
+        webhookEventId: null,
+        maxActions: 3,
+        sourceService: 'sonarr',
+        eventPayload: ['eventType' => 'ManualInteractionRequired', 'downloadId' => 'dl-1'],
+        originConnectionId: ServiceConnection::factory()->sonarr()->create()->id,
+    ));
+
+    $result = json_decode((new RemoveStuckDownloadTool)->handle(new Request([
+        'service' => 'sonarr', 'download_id' => 'dl-other', 'reason' => 'Not an upgrade',
+    ])), true);
+
+    expect($result['queued'])->toBeFalse()
+        ->and($result['reason'])->toBe('subject_mismatch')
+        ->and(ActionRequest::count())->toBe(0);
+});
+
+/**
+ * Binds a context the way RunDecisionAgent builds it for a persisted event.
+ */
+function bindRemovalContextForEvent(WebhookEvent $webhookEvent): void
+{
+    app()->instance(DecisionRunContext::class, new DecisionRunContext(
+        webhookEventId: $webhookEvent->id,
+        maxActions: 3,
+        sourceService: 'sonarr',
+        eventPayload: $webhookEvent->payload,
+        originConnectionId: $webhookEvent->service_connection_id,
+    ));
+}

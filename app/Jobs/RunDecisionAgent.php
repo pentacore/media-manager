@@ -58,6 +58,11 @@ class RunDecisionAgent implements ShouldBeUnique, ShouldQueue
     private const string GATE_QUESTION = 'Does this media-server webhook event require an operator action (import, remove, approve, re-search or fix something) rather than being purely informational?';
 
     /**
+     * $payload and $serviceConnectionId snapshot the triggering event so the
+     * run's subject binding and connection pinning survive the row being
+     * trimmed. A null $serviceConnectionId falls back to the event row when
+     * it still exists.
+     *
      * @param  array<string, mixed>  $payload
      */
     public function __construct(
@@ -65,6 +70,7 @@ class RunDecisionAgent implements ShouldBeUnique, ShouldQueue
         public readonly string $service,
         public readonly string $eventType,
         public readonly array $payload,
+        public readonly ?int $serviceConnectionId = null,
     ) {}
 
     public function uniqueId(): string
@@ -135,6 +141,9 @@ class RunDecisionAgent implements ShouldBeUnique, ShouldQueue
             webhookEventId: $webhookEventId,
             maxActions: $decisionAgentSettings->maxActionsPerRun(),
             sourceService: $this->service,
+            eventPayload: $this->payload,
+            originConnectionId: $this->serviceConnectionId
+                ?? ($webhookEventId === null ? null : WebhookEvent::query()->whereKey($webhookEventId)->value('service_connection_id')),
         );
         app()->instance(DecisionRunContext::class, $decisionRunContext);
 

@@ -3,9 +3,11 @@
 declare(strict_types=1);
 
 use App\Ai\Agents\DecisionAgent;
+use App\Ai\Decision\DecisionRunContext;
 use App\Enums\AgentDecisionStatus;
 use App\Jobs\RunDecisionAgent;
 use App\Models\AgentDecision;
+use App\Models\ServiceConnection;
 use App\Models\WebhookEvent;
 use App\Services\AiBudget\AiBudgetExceededException;
 use App\Services\AiBudget\AiBudgetGuard;
@@ -151,4 +153,44 @@ test('job has unique lock timeout and unique-for duration', function (): void {
 
     expect($reflection->getAttributes(Timeout::class)[0]->newInstance()->timeout)->toBe(240)
         ->and($reflection->getAttributes(UniqueFor::class)[0]->newInstance()->uniqueFor)->toBe(600);
+});
+
+test('a trimmed event still hands its payload snapshot and connection to the decision run', function (): void {
+    $connection = ServiceConnection::factory()->sonarr()->create();
+    $payload = ['eventType' => 'ManualInteractionRequired', 'series' => ['id' => 42], 'downloadId' => 'dl-1'];
+    $captured = null;
+    DecisionAgent::fake([function () use (&$captured): string {
+        $captured = resolve(DecisionRunContext::class);
+
+        return 'summary';
+    }]);
+
+    app()->call([new RunDecisionAgent(
+        webhookEventId: 987654,
+        service: 'sonarr',
+        eventType: 'ManualInteractionRequired',
+        payload: $payload,
+        serviceConnectionId: $connection->id,
+    ), 'handle']);
+
+    expect($captured)->toBeInstanceOf(DecisionRunContext::class)
+        ->and($captured->webhookEventId)->toBeNull()
+        ->and($captured->eventPayload)->toBe($payload)
+        ->and($captured->originConnectionId)->toBe($connection->id);
+});
+
+test('a persisted event without a carried connection falls back to the event row connection', function (): void {
+    $connection = ServiceConnection::factory()->sonarr()->create();
+    $event = WebhookEvent::factory()->for($connection, 'serviceConnection')->create();
+    $captured = null;
+    DecisionAgent::fake([function () use (&$captured): string {
+        $captured = resolve(DecisionRunContext::class);
+
+        return 'summary';
+    }]);
+
+    runJob($event->id);
+
+    expect($captured->webhookEventId)->toBe($event->id)
+        ->and($captured->originConnectionId)->toBe($connection->id);
 });

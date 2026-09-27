@@ -150,3 +150,22 @@ test('dispatchFromAgent ignores a model-supplied service_connection_id', functio
 
     expect($actionRequest->fresh()->payload['service_connection_id'])->toBe($connectionB->id);
 });
+
+test('dispatchFromAgent pins a caller-supplied connection when the webhook event row is gone', function (): void {
+    ActionTypeConfig::factory()->create(['type' => 'monitor_series', 'requires_approval' => true, 'is_enabled' => true]);
+    $connectionA = ServiceConnection::factory()->sonarr()->create(['url' => 'http://sonarr-a.local:8989']);
+    $connectionB = ServiceConnection::factory()->sonarr()->create(['url' => 'http://sonarr-b.local:8989']);
+
+    $actionRequest = resolve(ActionOrchestrator::class)->dispatchFromAgent(
+        type: 'monitor_series',
+        sourceService: 'sonarr',
+        targetService: 'sonarr',
+        payload: ['series_id' => 42, 'service_connection_id' => $connectionA->id],
+        rationale: 'Monitor it.',
+        description: new ActionDescription('Test action', 'Test effect.'),
+        pinnedConnectionId: $connectionB->id,
+    );
+
+    expect($actionRequest->fresh()->payload['service_connection_id'])->toBe($connectionB->id)
+        ->and($actionRequest->webhook_event_id)->toBeNull();
+});

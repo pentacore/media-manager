@@ -23,32 +23,44 @@ class DecisionRunContext
     /** @var array<int, array{action_request_id: int, requires_approval: bool}> */
     private array $queued = [];
 
+    /**
+     * $eventPayload and $originConnectionId are the triggering event's
+     * snapshot, carried by the job rather than re-read from the WebhookEvent
+     * row: with webhook capture off that row is trimmed before the run (and
+     * $webhookEventId is then null), yet subject binding and connection
+     * pinning must still hold.
+     *
+     * @param  array<string, mixed>  $eventPayload
+     */
     public function __construct(
         public readonly ?int $webhookEventId,
         public readonly int $maxActions,
         public readonly string $sourceService = 'agent',
+        public readonly array $eventPayload = [],
+        public readonly ?int $originConnectionId = null,
     ) {}
 
     /**
      * The payload the describer resolves against: the triggering webhook's
      * connection is pinned exactly as ActionOrchestrator::dispatchFromAgent()
-     * will pin it — always overwriting any model-supplied
-     * service_connection_id — so the named target is the one the executor
-     * acts on.
+     * will pin it (tools pass $originConnectionId as its pinnedConnectionId)
+     * — always overwriting any model-supplied service_connection_id — so the
+     * named target is the one the executor acts on.
      *
      * @param  array<string, mixed>  $payload
      * @return array<string, mixed>
      */
     public function pinContext(array $payload): array
     {
-        if ($this->webhookEventId === null) {
+        if ($this->webhookEventId === null && $this->originConnectionId === null) {
             return $payload;
         }
 
         unset($payload['service_connection_id']);
-        $connectionId = WebhookEvent::query()->whereKey($this->webhookEventId)->value('service_connection_id');
 
-        return $connectionId === null ? $payload : [...$payload, 'service_connection_id' => $connectionId];
+        return $this->originConnectionId === null
+            ? $payload
+            : [...$payload, 'service_connection_id' => $this->originConnectionId];
     }
 
     public function proposalReason(): string
