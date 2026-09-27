@@ -155,15 +155,18 @@ class RemoveStuckDownloadTool implements Tool
     /**
      * A removal may only target the download that triggered this run when the
      * event names one. Without this, injected payload text could steer the
-     * agent into deleting an unrelated download's data.
+     * agent into deleting an unrelated download's data. The event's id is read
+     * the way the arr webhook handlers read it: top-level downloadId, falling
+     * back to downloadInfo.downloadId.
      *
      * @return array<string, mixed>|null structured rejection, or null when OK
      */
     private function rejectForeignDownload(string $downloadId, DecisionRunContext $decisionRunContext): ?array
     {
-        $eventDownloadId = $decisionRunContext->webhookEventId === null
-            ? null
-            : (WebhookEvent::query()->find($decisionRunContext->webhookEventId)?->payload['downloadId'] ?? null);
+        $eventPayload = $decisionRunContext->webhookEventId === null
+            ? []
+            : (WebhookEvent::query()->find($decisionRunContext->webhookEventId)?->payload ?? []);
+        $eventDownloadId = $eventPayload['downloadId'] ?? ($eventPayload['downloadInfo']['downloadId'] ?? null);
 
         if (! is_string($eventDownloadId) || $eventDownloadId === '' || $eventDownloadId === $downloadId) {
             return null;

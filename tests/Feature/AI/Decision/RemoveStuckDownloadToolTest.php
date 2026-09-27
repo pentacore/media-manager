@@ -180,3 +180,18 @@ test('a removal must target the download that triggered the event', function ():
         ->and($result['reason'])->toBe('subject_mismatch')
         ->and(ActionRequest::count())->toBe(0);
 });
+
+test('a removal must target the triggering download when the event carries it only under downloadInfo', function (): void {
+    ActionTypeConfig::factory()->create(['type' => 'remove_stuck_download', 'requires_approval' => true, 'is_enabled' => true]);
+    $webhookEvent = WebhookEvent::factory()->for(ServiceConnection::factory()->sonarr(), 'serviceConnection')
+        ->create(['payload' => ['eventType' => 'ManualInteractionRequired', 'downloadInfo' => ['downloadId' => 'dl-1', 'title' => 'Some.Release']]]);
+    app()->instance(DecisionRunContext::class, new DecisionRunContext($webhookEvent->id, 3, 'sonarr'));
+
+    $result = json_decode((new RemoveStuckDownloadTool)->handle(new Request([
+        'service' => 'sonarr', 'download_id' => 'dl-other', 'reason' => 'Not an upgrade',
+    ])), true);
+
+    expect($result['queued'])->toBeFalse()
+        ->and($result['reason'])->toBe('subject_mismatch')
+        ->and(ActionRequest::count())->toBe(0);
+});
