@@ -207,7 +207,7 @@ final readonly class AiModelPriceWriter
 
         // Checked after validation so the outcome counts only genuinely new,
         // otherwise-creatable models that an update-only provider skipped.
-        if (! $scope->allowsCreate($provider)) {
+        if (! $scope->allowsCreateModel($provider, $model)) {
             return WriteOutcome::CreateDisabled;
         }
 

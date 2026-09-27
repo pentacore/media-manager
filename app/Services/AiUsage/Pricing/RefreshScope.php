@@ -214,9 +214,20 @@ final readonly class RefreshScope
     }
 
     /**
+     * Whether an automatic write may create a new row for this exact model: the
+     * provider is on the auto-create list, or the model is one the app uses
+     * ({@see InUsePricingModels}), so an update-only provider still prices the
+     * models it is actually called with.
+     */
+    public function allowsCreateModel(string $provider, string $model): bool
+    {
+        return $this->allowsCreate($provider)
+            || (self::canonicalize($provider) !== null && resolve(InUsePricingModels::class)->contains($provider, $model));
+    }
+
+    /**
      * Whether this scope was explicitly narrowed to a provider allowlist. An
-     * unbounded scope ({@see all()}) means nobody named specific providers, so
-     * conservative defaults (for example the core fallback provider set) apply.
+     * unbounded scope ({@see all()}) means nobody named specific providers.
      */
     public function isBounded(): bool
     {

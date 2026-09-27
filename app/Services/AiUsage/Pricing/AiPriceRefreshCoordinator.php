@@ -104,22 +104,6 @@ final class AiPriceRefreshCoordinator
     private const string FEED_DISABLED = 'disabled';
 
     /**
-     * Providers the verifier covers by default when a global feed failure
-     * leaves an unbounded scope with nothing. Groq, Cohere, and OpenRouter are
-     * intentionally absent: they are verified only when explicitly scoped.
-     *
-     * @var list<string>
-     */
-    private const array CORE_FALLBACK_PROVIDERS = [
-        'openai',
-        'anthropic',
-        'gemini',
-        'xai',
-        'deepseek',
-        'mistral',
-    ];
-
-    /**
      * Per-provider terminal states recorded in the compact audit payload.
      */
     private const string PROVIDER_OK = 'ok';
@@ -210,6 +194,7 @@ final class AiPriceRefreshCoordinator
         private readonly ModelsDevPricingAdapter $modelsDevPricingAdapter,
         private readonly AiModelPriceWriter $aiModelPriceWriter,
         private readonly AiBudgetGuard $aiBudgetGuard,
+        private readonly InUsePricingModels $inUsePricingModels,
     ) {}
 
     /**
@@ -269,10 +254,10 @@ final class AiPriceRefreshCoordinator
                 $errorMessage = 'No supported providers were in scope for this run.';
             } elseif ($source === self::SOURCE_AGENT) {
                 $modelsDevStatus = self::FEED_SKIPPED;
-                $this->queueAllForFallback($requested, $scope, self::PROVIDER_FEED_UNAVAILABLE, fallbackAll: true);
+                $this->queueAllForFallback($requested, $scope, self::PROVIDER_FEED_UNAVAILABLE);
             } elseif ($source === self::SOURCE_HYBRID && ! resolve(AiSettings::class)->modelsDevPricingEnabled()) {
                 $modelsDevStatus = self::FEED_DISABLED;
-                $this->queueAllForFallback($requested, $scope, self::PROVIDER_FEED_UNAVAILABLE, fallbackAll: false);
+                $this->queueAllForFallback($requested, $scope, self::PROVIDER_FEED_UNAVAILABLE);
             } else {
                 $modelsDevStatus = $this->runFeedPhase($source, $scope, $requested, $isDryRun, $errorMessage);
             }
@@ -323,7 +308,6 @@ final class AiPriceRefreshCoordinator
                 $requested,
                 $refreshScope,
                 self::PROVIDER_FEED_UNAVAILABLE,
-                fallbackAll: false,
                 fallbackAllowed: $source === self::SOURCE_HYBRID,
             );
 
@@ -432,7 +416,7 @@ final class AiPriceRefreshCoordinator
             // the verifier produces a real write; otherwise it stays unresolved.
             $this->writeFailureMessage ??= $throwable->getMessage();
 
-            if ($fallbackAllowed && $this->isFallbackEligible($provider, $refreshScope)) {
+            if ($fallbackAllowed) {
                 $this->providerStates[$provider] = $stateBeforeWrites;
                 $this->enqueueFallback($provider, $refreshScope);
 
@@ -496,7 +480,7 @@ final class AiPriceRefreshCoordinator
             $prompt = 'Verify and correct the catalog pricing for your scoped providers now. Fetch each canonical pricing page first, then upsert the rates you read.';
 
             $aiSettings = resolve(AiSettings::class);
-            $chain = $aiSettings->providerChainWithModel($aiSettings->model());
+            $chain = $aiSettings->providerChainWithModel($aiSettings->priceUpdaterModel());
 
             // Queued refreshes have no authenticated user, so attribute the
             // verifier's usage to whoever triggered the run.
@@ -722,8 +706,8 @@ final class AiPriceRefreshCoordinator
     }
 
     /**
-     * Queue every requested provider for verifier fallback, honoring the
-     * eligibility policy unless `$fallbackAll` forces it (agent source).
+     * Queue every requested provider for verifier fallback, or record the
+     * failure status on each when the source does not allow fallback.
      *
      * @param  list<string>  $requested
      */
@@ -731,13 +715,10 @@ final class AiPriceRefreshCoordinator
         array $requested,
         RefreshScope $refreshScope,
         string $failureStatus,
-        bool $fallbackAll,
         bool $fallbackAllowed = true,
     ): void {
         foreach ($requested as $provider) {
-            $eligible = $fallbackAll || ($fallbackAllowed && $this->isFallbackEligible($provider, $refreshScope));
-
-            if ($eligible) {
+            if ($fallbackAllowed) {
                 $this->queueFallback($provider, $refreshScope);
             } else {
                 $this->providerState($provider, $failureStatus);
@@ -747,7 +728,7 @@ final class AiPriceRefreshCoordinator
 
     /**
      * Mark one provider as failed at the feed stage, escalating to fallback
-     * when the source and eligibility policy allow it.
+     * when the source allows it.
      */
     private function resolveProviderFailure(
         string $provider,
@@ -755,7 +736,7 @@ final class AiPriceRefreshCoordinator
         string $failureStatus,
         bool $fallbackAllowed,
     ): void {
-        if ($fallbackAllowed && $this->isFallbackEligible($provider, $refreshScope)) {
+        if ($fallbackAllowed) {
             $this->queueFallback($provider, $refreshScope);
 
             return;
@@ -838,15 +819,17 @@ final class AiPriceRefreshCoordinator
 
     /**
      * Whether a provider-wide verifier target would be pointless: the provider
-     * is update-only (off the auto-create list) and has no stored rows, so the
-     * agent could neither update nor create anything for it. Model-pinned
-     * scopes are never short-circuited — their exact targets stay audited.
+     * is update-only (off the auto-create list) with no stored rows and no
+     * in-use models, so the agent could neither update nor create anything for
+     * it. Model-pinned scopes are never short-circuited — their exact targets
+     * stay audited.
      */
     private function hasNothingToRefresh(string $provider, RefreshScope $refreshScope): bool
     {
         return $refreshScope->modelsFor($provider) === null
             && ! $refreshScope->allowsCreate($provider)
-            && $this->providerStoredModels($provider) === [];
+            && $this->providerStoredModels($provider) === []
+            && $this->inUsePricingModels->forProvider($provider) === [];
     }
 
     /**
@@ -857,15 +840,6 @@ final class AiPriceRefreshCoordinator
     {
         $this->providerState($provider, self::PROVIDER_OK);
         $this->providerStates[$provider]['status'] = self::PROVIDER_OK;
-    }
-
-    /**
-     * Core providers always qualify for verifier fallback; Groq, Cohere, and
-     * OpenRouter qualify only when the caller explicitly scoped providers.
-     */
-    private function isFallbackEligible(string $provider, RefreshScope $refreshScope): bool
-    {
-        return in_array($provider, self::CORE_FALLBACK_PROVIDERS, true) || $refreshScope->isBounded();
     }
 
     /**

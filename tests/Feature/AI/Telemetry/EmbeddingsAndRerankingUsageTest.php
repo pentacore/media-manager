@@ -7,6 +7,8 @@ use App\Models\AiModelPrice;
 use App\Models\AiUsageRecord;
 use App\Models\User;
 use App\Services\AiUsage\AiUsageCaller;
+use App\Services\Search\LibraryEmbedder;
+use App\Services\Search\SemanticLibrarySearch;
 use Laravel\Ai\Embeddings;
 use Laravel\Ai\Reranking;
 use Laravel\Ai\Responses\Data\Meta;
@@ -19,11 +21,11 @@ use Laravel\Ai\Responses\RerankingResponse;
 test('embeddings generation writes an embeddings usage row attributed to the caller', function (): void {
     Embeddings::fake([new EmbeddingsResponse([[0.1, 0.2]], new Usage(42), new Meta('openai', 'text-embedding-3-small'))]);
 
-    resolve(AiUsageCaller::class)->during('App\Services\Search\LibraryEmbedder', fn () => Embeddings::for(['Dune'])->generate());
+    resolve(AiUsageCaller::class)->during(LibraryEmbedder::class, fn (): EmbeddingsResponse => Embeddings::for(['Dune'])->generate());
 
     $row = AiUsageRecord::where('kind', AiUsageKind::Embeddings)->sole();
 
-    expect($row->agent_class)->toBe('App\Services\Search\LibraryEmbedder')
+    expect($row->agent_class)->toBe(LibraryEmbedder::class)
         ->and($row->provider)->toBe('openai')
         ->and($row->prompt_tokens)->toBe(42)
         ->and($row->completion_tokens)->toBe(0);
@@ -70,10 +72,10 @@ test('reranking records the search units the provider reports', function (): voi
         new Meta('cohere', 'rerank-v3.5'),
     )]);
 
-    resolve(AiUsageCaller::class)->during('App\Services\Search\SemanticLibrarySearch', fn () => Reranking::of(['a'])->rerank('q', provider: 'cohere', model: 'rerank-v3.5'));
+    resolve(AiUsageCaller::class)->during(SemanticLibrarySearch::class, fn (): RerankingResponse => Reranking::of(['a'])->rerank('q', provider: 'cohere', model: 'rerank-v3.5'));
 
     $row = AiUsageRecord::where('kind', AiUsageKind::Reranking)->sole();
 
     expect($row->search_units)->toBe('1.000')
-        ->and($row->agent_class)->toBe('App\Services\Search\SemanticLibrarySearch');
+        ->and($row->agent_class)->toBe(SemanticLibrarySearch::class);
 });

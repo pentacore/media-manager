@@ -22,10 +22,10 @@ use Illuminate\Support\Facades\Cache;
  * requested source's Models.dev feed phase normally and THEN re-reads the
  * canonical first-party pages for every scoped provider, recording per-provider
  * discrepancies against the just-synced feed. It runs in the dedicated `verify`
- * mode so the audit row distinguishes it from an ordinary apply, and always
- * binds an explicit provider scope: the caller's `--provider` list when given,
- * otherwise the core six providers (Groq, Cohere, and OpenRouter are never
- * verified by default). `--verify` no longer forces a source: the default
+ * mode so the audit row distinguishes it from an ordinary apply, and covers the
+ * caller's `--provider` list when given, otherwise every supported provider (an
+ * update-only provider with nothing stored or in use is settled without an
+ * agent target). `--verify` no longer forces a source: the default
  * `hybrid` does feed-then-verify, `--source=agent` verifies without a feed, and
  * `--source=models-dev` is rejected as contradictory (it can never invoke the
  * verifier). `--verify --dry-run` is valid (spec §22) and genuinely verifies:
@@ -47,21 +47,6 @@ use Illuminate\Support\Facades\Cache;
 #[Description('Refreshes ai_model_prices from the Models.dev feed and/or the first-party verifier agent.')]
 class RefreshAiPrices extends Command
 {
-    /**
-     * Providers verified by default when `--verify` is passed without an
-     * explicit `--provider` scope. Mirrors the coordinator's core fallback set.
-     *
-     * @var list<string>
-     */
-    private const array CORE_PROVIDERS = [
-        'openai',
-        'anthropic',
-        'gemini',
-        'xai',
-        'deepseek',
-        'mistral',
-    ];
-
     public function handle(): int
     {
         // Scheduled invocations pass --scheduled so the audit row and the lock
@@ -92,7 +77,7 @@ class RefreshAiPrices extends Command
             return self::FAILURE;
         }
 
-        $refreshScope = $this->resolveScope($verify, $providers);
+        $refreshScope = $this->resolveScope($providers);
         $mode = match (true) {
             $verify => AiPriceRefreshCoordinator::MODE_VERIFY,
             $dryRun => AiPriceRefreshCoordinator::MODE_DRY_RUN,
@@ -128,17 +113,13 @@ class RefreshAiPrices extends Command
     }
 
     /**
-     * The provider/model allowlist for this run. `--verify` always yields a
-     * bounded scope; a bare refresh is unbounded unless providers were named.
+     * The provider/model allowlist for this run: unbounded unless providers
+     * were named.
      *
      * @param  list<string>  $providers
      */
-    private function resolveScope(bool $verify, array $providers): RefreshScope
+    private function resolveScope(array $providers): RefreshScope
     {
-        if ($verify) {
-            return RefreshScope::forProviders($providers === [] ? self::CORE_PROVIDERS : $providers);
-        }
-
         return $providers === [] ? RefreshScope::all() : RefreshScope::forProviders($providers);
     }
 
