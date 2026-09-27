@@ -138,6 +138,53 @@ test('requires a download_id', function (): void {
     expect($result['reason'])->toBe('missing_download_id');
 });
 
+test('rejects a download_id that does not match the event that triggered this run', function (): void {
+    app()->instance(DecisionRunContext::class, new DecisionRunContext(null, 3, 'sonarr', ['downloadId' => 'dl-1']));
+
+    $result = json_decode((new ResolveManualImportTool)->handle(new Request([
+        'service' => 'sonarr', 'download_id' => 'dl-other',
+    ])), true);
+
+    expect($result['queued'])->toBeFalse();
+    expect($result['reason'])->toBe('subject_mismatch');
+    expect(ActionRequest::count())->toBe(0);
+    Http::assertNothingSent();
+});
+
+test('rejects a download_id that does not match the event when carried only under downloadInfo', function (): void {
+    app()->instance(DecisionRunContext::class, new DecisionRunContext(null, 3, 'sonarr', [
+        'downloadInfo' => ['downloadId' => 'dl-1'],
+    ]));
+
+    $result = json_decode((new ResolveManualImportTool)->handle(new Request([
+        'service' => 'sonarr', 'download_id' => 'dl-other',
+    ])), true);
+
+    expect($result['queued'])->toBeFalse();
+    expect($result['reason'])->toBe('subject_mismatch');
+    expect(ActionRequest::count())->toBe(0);
+    Http::assertNothingSent();
+});
+
+test('inspects manual-import candidates on the connection that triggered the event, not just the active one', function (): void {
+    $first = ServiceConnection::factory()->sonarr()->create(['url' => 'http://sonarr-a.local:8989', 'api_key' => 'k']);
+    $second = ServiceConnection::factory()->sonarr()->create(['url' => 'http://sonarr-b.local:8989', 'api_key' => 'k']);
+    app()->instance(DecisionRunContext::class, new DecisionRunContext(
+        null, 3, 'sonarr', ['downloadId' => 'dl-1'], $second->id,
+    ));
+    Http::fake([
+        'sonarr-b.local:8989/api/v3/manualimport*' => Http::response([cleanCandidate()]),
+        'sonarr-b.local:8989/api/v3/queue*' => Http::response(['records' => []]),
+    ]);
+
+    (new ResolveManualImportTool)->handle(new Request([
+        'service' => 'sonarr', 'download_id' => 'dl-1',
+    ]));
+
+    Http::assertSent(fn (Illuminate\Http\Client\Request $sentRequest): bool => str_contains($sentRequest->url(), 'sonarr-b.local:8989/api/v3/manualimport'));
+    Http::assertNotSent(fn (Illuminate\Http\Client\Request $sentRequest): bool => str_contains($sentRequest->url(), 'sonarr-a.local:8989'));
+});
+
 test('describes the import from the arr queue record with the decision agent as the reason', function (): void {
     ActionTypeConfig::factory()->create(['type' => 'resolve_manual_import', 'requires_approval' => true, 'is_enabled' => true]);
     fakeCandidates([cleanCandidate()]);

@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use App\Ai\Decision\DecisionRunContext;
 use App\Ai\Decision\InspectStuckImportTool;
 use App\Models\ServiceConnection;
 use App\Settings\DecisionAgentSettings;
@@ -54,4 +55,32 @@ test('rejects an invalid service', function (): void {
 
     expect($result['ok'])->toBeFalse();
     expect($result['reason'])->toBe('invalid_service');
+});
+
+test('inspects candidates on the connection that triggered the event when a decision run context is bound', function (): void {
+    $second = ServiceConnection::factory()->sonarr()->create(['url' => 'http://sonarr-b.local:8989', 'api_key' => 'k']);
+    app()->instance(DecisionRunContext::class, new DecisionRunContext(null, 3, 'sonarr', [], $second->id));
+    Http::fake(['sonarr-b.local:8989/api/v3/manualimport*' => Http::response([])]);
+
+    $result = json_decode((new InspectStuckImportTool)->handle(new Request([
+        'service' => 'sonarr', 'download_id' => 'dl-1',
+    ])), true);
+
+    app()->forgetInstance(DecisionRunContext::class);
+
+    expect($result['ok'])->toBeTrue();
+    Http::assertSent(fn (Illuminate\Http\Client\Request $sentRequest): bool => str_contains($sentRequest->url(), 'sonarr-b.local:8989/api/v3/manualimport'));
+    Http::assertNotSent(fn (Illuminate\Http\Client\Request $sentRequest): bool => str_contains($sentRequest->url(), 'sonarr.local:8989'));
+});
+
+test('uses the active connection when no decision run context is bound', function (): void {
+    ServiceConnection::factory()->sonarr()->create(['url' => 'http://sonarr-b.local:8989', 'api_key' => 'k']);
+    Http::fake(['sonarr.local:8989/api/v3/manualimport*' => Http::response([])]);
+
+    $result = json_decode((new InspectStuckImportTool)->handle(new Request([
+        'service' => 'sonarr', 'download_id' => 'dl-1',
+    ])), true);
+
+    expect($result['ok'])->toBeTrue();
+    Http::assertSent(fn (Illuminate\Http\Client\Request $sentRequest): bool => str_contains($sentRequest->url(), 'sonarr.local:8989/api/v3/manualimport'));
 });

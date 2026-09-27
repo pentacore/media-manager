@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace App\Ai\Decision;
 
 use App\Enums\ServiceType;
-use App\Models\ServiceConnection;
 use App\Services\Actions\ActionDescriber;
 use App\Services\Actions\ActionOrchestrator;
 use App\Services\Arr\ManualImportResolver;
@@ -79,8 +78,13 @@ class ResolveManualImportTool implements Tool
             return $this->encode(['queued' => false, 'reason' => 'missing_download_id', 'message' => 'download_id is required (take it from the event payload).']);
         }
 
+        $subjectMismatch = $this->rejectForeignDownload($downloadId, $context);
+        if ($subjectMismatch !== null) {
+            return $this->encode($subjectMismatch);
+        }
+
         try {
-            $connection = ServiceConnection::resolveActive($type);
+            $connection = $context->resolveConnection($type);
             $client = $type === ServiceType::Sonarr
                 ? new SonarrClient($connection)
                 : new RadarrClient($connection);
@@ -195,6 +199,33 @@ class ResolveManualImportTool implements Tool
             $partial ? 'Partial — recommend manual confirmation.' : 'Fully mapped.',
             $reasons,
         ), 1000, '');
+    }
+
+    /**
+     * An import may only target the download that triggered this run when
+     * the event names one — the same rail RemoveStuckDownloadTool applies,
+     * so injected payload text can't steer the agent into importing an
+     * unrelated download.
+     *
+     * @return array<string, mixed>|null structured rejection, or null when OK
+     */
+    private function rejectForeignDownload(string $downloadId, DecisionRunContext $decisionRunContext): ?array
+    {
+        $eventDownloadId = $decisionRunContext->eventDownloadId();
+
+        if ($eventDownloadId === null || $eventDownloadId === $downloadId) {
+            return null;
+        }
+
+        return [
+            'queued' => false,
+            'reason' => 'subject_mismatch',
+            'message' => sprintf(
+                'download_id %s does not match the download that triggered this event (%s). Only the triggering download may be imported.',
+                $downloadId,
+                $eventDownloadId,
+            ),
+        ];
     }
 
     /**

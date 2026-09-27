@@ -163,10 +163,9 @@ class RemoveStuckDownloadTool implements Tool
      */
     private function rejectForeignDownload(string $downloadId, DecisionRunContext $decisionRunContext): ?array
     {
-        $eventPayload = $decisionRunContext->eventPayload;
-        $eventDownloadId = $eventPayload['downloadId'] ?? ($eventPayload['downloadInfo']['downloadId'] ?? null);
+        $eventDownloadId = $decisionRunContext->eventDownloadId();
 
-        if (! is_string($eventDownloadId) || $eventDownloadId === '' || $eventDownloadId === $downloadId) {
+        if ($eventDownloadId === null || $eventDownloadId === $downloadId) {
             return null;
         }
 

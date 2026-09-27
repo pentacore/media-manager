@@ -144,6 +144,7 @@ class RunDecisionAgent implements ShouldBeUnique, ShouldQueue
             eventPayload: $this->payload,
             originConnectionId: $this->serviceConnectionId
                 ?? ($webhookEventId === null ? null : WebhookEvent::query()->whereKey($webhookEventId)->value('service_connection_id')),
+            eventType: $this->eventType,
         );
         app()->instance(DecisionRunContext::class, $decisionRunContext);
 
