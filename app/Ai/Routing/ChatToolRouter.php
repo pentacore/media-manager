@@ -16,13 +16,12 @@ use Laravel\Ai\Storage\StoredMessage;
 
 /**
  * Sends MediaAgent only the tool groups a message needs. Fails open: routing
- * off, a classifier error, or no confident group all mean the full toolset.
+ * off, a classifier error, or no group meeting the inclusion threshold all
+ * mean the full toolset.
  */
 final readonly class ChatToolRouter
 {
     private const float INCLUDE_AT = 0.5;
-
-    private const float CONFIDENT_AT = 0.35;
 
     private const int PREVIOUS_REPLY_LIMIT = 1500;
 
@@ -60,7 +59,7 @@ final readonly class ChatToolRouter
 
         $probabilities = collect($answers)->map(fn (Answer $answer): float => $answer instanceof BooleanAnswer ? $answer->probability : 0.0);
 
-        if ($probabilities->max() < self::CONFIDENT_AT) {
+        if ($probabilities->max() < self::INCLUDE_AT) {
             return null;
         }
 
