@@ -11,16 +11,19 @@ use Illuminate\Support\Facades\Event;
 use Laravel\Ai\Events\AgentFailed;
 use Laravel\Ai\Events\StepCompleted;
 use Laravel\Ai\Prompts\AgentPrompt;
+use Laravel\Ai\Prompts\Prompt;
 use Laravel\Ai\Responses\AgentResponse;
 use Laravel\Ai\Responses\Data\Meta;
 use Laravel\Ai\Responses\Data\TextUsage;
 use Laravel\Ai\Responses\Data\ToolCall;
 use Laravel\Ai\Responses\TextResponse;
 
-function makeFailedRunPrompt(object $agent): AgentPrompt
+function makeFailedRunPrompt(object $agent, string $promptText = 'prompt text'): AgentPrompt
 {
     $agentPrompt = new ReflectionClass(AgentPrompt::class)->newInstanceWithoutConstructor();
     new ReflectionProperty(AgentPrompt::class, 'agent')->setValue($agentPrompt, $agent);
+    new ReflectionProperty(Prompt::class, 'prompt')->setValue($agentPrompt, $promptText);
+    new ReflectionProperty(AgentPrompt::class, 'attachments')->setValue($agentPrompt, collect());
 
     return $agentPrompt;
 }
@@ -55,6 +58,8 @@ test('a run that fails after a completed step bills the completed step as failed
     expect($row->status)->toBe('failed')
         ->and($row->error_message)->toContain('provider fell over')
         ->and($row->agent_class)->toBe(DecisionAgent::class)
+        ->and($row->prompt_text)->toBe('event')
+        ->and($row->response_text)->toBeNull()
         ->and(resolve(RunUsageAccumulator::class)->usage($row->invocation_id))->toBeNull();
 });
 

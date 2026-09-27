@@ -14,7 +14,9 @@ use App\Models\AiUsageRecord;
 use App\Models\User;
 use App\Services\AiUsage\BatchPricingContext;
 use Laravel\Ai\Events\AgentPrompted;
+use Laravel\Ai\Files\Document;
 use Laravel\Ai\Prompts\AgentPrompt;
+use Laravel\Ai\Prompts\Prompt;
 use Laravel\Ai\Responses\AgentResponse;
 use Laravel\Ai\Responses\Data\Meta;
 use Laravel\Ai\Responses\Data\TextUsage;
@@ -27,9 +29,13 @@ function makeAgentPrompted(
     ?string $conversationId = null,
     ?object $conversationUser = null,
     string $responseText = 'response text',
+    string $promptText = 'prompt text',
+    array $attachments = [],
 ): AgentPrompted {
     $agentPrompt = new ReflectionClass(AgentPrompt::class)->newInstanceWithoutConstructor();
     new ReflectionProperty(AgentPrompt::class, 'agent')->setValue($agentPrompt, $agent);
+    new ReflectionProperty(Prompt::class, 'prompt')->setValue($agentPrompt, $promptText);
+    new ReflectionProperty(AgentPrompt::class, 'attachments')->setValue($agentPrompt, collect($attachments));
 
     $response = new AgentResponse($invocationId, $responseText, $usage, $meta);
     $response->conversationId = $conversationId;
@@ -141,6 +147,52 @@ test('truncates response text past 64 KB with an ellipsis suffix', function (): 
 
     expect(strlen((string) $stored))->toBeLessThanOrEqual(65_536);
     expect($stored)->toEndWith('…');
+});
+
+test('persists the prompt the agent was sent on the row', function (): void {
+    (new RecordAgentUsage)->handle(makeAgentPrompted(
+        invocationId: 'inv-with-prompt',
+        agent: new MediaAgent,
+        usage: new TextUsage,
+        meta: new Meta(provider: 'openai', model: 'gpt-5-mini'),
+        promptText: 'Find severance in Sonarr.',
+    ));
+
+    expect(AiUsageRecord::where('invocation_id', 'inv-with-prompt')->value('prompt_text'))
+        ->toBe('Find severance in Sonarr.');
+});
+
+test('appends attachment names to the stored prompt', function (): void {
+    (new RecordAgentUsage)->handle(makeAgentPrompted(
+        invocationId: 'inv-with-attachments',
+        agent: new MediaAgent,
+        usage: new TextUsage,
+        meta: new Meta(provider: 'openai', model: 'gpt-5-mini'),
+        promptText: 'What is in these?',
+        attachments: [
+            Document::fromString('hello', 'text/plain')->as('notes.txt'),
+            Document::fromString('unnamed', 'text/plain'),
+        ],
+    ));
+
+    expect(AiUsageRecord::where('invocation_id', 'inv-with-attachments')->value('prompt_text'))
+        ->toBe("What is in these?\n\nAttachments: notes.txt, Base64Document");
+});
+
+test('truncates prompt text past 64 KB with an ellipsis suffix', function (): void {
+    (new RecordAgentUsage)->handle(makeAgentPrompted(
+        invocationId: 'inv-long-prompt',
+        agent: new MediaAgent,
+        usage: new TextUsage,
+        meta: new Meta(provider: 'openai', model: 'gpt-5-mini'),
+        promptText: str_repeat('é', 40_000),
+    ));
+
+    $stored = (string) AiUsageRecord::where('invocation_id', 'inv-long-prompt')->value('prompt_text');
+
+    expect(strlen($stored))->toBeLessThanOrEqual(65_536)
+        ->and(mb_check_encoding($stored, 'UTF-8'))->toBeTrue()
+        ->and($stored)->toEndWith('…');
 });
 
 test('batch usage is priced with batch rates when available', function (): void {

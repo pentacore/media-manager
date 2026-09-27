@@ -10,13 +10,12 @@ use App\Models\AiToolInvocation;
 use App\Services\AiUsage\RunUsageAccumulator;
 use App\Services\AiUsage\UsageColumns;
 use App\Services\AiUsage\UsageRecordWriter;
+use App\Services\AiUsage\UsageText;
 use Illuminate\Support\Facades\Auth;
 use Laravel\Ai\Events\AgentPrompted;
 
 class RecordAgentUsage
 {
-    private const int RESPONSE_TEXT_MAX_BYTES = 65_536;
-
     public function handle(AgentPrompted $agentPrompted): void
     {
         // Streamed runs are registered for both AgentStreamed (explicitly,
@@ -33,9 +32,8 @@ class RecordAgentUsage
             'provider' => $meta->provider,
             'model' => $meta->model,
             ...UsageColumns::fromText($response->usage),
-            // Cap at 64 KB so a runaway tool-stuffed reply can't bloat the
-            // row. Detail-modal use only — we don't index or search this.
-            'response_text' => $this->truncateResponseText($response->text ?? null),
+            'prompt_text' => UsageText::agentInput($agentPrompted->prompt),
+            'response_text' => UsageText::truncate($response->text ?? null),
             'tool_calls_count' => AiToolInvocation::where('invocation_id', $agentPrompted->invocationId)->count(),
             // Conversational agents (chat) carry a participant on the response.
             // Non-conversational agents (e.g. PriceFetcherAgent) don't, so we
@@ -52,18 +50,5 @@ class RecordAgentUsage
 
         // The run finished; its step totals were only needed had it failed.
         resolve(RunUsageAccumulator::class)->forget($agentPrompted->invocationId);
-    }
-
-    private function truncateResponseText(?string $text): ?string
-    {
-        if ($text === null || $text === '') {
-            return null;
-        }
-
-        if (mb_strlen($text, '8bit') <= self::RESPONSE_TEXT_MAX_BYTES) {
-            return $text;
-        }
-
-        return mb_strcut($text, 0, self::RESPONSE_TEXT_MAX_BYTES - 3, 'UTF-8').'…';
     }
 }

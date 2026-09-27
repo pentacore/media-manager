@@ -17,6 +17,20 @@ test('probability returns the boolean answer probability and bills a classificat
     expect(AiUsageRecord::where('kind', AiUsageKind::Classification)->sole()->agent_class)->toBe(RunDecisionAgent::class);
 });
 
+test('the classification row stores the state and questions as input and the answers as output', function (): void {
+    Classification::fake([['decision' => new BooleanAnswer(0.82)]]);
+
+    resolve(Classifier::class)->probability(RunDecisionAgent::class, 'payload', 'Needs action?');
+
+    $record = AiUsageRecord::where('kind', AiUsageKind::Classification)->sole();
+
+    expect(json_decode((string) $record->prompt_text, true))->toBe([
+        'state' => 'payload',
+        'questions' => ['decision' => ['type' => 'boolean', 'instructions' => 'Needs action?']],
+    ])
+        ->and(json_decode((string) $record->response_text, true))->toBe(['decision' => (new BooleanAnswer(0.82))->toArray()]);
+});
+
 test('the classifier fails open when the provider has no key', function (): void {
     config()->set('ai.providers.openrouter.key');
 
