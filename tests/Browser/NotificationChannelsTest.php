@@ -42,12 +42,13 @@ test('admin disables a destination from the edit dialog', function (): void {
     expect($destination->fresh()->is_enabled)->toBeFalse();
 });
 
-test('user saves a webhook url and can send a test through it', function (): void {
+test('admin saves a webhook url and can send a test through it', function (): void {
     Http::fake(['hooks.example.com/*' => Http::response('ok')]);
-    $this->actingAs(User::factory()->create());
+    $this->actingAs(User::factory()->admin()->create());
 
     visit(route('settings.notifications.edit', absolute: false))
         ->assertNoSmoke()
+        ->assertPresent('[data-destination="webhook"]')
         ->fill('[name="webhook_url"]', 'https://hooks.example.com/mm')
         ->assertSee('Save before sending a test to a changed destination.')
         ->assertDisabled('[data-test-send="webhook"]')
@@ -59,4 +60,15 @@ test('user saves a webhook url and can send a test through it', function (): voi
         ->assertSee('Test notification sent.');
 
     Http::assertSent(fn ($request): bool => $request->url() === 'https://hooks.example.com/mm');
+});
+
+test('a member does not see the webhook destination field or column', function (): void {
+    $this->actingAs(User::factory()->member()->create());
+
+    visit(route('settings.notifications.edit', absolute: false))
+        ->assertNoSmoke()
+        ->assertMissing('[data-destination="webhook"]')
+        ->assertMissing('[name="webhook_url"]')
+        ->assertMissing('[name="webhook_secret"]')
+        ->assertMissing('[data-test-send="webhook"]');
 });
