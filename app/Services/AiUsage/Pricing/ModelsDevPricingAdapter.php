@@ -54,12 +54,6 @@ final class ModelsDevPricingAdapter
     private const array OPTIONAL_COST_KEYS = ['cache_read', 'cache_write', 'reasoning'];
 
     /**
-     * Maximum number of whole-number digits a rate may carry, matching the
-     * catalog's `0` to `9999.9999` range. Values above this are out of range.
-     */
-    private const int MAX_WHOLE_DIGITS = 4;
-
-    /**
      * Translate a decoded Models.dev catalog into provider-scoped candidates.
      *
      * @param  array<string, mixed>  $decoded  Top-level provider map keyed by upstream provider id.
@@ -297,15 +291,7 @@ final class ModelsDevPricingAdapter
      */
     private function isDatedVariantOfKnownBase(string $modelId, array $sliceIds): bool
     {
-        if (preg_match('/^(.+)-(\d{4})-?(\d{2})-?(\d{2})$/D', $modelId, $matches) !== 1) {
-            return false;
-        }
-
-        if (! checkdate((int) $matches[3], (int) $matches[4], (int) $matches[2])) {
-            return false;
-        }
-
-        return isset($sliceIds[$matches[1]]);
+        return PricingModelIds::isDatedVariantOfKnownBase($modelId, $sliceIds);
     }
 
     /**
@@ -330,17 +316,7 @@ final class ModelsDevPricingAdapter
      */
     private function normalizeIdentifier(string $identifier): ?string
     {
-        if (preg_match('/[\x00-\x1F\x7F]/', $identifier) === 1) {
-            return null;
-        }
-
-        $identifier = trim($identifier);
-
-        if ($identifier === '' || strlen($identifier) > 255 || mb_strlen($identifier) > 255) {
-            return null;
-        }
-
-        return $identifier;
+        return PricingModelIds::normalize($identifier);
     }
 
     /**
@@ -426,33 +402,9 @@ final class ModelsDevPricingAdapter
      */
     private function normalizeNumber(mixed $value): ?string
     {
-        if (is_int($value)) {
-            $normalized = (string) $value;
-        } elseif (is_float($value)) {
-            if (! is_finite($value)) {
-                return null;
-            }
+        $normalized = PriceNumber::normalize($value);
 
-            $normalized = rtrim(rtrim(sprintf('%.10F', $value), '0'), '.');
-
-            if ($normalized === '' || $normalized === '-0') {
-                $normalized = '0';
-            }
-        } elseif (is_string($value)) {
-            $normalized = trim($value);
-        } else {
-            return null;
-        }
-
-        if (preg_match('/^\+?(\d+)(?:\.(\d+))?$/D', $normalized, $matches) !== 1) {
-            return null;
-        }
-
-        if (strlen(ltrim($matches[1], '0')) > self::MAX_WHOLE_DIGITS) {
-            return null;
-        }
-
-        return $normalized;
+        return $normalized !== null && PriceNumber::withinColumnRange($normalized) ? $normalized : null;
     }
 
     /**
