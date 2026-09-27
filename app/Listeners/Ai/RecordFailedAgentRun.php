@@ -9,6 +9,7 @@ use App\Enums\AiUsageKind;
 use App\Services\AiUsage\RunUsageAccumulator;
 use App\Services\AiUsage\UsageColumns;
 use App\Services\AiUsage\UsageRecordWriter;
+use App\Services\AiUsage\UsageText;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Str;
 use Laravel\Ai\Events\AgentFailed;
@@ -33,6 +34,7 @@ class RecordFailedAgentRun
             'provider' => $runUsageAccumulator->provider($invocationId) ?? (isset($agentPrompt->provider) ? $agentPrompt->provider->name() : null),
             'model' => $runUsageAccumulator->model($invocationId) ?? ($agentPrompt->model ?? null),
             ...UsageColumns::fromText($runUsageAccumulator->usage($invocationId) ?? new TextUsage),
+            'prompt_text' => UsageText::agentInput($agentPrompt),
             'parent_invocation_id' => $agentPrompt->parentInvocationId ?? null,
             'user_id' => resolve(AiRunAttribution::class)->user()?->id ?? Auth::id(),
             'status' => 'failed',

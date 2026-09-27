@@ -37,6 +37,7 @@ final readonly class RefreshReport
      * @param  list<string>  $fallbackProviders  Canonical providers handed to the verifier agent.
      * @param  string  $mode  One of the coordinator MODE_* constants (apply, dry-run, verify).
      * @param  int  $modelsCreateDisabled  Newly reported models skipped because their provider is update-only.
+     * @param  array<string, string>  $sourceStatuses  Pricing source key => `ok`, `disabled`, or a transport failure category.
      */
     public function __construct(
         public ?int $runId,
@@ -55,6 +56,7 @@ final readonly class RefreshReport
         public ?string $errorMessage = null,
         public string $mode = AiPriceRefreshCoordinator::MODE_APPLY,
         public int $modelsCreateDisabled = 0,
+        public array $sourceStatuses = [],
     ) {}
 
     /**
@@ -69,6 +71,7 @@ final readonly class RefreshReport
             'mode' => $this->mode,
             'final_result' => $this->finalResult,
             'models_dev_status' => $this->modelsDevStatus,
+            'source_statuses' => $this->sourceStatuses,
             'providers_requested' => $this->providersRequested,
             'providers_succeeded' => $this->providersSucceeded,
             'providers_failed' => $this->providersFailed,
@@ -113,6 +116,17 @@ final readonly class RefreshReport
                 $this->modelsTiered,
             ),
         ];
+
+        if ($this->sourceStatuses !== []) {
+            $lines[] = sprintf(
+                'Pricing sources: %s.',
+                implode(', ', array_map(
+                    static fn (string $source, string $status): string => sprintf('%s %s', $source, $status),
+                    array_keys($this->sourceStatuses),
+                    $this->sourceStatuses,
+                )),
+            );
+        }
 
         if ($this->modelsCreateDisabled > 0) {
             $lines[] = sprintf(

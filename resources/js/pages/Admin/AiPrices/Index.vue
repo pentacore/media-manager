@@ -54,7 +54,16 @@ interface PriceRow {
     batch_search_unit_per_k: string | null;
     free_usage_pool_id: number | null;
     pricing_source:
-        'seed' | 'models_dev' | 'first_party' | 'manual' | 'legacy' | null;
+        | 'seed'
+        | 'models_dev'
+        | 'first_party'
+        | 'manual'
+        | 'legacy'
+        | 'openrouter'
+        | 'litellm'
+        | 'xai_api'
+        | 'feed_consensus'
+        | null;
     pricing_source_url: string | null;
     pricing_source_updated_at: string | null;
     pricing_synced_at: string | null;
@@ -158,6 +167,10 @@ const SOURCE_LABELS: Record<PricingSource, string> = {
     first_party: 'First-party source',
     manual: 'Manual',
     legacy: 'Legacy',
+    openrouter: 'OpenRouter',
+    litellm: 'LiteLLM',
+    xai_api: 'xAI API',
+    feed_consensus: 'Models.dev + LiteLLM',
 };
 
 const SOURCE_VARIANTS: Record<
@@ -169,6 +182,10 @@ const SOURCE_VARIANTS: Record<
     first_party: 'ok',
     manual: 'info',
     legacy: 'warn',
+    openrouter: 'ok',
+    litellm: 'ok',
+    xai_api: 'ok',
+    feed_consensus: 'ok',
 };
 
 function sourceLabel(source: PriceRow['pricing_source']): string {

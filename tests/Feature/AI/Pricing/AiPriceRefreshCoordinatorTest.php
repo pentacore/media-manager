@@ -1324,6 +1324,7 @@ test('the report exposes a broadcast array and console lines', function (): void
         'models_tiered',
         'fallback_providers',
         'error_message',
+        'source_statuses',
     ])
         ->and($broadcast['run_id'])->toBe($refreshReport->runId)
         ->and($broadcast['final_result'])->toBe(RefreshReport::RESULT_SUCCEEDED);

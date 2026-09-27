@@ -109,6 +109,7 @@ defineOptions({
 
 const deleteFiles = ref(false);
 const deleteDialogOpen = ref(false);
+const deleting = ref(false);
 const openSeasons = ref<Record<number, boolean>>({});
 const replaceDialogOpen = ref(false);
 const replaceTarget = ref<{
@@ -171,10 +172,16 @@ function toggleSeason(seasonNumber: number) {
 }
 
 function confirmDelete() {
+    if (deleting.value) {
+        return;
+    }
+
+    deleting.value = true;
     router.delete(SeriesController.destroy.url(props.series.id), {
         data: { delete_files: deleteFiles.value },
         preserveScroll: true,
         onFinish: () => {
+            deleting.value = false;
             deleteDialogOpen.value = false;
         },
     });
@@ -218,6 +225,7 @@ function sonarrSeriesUrl(): string | null {
                             variant="destructive"
                             size="sm"
                             class="h-8 text-xs"
+                            data-delete-trigger
                         >
                             <Trash2 class="size-3.5" />
                             Delete
@@ -228,9 +236,10 @@ function sonarrSeriesUrl(): string | null {
                             <DialogTitle>
                                 Delete {{ series.title }}?
                             </DialogTitle>
-                            <DialogDescription>
+                            <DialogDescription data-delete-description>
                                 Removes the series from Sonarr. Cannot be
-                                undone.
+                                undone. Deletion may require approval in the
+                                Action Queue.
                             </DialogDescription>
                         </DialogHeader>
                         <div class="flex items-center gap-2 py-2">
@@ -248,6 +257,8 @@ function sonarrSeriesUrl(): string | null {
                             </Button>
                             <Button
                                 variant="destructive"
+                                data-delete-confirm
+                                :disabled="deleting"
                                 @click="confirmDelete"
                             >
                                 Delete

@@ -9,6 +9,7 @@ use App\Enums\AiUsageKind;
 use App\Services\AiUsage\AiUsageCaller;
 use App\Services\AiUsage\UsageColumns;
 use App\Services\AiUsage\UsageRecordWriter;
+use App\Services\AiUsage\UsageText;
 use Illuminate\Support\Facades\Auth;
 use Laravel\Ai\Events\Classified;
 
@@ -27,6 +28,8 @@ class RecordClassificationUsage
             'provider' => $classified->provider->name(),
             'model' => $classified->model,
             ...UsageColumns::fromText($classified->response->usage),
+            'prompt_text' => UsageText::classificationInput($classified->prompt),
+            'response_text' => UsageText::classificationOutput($classified->response),
             'user_id' => resolve(AiRunAttribution::class)->user()?->id ?? Auth::id(),
         ]);
     }

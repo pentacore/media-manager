@@ -21,6 +21,8 @@ use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldBeUnique;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
+use Illuminate\Queue\Attributes\Timeout;
+use Illuminate\Queue\Attributes\UniqueFor;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
 use Illuminate\Support\Facades\Cache;
@@ -35,6 +37,8 @@ use Throwable;
  * capture is disabled the row is trimmed right after processing, so a
  * serialized model could vanish before this job dequeues.
  */
+#[Timeout(240)]
+#[UniqueFor(600)]
 class RunDecisionAgent implements ShouldBeUnique, ShouldQueue
 {
     use Dispatchable;
@@ -54,6 +58,11 @@ class RunDecisionAgent implements ShouldBeUnique, ShouldQueue
     private const string GATE_QUESTION = 'Does this media-server webhook event require an operator action (import, remove, approve, re-search or fix something) rather than being purely informational?';
 
     /**
+     * $payload and $serviceConnectionId snapshot the triggering event so the
+     * run's subject binding and connection pinning survive the row being
+     * trimmed. A null $serviceConnectionId falls back to the event row when
+     * it still exists.
+     *
      * @param  array<string, mixed>  $payload
      */
     public function __construct(
@@ -61,6 +70,7 @@ class RunDecisionAgent implements ShouldBeUnique, ShouldQueue
         public readonly string $service,
         public readonly string $eventType,
         public readonly array $payload,
+        public readonly ?int $serviceConnectionId = null,
     ) {}
 
     public function uniqueId(): string
@@ -95,11 +105,12 @@ class RunDecisionAgent implements ShouldBeUnique, ShouldQueue
         }
 
         // Per-subject cooldown: a burst of webhooks about the same series /
-        // movie / request (including ones caused by MediaManager's own
-        // actions) must not trigger a paid agent run each — one decision per
-        // subject per window bounds feedback loops and webhook-flood cost.
-        // Only an agent run claims the window: an event the gate skips must
-        // not block the next one (a stuck import always runs past the gate).
+        // movie / request / stuck download (including ones caused by
+        // MediaManager's own actions) must not trigger a paid agent run each
+        // — one decision per subject per window bounds feedback loops and
+        // webhook-flood cost. Only an agent run claims the window: an event
+        // the gate skips must not block the next one (a stuck import always
+        // runs past the gate).
         $subjectKey = $this->subjectCooldownKey();
 
         if ($subjectKey !== null && Cache::has($subjectKey)) {
@@ -130,6 +141,10 @@ class RunDecisionAgent implements ShouldBeUnique, ShouldQueue
             webhookEventId: $webhookEventId,
             maxActions: $decisionAgentSettings->maxActionsPerRun(),
             sourceService: $this->service,
+            eventPayload: $this->payload,
+            originConnectionId: $this->serviceConnectionId
+                ?? ($webhookEventId === null ? null : WebhookEvent::query()->whereKey($webhookEventId)->value('service_connection_id')),
+            eventType: $this->eventType,
         );
         app()->instance(DecisionRunContext::class, $decisionRunContext);
 
@@ -207,9 +222,24 @@ class RunDecisionAgent implements ShouldBeUnique, ShouldQueue
      * Cache key identifying the media subject this event is about, or null
      * when no stable subject id can be extracted (those events fall back to
      * the per-event dedupe only).
+     *
+     * A stuck import (ManualInteractionRequired) is keyed on the download
+     * instead of the series/movie: otherwise an earlier Grab/Download run for
+     * the same series would claim the window and swallow the stuck-import
+     * decision that actually needs a human. The download id is read the way
+     * the arr webhook handlers read it: top-level downloadId, falling back to
+     * downloadInfo.downloadId.
      */
     private function subjectCooldownKey(): ?string
     {
+        if ($this->eventType === 'ManualInteractionRequired') {
+            $downloadId = $this->payload['downloadId'] ?? ($this->payload['downloadInfo']['downloadId'] ?? null);
+
+            return is_string($downloadId) && $downloadId !== ''
+                ? sprintf('decision-agent:cooldown:%s:download:%s', $this->service, $downloadId)
+                : null;
+        }
+
         $subject = match (true) {
             isset($this->payload['series']['id']) => 'series:'.(int) $this->payload['series']['id'],
             isset($this->payload['movie']['id']) => 'movie:'.(int) $this->payload['movie']['id'],

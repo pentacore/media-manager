@@ -41,7 +41,9 @@ test('dispatches RunDecisionAgent for an enabled, allowlisted event', function (
 
     Queue::assertPushed(RunDecisionAgent::class, fn (RunDecisionAgent $runDecisionAgent): bool => $runDecisionAgent->webhookEventId === $webhookEvent->id
         && $runDecisionAgent->service === 'sonarr'
-        && $runDecisionAgent->eventType === 'ManualInteractionRequired');
+        && $runDecisionAgent->eventType === 'ManualInteractionRequired'
+        && $runDecisionAgent->payload === $webhookEvent->payload
+        && $runDecisionAgent->serviceConnectionId === $webhookEvent->service_connection_id);
 });
 
 test('does nothing when the agent is disabled', function (): void {

@@ -50,3 +50,30 @@ test('the invocation drill-down lists sub-agent runs and tool errors', function 
         ->assertSeeIn('[data-usage-children]', 'child-model')
         ->assertSeeIn('[data-usage-tool-error]', 'tool_failed');
 });
+
+test('the invocation drill-down shows the input and output text', function (): void {
+    $record = AiUsageRecord::factory()->create([
+        'prompt_text' => 'Find severance in Sonarr.',
+        'response_text' => 'Found 3 series matching "severance".',
+    ]);
+
+    $this->actingAs(User::factory()->admin()->create());
+
+    visit(route('admin.ai-usage.index', absolute: false))
+        ->assertNoSmoke()
+        ->click(sprintf('[data-usage-row="%d"]', $record->id))
+        ->assertSeeIn('[data-usage-io="input"]', 'Find severance in Sonarr.')
+        ->assertSeeIn('[data-usage-io="output"]', 'Found 3 series matching "severance".');
+});
+
+test('the drill-down of a failed run shows its input without an output block', function (): void {
+    $record = AiUsageRecord::factory()->failed()->create(['prompt_text' => 'Find severance in Sonarr.']);
+
+    $this->actingAs(User::factory()->admin()->create());
+
+    visit(route('admin.ai-usage.index', absolute: false))
+        ->assertNoSmoke()
+        ->click(sprintf('[data-usage-row="%d"]', $record->id))
+        ->assertSeeIn('[data-usage-io="input"]', 'Find severance in Sonarr.')
+        ->assertMissing('[data-usage-io="output"]');
+});

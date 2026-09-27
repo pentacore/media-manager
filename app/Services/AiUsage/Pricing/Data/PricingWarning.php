@@ -21,6 +21,12 @@ final readonly class PricingWarning
      */
     public const string CONTEXT_TIERS = 'context_tiers';
 
+    /**
+     * Two agreeing feeds disagreed on an optional rate (cache or reasoning).
+     * The models.dev value was kept; {@see self::$detail} names the column.
+     */
+    public const string RATE_MISMATCH = 'rate_mismatch';
+
     public function __construct(
         public string $provider,
         public string $model,

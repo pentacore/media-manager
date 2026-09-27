@@ -17,6 +17,9 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
+use Laravel\Fortify\Events\TwoFactorAuthenticationChallenged;
+use Laravel\Fortify\Fortify;
+use Laravel\Fortify\TwoFactorAuthenticatable;
 
 class EmbyAuthController extends Controller
 {
@@ -56,7 +59,20 @@ class EmbyAuthController extends Controller
         $link = EmbyUserLink::where('emby_user_id', $embyUserId)->first();
 
         if ($link) {
-            Auth::login($link->user, remember: true);
+            $linkedUser = $link->user;
+
+            if ($this->requiresTwoFactorChallenge($linkedUser)) {
+                $embyLoginRequest->session()->put([
+                    'login.id' => $linkedUser->getKey(),
+                    'login.remember' => true,
+                ]);
+
+                TwoFactorAuthenticationChallenged::dispatch($linkedUser);
+
+                return to_route('two-factor.login');
+            }
+
+            Auth::login($linkedUser, remember: true);
 
             return redirect()->intended(route('dashboard'));
         }
@@ -110,5 +126,23 @@ class EmbyAuthController extends Controller
         Auth::login($user, remember: true);
 
         return redirect()->intended(route('dashboard'));
+    }
+
+    /**
+     * Determine whether the given user must complete Fortify's two-factor
+     * challenge before being authenticated, mirroring the condition in
+     * Laravel\Fortify\Actions\RedirectIfTwoFactorAuthenticatable::handle().
+     */
+    private function requiresTwoFactorChallenge(User $user): bool
+    {
+        if (! in_array(TwoFactorAuthenticatable::class, class_uses_recursive($user), true)) {
+            return false;
+        }
+
+        if (Fortify::confirmsTwoFactorAuthentication()) {
+            return $user->two_factor_secret !== null && $user->two_factor_confirmed_at !== null;
+        }
+
+        return $user->two_factor_secret !== null;
     }
 }

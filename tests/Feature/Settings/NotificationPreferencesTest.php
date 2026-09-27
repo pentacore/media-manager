@@ -17,7 +17,7 @@ beforeEach(function (): void {
 });
 
 test('GET /settings/notifications returns the default catalog', function (): void {
-    $user = User::factory()->create();
+    $user = User::factory()->admin()->create();
 
     $this->actingAs($user)
         ->get(route('settings.notifications.edit'))
@@ -36,7 +36,7 @@ test('GET /settings/notifications returns the default catalog', function (): voi
 });
 
 test('PUT /settings/notifications persists overrides', function (): void {
-    $user = User::factory()->create();
+    $user = User::factory()->admin()->create();
 
     $this->actingAs($user)
         ->put(route('settings.notifications.update'), [
@@ -191,7 +191,7 @@ test('edit exposes masked destinations and which channels are configured', funct
     config()->set('services.ntfy.server', 'https://ntfy.example.com');
     config()->set('services.telegram.token', '123:abc');
 
-    $user = User::factory()->create([
+    $user = User::factory()->admin()->create([
         'ntfy_topic' => 'mm',
         'discord_webhook_url' => 'https://discord.com/api/webhooks/1/abcd9999',
         'telegram_chat_id' => '-1001',
@@ -215,8 +215,21 @@ test('edit exposes masked destinations and which channels are configured', funct
         );
 });
 
+test('a non-admin does not see the webhook channel or destination in edit props', function (): void {
+    $user = User::factory()->member()->create(['webhook_url' => 'https://hooks.example.com/mm', 'webhook_secret' => 's3cret']);
+
+    $this->actingAs($user)
+        ->get(route('settings.notifications.edit'))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->where('channels', ['database', 'broadcast', 'mail', 'ntfy', 'discord', 'telegram'])
+            ->missing('destinations.webhook_url')
+            ->missing('destinations.webhook_secret_set')
+        );
+});
+
 test('update stores the push destinations', function (): void {
-    $user = User::factory()->create();
+    $user = User::factory()->admin()->create();
 
     $this->actingAs($user)
         ->put(route('settings.notifications.update'), [
@@ -260,6 +273,68 @@ test('update rejects a non-discord webhook url and a non-numeric chat id', funct
         ->assertSessionHasErrors(['discord_webhook_url', 'telegram_chat_id']);
 });
 
+test('a non-admin cannot set a webhook url or secret', function (): void {
+    $user = User::factory()->member()->create();
+
+    $this->actingAs($user)
+        ->put(route('settings.notifications.update'), [
+            'preferences' => [],
+            'webhook_url' => 'https://hooks.example.com/mm',
+        ])
+        ->assertSessionHasErrors('webhook_url');
+
+    expect($user->fresh()->webhook_url)->toBeNull();
+
+    $this->actingAs($user)
+        ->put(route('settings.notifications.update'), [
+            'preferences' => [],
+            'webhook_secret' => 's3cret',
+        ])
+        ->assertSessionHasErrors('webhook_secret');
+
+    expect($user->fresh()->webhook_secret)->toBeNull();
+});
+
+test('an admin can set a webhook url', function (): void {
+    $user = User::factory()->admin()->create();
+
+    $this->actingAs($user)
+        ->put(route('settings.notifications.update'), [
+            'preferences' => [],
+            'webhook_url' => 'https://hooks.example.com/mm',
+        ])
+        ->assertRedirect()
+        ->assertSessionHasNoErrors();
+
+    expect($user->fresh()->webhook_url)->toBe('https://hooks.example.com/mm');
+});
+
+test('a non-admin webhook preference toggle is ignored and forced off on save', function (): void {
+    $user = User::factory()->member()->create();
+
+    $this->actingAs($user)
+        ->put(route('settings.notifications.update'), [
+            'preferences' => [
+                [
+                    'class' => ServiceWarning::class,
+                    'severities' => [
+                        'warning' => ['database' => true, 'broadcast' => true, 'mail' => false, 'webhook' => true],
+                    ],
+                ],
+            ],
+        ])
+        ->assertRedirect()
+        ->assertSessionHasNoErrors();
+
+    $row = NotificationPreference::where('user_id', $user->id)
+        ->where('notification_class', ServiceWarning::class)
+        ->where('severity', 'warning')
+        ->first();
+
+    expect($row)->not->toBeNull()
+        ->and($row->webhook)->toBeFalse();
+});
+
 test('test endpoint delivers through the requested channel', function (): void {
     Http::preventStrayRequests();
     Http::fake(['discord.com/*' => Http::response('', 204)]);
@@ -277,11 +352,23 @@ test('test endpoint delivers through the requested channel', function (): void {
 test('test endpoint errors when the channel has no destination or delivery fails', function (): void {
     Http::preventStrayRequests();
     Http::fake(['hooks.example.com/*' => Http::response('nope', 500)]);
-    $user = User::factory()->create(['webhook_url' => 'https://hooks.example.com/mm']);
+    $user = User::factory()->admin()->create(['webhook_url' => 'https://hooks.example.com/mm']);
 
     $this->actingAs($user)->post(route('settings.notifications.test'), ['channel' => 'telegram'])->assertSessionHasErrors('test_channel');
     $this->actingAs($user)->post(route('settings.notifications.test'), ['channel' => 'webhook'])->assertSessionHasErrors('test_channel');
     $this->actingAs($user)->post(route('settings.notifications.test'), ['channel' => 'pager'])->assertSessionHasErrors('channel');
+});
+
+test('a non-admin cannot test the webhook channel', function (): void {
+    Http::preventStrayRequests();
+    Http::fake();
+    $user = User::factory()->member()->create(['webhook_url' => 'https://hooks.example.com/mm', 'webhook_secret' => 's3cret']);
+
+    $this->actingAs($user)
+        ->post(route('settings.notifications.test'), ['channel' => 'webhook'])
+        ->assertSessionHasErrors('test_channel');
+
+    Http::assertNothingSent();
 });
 
 test('a failed test send never leaks the telegram bot token to the user', function (): void {

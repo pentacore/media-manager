@@ -31,8 +31,8 @@ test('new push channels default off for users', function (): void {
         ->toBe(['database', 'broadcast']);
 });
 
-test('a preference row can enable discord, telegram and webhook', function (): void {
-    $user = User::factory()->create();
+test('a preference row can enable discord, telegram and webhook for an admin', function (): void {
+    $user = User::factory()->admin()->create();
     NotificationPreference::create([
         'user_id' => $user->id,
         'notification_class' => ServiceWarning::class,
@@ -48,6 +48,44 @@ test('a preference row can enable discord, telegram and webhook', function (): v
 
     expect(resolve(PreferenceResolver::class)->channelsFor($user, ServiceWarning::class, 'error'))
         ->toBe([DiscordChannel::class, TelegramChannel::class, WebhookChannel::class]);
+});
+
+test('a non-admin with webhook enabled and a saved url still gets no webhook channel', function (): void {
+    $user = User::factory()->member()->create(['webhook_url' => 'https://hooks.example.com/mm']);
+    NotificationPreference::create([
+        'user_id' => $user->id,
+        'notification_class' => ServiceWarning::class,
+        'severity' => 'error',
+        'database' => false,
+        'broadcast' => false,
+        'mail' => false,
+        'ntfy' => false,
+        'discord' => false,
+        'telegram' => false,
+        'webhook' => true,
+    ]);
+
+    expect(resolve(PreferenceResolver::class)->channelsFor($user, ServiceWarning::class, 'error'))
+        ->toBe([]);
+});
+
+test('an admin with webhook enabled and a saved url gets the webhook channel', function (): void {
+    $user = User::factory()->admin()->create(['webhook_url' => 'https://hooks.example.com/mm']);
+    NotificationPreference::create([
+        'user_id' => $user->id,
+        'notification_class' => ServiceWarning::class,
+        'severity' => 'error',
+        'database' => false,
+        'broadcast' => false,
+        'mail' => false,
+        'ntfy' => false,
+        'discord' => false,
+        'telegram' => false,
+        'webhook' => true,
+    ]);
+
+    expect(resolve(PreferenceResolver::class)->channelsFor($user, ServiceWarning::class, 'error'))
+        ->toBe([WebhookChannel::class]);
 });
 
 test('user routing returns the stored destinations or null', function (): void {

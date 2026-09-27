@@ -37,6 +37,10 @@ class AiSettingsController extends Controller
                 'chat_timeout' => $aiSettings->chatTimeout(),
                 'failover_provider' => $aiSettings->failoverProvider()?->value ?? 'none',
                 'models_dev_pricing_enabled' => $aiSettings->modelsDevPricingEnabled(),
+                'openrouter_pricing_enabled' => $aiSettings->openRouterPricingEnabled(),
+                'litellm_pricing_enabled' => $aiSettings->liteLlmPricingEnabled(),
+                'xai_pricing_enabled' => $aiSettings->xaiPricingEnabled(),
+                'xai_pricing_key_configured' => filled(config('ai.providers.xai.key')),
                 'rate_limits_enforced' => $aiSettings->rateLimitsEnforced(),
                 'ignored_pricing_providers' => $this->canonicalPricingProviders($aiSettings->ignoredPricingProviders()),
                 'auto_create_pricing_providers' => $this->canonicalPricingProviders($aiSettings->autoCreatePricingProviders()),
@@ -199,6 +203,15 @@ class AiSettingsController extends Controller
             array_key_exists('models_dev_pricing_enabled', $validated)
                 ? (bool) $validated['models_dev_pricing_enabled']
                 : null,
+        );
+        $aiSettings->setOpenRouterPricingEnabled(
+            array_key_exists('openrouter_pricing_enabled', $validated) ? (bool) $validated['openrouter_pricing_enabled'] : null,
+        );
+        $aiSettings->setLiteLlmPricingEnabled(
+            array_key_exists('litellm_pricing_enabled', $validated) ? (bool) $validated['litellm_pricing_enabled'] : null,
+        );
+        $aiSettings->setXaiPricingEnabled(
+            array_key_exists('xai_pricing_enabled', $validated) ? (bool) $validated['xai_pricing_enabled'] : null,
         );
         $aiSettings->setIgnoredPricingProviders($validated['ignored_pricing_providers'] ?? []);
 

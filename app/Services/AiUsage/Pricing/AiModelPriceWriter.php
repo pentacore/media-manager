@@ -62,12 +62,6 @@ final readonly class AiModelPriceWriter
         'batch_reasoning_per_mtok',
     ];
 
-    /**
-     * Upper bound (inclusive) for any single normalized rate, expressed as the
-     * value scaled to four decimal places (9999.9999 * 10^4).
-     */
-    private const int MAX_SCALED_RATE = 99_999_999;
-
     public function __construct(
         private PricingAnomalyPolicy $pricingAnomalyPolicy,
     ) {}
@@ -366,36 +360,6 @@ final readonly class AiModelPriceWriter
      */
     private function normalizeDecimal(?string $value): ?string
     {
-        if ($value === null) {
-            return null;
-        }
-
-        $value = trim($value);
-
-        if (preg_match('/^\+?(\d+)(?:\.(\d+))?$/D', $value, $matches) !== 1) {
-            return null;
-        }
-
-        $whole = ltrim($matches[1], '0');
-        $whole = $whole === '' ? '0' : $whole;
-
-        if (strlen($whole) > 4) {
-            return null;
-        }
-
-        $fraction = $matches[2] ?? '';
-        $fivePlaces = str_pad(substr($fraction, 0, 5), 5, '0');
-
-        $scaledToFivePlaces = ((int) $whole * 100_000) + (int) $fivePlaces;
-        $scaled = intdiv($scaledToFivePlaces + 5, 10);
-
-        if ($scaled < 0 || $scaled > self::MAX_SCALED_RATE) {
-            return null;
-        }
-
-        $intPart = intdiv($scaled, 10_000);
-        $fractionPart = $scaled % 10_000;
-
-        return $intPart.'.'.str_pad((string) $fractionPart, 4, '0', STR_PAD_LEFT);
+        return $value === null ? null : PriceNumber::roundToColumnScale($value);
     }
 }

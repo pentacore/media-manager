@@ -1,3 +1,44 @@
+# [1.22.0](https://github.com/pentacore/media-manager/compare/v1.21.0...v1.22.0) (2026-09-27)
+
+
+### Bug Fixes
+
+* **actions:** describe delete rules as covering manual media-page deletes ([ddfbc13](https://github.com/pentacore/media-manager/commit/ddfbc139869f5c6393835f224852e233d923e334))
+* **actions:** exempt manual requests from the chat AI advisory override ([b278e67](https://github.com/pentacore/media-manager/commit/b278e6755d0f201f319ca7244df3e5d0e6ae4432))
+* **admin:** clarify the LiteLLM cross-check hint ([800e91b](https://github.com/pentacore/media-manager/commit/800e91b0f1247f0b5449e51b01fed95dad562322))
+* **auth:** open self-registration only for the bootstrap admin unless enabled ([961f566](https://github.com/pentacore/media-manager/commit/961f56693ceda48cef7b045716c1a8610e7e11d9))
+* **auth:** resolve the welcome page's canRegister per request ([be4206e](https://github.com/pentacore/media-manager/commit/be4206e437cf12f5a26a084235ef20cce2d5d8b9))
+* **auth:** send 2FA users from Emby login to the two-factor challenge ([07509f5](https://github.com/pentacore/media-manager/commit/07509f56b9cbf55d7e3900d5a1ae4fc233e42dec))
+* **chat:** use the full toolset when no tool group clears the inclusion threshold ([30fa8ac](https://github.com/pentacore/media-manager/commit/30fa8accdb467705ce2a19d8af4c11f536101ca9))
+* **decision-agent:** bind stuck-download removals to downloadInfo.downloadId too ([cbdb2a6](https://github.com/pentacore/media-manager/commit/cbdb2a6792f33de8b0941f664726d19bebe705e4))
+* **decision-agent:** force approval for destructive proposals and bind them to the event subject ([d8704c2](https://github.com/pentacore/media-manager/commit/d8704c22ace22a475f7eff9593a0bfa5fe182974))
+* **decision-agent:** inspect stuck imports on the event's instance and bind imports to its download ([62a0ea0](https://github.com/pentacore/media-manager/commit/62a0ea070cdb4407e2728e070c208b92541963a5))
+* **decision-agent:** keep subject binding and connection pinning when capture trims the event ([879526f](https://github.com/pentacore/media-manager/commit/879526f065e58481ffa1b65cb63ab583c18164d7))
+* **decision-agent:** key stuck-import cooldowns on the download, not the series ([22fabf1](https://github.com/pentacore/media-manager/commit/22fabf15a5dfb6474d86be37536bb811d7e8e8a5))
+* **emby:** rate-limit Emby account linking ([70fcb88](https://github.com/pentacore/media-manager/commit/70fcb88251486fd14f06aaefa580feb512dc43d9))
+* **jobs:** expire unique-job locks so lost workers cannot block retries ([9c8050c](https://github.com/pentacore/media-manager/commit/9c8050c6c8b4e19961571c57cf60ab0f9d16cb93))
+* **jobs:** hold the subtitle advisor unique lock for its full retry window ([65326f6](https://github.com/pentacore/media-manager/commit/65326f699cd7030906b47c9fd1c0ccc159757cfe))
+* **media:** disable the delete confirm button while the delete is in flight ([8c1e364](https://github.com/pentacore/media-manager/commit/8c1e36471a5aa7c631741637be163d70682f9a41))
+* **media:** queue manual series and movie deletes through the action pipeline ([9812e52](https://github.com/pentacore/media-manager/commit/9812e52fc60c61118925e5a38b42844c6add35d4))
+* **notifications:** restrict the generic webhook channel to admins ([73e563f](https://github.com/pentacore/media-manager/commit/73e563f76442cfff4a659ec7d27876be93f8c105))
+* **notifications:** use an after() hook instead of an inline closure rule ([49eae6c](https://github.com/pentacore/media-manager/commit/49eae6ccdc28db3635dddb76c7c2f5463c67b495))
+* **pricing:** bill OpenRouter reasoning at the completion rate when unset ([c8ceb39](https://github.com/pentacore/media-manager/commit/c8ceb399913517cb4c72dc872a7ba05b916149ce))
+* **pricing:** emit xai alias candidates and widen tier detection ([41265a2](https://github.com/pentacore/media-manager/commit/41265a24e31bc6b56a8cb7a5c0df01275b316f3e))
+* **pricing:** merge xai per model and quiet an unconfigured xai toggle ([6189581](https://github.com/pentacore/media-manager/commit/61895815bcda476b94487c08d14f24b397d027f7))
+
+
+### Features
+
+* **ai-usage:** show each invocation's input and output in the drill-down ([581b025](https://github.com/pentacore/media-manager/commit/581b025e3a6ab3fbcfedc35e567a4b7c453686b0))
+* **pricing:** litellm price map source ([c8bd38e](https://github.com/pentacore/media-manager/commit/c8bd38e1ff43d161c5b303f4ae2053e12fd073d7))
+* **pricing:** openrouter models api pricing source ([d11b300](https://github.com/pentacore/media-manager/commit/d11b300fe3fb24e2da1e344e92cb3d46446fb5b1))
+* **pricing:** pricing catalog with per-provider source precedence ([b784a76](https://github.com/pentacore/media-manager/commit/b784a76c9d55d4e954ecde32b98c501e6e4fb486))
+* **pricing:** reconcile models.dev and litellm prices ([7b1b043](https://github.com/pentacore/media-manager/commit/7b1b04363f04000316d4f1fcea2348efa3b98899))
+* **pricing:** refresh prices through the structured pricing catalog ([d403720](https://github.com/pentacore/media-manager/commit/d40372038b53ed87e1f7211cc5f829df52aa5603))
+* **pricing:** settings and admin switches for structured pricing sources ([8127163](https://github.com/pentacore/media-manager/commit/81271638f3f147af6d24dbb6bcf576ea38fb5dfc))
+* **pricing:** tag price candidates with their source and add structured source kinds ([3348122](https://github.com/pentacore/media-manager/commit/3348122aa0683fcae815c64956e3d44cd09b3475))
+* **pricing:** xai first-party pricing api source ([ade5c7d](https://github.com/pentacore/media-manager/commit/ade5c7d4a5e867af984fb30b92f6a4eb1f900027))
+
 # [1.21.0](https://github.com/pentacore/media-manager/compare/v1.20.0...v1.21.0) (2026-09-27)
 
 

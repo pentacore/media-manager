@@ -71,6 +71,7 @@ defineOptions({
 });
 
 const deleteDialogOpen = ref(false);
+const deleting = ref(false);
 const deleteFiles = ref(false);
 const replaceDialogOpen = ref(false);
 
@@ -103,11 +104,19 @@ function posterUrl(): string | null {
 }
 
 function confirmDelete() {
+    if (deleting.value) {
+        return;
+    }
+
+    deleting.value = true;
     router.delete(MovieController.destroy.url(props.movie.id), {
         data: { delete_files: deleteFiles.value },
         preserveScroll: true,
         onSuccess: () => {
             deleteDialogOpen.value = false;
+        },
+        onFinish: () => {
+            deleting.value = false;
         },
     });
 }
@@ -153,6 +162,7 @@ function confirmDelete() {
                             variant="destructive"
                             size="sm"
                             class="h-8 text-xs"
+                            data-delete-trigger
                         >
                             <Trash2 class="size-3.5" />
                             Delete
@@ -161,8 +171,10 @@ function confirmDelete() {
                     <DialogContent>
                         <DialogHeader>
                             <DialogTitle>Delete {{ movie.title }}?</DialogTitle>
-                            <DialogDescription>
+                            <DialogDescription data-delete-description>
                                 Removes the movie from Radarr. Cannot be undone.
+                                Deletion may require approval in the Action
+                                Queue.
                             </DialogDescription>
                         </DialogHeader>
                         <div class="flex items-center gap-2 py-2">
@@ -183,6 +195,8 @@ function confirmDelete() {
                             </Button>
                             <Button
                                 variant="destructive"
+                                data-delete-confirm
+                                :disabled="deleting"
                                 @click="confirmDelete"
                             >
                                 Confirm

@@ -117,3 +117,29 @@ test('a saved price updater model overrides the config default and clears back t
 
     expect($aiSettings->priceUpdaterModel())->toBe('gpt-config-updater');
 });
+
+test('structured pricing sources ship disabled with their public endpoints', function (): void {
+    expect(config('mediamanager.ai.pricing.openrouter.enabled'))->toBeFalse()
+        ->and(config('mediamanager.ai.pricing.openrouter.url'))->toBe('https://openrouter.ai/api/v1/models')
+        ->and(config('mediamanager.ai.pricing.litellm.enabled'))->toBeFalse()
+        ->and(config('mediamanager.ai.pricing.litellm.url'))->toBe('https://raw.githubusercontent.com/BerriAI/litellm/main/model_prices_and_context_window.json')
+        ->and(config('mediamanager.ai.pricing.xai.enabled'))->toBeFalse()
+        ->and(config('mediamanager.ai.pricing.xai.url'))->toBe('https://api.x.ai/v1/language-models');
+});
+
+test('structured pricing source gates follow config until an admin saves a value', function (string $configKey, string $getter, string $setter): void {
+    $aiSettings = resolve(AiSettings::class);
+
+    config()->set(sprintf('mediamanager.ai.pricing.%s.enabled', $configKey), true);
+    expect($aiSettings->{$getter}())->toBeTrue();
+
+    $aiSettings->{$setter}(false);
+    expect($aiSettings->{$getter}())->toBeFalse();
+
+    $aiSettings->{$setter}(null);
+    expect($aiSettings->{$getter}())->toBeTrue();
+})->with([
+    'openrouter' => ['openrouter', 'openRouterPricingEnabled', 'setOpenRouterPricingEnabled'],
+    'litellm' => ['litellm', 'liteLlmPricingEnabled', 'setLiteLlmPricingEnabled'],
+    'xai' => ['xai', 'xaiPricingEnabled', 'setXaiPricingEnabled'],
+]);

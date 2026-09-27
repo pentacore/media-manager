@@ -23,6 +23,8 @@ final readonly class ProviderPricingResult
      *                                  The pure adapter cannot query the catalog, so it flags update-only providers here rather
      *                                  than consulting the database; the writer enforces the rule, including the in-use
      *                                  exception, via scope.
+     * @param  list<string>  $conflicts  Model ids whose cross-checked feeds disagreed on the primary rates. They carry no
+     *                                   candidate; the coordinator queues each one for the verifier like an anomaly.
      */
     public function __construct(
         public string $provider,
@@ -30,5 +32,6 @@ final readonly class ProviderPricingResult
         public array $rejections = [],
         public array $warnings = [],
         public bool $createSuppressed = false,
+        public array $conflicts = [],
     ) {}
 }

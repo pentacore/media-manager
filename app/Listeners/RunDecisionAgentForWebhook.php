@@ -45,6 +45,7 @@ class RunDecisionAgentForWebhook
             service: $service,
             eventType: $eventType,
             payload: $webhookEvent->payload,
+            serviceConnectionId: $webhookEvent->service_connection_id,
         ));
     }
 }
