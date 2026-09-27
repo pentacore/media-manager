@@ -127,6 +127,10 @@ test('pricing sources have stable backed values', function (): void {
         PricingSource::FirstParty,
         PricingSource::Manual,
         PricingSource::Legacy,
+        PricingSource::OpenRouter,
+        PricingSource::LiteLlm,
+        PricingSource::XaiApi,
+        PricingSource::FeedConsensus,
     ]);
 
     expect(PricingSource::values())->toBe([
@@ -135,6 +139,10 @@ test('pricing sources have stable backed values', function (): void {
         'first_party',
         'manual',
         'legacy',
+        'openrouter',
+        'litellm',
+        'xai_api',
+        'feed_consensus',
     ]);
 });
 

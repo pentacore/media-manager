@@ -14,6 +14,7 @@ use Laravel\Ai\Events\AgentPrompted;
 use Laravel\Ai\Events\ToolFailed;
 use Laravel\Ai\Events\ToolInvoked;
 use Laravel\Ai\Prompts\AgentPrompt;
+use Laravel\Ai\Prompts\Prompt;
 use Laravel\Ai\Responses\AgentResponse;
 use Laravel\Ai\Responses\Data\Meta;
 use Laravel\Ai\Responses\Data\TextUsage;
@@ -62,6 +63,8 @@ test('end-to-end: tool events fire before AgentPrompted, count rolls up to the p
 
     $agentPrompt = new ReflectionClass(AgentPrompt::class)->newInstanceWithoutConstructor();
     new ReflectionProperty(AgentPrompt::class, 'agent')->setValue($agentPrompt, new MediaAgent);
+    new ReflectionProperty(Prompt::class, 'prompt')->setValue($agentPrompt, 'prompt text');
+    new ReflectionProperty(AgentPrompt::class, 'attachments')->setValue($agentPrompt, collect());
 
     $response = new AgentResponse($invocationId, 'ok', new TextUsage, new Meta(provider: 'openai', model: 'gpt-5-mini'));
 

@@ -9,15 +9,15 @@ use RuntimeException;
 use Throwable;
 
 /**
- * Classified failure raised by {@see ModelsDevPricingClient} when the Models.dev
- * pricing catalog cannot be fetched or is not a usable shape.
+ * Classified failure raised when a pricing source (models.dev, LiteLLM,
+ * OpenRouter, xAI) cannot be fetched or is not a usable shape.
  *
- * The {@see self::$category} is a stable machine-readable identifier callers can
- * branch on (retry policy, alerting, provenance). Messages are intentionally
- * generic: the full upstream response body is never embedded so oversized or
- * sensitive payloads cannot leak into logs or exception trackers.
+ * The {@see self::$category} is a stable machine-readable identifier recorded
+ * per source on the refresh run. Messages name the source but never embed the
+ * upstream response body, so oversized or sensitive payloads cannot leak into
+ * logs or exception trackers.
  */
-final class ModelsDevTransportException extends RuntimeException
+final class PricingTransportException extends RuntimeException
 {
     /**
      * The connection could not be established (DNS, refused, reset).
@@ -57,9 +57,15 @@ final class ModelsDevTransportException extends RuntimeException
     public const string CATEGORY_INVALID_JSON = 'invalid_json';
 
     /**
-     * The decoded payload was not a top-level associative provider object.
+     * The decoded payload did not have the source's expected top-level shape.
      */
     public const string CATEGORY_INVALID_SHAPE = 'invalid_shape';
+
+    /**
+     * The source needs a credential that is not configured, so no request was
+     * made. Not an error: the run falls back to other sources quietly.
+     */
+    public const string CATEGORY_NOT_CONFIGURED = 'not_configured';
 
     private function __construct(
         public readonly string $category,
@@ -74,7 +80,7 @@ final class ModelsDevTransportException extends RuntimeException
      * Classify a low-level connection failure as a timeout or a plain
      * connection error based on the underlying cURL/Guzzle message.
      */
-    public static function fromConnectionException(ConnectionException $connectionException): self
+    public static function fromConnectionException(ConnectionException $connectionException, string $source): self
     {
         $message = strtolower($connectionException->getMessage());
 
@@ -85,8 +91,8 @@ final class ModelsDevTransportException extends RuntimeException
         return new self(
             category: $isTimeout ? self::CATEGORY_TIMEOUT : self::CATEGORY_CONNECTION,
             message: $isTimeout
-                ? 'Timed out contacting the Models.dev pricing API.'
-                : 'Could not connect to the Models.dev pricing API.',
+                ? sprintf('Timed out contacting the %s pricing API.', $source)
+                : sprintf('Could not connect to the %s pricing API.', $source),
             previous: $connectionException,
         );
     }
@@ -95,7 +101,7 @@ final class ModelsDevTransportException extends RuntimeException
      * Classify a non-successful HTTP status. The status is retained for
      * telemetry, but the response body is deliberately omitted.
      */
-    public static function fromResponseStatus(int $status): self
+    public static function fromResponseStatus(int $status, string $source): self
     {
         $category = match (true) {
             $status === 429 => self::CATEGORY_RATE_LIMITED,
@@ -105,36 +111,40 @@ final class ModelsDevTransportException extends RuntimeException
 
         return new self(
             category: $category,
-            message: sprintf('Models.dev pricing API responded with HTTP %d.', $status),
+            message: sprintf('%s pricing API responded with HTTP %d.', $source, $status),
             status: $status,
         );
     }
 
-    public static function oversized(int $actualBytes, int $maxBytes): self
+    public static function oversized(int $actualBytes, int $maxBytes, string $source): self
     {
         return new self(
             category: self::CATEGORY_OVERSIZED,
-            message: sprintf(
-                'Models.dev pricing response of %d bytes exceeds the %d byte ceiling.',
-                $actualBytes,
-                $maxBytes,
-            ),
+            message: sprintf('%s pricing response of %d bytes exceeds the %d byte ceiling.', $source, $actualBytes, $maxBytes),
         );
     }
 
-    public static function invalidJson(string $reason): self
+    public static function invalidJson(string $reason, string $source): self
     {
         return new self(
             category: self::CATEGORY_INVALID_JSON,
-            message: sprintf('Models.dev pricing response was not valid JSON (%s).', $reason),
+            message: sprintf('%s pricing response was not valid JSON (%s).', $source, $reason),
         );
     }
 
-    public static function invalidShape(): self
+    public static function invalidShape(string $source, string $expected): self
     {
         return new self(
             category: self::CATEGORY_INVALID_SHAPE,
-            message: 'Models.dev pricing response was not a top-level provider object.',
+            message: sprintf('%s pricing response was not %s.', $source, $expected),
+        );
+    }
+
+    public static function notConfigured(string $source): self
+    {
+        return new self(
+            category: self::CATEGORY_NOT_CONFIGURED,
+            message: sprintf('%s pricing API credentials are not configured.', $source),
         );
     }
 }

@@ -11,12 +11,15 @@ use Laravel\Ai\Events\AgentFailed;
 use Laravel\Ai\Events\AgentFailedOver;
 use Laravel\Ai\Exceptions\ProviderOverloadedException;
 use Laravel\Ai\Prompts\AgentPrompt;
+use Laravel\Ai\Prompts\Prompt;
 use Laravel\Ai\Responses\Data\TextUsage;
 
 function failoverAttemptPrompt(object $agent): AgentPrompt
 {
     $agentPrompt = new ReflectionClass(AgentPrompt::class)->newInstanceWithoutConstructor();
     new ReflectionProperty(AgentPrompt::class, 'agent')->setValue($agentPrompt, $agent);
+    new ReflectionProperty(Prompt::class, 'prompt')->setValue($agentPrompt, 'prompt text');
+    new ReflectionProperty(AgentPrompt::class, 'attachments')->setValue($agentPrompt, collect());
 
     return $agentPrompt;
 }

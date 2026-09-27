@@ -120,6 +120,7 @@ interface InvocationDetail {
         cache_write_input_tokens: number;
         reasoning_tokens: number;
         tool_calls_count: number;
+        prompt_text: string | null;
         response_text: string | null;
         price_source: string | null;
         conversation_id: string | null;
@@ -1434,24 +1435,41 @@ function formatTimestamp(value: string): string {
                         </div>
                     </div>
 
-                    <!-- Final assistant response -->
-                    <div
-                        v-if="detail.record.response_text"
-                        class="rounded-md border border-border bg-bg-elev"
+                    <!-- Prompt sent and final response -->
+                    <template
+                        v-for="io in [
+                            {
+                                key: 'input',
+                                label: 'Input',
+                                text: detail.record.prompt_text,
+                            },
+                            {
+                                key: 'output',
+                                label: 'Output',
+                                text: detail.record.response_text,
+                            },
+                        ]"
+                        :key="io.key"
                     >
                         <div
-                            class="flex items-center justify-between border-b border-border px-3 py-1.5"
+                            v-if="io.text"
+                            class="rounded-md border border-border bg-bg-elev"
+                            :data-usage-io="io.key"
                         >
-                            <span
-                                class="text-[11px] font-medium tracking-[0.05em] text-muted-foreground uppercase"
+                            <div
+                                class="flex items-center justify-between border-b border-border px-3 py-1.5"
                             >
-                                Assistant response
-                            </span>
+                                <span
+                                    class="text-[11px] font-medium tracking-[0.05em] text-muted-foreground uppercase"
+                                >
+                                    {{ io.label }}
+                                </span>
+                            </div>
+                            <pre
+                                class="max-h-72 overflow-y-auto px-3 py-2 text-[12px] leading-snug break-words whitespace-pre-wrap"
+                                >{{ io.text }}</pre>
                         </div>
-                        <pre
-                            class="max-h-72 overflow-y-auto px-3 py-2 text-[12px] leading-snug break-words whitespace-pre-wrap"
-                            >{{ detail.record.response_text }}</pre>
-                    </div>
+                    </template>
 
                     <!-- Pricing source banner -->
                     <div

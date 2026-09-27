@@ -388,3 +388,24 @@ test('a legacy broadcast (no final_result) shows the old added/total success toa
     $pendingAwaitablePage->assertSee('Price refresh complete')
         ->assertSee('4 new, 12 total');
 });
+
+test('structured pricing sources render their labels', function (PricingSource $pricingSource, string $model, string $label): void {
+    AiModelPrice::factory()->create([
+        'provider' => 'openrouter',
+        'model' => $model,
+        'input_per_mtok' => 1.00,
+        'output_per_mtok' => 2.00,
+        'pricing_source' => $pricingSource,
+        'pricing_synced_at' => now()->subHour(),
+    ]);
+
+    visit('/admin/ai-prices')
+        ->assertNoSmoke()
+        ->assertSee($model)
+        ->assertSee($label);
+})->with([
+    'openrouter' => [PricingSource::OpenRouter, 'vendor/routed-model', 'OpenRouter'],
+    'litellm' => [PricingSource::LiteLlm, 'vendor/litellm-model', 'LiteLLM'],
+    'xai api' => [PricingSource::XaiApi, 'vendor/xai-model', 'xAI API'],
+    'feed consensus' => [PricingSource::FeedConsensus, 'vendor/consensus-model', 'Models.dev + LiteLLM'],
+]);
