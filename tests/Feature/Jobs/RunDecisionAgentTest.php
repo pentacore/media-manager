@@ -10,6 +10,8 @@ use App\Models\WebhookEvent;
 use App\Services\AiBudget\AiBudgetExceededException;
 use App\Services\AiBudget\AiBudgetGuard;
 use App\Settings\DecisionAgentSettings;
+use Illuminate\Queue\Attributes\Timeout;
+use Illuminate\Queue\Attributes\UniqueFor;
 
 beforeEach(function (): void {
     config(['mediamanager.ai.enabled' => true]);
@@ -141,4 +143,12 @@ test('uniqueId is stable per webhook event', function (): void {
 
     expect($a->uniqueId())->toBe($b->uniqueId());
     expect($a->uniqueId())->toBe('decision:42');
+});
+
+test('job has unique lock timeout and unique-for duration', function (): void {
+    $job = new RunDecisionAgent(null, 'sonarr', 'test', []);
+    $reflection = new ReflectionClass($job);
+
+    expect($reflection->getAttributes(Timeout::class)[0]->newInstance()->timeout)->toBe(240)
+        ->and($reflection->getAttributes(UniqueFor::class)[0]->newInstance()->uniqueFor)->toBe(600);
 });

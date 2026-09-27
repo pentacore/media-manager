@@ -11,6 +11,7 @@ use Illuminate\Contracts\Queue\ShouldBeUnique;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Http\Client\RequestException;
+use Illuminate\Queue\Attributes\UniqueFor;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
 use Illuminate\Support\Facades\Cache;
@@ -32,6 +33,7 @@ use Throwable;
  *
  * @see https://github.com/Fribb/anime-lists
  */
+#[UniqueFor(1800)]
 class SyncAnimeMappingJob implements ShouldBeUnique, ShouldQueue
 {
     use Dispatchable;

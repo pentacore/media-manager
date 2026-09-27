@@ -16,6 +16,7 @@ use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldBeUnique;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
+use Illuminate\Queue\Attributes\UniqueFor;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
 use Illuminate\Support\Facades\Log;
@@ -26,6 +27,7 @@ use Throwable;
  * instances interleaving upserts with each other's delete-what-wasn't-seen
  * prunes — the schedule's withoutOverlapping() only guards the dispatch.
  */
+#[UniqueFor(1800)]
 class ReconcileSearchIndex implements ShouldBeUnique, ShouldQueue
 {
     use Dispatchable;

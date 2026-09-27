@@ -25,12 +25,14 @@ use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\RequestException;
 use Illuminate\Queue\Attributes\Timeout;
+use Illuminate\Queue\Attributes\UniqueFor;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
 use Illuminate\Support\Facades\Log;
 use Throwable;
 
 #[Timeout(300)]
+#[UniqueFor(3600)]
 class ExecuteActionRequest implements ShouldBeUnique, ShouldQueue
 {
     use Dispatchable;

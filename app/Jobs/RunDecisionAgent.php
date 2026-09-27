@@ -21,6 +21,8 @@ use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldBeUnique;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
+use Illuminate\Queue\Attributes\Timeout;
+use Illuminate\Queue\Attributes\UniqueFor;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
 use Illuminate\Support\Facades\Cache;
@@ -35,6 +37,8 @@ use Throwable;
  * capture is disabled the row is trimmed right after processing, so a
  * serialized model could vanish before this job dequeues.
  */
+#[Timeout(240)]
+#[UniqueFor(600)]
 class RunDecisionAgent implements ShouldBeUnique, ShouldQueue
 {
     use Dispatchable;

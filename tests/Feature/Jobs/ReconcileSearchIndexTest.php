@@ -7,6 +7,7 @@ use App\Models\IndexedSeries;
 use App\Models\ServiceConnection;
 use App\Services\Search\MovieIndexer;
 use App\Services\Search\SeriesIndexer;
+use Illuminate\Queue\Attributes\UniqueFor;
 
 function reconcileConnection(): ServiceConnection
 {
@@ -101,4 +102,11 @@ test('radarr reconciliation shares the failed-upsert protection', function (): v
     new ReconcileSearchIndex()->handle($this->mock(SeriesIndexer::class), $movieIndexer);
 
     expect(IndexedMovie::query()->where('radarr_id', 5)->exists())->toBeTrue();
+});
+
+test('job has unique-for duration', function (): void {
+    $job = new ReconcileSearchIndex();
+    $reflection = new ReflectionClass($job);
+
+    expect($reflection->getAttributes(UniqueFor::class)[0]->newInstance()->uniqueFor)->toBe(1800);
 });
