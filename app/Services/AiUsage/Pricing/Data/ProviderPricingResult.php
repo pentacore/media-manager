@@ -19,9 +19,10 @@ final readonly class ProviderPricingResult
      * @param  list<ModelPriceCandidate>  $candidates  Writable candidates for this provider.
      * @param  list<PricingRejection>  $rejections  Models the source described but the adapter could not safely accept.
      * @param  list<PricingWarning>  $warnings  Non-fatal notes attached to accepted candidates (for example context tiers).
-     * @param  bool  $createSuppressed  When true, these candidates may only update existing rows and must never create new ones.
+     * @param  bool  $createSuppressed  When true, these candidates may only update existing rows or create in-use models.
      *                                  The pure adapter cannot query the catalog, so it flags update-only providers here rather
-     *                                  than consulting the database; the writer still enforces the rule via scope.
+     *                                  than consulting the database; the writer enforces the rule, including the in-use
+     *                                  exception, via scope.
      */
     public function __construct(
         public string $provider,

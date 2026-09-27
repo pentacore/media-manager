@@ -9,6 +9,7 @@ use App\Ai\Middleware\EnforceBudgetEachStep;
 use App\Ai\ProviderCapabilities;
 use App\Ai\Tools\PriceFetcher\UpsertModelPriceTool;
 use App\Ai\Tools\PriceFetcher\WebFetchTool;
+use App\Services\AiUsage\Pricing\InUsePricingModels;
 use App\Services\AiUsage\Pricing\PriceVerificationRun;
 use App\Services\AiUsage\Pricing\RefreshScope;
 use App\Settings\AiSettings;
@@ -119,8 +120,9 @@ class PriceFetcherAgent implements Agent, HasMiddleware, HasTools
 
     public function model(): string
     {
-        // Use the configured model so the user controls cost / quality.
-        return resolve(AiSettings::class)->model();
+        // A dedicated setting so verification can run on a cheaper (or more
+        // capable) model than chat; it follows the chat model when unset.
+        return resolve(AiSettings::class)->priceUpdaterModel();
     }
 
     public function instructions(): Stringable|string
@@ -279,6 +281,16 @@ class PriceFetcherAgent implements Agent, HasMiddleware, HasTools
                 $checklist !== [] => 'every generally-available text/chat model it publishes; at minimum re-confirm each currently-stored model: '.implode(', ', $checklist),
                 default => 'every generally-available text/chat model it publishes',
             };
+
+            // Update-only providers may still add the models the app calls,
+            // which the write tool accepts; name the ones not yet stored.
+            $addableInUse = $createsNewModels || ($scopeModels !== null && $scopeModels !== [])
+                ? []
+                : array_values(array_diff(resolve(InUsePricingModels::class)->forProvider($provider), $checklist));
+
+            if ($addableInUse !== []) {
+                $focus .= '; plus these models the app uses, which may be added: '.implode(', ', $addableInUse);
+            }
 
             $lines[] = sprintf("- %s: %s\n  Verify %s.", $provider, implode('  +  ', $urls), $focus);
         }

@@ -47,6 +47,7 @@ class UpdateAiSettingsRequest extends FormRequest
             'reranking_provider' => ['sometimes', 'string', Rule::in(AiSettings::RERANKING_PROVIDERS)],
             'reranking_model' => ['nullable', 'string', 'max:100'],
             'sub_agent_model' => ['nullable', 'string', 'max:100'],
+            'price_updater_model' => ['nullable', 'string', 'max:100'],
         ];
     }
 
@@ -72,7 +73,7 @@ class UpdateAiSettingsRequest extends FormRequest
 
         // A blank model field means "use the default", which the nullable rules
         // store as a cleared setting.
-        foreach (['classification_model', 'reranking_model', 'sub_agent_model'] as $field) {
+        foreach (['classification_model', 'reranking_model', 'sub_agent_model', 'price_updater_model'] as $field) {
             if ($this->has($field) && trim((string) $this->input($field)) === '') {
                 $this->merge([$field => null]);
             }

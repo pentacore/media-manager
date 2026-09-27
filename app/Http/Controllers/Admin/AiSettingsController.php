@@ -50,6 +50,7 @@ class AiSettingsController extends Controller
                 'reranking_provider' => $aiSettings->rerankingProvider(),
                 'reranking_model' => $aiSettings->rerankingModel(),
                 'sub_agent_model' => $aiSettings->rawSubAgentModel(),
+                'price_updater_model' => $aiSettings->rawPriceUpdaterModel(),
             ],
             'budget' => [
                 'spend' => round($aiBudgetGuard->currentMonthSpend(), 4),
@@ -267,6 +268,10 @@ class AiSettingsController extends Controller
 
         if (array_key_exists('sub_agent_model', $validated)) {
             $aiSettings->setSubAgentModel($validated['sub_agent_model']);
+        }
+
+        if (array_key_exists('price_updater_model', $validated)) {
+            $aiSettings->setPriceUpdaterModel($validated['price_updater_model']);
         }
     }
 }

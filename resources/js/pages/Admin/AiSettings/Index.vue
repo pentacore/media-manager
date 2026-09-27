@@ -53,6 +53,7 @@ interface AiSettingsState {
     reranking_provider: string;
     reranking_model: string | null;
     sub_agent_model: string | null;
+    price_updater_model: string | null;
 }
 
 interface ProviderOption {
@@ -135,6 +136,14 @@ const subAgentModelValue = computed(() =>
     selectedSubAgentModel.value === SAME_AS_CHAT_MODEL
         ? ''
         : selectedSubAgentModel.value,
+);
+const selectedPriceUpdaterModel = ref(
+    props.settings.price_updater_model ?? SAME_AS_CHAT_MODEL,
+);
+const priceUpdaterModelValue = computed(() =>
+    selectedPriceUpdaterModel.value === SAME_AS_CHAT_MODEL
+        ? ''
+        : selectedPriceUpdaterModel.value,
 );
 
 function formatUsd(value: number | null): string {
@@ -1099,7 +1108,7 @@ const budgetState = computed<{
                     >
                         <Field
                             label="Add new models"
-                            hint="The refresh adds models these providers newly report to the catalog. Unchecked providers are update-only: their existing prices keep refreshing, but new models are skipped."
+                            hint="The refresh adds models these providers newly report to the catalog. Unchecked providers are update-only: their existing prices keep refreshing, and only new models the app uses (usage history or picked in these settings) are added."
                         >
                             <span />
                         </Field>
@@ -1151,6 +1160,59 @@ const budgetState = computed<{
                             />
                             <InputError
                                 :message="errors.auto_create_pricing_providers"
+                                class="mt-1"
+                            />
+                        </div>
+                    </div>
+
+                    <div
+                        class="grid items-start gap-6"
+                        style="grid-template-columns: 200px 1fr"
+                        data-price-updater-model
+                    >
+                        <Field
+                            label="Price updater model"
+                            hint="Model the price verifier agent runs on when it re-reads provider pricing pages."
+                        >
+                            <span />
+                        </Field>
+                        <div>
+                            <Select v-model="selectedPriceUpdaterModel">
+                                <SelectTrigger
+                                    id="price_updater_model"
+                                    class="h-8 max-w-[320px] text-sm"
+                                >
+                                    <SelectValue placeholder="Select a model" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem :value="SAME_AS_CHAT_MODEL">
+                                        Same as chat model
+                                    </SelectItem>
+                                    <SelectGroup
+                                        v-for="(modelList, provider) in models"
+                                        :key="provider"
+                                    >
+                                        <SelectLabel class="capitalize">
+                                            {{ provider }}
+                                        </SelectLabel>
+                                        <SelectItem
+                                            v-for="modelId in modelList"
+                                            :key="modelId"
+                                            :value="modelId"
+                                            :aria-label="modelId"
+                                        >
+                                            {{ modelId }}
+                                        </SelectItem>
+                                    </SelectGroup>
+                                </SelectContent>
+                            </Select>
+                            <input
+                                type="hidden"
+                                name="price_updater_model"
+                                :value="priceUpdaterModelValue"
+                            />
+                            <InputError
+                                :message="errors.price_updater_model"
                                 class="mt-1"
                             />
                         </div>
