@@ -22,7 +22,7 @@ use App\Settings\AiSettings;
  * value (including an explicit zero).
  *
  * @param  array<string, string|null>  $values
- * @param  array{sourceUrl?: string|null, sourceUpdatedAt?: string|null, tiered?: bool}  $meta
+ * @param  array{source?: PricingSource, sourceUrl?: string|null, sourceUpdatedAt?: string|null, tiered?: bool}  $meta
  */
 function priceCandidate(string $provider, string $model, array $values, array $meta = []): ModelPriceCandidate
 {
@@ -38,6 +38,7 @@ function priceCandidate(string $provider, string $model, array $values, array $m
         provider: $provider,
         model: $model,
         fields: $fields,
+        source: $meta['source'] ?? PricingSource::ModelsDev,
         sourceUrl: $meta['sourceUrl'] ?? null,
         sourceUpdatedAt: $meta['sourceUpdatedAt'] ?? null,
         tiered: $meta['tiered'] ?? false,

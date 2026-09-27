@@ -11,6 +11,7 @@ use App\Models\AiModelPrice;
 use App\Models\AiPriceRefreshRun;
 use App\Models\User;
 use App\Services\AiBudget\AiBudgetGuard;
+use App\Services\AiUsage\Pricing\Data\ModelPriceCandidate;
 use App\Services\AiUsage\Pricing\Data\PricingRejection;
 use App\Services\AiUsage\Pricing\Data\ProviderPricingResult;
 use App\Services\AiUsage\Pricing\Data\RefreshReport;
@@ -29,12 +30,13 @@ use Throwable;
  * Shared orchestration for every automatic price refresh entry point (queued
  * job and CLI).
  *
- * The coordinator fetches the Models.dev feed, adapts it per provider, persists
- * candidates through the single {@see AiModelPriceWriter} inside one database
- * transaction per provider, and — for the hybrid source — hands unresolved
- * providers to the scope-bound {@see PriceFetcherAgent} verifier in a single
- * bounded agent run. Every run is audited on {@see AiPriceRefreshRun} with
- * compact counters only; raw source payloads are never persisted.
+ * The coordinator fetches every enabled pricing source through {@see
+ * PricingCatalog} (OpenRouter, xAI, models.dev reconciled with LiteLLM),
+ * persists candidates through the single {@see AiModelPriceWriter} inside one
+ * database transaction per provider, and — for the hybrid source — hands
+ * unresolved providers to the scope-bound {@see PriceFetcherAgent} verifier in
+ * a single bounded agent run. Every run is audited on {@see AiPriceRefreshRun}
+ * with compact counters only; raw source payloads are never persisted.
  *
  * Fallback policy: provider-level failures escalate to the verifier — a
  * global feed failure (transport, invalid JSON/shape), a requested provider
@@ -43,11 +45,14 @@ use Throwable;
  * solely by the anomaly guard ({@see WriteOutcome::RejectedAnomalous}) is not
  * written and joins the same verifier run as an exact provider/model target,
  * where a receipt-backed first-party verified value may bypass the guard; a
- * failed or absent verification preserves the stored value. Other model-level
- * rejections (deprecated, non-text output, malformed model, missing or invalid
- * costs) are counted and skipped without waking the agent. On a global failure
- * with an unbounded scope, fallback covers the core six providers; Groq,
- * Cohere, and OpenRouter join only when the caller explicitly scoped them.
+ * failed or absent verification preserves the stored value. A model whose
+ * feeds disagreed ({@see ProviderPricingResult::$conflicts}) is not written
+ * and joins the verifier run as an exact provider/model target, like an
+ * anomaly. Other model-level rejections (deprecated, non-text output,
+ * malformed model, missing or invalid costs) are counted and skipped without
+ * waking the agent. On a global failure with an unbounded scope, fallback
+ * covers the core six providers; Groq, Cohere, and OpenRouter join only when
+ * the caller explicitly scoped them.
  *
  * Target resolution is ledger-driven, counts ONLY verification-grade
  * (receipt-backed, primary-rates-supplied) outcomes, and works at two
@@ -97,8 +102,6 @@ final class AiPriceRefreshCoordinator
     /**
      * Models.dev feed status stamped on the run.
      */
-    private const string FEED_OK = 'ok';
-
     private const string FEED_SKIPPED = 'skipped';
 
     private const string FEED_DISABLED = 'disabled';
@@ -133,7 +136,7 @@ final class AiPriceRefreshCoordinator
     /**
      * Provider => outcome counters and rejection codes accumulated per run.
      *
-     * @var array<string, array{status: string, created: int, updated: int, unchanged: int, locked: int, rejected: int, anomalous: int, tiered: int, discrepancies: int, create_disabled: int, rejections: array<string, int>}>
+     * @var array<string, array{status: string, created: int, updated: int, unchanged: int, locked: int, rejected: int, anomalous: int, tiered: int, discrepancies: int, create_disabled: int, consensus: int, conflicts: int, rejections: array<string, int>}>
      */
     private array $providerStates = [];
 
@@ -189,9 +192,15 @@ final class AiPriceRefreshCoordinator
      */
     private array $sourceCitations = [];
 
+    /**
+     * Pricing source key => status for this run, as reported by the catalog.
+     *
+     * @var array<string, string>
+     */
+    private array $sourceStatuses = [];
+
     public function __construct(
-        private readonly ModelsDevPricingClient $modelsDevPricingClient,
-        private readonly ModelsDevPricingAdapter $modelsDevPricingAdapter,
+        private readonly PricingCatalog $pricingCatalog,
         private readonly AiModelPriceWriter $aiModelPriceWriter,
         private readonly AiBudgetGuard $aiBudgetGuard,
         private readonly InUsePricingModels $inUsePricingModels,
@@ -223,6 +232,7 @@ final class AiPriceRefreshCoordinator
         $this->unverifiedTargets = [];
         $this->writeFailureMessage = null;
         $this->sourceCitations = [];
+        $this->sourceStatuses = [];
 
         // Dry runs suppress writes. A plain dry run also skips the agent (its
         // writes would persist), while `--verify --dry-run` (spec §22) still
@@ -255,7 +265,7 @@ final class AiPriceRefreshCoordinator
             } elseif ($source === self::SOURCE_AGENT) {
                 $modelsDevStatus = self::FEED_SKIPPED;
                 $this->queueAllForFallback($requested, $scope, self::PROVIDER_FEED_UNAVAILABLE);
-            } elseif ($source === self::SOURCE_HYBRID && ! resolve(AiSettings::class)->modelsDevPricingEnabled()) {
+            } elseif ($source === self::SOURCE_HYBRID && ! $this->pricingCatalog->anySourceEnabled()) {
                 $modelsDevStatus = self::FEED_DISABLED;
                 $this->queueAllForFallback($requested, $scope, self::PROVIDER_FEED_UNAVAILABLE);
             } else {
@@ -288,9 +298,10 @@ final class AiPriceRefreshCoordinator
     }
 
     /**
-     * Fetch and persist the Models.dev feed slice of the run. Returns the feed
-     * status; on a global source failure, queues fallback (hybrid only) and
-     * records the failure message into `$errorMessage`.
+     * Fetch and persist every enabled pricing source's slice of the run.
+     * Returns the models.dev status (`ok`, `disabled`, or a transport
+     * category); on a global source failure, queues fallback (hybrid only)
+     * and records the failure message into `$errorMessage`.
      */
     private function runFeedPhase(
         string $source,
@@ -299,10 +310,13 @@ final class AiPriceRefreshCoordinator
         bool $dryRun,
         ?string &$errorMessage,
     ): string {
-        try {
-            $decoded = $this->modelsDevPricingClient->fetch();
-        } catch (ModelsDevTransportException $modelsDevTransportException) {
-            $errorMessage = $modelsDevTransportException->getMessage();
+        $pricingCatalogResult = $this->pricingCatalog->fetch($refreshScope, modelsDevOnly: $source === self::SOURCE_MODELS_DEV);
+
+        $this->sourceStatuses = $pricingCatalogResult->sourceStatuses;
+        $modelsDevStatus = $pricingCatalogResult->sourceStatuses[PricingCatalog::SOURCE_MODELS_DEV] ?? self::FEED_DISABLED;
+
+        if ($pricingCatalogResult->unavailable) {
+            $errorMessage = $pricingCatalogResult->errorMessage ?? 'No pricing source produced data.';
 
             $this->queueAllForFallback(
                 $requested,
@@ -311,10 +325,10 @@ final class AiPriceRefreshCoordinator
                 fallbackAllowed: $source === self::SOURCE_HYBRID,
             );
 
-            return $modelsDevTransportException->category;
+            return $modelsDevStatus;
         }
 
-        $results = $this->modelsDevPricingAdapter->adapt($decoded, $refreshScope);
+        $results = $pricingCatalogResult->providers;
 
         foreach ($requested as $provider) {
             $result = $results[$provider] ?? null;
@@ -339,6 +353,7 @@ final class AiPriceRefreshCoordinator
                 // like a missing provider rather than counting as succeeded.
                 $this->recordRejectionCodes($provider, $result->rejections);
                 $this->providerStates[$provider]['rejected'] += count($result->rejections);
+                $this->providerStates[$provider]['conflicts'] += count($result->conflicts);
                 $this->resolveProviderFailure($provider, $refreshScope, self::PROVIDER_INCOMPLETE, $source === self::SOURCE_HYBRID);
 
                 continue;
@@ -347,7 +362,7 @@ final class AiPriceRefreshCoordinator
             $this->writeProviderCandidates($provider, $result, $refreshScope, $dryRun, $source === self::SOURCE_HYBRID);
         }
 
-        return self::FEED_OK;
+        return $modelsDevStatus;
     }
 
     /**
@@ -374,7 +389,13 @@ final class AiPriceRefreshCoordinator
         try {
             DB::transaction(function () use ($providerPricingResult, $refreshScope, $dryRun, &$state, &$anomalousModels): void {
                 foreach ($providerPricingResult->candidates as $candidate) {
-                    $outcome = $this->aiModelPriceWriter->write($candidate, $refreshScope, PricingSource::ModelsDev, dryRun: $dryRun);
+                    $outcome = $this->aiModelPriceWriter->write(
+                        $candidate,
+                        $refreshScope,
+                        $candidate->source,
+                        dryRun: $dryRun,
+                        firstPartyVerified: $candidate->source->isFirstPartyApi(),
+                    );
 
                     match ($outcome) {
                         WriteOutcome::Created, WriteOutcome::WouldCreate => $state['created']++,
@@ -429,11 +450,17 @@ final class AiPriceRefreshCoordinator
         }
 
         $this->providerStates[$provider] = $state;
+        $this->providerStates[$provider]['consensus'] += count(array_filter(
+            $providerPricingResult->candidates,
+            static fn (ModelPriceCandidate $modelPriceCandidate): bool => $modelPriceCandidate->source === PricingSource::FeedConsensus,
+        ));
+        $this->providerStates[$provider]['conflicts'] += count($providerPricingResult->conflicts);
 
-        // Anomaly-withheld candidates ride the same verifier run as exact
-        // provider/model targets; the provider itself stays feed-resolved.
-        foreach ($anomalousModels as $anomalouModel) {
-            $this->fallbackTargets[$provider][] = $anomalouModel;
+        // Anomaly-withheld candidates and feed conflicts ride the same
+        // verifier run as exact provider/model targets; the provider itself
+        // stays feed-resolved.
+        foreach ([...$anomalousModels, ...$providerPricingResult->conflicts] as $targetModel) {
+            $this->fallbackTargets[$provider][] = $targetModel;
         }
     }
 
@@ -888,7 +915,7 @@ final class AiPriceRefreshCoordinator
     /**
      * Fetch (or initialize) the mutable per-provider counter state.
      *
-     * @return array{status: string, created: int, updated: int, unchanged: int, locked: int, rejected: int, anomalous: int, tiered: int, discrepancies: int, create_disabled: int, rejections: array<string, int>}
+     * @return array{status: string, created: int, updated: int, unchanged: int, locked: int, rejected: int, anomalous: int, tiered: int, discrepancies: int, create_disabled: int, consensus: int, conflicts: int, rejections: array<string, int>}
      */
     private function providerState(string $provider, string $initialStatus): array
     {
@@ -903,6 +930,8 @@ final class AiPriceRefreshCoordinator
             'tiered' => 0,
             'discrepancies' => 0,
             'create_disabled' => 0,
+            'consensus' => 0,
+            'conflicts' => 0,
             'rejections' => [],
         ];
     }
@@ -1000,6 +1029,7 @@ final class AiPriceRefreshCoordinator
             'unverified_targets' => $auditTargets === [] ? null : $auditTargets,
             'provider_results' => $providerResults,
             'source_citations' => $this->sourceCitations === [] ? null : $this->sourceCitations,
+            'source_statuses' => $this->sourceStatuses === [] ? null : $this->sourceStatuses,
             'error_message' => $errorMessage,
             'completed_at' => CarbonImmutable::now(),
         ]);
@@ -1028,6 +1058,7 @@ final class AiPriceRefreshCoordinator
             errorMessage: $errorMessage,
             mode: $mode,
             modelsCreateDisabled: $totals['create_disabled'],
+            sourceStatuses: $this->sourceStatuses,
         );
     }
 

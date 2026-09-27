@@ -402,3 +402,49 @@ test('index maps upstream provider spellings to the canonical checkbox values', 
             ->where('settings.ignored_pricing_providers', ['gemini'])
         );
 });
+
+test('index exposes the structured pricing source switches', function (): void {
+    $admin = User::factory()->admin()->create();
+    config()->set('mediamanager.ai.pricing.openrouter.enabled', true);
+    config()->set('ai.providers.xai.key');
+
+    $this->actingAs($admin)
+        ->get(route('admin.ai-settings.index'))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->component('Admin/AiSettings/Index')
+            ->where('settings.openrouter_pricing_enabled', true)
+            ->where('settings.litellm_pricing_enabled', false)
+            ->where('settings.xai_pricing_enabled', false)
+            ->where('settings.xai_pricing_key_configured', false)
+        );
+});
+
+test('admin can save the structured pricing source switches', function (): void {
+    $admin = User::factory()->admin()->create();
+
+    $this->actingAs($admin)
+        ->put(route('admin.ai-settings.update'), [
+            ...baseAiSettingsPayload(),
+            'openrouter_pricing_enabled' => '1',
+            'litellm_pricing_enabled' => '1',
+            'xai_pricing_enabled' => '0',
+        ])
+        ->assertRedirect(route('admin.ai-settings.index'))
+        ->assertSessionHasNoErrors();
+
+    $aiSettings = resolve(AiSettings::class);
+
+    expect($aiSettings->openRouterPricingEnabled())->toBeTrue()
+        ->and($aiSettings->liteLlmPricingEnabled())->toBeTrue()
+        ->and($aiSettings->xaiPricingEnabled())->toBeFalse();
+});
+
+test('structured pricing source switches must be booleans', function (): void {
+    $this->actingAs(User::factory()->admin()->create())
+        ->put(route('admin.ai-settings.update'), [
+            ...baseAiSettingsPayload(),
+            'openrouter_pricing_enabled' => 'sometimes',
+        ])
+        ->assertSessionHasErrors('openrouter_pricing_enabled');
+});

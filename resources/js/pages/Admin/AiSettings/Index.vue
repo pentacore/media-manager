@@ -40,6 +40,10 @@ interface AiSettingsState {
     chat_timeout: number;
     failover_provider: string;
     models_dev_pricing_enabled: boolean;
+    openrouter_pricing_enabled: boolean;
+    litellm_pricing_enabled: boolean;
+    xai_pricing_enabled: boolean;
+    xai_pricing_key_configured: boolean;
     rate_limits_enforced: boolean;
     ignored_pricing_providers: string[];
     auto_create_pricing_providers: string[];
@@ -107,6 +111,9 @@ const titleModel = ref(props.settings.title_model);
 const selectedReasoningLevel = ref(props.settings.advisor_reasoning_level);
 const selectedFailoverProvider = ref(props.settings.failover_provider);
 const modelsDevPricingEnabled = ref(props.settings.models_dev_pricing_enabled);
+const openRouterPricingEnabled = ref(props.settings.openrouter_pricing_enabled);
+const liteLlmPricingEnabled = ref(props.settings.litellm_pricing_enabled);
+const xaiPricingEnabled = ref(props.settings.xai_pricing_enabled);
 const rateLimitsEnforced = ref(props.settings.rate_limits_enforced);
 const ignoredPricingProviders = ref<string[]>([
     ...props.settings.ignored_pricing_providers,
@@ -1034,7 +1041,7 @@ const budgetState = computed<{
                     >
                         <Field
                             label="Models.dev feed"
-                            hint="When enabled, the price refresh pulls the public models.dev catalog. When disabled, refreshes fall back to the first-party verifier agent only."
+                            hint="Primary price feed for direct providers. When every source is disabled, refreshes fall back to the first-party verifier agent only."
                         >
                             <span />
                         </Field>
@@ -1055,6 +1062,108 @@ const budgetState = computed<{
                             />
                             <InputError
                                 :message="errors.models_dev_pricing_enabled"
+                                class="mt-1"
+                            />
+                        </div>
+                    </div>
+
+                    <div
+                        class="grid items-start gap-6"
+                        style="grid-template-columns: 200px 1fr"
+                    >
+                        <Field
+                            label="LiteLLM cross-check"
+                            hint="Cross-checks models.dev against the LiteLLM price map and fills in models models.dev lacks. Agreeing prices are marked as confirmed; conflicts go to the verifier agent."
+                        >
+                            <span />
+                        </Field>
+                        <div>
+                            <Toggle
+                                v-model="liteLlmPricingEnabled"
+                                data-litellm-pricing-toggle
+                                :label="
+                                    liteLlmPricingEnabled
+                                        ? 'Enabled'
+                                        : 'Disabled'
+                                "
+                            />
+                            <input
+                                type="hidden"
+                                name="litellm_pricing_enabled"
+                                :value="liteLlmPricingEnabled ? '1' : '0'"
+                            />
+                            <InputError
+                                :message="errors.litellm_pricing_enabled"
+                                class="mt-1"
+                            />
+                        </div>
+                    </div>
+
+                    <div
+                        class="grid items-start gap-6"
+                        style="grid-template-columns: 200px 1fr"
+                    >
+                        <Field
+                            label="OpenRouter API"
+                            hint="Prices OpenRouter model rows from OpenRouter's public models API."
+                        >
+                            <span />
+                        </Field>
+                        <div>
+                            <Toggle
+                                v-model="openRouterPricingEnabled"
+                                data-openrouter-pricing-toggle
+                                :label="
+                                    openRouterPricingEnabled
+                                        ? 'Enabled'
+                                        : 'Disabled'
+                                "
+                            />
+                            <input
+                                type="hidden"
+                                name="openrouter_pricing_enabled"
+                                :value="openRouterPricingEnabled ? '1' : '0'"
+                            />
+                            <InputError
+                                :message="errors.openrouter_pricing_enabled"
+                                class="mt-1"
+                            />
+                        </div>
+                    </div>
+
+                    <div
+                        class="grid items-start gap-6"
+                        style="grid-template-columns: 200px 1fr"
+                    >
+                        <Field
+                            label="xAI pricing API"
+                            hint="Prices xAI rows from xAI's own pricing API. These prices count as first-party verified."
+                        >
+                            <span />
+                        </Field>
+                        <div>
+                            <Toggle
+                                v-model="xaiPricingEnabled"
+                                data-xai-pricing-toggle
+                                :label="
+                                    xaiPricingEnabled ? 'Enabled' : 'Disabled'
+                                "
+                            />
+                            <input
+                                type="hidden"
+                                name="xai_pricing_enabled"
+                                :value="xaiPricingEnabled ? '1' : '0'"
+                            />
+                            <p
+                                v-if="!settings.xai_pricing_key_configured"
+                                data-xai-pricing-key-missing
+                                class="mt-1 text-xs text-warning"
+                            >
+                                No XAI_API_KEY is configured, so this source is
+                                skipped and xAI falls back to the feeds.
+                            </p>
+                            <InputError
+                                :message="errors.xai_pricing_enabled"
                                 class="mt-1"
                             />
                         </div>

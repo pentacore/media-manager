@@ -82,6 +82,35 @@ return [
                 'retries' => 2,
                 'max_response_bytes' => 10_000_000,
             ],
+            // Structured pricing sources. Each ships OFF like models.dev.
+            // OpenRouter prices the `openrouter` rows from its public models
+            // API; LiteLLM's community price map cross-checks models.dev for
+            // direct providers; xAI's first-party pricing API prices `xai`
+            // rows using the xAI provider key (ai.providers.xai.key).
+            'openrouter' => [
+                'enabled' => env('AI_PRICING_OPENROUTER_ENABLED', false),
+                'url' => env('AI_PRICING_OPENROUTER_URL', 'https://openrouter.ai/api/v1/models'),
+                'connect_timeout' => 10,
+                'timeout' => 30,
+                'retries' => 2,
+                'max_response_bytes' => 10_000_000,
+            ],
+            'litellm' => [
+                'enabled' => env('AI_PRICING_LITELLM_ENABLED', false),
+                'url' => env('AI_PRICING_LITELLM_URL', 'https://raw.githubusercontent.com/BerriAI/litellm/main/model_prices_and_context_window.json'),
+                'connect_timeout' => 10,
+                'timeout' => 30,
+                'retries' => 2,
+                'max_response_bytes' => 20_000_000,
+            ],
+            'xai' => [
+                'enabled' => env('AI_PRICING_XAI_ENABLED', false),
+                'url' => env('AI_PRICING_XAI_URL', 'https://api.x.ai/v1/language-models'),
+                'connect_timeout' => 10,
+                'timeout' => 30,
+                'retries' => 2,
+                'max_response_bytes' => 5_000_000,
+            ],
             // Model the price updater agent runs on; empty follows the chat model.
             'updater_model' => env('AI_PRICING_UPDATER_MODEL', ''),
             'max_increase_ratio' => 4.0,
