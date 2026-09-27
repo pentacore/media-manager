@@ -3,11 +3,13 @@
 declare(strict_types=1);
 
 use App\Enums\ActionRequestStatus;
+use App\Enums\AiMode;
 use App\Jobs\ExecuteActionRequest;
 use App\Models\ActionRequest;
 use App\Models\ActionTypeConfig;
 use App\Models\ServiceConnection;
 use App\Models\User;
+use App\Settings\AiSettings;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Queue;
 
@@ -345,4 +347,29 @@ test('destroy reports a disabled rule', function (): void {
 
     Http::assertNotSent(fn ($request): bool => $request->method() === 'DELETE');
     expect(ActionRequest::query()->where('type', 'delete_movie')->exists())->toBeFalse();
+});
+
+test('destroy follows the rule even when the chat AI is in advisory mode', function (): void {
+    resolve(AiSettings::class)->setMode(AiMode::Advisory);
+    $member = User::factory()->member()->create();
+    ActionTypeConfig::factory()->create([
+        'type' => 'delete_movie',
+        'requires_approval' => false,
+        'is_enabled' => true,
+    ]);
+
+    Http::fake([
+        'radarr.local:7878/api/v3/movie/42' => Http::response([
+            'id' => 42, 'title' => 'My Movie', 'year' => 2024,
+        ]),
+    ]);
+    Queue::fake();
+
+    $this->actingAs($member)
+        ->delete(route('media.movies.destroy', 42))
+        ->assertRedirect(route('media.movies.index'));
+
+    $actionRequest = ActionRequest::query()->where('type', 'delete_movie')->sole();
+    expect($actionRequest->status)->toBe(ActionRequestStatus::Approved);
+    Queue::assertPushed(ExecuteActionRequest::class, fn (ExecuteActionRequest $executeActionRequest): bool => $executeActionRequest->actionRequest->id === $actionRequest->id);
 });

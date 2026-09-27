@@ -27,7 +27,9 @@ class ActionOrchestrator
      *
      * Advisory mode override: when AiSettings::mode() === Advisory, every request
      * is forced to Pending regardless of ActionTypeConfig.requires_approval, and
-     * ExecuteActionRequest is never dispatched.
+     * ExecuteActionRequest is never dispatched. It does not apply to
+     * origin 'manual': a human acting from the UI is governed by the action
+     * rule alone, not by the chat AI's mode.
      *
      * $forceRequiresApproval lets a caller add (never remove) an approval
      * requirement for a single instance — e.g. a partially-mapped manual import
@@ -70,7 +72,7 @@ class ActionOrchestrator
             return null;
         }
 
-        $advisoryMode = $this->aiSettings->mode() === AiMode::Advisory;
+        $advisoryMode = $origin !== 'manual' && $this->aiSettings->mode() === AiMode::Advisory;
         // The override can only tighten the gate (force approval), never relax it.
         $requiresApproval = $advisoryMode
             || $config->requires_approval
