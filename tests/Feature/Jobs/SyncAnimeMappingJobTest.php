@@ -235,7 +235,7 @@ test('handle throws and keeps existing rows when a valid list has fewer than the
 });
 
 test('job has unique-for duration', function (): void {
-    $job = new SyncAnimeMappingJob();
+    $job = new SyncAnimeMappingJob;
     $reflection = new ReflectionClass($job);
 
     expect($reflection->getAttributes(UniqueFor::class)[0]->newInstance()->uniqueFor)->toBe(1800);

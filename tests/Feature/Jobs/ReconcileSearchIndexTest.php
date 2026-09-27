@@ -105,7 +105,7 @@ test('radarr reconciliation shares the failed-upsert protection', function (): v
 });
 
 test('job has unique-for duration', function (): void {
-    $job = new ReconcileSearchIndex();
+    $job = new ReconcileSearchIndex;
     $reflection = new ReflectionClass($job);
 
     expect($reflection->getAttributes(UniqueFor::class)[0]->newInstance()->uniqueFor)->toBe(1800);
