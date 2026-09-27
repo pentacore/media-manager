@@ -77,7 +77,7 @@ test('the Advisor job is unique and waits for concurrency without retrying excep
         ->and($reflection->getAttributes(MaxExceptions::class)[0]->newInstance()->maxExceptions)->toBe(1)
         ->and($reflection->getAttributes(FailOnTimeout::class))->toHaveCount(1)
         ->and($reflection->getAttributes(Timeout::class)[0]->newInstance()->timeout)->toBe(180)
-        ->and($reflection->getAttributes(UniqueFor::class)[0]->newInstance()->uniqueFor)->toBe(900)
+        ->and($reflection->getAttributes(UniqueFor::class)[0]->newInstance()->uniqueFor)->toBe(1080)
         ->and($job->middleware())->toHaveCount(1)
         ->and($job->middleware()[0])->toBeInstanceOf(LimitSubtitleAdvisorConcurrency::class)
         ->and($job->retryUntil()->getTimestamp())

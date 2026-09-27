@@ -45,7 +45,7 @@ use Throwable;
 #[Tries(0)]
 #[MaxExceptions(1)]
 #[FailOnTimeout]
-#[UniqueFor(900)]
+#[UniqueFor(1080)]
 final class RunSubtitleAdvisor implements ShouldBeUnique, ShouldQueue
 {
     use Dispatchable;
