@@ -13,6 +13,8 @@ use App\Ai\Tools\Arr\SearchMediaTool;
 use App\Settings\AiSettings;
 use Generator;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
+use Illuminate\JsonSchema\Types\Type;
+use Illuminate\Support\Facades\Date;
 use Illuminate\Support\Str;
 use Laravel\Ai\Approvals\Decisions;
 use Laravel\Ai\Attributes\MaxSteps;
@@ -82,6 +84,9 @@ PROMPT;
         ];
     }
 
+    /**
+     * @return array<string, Type>
+     */
     public function schema(JsonSchema $schema): array
     {
         return [
@@ -127,7 +132,7 @@ PROMPT;
             $meta->provider = $agentResponse->meta->provider;
             $meta->model = $agentResponse->meta->model;
 
-            yield new TextDelta(Str::lower((string) Str::uuid7()), Str::lower((string) Str::uuid7()), $agentResponse->text, time());
+            yield new TextDelta(Str::lower((string) Str::uuid7()), Str::lower((string) Str::uuid7()), $agentResponse->text, Date::now()->getTimestamp());
         }, $meta);
 
         return $streamableAgentResponse;

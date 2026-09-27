@@ -11,6 +11,7 @@ use Illuminate\Support\Facades\Event;
 use Laravel\Ai\Events\AgentFailed;
 use Laravel\Ai\Events\StepCompleted;
 use Laravel\Ai\Prompts\AgentPrompt;
+use Laravel\Ai\Responses\AgentResponse;
 use Laravel\Ai\Responses\Data\Meta;
 use Laravel\Ai\Responses\Data\TextUsage;
 use Laravel\Ai\Responses\Data\ToolCall;
@@ -45,7 +46,7 @@ test('a run that fails after a completed step bills the completed step as failed
 
     // A faked ToolCall step carries zero usage, so this pins the row and error;
     // the next test pins partial-token pricing via the accumulator directly.
-    expect(fn () => (new DecisionAgent)->prompt('event'))->toThrow(RuntimeException::class);
+    expect(fn (): AgentResponse => (new DecisionAgent)->prompt('event'))->toThrow(RuntimeException::class);
 
     expect($accumulatedModels)->not->toBeEmpty()->each->toBeString();
 
@@ -80,8 +81,8 @@ test('a failed run with accumulated usage prices the partial tokens', function (
 test('a successful run discards its accumulator entry', function (): void {
     DecisionAgent::fake([new TextResponse('ok', new TextUsage(10, 5), new Meta('openai', 'gpt-5-mini'))]);
 
-    $response = (new DecisionAgent)->prompt('event');
+    $agentResponse = (new DecisionAgent)->prompt('event');
 
-    expect(resolve(RunUsageAccumulator::class)->usage($response->invocationId))->toBeNull()
-        ->and(AiUsageRecord::where('invocation_id', $response->invocationId)->value('status'))->toBe('success');
+    expect(resolve(RunUsageAccumulator::class)->usage($agentResponse->invocationId))->toBeNull()
+        ->and(AiUsageRecord::where('invocation_id', $agentResponse->invocationId)->value('status'))->toBe('success');
 });

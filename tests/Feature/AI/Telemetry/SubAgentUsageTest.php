@@ -45,11 +45,11 @@ test('sdk behaviour: parent usage includes sub-agent usage', function (): void {
         new TextResponse('parent done', new TextUsage(1000, 50), new Meta('openai', 'gpt-5-mini')),
     ]);
 
-    $response = (new BillingParentFixtureAgent)->prompt('go');
+    $agentResponse = (new BillingParentFixtureAgent)->prompt('go');
 
     // 1.0 does not fold sub-agent usage into the parent response, so each
     // row bills only its own run. A future SDK change here breaks loudly.
-    expect($response->usage->inputTokens)->toBe(1000);
+    expect($agentResponse->usage->inputTokens)->toBe(1000);
 })->group('characterization');
 
 test('parent and child are each billed once and linked', function (): void {
@@ -59,10 +59,10 @@ test('parent and child are each billed once and linked', function (): void {
         new TextResponse('parent done', new TextUsage(1000, 50), new Meta('openai', 'gpt-5-mini')),
     ]);
 
-    $response = (new BillingParentFixtureAgent)->prompt('go');
+    $agentResponse = (new BillingParentFixtureAgent)->prompt('go');
 
-    $parent = AiUsageRecord::where('invocation_id', $response->invocationId)->sole();
-    $child = AiUsageRecord::where('parent_invocation_id', $response->invocationId)->sole();
+    $parent = AiUsageRecord::where('invocation_id', $agentResponse->invocationId)->sole();
+    $child = AiUsageRecord::where('parent_invocation_id', $agentResponse->invocationId)->sole();
 
     expect($child->agent_class)->toBe(BillingChildFixtureAgent::class)
         ->and($child->prompt_tokens)->toBe(100)

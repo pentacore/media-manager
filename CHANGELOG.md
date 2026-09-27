@@ -1,3 +1,10 @@
+# [1.21.0](https://github.com/pentacore/media-manager/compare/v1.20.0...v1.21.0) (2026-09-27)
+
+
+### Features
+
+* **pricing:** dedicated price updater model and in-use model creation ([b871b41](https://github.com/pentacore/media-manager/commit/b871b417141b8f79ebf7becb365228f82d099c43))
+
 # [1.20.0](https://github.com/pentacore/media-manager/compare/v1.19.0...v1.20.0) (2026-09-26)
 
 

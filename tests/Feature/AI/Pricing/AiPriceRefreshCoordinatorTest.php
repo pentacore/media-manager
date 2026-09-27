@@ -16,6 +16,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Sleep;
 use Illuminate\Support\Str;
+use Laravel\Ai\Enums\Lab;
 use Laravel\Ai\Prompts\AgentPrompt;
 use Laravel\Ai\Responses\Data\Meta;
 use Laravel\Ai\Responses\Data\TextUsage;
@@ -200,8 +201,10 @@ test('full feed success writes the catalog without invoking the agent', function
         ->and($aiPriceRefreshRun->completed_at)->not->toBeNull();
 });
 
-test('global transport failure falls back to the six core providers only', function (): void {
+test('global transport failure falls back to every provider with something to refresh', function (): void {
     Sleep::fake();
+    config()->set('ai.providers.openrouter.key');
+    config()->set('ai.providers.cohere.key');
     fakeVerifierWrites([
         'openai' => ['gpt-verify'],
         'anthropic' => ['claude-verify'],
@@ -209,18 +212,22 @@ test('global transport failure falls back to the six core providers only', funct
         'xai' => ['grok-verify'],
         'deepseek' => ['deepseek-verify'],
         'mistral' => ['mistral-verify'],
+        'groq' => ['groq-verify'],
+        'cohere' => ['cohere-verify'],
     ]);
 
     Http::fake(['models.dev/*' => Http::response('upstream down', 500)]);
 
     $refreshReport = runCoordinator();
 
+    // OpenRouter is update-only by default with no stored or in-use models,
+    // so it settles without a verifier target instead of being queued.
     expect($refreshReport->modelsDevStatus)->toBe('server_error')
-        ->and($refreshReport->fallbackProviders)->toBe(['openai', 'anthropic', 'gemini', 'xai', 'deepseek', 'mistral'])
+        ->and($refreshReport->fallbackProviders)->toBe(['openai', 'anthropic', 'gemini', 'xai', 'deepseek', 'mistral', 'groq', 'cohere'])
         ->and($refreshReport->providersRequested)->toBe(9)
-        ->and($refreshReport->providersSucceeded)->toBe(6)
-        ->and($refreshReport->providersFailed)->toBe(3)
-        ->and($refreshReport->finalResult)->toBe(RefreshReport::RESULT_PARTIAL);
+        ->and($refreshReport->providersSucceeded)->toBe(9)
+        ->and($refreshReport->providersFailed)->toBe(0)
+        ->and($refreshReport->finalResult)->toBe(RefreshReport::RESULT_SUCCEEDED);
 
     // The static prompt text names every provider identity, so target scoping
     // is asserted through the canonical source URLs the run lists.
@@ -228,14 +235,13 @@ test('global transport failure falls back to the six core providers only', funct
         $instructions = (string) $agentPrompt->agent->instructions();
 
         return str_contains($instructions, 'https://api-docs.deepseek.com/quick_start/pricing')
-            && str_contains($instructions, 'https://mistral.ai/pricing/')
-            && ! str_contains($instructions, 'https://groq.com/pricing')
-            && ! str_contains($instructions, 'https://cohere.com/pricing')
+            && str_contains($instructions, 'https://groq.com/pricing')
+            && str_contains($instructions, 'https://cohere.com/pricing')
             && ! str_contains($instructions, 'https://openrouter.ai/api/v1/models');
     });
 
     $aiPriceRefreshRun = AiPriceRefreshRun::query()->findOrFail($refreshReport->runId);
-    expect($aiPriceRefreshRun->fallback_targets)->toBe(['openai', 'anthropic', 'gemini', 'xai', 'deepseek', 'mistral'])
+    expect($aiPriceRefreshRun->fallback_targets)->toBe(['openai', 'anthropic', 'gemini', 'xai', 'deepseek', 'mistral', 'groq', 'cohere'])
         ->and($aiPriceRefreshRun->models_dev_status)->toBe('server_error');
 });
 
@@ -1383,14 +1389,79 @@ test('the feed creates new openrouter models once openrouter is on the auto-crea
         ->and(AiModelPrice::query()->where('provider', 'openrouter')->where('model', 'vendor/brand-new')->exists())->toBeTrue();
 });
 
-test('an update-only provider with no stored rows settles without waking the verifier', function (): void {
+test('the feed creates in-use models for an update-only provider and skips the rest', function (): void {
+    PriceFetcherAgent::fake(['ok']);
+    resolve(AiSettings::class)->setAutoCreatePricingProviders([]);
+    AiUsageRecord::factory()->create(['provider' => 'openrouter', 'model' => 'vendor/used']);
+
+    fakeFeed([
+        'openrouter' => ['models' => [
+            'vendor/used' => feedModel(1.0, 2.0),
+            'vendor/unused' => feedModel(1.0, 2.0),
+        ]],
+    ]);
+
+    $refreshReport = runCoordinator(scope: RefreshScope::forProviders(['openrouter']));
+
+    PriceFetcherAgent::assertNeverPrompted();
+
+    expect($refreshReport->finalResult)->toBe(RefreshReport::RESULT_SUCCEEDED)
+        ->and($refreshReport->modelsCreated)->toBe(1)
+        ->and($refreshReport->modelsCreateDisabled)->toBe(1)
+        ->and(AiModelPrice::query()->where('provider', 'openrouter')->pluck('model')->all())->toBe(['vendor/used']);
+});
+
+test('an update-only provider with in-use models but no stored rows still reaches the verifier', function (): void {
+    Sleep::fake();
+    config()->set('ai.providers.openrouter.key', 'openrouter-test-key');
+    resolve(AiSettings::class)->setAutoCreatePricingProviders([]);
+    resolve(AiSettings::class)->setClassificationModel('vendor/classifier');
+
+    fakeVerifierWrites(['openrouter' => ['vendor/classifier', 'vendor/unused']]);
+    Http::fake(['models.dev/*' => Http::response('upstream down', 500)]);
+
+    $refreshReport = runCoordinator(scope: RefreshScope::forProviders(['openrouter']));
+
+    PriceFetcherAgent::assertPrompted(fn (AgentPrompt $agentPrompt): bool => str_contains(
+        (string) $agentPrompt->agent->instructions(),
+        'plus these models the app uses, which may be added: vendor/classifier',
+    ));
+
+    expect($refreshReport->finalResult)->toBe(RefreshReport::RESULT_SUCCEEDED)
+        ->and($refreshReport->fallbackProviders)->toBe(['openrouter'])
+        ->and($refreshReport->modelsCreated)->toBe(1)
+        ->and($refreshReport->modelsCreateDisabled)->toBe(1)
+        ->and(AiModelPrice::query()->where('provider', 'openrouter')->pluck('model')->all())->toBe(['vendor/classifier']);
+});
+
+test('the verifier runs on the configured price updater model', function (?Lab $failover): void {
+    config()->set('ai.default', 'openai');
+    resolve(AiSettings::class)->setFailoverProvider($failover);
+    resolve(AiSettings::class)->setModel('gpt-chat');
+    resolve(AiSettings::class)->setPriceUpdaterModel('gpt-updater');
+    PriceFetcherAgent::fake(['done']);
+    Http::fake();
+
+    runCoordinator(
+        source: AiPriceRefreshCoordinator::SOURCE_AGENT,
+        scope: RefreshScope::forProviders(['anthropic']),
+    );
+
+    PriceFetcherAgent::assertPrompted(fn (AgentPrompt $agentPrompt): bool => $agentPrompt->model === 'gpt-updater');
+})->with([
+    'without failover' => [null],
+    'with failover' => [Lab::Anthropic],
+]);
+
+test('an update-only provider with no stored or in-use models settles without waking the verifier', function (): void {
     Sleep::fake();
     PriceFetcherAgent::fake(['ok']);
     resolve(AiSettings::class)->setAutoCreatePricingProviders([]);
 
     Http::fake(['models.dev/*' => Http::response('upstream down', 500)]);
 
-    $refreshReport = runCoordinator(scope: RefreshScope::forProviders(['openai']));
+    // Groq is never the primary provider here, so no configured model is in use.
+    $refreshReport = runCoordinator(scope: RefreshScope::forProviders(['groq']));
 
     PriceFetcherAgent::assertNeverPrompted();
 

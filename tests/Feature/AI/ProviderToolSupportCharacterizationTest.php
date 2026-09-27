@@ -12,6 +12,7 @@ use Laravel\Ai\Exceptions\FailoverableException;
 use Laravel\Ai\Promptable;
 use Laravel\Ai\Providers\Tools\CodeExecution;
 use Laravel\Ai\Providers\Tools\ToolSearch;
+use Laravel\Ai\Responses\AgentResponse;
 use LogicException;
 use RuntimeException;
 use Throwable;
@@ -68,7 +69,7 @@ beforeEach(function (): void {
 });
 
 test('sdk behaviour: ToolSearch on a provider without tool search throws a non-failoverable LogicException', function (): void {
-    $throwable = characterizationFailure(fn () => (new ToolSearchCharacterizationAgent)->prompt('hi', provider: 'gemini', model: 'gemini-3.7-flash'));
+    $throwable = characterizationFailure(fn (): AgentResponse => (new ToolSearchCharacterizationAgent)->prompt('hi', provider: 'gemini', model: 'gemini-3.7-flash'));
 
     expect($throwable)->toBeInstanceOf(LogicException::class)
         ->and($throwable->getMessage())->toContain('does not support tool search')
@@ -78,7 +79,7 @@ test('sdk behaviour: ToolSearch on a provider without tool search throws a non-f
 })->group('characterization');
 
 test('sdk behaviour: CodeExecution on a chat-completions provider throws a non-failoverable error before any request', function (): void {
-    $throwable = characterizationFailure(fn () => (new CodeExecutionCharacterizationAgent)->prompt('hi', provider: 'groq', model: 'llama-4-scout'));
+    $throwable = characterizationFailure(fn (): AgentResponse => (new CodeExecutionCharacterizationAgent)->prompt('hi', provider: 'groq', model: 'llama-4-scout'));
 
     expect($throwable)->toBeInstanceOf(RuntimeException::class)
         ->and($throwable->getMessage())->toContain('does not support [CodeExecution] provider tools')

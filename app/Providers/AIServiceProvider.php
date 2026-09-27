@@ -9,6 +9,7 @@ use App\Listeners\Ai\EnforceAiRateLimit;
 use App\Listeners\Ai\RecordAgentUsage;
 use App\Services\AiUsage\AiUsageCaller;
 use App\Services\AiUsage\BatchPricingContext;
+use App\Services\AiUsage\Pricing\InUsePricingModels;
 use App\Services\AiUsage\RunUsageAccumulator;
 use Illuminate\Contracts\Foundation\Application;
 use Illuminate\Support\Facades\Event;
@@ -37,6 +38,10 @@ class AIServiceProvider extends ServiceProvider
         // Caller label for the in-flight embeddings/reranking call; scoped so
         // it never mislabels the next Octane request or queued job.
         $this->app->scoped(AiUsageCaller::class);
+
+        // Memoizes the in-use provider/model map; scoped so a long-running
+        // worker never prices against another request's or job's usage.
+        $this->app->scoped(InUsePricingModels::class);
     }
 
     // Note: RecordAgentUsage / RecordToolInvocation / RecordAgentFailover are

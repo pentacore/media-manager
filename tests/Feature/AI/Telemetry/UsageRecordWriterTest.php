@@ -16,12 +16,12 @@ beforeEach(function (): void {
 
 test('the writer snapshots catalog rates and dedupes by invocation id', function (): void {
     Cache::put(AiBudgetGuard::spendCacheKey(), 1.0);
-    $writer = resolve(UsageRecordWriter::class);
+    $usageRecordWriter = resolve(UsageRecordWriter::class);
 
     $attributes = ['invocation_id' => 'emb-1', 'kind' => AiUsageKind::Embeddings, 'agent_class' => 'LibraryEmbedder', 'provider' => 'openai', 'model' => 'text-embedding-3-small', 'prompt_tokens' => 1_000_000];
 
-    expect($writer->record($attributes))->toBeTrue()
-        ->and($writer->record($attributes))->toBeFalse();
+    expect($usageRecordWriter->record($attributes))->toBeTrue()
+        ->and($usageRecordWriter->record($attributes))->toBeFalse();
 
     $row = AiUsageRecord::where('invocation_id', 'emb-1')->sole();
 
@@ -32,10 +32,10 @@ test('the writer snapshots catalog rates and dedupes by invocation id', function
 });
 
 test('dated model ids resolve their base catalog row and cost is computed per tier', function (): void {
-    $lookup = resolve(ModelPriceLookup::class);
-    $snapshot = $lookup->snapshotFor('openai', 'text-embedding-3-small-2026-01-01', false);
+    $modelPriceLookup = resolve(ModelPriceLookup::class);
+    $snapshot = $modelPriceLookup->snapshotFor('openai', 'text-embedding-3-small-2026-01-01', false);
 
     expect($snapshot)->not->toBeNull()
-        ->and($lookup->costOf(['prompt_tokens' => 500_000, 'completion_tokens' => 0, 'cache_read_input_tokens' => 0, 'cache_write_input_tokens' => 0, 'reasoning_tokens' => 0], $snapshot))
+        ->and($modelPriceLookup->costOf(['prompt_tokens' => 500_000, 'completion_tokens' => 0, 'cache_read_input_tokens' => 0, 'cache_write_input_tokens' => 0, 'reasoning_tokens' => 0], $snapshot))
         ->toBe(0.01);
 });

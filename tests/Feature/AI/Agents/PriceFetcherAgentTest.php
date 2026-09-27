@@ -312,3 +312,25 @@ test('code execution is offered only when every provider in the chain supports i
     expect(collect($priceFetcherAgent->tools())->contains(fn (object $tool): bool => $tool instanceof CodeExecution))->toBeFalse()
         ->and((string) $priceFetcherAgent->instructions())->not->toContain('code execution');
 });
+
+test('the price fetcher runs on the price updater model rather than the chat model', function (): void {
+    $aiSettings = resolve(AiSettings::class);
+    $aiSettings->setModel('gpt-chat');
+    $aiSettings->setPriceUpdaterModel('gpt-updater');
+
+    expect((new PriceFetcherAgent)->model())->toBe('gpt-updater');
+});
+
+test('the verifier is told which in-use models an update-only provider may add', function (): void {
+    config()->set('ai.providers.openrouter.key', 'openrouter-test-key');
+    resolve(AiSettings::class)->setAutoCreatePricingProviders([]);
+    resolve(AiSettings::class)->setClassificationModel('vendor/in-use');
+
+    AiModelPrice::factory()->create(['provider' => 'openrouter', 'model' => 'vendor/stored']);
+
+    $priceFetcherAgent = (new PriceFetcherAgent)->forScope(RefreshScope::forProviders(['openrouter']), ['openrouter'], ['openrouter' => ['vendor/stored']]);
+
+    expect((string) $priceFetcherAgent->instructions())
+        ->toContain('only these currently-stored models (adding new models is disabled for this provider): vendor/stored')
+        ->toContain('plus these models the app uses, which may be added: vendor/in-use');
+});
