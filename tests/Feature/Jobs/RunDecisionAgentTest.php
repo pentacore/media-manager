@@ -50,8 +50,8 @@ test('a second event about the same subject inside the cooldown is skipped', fun
     $second = WebhookEvent::factory()->create();
     $payload = ['eventType' => 'Grab', 'series' => ['id' => 42]];
 
-    runJob($first->id, payload: $payload);
-    runJob($second->id, payload: $payload);
+    runJob($first->id, eventType: 'Grab', payload: $payload);
+    runJob($second->id, eventType: 'Grab', payload: $payload);
 
     expect(AgentDecision::count())->toBe(1)
         ->and(AgentDecision::first()->webhook_event_id)->toBe($first->id);
@@ -62,10 +62,55 @@ test('events about different subjects are not throttled by each other', function
     $first = WebhookEvent::factory()->create();
     $second = WebhookEvent::factory()->create();
 
-    runJob($first->id, payload: ['eventType' => 'Grab', 'series' => ['id' => 42]]);
-    runJob($second->id, payload: ['eventType' => 'Grab', 'series' => ['id' => 43]]);
+    runJob($first->id, eventType: 'Grab', payload: ['eventType' => 'Grab', 'series' => ['id' => 42]]);
+    runJob($second->id, eventType: 'Grab', payload: ['eventType' => 'Grab', 'series' => ['id' => 43]]);
 
     expect(AgentDecision::count())->toBe(2);
+});
+
+test('a Grab cooldown for a series does not block a later stuck import for the same series', function (): void {
+    DecisionAgent::fake(['grab summary', 'stuck import summary']);
+    $first = WebhookEvent::factory()->create();
+    $second = WebhookEvent::factory()->create();
+
+    runJob($first->id, eventType: 'Grab', payload: ['eventType' => 'Grab', 'series' => ['id' => 42]]);
+    runJob($second->id, eventType: 'ManualInteractionRequired', payload: [
+        'eventType' => 'ManualInteractionRequired',
+        'series' => ['id' => 42],
+        'downloadId' => 'abc123',
+    ]);
+
+    expect(AgentDecision::count())->toBe(2);
+});
+
+test('two stuck imports for the same download inside the cooldown are throttled', function (): void {
+    DecisionAgent::fake(['summary one', 'summary two']);
+    $first = WebhookEvent::factory()->create();
+    $second = WebhookEvent::factory()->create();
+    $payload = ['eventType' => 'ManualInteractionRequired', 'series' => ['id' => 42], 'downloadId' => 'abc123'];
+
+    runJob($first->id, eventType: 'ManualInteractionRequired', payload: $payload);
+    runJob($second->id, eventType: 'ManualInteractionRequired', payload: $payload);
+
+    expect(AgentDecision::count())->toBe(1)
+        ->and(AgentDecision::first()->webhook_event_id)->toBe($first->id);
+});
+
+test('two stuck imports for the same downloadInfo.downloadId inside the cooldown are throttled', function (): void {
+    DecisionAgent::fake(['summary one', 'summary two']);
+    $first = WebhookEvent::factory()->create();
+    $second = WebhookEvent::factory()->create();
+    $payload = [
+        'eventType' => 'ManualInteractionRequired',
+        'series' => ['id' => 42],
+        'downloadInfo' => ['downloadId' => 'xyz789'],
+    ];
+
+    runJob($first->id, eventType: 'ManualInteractionRequired', payload: $payload);
+    runJob($second->id, eventType: 'ManualInteractionRequired', payload: $payload);
+
+    expect(AgentDecision::count())->toBe(1)
+        ->and(AgentDecision::first()->webhook_event_id)->toBe($first->id);
 });
 
 test('does not run when the agent is disabled', function (): void {

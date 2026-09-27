@@ -95,11 +95,12 @@ class RunDecisionAgent implements ShouldBeUnique, ShouldQueue
         }
 
         // Per-subject cooldown: a burst of webhooks about the same series /
-        // movie / request (including ones caused by MediaManager's own
-        // actions) must not trigger a paid agent run each — one decision per
-        // subject per window bounds feedback loops and webhook-flood cost.
-        // Only an agent run claims the window: an event the gate skips must
-        // not block the next one (a stuck import always runs past the gate).
+        // movie / request / stuck download (including ones caused by
+        // MediaManager's own actions) must not trigger a paid agent run each
+        // — one decision per subject per window bounds feedback loops and
+        // webhook-flood cost. Only an agent run claims the window: an event
+        // the gate skips must not block the next one (a stuck import always
+        // runs past the gate).
         $subjectKey = $this->subjectCooldownKey();
 
         if ($subjectKey !== null && Cache::has($subjectKey)) {
@@ -207,9 +208,24 @@ class RunDecisionAgent implements ShouldBeUnique, ShouldQueue
      * Cache key identifying the media subject this event is about, or null
      * when no stable subject id can be extracted (those events fall back to
      * the per-event dedupe only).
+     *
+     * A stuck import (ManualInteractionRequired) is keyed on the download
+     * instead of the series/movie: otherwise an earlier Grab/Download run for
+     * the same series would claim the window and swallow the stuck-import
+     * decision that actually needs a human. The download id is read the way
+     * the arr webhook handlers read it: top-level downloadId, falling back to
+     * downloadInfo.downloadId.
      */
     private function subjectCooldownKey(): ?string
     {
+        if ($this->eventType === 'ManualInteractionRequired') {
+            $downloadId = $this->payload['downloadId'] ?? ($this->payload['downloadInfo']['downloadId'] ?? null);
+
+            return is_string($downloadId) && $downloadId !== ''
+                ? sprintf('decision-agent:cooldown:%s:download:%s', $this->service, $downloadId)
+                : null;
+        }
+
         $subject = match (true) {
             isset($this->payload['series']['id']) => 'series:'.(int) $this->payload['series']['id'],
             isset($this->payload['movie']['id']) => 'movie:'.(int) $this->payload['movie']['id'],
