@@ -23,7 +23,7 @@ beforeEach(function (): void {
 
 function runGateJob(string $eventType, ?int $seriesId = null): void
 {
-    (new RunDecisionAgent(null, 'sonarr', $eventType, ['series' => ['id' => $seriesId ?? random_int(1, 99999)], 'eventType' => $eventType]))->handle(
+    new RunDecisionAgent(null, 'sonarr', $eventType, ['series' => ['id' => $seriesId ?? random_int(1, 99999)], 'eventType' => $eventType])->handle(
         resolve(DecisionAgentSettings::class),
         resolve(AiBudgetGuard::class),
         resolve(AiSettings::class),

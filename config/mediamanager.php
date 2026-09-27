@@ -82,6 +82,8 @@ return [
                 'retries' => 2,
                 'max_response_bytes' => 10_000_000,
             ],
+            // Model the price updater agent runs on; empty follows the chat model.
+            'updater_model' => env('AI_PRICING_UPDATER_MODEL', ''),
             'max_increase_ratio' => 4.0,
             'min_decrease_ratio' => 0.25,
             // Ops-level opt-out on top of the provider map (the code-level

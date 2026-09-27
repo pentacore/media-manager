@@ -30,17 +30,17 @@ test('admin can enable the decision gate from AI settings', function (): void {
         ->assertSee('AI settings updated.')
         ->assertSeeIn('[data-decision-gate-toggle]', 'Enabled');
 
-    $settings = resolve(AiSettings::class);
+    $aiSettings = resolve(AiSettings::class);
 
-    expect($settings->decisionGateEnabled())->toBeTrue()
-        ->and($settings->subtitleTriageEnabled())->toBeFalse()
-        ->and($settings->chatRoutingEnabled())->toBeFalse()
-        ->and($settings->decisionGateThreshold())->toBe(0.3)
-        ->and($settings->rawSubAgentModel())->toBeNull();
+    expect($aiSettings->decisionGateEnabled())->toBeTrue()
+        ->and($aiSettings->subtitleTriageEnabled())->toBeFalse()
+        ->and($aiSettings->chatRoutingEnabled())->toBeFalse()
+        ->and($aiSettings->decisionGateThreshold())->toBe(0.3)
+        ->and($aiSettings->rawSubAgentModel())->toBeNull();
 });
 
 test('the AI settings page flags a classification provider without an API key', function (): void {
-    config()->set('ai.providers.openrouter.key', null);
+    config()->set('ai.providers.openrouter.key');
     config()->set('ai.providers.cohere.key', 'cohere-test-key');
     $this->actingAs(User::factory()->admin()->create());
 
@@ -75,8 +75,25 @@ test('admin can switch the reranking provider and model', function (): void {
         ->click('Save settings')
         ->assertSee('AI settings updated.');
 
-    $settings = resolve(AiSettings::class);
+    $aiSettings = resolve(AiSettings::class);
 
-    expect($settings->rerankingProvider())->toBe('jina')
-        ->and($settings->rerankingModel())->toBe('jina-reranker-v3');
+    expect($aiSettings->rerankingProvider())->toBe('jina')
+        ->and($aiSettings->rerankingModel())->toBe('jina-reranker-v3');
+});
+
+test('admin can pick a dedicated price updater model', function (): void {
+    AiModelPrice::factory()->create(['provider' => 'openai', 'model' => 'gpt-updater']);
+    $this->actingAs(User::factory()->admin()->create());
+
+    visit(route('admin.ai-settings.index', absolute: false))
+        ->assertNoSmoke()
+        ->assertSeeIn('[data-price-updater-model]', 'Same as chat model')
+        ->click('#price_updater_model')
+        ->click('[role="option"][aria-label="gpt-updater"]')
+        ->assertSeeIn('[data-price-updater-model]', 'gpt-updater')
+        ->click('Save settings')
+        ->assertSee('AI settings updated.')
+        ->assertSeeIn('[data-price-updater-model]', 'gpt-updater');
+
+    expect(resolve(AiSettings::class)->rawPriceUpdaterModel())->toBe('gpt-updater');
 });

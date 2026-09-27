@@ -126,7 +126,7 @@ test('the three source modes map to the coordinator source', function (string $o
     'agent' => ['agent', AiPriceRefreshCoordinator::SOURCE_AGENT],
 ]);
 
-test('verify with no provider defaults to the hybrid source over the core six', function (): void {
+test('verify with no provider defaults to the hybrid source over every provider', function (): void {
     $coordinator = bindCommandCoordinator(fn (): RefreshReport => commandReport());
 
     $this->artisan('ai:refresh-prices', ['--verify' => true])->assertSuccessful();
@@ -135,18 +135,14 @@ test('verify with no provider defaults to the hybrid source over the core six', 
     $scope = $coordinator->captured[2];
 
     // --verify no longer forces the agent source: the default hybrid does
-    // feed-then-verify, still bounded to the core six by default.
+    // feed-then-verify across every supported provider.
     expect($source)->toBe(AiPriceRefreshCoordinator::SOURCE_HYBRID)
         ->and($scope)->toBeInstanceOf(RefreshScope::class)
-        ->and($scope->isBounded())->toBeTrue()
+        ->and($scope->isBounded())->toBeFalse()
         ->and($scope->allowsProvider('openai'))->toBeTrue()
-        ->and($scope->allowsProvider('anthropic'))->toBeTrue()
-        ->and($scope->allowsProvider('gemini'))->toBeTrue()
-        ->and($scope->allowsProvider('xai'))->toBeTrue()
-        ->and($scope->allowsProvider('deepseek'))->toBeTrue()
-        ->and($scope->allowsProvider('mistral'))->toBeTrue()
-        // Groq/Cohere/OpenRouter are never verified by default.
-        ->and($scope->allowsProvider('groq'))->toBeFalse();
+        ->and($scope->allowsProvider('groq'))->toBeTrue()
+        ->and($scope->allowsProvider('cohere'))->toBeTrue()
+        ->and($scope->allowsProvider('openrouter'))->toBeTrue();
 });
 
 test('verify with an explicit provider scopes to just that provider', function (): void {

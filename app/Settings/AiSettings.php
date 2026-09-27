@@ -41,6 +41,8 @@ class AiSettings
 
     public const string AUTO_CREATE_PRICING_PROVIDERS_KEY = 'ai.pricing.auto_create_providers';
 
+    public const string PRICE_UPDATER_MODEL_KEY = 'ai.pricing.updater_model';
+
     public const string RATE_LIMITS_ENFORCED_KEY = 'ai.rate_limits.enforce';
 
     public const string CLASSIFICATION_PROVIDER_KEY = 'ai.classification.provider';
@@ -488,6 +490,37 @@ class AiSettings
     public function setSubAgentModel(?string $model): void
     {
         $this->appSettings->set(self::SUB_AGENT_MODEL_KEY, $model);
+    }
+
+    /**
+     * The model the price updater (PriceFetcherAgent) runs on. Empty (nothing
+     * saved and no `mediamanager.ai.pricing.updater_model` default) follows the
+     * chat model.
+     */
+    public function priceUpdaterModel(): string
+    {
+        return $this->rawPriceUpdaterModel() ?? $this->model();
+    }
+
+    /**
+     * The price updater model as configured, or null when it follows the chat
+     * model. The admin form shows this so "Same as chat model" round-trips.
+     */
+    public function rawPriceUpdaterModel(): ?string
+    {
+        return $this->optionalString(
+            $this->appSettings->get(self::PRICE_UPDATER_MODEL_KEY)
+                ?? config('mediamanager.ai.pricing.updater_model', ''),
+        );
+    }
+
+    /**
+     * Persist the price updater model. A null value clears the setting so the
+     * model falls back to the config default (or the chat model) again.
+     */
+    public function setPriceUpdaterModel(?string $model): void
+    {
+        $this->appSettings->set(self::PRICE_UPDATER_MODEL_KEY, $model);
     }
 
     private function threshold(string $key): float

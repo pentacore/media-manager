@@ -48,7 +48,7 @@ test('a step that would cross the hard cap is refused', function (): void {
     AiModelPrice::factory()->create(['provider' => 'openai', 'model' => 'gpt-5-mini', 'input_per_mtok' => 10, 'output_per_mtok' => 0]);
     resolve(AiSettings::class)->setHardBudgetUsd(5.0);
 
-    expect(fn () => (new EnforceBudgetEachStep)->handle(stepMiddlewarePendingStep(3, false, new TextUsage(1_000_000, 0)), fn (): string => 'ok'))
+    expect(fn (): mixed => (new EnforceBudgetEachStep)->handle(stepMiddlewarePendingStep(3, false, new TextUsage(1_000_000, 0)), fn (): string => 'ok'))
         ->toThrow(AiBudgetExceededException::class);
 });
 

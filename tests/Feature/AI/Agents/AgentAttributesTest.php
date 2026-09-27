@@ -12,7 +12,7 @@ use Laravel\Ai\Attributes\RepairToolCalls;
 use Laravel\Ai\Responses\Data\ToolCall;
 
 test('tool-using agents repair unknown tool calls', function (string $agent): void {
-    expect((new ReflectionClass($agent))->getAttributes(RepairToolCalls::class))->not->toBeEmpty();
+    expect(new ReflectionClass($agent)->getAttributes(RepairToolCalls::class))->not->toBeEmpty();
 })->with([MediaAgent::class, DecisionAgent::class, SubtitleAdvisorAgent::class, PriceFetcherAgent::class]);
 
 test('large-prompt agents cache instructions and tool definitions', function (string $agent): void {
@@ -25,7 +25,7 @@ test('large-prompt agents cache instructions and tool definitions', function (st
 test('a call to a tool missing from this turn is repaired instead of crashing the run', function (): void {
     MediaAgent::fake([new ToolCall(id: 'c1', name: 'DeleteMediaTool', arguments: []), 'Recovered without that tool.']);
 
-    $response = (new MediaAgent)->withTools(fn (array $declared): array => [])->prompt('delete it');
+    $agentResponse = (new MediaAgent)->withTools(fn (array $declared): array => [])->prompt('delete it');
 
-    expect($response->text)->toBe('Recovered without that tool.');
+    expect($agentResponse->text)->toBe('Recovered without that tool.');
 });

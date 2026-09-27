@@ -23,10 +23,10 @@ use DateTimeImmutable;
  * coordinator, not here.
  *
  * Because it cannot query existing rows, an update-only provider's "update
- * existing only, never create" rule (any provider missing from the auto-create
- * provider list) is represented as {@see ProviderPricingResult::$createSuppressed}
- * on the result rather than by consulting the catalog; the writer still enforces
- * the rule through scope.
+ * existing only, create just in-use models" rule (any provider missing from the
+ * auto-create provider list) is represented as
+ * {@see ProviderPricingResult::$createSuppressed} on the result rather than by
+ * consulting the catalog; the writer enforces the rule through scope.
  */
 final class ModelsDevPricingAdapter
 {

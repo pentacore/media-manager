@@ -10,6 +10,7 @@ use Illuminate\Support\Facades\Log;
 use Laravel\Ai\Classification;
 use Laravel\Ai\Classification\Boolean;
 use Laravel\Ai\Contracts\Question;
+use Laravel\Ai\Responses\ClassificationResponse;
 use Laravel\Ai\Responses\Data\Answer;
 use Laravel\Ai\Responses\Data\BooleanAnswer;
 use Throwable;
@@ -41,14 +42,14 @@ final readonly class Classifier
         }
 
         try {
-            $response = $this->aiUsageCaller->during($caller, fn () => Classification::of($state)
+            $response = $this->aiUsageCaller->during($caller, fn (): ClassificationResponse => Classification::of($state)
                 ->questions($questions)
                 ->timeout(self::TIMEOUT_SECONDS)
                 ->classify($provider, $this->aiSettings->classificationModel()));
 
             return array_combine(
                 array_keys($questions),
-                array_map(static fn (string $key): Answer => $response->answer($key), array_keys($questions)),
+                array_map($response->answer(...), array_keys($questions)),
             );
         } catch (Throwable $throwable) {
             Log::warning('Classification failed; failing open.', [

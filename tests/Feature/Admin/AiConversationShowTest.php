@@ -65,7 +65,7 @@ test('admin transcript is cursor-paginated fifty messages at a time', function (
     $this->actingAs($admin)
         ->get(route('admin.ai-conversations.show', $conversationId))
         ->assertOk()
-        ->assertInertia(function ($page) use (&$nextCursor) {
+        ->assertInertia(function ($page) use (&$nextCursor): void {
             $page->component('Admin/AiConversations/Show')
                 ->has('messages', 50)
                 ->where('messages.0.text', 'Message 10')

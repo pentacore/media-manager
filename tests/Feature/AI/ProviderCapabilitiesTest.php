@@ -35,6 +35,7 @@ test('an OpenAI to Anthropic chain supports tool search', function (): void {
 test('a provider that cannot be resolved counts as unsupported', function (): void {
     config()->set('ai.default', 'openai');
     config()->set('ai.providers.anthropic.driver', 'not-a-driver');
+
     resolve(AiSettings::class)->setFailoverProvider(Lab::Anthropic);
 
     expect(resolve(ProviderCapabilities::class)->everyProviderSupports(SupportsToolSearch::class))->toBeFalse();

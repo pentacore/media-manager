@@ -19,13 +19,13 @@ beforeEach(function (): void {
  */
 function validAiSettingsPayload(array $overrides = []): array
 {
-    $settings = resolve(AiSettings::class);
+    $aiSettings = resolve(AiSettings::class);
 
     return [
-        'mode' => $settings->mode()->value,
-        'model' => $settings->model(),
-        'title_model' => $settings->rawTitleModel(),
-        'advisor_reasoning_level' => $settings->advisorReasoningLevel(),
+        'mode' => $aiSettings->mode()->value,
+        'model' => $aiSettings->model(),
+        'title_model' => $aiSettings->rawTitleModel(),
+        'advisor_reasoning_level' => $aiSettings->advisorReasoningLevel(),
         'auto_create_pricing_providers' => [''],
         ...$overrides,
     ];
@@ -44,73 +44,81 @@ test('admin saves classification, reranking and sub-agent settings', function ()
             'reranking_provider' => 'jina',
             'reranking_model' => 'jina-reranker-v3',
             'sub_agent_model' => 'gpt-5.4-nano',
+            'price_updater_model' => 'gpt-5.4-mini',
         ]))
         ->assertRedirect();
 
-    $settings = resolve(AiSettings::class);
+    $aiSettings = resolve(AiSettings::class);
 
-    expect($settings->classificationProvider())->toBe('typesafe')
-        ->and($settings->classificationModel())->toBe('ts-classify-1')
-        ->and($settings->decisionGateEnabled())->toBeTrue()
-        ->and($settings->decisionGateThreshold())->toBe(0.4)
-        ->and($settings->subtitleTriageEnabled())->toBeFalse()
-        ->and($settings->subtitleTriageThreshold())->toBe(0.25)
-        ->and($settings->chatRoutingEnabled())->toBeTrue()
-        ->and($settings->rerankingProvider())->toBe('jina')
-        ->and($settings->rerankingModel())->toBe('jina-reranker-v3')
-        ->and($settings->subAgentModel())->toBe('gpt-5.4-nano')
-        ->and($settings->rawSubAgentModel())->toBe('gpt-5.4-nano');
+    expect($aiSettings->priceUpdaterModel())->toBe('gpt-5.4-mini')
+        ->and($aiSettings->rawPriceUpdaterModel())->toBe('gpt-5.4-mini');
+
+    expect($aiSettings->classificationProvider())->toBe('typesafe')
+        ->and($aiSettings->classificationModel())->toBe('ts-classify-1')
+        ->and($aiSettings->decisionGateEnabled())->toBeTrue()
+        ->and($aiSettings->decisionGateThreshold())->toBe(0.4)
+        ->and($aiSettings->subtitleTriageEnabled())->toBeFalse()
+        ->and($aiSettings->subtitleTriageThreshold())->toBe(0.25)
+        ->and($aiSettings->chatRoutingEnabled())->toBeTrue()
+        ->and($aiSettings->rerankingProvider())->toBe('jina')
+        ->and($aiSettings->rerankingModel())->toBe('jina-reranker-v3')
+        ->and($aiSettings->subAgentModel())->toBe('gpt-5.4-nano')
+        ->and($aiSettings->rawSubAgentModel())->toBe('gpt-5.4-nano');
 });
 
 test('gates default to off and the sub-agent model follows the chat model', function (): void {
-    $settings = resolve(AiSettings::class);
+    $aiSettings = resolve(AiSettings::class);
 
-    expect($settings->decisionGateEnabled())->toBeFalse()
-        ->and($settings->decisionGateThreshold())->toBe(0.3)
-        ->and($settings->subtitleTriageEnabled())->toBeFalse()
-        ->and($settings->subtitleTriageThreshold())->toBe(0.3)
-        ->and($settings->chatRoutingEnabled())->toBeFalse()
-        ->and($settings->classificationProvider())->toBe('openrouter')
-        ->and($settings->classificationModel())->toBeNull()
-        ->and($settings->rerankingProvider())->toBe('cohere')
-        ->and($settings->rerankingModel())->toBeNull()
-        ->and($settings->rawSubAgentModel())->toBeNull()
-        ->and($settings->subAgentModel())->toBe($settings->model());
+    expect($aiSettings->decisionGateEnabled())->toBeFalse()
+        ->and($aiSettings->decisionGateThreshold())->toBe(0.3)
+        ->and($aiSettings->subtitleTriageEnabled())->toBeFalse()
+        ->and($aiSettings->subtitleTriageThreshold())->toBe(0.3)
+        ->and($aiSettings->chatRoutingEnabled())->toBeFalse()
+        ->and($aiSettings->classificationProvider())->toBe('openrouter')
+        ->and($aiSettings->classificationModel())->toBeNull()
+        ->and($aiSettings->rerankingProvider())->toBe('cohere')
+        ->and($aiSettings->rerankingModel())->toBeNull()
+        ->and($aiSettings->rawSubAgentModel())->toBeNull()
+        ->and($aiSettings->subAgentModel())->toBe($aiSettings->model());
 });
 
 test('blank model fields clear back to their defaults', function (): void {
-    $settings = resolve(AiSettings::class);
-    $settings->setClassificationModel('ts-classify-1');
-    $settings->setRerankingModel('jina-reranker-v3');
-    $settings->setSubAgentModel('gpt-5.4-nano');
+    $aiSettings = resolve(AiSettings::class);
+    $aiSettings->setClassificationModel('ts-classify-1');
+    $aiSettings->setRerankingModel('jina-reranker-v3');
+    $aiSettings->setSubAgentModel('gpt-5.4-nano');
+    $aiSettings->setPriceUpdaterModel('gpt-5.4-mini');
 
     $this->actingAs(User::factory()->admin()->create())
         ->put(route('admin.ai-settings.update'), validAiSettingsPayload([
             'classification_model' => '',
             'reranking_model' => '',
             'sub_agent_model' => '',
+            'price_updater_model' => '',
         ]))
         ->assertRedirect();
 
-    expect($settings->classificationModel())->toBeNull()
-        ->and($settings->rerankingModel())->toBeNull()
-        ->and($settings->rawSubAgentModel())->toBeNull()
-        ->and($settings->subAgentModel())->toBe($settings->model());
+    expect($aiSettings->rawPriceUpdaterModel())->toBeNull()
+        ->and($aiSettings->priceUpdaterModel())->toBe($aiSettings->model())
+        ->and($aiSettings->classificationModel())->toBeNull()
+        ->and($aiSettings->rerankingModel())->toBeNull()
+        ->and($aiSettings->rawSubAgentModel())->toBeNull()
+        ->and($aiSettings->subAgentModel())->toBe($aiSettings->model());
 });
 
 test('omitted classification fields leave the saved settings untouched', function (): void {
-    $settings = resolve(AiSettings::class);
-    $settings->setDecisionGateEnabled(true);
-    $settings->setDecisionGateThreshold(0.6);
-    $settings->setRerankingProvider('jina');
+    $aiSettings = resolve(AiSettings::class);
+    $aiSettings->setDecisionGateEnabled(true);
+    $aiSettings->setDecisionGateThreshold(0.6);
+    $aiSettings->setRerankingProvider('jina');
 
     $this->actingAs(User::factory()->admin()->create())
         ->put(route('admin.ai-settings.update'), validAiSettingsPayload())
         ->assertRedirect();
 
-    expect($settings->decisionGateEnabled())->toBeTrue()
-        ->and($settings->decisionGateThreshold())->toBe(0.6)
-        ->and($settings->rerankingProvider())->toBe('jina');
+    expect($aiSettings->decisionGateEnabled())->toBeTrue()
+        ->and($aiSettings->decisionGateThreshold())->toBe(0.6)
+        ->and($aiSettings->rerankingProvider())->toBe('jina');
 });
 
 test('invalid classification input is rejected', function (): void {
@@ -126,8 +134,9 @@ test('invalid classification input is rejected', function (): void {
 
 test('index exposes classification settings, provider keys and advanced tool availability', function (): void {
     config()->set('ai.default', 'openai');
-    config()->set('ai.providers.typesafe.key', null);
+    config()->set('ai.providers.typesafe.key');
     config()->set('ai.providers.cohere.key', 'cohere-test-key');
+
     resolve(AiSettings::class)->setFailoverProvider(Lab::Gemini);
 
     $this->actingAs(User::factory()->admin()->create())
@@ -145,6 +154,7 @@ test('index exposes classification settings, provider keys and advanced tool ava
             ->where('settings.reranking_provider', 'cohere')
             ->where('settings.reranking_model', null)
             ->where('settings.sub_agent_model', null)
+            ->where('settings.price_updater_model', null)
             ->has('classificationProviders', 2)
             ->has('rerankingProviders', 3)
             ->where('providerKeys.typesafe', false)

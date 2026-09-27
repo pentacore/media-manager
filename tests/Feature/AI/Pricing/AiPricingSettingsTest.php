@@ -88,3 +88,32 @@ test('clearing the auto-create list restores the config default', function (): v
 
     expect($aiSettings->autoCreatePricingProviders())->toBe(['openai']);
 });
+
+test('the price updater model follows the chat model when nothing is configured', function (): void {
+    config()->set('mediamanager.ai.pricing.updater_model', '');
+    $aiSettings = resolve(AiSettings::class);
+    $aiSettings->setModel('gpt-chat');
+
+    expect($aiSettings->rawPriceUpdaterModel())->toBeNull()
+        ->and($aiSettings->priceUpdaterModel())->toBe('gpt-chat');
+});
+
+test('the price updater model falls back to the config default when unset', function (): void {
+    config()->set('mediamanager.ai.pricing.updater_model', 'gpt-config-updater');
+
+    expect(resolve(AiSettings::class)->priceUpdaterModel())->toBe('gpt-config-updater');
+});
+
+test('a saved price updater model overrides the config default and clears back to it', function (): void {
+    config()->set('mediamanager.ai.pricing.updater_model', 'gpt-config-updater');
+    $aiSettings = resolve(AiSettings::class);
+
+    $aiSettings->setPriceUpdaterModel('gpt-saved-updater');
+
+    expect($aiSettings->priceUpdaterModel())->toBe('gpt-saved-updater')
+        ->and($aiSettings->rawPriceUpdaterModel())->toBe('gpt-saved-updater');
+
+    $aiSettings->setPriceUpdaterModel(null);
+
+    expect($aiSettings->priceUpdaterModel())->toBe('gpt-config-updater');
+});
