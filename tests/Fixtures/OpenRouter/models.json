@@ -1,0 +1,40 @@
+{
+    "data": [
+        {
+            "id": "anthropic/claude-opus-5.5",
+            "architecture": { "input_modalities": ["text", "image"], "output_modalities": ["text"] },
+            "pricing": { "prompt": "0.000004", "completion": "0.00002", "web_search": "0.01", "input_cache_read": "0.0000002", "input_cache_write": "0.000005" }
+        },
+        {
+            "id": "openai/gpt-6-luna",
+            "architecture": { "output_modalities": ["text"] },
+            "pricing": { "prompt": "0.0000001", "completion": "0.0000005", "internal_reasoning": "0", "overrides": [{ "min_prompt_tokens": 272000, "prompt": "0.0000002", "completion": "0.00000075" }] }
+        },
+        {
+            "id": "anthropic/claude-opus-5.5:batch",
+            "architecture": { "output_modalities": ["text"] },
+            "pricing": { "prompt": "0.000002", "completion": "0.00001" }
+        },
+        {
+            "id": "meta-llama/llama-5-8b:free",
+            "architecture": { "output_modalities": ["text"] },
+            "pricing": { "prompt": "0", "completion": "0" }
+        },
+        {
+            "id": "google/imagen-5",
+            "architecture": { "output_modalities": ["image"] },
+            "pricing": { "prompt": "0.000001", "completion": "0.00003" }
+        },
+        {
+            "id": "openrouter/auto",
+            "architecture": { "output_modalities": ["text"] },
+            "pricing": { "prompt": "-1", "completion": "-1" }
+        },
+        {
+            "id": "vendor/no-completion",
+            "architecture": { "output_modalities": ["text"] },
+            "pricing": { "prompt": "0.000001" }
+        },
+        "not-an-object"
+    ]
+}
