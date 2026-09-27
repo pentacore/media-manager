@@ -33,6 +33,27 @@
             "prompt_text_token_price": 1000,
             "output_modalities": ["text"],
             "object": "model"
+        },
+        {
+            "id": "grok-5-nano",
+            "prompt_text_token_price": 1000,
+            "completion_text_token_price": 3000,
+            "prompt_text_token_price_long_context": 2000,
+            "output_modalities": ["text"],
+            "object": "model"
+        },
+        {
+            "id": "grok-5-no-input",
+            "completion_text_token_price": 1000,
+            "output_modalities": ["text"],
+            "object": "model"
+        },
+        {
+            "id": "grok-5-negative-completion",
+            "prompt_text_token_price": 1000,
+            "completion_text_token_price": -5,
+            "output_modalities": ["text"],
+            "object": "model"
         }
     ]
 }

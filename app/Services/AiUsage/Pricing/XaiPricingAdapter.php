@@ -44,6 +44,7 @@ final class XaiPricingAdapter
         $candidates = [];
         $rejections = [];
         $warnings = [];
+        $emittedIds = [];
 
         foreach ($models as $model) {
             $rawId = is_array($model) ? ($model['id'] ?? null) : null;
@@ -63,6 +64,12 @@ final class XaiPricingAdapter
 
             if ($candidate instanceof ModelPriceCandidate) {
                 $candidates[] = $candidate;
+                $emittedIds[$modelId] = true;
+
+                foreach ($this->aliasCandidates($candidate, $model, $refreshScope, $emittedIds) as $aliasCandidate) {
+                    $candidates[] = $aliasCandidate;
+                    $emittedIds[$aliasCandidate->model] = true;
+                }
             }
 
             if ($rejection instanceof PricingRejection) {
@@ -81,6 +88,59 @@ final class XaiPricingAdapter
             warnings: $warnings,
             createSuppressed: ! $refreshScope->allowsCreate(self::PROVIDER),
         );
+    }
+
+    /**
+     * Emit one candidate per string `aliases` entry, sharing the canonical
+     * model's fields, source, and tiered flag exactly (xAI aliases are the
+     * same priced model under another name, for example `grok-5-latest` for
+     * `grok-5`). Each alias is normalized and subject to the same write scope
+     * as the canonical id; an invalid, already-emitted, or scope-excluded
+     * alias is skipped silently — never a rejection.
+     *
+     * @param  array<string, mixed>  $modelData
+     * @param  array<string, true>  $emittedIds  Model ids already emitted this run.
+     * @return list<ModelPriceCandidate>
+     */
+    private function aliasCandidates(ModelPriceCandidate $candidate, array $modelData, RefreshScope $refreshScope, array $emittedIds): array
+    {
+        $aliases = $modelData['aliases'] ?? null;
+
+        if (! is_array($aliases)) {
+            return [];
+        }
+
+        $aliasCandidates = [];
+
+        foreach ($aliases as $alias) {
+            if (! is_string($alias)) {
+                continue;
+            }
+
+            $aliasId = PricingModelIds::normalize($alias);
+
+            if ($aliasId === null || isset($emittedIds[$aliasId])) {
+                continue;
+            }
+
+            if (! $refreshScope->allowsWrite(self::PROVIDER, $aliasId)) {
+                continue;
+            }
+
+            $emittedIds[$aliasId] = true;
+
+            $aliasCandidates[] = new ModelPriceCandidate(
+                provider: $candidate->provider,
+                model: $aliasId,
+                fields: $candidate->fields,
+                source: $candidate->source,
+                sourceUrl: $candidate->sourceUrl,
+                sourceUpdatedAt: $candidate->sourceUpdatedAt,
+                tiered: $candidate->tiered,
+            );
+        }
+
+        return $aliasCandidates;
     }
 
     /**
@@ -129,7 +189,8 @@ final class XaiPricingAdapter
         }
 
         $threshold = $modelData['long_context_threshold'] ?? 0;
-        $tiered = is_int($threshold) && $threshold > 0;
+        $thresholdPositive = is_int($threshold) && $threshold > 0;
+        $tiered = $thresholdPositive || $this->hasPositiveLongContextRate($modelData);
 
         $modelPriceCandidate = new ModelPriceCandidate(
             provider: self::PROVIDER,
@@ -141,10 +202,33 @@ final class XaiPricingAdapter
         );
 
         $warning = $tiered
-            ? new PricingWarning(self::PROVIDER, $modelId, PricingWarning::CONTEXT_TIERS, sprintf('long_context_threshold:%d', $threshold))
+            ? new PricingWarning(self::PROVIDER, $modelId, PricingWarning::CONTEXT_TIERS, $thresholdPositive ? sprintf('long_context_threshold:%d', $threshold) : 'long_context')
             : null;
 
         return [$modelPriceCandidate, null, $warning];
+    }
+
+    /**
+     * Whether the model declares a positive rate under any key ending in
+     * `_long_context` (for example `prompt_text_token_price_long_context`),
+     * regardless of `long_context_threshold` — xAI sometimes ships a
+     * long-context rate without a matching threshold.
+     *
+     * @param  array<string, mixed>  $modelData
+     */
+    private function hasPositiveLongContextRate(array $modelData): bool
+    {
+        foreach ($modelData as $key => $value) {
+            if (! str_ends_with($key, '_long_context')) {
+                continue;
+            }
+
+            if (is_numeric($value) && (float) $value > 0) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /**
