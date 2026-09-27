@@ -40,7 +40,7 @@ test('fetch sends the xai key and returns the models list', function (): void {
 });
 
 test('a missing key fails as not configured without any request', function (): void {
-    config()->set('ai.providers.xai.key', null);
+    config()->set('ai.providers.xai.key');
     Http::fake();
 
     expect(xaiClientFailure()?->category)->toBe(PricingTransportException::CATEGORY_NOT_CONFIGURED);

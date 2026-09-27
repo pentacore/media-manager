@@ -46,11 +46,11 @@ final class OpenRouterPricingAdapter
         $rejections = [];
         $warnings = [];
 
-        foreach ($models as $modelData) {
-            $rawId = is_array($modelData) ? ($modelData['id'] ?? null) : null;
+        foreach ($models as $model) {
+            $rawId = is_array($model) ? ($model['id'] ?? null) : null;
             $modelId = is_string($rawId) ? PricingModelIds::normalize($rawId) : null;
 
-            if ($modelId === null || ! is_array($modelData)) {
+            if ($modelId === null || ! is_array($model)) {
                 $rejections[] = new PricingRejection(self::PROVIDER, is_string($rawId) ? $rawId : '', PricingRejection::INVALID_IDENTIFIER);
 
                 continue;
@@ -66,7 +66,7 @@ final class OpenRouterPricingAdapter
                 continue;
             }
 
-            [$candidate, $rejection, $warning] = $this->adaptModel($modelId, $modelData);
+            [$candidate, $rejection, $warning] = $this->adaptModel($modelId, $model);
 
             if ($candidate instanceof ModelPriceCandidate) {
                 $candidates[] = $candidate;
@@ -142,7 +142,7 @@ final class OpenRouterPricingAdapter
 
         $tiered = is_array($pricing['overrides'] ?? null) && $pricing['overrides'] !== [];
 
-        $candidate = new ModelPriceCandidate(
+        $modelPriceCandidate = new ModelPriceCandidate(
             provider: self::PROVIDER,
             model: $modelId,
             fields: $fields,
@@ -155,7 +155,7 @@ final class OpenRouterPricingAdapter
             ? new PricingWarning(self::PROVIDER, $modelId, PricingWarning::CONTEXT_TIERS, 'overrides')
             : null;
 
-        return [$candidate, null, $warning];
+        return [$modelPriceCandidate, null, $warning];
     }
 
     /**

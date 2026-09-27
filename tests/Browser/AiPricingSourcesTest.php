@@ -10,7 +10,7 @@ test('admin can enable the structured pricing sources from ai settings', functio
     config()->set('mediamanager.ai.pricing.openrouter.enabled', false);
     config()->set('mediamanager.ai.pricing.litellm.enabled', false);
     config()->set('mediamanager.ai.pricing.xai.enabled', false);
-    config()->set('ai.providers.xai.key', null);
+    config()->set('ai.providers.xai.key');
     // The model <Select> submits from the pricing catalog; seed one row so the
     // required `model` field posts a value.
     AiModelPrice::factory()->create([

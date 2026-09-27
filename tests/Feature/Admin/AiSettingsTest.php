@@ -406,7 +406,7 @@ test('index maps upstream provider spellings to the canonical checkbox values', 
 test('index exposes the structured pricing source switches', function (): void {
     $admin = User::factory()->admin()->create();
     config()->set('mediamanager.ai.pricing.openrouter.enabled', true);
-    config()->set('ai.providers.xai.key', null);
+    config()->set('ai.providers.xai.key');
 
     $this->actingAs($admin)
         ->get(route('admin.ai-settings.index'))

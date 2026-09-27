@@ -128,8 +128,8 @@ test('fetch throws a classified server error after exhausting retries without le
 
     try {
         resolve(ModelsDevPricingClient::class)->fetch();
-    } catch (PricingTransportException $modelsDevTransportException) {
-        $caught = $modelsDevTransportException;
+    } catch (PricingTransportException $pricingTransportException) {
+        $caught = $pricingTransportException;
     }
 
     expect($caught)->not->toBeNull()
@@ -151,8 +151,8 @@ test('fetch retries a rate limited response and classifies it when persistent', 
 
     try {
         resolve(ModelsDevPricingClient::class)->fetch();
-    } catch (PricingTransportException $modelsDevTransportException) {
-        $caught = $modelsDevTransportException;
+    } catch (PricingTransportException $pricingTransportException) {
+        $caught = $pricingTransportException;
     }
 
     expect($caught)->not->toBeNull()
@@ -173,8 +173,8 @@ test('fetch does not retry a deterministic client error', function (): void {
 
     try {
         resolve(ModelsDevPricingClient::class)->fetch();
-    } catch (PricingTransportException $modelsDevTransportException) {
-        $caught = $modelsDevTransportException;
+    } catch (PricingTransportException $pricingTransportException) {
+        $caught = $pricingTransportException;
     }
 
     expect($caught)->not->toBeNull()
@@ -192,8 +192,8 @@ test('fetch classifies a connection failure', function (): void {
 
     try {
         resolve(ModelsDevPricingClient::class)->fetch();
-    } catch (PricingTransportException $modelsDevTransportException) {
-        $caught = $modelsDevTransportException;
+    } catch (PricingTransportException $pricingTransportException) {
+        $caught = $pricingTransportException;
     }
 
     expect($caught)->not->toBeNull()
@@ -209,8 +209,8 @@ test('fetch classifies a timeout distinctly from a plain connection failure', fu
 
     try {
         resolve(ModelsDevPricingClient::class)->fetch();
-    } catch (PricingTransportException $modelsDevTransportException) {
-        $caught = $modelsDevTransportException;
+    } catch (PricingTransportException $pricingTransportException) {
+        $caught = $pricingTransportException;
     }
 
     expect($caught)->not->toBeNull()
@@ -230,8 +230,8 @@ test('fetch rejects an oversized body before attempting to decode it', function 
 
     try {
         resolve(ModelsDevPricingClient::class)->fetch();
-    } catch (PricingTransportException $modelsDevTransportException) {
-        $caught = $modelsDevTransportException;
+    } catch (PricingTransportException $pricingTransportException) {
+        $caught = $pricingTransportException;
     }
 
     expect($caught)->not->toBeNull()
@@ -252,8 +252,8 @@ test('fetch rejects invalid json without retrying', function (): void {
 
     try {
         resolve(ModelsDevPricingClient::class)->fetch();
-    } catch (PricingTransportException $modelsDevTransportException) {
-        $caught = $modelsDevTransportException;
+    } catch (PricingTransportException $pricingTransportException) {
+        $caught = $pricingTransportException;
     }
 
     expect($caught)->not->toBeNull()
@@ -274,8 +274,8 @@ test('fetch rejects a list-shaped top level payload without retrying', function 
 
     try {
         resolve(ModelsDevPricingClient::class)->fetch();
-    } catch (PricingTransportException $modelsDevTransportException) {
-        $caught = $modelsDevTransportException;
+    } catch (PricingTransportException $pricingTransportException) {
+        $caught = $pricingTransportException;
     }
 
     expect($caught)->not->toBeNull()

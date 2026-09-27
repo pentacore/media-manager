@@ -25,7 +25,7 @@ use Closure;
  * to the fallback. Sources fail independently; the catalog is unavailable
  * only when no source produced data. Per-run state only — resolve per run.
  */
-final class PricingCatalog
+final readonly class PricingCatalog
 {
     public const string SOURCE_OPENROUTER = 'openrouter';
 
@@ -36,16 +36,16 @@ final class PricingCatalog
     public const string SOURCE_LITELLM = 'litellm';
 
     public function __construct(
-        private readonly ModelsDevPricingClient $modelsDevPricingClient,
-        private readonly ModelsDevPricingAdapter $modelsDevPricingAdapter,
-        private readonly LiteLlmPricingClient $liteLlmPricingClient,
-        private readonly LiteLlmPricingAdapter $liteLlmPricingAdapter,
-        private readonly OpenRouterPricingClient $openRouterPricingClient,
-        private readonly OpenRouterPricingAdapter $openRouterPricingAdapter,
-        private readonly XaiPricingClient $xaiPricingClient,
-        private readonly XaiPricingAdapter $xaiPricingAdapter,
-        private readonly PricingReconciler $pricingReconciler,
-        private readonly AiSettings $aiSettings,
+        private ModelsDevPricingClient $modelsDevPricingClient,
+        private ModelsDevPricingAdapter $modelsDevPricingAdapter,
+        private LiteLlmPricingClient $liteLlmPricingClient,
+        private LiteLlmPricingAdapter $liteLlmPricingAdapter,
+        private OpenRouterPricingClient $openRouterPricingClient,
+        private OpenRouterPricingAdapter $openRouterPricingAdapter,
+        private XaiPricingClient $xaiPricingClient,
+        private XaiPricingAdapter $xaiPricingAdapter,
+        private PricingReconciler $pricingReconciler,
+        private AiSettings $aiSettings,
     ) {}
 
     /**
@@ -97,13 +97,13 @@ final class PricingCatalog
             ...array_keys($liteLlm ?? []),
         ]);
 
-        foreach ($providerKeys as $provider) {
-            $result = $openRouter[$provider]
-                ?? $xai[$provider]
-                ?? $this->pricingReconciler->reconcile($provider, $modelsDev[$provider] ?? null, $liteLlm[$provider] ?? null);
+        foreach ($providerKeys as $providerKey) {
+            $result = $openRouter[$providerKey]
+                ?? $xai[$providerKey]
+                ?? $this->pricingReconciler->reconcile($providerKey, $modelsDev[$providerKey] ?? null, $liteLlm[$providerKey] ?? null);
 
             if ($result instanceof ProviderPricingResult) {
-                $providers[$provider] = $result;
+                $providers[$providerKey] = $result;
             }
         }
 

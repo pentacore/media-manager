@@ -147,16 +147,16 @@ test('tiering from either feed carries onto the consensus candidate', function (
 });
 
 test('a single available feed passes through untouched', function (): void {
-    $modelsDev = reconcilerResult([reconcilerCandidate('gpt-a', PricingSource::ModelsDev, ['input_per_mtok' => '1', 'output_per_mtok' => '2'])]);
+    $providerPricingResult = reconcilerResult([reconcilerCandidate('gpt-a', PricingSource::ModelsDev, ['input_per_mtok' => '1', 'output_per_mtok' => '2'])]);
 
-    expect(new PricingReconciler()->reconcile('openai', $modelsDev, null))->toBe($modelsDev)
+    expect(new PricingReconciler()->reconcile('openai', $providerPricingResult, null))->toBe($providerPricingResult)
         ->and(new PricingReconciler()->reconcile('openai', null, null))->toBeNull();
 });
 
 test('a malformed feed is ignored when the other feed is usable', function (): void {
     $malformed = new ProviderPricingResult(provider: 'openai', candidates: [], rejections: [new PricingRejection('openai', '', PricingRejection::MALFORMED_PROVIDER)]);
-    $liteLlm = reconcilerResult([reconcilerCandidate('gpt-a', PricingSource::LiteLlm, ['input_per_mtok' => '1', 'output_per_mtok' => '2'])]);
+    $providerPricingResult = reconcilerResult([reconcilerCandidate('gpt-a', PricingSource::LiteLlm, ['input_per_mtok' => '1', 'output_per_mtok' => '2'])]);
 
-    expect(new PricingReconciler()->reconcile('openai', $malformed, $liteLlm))->toBe($liteLlm)
+    expect(new PricingReconciler()->reconcile('openai', $malformed, $providerPricingResult))->toBe($providerPricingResult)
         ->and(new PricingReconciler()->reconcile('openai', $malformed, null))->toBe($malformed);
 });

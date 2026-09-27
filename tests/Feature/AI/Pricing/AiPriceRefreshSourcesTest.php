@@ -66,19 +66,19 @@ test('openrouter api updates existing openrouter rows and records source statuse
 
     $refreshReport = sourcesRun(RefreshScope::forProviders(['openrouter']));
 
-    $row = AiModelPrice::query()->where('provider', 'openrouter')->where('model', 'anthropic/claude-opus-5.5')->sole();
-    $run = AiPriceRefreshRun::query()->findOrFail($refreshReport->runId);
+    $aiModelPrice = AiModelPrice::query()->where('provider', 'openrouter')->where('model', 'anthropic/claude-opus-5.5')->sole();
+    $aiPriceRefreshRun = AiPriceRefreshRun::query()->findOrFail($refreshReport->runId);
 
     PriceFetcherAgent::assertNeverPrompted();
 
-    expect($row->input_per_mtok)->toBe('4.0000')
-        ->and($row->output_per_mtok)->toBe('20.0000')
-        ->and($row->pricing_source)->toBe(PricingSource::OpenRouter)
+    expect($aiModelPrice->input_per_mtok)->toBe('4.0000')
+        ->and($aiModelPrice->output_per_mtok)->toBe('20.0000')
+        ->and($aiModelPrice->pricing_source)->toBe(PricingSource::OpenRouter)
         ->and(AiModelPrice::query()->where('provider', 'openrouter')->count())->toBe(1)
         ->and($refreshReport->modelsCreateDisabled)->toBeGreaterThan(0)
         ->and($refreshReport->sourceStatuses['openrouter'])->toBe('ok')
-        ->and($run->source_statuses['openrouter'])->toBe('ok')
-        ->and($run->models_dev_status)->toBe('disabled');
+        ->and($aiPriceRefreshRun->source_statuses['openrouter'])->toBe('ok')
+        ->and($aiPriceRefreshRun->models_dev_status)->toBe('disabled');
 });
 
 test('agreeing feeds write a consensus row and count it', function (): void {
@@ -92,11 +92,11 @@ test('agreeing feeds write a consensus row and count it', function (): void {
     ]);
 
     $refreshReport = sourcesRun(RefreshScope::forProviders(['openai']));
-    $run = AiPriceRefreshRun::query()->findOrFail($refreshReport->runId);
+    $aiPriceRefreshRun = AiPriceRefreshRun::query()->findOrFail($refreshReport->runId);
 
     expect(AiModelPrice::query()->where('provider', 'openai')->where('model', 'gpt-agree')->sole()->pricing_source)->toBe(PricingSource::FeedConsensus)
         ->and($refreshReport->finalResult)->toBe(RefreshReport::RESULT_SUCCEEDED)
-        ->and($run->provider_results['openai']['consensus'])->toBe(1);
+        ->and($aiPriceRefreshRun->provider_results['openai']['consensus'])->toBe(1);
 });
 
 test('a feed conflict is not written and wakes the verifier for that exact model', function (): void {
@@ -116,14 +116,14 @@ test('a feed conflict is not written and wakes the verifier for that exact model
     ]);
 
     $refreshReport = sourcesRun(RefreshScope::forProviders(['openai']));
-    $run = AiPriceRefreshRun::query()->findOrFail($refreshReport->runId);
+    $aiPriceRefreshRun = AiPriceRefreshRun::query()->findOrFail($refreshReport->runId);
 
     PriceFetcherAgent::assertPromptedTimes(1);
 
     expect(AiModelPrice::query()->where('model', 'gpt-conflict')->exists())->toBeFalse()
-        ->and($run->fallback_targets)->toContain('openai:gpt-conflict')
-        ->and($run->unverified_targets)->toContain('openai:gpt-conflict')
-        ->and($run->provider_results['openai']['conflicts'])->toBe(1)
+        ->and($aiPriceRefreshRun->fallback_targets)->toContain('openai:gpt-conflict')
+        ->and($aiPriceRefreshRun->unverified_targets)->toContain('openai:gpt-conflict')
+        ->and($aiPriceRefreshRun->provider_results['openai']['conflicts'])->toBe(1)
         ->and($refreshReport->finalResult)->toBe(RefreshReport::RESULT_PARTIAL);
 });
 
@@ -162,10 +162,10 @@ test('a provider whose only model conflicts falls back as a whole provider', fun
     ]);
 
     $refreshReport = sourcesRun(RefreshScope::forProviders(['openai']), dryRun: true);
-    $run = AiPriceRefreshRun::query()->findOrFail($refreshReport->runId);
+    $aiPriceRefreshRun = AiPriceRefreshRun::query()->findOrFail($refreshReport->runId);
 
-    expect($run->fallback_targets)->toBe(['openai'])
-        ->and($run->provider_results['openai']['conflicts'])->toBe(1);
+    expect($aiPriceRefreshRun->fallback_targets)->toBe(['openai'])
+        ->and($aiPriceRefreshRun->provider_results['openai']['conflicts'])->toBe(1);
 });
 
 test('xai api writes are first-party verified and bypass the anomaly guard', function (): void {
@@ -183,12 +183,12 @@ test('xai api writes are first-party verified and bypass the anomaly guard', fun
 
     sourcesRun(RefreshScope::forProviders(['xai']));
 
-    $row = AiModelPrice::query()->where('provider', 'xai')->where('model', 'grok-5')->sole();
+    $aiModelPrice = AiModelPrice::query()->where('provider', 'xai')->where('model', 'grok-5')->sole();
 
-    expect($row->input_per_mtok)->toBe('3.0000')
-        ->and($row->output_per_mtok)->toBe('15.0000')
-        ->and($row->pricing_source)->toBe(PricingSource::XaiApi)
-        ->and($row->pricing_verified_at)->not->toBeNull();
+    expect($aiModelPrice->input_per_mtok)->toBe('3.0000')
+        ->and($aiModelPrice->output_per_mtok)->toBe('15.0000')
+        ->and($aiModelPrice->pricing_source)->toBe(PricingSource::XaiApi)
+        ->and($aiModelPrice->pricing_verified_at)->not->toBeNull();
 });
 
 test('a down models.dev feed is covered by litellm without waking the verifier', function (): void {

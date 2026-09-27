@@ -8,10 +8,10 @@ namespace App\Services\AiUsage\Pricing;
  * Transport for OpenRouter's public, unauthenticated models API, the
  * authoritative price list for model ids routed through OpenRouter.
  */
-final class OpenRouterPricingClient
+final readonly class OpenRouterPricingClient
 {
     public function __construct(
-        private readonly PricingFeedFetcher $pricingFeedFetcher,
+        private PricingFeedFetcher $pricingFeedFetcher,
     ) {}
 
     /**

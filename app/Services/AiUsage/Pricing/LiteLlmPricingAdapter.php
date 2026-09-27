@@ -238,7 +238,7 @@ final class LiteLlmPricingAdapter
             static fn (string $key): bool => preg_match('/_above_\d+k?_tokens$/D', $key) === 1,
         ));
 
-        $candidate = new ModelPriceCandidate(
+        $modelPriceCandidate = new ModelPriceCandidate(
             provider: $provider,
             model: $modelId,
             fields: $fields,
@@ -251,7 +251,7 @@ final class LiteLlmPricingAdapter
             ? new PricingWarning($provider, $modelId, PricingWarning::CONTEXT_TIERS, implode(',', $tierKeys))
             : null;
 
-        return [$candidate, null, $warning];
+        return [$modelPriceCandidate, null, $warning];
     }
 
     /**

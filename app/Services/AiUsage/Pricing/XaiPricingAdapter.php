@@ -45,11 +45,11 @@ final class XaiPricingAdapter
         $rejections = [];
         $warnings = [];
 
-        foreach ($models as $modelData) {
-            $rawId = is_array($modelData) ? ($modelData['id'] ?? null) : null;
+        foreach ($models as $model) {
+            $rawId = is_array($model) ? ($model['id'] ?? null) : null;
             $modelId = is_string($rawId) ? PricingModelIds::normalize($rawId) : null;
 
-            if ($modelId === null || ! is_array($modelData)) {
+            if ($modelId === null || ! is_array($model)) {
                 $rejections[] = new PricingRejection(self::PROVIDER, is_string($rawId) ? $rawId : '', PricingRejection::INVALID_IDENTIFIER);
 
                 continue;
@@ -59,7 +59,7 @@ final class XaiPricingAdapter
                 continue;
             }
 
-            [$candidate, $rejection, $warning] = $this->adaptModel($modelId, $modelData);
+            [$candidate, $rejection, $warning] = $this->adaptModel($modelId, $model);
 
             if ($candidate instanceof ModelPriceCandidate) {
                 $candidates[] = $candidate;
@@ -131,7 +131,7 @@ final class XaiPricingAdapter
         $threshold = $modelData['long_context_threshold'] ?? 0;
         $tiered = is_int($threshold) && $threshold > 0;
 
-        $candidate = new ModelPriceCandidate(
+        $modelPriceCandidate = new ModelPriceCandidate(
             provider: self::PROVIDER,
             model: $modelId,
             fields: $fields,
@@ -144,7 +144,7 @@ final class XaiPricingAdapter
             ? new PricingWarning(self::PROVIDER, $modelId, PricingWarning::CONTEXT_TIERS, sprintf('long_context_threshold:%d', $threshold))
             : null;
 
-        return [$candidate, null, $warning];
+        return [$modelPriceCandidate, null, $warning];
     }
 
     /**

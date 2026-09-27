@@ -8,10 +8,10 @@ namespace App\Services\AiUsage\Pricing;
  * Transport for xAI's first-party pricing endpoint (`GET /v1/language-models`),
  * authenticated with the xAI provider key.
  */
-final class XaiPricingClient
+final readonly class XaiPricingClient
 {
     public function __construct(
-        private readonly PricingFeedFetcher $pricingFeedFetcher,
+        private PricingFeedFetcher $pricingFeedFetcher,
     ) {}
 
     /**

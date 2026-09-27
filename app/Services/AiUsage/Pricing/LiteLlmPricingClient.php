@@ -8,10 +8,10 @@ namespace App\Services\AiUsage\Pricing;
  * Transport for LiteLLM's community-maintained model price map, used to
  * cross-check models.dev for direct providers.
  */
-final class LiteLlmPricingClient
+final readonly class LiteLlmPricingClient
 {
     public function __construct(
-        private readonly PricingFeedFetcher $pricingFeedFetcher,
+        private PricingFeedFetcher $pricingFeedFetcher,
     ) {}
 
     /**

@@ -13,10 +13,10 @@ namespace App\Services\AiUsage\Pricing;
  * DB work and does not interpret provider/model shapes beyond the top-level
  * check below — that is the adapter's job.
  */
-final class ModelsDevPricingClient
+final readonly class ModelsDevPricingClient
 {
     public function __construct(
-        private readonly PricingFeedFetcher $pricingFeedFetcher,
+        private PricingFeedFetcher $pricingFeedFetcher,
     ) {}
 
     /**
