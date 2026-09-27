@@ -1,0 +1,19 @@
+{
+    "sample_spec": { "litellm_provider": "one of the providers", "mode": "chat", "input_cost_per_token": 0, "output_cost_per_token": 0 },
+    "claude-opus-5-5": { "litellm_provider": "anthropic", "mode": "chat", "input_cost_per_token": 4e-06, "output_cost_per_token": 2e-05, "cache_read_input_token_cost": 2e-07, "cache_creation_input_token_cost": 5e-06 },
+    "claude-opus-5-5-20260901": { "litellm_provider": "anthropic", "mode": "chat", "input_cost_per_token": 4e-06, "output_cost_per_token": 2e-05 },
+    "claude-retired": { "litellm_provider": "anthropic", "mode": "chat", "deprecation_date": "2025-01-01", "input_cost_per_token": 1e-06, "output_cost_per_token": 2e-06 },
+    "gemini/gemini-3-pro": { "litellm_provider": "gemini", "mode": "chat", "input_cost_per_token": 1.25e-06, "output_cost_per_token": 1e-05, "input_cost_per_token_above_200k_tokens": 2.5e-06 },
+    "gemini/gemini-embedding-001": { "litellm_provider": "gemini", "mode": "embedding", "input_cost_per_token": 1.5e-07, "output_cost_per_token": 0 },
+    "deepseek-chat": { "litellm_provider": "deepseek", "mode": "chat", "input_cost_per_token": 2.8e-07, "output_cost_per_token": 4.2e-07 },
+    "deepseek/deepseek-chat": { "litellm_provider": "deepseek", "mode": "chat", "input_cost_per_token": 2.8e-07, "output_cost_per_token": 4.2e-07 },
+    "mistral-dup": { "litellm_provider": "mistral", "mode": "chat", "input_cost_per_token": 1e-06, "output_cost_per_token": 3e-06 },
+    "mistral/mistral-dup": { "litellm_provider": "mistral", "mode": "chat", "input_cost_per_token": 2e-06, "output_cost_per_token": 3e-06 },
+    "command-a-03-2025": { "litellm_provider": "cohere_chat", "mode": "chat", "input_cost_per_token": 2.5e-06, "output_cost_per_token": 1e-05 },
+    "groq/42": { "litellm_provider": "groq", "mode": "chat", "input_cost_per_token": 5e-08, "output_cost_per_token": 8e-08 },
+    "xai/grok-5": { "litellm_provider": "xai", "mode": "chat", "input_cost_per_token": 3e-06, "output_cost_per_token": 1.5e-05, "output_cost_per_reasoning_token": 1.5e-05 },
+    "no-output-cost": { "litellm_provider": "openai", "mode": "chat", "input_cost_per_token": 1e-06 },
+    "ft:gpt-4o": { "litellm_provider": "openai", "mode": "chat", "input_cost_per_token": 3e-06, "output_cost_per_token": 1.2e-05 },
+    "openrouter/anthropic/claude-opus-5.5": { "litellm_provider": "openrouter", "mode": "chat", "input_cost_per_token": 4e-06, "output_cost_per_token": 2e-05 },
+    "vertex_ai/gemini-3-pro": { "litellm_provider": "vertex_ai-language-models", "mode": "chat", "input_cost_per_token": 1.25e-06, "output_cost_per_token": 1e-05 }
+}
