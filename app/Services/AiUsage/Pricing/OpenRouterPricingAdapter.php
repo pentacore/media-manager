@@ -30,7 +30,6 @@ final class OpenRouterPricingAdapter
         'completion' => 'output_per_mtok',
         'input_cache_read' => 'cache_read_per_mtok',
         'input_cache_write' => 'cache_write_per_mtok',
-        'internal_reasoning' => 'reasoning_per_mtok',
     ];
 
     /**
@@ -140,6 +139,14 @@ final class OpenRouterPricingAdapter
             $fields[$column] = CandidatePriceField::of($value);
         }
 
+        $reasoningField = $this->reasoningField($pricing, $fields['output_per_mtok']);
+
+        if ($reasoningField === null) {
+            return [null, new PricingRejection(self::PROVIDER, $modelId, PricingRejection::INVALID_COST, 'internal_reasoning'), null];
+        }
+
+        $fields['reasoning_per_mtok'] = $reasoningField;
+
         $tiered = is_array($pricing['overrides'] ?? null) && $pricing['overrides'] !== [];
 
         $modelPriceCandidate = new ModelPriceCandidate(
@@ -156,6 +163,31 @@ final class OpenRouterPricingAdapter
             : null;
 
         return [$modelPriceCandidate, null, $warning];
+    }
+
+    /**
+     * `reasoning_per_mtok` reads OpenRouter's `internal_reasoning` rate when it
+     * is supplied and greater than zero. OpenRouter reports it as `0` (or omits
+     * it) for most models because reasoning tokens are billed at the
+     * completion rate, so a missing or explicit-zero value falls back to the
+     * already-resolved completion (output) rate instead of writing zero.
+     * Returns null when a supplied value is invalid.
+     *
+     * @param  array<string, mixed>  $pricing
+     */
+    private function reasoningField(array $pricing, CandidatePriceField $outputField): ?CandidatePriceField
+    {
+        if (! array_key_exists('internal_reasoning', $pricing)) {
+            return $outputField;
+        }
+
+        $value = $this->perMillion($pricing['internal_reasoning']);
+
+        if ($value === null) {
+            return null;
+        }
+
+        return $value === '0' ? $outputField : CandidatePriceField::of($value);
     }
 
     /**

@@ -57,7 +57,8 @@ test('per-token prices become per-million rates for the openrouter provider', fu
         ->and($candidate->fields['output_per_mtok']->value)->toBe('20')
         ->and($candidate->fields['cache_read_per_mtok']->value)->toBe('0.2')
         ->and($candidate->fields['cache_write_per_mtok']->value)->toBe('5')
-        ->and($candidate->fields['reasoning_per_mtok']->supplied)->toBeFalse()
+        ->and($candidate->fields['reasoning_per_mtok']->supplied)->toBeTrue()
+        ->and($candidate->fields['reasoning_per_mtok']->value)->toBe('20')
         ->and($candidate->tiered)->toBeFalse();
 });
 
@@ -69,8 +70,18 @@ test('long-context overrides flag the candidate as tiered without changing the b
     expect($candidate->tiered)->toBeTrue()
         ->and($candidate->fields['input_per_mtok']->value)->toBe('0.1')
         ->and($candidate->fields['reasoning_per_mtok']->supplied)->toBeTrue()
-        ->and($candidate->fields['reasoning_per_mtok']->value)->toBe('0')
+        ->and($candidate->fields['reasoning_per_mtok']->value)->toBe('0.5')
         ->and(array_map(fn (PricingWarning $pricingWarning): string => $pricingWarning->code, $result->warnings))->toBe([PricingWarning::CONTEXT_TIERS]);
+});
+
+test('a positive internal reasoning rate distinct from completion is used as-is', function (): void {
+    $result = new OpenRouterPricingAdapter()->adapt(openRouterAdapterFixture(), RefreshScope::all());
+
+    $candidate = openRouterAdapterCandidate($result, 'anthropic/claude-haiku-6');
+
+    expect($candidate->fields['output_per_mtok']->value)->toBe('4')
+        ->and($candidate->fields['reasoning_per_mtok']->supplied)->toBeTrue()
+        ->and($candidate->fields['reasoning_per_mtok']->value)->toBe('8');
 });
 
 test('variant ids, non-text models, variable prices and incomplete entries are rejected', function (string $model, string $code): void {

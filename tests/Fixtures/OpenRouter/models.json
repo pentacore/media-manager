@@ -11,6 +11,11 @@
             "pricing": { "prompt": "0.0000001", "completion": "0.0000005", "internal_reasoning": "0", "overrides": [{ "min_prompt_tokens": 272000, "prompt": "0.0000002", "completion": "0.00000075" }] }
         },
         {
+            "id": "anthropic/claude-haiku-6",
+            "architecture": { "output_modalities": ["text"] },
+            "pricing": { "prompt": "0.000001", "completion": "0.000004", "internal_reasoning": "0.000008" }
+        },
+        {
             "id": "anthropic/claude-opus-5.5:batch",
             "architecture": { "output_modalities": ["text"] },
             "pricing": { "prompt": "0.000002", "completion": "0.00001" }
