@@ -71,6 +71,7 @@ defineOptions({
 });
 
 const deleteDialogOpen = ref(false);
+const deleting = ref(false);
 const deleteFiles = ref(false);
 const replaceDialogOpen = ref(false);
 
@@ -103,11 +104,19 @@ function posterUrl(): string | null {
 }
 
 function confirmDelete() {
+    if (deleting.value) {
+        return;
+    }
+
+    deleting.value = true;
     router.delete(MovieController.destroy.url(props.movie.id), {
         data: { delete_files: deleteFiles.value },
         preserveScroll: true,
         onSuccess: () => {
             deleteDialogOpen.value = false;
+        },
+        onFinish: () => {
+            deleting.value = false;
         },
     });
 }
@@ -187,6 +196,7 @@ function confirmDelete() {
                             <Button
                                 variant="destructive"
                                 data-delete-confirm
+                                :disabled="deleting"
                                 @click="confirmDelete"
                             >
                                 Confirm

@@ -109,6 +109,7 @@ defineOptions({
 
 const deleteFiles = ref(false);
 const deleteDialogOpen = ref(false);
+const deleting = ref(false);
 const openSeasons = ref<Record<number, boolean>>({});
 const replaceDialogOpen = ref(false);
 const replaceTarget = ref<{
@@ -171,10 +172,16 @@ function toggleSeason(seasonNumber: number) {
 }
 
 function confirmDelete() {
+    if (deleting.value) {
+        return;
+    }
+
+    deleting.value = true;
     router.delete(SeriesController.destroy.url(props.series.id), {
         data: { delete_files: deleteFiles.value },
         preserveScroll: true,
         onFinish: () => {
+            deleting.value = false;
             deleteDialogOpen.value = false;
         },
     });
@@ -251,6 +258,7 @@ function sonarrSeriesUrl(): string | null {
                             <Button
                                 variant="destructive"
                                 data-delete-confirm
+                                :disabled="deleting"
                                 @click="confirmDelete"
                             >
                                 Delete
