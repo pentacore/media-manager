@@ -8,22 +8,25 @@ use App\Concerns\NotificationDestinationValidationRules;
 use App\Services\Notifications\PreferenceResolver;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
-use Illuminate\Validation\Rule;
+use Illuminate\Validation\Validator;
 
 class UpdateNotificationPreferencesRequest extends FormRequest
 {
     use NotificationDestinationValidationRules;
 
     /**
+     * Fields the generic webhook channel is built from — admin-only, since it
+     * POSTs to whatever URL is saved with no SSRF filtering.
+     *
+     * @var list<string>
+     */
+    private const array WEBHOOK_FIELDS = ['webhook_url', 'webhook_secret'];
+
+    /**
      * @return array<string, ValidationRule|array<mixed>|string>
      */
     public function rules(): array
     {
-        // The generic webhook channel POSTs to whatever URL is saved, with no
-        // SSRF filtering — admin-only, so only trusted operators can point it
-        // anywhere.
-        $webhookProhibited = Rule::prohibitedIf(fn (): bool => ! $this->isAdminUser());
-
         $rules = [
             'preferences' => ['present', 'array'],
             'preferences.*.class' => ['required', 'string'],
@@ -32,8 +35,8 @@ class UpdateNotificationPreferencesRequest extends FormRequest
             // Secrets: absent key = keep, '' = clear, value = replace (see controller).
             'discord_webhook_url' => ['sometimes', 'nullable', ...self::discordWebhookUrlRules()],
             'telegram_chat_id' => ['nullable', ...self::telegramChatIdRules()],
-            'webhook_url' => ['nullable', 'url', 'max:2048', $webhookProhibited],
-            'webhook_secret' => ['sometimes', 'nullable', 'string', 'max:255', $webhookProhibited],
+            'webhook_url' => ['nullable', 'url', 'max:2048'],
+            'webhook_secret' => ['sometimes', 'nullable', 'string', 'max:255'],
         ];
 
         foreach (PreferenceResolver::CHANNELS as $channel) {
@@ -41,6 +44,28 @@ class UpdateNotificationPreferencesRequest extends FormRequest
         }
 
         return $rules;
+    }
+
+    /**
+     * A non-admin submitting a non-empty webhook_url/webhook_secret is
+     * rejected; an absent or blank value is still fine (keeps/clears
+     * semantics for the fields an admin already saved).
+     */
+    public function withValidator(Validator $validator): void
+    {
+        $validator->after(function (Validator $validator): void {
+            if ($this->isAdminUser()) {
+                return;
+            }
+
+            foreach (self::WEBHOOK_FIELDS as $field) {
+                $value = $this->input($field);
+
+                if ($value !== null && $value !== '') {
+                    $validator->errors()->add($field, __('Only admins can set the webhook channel.'));
+                }
+            }
+        });
     }
 
     private function isAdminUser(): bool
