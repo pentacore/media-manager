@@ -33,6 +33,7 @@ use Illuminate\Queue\Attributes\FailOnTimeout;
 use Illuminate\Queue\Attributes\MaxExceptions;
 use Illuminate\Queue\Attributes\Timeout;
 use Illuminate\Queue\Attributes\Tries;
+use Illuminate\Queue\Attributes\UniqueFor;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
 use Illuminate\Support\Facades\DB;
@@ -44,6 +45,7 @@ use Throwable;
 #[Tries(0)]
 #[MaxExceptions(1)]
 #[FailOnTimeout]
+#[UniqueFor(1080)]
 final class RunSubtitleAdvisor implements ShouldBeUnique, ShouldQueue
 {
     use Dispatchable;

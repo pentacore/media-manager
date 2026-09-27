@@ -53,7 +53,10 @@ class InspectStuckImportTool implements Tool
         }
 
         try {
-            $connection = ServiceConnection::resolveActive($type);
+            $context = app()->bound(DecisionRunContext::class) ? resolve(DecisionRunContext::class) : null;
+            $connection = $context instanceof DecisionRunContext
+                ? $context->resolveConnection($type)
+                : ServiceConnection::resolveActive($type);
             $client = $type === ServiceType::Sonarr
                 ? new SonarrClient($connection)
                 : new RadarrClient($connection);

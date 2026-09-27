@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use App\Jobs\SyncAnimeMappingJob;
 use App\Models\AnimeIdMap;
+use Illuminate\Queue\Attributes\UniqueFor;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
 
@@ -231,4 +232,11 @@ test('handle throws and keeps existing rows when a valid list has fewer than the
 
     expect(AnimeIdMap::query()->where('anilist_id', 111)->exists())->toBeTrue();
     expect(AnimeIdMap::query()->where('anilist_id', 222)->exists())->toBeFalse();
+});
+
+test('job has unique-for duration', function (): void {
+    $job = new SyncAnimeMappingJob;
+    $reflection = new ReflectionClass($job);
+
+    expect($reflection->getAttributes(UniqueFor::class)[0]->newInstance()->uniqueFor)->toBe(1800);
 });

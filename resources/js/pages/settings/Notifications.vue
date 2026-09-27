@@ -26,8 +26,8 @@ interface Destinations {
     ntfy_topic: string | null;
     discord_webhook_url_hint: string | null;
     telegram_chat_id: string | null;
-    webhook_url: string | null;
-    webhook_secret_set: boolean;
+    webhook_url?: string | null;
+    webhook_secret_set?: boolean;
 }
 
 const props = defineProps<{
@@ -93,7 +93,10 @@ const webhookSecretTouched = ref(false);
 const hasDiscord = computed(
     () => props.destinations.discord_webhook_url_hint !== null,
 );
-const hasWebhook = computed(() => props.destinations.webhook_url !== null);
+const hasWebhook = computed(
+    () => (props.destinations.webhook_url ?? null) !== null,
+);
+const canUseWebhook = computed(() => props.channels.includes('webhook'));
 const hasTelegram = computed(
     () => props.destinations.telegram_chat_id !== null,
 );
@@ -398,6 +401,7 @@ function save(): void {
         </div>
 
         <div
+            v-if="canUseWebhook"
             data-destination="webhook"
             class="rounded-xl border border-border bg-card p-4"
         >

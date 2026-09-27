@@ -49,6 +49,12 @@ beforeEach(function (): void {
     resolve(AiSettings::class)->setChatRoutingEnabled(true);
 });
 
+test('no group meeting the inclusion threshold means the full toolset', function (): void {
+    Classification::fake([routerGroupAnswers(['playback' => 0.45])]);
+
+    expect(resolve(ChatToolRouter::class)->route('What is playing?', null))->toBeNull();
+});
+
 test('confident groups are routed and filtering keeps core tools', function (): void {
     Classification::fake([routerGroupAnswers(['playback' => 0.9])]);
     $chatToolRouter = resolve(ChatToolRouter::class);

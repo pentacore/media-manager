@@ -2,9 +2,16 @@
 
 declare(strict_types=1);
 
+use App\Enums\ActionRequestStatus;
+use App\Enums\AiMode;
+use App\Jobs\ExecuteActionRequest;
+use App\Models\ActionRequest;
+use App\Models\ActionTypeConfig;
 use App\Models\ServiceConnection;
 use App\Models\User;
+use App\Settings\AiSettings;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Queue;
 
 beforeEach(function (): void {
     config()->set('inertia.ssr.enabled', false);
@@ -256,33 +263,92 @@ test('store validates required fields', function (): void {
         ->assertSessionHasErrors(['title', 'tvdbId', 'qualityProfileId', 'rootFolderPath']);
 });
 
-test('members can delete a series', function (): void {
+test('destroy queues a delete_series action request instead of calling sonarr', function (): void {
     $member = User::factory()->member()->create();
+    ActionTypeConfig::factory()->create([
+        'type' => 'delete_series',
+        'requires_approval' => true,
+        'is_enabled' => true,
+    ]);
 
-    Http::fake(['sonarr.local:8989/api/v3/series/42*' => Http::response(null, 200)]);
-
-    $this->actingAs($member)
-        ->delete(route('media.series.destroy', 42))
-        ->assertRedirect(route('media.series.index'));
-
-    Http::assertSent(fn ($request): bool => $request->method() === 'DELETE'
-        && str_contains((string) $request->url(), '/api/v3/series/42')
-        && str_contains((string) $request->url(), 'deleteFiles=false')
-    );
-});
-
-test('delete passes deleteFiles flag when requested', function (): void {
-    $member = User::factory()->member()->create();
-
-    Http::fake(['sonarr.local:8989/api/v3/series/42*' => Http::response(null, 200)]);
+    Http::fake([
+        'sonarr.local:8989/api/v3/series/42' => Http::response([
+            'id' => 42, 'title' => 'My Show', 'year' => 2024,
+        ]),
+    ]);
+    Queue::fake();
 
     $this->actingAs($member)
         ->delete(route('media.series.destroy', 42), ['delete_files' => true])
-        ->assertRedirect(route('media.series.index'));
+        ->assertRedirect()
+        ->assertSessionHas('inertia.flash_data.toast.type', 'info')
+        ->assertSessionHas('inertia.flash_data.toast.message', 'Deletion queued for approval in the Action Queue.');
 
-    Http::assertSent(fn ($request): bool => $request->method() === 'DELETE'
-        && str_contains((string) $request->url(), 'deleteFiles=true')
-    );
+    Http::assertNotSent(fn ($request): bool => $request->method() === 'DELETE');
+
+    $actionRequest = ActionRequest::query()->where('type', 'delete_series')->sole();
+    expect($actionRequest->origin)->toBe('manual');
+    expect($actionRequest->status)->toBe(ActionRequestStatus::Pending);
+    expect($actionRequest->payload)->toMatchArray([
+        'sonarr_series_id' => 42,
+        'delete_files' => true,
+        'service_connection_id' => $this->connection->id,
+    ]);
+
+    Queue::assertNotPushed(ExecuteActionRequest::class);
+});
+
+test('destroy auto-executes when the rule does not require approval', function (): void {
+    $member = User::factory()->member()->create();
+    ActionTypeConfig::factory()->create([
+        'type' => 'delete_series',
+        'requires_approval' => false,
+        'is_enabled' => true,
+    ]);
+
+    Http::fake([
+        'sonarr.local:8989/api/v3/series/42' => Http::response([
+            'id' => 42, 'title' => 'My Show', 'year' => 2024,
+        ]),
+    ]);
+    Queue::fake();
+
+    $this->actingAs($member)
+        ->delete(route('media.series.destroy', 42))
+        ->assertRedirect(route('media.series.index'))
+        ->assertSessionHas('inertia.flash_data.toast.type', 'success')
+        ->assertSessionHas('inertia.flash_data.toast.message', 'Series deletion queued.');
+
+    Http::assertNotSent(fn ($request): bool => $request->method() === 'DELETE');
+
+    $actionRequest = ActionRequest::query()->where('type', 'delete_series')->sole();
+    expect($actionRequest->status)->toBe(ActionRequestStatus::Approved);
+
+    Queue::assertPushed(ExecuteActionRequest::class, fn (ExecuteActionRequest $executeActionRequest): bool => $executeActionRequest->actionRequest->id === $actionRequest->id);
+});
+
+test('destroy reports a disabled rule', function (): void {
+    $member = User::factory()->member()->create();
+    ActionTypeConfig::factory()->create([
+        'type' => 'delete_series',
+        'requires_approval' => true,
+        'is_enabled' => false,
+    ]);
+
+    Http::fake([
+        'sonarr.local:8989/api/v3/series/42' => Http::response([
+            'id' => 42, 'title' => 'My Show', 'year' => 2024,
+        ]),
+    ]);
+
+    $this->actingAs($member)
+        ->delete(route('media.series.destroy', 42))
+        ->assertRedirect()
+        ->assertSessionHas('inertia.flash_data.toast.type', 'error')
+        ->assertSessionHas('inertia.flash_data.toast.message', 'Deleting series is disabled in Action Rules.');
+
+    Http::assertNotSent(fn ($request): bool => $request->method() === 'DELETE');
+    expect(ActionRequest::query()->where('type', 'delete_series')->exists())->toBeFalse();
 });
 
 test('series index prefers external_url for connection link', function (): void {
@@ -295,4 +361,29 @@ test('series index prefers external_url for connection link', function (): void 
         ->assertInertia(fn ($page) => $page
             ->where('connection.url', 'https://sonarr.example.com')
         );
+});
+
+test('destroy follows the rule even when the chat AI is in advisory mode', function (): void {
+    resolve(AiSettings::class)->setMode(AiMode::Advisory);
+    $member = User::factory()->member()->create();
+    ActionTypeConfig::factory()->create([
+        'type' => 'delete_series',
+        'requires_approval' => false,
+        'is_enabled' => true,
+    ]);
+
+    Http::fake([
+        'sonarr.local:8989/api/v3/series/42' => Http::response([
+            'id' => 42, 'title' => 'My Show', 'year' => 2024,
+        ]),
+    ]);
+    Queue::fake();
+
+    $this->actingAs($member)
+        ->delete(route('media.series.destroy', 42))
+        ->assertRedirect(route('media.series.index'));
+
+    $actionRequest = ActionRequest::query()->where('type', 'delete_series')->sole();
+    expect($actionRequest->status)->toBe(ActionRequestStatus::Approved);
+    Queue::assertPushed(ExecuteActionRequest::class, fn (ExecuteActionRequest $executeActionRequest): bool => $executeActionRequest->actionRequest->id === $actionRequest->id);
 });

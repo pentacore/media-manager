@@ -4,7 +4,10 @@ declare(strict_types=1);
 
 namespace App\Ai\Decision;
 
+use App\Enums\ServiceType;
+use App\Models\ServiceConnection;
 use App\Models\WebhookEvent;
+use Illuminate\Database\Eloquent\ModelNotFoundException;
 
 /**
  * Per-run scratch state shared between RunDecisionAgent and ProposeActionTool.
@@ -23,33 +26,93 @@ class DecisionRunContext
     /** @var array<int, array{action_request_id: int, requires_approval: bool}> */
     private array $queued = [];
 
+    /**
+     * $eventPayload and $originConnectionId are the triggering event's
+     * snapshot, carried by the job rather than re-read from the WebhookEvent
+     * row: with webhook capture off that row is trimmed before the run (and
+     * $webhookEventId is then null), yet subject binding and connection
+     * pinning must still hold.
+     *
+     * $eventType is the triggering event's type, carried the same way as
+     * $eventPayload/$originConnectionId, so the approval-card reason still
+     * names the event when the WebhookEvent row is gone.
+     *
+     * @param  array<string, mixed>  $eventPayload
+     */
     public function __construct(
         public readonly ?int $webhookEventId,
         public readonly int $maxActions,
         public readonly string $sourceService = 'agent',
+        public readonly array $eventPayload = [],
+        public readonly ?int $originConnectionId = null,
+        public readonly ?string $eventType = null,
     ) {}
+
+    /**
+     * The triggering event's download id, read the way the arr webhook
+     * handlers read it: top-level downloadId, falling back to
+     * downloadInfo.downloadId. Shared by every tool that must bind its
+     * action to the download that triggered this run.
+     */
+    public function eventDownloadId(): ?string
+    {
+        $downloadId = $this->eventPayload['downloadId'] ?? ($this->eventPayload['downloadInfo']['downloadId'] ?? null);
+
+        return is_string($downloadId) && $downloadId !== '' ? $downloadId : null;
+    }
 
     /**
      * The payload the describer resolves against: the triggering webhook's
      * connection is pinned exactly as ActionOrchestrator::dispatchFromAgent()
-     * will pin it, so the named target is the one the executor acts on.
+     * will pin it (tools pass $originConnectionId as its pinnedConnectionId)
+     * — always overwriting any model-supplied service_connection_id — so the
+     * named target is the one the executor acts on.
      *
      * @param  array<string, mixed>  $payload
      * @return array<string, mixed>
      */
     public function pinContext(array $payload): array
     {
-        if ($this->webhookEventId === null || array_key_exists('service_connection_id', $payload)) {
+        if ($this->webhookEventId === null && $this->originConnectionId === null) {
             return $payload;
         }
 
-        $connectionId = WebhookEvent::query()->whereKey($this->webhookEventId)->value('service_connection_id');
+        unset($payload['service_connection_id']);
 
-        return $connectionId === null ? $payload : [...$payload, 'service_connection_id' => $connectionId];
+        return $this->originConnectionId === null
+            ? $payload
+            : [...$payload, 'service_connection_id' => $this->originConnectionId];
+    }
+
+    /**
+     * Resolve the connection candidate-lookup and inspection tools should
+     * read from: the pinned connection this run's action executes on when an
+     * origin connection is known, the active connection otherwise. Without
+     * this, a tool re-resolving "the active" connection could inspect a
+     * different instance than the one the queued action will run against on
+     * a multi-instance setup.
+     *
+     * @throws ModelNotFoundException
+     */
+    public function resolveConnection(ServiceType $serviceType): ServiceConnection
+    {
+        return ServiceConnection::resolvePinned($this->pinContext([]), $serviceType);
     }
 
     public function proposalReason(): string
     {
+        if ($this->eventType !== null) {
+            $connectionName = $this->originConnectionId === null
+                ? null
+                : ServiceConnection::query()->find($this->originConnectionId)?->name;
+
+            return sprintf(
+                'Proposed by the decision agent in response to a "%s" event from %s.',
+                $this->eventType,
+                $connectionName ?? $this->sourceService,
+            );
+        }
+
         $webhookEvent = $this->webhookEventId === null
             ? null
             : WebhookEvent::query()->with('serviceConnection:id,name')->find($this->webhookEventId);

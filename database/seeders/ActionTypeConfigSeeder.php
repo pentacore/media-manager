@@ -15,7 +15,7 @@ class ActionTypeConfigSeeder extends Seeder
             [
                 'type' => 'delete_series',
                 'label' => 'Delete series from Sonarr',
-                'description' => 'Remove a series from Sonarr when it is deleted from Emby.',
+                'description' => 'Delete a series from Sonarr — from the series page or when it is deleted from Emby.',
                 'requires_approval' => true,
                 'is_enabled' => true,
             ],
@@ -43,7 +43,7 @@ class ActionTypeConfigSeeder extends Seeder
             [
                 'type' => 'delete_movie',
                 'label' => 'Delete movie from Radarr',
-                'description' => 'Remove a movie from Radarr when it is deleted from Emby.',
+                'description' => 'Delete a movie from Radarr — from the movie page or when it is deleted from Emby.',
                 'requires_approval' => true,
                 'is_enabled' => true,
             ],
