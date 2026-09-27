@@ -16,6 +16,8 @@ use Illuminate\Contracts\Queue\Job;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\RequestException;
 use Illuminate\Http\Client\Response;
+use Illuminate\Queue\Attributes\Timeout;
+use Illuminate\Queue\Attributes\UniqueFor;
 use Illuminate\Support\Facades\Event;
 
 beforeEach(function (): void {
@@ -268,4 +270,13 @@ test('failed() hook records job_failed when queue exhausts without explicit stat
         'reason' => 'job_failed',
         'message' => 'queue gave up',
     ]);
+});
+
+test('job has timeout and unique-for duration', function (): void {
+    $request = ActionRequest::factory()->create(['status' => ActionRequestStatus::Approved, 'type' => 'delete_series']);
+    $job = new ExecuteActionRequest($request);
+    $reflection = new ReflectionClass($job);
+
+    expect($reflection->getAttributes(Timeout::class)[0]->newInstance()->timeout)->toBe(300)
+        ->and($reflection->getAttributes(UniqueFor::class)[0]->newInstance()->uniqueFor)->toBe(3600);
 });

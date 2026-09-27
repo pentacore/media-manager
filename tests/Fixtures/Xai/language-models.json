@@ -1,0 +1,59 @@
+{
+    "models": [
+        {
+            "id": "grok-5",
+            "aliases": ["grok-5-latest"],
+            "prompt_text_token_price": 30000,
+            "cached_prompt_text_token_price": 7500,
+            "completion_text_token_price": 150000,
+            "prompt_text_token_price_long_context": 60000,
+            "completion_text_token_price_long_context": 300000,
+            "long_context_threshold": 128000,
+            "input_modalities": ["text", "image"],
+            "output_modalities": ["text"],
+            "object": "model"
+        },
+        {
+            "id": "grok-5-mini",
+            "prompt_text_token_price": 2000,
+            "completion_text_token_price": 5000,
+            "long_context_threshold": 0,
+            "output_modalities": ["text"],
+            "object": "model"
+        },
+        {
+            "id": "grok-imagine",
+            "prompt_text_token_price": 1000,
+            "completion_text_token_price": 1000,
+            "output_modalities": ["image"],
+            "object": "model"
+        },
+        {
+            "id": "grok-missing-completion",
+            "prompt_text_token_price": 1000,
+            "output_modalities": ["text"],
+            "object": "model"
+        },
+        {
+            "id": "grok-5-nano",
+            "prompt_text_token_price": 1000,
+            "completion_text_token_price": 3000,
+            "prompt_text_token_price_long_context": 2000,
+            "output_modalities": ["text"],
+            "object": "model"
+        },
+        {
+            "id": "grok-5-no-input",
+            "completion_text_token_price": 1000,
+            "output_modalities": ["text"],
+            "object": "model"
+        },
+        {
+            "id": "grok-5-negative-completion",
+            "prompt_text_token_price": 1000,
+            "completion_text_token_price": -5,
+            "output_modalities": ["text"],
+            "object": "model"
+        }
+    ]
+}

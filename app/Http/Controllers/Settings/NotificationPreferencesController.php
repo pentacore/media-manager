@@ -64,6 +64,7 @@ class NotificationPreferencesController extends Controller
     public function edit(Request $request): Response
     {
         $user = $request->user();
+        $isAdmin = $user->isAdmin();
         $rows = NotificationPreference::query()
             ->where('user_id', $user->id)
             ->get()
@@ -93,17 +94,26 @@ class NotificationPreferencesController extends Controller
             ];
         }
 
+        $channels = $isAdmin
+            ? PreferenceResolver::CHANNELS
+            : array_values(array_diff(PreferenceResolver::CHANNELS, ['webhook']));
+
+        $destinations = [
+            'ntfy_topic' => $user->ntfy_topic,
+            'discord_webhook_url_hint' => $this->hint($user->discord_webhook_url),
+            'telegram_chat_id' => $user->telegram_chat_id,
+        ];
+
+        if ($isAdmin) {
+            $destinations['webhook_url'] = $user->webhook_url;
+            $destinations['webhook_secret_set'] = is_string($user->webhook_secret) && $user->webhook_secret !== '';
+        }
+
         return Inertia::render('settings/Notifications', [
             'catalog' => $catalog,
-            'channels' => PreferenceResolver::CHANNELS,
+            'channels' => $channels,
             'severities' => PreferenceResolver::SEVERITIES,
-            'destinations' => [
-                'ntfy_topic' => $user->ntfy_topic,
-                'discord_webhook_url_hint' => $this->hint($user->discord_webhook_url),
-                'telegram_chat_id' => $user->telegram_chat_id,
-                'webhook_url' => $user->webhook_url,
-                'webhook_secret_set' => is_string($user->webhook_secret) && $user->webhook_secret !== '',
-            ],
+            'destinations' => $destinations,
             'channelsConfigured' => [
                 'ntfy' => is_string(config('services.ntfy.server')) && config('services.ntfy.server') !== '',
                 'telegram' => is_string(config('services.telegram.token')) && config('services.telegram.token') !== '',
@@ -115,6 +125,7 @@ class NotificationPreferencesController extends Controller
     {
         $validated = $updateNotificationPreferencesRequest->validated();
         $user = $updateNotificationPreferencesRequest->user();
+        $isAdmin = $user->isAdmin();
         $preferenceResolver = resolve(PreferenceResolver::class);
 
         foreach ($validated['preferences'] as $entry) {
@@ -131,6 +142,13 @@ class NotificationPreferencesController extends Controller
                 $values = [];
                 foreach (PreferenceResolver::CHANNELS as $channel) {
                     $values[$channel] = (bool) ($flags[$channel] ?? $defaults[$channel]);
+                }
+
+                // The webhook channel is admin-only; a non-admin's toggle is
+                // ignored rather than rejected, since it renders the same as
+                // every other channel in the shared preferences matrix.
+                if (! $isAdmin) {
+                    $values['webhook'] = false;
                 }
 
                 NotificationPreference::query()->updateOrCreate(

@@ -180,6 +180,7 @@ class UpsertModelPriceTool extends BaseTool
             provider: $provider,
             model: $model,
             fields: $this->priceFields($args),
+            source: PricingSource::FirstParty,
             sourceUrl: $sourceUrl,
             sourceUpdatedAt: $this->validSourceDate($args['source_updated_at'] ?? null),
         );

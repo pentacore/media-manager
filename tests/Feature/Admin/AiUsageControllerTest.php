@@ -315,7 +315,7 @@ test('show returns invocation detail with breakdown using the row snapshot', fun
         ->assertJsonPath('total_cost', fn ($v): bool => abs((float) $v - 1.20) < 0.0001);
 });
 
-test('show exposes the persisted assistant response_text', function (): void {
+test('show exposes the persisted prompt_text and response_text', function (): void {
     $admin = User::factory()->admin()->create();
 
     $record = AiUsageRecord::create([
@@ -329,6 +329,7 @@ test('show exposes the persisted assistant response_text', function (): void {
         'cache_write_input_tokens' => 0,
         'reasoning_tokens' => 0,
         'tool_calls_count' => 0,
+        'prompt_text' => 'Hello from the user.',
         'response_text' => 'Hello from the assistant.',
         'status' => 'success',
     ]);
@@ -336,6 +337,7 @@ test('show exposes the persisted assistant response_text', function (): void {
     $this->actingAs($admin)
         ->getJson(route('admin.ai-usage.show', $record))
         ->assertOk()
+        ->assertJsonPath('record.prompt_text', 'Hello from the user.')
         ->assertJsonPath('record.response_text', 'Hello from the assistant.');
 });
 

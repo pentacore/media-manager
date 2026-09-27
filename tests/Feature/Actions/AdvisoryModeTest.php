@@ -82,3 +82,26 @@ test('executive mode preserves auto-approve behavior', function (): void {
     expect($request->status)->toBe(ActionRequestStatus::Approved);
     Queue::assertPushed(ExecuteActionRequest::class);
 });
+
+test('advisory mode does not gate manual requests, which follow the action rule', function (): void {
+    resolve(AiSettings::class)->setMode(AiMode::Advisory);
+
+    ActionTypeConfig::factory()->create([
+        'type' => 'delete_series',
+        'requires_approval' => false,
+        'is_enabled' => true,
+    ]);
+
+    $request = resolve(ActionOrchestrator::class)->dispatch(
+        type: 'delete_series',
+        sourceService: 'user',
+        targetService: 'sonarr',
+        payload: ['sonarr_series_id' => 1],
+        description: new ActionDescription('Test action', 'Test effect.'),
+        origin: 'manual',
+    );
+
+    expect($request->status)->toBe(ActionRequestStatus::Approved)
+        ->and($request->requires_approval)->toBeFalse();
+    Queue::assertPushed(ExecuteActionRequest::class);
+});

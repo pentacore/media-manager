@@ -6,7 +6,6 @@ namespace App\Ai\Decision;
 
 use App\Enums\MediaReplacementStatus;
 use App\Models\MediaReplacementAttempt;
-use App\Models\WebhookEvent;
 use App\Services\Actions\ActionDescriber;
 use App\Services\Actions\ActionOrchestrator;
 use App\Services\Actions\UndescribableAction;
@@ -55,14 +54,42 @@ class ProposeActionTool implements Tool
      * ActionTypeConfig.requires_approval. The DecisionAgent's prompt embeds
      * third-party-authored webhook text (request titles/notes, release
      * names), so a crafted string could steer it into approving/denying
-     * Seerr requests — an approval bypass if these auto-executed. Forcing a
-     * human approval keeps prompt injection from turning into real
-     * downloads or dropped requests.
+     * Seerr requests or deleting library media — an approval bypass if these
+     * auto-executed. Forcing a human approval keeps prompt injection from
+     * turning into real downloads, dropped requests or deleted files.
      */
     public const array FORCED_APPROVAL_TYPES = [
         'approve_seerr_request',
         'decline_seerr_request',
         'cleanup_seerr_request',
+        'delete_series',
+        'delete_movie',
+    ];
+
+    /**
+     * Seerr request mutations: they may only target the request that
+     * triggered the run.
+     */
+    private const array SEERR_REQUEST_TYPES = [
+        'approve_seerr_request',
+        'decline_seerr_request',
+        'cleanup_seerr_request',
+    ];
+
+    /**
+     * Series/movie-scoped types mapped to the event subject they must match
+     * and the payload key their executor (SonarrActions / RadarrActions)
+     * reads the target id from.
+     *
+     * @var array<string, array{subject: 'series'|'movie', key: string}>
+     */
+    private const array SUBJECT_BOUND_TYPES = [
+        'delete_series' => ['subject' => 'series', 'key' => 'sonarr_series_id'],
+        'monitor_series' => ['subject' => 'series', 'key' => 'series_id'],
+        'set_series_quality_profile' => ['subject' => 'series', 'key' => 'series_id'],
+        'delete_movie' => ['subject' => 'movie', 'key' => 'radarr_movie_id'],
+        'monitor_movie' => ['subject' => 'movie', 'key' => 'movie_id'],
+        'set_movie_quality_profile' => ['subject' => 'movie', 'key' => 'movie_id'],
     ];
 
     public function description(): Stringable|string
@@ -114,7 +141,8 @@ class ProposeActionTool implements Tool
             ]);
         }
 
-        $subjectMismatch = $this->rejectForeignSeerrSubject($type, $payload, $context);
+        $subjectMismatch = $this->rejectForeignSeerrSubject($type, $payload, $context)
+            ?? $this->rejectForeignMediaSubject($type, $payload, $context);
         if ($subjectMismatch !== null) {
             return $this->encode($subjectMismatch);
         }
@@ -146,6 +174,7 @@ class ProposeActionTool implements Tool
                 description: $description,
                 webhookEventId: $context->webhookEventId,
                 forceRequiresApproval: in_array($type, self::FORCED_APPROVAL_TYPES, true) ? true : null,
+                pinnedConnectionId: $context->originConnectionId,
             );
         } catch (Throwable $throwable) {
             Log::warning('ProposeActionTool: dispatch failed', [
@@ -216,17 +245,15 @@ class ProposeActionTool implements Tool
      */
     private function rejectForeignSeerrSubject(string $type, array $payload, DecisionRunContext $decisionRunContext): ?array
     {
-        if (! in_array($type, self::FORCED_APPROVAL_TYPES, true)) {
+        if (! in_array($type, self::SEERR_REQUEST_TYPES, true)) {
             return null;
         }
 
         $proposedId = (int) ($payload['seerr_request_id'] ?? 0);
 
-        $eventRequestId = $decisionRunContext->webhookEventId === null
-            ? null
-            : (int) (WebhookEvent::query()->find($decisionRunContext->webhookEventId)?->payload['request']['request_id'] ?? 0);
+        $eventRequestId = (int) ($decisionRunContext->eventPayload['request']['request_id'] ?? 0);
 
-        if ($eventRequestId === null || $eventRequestId <= 0) {
+        if ($eventRequestId <= 0) {
             return [
                 'queued' => false,
                 'reason' => 'subject_not_verifiable',
@@ -242,6 +269,64 @@ class ProposeActionTool implements Tool
                     'seerr_request_id %d does not match the request that triggered this event (%d). Only the triggering request may be acted on.',
                     $proposedId,
                     $eventRequestId,
+                ),
+            ];
+        }
+
+        return null;
+    }
+
+    /**
+     * A series/movie-scoped proposal may only target the subject of the event
+     * that triggered this run. Without this, injected payload text could
+     * steer the agent into deleting or re-configuring an unrelated title.
+     * The id is read from the exact key the executor acts on, so a matching
+     * id smuggled under another key cannot pass the check. A missing or
+     * malformed id is left to the describer, which rejects it as
+     * missing_target. When the event names no subject, only the destructive
+     * delete types are refused; monitor/quality changes stay subject to the
+     * admin's action rules.
+     *
+     * @param  array<string, mixed>  $payload
+     * @return array<string, mixed>|null structured rejection, or null when OK
+     */
+    private function rejectForeignMediaSubject(string $type, array $payload, DecisionRunContext $decisionRunContext): ?array
+    {
+        $binding = self::SUBJECT_BOUND_TYPES[$type] ?? null;
+
+        if ($binding === null) {
+            return null;
+        }
+
+        $proposedId = (int) ($payload[$binding['key']] ?? 0);
+
+        if ($proposedId <= 0) {
+            return null;
+        }
+
+        $eventSubjectId = (int) ($decisionRunContext->eventPayload[$binding['subject']]['id'] ?? 0);
+
+        if ($eventSubjectId <= 0) {
+            return str_starts_with($type, 'delete_')
+                ? [
+                    'queued' => false,
+                    'reason' => 'subject_not_verifiable',
+                    'message' => sprintf('The triggering event carries no %s id, so %s cannot be proposed from it.', $binding['subject'], $type),
+                ]
+                : null;
+        }
+
+        if ($proposedId !== $eventSubjectId) {
+            return [
+                'queued' => false,
+                'reason' => 'subject_mismatch',
+                'message' => sprintf(
+                    '%s %d does not match the %s that triggered this event (%d). Only the triggering %s may be acted on.',
+                    $binding['key'],
+                    $proposedId,
+                    $binding['subject'],
+                    $eventSubjectId,
+                    $binding['subject'],
                 ),
             ];
         }

@@ -8,6 +8,7 @@ use App\Actions\Fortify\CreateNewUser;
 use App\Actions\Fortify\ResetUserPassword;
 use App\Enums\ServiceType;
 use App\Models\ServiceConnection;
+use App\Support\RegistrationGate;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\RateLimiter;
@@ -55,7 +56,7 @@ class FortifyServiceProvider extends ServiceProvider
     {
         Fortify::loginView(fn (Request $request) => Inertia::render('auth/Login', [
             'canResetPassword' => Features::enabled(Features::resetPasswords()),
-            'canRegister' => Features::enabled(Features::registration()),
+            'canRegister' => Features::enabled(Features::registration()) && RegistrationGate::isOpen(),
             'status' => $request->session()->get('status'),
             'authentikEnabled' => filled(config('services.authentik.client_id')),
             'embyEnabled' => ServiceConnection::where('type', ServiceType::Emby)->where('is_active', true)->exists(),
@@ -74,7 +75,7 @@ class FortifyServiceProvider extends ServiceProvider
             'status' => $request->session()->get('status'),
         ]));
 
-        Fortify::registerView(fn () => Inertia::render('auth/Register'));
+        Fortify::registerView(fn () => RegistrationGate::isOpen() ? Inertia::render('auth/Register') : abort(404));
 
         Fortify::twoFactorChallengeView(fn () => Inertia::render('auth/TwoFactorChallenge'));
 
@@ -99,5 +100,7 @@ class FortifyServiceProvider extends ServiceProvider
 
             return Limit::perMinute(5)->by($throttleKey);
         });
+
+        RateLimiter::for('emby-link', fn (Request $request) => Limit::perMinute(5)->by((string) $request->user()?->getAuthIdentifier() ?: $request->ip()));
     }
 }

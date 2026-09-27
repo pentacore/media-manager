@@ -82,6 +82,7 @@ test('first user registered via Fortify gets admin role', function (): void {
 });
 
 test('second user registered via Fortify gets viewer role', function (): void {
+    config(['mediamanager.registration_enabled' => true]);
     User::factory()->admin()->create();
 
     $this->post(route('register'), [

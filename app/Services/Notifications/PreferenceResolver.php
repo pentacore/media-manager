@@ -105,9 +105,12 @@ class PreferenceResolver
             ]
             : [...self::DEFAULTS, ...(self::CLASS_DEFAULTS[$notificationClass] ?? [])];
 
+        // The generic webhook channel is admin-only (it POSTs to whatever URL
+        // is saved with no SSRF filtering); a role downgrade must not leave a
+        // stale preference row still delivering to it.
         $enabled = array_values(array_filter(
             self::CHANNELS,
-            static fn (string $channel): bool => $flags[$channel],
+            static fn (string $channel): bool => $flags[$channel] && ($channel !== 'webhook' || $notifiable->isAdmin()),
         ));
 
         return array_map(

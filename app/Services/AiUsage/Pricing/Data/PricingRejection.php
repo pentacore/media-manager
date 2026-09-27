@@ -71,6 +71,12 @@ final readonly class PricingRejection
      */
     public const string INVALID_COST = 'invalid_cost';
 
+    /**
+     * The model id is a routing variant (for example OpenRouter's `:batch` or
+     * `:free` suffixes) of a base model, priced separately from the base row.
+     */
+    public const string VARIANT = 'variant';
+
     public function __construct(
         public string $provider,
         public string $model,

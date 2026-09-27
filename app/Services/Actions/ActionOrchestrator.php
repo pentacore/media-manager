@@ -27,7 +27,9 @@ class ActionOrchestrator
      *
      * Advisory mode override: when AiSettings::mode() === Advisory, every request
      * is forced to Pending regardless of ActionTypeConfig.requires_approval, and
-     * ExecuteActionRequest is never dispatched.
+     * ExecuteActionRequest is never dispatched. It does not apply to
+     * origin 'manual': a human acting from the UI is governed by the action
+     * rule alone, not by the chat AI's mode.
      *
      * $forceRequiresApproval lets a caller add (never remove) an approval
      * requirement for a single instance — e.g. a partially-mapped manual import
@@ -70,7 +72,7 @@ class ActionOrchestrator
             return null;
         }
 
-        $advisoryMode = $this->aiSettings->mode() === AiMode::Advisory;
+        $advisoryMode = $origin !== 'manual' && $this->aiSettings->mode() === AiMode::Advisory;
         // The override can only tighten the gate (force approval), never relax it.
         $requiresApproval = $advisoryMode
             || $config->requires_approval
@@ -121,6 +123,11 @@ class ActionOrchestrator
      * requirement for a single instance — e.g. an ambiguous manual import is
      * forced to Pending even when its ActionTypeConfig auto-executes.
      *
+     * $pinnedConnectionId is the triggering event's connection as carried by
+     * the run's snapshot (DecisionRunContext::$originConnectionId). It wins
+     * over a lookup through $webhookEventId, and keeps pinning enforced when
+     * webhook capture already trimmed the event row.
+     *
      * @param  array<string, mixed>  $payload
      */
     public function dispatchFromAgent(
@@ -132,6 +139,7 @@ class ActionOrchestrator
         ActionDescription $description,
         ?int $webhookEventId = null,
         ?bool $forceRequiresApproval = null,
+        ?int $pinnedConnectionId = null,
     ): ?ActionRequest {
         $config = ActionTypeConfig::where('type', $type)->first();
 
@@ -149,10 +157,14 @@ class ActionOrchestrator
             || ($forceRequiresApproval ?? false)
             || ! $description->verified;
 
-        // Same connection pinning as dispatch(): agent proposals originate
-        // from a webhook event too.
-        if ($webhookEventId !== null && ! array_key_exists('service_connection_id', $payload)) {
-            $originConnectionId = WebhookEvent::query()->whereKey($webhookEventId)->value('service_connection_id');
+        // Pin the originating connection like dispatch() does, but always
+        // overwrite: the payload is model-authored, and a prompt-injected
+        // service_connection_id must not redirect the action to another
+        // instance. DecisionRunContext::pinContext() mirrors this exactly.
+        if ($webhookEventId !== null || $pinnedConnectionId !== null) {
+            unset($payload['service_connection_id']);
+            $originConnectionId = $pinnedConnectionId
+                ?? WebhookEvent::query()->whereKey($webhookEventId)->value('service_connection_id');
 
             if ($originConnectionId !== null) {
                 $payload['service_connection_id'] = $originConnectionId;

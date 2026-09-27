@@ -54,3 +54,12 @@ test('every seeded action type has an executor', function (): void {
     // Empty on success; otherwise lists seeded types the queue would fail with no_executor.
     expect(array_values(array_diff($seeded, array_keys(ExecuteActionRequest::EXECUTORS))))->toBe([]);
 });
+
+test('delete rule copy covers manual deletes from the media pages as well as Emby deletes', function (string $type, string $expected): void {
+    $this->seed(ActionTypeConfigSeeder::class);
+
+    expect(ActionTypeConfig::query()->where('type', $type)->value('description'))->toBe($expected);
+})->with([
+    'delete_series' => ['delete_series', 'Delete a series from Sonarr — from the series page or when it is deleted from Emby.'],
+    'delete_movie' => ['delete_movie', 'Delete a movie from Radarr — from the movie page or when it is deleted from Emby.'],
+]);

@@ -6,6 +6,7 @@ use App\Models\ServiceConnection;
 use App\Models\User;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Support\Facades\Http;
+use PragmaRX\Google2FA\Google2FA;
 
 beforeEach(function (): void {
     Http::preventStrayRequests();
@@ -214,4 +215,75 @@ test('emby login with linked account logs in regardless of email field', functio
     $this->assertAuthenticatedAs($user);
     expect(User::count())->toBe(1);
     expect(EmbyUserLink::count())->toBe(1);
+});
+
+test('emby login redirects a 2FA user to the challenge without authenticating', function (): void {
+    $google2fa = app(Google2FA::class);
+    $secret = $google2fa->generateSecretKey();
+
+    $user = User::factory()->create();
+    $user->forceFill([
+        'two_factor_secret' => encrypt($secret),
+        'two_factor_recovery_codes' => encrypt(json_encode(['recovery-code-1'])),
+        'two_factor_confirmed_at' => now(),
+    ])->save();
+
+    EmbyUserLink::factory()->create([
+        'user_id' => $user->id,
+        'emby_user_id' => 'emby-2fa-user',
+        'emby_username' => 'TwoFactorUser',
+    ]);
+
+    Http::fake([
+        'emby.local:8096/Users/AuthenticateByName' => Http::response([
+            'User' => ['Id' => 'emby-2fa-user', 'Name' => 'TwoFactorUser'],
+            'AccessToken' => 'token',
+        ]),
+    ]);
+
+    $this->post(route('auth.emby'), [
+        'username' => 'TwoFactorUser',
+        'password' => 'pass',
+    ])->assertRedirect(route('two-factor.login'));
+
+    $this->assertGuest();
+    expect(session('login.id'))->toBe($user->id);
+});
+
+test('completing the challenge after emby login authenticates the user', function (): void {
+    $google2fa = app(Google2FA::class);
+    $secret = $google2fa->generateSecretKey();
+
+    $user = User::factory()->create();
+    $user->forceFill([
+        'two_factor_secret' => encrypt($secret),
+        'two_factor_recovery_codes' => encrypt(json_encode(['recovery-code-1'])),
+        'two_factor_confirmed_at' => now(),
+    ])->save();
+
+    EmbyUserLink::factory()->create([
+        'user_id' => $user->id,
+        'emby_user_id' => 'emby-2fa-user-2',
+        'emby_username' => 'ChallengedUser',
+    ]);
+
+    Http::fake([
+        'emby.local:8096/Users/AuthenticateByName' => Http::response([
+            'User' => ['Id' => 'emby-2fa-user-2', 'Name' => 'ChallengedUser'],
+            'AccessToken' => 'token',
+        ]),
+    ]);
+
+    $this->post(route('auth.emby'), [
+        'username' => 'ChallengedUser',
+        'password' => 'pass',
+    ])->assertRedirect(route('two-factor.login'));
+
+    $this->assertGuest();
+
+    $this->post(route('two-factor.login.store'), [
+        'code' => $google2fa->getCurrentOtp($secret),
+    ])->assertRedirect(route('dashboard'));
+
+    $this->assertAuthenticatedAs($user);
 });
