@@ -268,3 +268,29 @@ test('admin can destroy any link', function (): void {
 
     $this->assertDatabaseMissing('emby_user_links', ['id' => $link->id]);
 });
+
+// ----- RATE LIMITING -----
+
+test('emby link attempts are throttled', function (): void {
+    $user = User::factory()->create();
+
+    Http::fake([
+        'emby.local:8096/Users/AuthenticateByName' => Http::response('', 401),
+    ]);
+
+    for ($attempt = 1; $attempt <= 5; $attempt++) {
+        $this->actingAs($user)
+            ->post(route('emby.links.store'), [
+                'emby_username' => 'alice',
+                'password' => 'wrong',
+            ])
+            ->assertRedirect();
+    }
+
+    $this->actingAs($user)
+        ->post(route('emby.links.store'), [
+            'emby_username' => 'alice',
+            'password' => 'wrong',
+        ])
+        ->assertStatus(429);
+});
