@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace App\Services\AiUsage\Pricing;
 
 use App\Services\AiUsage\Pricing\Data\PricingCatalogResult;
+use App\Services\AiUsage\Pricing\Data\PricingRejection;
+use App\Services\AiUsage\Pricing\Data\PricingWarning;
 use App\Services\AiUsage\Pricing\Data\ProviderPricingResult;
 use App\Settings\AiSettings;
 use Closure;
@@ -53,7 +55,17 @@ final readonly class PricingCatalog
      */
     public function anySourceEnabled(): bool
     {
-        return in_array(true, $this->enabledSources(), true);
+        $enabled = $this->enabledSources();
+
+        // A switched-on xAI source with no configured key can never leave
+        // `not_configured`, so it must not count as "enabled" here — otherwise
+        // an operator who flips xAI on without a key loses the coordinator's
+        // quiet FEED_DISABLED fallback path for a source that will never
+        // produce data. `fetch()` itself is untouched: it still attempts xAI
+        // and records the (quiet) `not_configured` status.
+        $enabled[self::SOURCE_XAI] = $enabled[self::SOURCE_XAI] && $this->xaiKeyConfigured();
+
+        return in_array(true, $enabled, true);
     }
 
     /**
@@ -98,9 +110,11 @@ final readonly class PricingCatalog
         ]);
 
         foreach ($providerKeys as $providerKey) {
-            $result = $openRouter[$providerKey]
-                ?? $xai[$providerKey]
-                ?? $this->pricingReconciler->reconcile($providerKey, $modelsDev[$providerKey] ?? null, $liteLlm[$providerKey] ?? null);
+            $reconciled = $this->pricingReconciler->reconcile($providerKey, $modelsDev[$providerKey] ?? null, $liteLlm[$providerKey] ?? null);
+
+            $result = $providerKey === self::SOURCE_XAI
+                ? $this->mergeXaiPerModel($xai[$providerKey] ?? null, $reconciled)
+                : ($openRouter[$providerKey] ?? $reconciled);
 
             if ($result instanceof ProviderPricingResult) {
                 $providers[$providerKey] = $result;
@@ -126,6 +140,13 @@ final readonly class PricingCatalog
             self::SOURCE_MODELS_DEV => $this->aiSettings->modelsDevPricingEnabled(),
             self::SOURCE_LITELLM => $this->aiSettings->liteLlmPricingEnabled(),
         ];
+    }
+
+    private function xaiKeyConfigured(): bool
+    {
+        $key = config('ai.providers.xai.key');
+
+        return is_string($key) && $key !== '';
     }
 
     /**
@@ -160,6 +181,69 @@ final readonly class PricingCatalog
         $statuses[$source] = PricingCatalogResult::STATUS_OK;
 
         return $results;
+    }
+
+    /**
+     * Merge xAI API candidates with the reconciled models.dev+LiteLLM `xai`
+     * result, per model id rather than per provider: an xAI candidate
+     * (canonical id or alias) always wins for the model ids it covers, and the
+     * reconciled result fills in every xai model id xAI did not cover. A
+     * reconciled conflict or rejection for a model id xAI covered is dropped
+     * (xAI settled it); a warning is kept only for a model id that ended up
+     * with a candidate. Returns the reconciled result unchanged when xAI
+     * produced no candidates (disabled, failed, or an empty response).
+     */
+    private function mergeXaiPerModel(?ProviderPricingResult $xai, ?ProviderPricingResult $reconciled): ?ProviderPricingResult
+    {
+        if (! $xai instanceof ProviderPricingResult || $xai->candidates === []) {
+            return $reconciled;
+        }
+
+        $covered = [];
+
+        foreach ($xai->candidates as $candidate) {
+            $covered[$candidate->model] = true;
+        }
+
+        $candidates = $xai->candidates;
+        $conflicts = [];
+
+        foreach ($reconciled?->candidates ?? [] as $candidate) {
+            if (! isset($covered[$candidate->model])) {
+                $candidates[] = $candidate;
+            }
+        }
+
+        foreach ($reconciled?->conflicts ?? [] as $conflict) {
+            if (! isset($covered[$conflict])) {
+                $conflicts[] = $conflict;
+            }
+        }
+
+        $settled = [];
+
+        foreach ($candidates as $candidate) {
+            $settled[$candidate->model] = true;
+        }
+
+        $rejections = array_values(array_filter(
+            [...$xai->rejections, ...($reconciled?->rejections ?? [])],
+            static fn (PricingRejection $pricingRejection): bool => ! isset($settled[$pricingRejection->model]),
+        ));
+
+        $warnings = array_values(array_filter(
+            [...$xai->warnings, ...($reconciled?->warnings ?? [])],
+            static fn (PricingWarning $pricingWarning): bool => isset($settled[$pricingWarning->model]),
+        ));
+
+        return new ProviderPricingResult(
+            provider: $xai->provider,
+            candidates: $candidates,
+            rejections: $rejections,
+            warnings: $warnings,
+            createSuppressed: $xai->createSuppressed || ($reconciled?->createSuppressed ?? false),
+            conflicts: $conflicts,
+        );
     }
 
     /**

@@ -191,6 +191,18 @@ test('xai api writes are first-party verified and bypass the anomaly guard', fun
         ->and($aiModelPrice->pricing_verified_at)->not->toBeNull();
 });
 
+test('an enabled xai source with no configured key takes the quiet feed-disabled path', function (): void {
+    PriceFetcherAgent::fake(['ok']);
+    config()->set('ai.providers.xai.key');
+    config()->set('mediamanager.ai.pricing.xai.enabled', true);
+
+    $refreshReport = sourcesRun(RefreshScope::forProviders(['xai']));
+    $aiPriceRefreshRun = AiPriceRefreshRun::query()->findOrFail($refreshReport->runId);
+
+    expect($aiPriceRefreshRun->models_dev_status)->toBe('disabled')
+        ->and($refreshReport->errorMessage)->not->toBe('No pricing source produced data.');
+});
+
 test('a down models.dev feed is covered by litellm without waking the verifier', function (): void {
     PriceFetcherAgent::fake(['ok']);
     config()->set('mediamanager.ai.pricing.models_dev.enabled', true);

@@ -118,8 +118,49 @@ test('xai without a key is not configured and falls back to the feeds', function
     $pricingCatalogResult = resolve(PricingCatalog::class)->fetch(RefreshScope::all());
 
     expect($pricingCatalogResult->sourceStatuses[PricingCatalog::SOURCE_XAI])->toBe('not_configured')
-        ->and(catalogSources($pricingCatalogResult, 'xai'))->toBe(['grok-5' => PricingSource::LiteLlm])
+        ->and(catalogSources($pricingCatalogResult, 'xai'))->toBe(['grok-5' => PricingSource::LiteLlm, 'grok-3-mini' => PricingSource::LiteLlm])
         ->and($pricingCatalogResult->errorMessage)->toBeNull();
+});
+
+test('xai candidates win per model while litellm fills the models xai does not cover', function (): void {
+    catalogEnable('xai', 'litellm');
+    catalogFake([
+        'api.x.ai/*' => 'tests/Fixtures/Xai/language-models.json',
+        'raw.githubusercontent.com/*' => 'tests/Fixtures/LiteLlm/prices.json',
+    ]);
+
+    $pricingCatalogResult = resolve(PricingCatalog::class)->fetch(RefreshScope::all());
+
+    expect(catalogSources($pricingCatalogResult, 'xai'))->toMatchArray([
+        'grok-5' => PricingSource::XaiApi,
+        'grok-3-mini' => PricingSource::LiteLlm,
+    ]);
+});
+
+test('an empty xai models list falls back entirely to the reconciled feeds', function (): void {
+    catalogEnable('xai', 'litellm');
+    Http::fake([
+        'api.x.ai/*' => Http::response(json_encode(['models' => []], JSON_THROW_ON_ERROR)),
+        'raw.githubusercontent.com/*' => Http::response((string) file_get_contents(base_path('tests/Fixtures/LiteLlm/prices.json'))),
+    ]);
+
+    $pricingCatalogResult = resolve(PricingCatalog::class)->fetch(RefreshScope::all());
+
+    expect(catalogSources($pricingCatalogResult, 'xai'))->toBe([
+        'grok-5' => PricingSource::LiteLlm,
+        'grok-3-mini' => PricingSource::LiteLlm,
+    ]);
+});
+
+test('anySourceEnabled ignores an xai toggle with no configured key', function (): void {
+    config()->set('ai.providers.xai.key');
+    catalogEnable('xai');
+
+    expect(resolve(PricingCatalog::class)->anySourceEnabled())->toBeFalse();
+
+    config()->set('ai.providers.xai.key', 'xai-test-key');
+
+    expect(resolve(PricingCatalog::class)->anySourceEnabled())->toBeTrue();
 });
 
 test('models.dev and litellm are reconciled for direct providers', function (): void {
