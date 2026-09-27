@@ -17,7 +17,7 @@ use Pentacore\Typefinder\Attributes\TypefinderResource;
 #[TypefinderResource(shape: [
     'id' => 'number',
     'type' => 'string',
-    'origin' => "'system' | 'chat' | 'agent'",
+    'origin' => "'system' | 'chat' | 'agent' | 'manual'",
     'title' => 'string | null',
     'description' => 'string | null',
     'details' => 'Array<{ label: string; value: string }>',

@@ -2,9 +2,14 @@
 
 declare(strict_types=1);
 
+use App\Enums\ActionRequestStatus;
+use App\Jobs\ExecuteActionRequest;
+use App\Models\ActionRequest;
+use App\Models\ActionTypeConfig;
 use App\Models\ServiceConnection;
 use App\Models\User;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Queue;
 
 beforeEach(function (): void {
     config()->set('inertia.ssr.enabled', false);
@@ -254,31 +259,84 @@ test('store validates required fields', function (): void {
         ->assertSessionHasErrors(['title', 'tmdbId', 'qualityProfileId', 'rootFolderPath']);
 });
 
-test('members can delete a movie', function (): void {
+test('destroy queues a delete_movie action request instead of calling radarr', function (): void {
     $member = User::factory()->member()->create();
+    ActionTypeConfig::factory()->create([
+        'type' => 'delete_movie',
+        'requires_approval' => true,
+        'is_enabled' => true,
+    ]);
 
-    Http::fake(['radarr.local:7878/api/v3/movie/42*' => Http::response(null, 200)]);
+    Http::fake([
+        'radarr.local:7878/api/v3/movie/42' => Http::response([
+            'id' => 42, 'title' => 'My Movie', 'year' => 2024,
+        ]),
+    ]);
+    Queue::fake();
+
+    $this->actingAs($member)
+        ->delete(route('media.movies.destroy', 42), ['delete_files' => true])
+        ->assertRedirect();
+
+    Http::assertNotSent(fn ($request): bool => $request->method() === 'DELETE');
+
+    $actionRequest = ActionRequest::query()->where('type', 'delete_movie')->sole();
+    expect($actionRequest->origin)->toBe('manual');
+    expect($actionRequest->status)->toBe(ActionRequestStatus::Pending);
+    expect($actionRequest->payload)->toMatchArray([
+        'radarr_movie_id' => 42,
+        'delete_files' => true,
+        'service_connection_id' => $this->connection->id,
+    ]);
+
+    Queue::assertNotPushed(ExecuteActionRequest::class);
+});
+
+test('destroy auto-executes when the rule does not require approval', function (): void {
+    $member = User::factory()->member()->create();
+    ActionTypeConfig::factory()->create([
+        'type' => 'delete_movie',
+        'requires_approval' => false,
+        'is_enabled' => true,
+    ]);
+
+    Http::fake([
+        'radarr.local:7878/api/v3/movie/42' => Http::response([
+            'id' => 42, 'title' => 'My Movie', 'year' => 2024,
+        ]),
+    ]);
+    Queue::fake();
 
     $this->actingAs($member)
         ->delete(route('media.movies.destroy', 42))
         ->assertRedirect(route('media.movies.index'));
 
-    Http::assertSent(fn ($request): bool => $request->method() === 'DELETE'
-        && str_contains((string) $request->url(), '/api/v3/movie/42')
-        && str_contains((string) $request->url(), 'deleteFiles=false')
-    );
+    Http::assertNotSent(fn ($request): bool => $request->method() === 'DELETE');
+
+    $actionRequest = ActionRequest::query()->where('type', 'delete_movie')->sole();
+    expect($actionRequest->status)->toBe(ActionRequestStatus::Approved);
+
+    Queue::assertPushed(ExecuteActionRequest::class, fn (ExecuteActionRequest $executeActionRequest): bool => $executeActionRequest->actionRequest->id === $actionRequest->id);
 });
 
-test('delete passes deleteFiles flag when requested', function (): void {
+test('destroy reports a disabled rule', function (): void {
     $member = User::factory()->member()->create();
+    ActionTypeConfig::factory()->create([
+        'type' => 'delete_movie',
+        'requires_approval' => true,
+        'is_enabled' => false,
+    ]);
 
-    Http::fake(['radarr.local:7878/api/v3/movie/42*' => Http::response(null, 200)]);
+    Http::fake([
+        'radarr.local:7878/api/v3/movie/42' => Http::response([
+            'id' => 42, 'title' => 'My Movie', 'year' => 2024,
+        ]),
+    ]);
 
     $this->actingAs($member)
-        ->delete(route('media.movies.destroy', 42), ['delete_files' => true])
-        ->assertRedirect(route('media.movies.index'));
+        ->delete(route('media.movies.destroy', 42))
+        ->assertRedirect();
 
-    Http::assertSent(fn ($request): bool => $request->method() === 'DELETE'
-        && str_contains((string) $request->url(), 'deleteFiles=true')
-    );
+    Http::assertNotSent(fn ($request): bool => $request->method() === 'DELETE');
+    expect(ActionRequest::query()->where('type', 'delete_movie')->exists())->toBeFalse();
 });

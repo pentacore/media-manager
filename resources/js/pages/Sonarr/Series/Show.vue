@@ -218,6 +218,7 @@ function sonarrSeriesUrl(): string | null {
                             variant="destructive"
                             size="sm"
                             class="h-8 text-xs"
+                            data-delete-trigger
                         >
                             <Trash2 class="size-3.5" />
                             Delete
@@ -228,9 +229,10 @@ function sonarrSeriesUrl(): string | null {
                             <DialogTitle>
                                 Delete {{ series.title }}?
                             </DialogTitle>
-                            <DialogDescription>
+                            <DialogDescription data-delete-description>
                                 Removes the series from Sonarr. Cannot be
-                                undone.
+                                undone. Deletion may require approval in the
+                                Action Queue.
                             </DialogDescription>
                         </DialogHeader>
                         <div class="flex items-center gap-2 py-2">
@@ -248,6 +250,7 @@ function sonarrSeriesUrl(): string | null {
                             </Button>
                             <Button
                                 variant="destructive"
+                                data-delete-confirm
                                 @click="confirmDelete"
                             >
                                 Delete
