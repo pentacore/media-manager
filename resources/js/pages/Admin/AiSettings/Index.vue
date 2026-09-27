@@ -1073,7 +1073,7 @@ const budgetState = computed<{
                     >
                         <Field
                             label="LiteLLM cross-check"
-                            hint="Cross-checks models.dev against the LiteLLM price map. Agreeing prices are marked as confirmed; conflicts go to the verifier agent."
+                            hint="Cross-checks models.dev against the LiteLLM price map and fills in models models.dev lacks. Agreeing prices are marked as confirmed; conflicts go to the verifier agent."
                         >
                             <span />
                         </Field>
