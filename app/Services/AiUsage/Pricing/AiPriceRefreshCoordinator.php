@@ -6,7 +6,6 @@ namespace App\Services\AiUsage\Pricing;
 
 use App\Ai\Agents\PriceFetcherAgent;
 use App\Ai\AiRunAttribution;
-use App\Enums\PricingSource;
 use App\Models\AiModelPrice;
 use App\Models\AiPriceRefreshRun;
 use App\Models\User;
@@ -374,7 +373,13 @@ final class AiPriceRefreshCoordinator
         try {
             DB::transaction(function () use ($providerPricingResult, $refreshScope, $dryRun, &$state, &$anomalousModels): void {
                 foreach ($providerPricingResult->candidates as $candidate) {
-                    $outcome = $this->aiModelPriceWriter->write($candidate, $refreshScope, PricingSource::ModelsDev, dryRun: $dryRun);
+                    $outcome = $this->aiModelPriceWriter->write(
+                        $candidate,
+                        $refreshScope,
+                        $candidate->source,
+                        dryRun: $dryRun,
+                        firstPartyVerified: $candidate->source->isFirstPartyApi(),
+                    );
 
                     match ($outcome) {
                         WriteOutcome::Created, WriteOutcome::WouldCreate => $state['created']++,

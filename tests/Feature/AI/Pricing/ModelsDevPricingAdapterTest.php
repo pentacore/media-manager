@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use App\Enums\PricingSource;
 use App\Services\AiUsage\Pricing\Data\ModelPriceCandidate;
 use App\Services\AiUsage\Pricing\Data\PricingRejection;
 use App\Services\AiUsage\Pricing\Data\PricingWarning;
@@ -659,4 +660,16 @@ test('flags create suppression from the saved auto-create list for every provide
     expect($results['openrouter']->createSuppressed)->toBeFalse()
         ->and($results['openai']->createSuppressed)->toBeTrue()
         ->and($results['anthropic']->createSuppressed)->toBeTrue();
+});
+
+test('models.dev candidates carry the models.dev pricing source', function (): void {
+    $results = new ModelsDevPricingAdapter()->adapt(modelsDevDecoded(), RefreshScope::forProviders(['openai']));
+
+    $sources = array_map(
+        static fn (ModelPriceCandidate $modelPriceCandidate): PricingSource => $modelPriceCandidate->source,
+        $results['openai']->candidates,
+    );
+
+    expect($sources)->not->toBeEmpty()
+        ->and(array_unique($sources, SORT_REGULAR))->toBe([PricingSource::ModelsDev]);
 });

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Services\AiUsage\Pricing;
 
+use App\Enums\PricingSource;
 use App\Services\AiUsage\Pricing\Data\CandidatePriceField;
 use App\Services\AiUsage\Pricing\Data\ModelPriceCandidate;
 use App\Services\AiUsage\Pricing\Data\PricingRejection;
@@ -250,6 +251,7 @@ final class ModelsDevPricingAdapter
             provider: $provider,
             model: $modelId,
             fields: $fields,
+            source: PricingSource::ModelsDev,
             sourceUrl: $this->sourceUrl(),
             sourceUpdatedAt: $this->sourceUpdatedAt($modelData),
             tiered: $tierSignal !== null,

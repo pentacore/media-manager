@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Services\AiUsage\Pricing\Data;
 
+use App\Enums\PricingSource;
 use App\Models\AiModelPrice;
 
 /**
@@ -18,11 +19,13 @@ final readonly class ModelPriceCandidate
 {
     /**
      * @param  array<string, CandidatePriceField>  $fields
+     * @param  PricingSource  $source  The source that produced this candidate; the coordinator writes the row with it.
      */
     public function __construct(
         public string $provider,
         public string $model,
         public array $fields,
+        public PricingSource $source,
         public ?string $sourceUrl = null,
         public ?string $sourceUpdatedAt = null,
         public bool $tiered = false,
