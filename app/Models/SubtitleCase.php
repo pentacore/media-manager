@@ -201,7 +201,7 @@ class SubtitleCase extends Model
      * when they closed. A case with an upload whose file is not cleaned up yet
      * waits for PruneSubtitleUploads.
      *
-     * @return Builder<self>
+     * @return Builder<static>
      */
     public function prunable(): Builder
     {

@@ -75,6 +75,23 @@ jobs:
       - name: Rector (dry run)
         run: vendor/bin/rector process --dry-run --no-progress-bar
 
+      # Larastan boots the application. Array/sync drivers keep it off Valkey
+      # (the app otherwise reaches Redis while booting) and sqlite keeps it
+      # off Postgres; nothing is queried.
+      - name: Larastan
+        env:
+          APP_KEY: base64:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=
+          APP_ENV: testing
+          DB_CONNECTION: sqlite
+          DB_DATABASE: ':memory:'
+          CACHE_STORE: array
+          MEDIAMANAGER_CACHE_STORE: array
+          SESSION_DRIVER: array
+          QUEUE_CONNECTION: sync
+          BROADCAST_CONNECTION: 'null'
+          TELESCOPE_ENABLED: 'false'
+        run: vendor/bin/phpstan analyse --memory-limit=2G --no-progress
+
   dependency-audit:
     name: Dependency audit
     runs-on: ubuntu-latest

@@ -493,6 +493,12 @@ vendor/bin/sail bin rector
 vendor/bin/sail bin pint --dirty --format agent
 ```
 
+Static analysis (Larastan, level 6, existing errors baselined in `phpstan-baseline.neon`; CI runs it with `rector --dry-run` in the `PHP static analysis` job):
+
+```bash
+vendor/bin/sail composer analyse
+```
+
 Other useful checks:
 
 ```bash

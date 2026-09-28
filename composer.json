@@ -30,6 +30,7 @@
         "driftingly/rector-laravel": "^2.3",
         "fakerphp/faker": "^1.24",
         "itsgoingd/clockwork": "^5.3",
+        "larastan/larastan": "^3.12",
         "laravel/boost": "^2.10",
         "laravel/pail": "^1.2.5",
         "laravel/pint": "^1.27",
@@ -72,6 +73,9 @@
         ],
         "lint:check": [
             "pint --parallel --test"
+        ],
+        "analyse": [
+            "phpstan analyse --memory-limit=2G"
         ],
         "ci:check": [
             "Composer\\Config::disableProcessTimeout",
