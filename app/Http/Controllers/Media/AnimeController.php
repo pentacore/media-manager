@@ -20,6 +20,7 @@ use App\Services\Anime\JikanClient;
 use App\Services\Anime\SeasonalAnimeEntry;
 use App\Services\Anime\SeasonalAnimeSource;
 use App\Services\Seerr\SeerrClient;
+use App\Services\Seerr\SeerrUserResolver;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\RequestException;
@@ -38,7 +39,7 @@ class AnimeController extends Controller
      * Seasonal anime discovery grid. Season list is fetched live (cached) and
      * mapped to TMDB/TVDB ids; owned/requested status is overlaid fresh.
      */
-    public function index(Request $request): Response|RedirectResponse
+    public function index(Request $request, SeerrUserResolver $seerrUserResolver): Response|RedirectResponse
     {
         try {
             $connection = ServiceConnection::resolveActive(ServiceType::Seerr);
@@ -64,7 +65,7 @@ class AnimeController extends Controller
                 'source' => $seasonalAnimeSource->slug(),
             ],
             'navigation' => $this->navigation($year, $season),
-            'requestingUsers' => Inertia::defer(fn (): array => $this->requestingUsers($connection)),
+            'requestingUsers' => Inertia::defer(fn (): array => $seerrUserResolver->pickerOptions($connection, $request->user())),
             'entries' => Inertia::defer(fn (): array => $this->loadSeason($connection, $seasonalAnimeSource, $year, $season)),
         ]);
     }
@@ -347,47 +348,6 @@ class AnimeController extends Controller
         $number = (int) ($closest['seasonNumber'] ?? $closest['season_number'] ?? 0);
 
         return $number > 0 ? [$number] : 'all';
-    }
-
-    /**
-     * Seerr users for the "Requesting as" picker, with an email-matched
-     * default for the current app user.
-     *
-     * @return array{users: array<int, array{id: int, label: string}>, defaultId: int|null}
-     */
-    private function requestingUsers(ServiceConnection $serviceConnection): array
-    {
-        $seerrClient = new SeerrClient($serviceConnection);
-        $email = strtolower((string) request()->user()?->email);
-
-        $users = collect();
-        $defaultId = null;
-
-        // Scan every page so the full picker list is available and the
-        // email-matched default is found even when the current user is not on
-        // the first page.
-        try {
-            foreach ($this->walkSeerrPages(fn (int $take, int $skip): array => $seerrClient->getUsers(['take' => $take, 'skip' => $skip])) as $result) {
-                $id = (int) $result['id'];
-                $userEmail = strtolower((string) ($result['email'] ?? ''));
-
-                if ($defaultId === null && $email !== '' && $userEmail === $email) {
-                    $defaultId = $id;
-                }
-
-                $users->push([
-                    'id' => $id,
-                    'label' => $result['displayName'] ?? $result['email'] ?? ('User #'.$id),
-                ]);
-            }
-        } catch (RequestException|ConnectionException) {
-            // Return whatever was collected before the failure.
-        }
-
-        return [
-            'users' => $users->all(),
-            'defaultId' => $defaultId ?? ($users->first()['id'] ?? null),
-        ];
     }
 
     /**
