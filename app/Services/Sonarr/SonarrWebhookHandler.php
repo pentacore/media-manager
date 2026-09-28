@@ -54,8 +54,6 @@ class SonarrWebhookHandler extends AbstractWebhookHandler
             default => $status = $this->ignore($webhookEvent, $eventType),
         };
 
-        $webhookEvent->markProcessed();
-
         if ($webhookEvent->serviceConnection !== null) {
             new SonarrCache($webhookEvent->serviceConnection)->bustAll();
         }

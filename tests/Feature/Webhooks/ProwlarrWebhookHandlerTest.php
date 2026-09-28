@@ -31,7 +31,7 @@ test('Test event writes an ActivityLog row and marks the webhook processed', fun
     $this->handler->handle($webhookEvent);
 
     expect(ActivityLog::where('action', 'webhook.prowlarr.test')->count())->toBe(1);
-    expect($webhookEvent->fresh()->processed_at)->not->toBeNull();
+    expect($webhookEvent->fresh()->processed_at)->toBeNull(); // ProcessWebhookEvent marks processed, not the handler
 });
 
 test('Health event writes an ActivityLog row and dispatches a health re-ping', function (): void {
@@ -86,5 +86,5 @@ test('unknown event types are ignored without writing ActivityLog', function ():
     $this->handler->handle($webhookEvent);
 
     expect(ActivityLog::count())->toBe(0);
-    expect($webhookEvent->fresh()->processed_at)->not->toBeNull();
+    expect($webhookEvent->fresh()->processed_at)->toBeNull(); // ProcessWebhookEvent marks processed, not the handler
 });

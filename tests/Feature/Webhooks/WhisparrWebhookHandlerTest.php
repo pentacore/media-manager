@@ -39,7 +39,7 @@ test('Test event writes ActivityLog and never dispatches an ActionRequest', func
         'action' => 'webhook.whisparr.test',
     ]);
     expect(ActionRequest::count())->toBe(0);
-    expect($webhookEvent->fresh()->processed_at)->not->toBeNull();
+    expect($webhookEvent->fresh()->processed_at)->toBeNull(); // ProcessWebhookEvent marks processed, not the handler
 });
 
 test('v3 movie events write ActivityLog and never dispatch emby_library_scan', function (string $type, string $action): void {
@@ -122,5 +122,5 @@ test('Unknown eventType is skipped (no ActivityLog) but still marked processed',
     resolve(WhisparrWebhookHandler::class)->handle($webhookEvent);
 
     expect(ActivityLog::count())->toBe(0);
-    expect($webhookEvent->fresh()->processed_at)->not->toBeNull();
+    expect($webhookEvent->fresh()->processed_at)->toBeNull(); // ProcessWebhookEvent marks processed, not the handler
 });

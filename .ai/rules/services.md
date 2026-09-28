@@ -16,3 +16,6 @@ Build every upstream request with the `Http` facade through a `buildClient()` he
 
 ## DTOs are hand-rolled readonly value objects
 Model the outcome of a multi-step process as a `final readonly` class with promoted public properties, named-argument construction, and a documented `toArray()` — there is no DTO package. Keep upstream API responses as plain arrays annotated with an `array{...}` docblock shape.
+
+## Webhook handlers never mark events processed
+`ProcessWebhookEvent` calls `WebhookEvent::markProcessed($status)` after `handle()` returns (one write of `processed_at` + `handling_status`, then `WebhookEventProcessed`). Handlers return a `WebhookHandlingStatus` and must not touch `processed_at`: a handler that marked processed and then threw (e.g. in a cache `bustAll()`) left the row stuck in `Processing`, because `claim()` skips processed rows on retry.

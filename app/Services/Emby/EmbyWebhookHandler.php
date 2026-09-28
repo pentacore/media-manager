@@ -32,7 +32,6 @@ class EmbyWebhookHandler extends AbstractWebhookHandler
 
         if (($payload['Event'] ?? null) === 'library.deleted') {
             $this->handleLibraryDeleted($webhookEvent, $payload);
-            $webhookEvent->markProcessed();
 
             return WebhookHandlingStatus::Handled;
         }
@@ -46,8 +45,6 @@ class EmbyWebhookHandler extends AbstractWebhookHandler
                 'emby_event' => $embyEvent,
             ]);
 
-            $webhookEvent->markProcessed();
-
             return WebhookHandlingStatus::Ignored;
         }
 
@@ -58,8 +55,6 @@ class EmbyWebhookHandler extends AbstractWebhookHandler
                 'item_type' => $payload['Item']['Type'] ?? null,
             ]);
 
-            $webhookEvent->markProcessed();
-
             return WebhookHandlingStatus::Ignored;
         }
 
@@ -68,8 +63,6 @@ class EmbyWebhookHandler extends AbstractWebhookHandler
             Log::warning('EmbyWebhookHandler: payload missing User.Id', [
                 'webhook_event_id' => $webhookEvent->id,
             ]);
-
-            $webhookEvent->markProcessed();
 
             return WebhookHandlingStatus::Ignored;
         }
@@ -81,8 +74,6 @@ class EmbyWebhookHandler extends AbstractWebhookHandler
                 'emby_user_id' => $embyUserId,
             ]);
 
-            $webhookEvent->markProcessed();
-
             return WebhookHandlingStatus::Ignored;
         }
 
@@ -91,8 +82,6 @@ class EmbyWebhookHandler extends AbstractWebhookHandler
             Log::warning('EmbyWebhookHandler: payload missing Item.Id', [
                 'webhook_event_id' => $webhookEvent->id,
             ]);
-
-            $webhookEvent->markProcessed();
 
             return WebhookHandlingStatus::Ignored;
         }
@@ -130,8 +119,6 @@ class EmbyWebhookHandler extends AbstractWebhookHandler
 
         $activity->setRelation('embyUserLink', $userLink);
         event(new EmbyPlaybackUpdated($activity));
-
-        $webhookEvent->markProcessed();
 
         return WebhookHandlingStatus::Handled;
     }

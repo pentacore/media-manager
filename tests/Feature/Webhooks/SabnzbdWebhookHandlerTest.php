@@ -30,7 +30,7 @@ test('complete event writes ActivityLog and marks processed', function (): void 
     expect($log)->not->toBeNull();
     expect($log->description)->toContain('Some.Show.S01E01');
     expect($log->metadata['category'])->toBe('tv');
-    expect($webhookEvent->fresh()->processed_at)->not->toBeNull();
+    expect($webhookEvent->fresh()->processed_at)->toBeNull(); // ProcessWebhookEvent marks processed, not the handler
 });
 
 test('failed event writes ActivityLog with the upstream message', function (): void {
@@ -119,5 +119,5 @@ test('unknown event types are ignored without writing ActivityLog', function ():
     resolve(SabnzbdWebhookHandler::class)->handle($webhookEvent);
 
     expect(ActivityLog::where('action', 'like', 'webhook.sabnzbd.%')->count())->toBe(0);
-    expect($webhookEvent->fresh()->processed_at)->not->toBeNull();
+    expect($webhookEvent->fresh()->processed_at)->toBeNull(); // ProcessWebhookEvent marks processed, not the handler
 });

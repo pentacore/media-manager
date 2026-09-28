@@ -778,7 +778,7 @@ final readonly class MediaReplacementTracker
     /**
      * Tracking is best-effort and must degrade gracefully: it is wired into
      * webhook handlers ahead of pre-existing must-run side effects (Emby library
-     * scan, markProcessed, cache busting, intervention badge), so a transient
+     * scan, cache busting, intervention badge), so a transient
      * arr-API failure here must NOT tear down the rest of webhook processing.
      * Log and swallow; the reconciliation sweep flags any attempt left stuck in
      * `downloading` as `needs_attention`.

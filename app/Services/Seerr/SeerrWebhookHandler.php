@@ -45,8 +45,6 @@ class SeerrWebhookHandler extends AbstractWebhookHandler
             default => $status = $this->ignore($webhookEvent, $notificationType),
         };
 
-        $webhookEvent->markProcessed();
-
         if ($webhookEvent->serviceConnection !== null) {
             new SeerrCache($webhookEvent->serviceConnection)->bustAll();
         }

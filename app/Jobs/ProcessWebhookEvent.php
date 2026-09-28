@@ -81,7 +81,10 @@ class ProcessWebhookEvent implements ShouldQueue
         }
 
         $webhookHandlingStatus = $handler->handle($this->webhookEvent);
-        $this->webhookEvent->update(['handling_status' => $webhookHandlingStatus]);
+        // Mark processed only now: a throw inside handle() (after its side
+        // effects, e.g. a cache flush) must leave the row reclaimable by
+        // claim() on retry instead of stranded in Processing.
+        $this->webhookEvent->markProcessed($webhookHandlingStatus);
 
         $this->discardIfCaptureDisabled();
     }
