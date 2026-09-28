@@ -24,9 +24,9 @@ test('it deletes every request and records the outcome', function (): void {
     new ClearSeerrRequests($this->connection->id, 'available', [11, 22], $admin->id)->handle();
 
     Http::assertSentCount(2);
-    $log = ActivityLog::query()->where('action', 'seerr.requests_cleared')->sole();
-    expect($log->user_id)->toBe($admin->id)
-        ->and($log->metadata)->toMatchArray(['status' => 'available', 'deleted' => 2, 'failed' => 0]);
+    $activityLog = ActivityLog::query()->where('action', 'seerr.requests_cleared')->sole();
+    expect($activityLog->user_id)->toBe($admin->id)
+        ->and($activityLog->metadata)->toMatchArray(['status' => 'available', 'deleted' => 2, 'failed' => 0]);
 });
 
 test('upstream rejections are counted as failures', function (): void {

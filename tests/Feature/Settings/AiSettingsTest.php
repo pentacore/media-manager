@@ -96,6 +96,7 @@ test('withMode override does not leak across request scopes', function (): void 
 test('chatTimeout is capped below the Octane request ceiling', function (): void {
     config()->set('octane.max_execution_time', 120);
     config()->set('mediamanager.ai.chat_timeout', 120);
+
     $aiSettings = resolve(AiSettings::class);
 
     expect($aiSettings->chatTimeout())->toBe(110);

@@ -7,6 +7,7 @@ namespace App\Jobs;
 use App\Services\Dashboard\DashboardStatsService;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
+use Illuminate\Queue\Attributes\Tries;
 use Illuminate\Support\Facades\Cache;
 
 /**
@@ -16,6 +17,7 @@ use Illuminate\Support\Facades\Cache;
  * event after the forget schedules the next run: the trailing update of a
  * burst is never dropped.
  */
+#[Tries(1)]
 final class BroadcastDashboardStats implements ShouldQueue
 {
     use Queueable;
@@ -27,8 +29,6 @@ final class BroadcastDashboardStats implements ShouldQueue
 
     /** Coalesces a webhook burst into roughly one broadcast per second. */
     public const int DELAY_SECONDS = 1;
-
-    public int $tries = 1;
 
     public function handle(DashboardStatsService $dashboardStatsService): void
     {

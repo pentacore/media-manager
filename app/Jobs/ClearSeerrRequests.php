@@ -14,6 +14,8 @@ use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\RequestException;
+use Illuminate\Queue\Attributes\Timeout;
+use Illuminate\Queue\Attributes\Tries;
 use Illuminate\Queue\Attributes\UniqueFor;
 use Illuminate\Support\Facades\Log;
 
@@ -24,15 +26,13 @@ use Illuminate\Support\Facades\Log;
  * the outcome in the activity feed.
  */
 #[UniqueFor(600)]
+#[Timeout(280)]
+#[Tries(1)]
 final class ClearSeerrRequests implements ShouldBeUnique, ShouldQueue
 {
     use Queueable;
 
     public const int MAX_CONSECUTIVE_CONNECTION_FAILURES = 5;
-
-    public int $tries = 1;
-
-    public int $timeout = 280;
 
     /**
      * @param  list<int>  $requestIds

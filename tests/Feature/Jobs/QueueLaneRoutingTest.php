@@ -4,8 +4,11 @@ declare(strict_types=1);
 
 use App\Enums\QueueLane;
 use App\Jobs\Ai\GenerateConversationTitle;
+use App\Jobs\BroadcastDashboardStats;
+use App\Jobs\ClearSeerrRequests;
 use App\Jobs\EmbedLibraryItem;
 use App\Jobs\ExecuteActionRequest;
+use App\Jobs\ExecuteDebouncedLibraryScan;
 use App\Jobs\ProcessWebhookEvent;
 use App\Jobs\RefreshAiPricesJob;
 use App\Jobs\RunDecisionAgent;
@@ -28,12 +31,20 @@ test('each job is pushed onto its lane', function (Closure $makeJob, QueueLane $
     Queue::assertPushedOn($queueLane, $job::class);
 })->with([
     'approved actions' => [fn (): ExecuteActionRequest => new ExecuteActionRequest(ActionRequest::factory()->create()), QueueLane::Actions],
+    'debounced library scan wake-up' => [fn (): ExecuteDebouncedLibraryScan => new ExecuteDebouncedLibraryScan(1), QueueLane::Actions],
     'inbound webhooks' => [fn (): ProcessWebhookEvent => new ProcessWebhookEvent(WebhookEvent::factory()->create()), QueueLane::Webhooks],
     'decision agent' => [fn (): RunDecisionAgent => new RunDecisionAgent(null, 'sonarr', 'Download', ['series' => ['id' => 1]]), QueueLane::Ai],
     'subtitle advisor' => [fn (): RunSubtitleAdvisor => new RunSubtitleAdvisor(1), QueueLane::Ai],
     'price refresh' => [fn (): RefreshAiPricesJob => new RefreshAiPricesJob(User::factory()->admin()->create()), QueueLane::Ai],
     'library embedding' => [fn (): EmbedLibraryItem => new EmbedLibraryItem(IndexedMovie::class, 1), QueueLane::Ai],
     'conversation title' => [fn (): GenerateConversationTitle => new GenerateConversationTitle('01J9ZZZZZZZZZZZZZZZZZZZZZZ', 'hello'), QueueLane::Ai],
+]);
+
+test('jobs that neither execute actions, process webhooks nor call a model stay on the default lane', function (string $jobClass): void {
+    expect(new ReflectionClass($jobClass)->getAttributes(QueueAttribute::class))->toBe([]);
+})->with([
+    'dashboard stats rebroadcast' => [BroadcastDashboardStats::class],
+    'bulk seerr request clear' => [ClearSeerrRequests::class],
 ]);
 
 test('every queued job either stays on the default lane or names a known lane', function (): void {
