@@ -7,6 +7,7 @@ namespace App\Http\Controllers\Media;
 use App\Enums\ActionRequestStatus;
 use App\Enums\ServiceType;
 use App\Http\Requests\Media\StoreMovieRequest;
+use App\Models\ActionRequest;
 use App\Models\ServiceConnection;
 use App\Services\Actions\ActionDescriber;
 use App\Services\Actions\ActionOrchestrator;
@@ -144,7 +145,7 @@ class MovieController extends BaseArrController
             origin: 'manual',
         );
 
-        if ($actionRequest === null) {
+        if (! $actionRequest instanceof ActionRequest) {
             Inertia::flash('toast', ['type' => 'error', 'message' => __('Deleting movies is disabled in Action Rules.')]);
 
             return back();

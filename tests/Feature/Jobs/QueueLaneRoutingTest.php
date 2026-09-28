@@ -40,7 +40,7 @@ test('every queued job either stays on the default lane or names a known lane', 
     $unknownLanes = collect(Finder::create()->files()->in(app_path('Jobs'))->name('*.php'))
         ->map(fn (SplFileInfo $file): string => 'App\\Jobs\\'.str_replace(['/', '.php'], ['\\', ''], $file->getRelativePathname()))
         ->filter(fn (string $class): bool => is_subclass_of($class, ShouldQueue::class))
-        ->mapWithKeys(fn (string $class): array => [$class => (new ReflectionClass($class))->getAttributes(QueueAttribute::class)[0] ?? null])
+        ->mapWithKeys(fn (string $class): array => [$class => new ReflectionClass($class)->getAttributes(QueueAttribute::class)[0] ?? null])
         ->filter()
         ->map(fn (ReflectionAttribute $reflectionAttribute): string => $reflectionAttribute->newInstance()->queue)
         ->reject(fn (string $queue): bool => in_array($queue, QueueLane::values(), true))

@@ -67,7 +67,7 @@ class EmbyAuthController extends Controller
                     'login.remember' => true,
                 ]);
 
-                TwoFactorAuthenticationChallenged::dispatch($linkedUser);
+                event(new TwoFactorAuthenticationChallenged($linkedUser));
 
                 return to_route('two-factor.login');
             }

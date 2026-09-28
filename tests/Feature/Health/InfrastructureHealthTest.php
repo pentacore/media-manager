@@ -13,10 +13,11 @@ test('the health endpoint answers 200 when the database is reachable and no Valk
 test('the health endpoint pings the Valkey connections the cache and queue use', function (): void {
     config()->set('cache.default', 'redis');
     config()->set('queue.default', 'redis');
-    $connection = Mockery::mock();
-    $connection->shouldReceive('ping')->twice()->andReturn(true);
-    Redis::shouldReceive('connection')->with('cache')->once()->andReturn($connection);
-    Redis::shouldReceive('connection')->with('default')->once()->andReturn($connection);
+
+    $mock = Mockery::mock();
+    $mock->shouldReceive('ping')->twice()->andReturn(true);
+    Redis::shouldReceive('connection')->with('cache')->once()->andReturn($mock);
+    Redis::shouldReceive('connection')->with('default')->once()->andReturn($mock);
 
     $this->get('/up')->assertOk();
 });

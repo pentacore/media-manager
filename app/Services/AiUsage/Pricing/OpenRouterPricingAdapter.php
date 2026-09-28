@@ -141,7 +141,7 @@ final class OpenRouterPricingAdapter
 
         $reasoningField = $this->reasoningField($pricing, $fields['output_per_mtok']);
 
-        if ($reasoningField === null) {
+        if (! $reasoningField instanceof CandidatePriceField) {
             return [null, new PricingRejection(self::PROVIDER, $modelId, PricingRejection::INVALID_COST, 'internal_reasoning'), null];
         }
 

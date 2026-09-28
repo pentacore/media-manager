@@ -9,6 +9,8 @@ use App\Support\OpsHeartbeat;
 use Illuminate\Contracts\Queue\ShouldBeUnique;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
+use Illuminate\Queue\Attributes\Timeout;
+use Illuminate\Queue\Attributes\Tries;
 use Illuminate\Queue\Attributes\UniqueFor;
 
 /**
@@ -17,13 +19,11 @@ use Illuminate\Queue\Attributes\UniqueFor;
  * lane holds one pending heartbeat instead of piling them up.
  */
 #[UniqueFor(600)]
+#[Timeout(10)]
+#[Tries(1)]
 final class RecordQueueHeartbeat implements ShouldBeUnique, ShouldQueue
 {
     use Queueable;
-
-    public int $tries = 1;
-
-    public int $timeout = 10;
 
     public function __construct(public QueueLane $queueLane)
     {

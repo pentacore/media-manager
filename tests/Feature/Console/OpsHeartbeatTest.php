@@ -20,13 +20,14 @@ test('ops:record-heartbeat records the scheduler and queues one heartbeat per la
     foreach (QueueLane::cases() as $queueLane) {
         Queue::assertPushedOn($queueLane, RecordQueueHeartbeat::class, fn (RecordQueueHeartbeat $recordQueueHeartbeat): bool => $recordQueueHeartbeat->queueLane === $queueLane);
     }
+
     Queue::assertPushed(RecordQueueHeartbeat::class, count(QueueLane::cases()));
 });
 
 test('a processed queue heartbeat records its own lane only', function (): void {
     $this->freezeTime();
 
-    (new RecordQueueHeartbeat(QueueLane::Webhooks))->handle();
+    new RecordQueueHeartbeat(QueueLane::Webhooks)->handle();
     $this->travel(90)->seconds();
 
     expect(OpsHeartbeat::ageInSeconds('queue:webhooks'))->toBe(90)

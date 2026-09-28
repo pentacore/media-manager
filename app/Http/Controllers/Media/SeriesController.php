@@ -7,6 +7,7 @@ namespace App\Http\Controllers\Media;
 use App\Enums\ActionRequestStatus;
 use App\Enums\ServiceType;
 use App\Http\Requests\Media\StoreSeriesRequest;
+use App\Models\ActionRequest;
 use App\Models\ServiceConnection;
 use App\Services\Actions\ActionDescriber;
 use App\Services\Actions\ActionOrchestrator;
@@ -154,7 +155,7 @@ class SeriesController extends BaseArrController
             origin: 'manual',
         );
 
-        if ($actionRequest === null) {
+        if (! $actionRequest instanceof ActionRequest) {
             Inertia::flash('toast', ['type' => 'error', 'message' => __('Deleting series is disabled in Action Rules.')]);
 
             return back();
