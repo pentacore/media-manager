@@ -7,21 +7,22 @@ namespace App\Http\Controllers\AI;
 use App\Ai\Agents\MediaAgent;
 use App\Ai\ChatFailure;
 use App\Ai\Routing\ChatToolRouter;
+use App\Ai\Routing\ToolGroup;
 use App\Ai\Routing\ToolPayload;
 use App\Enums\AiMode;
-use App\Enums\AiProposedWorkflowStatus;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\AI\SendChatRequest;
 use App\Http\Requests\AI\StreamChatRequest;
 use App\Http\Streaming\ChatStreamProtocol;
 use App\Jobs\Ai\GenerateConversationTitle;
-use App\Models\AiProposedWorkflow;
 use App\Models\User;
 use App\Services\AiBudget\AiBudgetExceededException;
 use App\Services\AiBudget\AiBudgetGuard;
 use App\Services\AiUsage\AiModelRateLimitExceededException;
 use App\Services\AiUsage\AiRateLimitGuard;
 use App\Services\Chat\ChatAttachmentStore;
+use App\Services\Chat\ChatWorkflowContinuation;
+use App\Services\Chat\WorkflowContinuationRefused;
 use App\Settings\AiSettings;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\Client\RequestException;
@@ -46,28 +47,19 @@ class ChatController extends Controller
         return Inertia::render('AI/Chat', []);
     }
 
-    public function send(SendChatRequest $sendChatRequest, ChatAttachmentStore $chatAttachmentStore, ChatToolRouter $chatToolRouter, ToolPayload $toolPayload): JsonResponse
+    public function send(SendChatRequest $sendChatRequest, ChatAttachmentStore $chatAttachmentStore, ChatToolRouter $chatToolRouter, ToolPayload $toolPayload, ChatWorkflowContinuation $chatWorkflowContinuation): JsonResponse
     {
         $validated = $sendChatRequest->validated();
 
         $conversationId = $validated['conversation_id'] ?? null;
         $user = $sendChatRequest->user();
 
-        $this->applyRequestedMode($validated['mode'] ?? null);
-
-        if (($budgetResponse = $this->enforceBudget()) instanceof JsonResponse) {
-            return $budgetResponse;
+        if (($refusal = $this->refuseTurn($validated, $user)) instanceof JsonResponse) {
+            return $refusal;
         }
 
-        if (($rateLimitResponse = $this->enforceRateLimit()) instanceof JsonResponse) {
-            return $rateLimitResponse;
-        }
+        $continuation = $this->resolveWorkflowContinuation($validated, $user, $chatWorkflowContinuation);
 
-        if ($conversationId !== null && ! $this->conversationIsAvailable($conversationId, $user)) {
-            return response()->json(['message' => 'Conversation not found.'], 404);
-        }
-
-        $continuation = $this->resolveWorkflowContinuation($validated, $user);
         if ($continuation instanceof JsonResponse) {
             return $continuation;
         }
@@ -81,19 +73,13 @@ class ChatController extends Controller
             // A workflow continuation executes whichever destructive tools the
             // approved steps name, so it always gets the full toolset.
             $groups = $continuation === null ? $chatToolRouter->route($messageToSend, $conversationId) : null;
-            $agent = (new MediaAgent)->continueOrStart($conversationId, as: $user)
-                ->withTools(fn (array $declared): array => $toolPayload->build($groups === null ? $declared : $chatToolRouter->filter($declared, $groups)));
-            $aiSettings = resolve(AiSettings::class);
-            $chain = $aiSettings->providerChainWithModel($aiSettings->model());
-            $sdkAttachments = $chatAttachmentStore->toSdkAttachments($attachments);
-            $response = $chain === null
-                ? $agent->prompt($messageToSend, attachments: $sdkAttachments)
-                : $agent->prompt($messageToSend, attachments: $sdkAttachments, provider: $chain);
+            $response = $this->agentFor($conversationId, $user, $groups, $chatToolRouter, $toolPayload)
+                ->prompt($messageToSend, attachments: $chatAttachmentStore->toSdkAttachments($attachments));
         } catch (Throwable $throwable) {
             return $this->handleAgentFailure($throwable, $user);
         }
 
-        $workflowPayload = $this->attachFreshlyProposedWorkflow($user, $turnStartedAt, $response->conversationId ?? null);
+        $workflowPayload = $chatWorkflowContinuation->claimProposed($user, $turnStartedAt, $response->conversationId ?? null);
 
         $newConversationId = $response->conversationId ?? null;
         $chatAttachmentStore->assignConversation($attachments, $newConversationId);
@@ -113,7 +99,7 @@ class ChatController extends Controller
     /**
      * Stream a chat turn back to the client as AG-UI events (ChatStreamProtocol).
      *
-     * Mirrors send()'s pre-flight (mode, budget, ownership). The conversation id
+     * Shares send()'s pre-flight (refuseTurn()). The conversation id
      * travels as the run's `threadId` on RUN_STARTED/RUN_FINISHED, so the client's
      * active conversation is deterministic for brand-new conversations too.
      * Workflow continuations are intentionally NOT supported here — they stay on
@@ -125,21 +111,11 @@ class ChatController extends Controller
 
         $user = $streamChatRequest->user();
 
-        $this->applyRequestedMode($validated['mode'] ?? null);
-
-        if (($budgetResponse = $this->enforceBudget()) instanceof JsonResponse) {
-            return $budgetResponse;
-        }
-
-        if (($rateLimitResponse = $this->enforceRateLimit()) instanceof JsonResponse) {
-            return $rateLimitResponse;
+        if (($refusal = $this->refuseTurn($validated, $user)) instanceof JsonResponse) {
+            return $refusal;
         }
 
         $conversationId = $validated['conversation_id'] ?? null;
-
-        if ($conversationId !== null && ! $this->conversationIsAvailable($conversationId, $user)) {
-            return response()->json(['message' => 'Conversation not found.'], 404);
-        }
 
         $isNewConversation = $conversationId === null;
         $message = $validated['message'];
@@ -147,14 +123,8 @@ class ChatController extends Controller
 
         try {
             $groups = $chatToolRouter->route($message, $conversationId);
-            $agent = (new MediaAgent)->continueOrStart($conversationId, as: $user)
-                ->withTools(fn (array $declared): array => $toolPayload->build($groups === null ? $declared : $chatToolRouter->filter($declared, $groups)));
-            $aiSettings = resolve(AiSettings::class);
-            $chain = $aiSettings->providerChainWithModel($aiSettings->model());
-            $sdkAttachments = $chatAttachmentStore->toSdkAttachments($attachments);
-            $stream = $chain === null
-                ? $agent->stream($message, attachments: $sdkAttachments)
-                : $agent->stream($message, attachments: $sdkAttachments, provider: $chain);
+            $stream = $this->agentFor($conversationId, $user, $groups, $chatToolRouter, $toolPayload)
+                ->stream($message, attachments: $chatAttachmentStore->toSdkAttachments($attachments));
         } catch (Throwable $throwable) {
             return $this->handleAgentFailure($throwable, $user);
         }
@@ -193,7 +163,7 @@ class ChatController extends Controller
      * frontend polls this once after the stream finishes. Reuses the same query
      * as send()'s attach step, claiming the proposal for the given conversation.
      */
-    public function pendingWorkflow(Request $request): JsonResponse
+    public function pendingWorkflow(Request $request, ChatWorkflowContinuation $chatWorkflowContinuation): JsonResponse
     {
         $validated = $request->validate([
             'conversation_id' => ['required', 'string', 'uuid'],
@@ -205,13 +175,53 @@ class ChatController extends Controller
             return response()->json(['message' => 'Conversation not found.'], 404);
         }
 
-        $workflow = $this->attachFreshlyProposedWorkflow(
+        $workflow = $chatWorkflowContinuation->claimProposed(
             $request->user(),
             CarbonImmutable::now()->subMinutes(10),
             $validated['conversation_id'],
         );
 
         return response()->json(['workflow' => $workflow]);
+    }
+
+    /**
+     * The checks every chat turn passes before the agent runs, in this
+     * order: apply the requested mode, the monthly hard cap (402), the chat
+     * model's rate limit (429), then conversation ownership (404). Returns
+     * the refusal, or null when the turn may proceed. Shared by send() and
+     * stream().
+     *
+     * @param  array<string, mixed>  $validated
+     */
+    private function refuseTurn(array $validated, ?User $user): ?JsonResponse
+    {
+        $this->applyRequestedMode($validated['mode'] ?? null);
+
+        $refusal = $this->enforceBudget() ?? $this->enforceRateLimit();
+
+        if ($refusal instanceof JsonResponse) {
+            return $refusal;
+        }
+
+        $conversationId = $validated['conversation_id'] ?? null;
+
+        if ($conversationId !== null && ! $this->conversationIsAvailable($conversationId, $user)) {
+            return response()->json(['message' => 'Conversation not found.'], 404);
+        }
+
+        return null;
+    }
+
+    /**
+     * The chat agent for one turn: the user's conversation (or a new one)
+     * with the turn's routed tool groups. Null groups keep every declared tool.
+     *
+     * @param  list<ToolGroup>|null  $groups
+     */
+    private function agentFor(?string $conversationId, User $user, ?array $groups, ChatToolRouter $chatToolRouter, ToolPayload $toolPayload): MediaAgent
+    {
+        return (new MediaAgent)->continueOrStart($conversationId, as: $user)
+            ->withTools(fn (array $declared): array => $toolPayload->build($groups === null ? $declared : $chatToolRouter->filter($declared, $groups)));
     }
 
     /**
@@ -347,111 +357,22 @@ class ChatController extends Controller
     }
 
     /**
-     * Validate + transition a workflow continuation. Returns:
-     * - `JsonResponse` when validation fails (caller short-circuits with it)
-     * - `string` synthesized prompt when continuation succeeds
-     * - `null` when the request is not a continuation (caller uses raw message)
+     * A workflow continuation's prompt, the refusal to answer with, or null
+     * when the request is not a continuation.
      *
      * @param  array<string, mixed>  $validated
      */
-    private function resolveWorkflowContinuation(array $validated, ?User $user): JsonResponse|string|null
+    private function resolveWorkflowContinuation(array $validated, ?User $user, ChatWorkflowContinuation $chatWorkflowContinuation): JsonResponse|string|null
     {
         if (empty($validated['workflow_id']) || empty($validated['workflow_action'])) {
             return null;
         }
 
-        $workflow = AiProposedWorkflow::find($validated['workflow_id']);
-
-        if ($workflow === null || $workflow->user_id !== $user?->id) {
-            return response()->json(['message' => 'Workflow not found.'], 404);
+        try {
+            return $chatWorkflowContinuation->continueFrom((string) $validated['workflow_id'], (string) $validated['workflow_action'], $user);
+        } catch (WorkflowContinuationRefused $workflowContinuationRefused) {
+            return response()->json(['message' => $workflowContinuationRefused->getMessage()], $workflowContinuationRefused->status);
         }
-
-        $newStatus = $validated['workflow_action'] === 'approved'
-            ? AiProposedWorkflowStatus::Approved
-            : AiProposedWorkflowStatus::Declined;
-
-        // Conditional transition: two overlapping requests (double-click,
-        // second tab) both passed the status read above and the winner's
-        // approval directed destructive execution twice. Only the request
-        // whose update flips Proposed away proceeds.
-        $won = AiProposedWorkflow::query()
-            ->whereKey($workflow->id)
-            ->where('status', AiProposedWorkflowStatus::Proposed->value)
-            ->update(['status' => $newStatus]);
-
-        if ($won !== 1) {
-            return response()->json(['message' => 'Workflow is no longer pending.'], 422);
-        }
-
-        $workflow->refresh();
-
-        return $this->synthesizeWorkflowContinuation($workflow, $newStatus);
-    }
-
-    /**
-     * Detect a workflow proposed by ProposeWorkflowTool during the just-completed
-     * turn. We use the turn-start timestamp (rather than just `whereNull('conversation_id')`)
-     * to avoid picking up a sibling tab's pending proposal in the same admin's session.
-     *
-     * @return array{id: string, rationale: string, steps: array<int, array<string, mixed>>}|null
-     */
-    private function attachFreshlyProposedWorkflow(?User $user, CarbonImmutable $carbonImmutable, ?string $conversationId): ?array
-    {
-        if (! $user instanceof User) {
-            return null;
-        }
-
-        // Prefer a proposal already stamped with this conversation; only
-        // claim unstamped ones. Without the scoping, a sibling tab's
-        // pendingWorkflow poll could steal (re-stamp) a proposal that was
-        // already attached to another conversation.
-        $proposedWorkflow = AiProposedWorkflow::where('user_id', $user->id)
-            ->where('created_at', '>=', $carbonImmutable)
-            ->where('status', AiProposedWorkflowStatus::Proposed)
-            ->where(function ($query) use ($conversationId): void {
-                $query->whereNull('conversation_id')
-                    ->orWhere('conversation_id', $conversationId);
-            })
-            ->latest('created_at')
-            ->first();
-
-        if ($proposedWorkflow === null) {
-            return null;
-        }
-
-        if ($proposedWorkflow->conversation_id === null) {
-            $proposedWorkflow->update(['conversation_id' => $conversationId]);
-        }
-
-        return [
-            'id' => $proposedWorkflow->id,
-            'rationale' => $proposedWorkflow->rationale,
-            'steps' => $proposedWorkflow->steps,
-        ];
-    }
-
-    private function synthesizeWorkflowContinuation(AiProposedWorkflow $aiProposedWorkflow, AiProposedWorkflowStatus $aiProposedWorkflowStatus): string
-    {
-        $stepsList = collect($aiProposedWorkflow->steps)
-            ->map(fn (array $step, int $index): string => sprintf(
-                '%d. %s on %s — %s',
-                $index + 1,
-                $step['action'] ?? 'unknown',
-                $step['target'] ?? 'unknown',
-                $step['reason'] ?? '',
-            ))
-            ->implode("\n");
-
-        return $aiProposedWorkflowStatus === AiProposedWorkflowStatus::Approved
-            ? sprintf(
-                "The user has APPROVED workflow %s. Execute each step now using the destructive tool that matches its action — do NOT call ProposeWorkflowTool again for these steps.\n\n%s",
-                $aiProposedWorkflow->id,
-                $stepsList,
-            )
-            : sprintf(
-                'The user has DECLINED workflow %s. Acknowledge the decline and ask what they would like to do instead.',
-                $aiProposedWorkflow->id,
-            );
     }
 
     private function conversationIsAvailable(string $conversationId, ?User $user): bool

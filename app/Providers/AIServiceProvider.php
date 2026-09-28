@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Providers;
 
 use App\Ai\AiRunAttribution;
+use App\Http\Streaming\ClientConnection;
 use App\Listeners\Ai\EnforceAiRateLimit;
 use App\Listeners\Ai\RecordAgentUsage;
 use App\Services\AiUsage\AiUsageCaller;
@@ -42,6 +43,11 @@ class AIServiceProvider extends ServiceProvider
         // Memoizes the in-use provider/model map; scoped so a long-running
         // worker never prices against another request's or job's usage.
         $this->app->scoped(InUsePricingModels::class);
+
+        // Whether the current chat stream's browser is still connected;
+        // scoped so one request's watch flag never carries into the next
+        // Octane request.
+        $this->app->scoped(ClientConnection::class);
     }
 
     // Note: RecordAgentUsage / RecordToolInvocation / RecordAgentFailover are

@@ -6,7 +6,6 @@ namespace App\Jobs\Ai;
 
 use App\Ai\Agents\TitleAgent;
 use App\Enums\QueueLane;
-use App\Settings\AiSettings;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
@@ -32,15 +31,10 @@ class GenerateConversationTitle implements ShouldQueue
         public string $firstUserMessage,
     ) {}
 
-    public function handle(AiSettings $aiSettings): void
+    public function handle(): void
     {
-        $titleAgent = new TitleAgent;
-        $chain = $aiSettings->providerChainWithModel($aiSettings->titleModel());
-
         try {
-            $response = $chain === null
-                ? $titleAgent->prompt($this->firstUserMessage, model: $aiSettings->titleModel())
-                : $titleAgent->prompt($this->firstUserMessage, provider: $chain);
+            $response = (new TitleAgent)->prompt($this->firstUserMessage);
         } catch (Throwable $throwable) {
             // Soft failure — the controller already wrote a fallback title
             // (truncated first message) before dispatching this job, so the

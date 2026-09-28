@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Ai\Agents;
 
+use App\Ai\Concerns\UsesFailoverChain;
 use App\Ai\Middleware\AnswerOnFinalStep;
 use App\Ai\Middleware\EnforceBudgetEachStep;
 use App\Ai\ProviderCapabilities;
@@ -34,6 +35,7 @@ use Stringable;
 class PriceFetcherAgent implements Agent, HasMiddleware, HasTools
 {
     use Promptable;
+    use UsesFailoverChain;
 
     /**
      * Canonical (Laravel AI identity) provider => the pricing page(s) the

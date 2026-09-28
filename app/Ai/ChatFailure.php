@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Ai;
 
+use App\Ai\Middleware\ClientDisconnectedException;
 use App\Services\AiBudget\AiBudgetExceededException;
 use Laravel\Ai\Exceptions\ProviderConnectionException;
 use Laravel\Ai\Exceptions\RateLimitedException;
@@ -18,6 +19,7 @@ final class ChatFailure
     public static function code(Throwable $throwable): string
     {
         return match (true) {
+            $throwable instanceof ClientDisconnectedException => 'stopped',
             $throwable instanceof RateLimitedException => 'rate_limited',
             $throwable instanceof AiBudgetExceededException => 'budget_exceeded',
             $throwable instanceof ProviderConnectionException => 'provider_unreachable',
@@ -30,6 +32,7 @@ final class ChatFailure
         return match (self::code($throwable)) {
             'rate_limited', 'budget_exceeded' => $throwable->getMessage(),
             'provider_unreachable' => __("Couldn't reach the AI provider. Please try again in a moment."),
+            'stopped' => __('The reply was stopped.'),
             default => __('The AI provider returned an error. Please try again.'),
         };
     }

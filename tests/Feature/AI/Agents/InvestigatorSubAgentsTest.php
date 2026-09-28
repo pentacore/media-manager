@@ -5,12 +5,15 @@ declare(strict_types=1);
 use App\Ai\Agents\MediaAgent;
 use App\Ai\Agents\MediaFileInspectorAgent;
 use App\Ai\Agents\StuckDownloadInvestigatorAgent;
+use App\Ai\Concerns\ActsAsStructuredSubAgent;
 use App\Ai\Routing\ToolGroup;
 use App\Ai\Tools\Arr\InspectMediaFileTool;
 use App\Ai\Tools\Arr\ReplaceMediaFileTool;
 use App\Models\AiUsageRecord;
 use App\Settings\AiSettings;
+use Illuminate\JsonSchema\JsonSchemaTypeFactory;
 use Laravel\Ai\Responses\Data\ToolCall;
+use Laravel\Ai\Streaming\Events\TextDelta;
 use Laravel\Ai\Streaming\Events\ToolResult as StreamedToolResult;
 
 test('MediaAgent delegates investigations and keeps the destructive tools', function (): void {
@@ -94,4 +97,38 @@ test('a streamed turn hands the media file inspector structured findings to the 
     $toolResult = collect($events)->first(fn (object $event): bool => $event instanceof StreamedToolResult && ! $event->preliminary);
 
     expect((string) $toolResult->toolResult->result)->toContain('"automatic_candidate":"fp1"');
+});
+
+test('both structured sub-agents take streaming and middleware from one concern', function (string $agentClass): void {
+    expect(class_uses($agentClass))->toHaveKey(ActsAsStructuredSubAgent::class)
+        ->and(new ReflectionMethod($agentClass, 'stream')->getFileName())
+        ->toEndWith('app/Ai/Concerns/ActsAsStructuredSubAgent.php')
+        ->and(new ReflectionMethod($agentClass, 'middleware')->getFileName())
+        ->toEndWith('app/Ai/Concerns/ActsAsStructuredSubAgent.php');
+})->with([StuckDownloadInvestigatorAgent::class, MediaFileInspectorAgent::class]);
+
+test('a structured sub-agent streamed on its own answers with its findings as one text delta', function (): void {
+    MediaFileInspectorAgent::fake([[
+        'service' => 'sonarr', 'target' => 'series 42 S01E01', 'ambiguous' => false, 'choices' => [],
+        'affected_files' => ['/tv/show.mkv'], 'subtitle_tracks' => ['eng'], 'candidate_fingerprints' => ['fp1'],
+        'candidates' => ['1080p WEB'], 'automatic_candidate' => 'fp1',
+    ]]);
+
+    $stream = (new MediaFileInspectorAgent)->stream('Inspect Show S01E01 on sonarr');
+    $events = iterator_to_array($stream, false);
+
+    expect($events)->toHaveCount(1)
+        ->and($events[0])->toBeInstanceOf(TextDelta::class)
+        ->and(json_decode($events[0]->delta, true))->toMatchArray(['service' => 'sonarr', 'automatic_candidate' => 'fp1'])
+        ->and((string) $stream->text)->toBe($events[0]->delta);
+
+    MediaFileInspectorAgent::assertPromptedTimes(1);
+});
+
+test('the stuck-download investigator only offers the services its tools support', function (): void {
+    $stuckDownloadInvestigatorAgent = new StuckDownloadInvestigatorAgent;
+    $schema = $stuckDownloadInvestigatorAgent->schema(new JsonSchemaTypeFactory);
+
+    expect($stuckDownloadInvestigatorAgent->description())->not->toContain('Whisparr')
+        ->and($schema['service']->toArray()['enum'])->toBe(['sonarr', 'radarr']);
 });

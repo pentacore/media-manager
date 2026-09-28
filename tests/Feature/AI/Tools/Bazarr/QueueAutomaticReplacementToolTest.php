@@ -182,6 +182,7 @@ test('it refuses a fingerprint other than the recomputed automatic candidate', f
     $result = runAutomaticReplacementTool($this->case, 'stale-fingerprint');
 
     expect($result)->toHaveKey('error', 'tool_failed')
+        ->and($result['message'])->toBe('The automatic candidate changed.')
         ->and(ActionRequest::query()->count())->toBe(0);
 });
 

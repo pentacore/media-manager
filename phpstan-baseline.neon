@@ -859,31 +859,7 @@ parameters:
 			path: app/Services/AiUsage/AiUsageReporting.php
 
 		-
-			message: '#^Method App\\Services\\AiUsage\\AiUsageReporting\:\:fitOrPaidUsageRows\(\) should return Illuminate\\Support\\Collection\<int, object\{provider\: string, base_model\: string, used_input\: int, used_output\: int\}\> but returns Illuminate\\Support\\Collection\<int, object\{provider\: string, base_model\: string, used_input\: 0, used_output\: 0\}&stdClass\>\.$#'
-			identifier: return.type
-			count: 1
-			path: app/Services/AiUsage/AiUsageReporting.php
-
-		-
-			message: '#^Method App\\Services\\AiUsage\\AiUsageReporting\:\:poolUsageRecords\(\) should return Illuminate\\Support\\Collection\<int, object\{provider\: string, base_model\: string, kind\: string, prompt_tokens\: int\|string, completion_tokens\: int\|string, cache_read_input_tokens\: int\|string, cache_write_input_tokens\: int\|string, created_at\: string\}\> but returns Illuminate\\Support\\Collection\<int, stdClass\>\.$#'
-			identifier: return.type
-			count: 1
-			path: app/Services/AiUsage/AiUsageReporting.php
-
-		-
-			message: '#^Method App\\Services\\AiUsage\\AiUsageReporting\:\:poolUsageRows\(\) should return Illuminate\\Support\\Collection\<int, object\{provider\: string, base_model\: string, bucket\?\: string, used_input\: int\|string, used_output\: int\|string, window_input\?\: int\|string, window_cache_read\?\: int\|string, window_cache_write\?\: int\|string, window_output\?\: int\|string\}\> but returns Illuminate\\Support\\Collection\<int, stdClass\>\.$#'
-			identifier: return.type
-			count: 1
-			path: app/Services/AiUsage/AiUsageReporting.php
-
-		-
 			message: '#^Method App\\Services\\AiUsage\\AiUsageReporting\:\:recentInvocations\(\) should return Illuminate\\Support\\Collection\<int, object\> but returns Illuminate\\Support\\Collection\<int, stdClass\>\.$#'
-			identifier: return.type
-			count: 1
-			path: app/Services/AiUsage/AiUsageReporting.php
-
-		-
-			message: '#^Method App\\Services\\AiUsage\\AiUsageReporting\:\:replayFitOrPaid\(\) should return Illuminate\\Support\\Collection\<int, object\{provider\: string, base_model\: string, kind\: string, prompt_tokens\: int\|string, completion_tokens\: int\|string, cache_read_input_tokens\: int\|string, cache_write_input_tokens\: int\|string, created_at\: string, fits\: bool\}\> but returns Illuminate\\Support\\Collection\<int, object\{provider\: string, base_model\: string, kind\: string, prompt_tokens\: int\|string, completion_tokens\: int\|string, cache_read_input_tokens\: int\|string, cache_write_input_tokens\: int\|string, created_at\: string\}\>\.$#'
 			identifier: return.type
 			count: 1
 			path: app/Services/AiUsage/AiUsageReporting.php
@@ -895,22 +871,40 @@ parameters:
 			path: app/Services/AiUsage/AiUsageReporting.php
 
 		-
+			message: '#^Method App\\Services\\AiUsage\\FreePoolAccounting\:\:fitOrPaidUsageRows\(\) should return Illuminate\\Support\\Collection\<int, object\{provider\: string, base_model\: string, used_input\: int, used_output\: int\}\> but returns Illuminate\\Support\\Collection\<int, object\{provider\: string, base_model\: string, used_input\: 0, used_output\: 0\}&stdClass\>\.$#'
+			identifier: return.type
+			count: 1
+			path: app/Services/AiUsage/FreePoolAccounting.php
+
+		-
+			message: '#^Method App\\Services\\AiUsage\\FreePoolAccounting\:\:poolUsageRecords\(\) should return Illuminate\\Support\\Collection\<int, object\{provider\: string, base_model\: string, kind\: string, prompt_tokens\: int\|string, completion_tokens\: int\|string, cache_read_input_tokens\: int\|string, cache_write_input_tokens\: int\|string, created_at\: string\}\> but returns Illuminate\\Support\\Collection\<int, stdClass\>\.$#'
+			identifier: return.type
+			count: 1
+			path: app/Services/AiUsage/FreePoolAccounting.php
+
+		-
+			message: '#^Method App\\Services\\AiUsage\\FreePoolAccounting\:\:poolUsageRows\(\) should return Illuminate\\Support\\Collection\<int, object\{provider\: string, base_model\: string, bucket\?\: string, used_input\: int\|string, used_output\: int\|string, window_input\?\: int\|string, window_cache_read\?\: int\|string, window_cache_write\?\: int\|string, window_output\?\: int\|string\}\> but returns Illuminate\\Support\\Collection\<int, stdClass\>\.$#'
+			identifier: return.type
+			count: 1
+			path: app/Services/AiUsage/FreePoolAccounting.php
+
+		-
+			message: '#^Method App\\Services\\AiUsage\\FreePoolAccounting\:\:replayFitOrPaid\(\) should return Illuminate\\Support\\Collection\<int, object\{provider\: string, base_model\: string, kind\: string, prompt_tokens\: int\|string, completion_tokens\: int\|string, cache_read_input_tokens\: int\|string, cache_write_input_tokens\: int\|string, created_at\: string, fits\: bool\}\> but returns Illuminate\\Support\\Collection\<int, object\{provider\: string, base_model\: string, kind\: string, prompt_tokens\: int\|string, completion_tokens\: int\|string, cache_read_input_tokens\: int\|string, cache_write_input_tokens\: int\|string, created_at\: string\}\>\.$#'
+			identifier: return.type
+			count: 1
+			path: app/Services/AiUsage/FreePoolAccounting.php
+
+		-
 			message: '#^Offset ''cache_read'' does not exist on array\{input\: float, output\: float\}\.$#'
 			identifier: offsetAccess.notFound
 			count: 1
-			path: app/Services/AiUsage/AiUsageReporting.php
+			path: app/Services/AiUsage/FreePoolAccounting.php
 
 		-
 			message: '#^Offset ''cache_write'' does not exist on array\{input\: float, output\: float\}\.$#'
 			identifier: offsetAccess.notFound
 			count: 1
-			path: app/Services/AiUsage/AiUsageReporting.php
-
-		-
-			message: '#^Method App\\Services\\AiUsage\\Pricing\\AiPriceRefreshCoordinator\:\:runFeedPhase\(\) has parameter \$requested with no value type specified in iterable type array\.$#'
-			identifier: missingType.iterableValue
-			count: 1
-			path: app/Services/AiUsage/Pricing/AiPriceRefreshCoordinator.php
+			path: app/Services/AiUsage/FreePoolAccounting.php
 
 		-
 			message: '#^Parameter \#1 \$array of function usort contains unresolvable type\.$#'

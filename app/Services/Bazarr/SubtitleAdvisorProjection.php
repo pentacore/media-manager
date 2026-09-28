@@ -14,6 +14,9 @@ use App\Services\MediaReplacement\LanguageNormalizer;
 use App\Services\MediaReplacement\MediaFileInspector;
 use App\Services\MediaReplacement\ReplacementCandidateFinder;
 use App\Services\Sonarr\SonarrClient;
+use Illuminate\Database\Eloquent\ModelNotFoundException;
+use Illuminate\Http\Client\ConnectionException;
+use Illuminate\Http\Client\RequestException;
 use InvalidArgumentException;
 use JsonException;
 use LengthException;
@@ -57,7 +60,12 @@ final readonly class SubtitleAdvisorProjection
      *     effective_languages: list<string>
      * }
      *
+     * @throws ConnectionException
+     * @throws InvalidArgumentException
      * @throws JsonException
+     * @throws LengthException
+     * @throws ModelNotFoundException
+     * @throws RequestException
      */
     public function replacementContextForCase(SubtitleCase $subtitleCase): array
     {

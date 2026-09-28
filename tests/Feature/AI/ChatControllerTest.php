@@ -5,6 +5,7 @@ declare(strict_types=1);
 use App\Ai\Agents\MediaAgent;
 use App\Jobs\Ai\GenerateConversationTitle;
 use App\Models\AiModelPrice;
+use App\Models\AiUsageRecord;
 use App\Models\User;
 use App\Services\AiBudget\AiBudgetExceededException;
 use App\Settings\AiSettings;
@@ -265,3 +266,31 @@ test('send maps a hard cap reached mid-run to the budget message instead of a ge
     expect($response->json('error'))->toBe('budget_exceeded')
         ->and($response->json('message'))->toContain('Monthly AI hard cap reached');
 });
+
+test('send and stream apply the requested mode before the agent runs', function (string $routeName): void {
+    Bus::fake([GenerateConversationTitle::class]);
+    MediaAgent::fake(fn (): string => resolve(AiSettings::class)->mode()->value);
+
+    $response = $this->actingAs(User::factory()->admin()->create())
+        ->post(route($routeName), ['message' => 'which mode?', 'mode' => 'advisory'], [
+            'Accept' => $routeName === 'ai.chat.stream' ? 'text/event-stream' : 'application/json',
+        ]);
+
+    $body = $routeName === 'ai.chat.stream' ? $response->streamedContent() : (string) $response->getContent();
+
+    expect($body)->toContain('advisory');
+})->with(['ai.chat.send', 'ai.chat.stream']);
+
+test('send and stream refuse an exhausted budget before looking at the conversation', function (string $routeName): void {
+    AiModelPrice::factory()->create(['provider' => 'openai', 'model' => 'test-model', 'input_per_mtok' => 1.0, 'output_per_mtok' => 2.0]);
+    AiUsageRecord::factory()->create(['provider' => 'openai', 'model' => 'test-model', 'prompt_tokens' => 1_000_000, 'completion_tokens' => 1_000_000]);
+    resolve(AiSettings::class)->setHardBudgetUsd(1.0);
+    MediaAgent::fake(['never']);
+
+    $this->actingAs(User::factory()->admin()->create())
+        ->postJson(route($routeName), ['message' => 'hi', 'conversation_id' => (string) Str::uuid7()])
+        ->assertPaymentRequired()
+        ->assertJsonPath('error', 'budget_exceeded');
+
+    MediaAgent::assertNeverPrompted();
+})->with(['ai.chat.send', 'ai.chat.stream']);

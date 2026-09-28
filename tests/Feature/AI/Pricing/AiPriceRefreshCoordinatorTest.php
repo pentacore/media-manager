@@ -1544,3 +1544,75 @@ test('a verifier run without citations leaves the citation audit empty', functio
 
     expect(AiPriceRefreshRun::query()->findOrFail($refreshReport->runId)->source_citations)->toBeNull();
 });
+
+test('characterization: a feed provider plus a verifier fallback audit every counter exactly', function (): void {
+    fakeVerifierWrites(['anthropic' => ['claude-a', 'claude-b']]);
+    fakeFeed(['openai' => ['models' => ['gpt-feed' => feedModel()]]]);
+
+    $refreshReport = runCoordinator(scope: RefreshScope::forProviders(['openai', 'anthropic']));
+    $aiPriceRefreshRun = AiPriceRefreshRun::query()->findOrFail($refreshReport->runId);
+
+    expect($aiPriceRefreshRun->only([
+        'status', 'models_dev_status', 'providers_requested', 'providers_succeeded', 'providers_failed',
+        'models_created', 'models_updated', 'models_unchanged', 'models_locked', 'models_rejected', 'models_tiered',
+        'fallback_targets', 'unverified_targets', 'provider_results', 'error_message',
+    ]))->toBe([
+        'status' => RefreshReport::RESULT_SUCCEEDED,
+        'models_dev_status' => 'ok',
+        'providers_requested' => 2,
+        'providers_succeeded' => 2,
+        'providers_failed' => 0,
+        'models_created' => 3,
+        'models_updated' => 0,
+        'models_unchanged' => 0,
+        'models_locked' => 0,
+        'models_rejected' => 0,
+        'models_tiered' => 0,
+        'fallback_targets' => ['anthropic'],
+        'unverified_targets' => null,
+        'provider_results' => [
+            'openai' => ['status' => 'ok', 'created' => 1],
+            'anthropic' => ['status' => 'fallback', 'created' => 2],
+        ],
+        'error_message' => null,
+    ])->and($refreshReport->fallbackProviders)->toBe(['anthropic']);
+});
+
+test('characterization: an unverified anomaly audits the run as partial exactly', function (): void {
+    PriceFetcherAgent::fake(['verified: value looks wrong upstream, left unchanged']);
+    AiModelPrice::create(['provider' => 'openai', 'model' => 'gpt-anom', 'input_per_mtok' => 1.0, 'output_per_mtok' => 2.0]);
+    fakeFeed(['openai' => ['models' => ['gpt-anom' => feedModel(10.0, 2.0)]]]);
+
+    $refreshReport = runCoordinator(scope: RefreshScope::forProviders(['openai']));
+    $aiPriceRefreshRun = AiPriceRefreshRun::query()->findOrFail($refreshReport->runId);
+
+    expect($aiPriceRefreshRun->only([
+        'status', 'providers_succeeded', 'providers_failed', 'models_updated', 'models_rejected',
+        'fallback_targets', 'unverified_targets', 'provider_results', 'error_message',
+    ]))->toBe([
+        'status' => RefreshReport::RESULT_PARTIAL,
+        'providers_succeeded' => 1,
+        'providers_failed' => 0,
+        'models_updated' => 0,
+        'models_rejected' => 0,
+        'fallback_targets' => ['openai:gpt-anom'],
+        'unverified_targets' => ['openai:gpt-anom'],
+        'provider_results' => ['openai' => ['status' => 'ok', 'anomalous' => 1]],
+        'error_message' => 'Unverified verification targets: openai:gpt-anom.',
+    ]);
+});
+
+test('characterization: the coordinator carries no state from one run into the next', function (): void {
+    PriceFetcherAgent::fake(['ok', 'ok']);
+    AiModelPrice::create(['provider' => 'openai', 'model' => 'gpt-anom', 'input_per_mtok' => 1.0, 'output_per_mtok' => 2.0]);
+    fakeFeed(['openai' => ['models' => ['gpt-anom' => feedModel(10.0, 2.0)]]]);
+    $aiPriceRefreshCoordinator = resolve(AiPriceRefreshCoordinator::class);
+
+    $aiPriceRefreshCoordinator->run(AiPriceRefreshCoordinator::MODE_APPLY, AiPriceRefreshCoordinator::SOURCE_HYBRID, RefreshScope::forProviders(['openai']), null, 'test');
+
+    $refreshReport = $aiPriceRefreshCoordinator->run(AiPriceRefreshCoordinator::MODE_DRY_RUN, AiPriceRefreshCoordinator::SOURCE_MODELS_DEV, RefreshScope::forProviders(['anthropic']), null, 'test');
+
+    expect(AiPriceRefreshRun::query()->findOrFail($refreshReport->runId)->unverified_targets)->toBeNull()
+        ->and($refreshReport->fallbackProviders)->toBe([])
+        ->and(array_keys(AiPriceRefreshRun::query()->findOrFail($refreshReport->runId)->provider_results))->toBe(['anthropic']);
+});
