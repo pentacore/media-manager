@@ -130,6 +130,26 @@ test('version is not shared with guests', function (): void {
         ->assertInertia(fn ($page) => $page->where('version', null));
 });
 
+test('shared auth.can carries the viewer abilities', function (): void {
+    $this->actingAs(User::factory()->create())
+        ->get(route('dashboard'))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->where('auth.can.view-library', true)
+            ->where('auth.can.request-media', true)
+            ->where('auth.can.manage-library', false)
+            ->where('auth.can.manage-requests', false)
+            ->where('auth.can.admin', false));
+});
+
+test('shared auth.can is all false for guests', function (): void {
+    $this->get(route('home'))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->where('auth.can.view-library', false)
+            ->where('auth.can.admin', false));
+});
+
 test('nav.replacementAttention counts unacknowledged needs_attention attempts for admins only', function (): void {
     MediaReplacementAttempt::factory()->needsAttention()->create();
     MediaReplacementAttempt::factory()->needsAttention()->acknowledged()->create();

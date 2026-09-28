@@ -15,6 +15,7 @@ use App\Listeners\RunDecisionAgentForWebhook;
 use App\Settings\AiSettings;
 use App\Settings\AppSettings;
 use App\Settings\DecisionAgentSettings;
+use App\Support\Abilities;
 use Carbon\CarbonImmutable;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Http\Request;
@@ -58,6 +59,7 @@ class AppServiceProvider extends ServiceProvider
     public function boot(): void
     {
         $this->configureDefaults();
+        Abilities::define();
         RateLimiter::for(
             'bazarr-reconciliation',
             fn (ReconcileBazarrConnection $reconcileBazarrConnection): Limit => Limit::perMinute(30)->by((string) $reconcileBazarrConnection->connectionId),

@@ -13,6 +13,7 @@ use App\Models\User;
 use App\Providers\AIServiceProvider;
 use App\Services\Library\InterventionCounter;
 use App\Services\Sabnzbd\SabnzbdDownloadCounter;
+use App\Support\Abilities;
 use App\Support\AppVersion;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
@@ -60,6 +61,7 @@ class HandleInertiaRequests extends Middleware
             'name' => config('app.name'),
             'auth' => [
                 'user' => $user ? new SharedUserResource($user)->toArray($request) : null,
+                'can' => Abilities::for($user),
             ],
             'ai' => [
                 'enabled' => AIServiceProvider::enabled(),
