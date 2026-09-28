@@ -5,11 +5,11 @@ declare(strict_types=1);
 namespace App\Ai\Agents;
 
 use App\Ai\Concerns\UsesFailoverChain;
-use App\Ai\Decision\InspectStuckImportTool;
 use App\Ai\Middleware\AnswerOnFinalStep;
 use App\Ai\Middleware\EnforceBudgetEachStep;
 use App\Ai\Tools\Arr\GetDownloadHistoryTool;
 use App\Ai\Tools\Arr\GetDownloadQueueTool;
+use App\Ai\Tools\Decision\InspectStuckImportTool;
 use App\Settings\AiSettings;
 use Generator;
 use Illuminate\Contracts\JsonSchema\JsonSchema;

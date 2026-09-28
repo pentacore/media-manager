@@ -3,7 +3,7 @@
 declare(strict_types=1);
 
 use App\Ai\Decision\DecisionRunContext;
-use App\Ai\Decision\InspectStuckImportTool;
+use App\Ai\Tools\Decision\InspectStuckImportTool;
 use App\Models\ServiceConnection;
 use App\Settings\DecisionAgentSettings;
 use Illuminate\Support\Facades\Http;
@@ -54,7 +54,8 @@ test('rejects an invalid service', function (): void {
     ])), true);
 
     expect($result['ok'])->toBeFalse();
-    expect($result['reason'])->toBe('invalid_service');
+    expect($result['reason'])->toBe('invalid_arguments')
+        ->and($result['errors']['service'][0])->toBe('service must be "sonarr" or "radarr".');
 });
 
 test('inspects candidates on the connection that triggered the event when a decision run context is bound', function (): void {

@@ -3,7 +3,7 @@
 declare(strict_types=1);
 
 use App\Ai\Decision\DecisionRunContext;
-use App\Ai\Decision\ProposeActionTool;
+use App\Ai\Tools\Decision\ProposeActionTool;
 use App\Enums\ActionRequestStatus;
 use App\Enums\MediaReplacementStatus;
 use App\Jobs\ExecuteActionRequest;
@@ -95,7 +95,8 @@ test('requires a rationale', function (): void {
     ])), true);
 
     expect($result['queued'])->toBeFalse();
-    expect($result['reason'])->toBe('missing_rationale');
+    expect($result['reason'])->toBe('invalid_arguments')
+        ->and($result['errors']['rationale'][0])->toBe('A plain-English rationale is required so a human can understand the proposal.');
 });
 
 test('seerr request mutations are forced to approval even when the type auto-executes', function (): void {

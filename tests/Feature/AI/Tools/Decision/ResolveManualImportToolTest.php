@@ -3,7 +3,7 @@
 declare(strict_types=1);
 
 use App\Ai\Decision\DecisionRunContext;
-use App\Ai\Decision\ResolveManualImportTool;
+use App\Ai\Tools\Decision\ResolveManualImportTool;
 use App\Models\ActionRequest;
 use App\Models\ActionTypeConfig;
 use App\Models\ServiceConnection;
@@ -126,7 +126,8 @@ test('rejects an invalid service', function (): void {
     ])), true);
 
     expect($result['queued'])->toBeFalse();
-    expect($result['reason'])->toBe('invalid_service');
+    expect($result['reason'])->toBe('invalid_arguments')
+        ->and($result['errors']['service'][0])->toBe('service must be "sonarr" or "radarr".');
 });
 
 test('requires a download_id', function (): void {
@@ -135,7 +136,8 @@ test('requires a download_id', function (): void {
     ])), true);
 
     expect($result['queued'])->toBeFalse();
-    expect($result['reason'])->toBe('missing_download_id');
+    expect($result['reason'])->toBe('invalid_arguments')
+        ->and($result['errors']['download_id'][0])->toBe('download_id is required (take it from the event payload).');
 });
 
 test('rejects a download_id that does not match the event that triggered this run', function (): void {

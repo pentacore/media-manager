@@ -2,8 +2,9 @@
 
 declare(strict_types=1);
 
-namespace App\Ai\Decision;
+namespace App\Ai\Tools\Decision;
 
+use App\Ai\Decision\DecisionRunContext;
 use App\Enums\MediaReplacementStatus;
 use App\Models\MediaReplacementAttempt;
 use App\Services\Actions\ActionDescriber;
@@ -13,7 +14,6 @@ use Illuminate\Contracts\JsonSchema\JsonSchema;
 use Illuminate\JsonSchema\Types\Type;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
-use Laravel\Ai\Contracts\Tool;
 use Laravel\Ai\Tools\Request;
 use Stringable;
 use Throwable;
@@ -23,10 +23,9 @@ use Throwable;
  * ActionOrchestrator's agent path, which decides suggest-vs-act from the
  * per-type ActionTypeConfig.requires_approval flag (NOT the chat AiMode).
  *
- * Implemented against the raw Tool contract rather than BaseTool so it
- * bypasses BaseTool's chat-advisory gate and auth()-bound action queueing.
+ * Extends DecisionTool rather than BaseTool so it bypasses BaseTool's chat-advisory gate and auth()-bound action queueing.
  */
-class ProposeActionTool implements Tool
+class ProposeActionTool extends DecisionTool
 {
     /**
      * Action types the DecisionAgent is permitted to propose. A safety net so
@@ -97,59 +96,44 @@ class ProposeActionTool implements Tool
         return 'Propose ONE concrete action in response to the inbound event. Suggest-vs-act is decided by admin rules, not by you. Call this once per distinct action you want taken (subject to a per-run cap). If no action is warranted, do NOT call this — just explain your reasoning in your final reply. Never guess IDs; rely on the event payload and read tools.';
     }
 
-    public function handle(Request $request): string
+    /**
+     * @return array<string, mixed>
+     */
+    protected function execute(Request $request): array
     {
-        $context = app()->bound(DecisionRunContext::class)
-            ? resolve(DecisionRunContext::class)
-            : null;
-
-        if (! $context instanceof DecisionRunContext) {
-            return $this->encode([
-                'queued' => false,
-                'reason' => 'no_active_run',
-                'message' => 'No active decision run; cannot propose actions.',
-            ]);
-        }
-
-        if ($context->capReached()) {
-            return $this->encode([
-                'queued' => false,
-                'reason' => 'max_actions_reached',
-                'message' => 'The per-run action cap has been reached. Do not propose further actions; summarize what you have queued.',
-            ]);
-        }
-
+        $context = $this->boundRunContext();
         $args = $request->toArray();
         $type = (string) ($args['type'] ?? '');
-        $targetService = (string) ($args['target_service'] ?? '');
-        $rationale = (string) ($args['rationale'] ?? '');
-        $payload = is_array($args['payload'] ?? null) ? $args['payload'] : [];
 
         if (! in_array($type, self::ALLOWED_TYPES, true)) {
-            return $this->encode([
+            return [
                 'queued' => false,
                 'reason' => 'type_not_allowed',
                 'message' => sprintf('"%s" is not a proposable action type. Allowed: %s.', $type, implode(', ', self::ALLOWED_TYPES)),
-            ]);
+            ];
         }
 
-        if ($rationale === '') {
-            return $this->encode([
-                'queued' => false,
-                'reason' => 'missing_rationale',
-                'message' => 'A plain-English rationale is required so a human can understand the proposal.',
-            ]);
-        }
+        $validated = $request->validate([
+            'rationale' => ['required', 'string'],
+        ], [
+            'rationale.required' => 'A plain-English rationale is required so a human can understand the proposal.',
+        ]);
+
+        $targetService = (string) ($args['target_service'] ?? '');
+        $rationale = (string) $validated['rationale'];
+        $payload = is_array($args['payload'] ?? null) ? $args['payload'] : [];
 
         $subjectMismatch = $this->rejectForeignSeerrSubject($type, $payload, $context)
             ?? $this->rejectForeignMediaSubject($type, $payload, $context);
+
         if ($subjectMismatch !== null) {
-            return $this->encode($subjectMismatch);
+            return $subjectMismatch;
         }
 
         $replacementConflict = $this->rejectMonitorDuringReplacement($type, $payload);
+
         if ($replacementConflict !== null) {
-            return $this->encode($replacementConflict);
+            return $replacementConflict;
         }
 
         try {
@@ -157,11 +141,11 @@ class ProposeActionTool implements Tool
                 ->describe($type, $context->pinContext($payload), is_string($args['title'] ?? null) ? $args['title'] : null)
                 ->because($context->proposalReason());
         } catch (UndescribableAction $undescribableAction) {
-            return $this->encode([
+            return [
                 'queued' => false,
                 'reason' => 'missing_target',
                 'message' => sprintf('%s Take the id from the event payload or a read tool and propose again.', $undescribableAction->getMessage()),
-            ]);
+            ];
         }
 
         try {
@@ -183,24 +167,24 @@ class ProposeActionTool implements Tool
                 'message' => $throwable->getMessage(),
             ]);
 
-            return $this->encode([
+            return [
                 'queued' => false,
                 'reason' => 'dispatch_failed',
                 'message' => 'Could not queue the action. Do not retry the identical call.',
-            ]);
+            ];
         }
 
         if ($actionRequest === null) {
-            return $this->encode([
+            return [
                 'queued' => false,
                 'reason' => 'no_action_type_config',
                 'message' => sprintf('No enabled Action Rule exists for "%s". It cannot be queued until an admin enables it.', $type),
-            ]);
+            ];
         }
 
         $context->recordQueued($actionRequest->id, $actionRequest->requires_approval);
 
-        return $this->encode([
+        return [
             'queued' => true,
             'action_request_id' => $actionRequest->id,
             'status' => $actionRequest->status->value,
@@ -209,7 +193,31 @@ class ProposeActionTool implements Tool
             'message' => $actionRequest->requires_approval
                 ? 'Queued as a suggestion pending human approval.'
                 : 'Queued and will auto-execute.',
-        ]);
+        ];
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    protected function noActiveRunRejection(): array
+    {
+        return [
+            'queued' => false,
+            'reason' => 'no_active_run',
+            'message' => 'No active decision run; cannot propose actions.',
+        ];
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    protected function capReachedRejection(): array
+    {
+        return [
+            'queued' => false,
+            'reason' => 'max_actions_reached',
+            'message' => 'The per-run action cap has been reached. Do not propose further actions; summarize what you have queued.',
+        ];
     }
 
     /**
@@ -383,17 +391,5 @@ class ProposeActionTool implements Tool
                 $targetKey === 'series_id' ? 'series' : 'movie',
             ),
         ];
-    }
-
-    /**
-     * @param  array<string, mixed>  $payload
-     */
-    private function encode(array $payload): string
-    {
-        $encoded = json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_PARTIAL_OUTPUT_ON_ERROR);
-
-        return $encoded === false
-            ? '{"queued":false,"reason":"encoding_failed"}'
-            : $encoded;
     }
 }

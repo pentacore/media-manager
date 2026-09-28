@@ -6,7 +6,7 @@ paths:
 # Ai
 
 ## AI agents and tools
-Put agents in `app/Ai/Agents` named `*Agent` with `#[MaxSteps]`, settings-resolved models (never hardcoded) and `UsesFailoverChain`; put tools in `app/Ai/Tools/&lt;Integration&gt;` named `*Tool` extending `BaseTool`, implementing only `description()`, `risk()`, `execute()`, and `schema()`. Never call an upstream API from a Destructive tool — return `['type','target_service','payload']` and let `BaseTool` queue an `ActionRequest`. Per-run state lives in a container-bound `*RunContext`, since the SDK resolves tools fresh from the container.
+Put agents in `app/Ai/Agents` named `*Agent` with `#[MaxSteps]`, settings-resolved models (never hardcoded) and `UsesFailoverChain`; put tools in `app/Ai/Tools/&lt;Integration&gt;` named `*Tool` extending `BaseTool` (the DecisionAgent's tools extend `DecisionTool`, see below), implementing only `description()`, `risk()`, `execute()`, and `schema()`. Never call an upstream API from a Destructive tool — return `['type','target_service','payload']` and let `BaseTool` queue an `ActionRequest`. Per-run state lives in a container-bound `*RunContext`, since the SDK resolves tools fresh from the container.
 
 ## Sub-agents
 Sub-agents are `*Agent` classes in `app/Ai/Agents` implementing `CanActAsTool` (stable `name()`), `HasStructuredOutput`, `#[MaxSteps]` and `#[RepairToolCalls]`, modelled via `AiSettings::subAgentModel()`. They are read-only; the parent keeps destructive tools. Their usage rows carry `parent_invocation_id`.
@@ -22,3 +22,6 @@ laravel/ai 1.0 throws "Streaming structured output is not currently supported" f
 
 ## Agents own their failover chain
 Every agent uses `App\Ai\Concerns\UsesFailoverChain`: its `provider()` returns `AiSettings::providerChainWithModel($this->model())`, which laravel/ai reads whenever `prompt()`/`stream()` get no provider. Never pass `provider:` at a call site — sub-agents run through `AgentTool` with no provider and only fail over through the concern. AI-layer traits live in `app/Ai/Concerns` (like the SDK's `Laravel\Ai\Concerns`), not `app/Concerns`.
+
+## Decision tools extend DecisionTool, never BaseTool
+The DecisionAgent's tools live in `app/Ai/Tools/Decision` and extend `DecisionTool`: no advisory-mode gate and no auth-bound queueing — they dispatch through `ActionOrchestrator::dispatchFromAgent()` with the run's `DecisionRunContext` (which stays in `app/Ai/Decision`). The base owns context resolution, the capability refusal hook, the per-run cap, JSON encoding and `invalid_arguments` from `$request->validate()`. Keep their domain rejections (`subject_mismatch`, `subject_not_verifiable`, `capability_disabled`, `type_not_allowed`, `replacement_in_flight`, `missing_target`, `dispatch_failed`, `no_action_type_config`) byte-for-byte: the DecisionAgent prompt and the security hardening tests depend on them.

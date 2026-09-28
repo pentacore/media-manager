@@ -2,8 +2,9 @@
 
 declare(strict_types=1);
 
-namespace App\Ai\Decision;
+namespace App\Ai\Tools\Decision;
 
+use App\Ai\Decision\DecisionRunContext;
 use App\Services\Actions\ActionDescriber;
 use App\Services\Actions\ActionOrchestrator;
 use App\Settings\DecisionAgentSettings;
@@ -11,7 +12,6 @@ use Illuminate\Contracts\JsonSchema\JsonSchema;
 use Illuminate\JsonSchema\Types\Type;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
-use Laravel\Ai\Contracts\Tool;
 use Laravel\Ai\Tools\Request;
 use Stringable;
 use Throwable;
@@ -26,56 +26,59 @@ use Throwable;
  * Gated behind the same manual-import capability as importing. Removals are
  * always queued for human approval regardless of the remove_stuck_download
  * action rule, since this deletes the downloaded data and the agent's prompt
- * embeds third-party-authored webhook text.
+ * embeds third-party-authored webhook text. Extends DecisionTool, not BaseTool:
+ * it owns its dispatch path through dispatchFromAgent().
  */
-class RemoveStuckDownloadTool implements Tool
+class RemoveStuckDownloadTool extends DecisionTool
 {
     public function description(): Stringable|string
     {
         return 'Remove a stuck Sonarr/Radarr download from the queue — use when an inspected stuck import should NOT be imported, e.g. it is "not an upgrade for existing episode file(s)". Provide the service, the download_id, and a short reason. Optionally pass blocklist=true to also blocklist the release so the arr never grabs it again (only when the release itself is bad — corrupt/fake/wrong content), and/or search_replacement=true to have the arr immediately search for a replacement release after removal (combine with blocklist=true to retry with a different release). This deletes the downloaded data and always requires human approval.';
     }
 
-    public function handle(Request $request): Stringable|string
+    /**
+     * @return array<string, mixed>|null
+     */
+    protected function refusal(): ?array
     {
-        $context = app()->bound(DecisionRunContext::class) ? resolve(DecisionRunContext::class) : null;
-        if (! $context instanceof DecisionRunContext) {
-            return $this->encode(['queued' => false, 'reason' => 'no_active_run']);
+        if (resolve(DecisionAgentSettings::class)->allowManualImport()) {
+            return null;
         }
 
-        if (! resolve(DecisionAgentSettings::class)->allowManualImport()) {
-            return $this->encode([
-                'queued' => false,
-                'reason' => 'capability_disabled',
-                'message' => 'Manual-import resolution is disabled in Decision Agent settings; you cannot remove stuck downloads. Note this in your summary.',
-            ]);
-        }
+        return [
+            'queued' => false,
+            'reason' => 'capability_disabled',
+            'message' => 'Manual-import resolution is disabled in Decision Agent settings; you cannot remove stuck downloads. Note this in your summary.',
+        ];
+    }
 
-        if ($context->capReached()) {
-            return $this->encode(['queued' => false, 'reason' => 'max_actions_reached']);
-        }
-
+    /**
+     * @return array<string, mixed>
+     */
+    protected function execute(Request $request): array
+    {
+        $context = $this->boundRunContext();
+        $validated = $request->validate([
+            'service' => ['required', 'string', 'regex:/^(sonarr|radarr)$/Di'],
+            'download_id' => ['required', 'string'],
+            'reason' => ['required', 'string'],
+        ], [
+            'service.required' => 'service must be "sonarr" or "radarr".',
+            'service.regex' => 'service must be "sonarr" or "radarr".',
+            'download_id.required' => 'download_id is required.',
+            'reason.required' => 'A short reason is required so the human approver understands why.',
+        ]);
         $args = $request->toArray();
-        $service = mb_strtolower((string) ($args['service'] ?? ''));
-        $downloadId = (string) ($args['download_id'] ?? '');
-        $reason = (string) ($args['reason'] ?? '');
+        $service = mb_strtolower((string) $validated['service']);
+        $downloadId = (string) $validated['download_id'];
+        $reason = (string) $validated['reason'];
         $blocklist = ($args['blocklist'] ?? null) === true;
         $searchReplacement = ($args['search_replacement'] ?? null) === true;
 
-        if (! in_array($service, ['sonarr', 'radarr'], true)) {
-            return $this->encode(['queued' => false, 'reason' => 'invalid_service', 'message' => 'service must be "sonarr" or "radarr".']);
-        }
-
-        if ($downloadId === '') {
-            return $this->encode(['queued' => false, 'reason' => 'missing_download_id', 'message' => 'download_id is required.']);
-        }
-
-        if ($reason === '') {
-            return $this->encode(['queued' => false, 'reason' => 'missing_reason', 'message' => 'A short reason is required so the human approver understands why.']);
-        }
-
         $subjectMismatch = $this->rejectForeignDownload($downloadId, $context);
+
         if ($subjectMismatch !== null) {
-            return $this->encode($subjectMismatch);
+            return $subjectMismatch;
         }
 
         try {
@@ -101,20 +104,20 @@ class RemoveStuckDownloadTool implements Tool
                 'message' => $throwable->getMessage(),
             ]);
 
-            return $this->encode(['queued' => false, 'reason' => 'dispatch_failed']);
+            return ['queued' => false, 'reason' => 'dispatch_failed'];
         }
 
         if ($actionRequest === null) {
-            return $this->encode([
+            return [
                 'queued' => false,
                 'reason' => 'no_action_type_config',
                 'message' => 'The remove_stuck_download Action Rule is missing or disabled; an admin must enable it.',
-            ]);
+            ];
         }
 
         $context->recordQueued($actionRequest->id, $actionRequest->requires_approval);
 
-        return $this->encode([
+        return [
             'queued' => true,
             'action_request_id' => $actionRequest->id,
             'status' => $actionRequest->status->value,
@@ -123,7 +126,7 @@ class RemoveStuckDownloadTool implements Tool
             'message' => $actionRequest->requires_approval
                 ? 'Removal queued for human approval.'
                 : 'Removal queued and will auto-run.',
-        ]);
+        ];
     }
 
     /**
@@ -178,15 +181,5 @@ class RemoveStuckDownloadTool implements Tool
                 $eventDownloadId,
             ),
         ];
-    }
-
-    /**
-     * @param  array<string, mixed>  $payload
-     */
-    private function encode(array $payload): string
-    {
-        $encoded = json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_PARTIAL_OUTPUT_ON_ERROR);
-
-        return $encoded === false ? '{"queued":false,"reason":"encoding_failed"}' : $encoded;
     }
 }
