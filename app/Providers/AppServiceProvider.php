@@ -17,6 +17,7 @@ use App\Settings\AppSettings;
 use App\Settings\DecisionAgentSettings;
 use Carbon\CarbonImmutable;
 use Illuminate\Cache\RateLimiting\Limit;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Date;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Event;
@@ -60,6 +61,11 @@ class AppServiceProvider extends ServiceProvider
         RateLimiter::for(
             'bazarr-reconciliation',
             fn (ReconcileBazarrConnection $reconcileBazarrConnection): Limit => Limit::perMinute(30)->by((string) $reconcileBazarrConnection->connectionId),
+        );
+        RateLimiter::for(
+            'webhooks',
+            fn (Request $request): Limit => Limit::perMinute(max(1, (int) config('mediamanager.webhooks.rate_limit_per_minute', 300)))
+                ->by((string) $request->ip()),
         );
         Event::listen(SocialiteWasCalled::class, AuthentikExtendSocialite::class);
 

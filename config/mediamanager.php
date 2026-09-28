@@ -273,6 +273,15 @@ return [
 
     'webhooks' => [
         'capture_enabled' => (bool) env('MEDIAMANAGER_WEBHOOKS_CAPTURE_ENABLED', true),
+
+        // Bodies above this many KB are refused with 413 before the token
+        // check. Arr/Emby/Seerr payloads are a few KB; season-pack imports
+        // stay far below the default.
+        'max_payload_kb' => (int) env('MEDIAMANAGER_WEBHOOK_MAX_PAYLOAD_KB', 1024),
+
+        // Deliveries accepted per client IP per minute. Generous because a
+        // season pack fires one Download webhook per episode in seconds.
+        'rate_limit_per_minute' => (int) env('MEDIAMANAGER_WEBHOOK_RATE_LIMIT', 300),
     ],
 
     /*

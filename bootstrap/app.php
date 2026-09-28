@@ -7,6 +7,7 @@ use App\Http\Middleware\EnsurePasswordIsSet;
 use App\Http\Middleware\EnsureUserHasRole;
 use App\Http\Middleware\HandleAppearance;
 use App\Http\Middleware\HandleInertiaRequests;
+use App\Http\Middleware\LimitWebhookPayloadSize;
 use App\Http\Middleware\SetSecurityHeaders;
 use App\Http\Middleware\TrustProxies;
 use Illuminate\Foundation\Application;
@@ -38,6 +39,7 @@ return Application::configure(basePath: dirname(__DIR__))
             'role' => EnsureUserHasRole::class,
             'password.set' => EnsurePasswordIsSet::class,
             'ai.enabled' => EnsureAIEnabled::class,
+            'webhook.payload-limit' => LimitWebhookPayloadSize::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {

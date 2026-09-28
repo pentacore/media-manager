@@ -305,7 +305,7 @@ Two services deliver differently:
 - **SABnzbd** has no native HTTP webhook — the connection edit page generates a Python notification script (stdlib only, token embedded) to drop into SABnzbd's `scripts/` folder and select under Settings → Notifications.
 - **Bazarr** posts to a dedicated endpoint (`POST {APP_URL}/webhooks/bazarr/{connection_id}`) via Apprise — the Subtitles → Admin page shows the exact `json://` config URI to paste into Bazarr's notification settings. These events are treated as reconciliation hints rather than a typed event vocabulary.
 
-Webhook delivery is logged as a `WebhookEvent` (browseable under Admin → Webhook Log, with a 5-minute payload dedupe), then processed asynchronously by `ProcessWebhookEvent` (requires the queue worker — in dev, `vendor/bin/sail artisan queue:listen`).
+Webhook delivery is logged as a `WebhookEvent` (browseable under Admin → Webhook Log, with a 5-minute payload dedupe), then processed asynchronously by `ProcessWebhookEvent` (requires the queue worker — in dev, `vendor/bin/sail artisan queue:listen`). Each client IP may deliver up to `MEDIAMANAGER_WEBHOOK_RATE_LIMIT` webhooks per minute (default 300) and bodies above `MEDIAMANAGER_WEBHOOK_MAX_PAYLOAD_KB` (default 1024) are refused with 413. The 5-minute dedupe also holds when webhook capture is off. A `?token=` query parameter is never stored with the event.
 
 ### Supported events
 
