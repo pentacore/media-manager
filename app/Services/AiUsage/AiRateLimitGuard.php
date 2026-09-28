@@ -24,7 +24,7 @@ class AiRateLimitGuard
 {
     public function __construct(
         private readonly AiSettings $aiSettings,
-        private readonly AiUsageReporting $aiUsageReporting,
+        private readonly RateLimitUsage $rateLimitUsage,
     ) {}
 
     /**
@@ -36,7 +36,7 @@ class AiRateLimitGuard
             return;
         }
 
-        $baseModel = AiUsageReporting::baseModel($model);
+        $baseModel = BaseModelName::of($model);
 
         $price = AiModelPrice::query()
             ->with('rateLimits')
@@ -48,14 +48,14 @@ class AiRateLimitGuard
             return;
         }
 
-        $usage = $this->aiUsageReporting->rateLimitUsageByPeriod(
+        $usage = $this->rateLimitUsage->byPeriod(
             $price->rateLimits->pluck('period')->unique(),
             $provider,
             $baseModel,
         );
 
         foreach ($price->rateLimits as $rateLimit) {
-            $used = AiUsageReporting::rateLimitUsed(
+            $used = RateLimitUsage::used(
                 $rateLimit,
                 $usage[$rateLimit->period->value][$provider.'|'.$baseModel] ?? null,
             );
