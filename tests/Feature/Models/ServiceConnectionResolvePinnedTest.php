@@ -17,7 +17,7 @@ test('a deactivated pinned connection aborts instead of falling back', function 
     ServiceConnection::factory()->sonarr()->create();
     $pinned = ServiceConnection::factory()->sonarr()->inactive()->create();
 
-    expect(fn () => ServiceConnection::resolvePinned(['service_connection_id' => $pinned->id], ServiceType::Sonarr))
+    expect(fn (): ServiceConnection => ServiceConnection::resolvePinned(['service_connection_id' => $pinned->id], ServiceType::Sonarr))
         ->toThrow(ModelNotFoundException::class, 'deactivated');
 });
 

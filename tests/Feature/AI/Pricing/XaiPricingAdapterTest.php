@@ -105,8 +105,8 @@ test('a long-context rate without a threshold still flags the candidate as tiere
     $candidate = xaiAdapterCandidate($result, 'grok-5-nano');
 
     expect($candidate->tiered)->toBeTrue()
-        ->and(array_values(array_filter(
+        ->and(array_first(array_filter(
             $result->warnings,
             static fn (PricingWarning $pricingWarning): bool => $pricingWarning->model === 'grok-5-nano',
-        ))[0]->detail)->toBe('long_context');
+        ))->detail)->toBe('long_context');
 });

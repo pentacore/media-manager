@@ -220,7 +220,7 @@ test('emby login with linked account logs in regardless of email field', functio
 });
 
 test('emby login redirects a 2FA user to the challenge without authenticating', function (): void {
-    $google2fa = app(Google2FA::class);
+    $google2fa = resolve(Google2FA::class);
     $secret = $google2fa->generateSecretKey();
 
     $user = User::factory()->create();
@@ -253,7 +253,7 @@ test('emby login redirects a 2FA user to the challenge without authenticating', 
 });
 
 test('completing the challenge after emby login authenticates the user', function (): void {
-    $google2fa = app(Google2FA::class);
+    $google2fa = resolve(Google2FA::class);
     $secret = $google2fa->generateSecretKey();
 
     $user = User::factory()->create();

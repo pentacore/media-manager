@@ -38,6 +38,7 @@ test('registration is closed once a user exists', function (): void {
     ]);
 
     $response->assertNotFound();
+
     expect(User::count())->toBe(1);
     $this->assertGuest();
 });

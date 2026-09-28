@@ -1,3 +1,24 @@
+# [1.24.0](https://github.com/pentacore/media-manager/compare/v1.23.0...v1.24.0) (2026-09-28)
+
+
+### Bug Fixes
+
+* **chat:** group sweepOrphanedAttachments' OR branches before chunkById ([bd3382c](https://github.com/pentacore/media-manager/commit/bd3382cefec0bcf9267a490364c2fcbc3269c130))
+* **metrics:** guard the pre-existing gauges against dependency failures ([daee0aa](https://github.com/pentacore/media-manager/commit/daee0aad93ee1d7a3e2a2322de671008c17f9bd4))
+* **metrics:** isolate gauge failures, bound failed-jobs cardinality, index webhook lag query ([f846c3a](https://github.com/pentacore/media-manager/commit/f846c3a8c6c179a646e77130fab1816e26bc5200))
+* **schedule:** give the ops heartbeat an overlap lock expiry ([5e811ad](https://github.com/pentacore/media-manager/commit/5e811adf4471c1e5a5ea9ca2bdcfb2ae70bdd1db))
+* **scheduler:** size overlap locks to each task and clear stale locks at boot ([cf1747f](https://github.com/pentacore/media-manager/commit/cf1747fc2c8fe007104e50a4799f7a2d85ba0d6b))
+
+
+### Features
+
+* **health:** probe db and valkey on /up and check workers by heartbeat ([84f0f72](https://github.com/pentacore/media-manager/commit/84f0f72995e492e255fc5aab4cb995f6d37178fe))
+* **metrics:** export failed jobs, queue backlog, heartbeat age and webhook lag ([8df0f19](https://github.com/pentacore/media-manager/commit/8df0f195d5b6fa703de7f4013c33044dbe5e6043))
+* **queue:** route jobs onto named lanes with a dedicated ai worker ([45f771b](https://github.com/pentacore/media-manager/commit/45f771b180f81cd75716854104fb716d8c4500ac))
+* **queue:** run long maintenance jobs on a maintenance lane drained by the queue-ai worker ([e93e897](https://github.com/pentacore/media-manager/commit/e93e897f8331bead0d6d697d5c138b92a57fb708))
+* **retention:** opt-in conversation pruning and an orphaned chat attachment sweep ([e397f71](https://github.com/pentacore/media-manager/commit/e397f71704ee2f3e26e2418e5ad905f28cc1c139))
+* **retention:** prune terminal action requests, subtitle cases, price runs, failed jobs and batches ([b594b20](https://github.com/pentacore/media-manager/commit/b594b20fc5c527eef8eedfdd77ef19b4b1abd91b))
+
 # [1.23.0](https://github.com/pentacore/media-manager/compare/v1.22.0...v1.23.0) (2026-09-28)
 
 

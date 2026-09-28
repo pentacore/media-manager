@@ -49,13 +49,13 @@ test('a burst of imports yields one scan request that runs after the burst', fun
         $this->travel(10)->seconds();
     }
 
-    $scan = ActionRequest::query()->where('type', 'emby_library_scan')->sole();
+    $actionRequest = ActionRequest::query()->where('type', 'emby_library_scan')->sole();
 
-    expect($scan->status)->toBe(ActionRequestStatus::Approved)
-        ->and($scan->payload['emby_connection_id'])->toBe($emby->id)
-        ->and($scan->payload['coalesced_events'])->toBe(3)
-        ->and($scan->payload['triggers'])->toBe(['sonarr_download', 'sonarr_download', 'sonarr_download'])
-        ->and(CarbonImmutable::parse($scan->payload['scan_after'])->greaterThan(now()->addSeconds(EmbyLibraryScanScheduler::DEBOUNCE_SECONDS - 12)))->toBeTrue();
+    expect($actionRequest->status)->toBe(ActionRequestStatus::Approved)
+        ->and($actionRequest->payload['emby_connection_id'])->toBe($emby->id)
+        ->and($actionRequest->payload['coalesced_events'])->toBe(3)
+        ->and($actionRequest->payload['triggers'])->toBe(['sonarr_download', 'sonarr_download', 'sonarr_download'])
+        ->and(CarbonImmutable::parse($actionRequest->payload['scan_after'])->greaterThan(now()->addSeconds(EmbyLibraryScanScheduler::DEBOUNCE_SECONDS - 12)))->toBeTrue();
 
     Queue::assertNotPushed(ExecuteActionRequest::class);
     Queue::assertPushed(ExecuteDebouncedLibraryScan::class, 3);
@@ -91,9 +91,9 @@ test('a burst that needs approval coalesces into one pending request', function 
         scheduleImportScan($this->sonarr);
     }
 
-    $scan = ActionRequest::query()->where('type', 'emby_library_scan')->sole();
-    expect($scan->status)->toBe(ActionRequestStatus::Pending)
-        ->and($scan->payload['coalesced_events'])->toBe(3);
+    $actionRequest = ActionRequest::query()->where('type', 'emby_library_scan')->sole();
+    expect($actionRequest->status)->toBe(ActionRequestStatus::Pending)
+        ->and($actionRequest->payload['coalesced_events'])->toBe(3);
     Queue::assertNotPushed(ExecuteDebouncedLibraryScan::class);
 });
 
@@ -102,8 +102,8 @@ test('without an active emby connection each import falls back to a plain scan r
 
     scheduleImportScan($this->sonarr);
 
-    $scan = ActionRequest::query()->where('type', 'emby_library_scan')->sole();
-    expect($scan->payload)->not->toHaveKey('emby_connection_id');
+    $actionRequest = ActionRequest::query()->where('type', 'emby_library_scan')->sole();
+    expect($actionRequest->payload)->not->toHaveKey('emby_connection_id');
     Queue::assertPushed(ExecuteActionRequest::class, 1);
     Queue::assertNotPushed(ExecuteDebouncedLibraryScan::class);
 });
@@ -116,7 +116,7 @@ test('the trigger list is capped', function (): void {
         scheduleImportScan($this->sonarr);
     }
 
-    $scan = ActionRequest::query()->where('type', 'emby_library_scan')->sole();
-    expect($scan->payload['triggers'])->toHaveCount(EmbyLibraryScanScheduler::MAX_RECORDED_TRIGGERS)
-        ->and($scan->payload['coalesced_events'])->toBe(EmbyLibraryScanScheduler::MAX_RECORDED_TRIGGERS + 5);
+    $actionRequest = ActionRequest::query()->where('type', 'emby_library_scan')->sole();
+    expect($actionRequest->payload['triggers'])->toHaveCount(EmbyLibraryScanScheduler::MAX_RECORDED_TRIGGERS)
+        ->and($actionRequest->payload['coalesced_events'])->toBe(EmbyLibraryScanScheduler::MAX_RECORDED_TRIGGERS + 5);
 });

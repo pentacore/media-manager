@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Jobs;
 
 use App\Enums\ActionRequestStatus;
+use App\Enums\QueueLane;
 use App\Events\ActionRequestStatusChanged;
 use App\Models\ActionRequest;
 use App\Services\Actions\ActionExecutor;
@@ -25,6 +26,7 @@ use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\RequestException;
+use Illuminate\Queue\Attributes\Queue;
 use Illuminate\Queue\Attributes\Timeout;
 use Illuminate\Queue\Attributes\UniqueFor;
 use Illuminate\Queue\InteractsWithQueue;
@@ -32,6 +34,7 @@ use Illuminate\Queue\SerializesModels;
 use Illuminate\Support\Facades\Log;
 use Throwable;
 
+#[Queue(QueueLane::Actions)]
 #[Timeout(300)]
 #[UniqueFor(3600)]
 class ExecuteActionRequest implements ShouldBeUnique, ShouldQueue

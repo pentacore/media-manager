@@ -13,3 +13,6 @@ Declare middleware with `Route::middleware()->group()` in the route file, escala
 
 ## Bind local models implicitly; constrain scalar parameters
 Name route parameters after the model in camelCase so implicit binding resolves them, and type-hint the model in the action. Reserve scalar `{id}` parameters for identifiers owned by an upstream service (Sonarr, Radarr, …), and constrain every scalar parameter with `->whereNumber()`, `->whereUuid()`, or `->whereIn()`.
+
+## Scheduled tasks carry an explicit overlap expiry
+Every `->withoutOverlapping()` in `routes/console.php` passes its expiry in minutes: long enough for a healthy run, at least 5, and at most `max(10, cadence − 5)` so one crashed run costs at most one skipped tick instead of the 1440-minute default. `tests/Feature/Console/ScheduleOverlapExpiryTest.php` enforces it.

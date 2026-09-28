@@ -75,7 +75,7 @@ vendor/bin/sail npm run dev
 
 ## Production deployment
 
-The production stack lives in `docker/production` and runs the published application image as separate web (Octane), queue, scheduler, Reverb, migration, and Inertia SSR services, alongside Postgres, Valkey, and Typesense containers. The SSR service uses the same image as the web service, so both processes always run the same application release and frontend bundle.
+The production stack lives in `docker/production` and runs the published application image as separate web (Octane), queue, queue-ai, scheduler, Reverb, migration, and Inertia SSR services, alongside Postgres, Valkey, and Typesense containers. The SSR service uses the same image as the web service, so both processes always run the same application release and frontend bundle.
 
 For a new deployment, create the production environment file and fill in the required application, database, Reverb, Typesense, and service credentials:
 
@@ -111,6 +111,54 @@ MediaManager expects a reverse proxy (Traefik, Caddy, nginx) in front of the `we
 
 Leave it empty (the default) when nothing sits in front of the app: no forwarded header is trusted. Do not list whole private ranges such as `192.168.0.0/16`. Compose publishes `WEB_PORT` on every interface, so any host inside a trusted range could send a forged `X-Forwarded-For` and dodge the login and Emby-login throttles. The app logs a warning (at most once a day) while `TRUSTED_PROXIES` contains `*` or a range wider than /24 (IPv6: /64). Where you can, also firewall `WEB_PORT` and `REVERB_BIND_PORT` so only the proxy host reaches them.
 
+### Queue workers
+
+Jobs run on five named queues. The `queue` service drains `actions` (approved actions), `webhooks` (inbound webhook processing) and `default` (everything else), in that priority order; the `queue-ai` service drains `ai` (decision agent, subtitle advisor, embeddings, conversation titles, price refresh) then `maintenance` (long housekeeping — bulk Seerr request clears, search index reconcile, anime mapping sync) so a slow model call or a long-running job never holds up an approved action or a webhook. Both use the same image and a 300-second job timeout. If you run an older `compose.yaml` without the `queue-ai` service, the `queue` service drains all five queues by default — add the `queue-ai` service to split them.
+
+### Health checks
+
+- `web`: `GET /up` answers 200 only when Postgres and the Valkey connections the app uses (cache and queue) respond. Upstream media services are not part of it.
+- `queue`, `queue-ai`, `scheduler`: the scheduler records a heartbeat every minute and queues a heartbeat job on every queue; each worker records the queues it drains. The containers report unhealthy when their heartbeat is older than 10 minutes (queues) or 3 minutes (scheduler); override with `HEARTBEAT_MAX_AGE` (seconds). Because the scheduler queues the worker heartbeats, a stopped scheduler turns `queue` and `queue-ai` unhealthy too — check the scheduler first. Check by hand with `docker compose --env-file .env exec queue php artisan ops:check-heartbeat --queue=actions,webhooks,default`.
+
+### Backups and restore
+
+> **Back up `APP_KEY` together with the database.** Every stored credential is encrypted with it: service connection API keys and webhook tokens, users' Discord/webhook URLs and webhook secrets, notification destination settings, and two-factor secrets. A database restored under a different `APP_KEY` boots, but none of those values decrypt — every service connection and notification destination must be re-entered and every user must re-enrol 2FA. Keep a copy of `docker/production/.env` (it holds `APP_KEY`) somewhere other than the backup disk. To rotate the key, put the old one in `APP_PREVIOUS_KEYS` first.
+
+| What | Why | How |
+|---|---|---|
+| Postgres (`pgsql-data`) | all application state | `pg_dump` (below) — never copy the live data directory |
+| `docker/production/.env` | `APP_KEY` and every credential | copy the file |
+| `app-storage` volume (includes `app-public-storage`) | chat attachments, staged subtitle uploads, public files | `tar` through the app image (below) |
+
+Not needed: `valkey-data` (cache, queues and locks — queued jobs are lost, which only delays work) and `typesense-data` (rebuilt from Postgres after a restore).
+
+Nightly database dump from the host's crontab, run from `docker/production`, keeping 14 days:
+
+```cron
+15 2 * * * cd /opt/media-manager/docker/production && docker compose --env-file .env exec -T pgsql sh -c 'pg_dump -U "$POSTGRES_USER" -d "$POSTGRES_DB" -Fc' > backups/media-manager-$(date +\%F).dump && find backups -name 'media-manager-*.dump' -mtime +14 -delete
+```
+
+Files:
+
+```bash
+docker compose --env-file .env run --rm --no-deps -T web tar czf - -C /app/storage app > backups/app-storage-$(date +%F).tgz
+```
+
+Restore (same or newer image, the original `.env`):
+
+```bash
+cd docker/production
+docker compose --env-file .env stop web queue queue-ai scheduler reverb ssr
+docker compose --env-file .env up -d pgsql valkey typesense
+docker compose --env-file .env exec -T pgsql sh -c 'pg_restore -U "$POSTGRES_USER" -d "$POSTGRES_DB" --clean --if-exists --no-owner' < backups/media-manager-YYYY-MM-DD.dump
+docker compose --env-file .env run --rm --no-deps -T web tar xzf - -C /app/storage < backups/app-storage-YYYY-MM-DD.tgz
+docker compose --env-file .env up -d
+docker compose --env-file .env exec web php artisan scout:import 'App\Models\IndexedSeries'
+docker compose --env-file .env exec web php artisan scout:import 'App\Models\IndexedMovie'
+```
+
+`up -d` runs the `migrate` service first, so a dump from an older release is migrated forward automatically.
+
 ### Verify SSR
 
 ```bash
@@ -141,7 +189,7 @@ docker compose --env-file .env stop ssr
 
 | Variable | Purpose |
 |---|---|
-| `APP_KEY` | Generated by `artisan key:generate` |
+| `APP_KEY` | Generated by `artisan key:generate`. Encrypts every stored credential — back it up with the database (see [Backups and restore](#backups-and-restore)) |
 | `APP_URL` | Public URL — webhook URLs are built from this |
 | `APP_PORT` | Host port Sail binds to (default `81`) |
 | `DB_*` | Postgres (Sail-managed) |
@@ -305,7 +353,7 @@ Two services deliver differently:
 - **SABnzbd** has no native HTTP webhook — the connection edit page generates a Python notification script (stdlib only, token embedded) to drop into SABnzbd's `scripts/` folder and select under Settings → Notifications.
 - **Bazarr** posts to a dedicated endpoint (`POST {APP_URL}/webhooks/bazarr/{connection_id}`) via Apprise — the Subtitles → Admin page shows the exact `json://` config URI to paste into Bazarr's notification settings. These events are treated as reconciliation hints rather than a typed event vocabulary.
 
-Webhook delivery is logged as a `WebhookEvent` (browseable under Admin → Webhook Log, with a 5-minute payload dedupe), then processed asynchronously by `ProcessWebhookEvent` (requires the queue worker — in dev, `vendor/bin/sail artisan queue:listen`). Each client IP may deliver up to `MEDIAMANAGER_WEBHOOK_RATE_LIMIT` webhooks per minute (default 300) and bodies above `MEDIAMANAGER_WEBHOOK_MAX_PAYLOAD_KB` (default 1024) are refused with 413. The 5-minute dedupe also holds when webhook capture is off. A `?token=` query parameter is never stored with the event.
+Webhook delivery is logged as a `WebhookEvent` (browseable under Admin → Webhook Log, with a 5-minute payload dedupe), then processed asynchronously by `ProcessWebhookEvent` (requires the queue worker — in dev, the Sail `queue` service or `vendor/bin/sail artisan queue:listen --queue=actions,webhooks,default,ai,maintenance`). Each client IP may deliver up to `MEDIAMANAGER_WEBHOOK_RATE_LIMIT` webhooks per minute (default 300) and bodies above `MEDIAMANAGER_WEBHOOK_MAX_PAYLOAD_KB` (default 1024) are refused with 413. The 5-minute dedupe also holds when webhook capture is off. A `?token=` query parameter is never stored with the event.
 
 ### Supported events
 
@@ -343,18 +391,18 @@ Approval behaviour is editable at `/actions/rules` (admin only). Rows come from 
 
 ## Scheduled tasks
 
-The scheduler runs as its own container in both the dev and production stacks (`schedule:work`) — no host cron needed. Registered schedules (see `routes/console.php`; all `withoutOverlapping`):
+The scheduler runs as its own container in both the dev and production stacks (`schedule:work`) — no host cron needed. Registered schedules (see `routes/console.php`; all `withoutOverlapping` with an explicit lock expiry, and the scheduler container clears stale locks when it starts):
 
 | Cadence | Task |
 |---|---|
 | every minute | `services:warm-caches` — presence-aware external-API cache warmer |
 | every 5 min | `services:check-health`, `dashboard:broadcast-stats`, `bazarr:reconcile`, `sabnzbd:poll-history`, `sabnzbd:refresh-download-counts`, `library:refresh-intervention-count`, `statistics:collect-gauges` |
 | hourly | `media-replacement:reconcile`, `actions:reconcile-stuck`, `statistics:aggregate` (at :05), prune expired subtitle uploads |
-| daily | `services:check-versions`, `app:check-version`, `ai:prune-proposed-workflows`, `statistics:prune` (04:30), retention pruning (03:00) for webhook events / activity logs / Emby activity / AI usage + tool invocations / agent decisions / replacement attempts, notification pruning, search-index reconciliation (03:30), daily library gauge snapshot (04:00) |
+| daily | `services:check-versions`, `app:check-version`, `ai:prune-proposed-workflows`, `statistics:prune` (04:30), retention pruning (03:00) for webhook events / activity logs / Emby activity / AI usage + tool invocations / agent decisions / price-refresh runs / replacement attempts / resolved+superseded subtitle cases / terminal action requests, failed-job (03:10) and job-batch (03:20) pruning, notification pruning, search-index reconciliation (03:30), daily library gauge snapshot (04:00), `ai:prune-conversations` (03:15; conversation retention is opt-in, the orphaned-attachment sweep always runs) |
 | weekly | `ai:refresh-prices` (Models.dev sync), anime id-mapping sync |
 | monthly | `ai:refresh-prices --verify` (first-party price re-verification) |
 
-Retention windows are configurable via `MEDIAMANAGER_RETENTION_*_DAYS` (0 disables pruning for that table).
+Retention windows are configurable via `MEDIAMANAGER_RETENTION_*_DAYS` (0 disables pruning for that table): webhook events 90, activity logs 180, Emby activity 365, notifications 90, AI usage 400, AI tool invocations 90, agent decisions 180, replacement attempts 90, action requests 180, subtitle cases 180, price-refresh runs 90, failed jobs 30, job batches 7, agent conversations 0 (kept). Only finished rows are pruned; an action request is kept while a subtitle case, attempt, upload or replacement attempt still refers to it, and dismissed/handled subtitle cases are never pruned.
 
 Upstream version checks map service types to GitHub repos: Sonarr → `Sonarr/Sonarr`, Radarr → `Radarr/Radarr`, Whisparr → `Whisparr/Whisparr`, Prowlarr → `Prowlarr/Prowlarr`, Bazarr → `morpheus65535/bazarr`, Seerr → `seerr-team/seerr`, Emby → `MediaBrowser/Emby.Releases` (closed-source; canonical release mirror). SABnzbd has no version check.
 
@@ -368,6 +416,26 @@ A Prometheus scrape endpoint is available at `/metrics`, gated by a bearer token
 METRICS_ENABLED=true
 METRICS_TOKEN=          # empty = deny all
 METRICS_ALLOWED_IPS=
+```
+
+Operational gauges for alerting:
+
+| Gauge | Meaning |
+|---|---|
+| `mediamanager_failed_jobs{queue}` | failed jobs per queue (pruned after 30 days); a queue name outside `actions`/`webhooks`/`default`/`ai` is folded into `queue="other"` to keep the label bounded |
+| `mediamanager_job_queue_size{queue,state}` | pending / delayed / reserved jobs on `actions`, `webhooks`, `default`, `ai` |
+| `mediamanager_heartbeat_age_seconds{component}` | seconds since `scheduler` / `queue:<lane>` last reported; absent until the first heartbeat |
+| `mediamanager_webhook_oldest_pending_age_seconds` | age of the oldest webhook not yet processed (0 when none); backed by a partial index on `webhook_events(created_at) WHERE processed_at IS NULL` |
+
+Each gauge's value closure is isolated: if its dependency (Redis, cache, DB) throws, that gauge exports no series for the scrape and the failure is logged, instead of 500ing the whole endpoint.
+
+```yaml
+- alert: MediaManagerWorkerStalled
+  expr: mediamanager_heartbeat_age_seconds > 600 or absent(mediamanager_heartbeat_age_seconds{component="scheduler"})
+  for: 5m
+- alert: MediaManagerWebhookBacklog
+  expr: mediamanager_webhook_oldest_pending_age_seconds > 900
+  for: 5m
 ```
 
 ## Local testing
@@ -423,6 +491,12 @@ Order matters — rector first (structural refactors), then pint (formatting):
 ```bash
 vendor/bin/sail bin rector
 vendor/bin/sail bin pint --dirty --format agent
+```
+
+Static analysis (Larastan, level 6, existing errors baselined in `phpstan-baseline.neon`; CI runs it with `rector --dry-run` in the `PHP static analysis` job):
+
+```bash
+vendor/bin/sail composer analyse
 ```
 
 Other useful checks:

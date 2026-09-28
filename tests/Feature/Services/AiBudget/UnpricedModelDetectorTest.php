@@ -13,6 +13,7 @@ beforeEach(function (): void {
     $aiSettings->setModel('chat-model');
     $aiSettings->setTitleModel('title-model');
     $aiSettings->setSubAgentModel('sub-agent-model');
+
     resolve(DecisionAgentSettings::class)->setModel('decision-model');
 });
 
@@ -47,6 +48,7 @@ test('each unpriced selected model is reported with its role', function (): void
 test('a model shared by several roles is reported for each role', function (): void {
     config()->set('mediamanager.decision_agent.model', '');
     config()->set('mediamanager.ai.sub_agent_model', '');
+
     resolve(AiSettings::class)->setHardBudgetUsd(25.0);
     resolve(AiSettings::class)->setSubAgentModel(null);
     resolve(DecisionAgentSettings::class)->setModel('');
