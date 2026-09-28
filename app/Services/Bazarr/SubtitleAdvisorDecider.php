@@ -7,9 +7,14 @@ namespace App\Services\Bazarr;
 use App\Ai\Tools\Bazarr\QueueAutomaticReplacementTool;
 use App\Models\SubtitleCase;
 use App\Support\UpstreamErrorText;
+use Illuminate\Database\Eloquent\ModelNotFoundException;
+use Illuminate\Http\Client\ConnectionException;
+use Illuminate\Http\Client\RequestException;
 use Illuminate\Support\Facades\Log;
+use InvalidArgumentException;
+use JsonException;
 use Laravel\Ai\Tools\Request;
-use Throwable;
+use LengthException;
 
 /**
  * The Media Advisor's decision for one escalated subtitle case, made in code:
@@ -34,7 +39,14 @@ class SubtitleAdvisorDecider
     {
         try {
             $replacementContext = $this->subtitleAdvisorProjection->replacementContextForCase($subtitleCase);
-        } catch (Throwable $throwable) {
+        } catch (
+            // The domain/transport failures replacementContextForCase() and its
+            // callees are documented to throw: a stale case, an invalid target,
+            // an oversized projection, or an arr API failure. Anything else is a
+            // programming error and must propagate to the job's agent_failure
+            // path instead of being swallowed into a routine "needs review".
+            InvalidArgumentException|LengthException|JsonException|ModelNotFoundException|RequestException|ConnectionException $throwable
+        ) {
             Log::warning('Subtitle Advisor inspection failed.', [
                 'subtitle_case_id' => $subtitleCase->id,
                 'exception' => $throwable::class,
@@ -80,7 +92,33 @@ class SubtitleAdvisorDecider
         return sprintf(
             'The automatic replacement candidate for %s was not queued (%s). A human needs to review the case.',
             $displayName,
-            is_array($result) ? (string) ($result['reason'] ?? $result['error'] ?? 'unknown') : 'unreadable tool result',
+            $this->notQueuedReason($result),
         );
+    }
+
+    /**
+     * The tool's queued:false/error envelope, reduced to one audit-friendly
+     * reason. `reason` (queueAsActionRequest's own rejections) and a
+     * `tool_failed` `message` (this tool's specific validation failure, see
+     * QueueAutomaticReplacementTool::exposesFailureDetail()) are both
+     * informative text; every other `error` is a stable code such as
+     * `advisory_mode_blocks_destructive`, which stays a code so admins and
+     * tests can match it reliably.
+     */
+    private function notQueuedReason(mixed $result): string
+    {
+        if (! is_array($result)) {
+            return 'unreadable tool result';
+        }
+
+        if (is_string($result['reason'] ?? null)) {
+            return $result['reason'];
+        }
+
+        if (($result['error'] ?? null) === 'tool_failed' && is_string($result['message'] ?? null)) {
+            return $result['message'];
+        }
+
+        return is_string($result['error'] ?? null) ? $result['error'] : 'unknown';
     }
 }

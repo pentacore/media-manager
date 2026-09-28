@@ -450,6 +450,36 @@ test('a case whose file changed goes to review instead of queueing', function ()
         ->and(ActionRequest::query()->count())->toBe(0);
 });
 
+test('a tool-level rejection surfaces its specific reason instead of a generic not-queued message', function (): void {
+    $this->case->update(['requirements_fingerprint' => str_repeat('0', 64)]);
+
+    runAdvisorJob(new RunSubtitleAdvisor($this->case->id));
+
+    $subtitleCaseAttempt = SubtitleCaseAttempt::query()->sole();
+
+    expect($this->case->fresh()->status)->toBe(SubtitleCaseStatus::NeedsReview)
+        ->and($subtitleCaseAttempt->error_category)->toBe('no_automatic_candidate')
+        ->and($subtitleCaseAttempt->summary['summary'])->toContain('The subtitle requirements changed after this case was observed.')
+        ->and(ActionRequest::query()->count())->toBe(0);
+});
+
+test('an unexpected inspection exception is not swallowed into a routine review', function (): void {
+    // Http::preventStrayRequests() (set in beforeEach) throws StrayRequestException
+    // — a RuntimeException, not one of the domain/transport types the decider
+    // catches — for any URL fakeAdvisorJobApis() didn't stub. Pointing the case
+    // at an uncovered movie id reaches that without mocking a final class.
+    $this->case->update(['target_ids' => ['radarr_id' => 9_999, 'movie_file_id' => 9_999]]);
+
+    runAdvisorJob(new RunSubtitleAdvisor($this->case->id));
+
+    $subtitleCaseAttempt = SubtitleCaseAttempt::query()->sole();
+
+    expect($this->case->fresh()->status)->toBe(SubtitleCaseStatus::NeedsReview)
+        ->and($subtitleCaseAttempt->outcome)->toBe(SubtitleCaseAttemptOutcome::Failed)
+        ->and($subtitleCaseAttempt->error_category)->toBe('agent_failure');
+    Notification::assertSentTo($this->admin, SubtitleCaseNeedsReview::class);
+});
+
 function runAdvisorJob(RunSubtitleAdvisor $runSubtitleAdvisor): void
 {
     app()->call($runSubtitleAdvisor->handle(...));
