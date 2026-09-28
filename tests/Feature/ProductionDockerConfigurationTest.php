@@ -270,3 +270,15 @@ test('heartbeat-checked services wait for the first heartbeat before failures co
         expect(dockerConfigComposeService($compose, $service))->toContain('healthcheck: *heartbeat-healthcheck');
     }
 });
+
+test('production documentation covers backups, restore and the APP_KEY', function (): void {
+    $readme = (string) file_get_contents(base_path('README.md'));
+    $environment = (string) file_get_contents(base_path('docker/production/.env.example'));
+
+    expect($readme)->toContain('### Backups and restore')
+        ->toContain('pg_dump -U "$POSTGRES_USER" -d "$POSTGRES_DB" -Fc')
+        ->toContain('pg_restore -U "$POSTGRES_USER" -d "$POSTGRES_DB" --clean --if-exists --no-owner')
+        ->toContain('tar czf - -C /app/storage app')
+        ->toContain('Back up `APP_KEY` together with the database')
+        ->and($environment)->toContain('# Back up APP_KEY with every database backup');
+});
