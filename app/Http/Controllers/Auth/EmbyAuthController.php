@@ -4,8 +4,8 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers\Auth;
 
+use App\Actions\CreateUserWithBootstrapRole;
 use App\Enums\ServiceType;
-use App\Enums\UserRole;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Auth\EmbyLoginRequest;
 use App\Models\EmbyUserLink;
@@ -23,7 +23,7 @@ use Laravel\Fortify\TwoFactorAuthenticatable;
 
 class EmbyAuthController extends Controller
 {
-    public function store(EmbyLoginRequest $embyLoginRequest): RedirectResponse
+    public function store(EmbyLoginRequest $embyLoginRequest, CreateUserWithBootstrapRole $createUserWithBootstrapRole): RedirectResponse
     {
         $connection = ServiceConnection::where('type', ServiceType::Emby)
             ->where('is_active', true)
@@ -93,16 +93,16 @@ class EmbyAuthController extends Controller
             ]);
         }
 
-        $role = User::count() === 0 ? UserRole::Admin : UserRole::Viewer;
-
-        // Create the user + link atomically and rely on the unique constraint
-        // on emby_user_id as the final authority against races.
+        // Create the user + link atomically. CreateUserWithBootstrapRole
+        // takes the bootstrap advisory lock, so the first-user-becomes-admin
+        // check is serialized with Fortify/SSO sign-ups; nested here it is a
+        // savepoint and the lock is held until this outer commit. The unique
+        // constraint on emby_user_id stays the final authority against races.
         try {
-            $user = DB::transaction(function () use ($email, $embyUsername, $embyUserId, $role): User {
-                $user = User::create([
+            $user = DB::transaction(function () use ($createUserWithBootstrapRole, $email, $embyUsername, $embyUserId): User {
+                $user = $createUserWithBootstrapRole->execute([
                     'name' => $embyUsername,
                     'email' => $email,
-                    'role' => $role,
                 ]);
 
                 // email_verified_at is guarded against mass assignment, so set
