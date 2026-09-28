@@ -383,10 +383,12 @@ Operational gauges for alerting:
 
 | Gauge | Meaning |
 |---|---|
-| `mediamanager_failed_jobs{queue}` | failed jobs per queue (pruned after 30 days) |
+| `mediamanager_failed_jobs{queue}` | failed jobs per queue (pruned after 30 days); a queue name outside `actions`/`webhooks`/`default`/`ai` is folded into `queue="other"` to keep the label bounded |
 | `mediamanager_job_queue_size{queue,state}` | pending / delayed / reserved jobs on `actions`, `webhooks`, `default`, `ai` |
 | `mediamanager_heartbeat_age_seconds{component}` | seconds since `scheduler` / `queue:<lane>` last reported; absent until the first heartbeat |
-| `mediamanager_webhook_oldest_pending_age_seconds` | age of the oldest webhook not yet processed (0 when none) |
+| `mediamanager_webhook_oldest_pending_age_seconds` | age of the oldest webhook not yet processed (0 when none); backed by a partial index on `webhook_events(created_at) WHERE processed_at IS NULL` |
+
+Each gauge's value closure is isolated: if its dependency (Redis, cache, DB) throws, that gauge exports no series for the scrape and the failure is logged, instead of 500ing the whole endpoint.
 
 ```yaml
 - alert: MediaManagerWorkerStalled

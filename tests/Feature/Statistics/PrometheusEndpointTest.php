@@ -13,6 +13,7 @@ use App\Support\OpsHeartbeat;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Queue;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
 
 beforeEach(function (): void {
@@ -156,3 +157,75 @@ test('the webhook lag gauge reads zero when nothing is waiting', function (): vo
         ->assertOk()
         ->assertSee('mediamanager_webhook_oldest_pending_age_seconds 0', escape: false);
 });
+
+test('the failed-jobs gauge folds an unrecognized queue name into "other" instead of minting a new label', function (): void {
+    DB::table('failed_jobs')->insert([
+        'uuid' => (string) Str::uuid(), 'connection' => 'redis', 'queue' => 'legacy-import-queue',
+        'payload' => '{}', 'exception' => 'RuntimeException: boom', 'failed_at' => now(),
+    ]);
+
+    $this->get('/metrics?token=test-token')
+        ->assertOk()
+        ->assertSee('mediamanager_failed_jobs{queue="other"} 1', escape: false)
+        ->assertDontSee('mediamanager_failed_jobs{queue="legacy-import-queue"}', escape: false);
+});
+
+test('the queue-backlog gauge failing does not take down the rest of the scrape', function (): void {
+    // tests/Pest.php already runs Queue::fake() for every Feature test, so
+    // reconfiguring queue.default wouldn't reach a real connection; swap in
+    // a mock that throws on connection() instead, the same failure mode as
+    // Redis being unreachable.
+    Queue::shouldReceive('connection')->andThrow(new RuntimeException('redis unreachable'));
+
+    $this->get('/metrics?token=test-token')
+        ->assertOk()
+        ->assertSee('mediamanager_ai_cost_usd_today', escape: false)
+        ->assertDontSee('mediamanager_job_queue_size{queue=', escape: false);
+});
+
+test('the heartbeat gauge failing does not take down the rest of the scrape', function (): void {
+    // Cache::get() throws when the default store isn't configured — the
+    // same failure mode as Valkey being unreachable.
+    config()->set('cache.default', 'unconfigured-store');
+
+    $this->get('/metrics?token=test-token')
+        ->assertOk()
+        ->assertSee('mediamanager_ai_cost_usd_today', escape: false)
+        ->assertDontSee('mediamanager_heartbeat_age_seconds{component=', escape: false);
+});
+
+test('the failed-jobs gauge itself failing does not take down the rest of the scrape', function (): void {
+    // Points the gauge at a table that doesn't exist, producing a genuine
+    // query failure scoped to this one gauge.
+    config()->set('queue.failed.table', 'nonexistent_failed_jobs_table');
+
+    $this->get('/metrics?token=test-token')
+        ->assertOk()
+        ->assertSee('mediamanager_ai_cost_usd_today', escape: false)
+        ->assertDontSee('mediamanager_failed_jobs{queue=', escape: false);
+});
+
+test('the webhook-lag gauge failing does not take down the rest of the scrape', function (): void {
+    // Renamed inside the per-test transaction, so the real table comes back
+    // for every other test once this one rolls back.
+    Schema::rename('webhook_events', 'webhook_events_renamed_for_test');
+
+    $this->get('/metrics?token=test-token')
+        ->assertOk()
+        ->assertSee('mediamanager_ai_cost_usd_today', escape: false)
+        ->assertDontSee('mediamanager_webhook_oldest_pending_age_seconds', escape: false);
+});
+
+test('the pending-webhook partial index exists and covers the lag query predicate', function (): void {
+    $indexDefinition = (string) DB::table('pg_indexes')
+        ->where('indexname', 'webhook_events_pending_created_at_index')
+        ->value('indexdef');
+
+    expect($indexDefinition)
+        ->toContain('webhook_events')
+        ->toContain('created_at')
+        ->toContain('processed_at IS NULL');
+})->skip(
+    fn (): bool => DB::connection()->getDriverName() !== 'pgsql',
+    'The index definition is read from pg_indexes.',
+);

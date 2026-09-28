@@ -16,12 +16,15 @@ use App\Models\WebhookEvent;
 use App\Services\Statistics\StatisticsRepository;
 use App\Support\OpsHeartbeat;
 use Carbon\CarbonImmutable;
+use Closure;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\ServiceProvider;
 use Override;
 use Spatie\Prometheus\Facades\Prometheus;
+use Throwable;
 
 /**
  * Registers the MediaManager gauges exported on the token-gated /metrics
@@ -160,14 +163,17 @@ class PrometheusServiceProvider extends ServiceProvider
 
     /**
      * Failed jobs and per-lane backlog on the default queue connection. Every
-     * lane is always exported (0 when empty) so alerts have a series to read.
+     * known lane is always exported (0 when empty) so alerts have a series
+     * to read; a queue name outside `QueueLane` (manual dispatch, a removed
+     * lane, ...) is folded into `queue="other"` instead of minting its own
+     * label value, keeping cardinality bounded.
      */
     private function registerQueueGauges(): void
     {
         Prometheus::addGauge('mediamanager_failed_jobs')
-            ->helpText('Failed queue jobs not yet retried or pruned, by queue')
+            ->helpText('Failed queue jobs not yet retried or pruned, by queue (unknown queues roll up into "other")')
             ->label('queue')
-            ->value(function (): array {
+            ->value(fn (): array|float => $this->safely('mediamanager_failed_jobs', function (): array {
                 $counts = DB::table((string) config('queue.failed.table', 'failed_jobs'))
                     ->select('queue', DB::raw('count(*) as aggregate'))
                     ->groupBy('queue')
@@ -175,17 +181,25 @@ class PrometheusServiceProvider extends ServiceProvider
                     ->map(fn (mixed $count): int => (int) $count)
                     ->all();
 
-                return collect([...array_fill_keys(QueueLane::values(), 0), ...$counts])
+                $knownLanes = QueueLane::values();
+                $lanes = array_fill_keys($knownLanes, 0);
+                $lanes['other'] = 0;
+
+                foreach ($counts as $queue => $count) {
+                    $lanes[in_array($queue, $knownLanes, true) ? $queue : 'other'] += $count;
+                }
+
+                return collect($lanes)
                     ->map(fn (int $count, string $queue): array => [(float) $count, [$queue]])
                     ->values()
                     ->all();
-            });
+            }));
 
         Prometheus::addGauge('mediamanager_job_queue_size')
             ->helpText('Jobs on each queue lane of the default queue connection, by state')
             ->label('queue')
             ->label('state')
-            ->value(function (): array {
+            ->value(fn (): array|float => $this->safely('mediamanager_job_queue_size', function (): array {
                 $queue = Queue::connection();
 
                 return collect(QueueLane::cases())
@@ -196,7 +210,7 @@ class PrometheusServiceProvider extends ServiceProvider
                     ])
                     ->values()
                     ->all();
-            });
+            }));
     }
 
     /**
@@ -208,23 +222,26 @@ class PrometheusServiceProvider extends ServiceProvider
         Prometheus::addGauge('mediamanager_heartbeat_age_seconds')
             ->helpText('Seconds since the scheduler or a queue lane last recorded a heartbeat')
             ->label('component')
-            ->value(fn (): array => collect(OpsHeartbeat::components())
+            ->value(fn (): array|float => $this->safely('mediamanager_heartbeat_age_seconds', fn (): array => collect(OpsHeartbeat::components())
                 ->map(fn (string $component): array => [OpsHeartbeat::ageInSeconds($component), $component])
                 ->reject(fn (array $sample): bool => $sample[0] === null)
                 ->map(fn (array $sample): array => [(float) $sample[0], [$sample[1]]])
                 ->values()
-                ->all());
+                ->all()));
     }
 
     /**
      * Age of the oldest webhook not yet handled — rises when the webhooks
-     * lane stalls even if its worker is alive.
+     * lane stalls even if its worker is alive. Backed by a partial index on
+     * (created_at) WHERE processed_at IS NULL (see the
+     * add_pending_lookup_index_to_webhook_events_table migration) so the
+     * scrape query stays cheap as the table grows.
      */
     private function registerWebhookLagGauge(): void
     {
         Prometheus::addGauge('mediamanager_webhook_oldest_pending_age_seconds')
             ->helpText('Age in seconds of the oldest webhook event still waiting to be processed (0 when none)')
-            ->value(function (): float {
+            ->value(fn (): array|float => $this->safely('mediamanager_webhook_oldest_pending_age_seconds', function (): float {
                 $oldest = WebhookEvent::query()
                     ->whereNull('processed_at')
                     ->where(fn (Builder $builder): Builder => $builder
@@ -235,6 +252,27 @@ class PrometheusServiceProvider extends ServiceProvider
                 return $oldest === null
                     ? 0.0
                     : (float) max(0, now()->getTimestamp() - CarbonImmutable::parse($oldest)->getTimestamp());
-            });
+            }));
+    }
+
+    /**
+     * Runs a gauge's value collection, isolating a dependency failure
+     * (Redis, cache, DB) to that gauge alone instead of 500ing the whole
+     * /metrics scrape — spatie/laravel-prometheus has no error handling of
+     * its own around these closures. On failure the gauge exports no series
+     * for this scrape (an empty array is a no-op for both scalar and
+     * labelled gauges, see Gauge::handleValueAndLabels()).
+     */
+    private function safely(string $gauge, Closure $callback): array|float
+    {
+        try {
+            return $callback();
+        } catch (Throwable $throwable) {
+            Log::warning(sprintf('Prometheus gauge [%s] failed to collect', $gauge), [
+                'exception' => $throwable,
+            ]);
+
+            return [];
+        }
     }
 }
