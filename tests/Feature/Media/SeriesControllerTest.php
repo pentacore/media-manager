@@ -27,9 +27,11 @@ test('guests are redirected to login from series index', function (): void {
     $this->get(route('media.series.index'))->assertRedirect(route('login'));
 });
 
-test('viewers cannot access series index', function (): void {
-    $viewer = User::factory()->create();
-    $this->actingAs($viewer)->get(route('media.series.index'))->assertForbidden();
+test('viewers can browse the series index', function (): void {
+    $this->actingAs(User::factory()->create())
+        ->get(route('media.series.index'))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page->component('Sonarr/Series/Index'));
 });
 
 test('series index shell renders with connection url before deferred data loads', function (): void {

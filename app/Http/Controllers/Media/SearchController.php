@@ -13,6 +13,7 @@ use App\Services\Prowlarr\ProwlarrClient;
 use App\Services\Radarr\RadarrClient;
 use App\Services\Seerr\SeerrClient;
 use App\Services\Sonarr\SonarrClient;
+use App\Support\Abilities;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Http\Request;
@@ -47,26 +48,37 @@ class SearchController extends Controller
         $term = trim((string) $request->query('q', ''));
         $scope = (string) $request->query('scope', 'all');
 
+        // Viewers browse the library read-only through its own pages; Search is
+        // their way into Seerr only, so the library and indexer fan-outs stay
+        // member+ (spec: "Viewers get only the Seerr scope").
+        $seerrOnly = ! $request->user()->can(Abilities::MANAGE_LIBRARY);
+
+        if ($seerrOnly) {
+            $scope = 'requests';
+        }
+
+        $empty = ['results' => [], 'error' => null];
+
         // Indexers are heavy and noisy, so they are opt-in: only fire the
         // Prowlarr fan-out when the user explicitly switches to that scope.
-        $includeIndexers = $term !== '' && $scope === 'indexers';
+        $includeIndexers = ! $seerrOnly && $term !== '' && $scope === 'indexers';
 
         return Inertia::render('Search', [
             'query' => $term,
             'scope' => $scope,
             'connections' => $this->resolveConnectionUrls(),
-            'seriesResults' => $term === ''
-                ? ['results' => [], 'error' => null]
+            'seriesResults' => $term === '' || $seerrOnly
+                ? $empty
                 : Inertia::defer(fn (): array => $this->searchSonarr($term)),
-            'movieResults' => $term === ''
-                ? ['results' => [], 'error' => null]
+            'movieResults' => $term === '' || $seerrOnly
+                ? $empty
                 : Inertia::defer(fn (): array => $this->searchRadarr($term)),
             'requestResults' => $term === ''
-                ? ['results' => [], 'error' => null]
+                ? $empty
                 : Inertia::defer(fn (): array => $this->searchSeerr($term)),
             'indexerResults' => $includeIndexers
                 ? Inertia::defer(fn (): array => $this->searchIndexers($term))
-                : ['results' => [], 'error' => null],
+                : $empty,
         ]);
     }
 

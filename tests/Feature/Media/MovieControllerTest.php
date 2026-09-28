@@ -37,9 +37,11 @@ test('guests are redirected to login from movies index', function (): void {
     $this->get(route('media.movies.index'))->assertRedirect(route('login'));
 });
 
-test('viewers cannot access movies index', function (): void {
-    $viewer = User::factory()->create();
-    $this->actingAs($viewer)->get(route('media.movies.index'))->assertForbidden();
+test('viewers can browse the movies index', function (): void {
+    $this->actingAs(User::factory()->create())
+        ->get(route('media.movies.index'))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page->component('Radarr/Movies/Index'));
 });
 
 test('members can list movies', function (): void {

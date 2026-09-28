@@ -22,9 +22,19 @@ test('guests are redirected to login from search', function (): void {
     $this->get(route('media.search.index'))->assertRedirect(route('login'));
 });
 
-test('viewers cannot access search', function (): void {
-    $viewer = User::factory()->create();
-    $this->actingAs($viewer)->get(route('media.search.index'))->assertForbidden();
+test('viewers search only the Seerr scope', function (): void {
+    ServiceConnection::factory()->seerr()->create(['url' => 'http://seerr.local:5055', 'api_key' => 'k']);
+
+    $this->actingAs(User::factory()->create())
+        ->get(route('media.search.index', ['q' => 'dune', 'scope' => 'indexers']))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->component('Search')
+            ->where('scope', 'requests')
+            ->where('seriesResults', ['results' => [], 'error' => null])
+            ->where('movieResults', ['results' => [], 'error' => null])
+            ->where('indexerResults', ['results' => [], 'error' => null])
+            ->missing('requestResults'));
 });
 
 test('search with empty query returns empty results immediately', function (): void {
