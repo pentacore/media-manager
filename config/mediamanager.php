@@ -344,11 +344,13 @@ return [
     | Data Retention
     |--------------------------------------------------------------------------
     |
-    | Days to keep rows in the fastest-growing tables before the nightly
-    | model:prune removes them. 0 disables pruning for that table. AI usage
-    | records must outlive the longest budget/free-pool accounting period
-    | (calendar month), and emby activity rows feed the watch statistics
-    | that query the raw table.
+    | Days to keep rows before the nightly prune removes them. 0 disables
+    | pruning for that table (keep forever). Only finished rows are pruned:
+    | terminal action requests nothing still points at, resolved/superseded
+    | subtitle cases, completed price-refresh runs. AI usage records must
+    | outlive the longest budget/free-pool accounting period (calendar month),
+    | and emby activity rows feed the watch statistics that query the raw
+    | table. Agent conversations default to 0 (kept) — set a window to opt in.
     |
     */
 
@@ -361,6 +363,12 @@ return [
         'ai_tool_invocations_days' => (int) env('MEDIAMANAGER_RETENTION_AI_TOOL_INVOCATIONS_DAYS', 90),
         'agent_decisions_days' => (int) env('MEDIAMANAGER_RETENTION_AGENT_DECISIONS_DAYS', 180),
         'media_replacement_attempts_days' => (int) env('MEDIAMANAGER_RETENTION_MEDIA_REPLACEMENT_ATTEMPTS_DAYS', 90),
+        'action_requests_days' => (int) env('MEDIAMANAGER_RETENTION_ACTION_REQUESTS_DAYS', 180),
+        'subtitle_cases_days' => (int) env('MEDIAMANAGER_RETENTION_SUBTITLE_CASES_DAYS', 180),
+        'ai_price_refresh_runs_days' => (int) env('MEDIAMANAGER_RETENTION_AI_PRICE_REFRESH_RUNS_DAYS', 90),
+        'failed_jobs_days' => (int) env('MEDIAMANAGER_RETENTION_FAILED_JOBS_DAYS', 30),
+        'job_batches_days' => (int) env('MEDIAMANAGER_RETENTION_JOB_BATCHES_DAYS', 7),
+        'agent_conversations_days' => (int) env('MEDIAMANAGER_RETENTION_AGENT_CONVERSATIONS_DAYS', 0),
     ],
 
     /*

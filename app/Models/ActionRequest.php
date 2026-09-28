@@ -12,9 +12,11 @@ use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\ObservedBy;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\MassPrunable;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasOne;
+use Illuminate\Database\Query\Builder as QueryBuilder;
 use Override;
 
 /**
@@ -70,6 +72,8 @@ class ActionRequest extends Model
     /** @use HasFactory<ActionRequestFactory> */
     use HasFactory;
 
+    use MassPrunable;
+
     /**
      * @return array<string, string>
      */
@@ -118,5 +122,41 @@ class ActionRequest extends Model
     public function isTerminal(): bool
     {
         return $this->status->isTerminal();
+    }
+
+    /**
+     * Terminal requests past the retention window. A request is kept while a
+     * subtitle case, attempt or upload still points at it (those FKs null out
+     * on delete and the case would lose its history) and while it has a media
+     * replacement attempt (that FK cascades; the attempt is pruned on its own
+     * window first).
+     *
+     * @return Builder<self>
+     */
+    public function prunable(): Builder
+    {
+        $days = (int) config('mediamanager.retention.action_requests_days');
+
+        return static::query()->when(
+            $days > 0,
+            fn (Builder $builder): Builder => $builder
+                ->whereIn('status', ActionRequestStatus::terminal())
+                ->where('updated_at', '<', now()->subDays($days))
+                ->whereDoesntHave('mediaReplacementAttempt')
+                ->whereNotExists(fn (QueryBuilder $query): QueryBuilder => $query
+                    ->selectRaw('1')
+                    ->from('subtitle_cases')
+                    ->whereColumn('subtitle_cases.download_action_request_id', 'action_requests.id')
+                    ->orWhereColumn('subtitle_cases.replacement_action_request_id', 'action_requests.id'))
+                ->whereNotExists(fn (QueryBuilder $query): QueryBuilder => $query
+                    ->selectRaw('1')
+                    ->from('subtitle_case_attempts')
+                    ->whereColumn('subtitle_case_attempts.action_request_id', 'action_requests.id'))
+                ->whereNotExists(fn (QueryBuilder $query): QueryBuilder => $query
+                    ->selectRaw('1')
+                    ->from('subtitle_uploads')
+                    ->whereColumn('subtitle_uploads.action_request_id', 'action_requests.id')),
+            fn (Builder $builder): Builder => $builder->whereRaw('1 = 0'),
+        );
     }
 }

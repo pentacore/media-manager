@@ -21,4 +21,16 @@ enum SubtitleCaseStatus: string
     case Dismissed = 'dismissed';
     case Handled = 'handled';
     case Superseded = 'superseded';
+
+    /**
+     * Statuses whose rows may be pruned once old. Dismissed and Handled are
+     * operator decisions the reconciler finds by file identity to keep a file
+     * out of automation, so they stay on the record.
+     *
+     * @return list<self>
+     */
+    public static function prunableStatuses(): array
+    {
+        return [self::Resolved, self::Superseded];
+    }
 }

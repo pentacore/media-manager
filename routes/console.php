@@ -21,13 +21,18 @@ use App\Console\Commands\WarmServiceCaches;
 use App\Jobs\PruneSubtitleUploads;
 use App\Jobs\ReconcileSearchIndex;
 use App\Jobs\SyncAnimeMappingJob;
+use App\Models\ActionRequest;
 use App\Models\ActivityLog;
 use App\Models\AgentDecision;
+use App\Models\AiPriceRefreshRun;
 use App\Models\AiToolInvocation;
 use App\Models\AiUsageRecord;
 use App\Models\EmbyActivity;
 use App\Models\MediaReplacementAttempt;
+use App\Models\SubtitleCase;
 use App\Models\WebhookEvent;
+use Illuminate\Queue\Console\PruneBatchesCommand;
+use Illuminate\Queue\Console\PruneFailedJobsCommand;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schedule;
 use Laravel\Telescope\Telescope;
@@ -130,8 +135,7 @@ Schedule::command(CollectServiceGauges::class, ['--library'])
     ->withoutOverlapping(60);
 
 // Retention for the fastest-growing tables (config: mediamanager.retention;
-// 0 disables a table). Without this, webhook payloads, activity rows, AI
-// usage records, and notifications grow without bound.
+// 0 disables a table).
 Schedule::command('model:prune', [
     '--model' => [
         WebhookEvent::class,
@@ -140,7 +144,12 @@ Schedule::command('model:prune', [
         AiUsageRecord::class,
         AiToolInvocation::class,
         AgentDecision::class,
+        AiPriceRefreshRun::class,
         MediaReplacementAttempt::class,
+        // Cases (with their attempts and uploads) before action requests: a
+        // case pruned tonight frees the action requests it pointed at.
+        SubtitleCase::class,
+        ActionRequest::class,
     ],
 ])
     ->dailyAt('03:00')
@@ -159,6 +168,28 @@ Schedule::call(function (): void {
     ->name('prune-notifications')
     ->daily()
     ->withoutOverlapping(60);
+
+// Queue bookkeeping: failed jobs and finished/cancelled/abandoned batches
+// (the five-minute health check creates a batch every run).
+$failedJobsDays = (int) config('mediamanager.retention.failed_jobs_days');
+
+if ($failedJobsDays > 0) {
+    Schedule::command(PruneFailedJobsCommand::class, ['--hours' => $failedJobsDays * 24])
+        ->dailyAt('03:10')
+        ->withoutOverlapping(30);
+}
+
+$jobBatchesHours = (int) config('mediamanager.retention.job_batches_days') * 24;
+
+if ($jobBatchesHours > 0) {
+    Schedule::command(PruneBatchesCommand::class, [
+        '--hours' => $jobBatchesHours,
+        '--unfinished' => $jobBatchesHours,
+        '--cancelled' => $jobBatchesHours,
+    ])
+        ->dailyAt('03:20')
+        ->withoutOverlapping(30);
+}
 
 // Telescope is a require-dev package: the class exists on dev machines (where
 // telescope_entries otherwise grows unboundedly) and is absent from the

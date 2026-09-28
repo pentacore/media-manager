@@ -354,11 +354,11 @@ The scheduler runs as its own container in both the dev and production stacks (`
 | every minute | `services:warm-caches` — presence-aware external-API cache warmer |
 | every 5 min | `services:check-health`, `dashboard:broadcast-stats`, `bazarr:reconcile`, `sabnzbd:poll-history`, `sabnzbd:refresh-download-counts`, `library:refresh-intervention-count`, `statistics:collect-gauges` |
 | hourly | `media-replacement:reconcile`, `actions:reconcile-stuck`, `statistics:aggregate` (at :05), prune expired subtitle uploads |
-| daily | `services:check-versions`, `app:check-version`, `ai:prune-proposed-workflows`, `statistics:prune` (04:30), retention pruning (03:00) for webhook events / activity logs / Emby activity / AI usage + tool invocations / agent decisions / replacement attempts, notification pruning, search-index reconciliation (03:30), daily library gauge snapshot (04:00) |
+| daily | `services:check-versions`, `app:check-version`, `ai:prune-proposed-workflows`, `statistics:prune` (04:30), retention pruning (03:00) for webhook events / activity logs / Emby activity / AI usage + tool invocations / agent decisions / price-refresh runs / replacement attempts / resolved+superseded subtitle cases / terminal action requests, failed-job (03:10) and job-batch (03:20) pruning, notification pruning, search-index reconciliation (03:30), daily library gauge snapshot (04:00) |
 | weekly | `ai:refresh-prices` (Models.dev sync), anime id-mapping sync |
 | monthly | `ai:refresh-prices --verify` (first-party price re-verification) |
 
-Retention windows are configurable via `MEDIAMANAGER_RETENTION_*_DAYS` (0 disables pruning for that table).
+Retention windows are configurable via `MEDIAMANAGER_RETENTION_*_DAYS` (0 disables pruning for that table): webhook events 90, activity logs 180, Emby activity 365, notifications 90, AI usage 400, AI tool invocations 90, agent decisions 180, replacement attempts 90, action requests 180, subtitle cases 180, price-refresh runs 90, failed jobs 30, job batches 7, agent conversations 0 (kept). Only finished rows are pruned; an action request is kept while a subtitle case, attempt, upload or replacement attempt still refers to it, and dismissed/handled subtitle cases are never pruned.
 
 Upstream version checks map service types to GitHub repos: Sonarr → `Sonarr/Sonarr`, Radarr → `Radarr/Radarr`, Whisparr → `Whisparr/Whisparr`, Prowlarr → `Prowlarr/Prowlarr`, Bazarr → `morpheus65535/bazarr`, Seerr → `seerr-team/seerr`, Emby → `MediaBrowser/Emby.Releases` (closed-source; canonical release mirror). SABnzbd has no version check.
 
