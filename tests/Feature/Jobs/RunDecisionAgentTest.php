@@ -199,7 +199,7 @@ test('a persisted event without a carried connection falls back to the event row
 test('a run the worker stops leaves a Failed decision with the reason', function (): void {
     $event = WebhookEvent::factory()->create();
 
-    (new RunDecisionAgent($event->id, 'sonarr', 'Grab', ['eventType' => 'Grab', 'series' => ['id' => 42]]))
+    new RunDecisionAgent($event->id, 'sonarr', 'Grab', ['eventType' => 'Grab', 'series' => ['id' => 42]])
         ->failed(new RuntimeException('App\Jobs\RunDecisionAgent has timed out.'));
 
     expect(AgentDecision::query()->where('webhook_event_id', $event->id)->sole())
@@ -215,7 +215,7 @@ test('a stopped run links the actions it queued before the worker stopped it', f
     $event = WebhookEvent::factory()->create();
     $actionRequest = ActionRequest::factory()->create(['webhook_event_id' => $event->id]);
 
-    (new RunDecisionAgent($event->id, 'sonarr', 'ManualInteractionRequired', ['downloadId' => 'dl-1']))
+    new RunDecisionAgent($event->id, 'sonarr', 'ManualInteractionRequired', ['downloadId' => 'dl-1'])
         ->failed(new RuntimeException('killed'));
 
     expect(AgentDecision::query()->where('webhook_event_id', $event->id)->sole())
@@ -232,7 +232,7 @@ test('a run that already recorded its outcome is left alone by the failed callba
         'summary' => 'Nothing to do.',
     ]);
 
-    (new RunDecisionAgent($event->id, 'sonarr', 'Grab', []))->failed(new RuntimeException('late failure'));
+    new RunDecisionAgent($event->id, 'sonarr', 'Grab', [])->failed(new RuntimeException('late failure'));
 
     expect(AgentDecision::query()->where('webhook_event_id', $event->id)->sole())
         ->status->toBe(AgentDecisionStatus::NoAction)
@@ -240,7 +240,7 @@ test('a run that already recorded its outcome is left alone by the failed callba
 });
 
 test('a stopped run for a trimmed event still records a Failed decision', function (): void {
-    (new RunDecisionAgent(987654, 'radarr', 'Grab', ['movie' => ['id' => 5]]))->failed(null);
+    new RunDecisionAgent(987654, 'radarr', 'Grab', ['movie' => ['id' => 5]])->failed(null);
 
     expect(AgentDecision::query()->sole())
         ->webhook_event_id->toBeNull()

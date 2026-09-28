@@ -101,7 +101,7 @@ class ProposeActionTool extends DecisionTool
      */
     protected function execute(Request $request): array
     {
-        $context = $this->boundRunContext();
+        $decisionRunContext = $this->boundRunContext();
         $args = $request->toArray();
         $type = (string) ($args['type'] ?? '');
 
@@ -123,8 +123,8 @@ class ProposeActionTool extends DecisionTool
         $rationale = (string) $validated['rationale'];
         $payload = is_array($args['payload'] ?? null) ? $args['payload'] : [];
 
-        $subjectMismatch = $this->rejectForeignSeerrSubject($type, $payload, $context)
-            ?? $this->rejectForeignMediaSubject($type, $payload, $context);
+        $subjectMismatch = $this->rejectForeignSeerrSubject($type, $payload, $decisionRunContext)
+            ?? $this->rejectForeignMediaSubject($type, $payload, $decisionRunContext);
 
         if ($subjectMismatch !== null) {
             return $subjectMismatch;
@@ -138,8 +138,8 @@ class ProposeActionTool extends DecisionTool
 
         try {
             $description = resolve(ActionDescriber::class)
-                ->describe($type, $context->pinContext($payload), is_string($args['title'] ?? null) ? $args['title'] : null)
-                ->because($context->proposalReason());
+                ->describe($type, $decisionRunContext->pinContext($payload), is_string($args['title'] ?? null) ? $args['title'] : null)
+                ->because($decisionRunContext->proposalReason());
         } catch (UndescribableAction $undescribableAction) {
             return [
                 'queued' => false,
@@ -151,14 +151,14 @@ class ProposeActionTool extends DecisionTool
         try {
             $actionRequest = resolve(ActionOrchestrator::class)->dispatchFromAgent(
                 type: $type,
-                sourceService: $context->sourceService,
-                targetService: $targetService !== '' ? $targetService : $context->sourceService,
+                sourceService: $decisionRunContext->sourceService,
+                targetService: $targetService !== '' ? $targetService : $decisionRunContext->sourceService,
                 payload: $payload,
                 rationale: Str::limit($rationale, 1000, ''),
                 description: $description,
-                webhookEventId: $context->webhookEventId,
+                webhookEventId: $decisionRunContext->webhookEventId,
                 forceRequiresApproval: in_array($type, self::FORCED_APPROVAL_TYPES, true) ? true : null,
-                pinnedConnectionId: $context->originConnectionId,
+                pinnedConnectionId: $decisionRunContext->originConnectionId,
             );
         } catch (Throwable $throwable) {
             Log::warning('ProposeActionTool: dispatch failed', [
@@ -182,14 +182,14 @@ class ProposeActionTool extends DecisionTool
             ];
         }
 
-        $context->recordQueued($actionRequest->id, $actionRequest->requires_approval);
+        $decisionRunContext->recordQueued($actionRequest->id, $actionRequest->requires_approval);
 
         return [
             'queued' => true,
             'action_request_id' => $actionRequest->id,
             'status' => $actionRequest->status->value,
             'requires_approval' => $actionRequest->requires_approval,
-            'remaining_budget' => $context->remainingBudget(),
+            'remaining_budget' => $decisionRunContext->remainingBudget(),
             'message' => $actionRequest->requires_approval
                 ? 'Queued as a suggestion pending human approval.'
                 : 'Queued and will auto-execute.',

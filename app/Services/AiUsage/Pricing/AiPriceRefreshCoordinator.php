@@ -53,7 +53,7 @@ use Throwable;
  * This class must never depend on Auth state: attribution comes solely from
  * the `$triggeredBy` argument so queued and scheduled runs behave identically.
  */
-final class AiPriceRefreshCoordinator
+final readonly class AiPriceRefreshCoordinator
 {
     public const string MODE_APPLY = 'apply';
 
@@ -88,10 +88,10 @@ final class AiPriceRefreshCoordinator
     private const string FEED_SKIPPED = 'skipped';
 
     public function __construct(
-        private readonly PricingCatalog $pricingCatalog,
-        private readonly PricingFeedPhase $pricingFeedPhase,
-        private readonly PriceVerifierPhase $priceVerifierPhase,
-        private readonly PriceRefreshFallbackQueue $priceRefreshFallbackQueue,
+        private PricingCatalog $pricingCatalog,
+        private PricingFeedPhase $pricingFeedPhase,
+        private PriceVerifierPhase $priceVerifierPhase,
+        private PriceRefreshFallbackQueue $priceRefreshFallbackQueue,
     ) {}
 
     /**

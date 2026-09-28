@@ -61,7 +61,7 @@ class ResolveManualImportTool extends DecisionTool
      */
     protected function execute(Request $request): array
     {
-        $context = $this->boundRunContext();
+        $decisionRunContext = $this->boundRunContext();
         $validated = $request->validate([
             'service' => ['required', 'string', 'regex:/^(sonarr|radarr)$/Di'],
             'download_id' => ['required', 'string'],
@@ -74,14 +74,14 @@ class ResolveManualImportTool extends DecisionTool
         $downloadId = (string) $validated['download_id'];
         $type = $service === 'sonarr' ? ServiceType::Sonarr : ServiceType::Radarr;
 
-        $subjectMismatch = $this->rejectForeignDownload($downloadId, $context);
+        $subjectMismatch = $this->rejectForeignDownload($downloadId, $decisionRunContext);
 
         if ($subjectMismatch !== null) {
             return $subjectMismatch;
         }
 
         try {
-            $connection = $context->resolveConnection($type);
+            $connection = $decisionRunContext->resolveConnection($type);
             $client = $type === ServiceType::Sonarr
                 ? new SonarrClient($connection)
                 : new RadarrClient($connection);
@@ -123,11 +123,11 @@ class ResolveManualImportTool extends DecisionTool
                 payload: $actionPayload,
                 rationale: $rationale,
                 description: resolve(ActionDescriber::class)
-                    ->describe('resolve_manual_import', $context->pinContext($actionPayload))
-                    ->because($context->proposalReason()),
-                webhookEventId: $context->webhookEventId,
+                    ->describe('resolve_manual_import', $decisionRunContext->pinContext($actionPayload))
+                    ->because($decisionRunContext->proposalReason()),
+                webhookEventId: $decisionRunContext->webhookEventId,
                 forceRequiresApproval: $partial ? true : null,
-                pinnedConnectionId: $context->originConnectionId,
+                pinnedConnectionId: $decisionRunContext->originConnectionId,
             );
         } catch (Throwable $throwable) {
             Log::warning('ResolveManualImportTool: dispatch failed', [
@@ -147,7 +147,7 @@ class ResolveManualImportTool extends DecisionTool
             ];
         }
 
-        $context->recordQueued($actionRequest->id, $actionRequest->requires_approval);
+        $decisionRunContext->recordQueued($actionRequest->id, $actionRequest->requires_approval);
 
         return [
             'queued' => true,
@@ -156,7 +156,7 @@ class ResolveManualImportTool extends DecisionTool
             'requires_approval' => $actionRequest->requires_approval,
             'partial' => $partial,
             'assessment' => $assessment,
-            'remaining_budget' => $context->remainingBudget(),
+            'remaining_budget' => $decisionRunContext->remainingBudget(),
             'message' => $partial
                 ? 'Only some files mapped — queued for human approval.'
                 : ($actionRequest->requires_approval

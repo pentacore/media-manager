@@ -478,14 +478,14 @@ test('a disconnected client stops the turn at the next step and still bills what
         ->post(route('ai.chat.stream'), ['message' => 'Check my services'], ['Accept' => 'text/event-stream'])
         ->streamedContent();
 
-    $usage = AiUsageRecord::query()->where('agent_class', MediaAgent::class)->sole();
+    $aiUsageRecord = AiUsageRecord::query()->where('agent_class', MediaAgent::class)->sole();
 
     expect($body)->not->toContain('Second step reply')
         ->and(chatStreamFrame($body, 'RUN_ERROR'))->toContain('"code":"stopped"')
-        ->and($usage->status)->toBe('failed')
-        ->and($usage->error_message)->toContain('client disconnected')
-        ->and($usage->prompt_tokens)->toBe(1200)
-        ->and($usage->completion_tokens)->toBe(300);
+        ->and($aiUsageRecord->status)->toBe('failed')
+        ->and($aiUsageRecord->error_message)->toContain('client disconnected')
+        ->and($aiUsageRecord->prompt_tokens)->toBe(1200)
+        ->and($aiUsageRecord->completion_tokens)->toBe(300);
 });
 
 test('a non-streamed turn is never stopped by the disconnect check', function (): void {

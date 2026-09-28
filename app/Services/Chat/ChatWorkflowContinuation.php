@@ -29,9 +29,7 @@ class ChatWorkflowContinuation
     {
         $workflow = AiProposedWorkflow::find($workflowId);
 
-        if ($workflow === null || $workflow->user_id !== $user?->id) {
-            throw new WorkflowContinuationRefused('Workflow not found.', 404);
-        }
+        throw_if($workflow === null || $workflow->user_id !== $user?->id, WorkflowContinuationRefused::class, 'Workflow not found.', 404);
 
         $newStatus = $action === 'approved'
             ? AiProposedWorkflowStatus::Approved
@@ -42,9 +40,7 @@ class ChatWorkflowContinuation
             ->where('status', AiProposedWorkflowStatus::Proposed->value)
             ->update(['status' => $newStatus]);
 
-        if ($won !== 1) {
-            throw new WorkflowContinuationRefused('Workflow is no longer pending.', 422);
-        }
+        throw_if($won !== 1, WorkflowContinuationRefused::class, 'Workflow is no longer pending.', 422);
 
         $workflow->refresh();
 

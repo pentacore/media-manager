@@ -101,9 +101,9 @@ test('a streamed turn hands the media file inspector structured findings to the 
 
 test('both structured sub-agents take streaming and middleware from one concern', function (string $agentClass): void {
     expect(class_uses($agentClass))->toHaveKey(ActsAsStructuredSubAgent::class)
-        ->and((new ReflectionMethod($agentClass, 'stream'))->getFileName())
+        ->and(new ReflectionMethod($agentClass, 'stream')->getFileName())
         ->toEndWith('app/Ai/Concerns/ActsAsStructuredSubAgent.php')
-        ->and((new ReflectionMethod($agentClass, 'middleware'))->getFileName())
+        ->and(new ReflectionMethod($agentClass, 'middleware')->getFileName())
         ->toEndWith('app/Ai/Concerns/ActsAsStructuredSubAgent.php');
 })->with([StuckDownloadInvestigatorAgent::class, MediaFileInspectorAgent::class]);
 

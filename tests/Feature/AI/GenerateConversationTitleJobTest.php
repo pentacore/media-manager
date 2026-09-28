@@ -39,8 +39,7 @@ test('writes the generated title onto the conversation row', function (): void {
     TitleAgent::fake([['title' => 'Sonarr Library Cleanup']]);
     $id = seedTitleConvo('Delete every unwatched horror movie older than 6 months');
 
-    new GenerateConversationTitle($id, 'Delete every unwatched horror movie older than 6 months')
-        ->handle(resolve(AiSettings::class));
+    new GenerateConversationTitle($id, 'Delete every unwatched horror movie older than 6 months')->handle();
 
     expect(DB::table('agent_conversations')->where('id', $id)->value('title'))
         ->toBe('Sonarr Library Cleanup');
@@ -50,8 +49,7 @@ test('title job stores the structured title', function (): void {
     TitleAgent::fake([['title' => 'Sonarr Queue Cleanup']]);
     $id = seedTitleConvo('clear out my sonarr download queue');
 
-    new GenerateConversationTitle($id, 'clear out my sonarr download queue')
-        ->handle(resolve(AiSettings::class));
+    new GenerateConversationTitle($id, 'clear out my sonarr download queue')->handle();
 
     expect(DB::table('agent_conversations')->where('id', $id)->value('title'))
         ->toBe('Sonarr Queue Cleanup');
@@ -61,8 +59,7 @@ test('missing or empty structured title leaves the fallback intact', function ()
     TitleAgent::fake([['title' => '   ']]);
     $id = seedTitleConvo('something');
 
-    new GenerateConversationTitle($id, 'something')
-        ->handle(resolve(AiSettings::class));
+    new GenerateConversationTitle($id, 'something')->handle();
 
     expect(DB::table('agent_conversations')->where('id', $id)->value('title'))
         ->toBe('something');
@@ -73,8 +70,7 @@ test('uses the configured title model', function (): void {
     resolve(AiSettings::class)->setTitleModel('gpt-5.4-nano-custom');
     $id = seedTitleConvo('audit my library');
 
-    new GenerateConversationTitle($id, 'audit my library')
-        ->handle(resolve(AiSettings::class));
+    new GenerateConversationTitle($id, 'audit my library')->handle();
 
     TitleAgent::assertPrompted(fn ($prompt): bool => $prompt->model === 'gpt-5.4-nano-custom');
 });
@@ -84,8 +80,7 @@ test('auto title model resolves the provider cheapest model', function (): void 
     resolve(AiSettings::class)->setTitleModel('auto');
     $id = seedTitleConvo('audit my library');
 
-    new GenerateConversationTitle($id, 'audit my library')
-        ->handle(resolve(AiSettings::class));
+    new GenerateConversationTitle($id, 'audit my library')->handle();
 
     // Compared against the SDK rather than a literal: the provider's cheapest
     // model changes between laravel/ai releases.
@@ -100,8 +95,7 @@ test('AI failure leaves the fallback title intact', function (): void {
     TitleAgent::fake(fn (): never => throw new RuntimeException('provider exploded'));
     $id = seedTitleConvo('do something interesting');
 
-    new GenerateConversationTitle($id, 'do something interesting')
-        ->handle(resolve(AiSettings::class));
+    new GenerateConversationTitle($id, 'do something interesting')->handle();
 
     expect(DB::table('agent_conversations')->where('id', $id)->value('title'))
         ->toBe('do something interesting');
@@ -111,8 +105,7 @@ test('strips quotes and trailing punctuation from generated title', function ():
     TitleAgent::fake([['title' => '"Movie Cleanup."']]);
     $id = seedTitleConvo('something');
 
-    new GenerateConversationTitle($id, 'something')
-        ->handle(resolve(AiSettings::class));
+    new GenerateConversationTitle($id, 'something')->handle();
 
     expect(DB::table('agent_conversations')->where('id', $id)->value('title'))
         ->toBe('Movie Cleanup');
@@ -125,8 +118,7 @@ test('a manual rename done while the job was queued is never clobbered', functio
     // The user renames before the queued job runs.
     DB::table('agent_conversations')->where('id', $id)->update(['title' => 'My Custom Name']);
 
-    new GenerateConversationTitle($id, 'original first message')
-        ->handle(resolve(AiSettings::class));
+    new GenerateConversationTitle($id, 'original first message')->handle();
 
     expect(DB::table('agent_conversations')->where('id', $id)->value('title'))
         ->toBe('My Custom Name');

@@ -164,7 +164,7 @@ class PriceVerifierPhase
             $models = $priceRefreshLedger->fallbackTargets[$provider] ?? [];
 
             $uncovered = $models === []
-                ? $this->uncoveredStoredModels($priceRefreshLedger, $provider, $priceVerificationRun)
+                ? $this->uncoveredStoredModels($provider, $priceVerificationRun)
                 : array_values(array_filter(
                     $models,
                     fn (string $model): bool => ! $priceVerificationRun->modelHasVerifiedWrite($provider, $model),
@@ -192,7 +192,7 @@ class PriceVerifierPhase
      *
      * @return list<string>
      */
-    private function uncoveredStoredModels(PriceRefreshLedger $priceRefreshLedger, string $provider, PriceVerificationRun $priceVerificationRun): array
+    private function uncoveredStoredModels(string $provider, PriceVerificationRun $priceVerificationRun): array
     {
         return array_values(array_filter(
             $this->priceRefreshFallbackQueue->storedModels($provider),

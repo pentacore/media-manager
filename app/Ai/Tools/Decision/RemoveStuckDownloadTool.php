@@ -57,7 +57,7 @@ class RemoveStuckDownloadTool extends DecisionTool
      */
     protected function execute(Request $request): array
     {
-        $context = $this->boundRunContext();
+        $decisionRunContext = $this->boundRunContext();
         $validated = $request->validate([
             'service' => ['required', 'string', 'regex:/^(sonarr|radarr)$/Di'],
             'download_id' => ['required', 'string'],
@@ -75,7 +75,7 @@ class RemoveStuckDownloadTool extends DecisionTool
         $blocklist = ($args['blocklist'] ?? null) === true;
         $searchReplacement = ($args['search_replacement'] ?? null) === true;
 
-        $subjectMismatch = $this->rejectForeignDownload($downloadId, $context);
+        $subjectMismatch = $this->rejectForeignDownload($downloadId, $decisionRunContext);
 
         if ($subjectMismatch !== null) {
             return $subjectMismatch;
@@ -91,11 +91,11 @@ class RemoveStuckDownloadTool extends DecisionTool
                 payload: $actionPayload,
                 rationale: Str::limit(sprintf('Remove stuck %s download %s: %s', $service, $downloadId, $reason), 1000, ''),
                 description: resolve(ActionDescriber::class)
-                    ->describe('remove_stuck_download', $context->pinContext($actionPayload))
-                    ->because($context->proposalReason()),
-                webhookEventId: $context->webhookEventId,
+                    ->describe('remove_stuck_download', $decisionRunContext->pinContext($actionPayload))
+                    ->because($decisionRunContext->proposalReason()),
+                webhookEventId: $decisionRunContext->webhookEventId,
                 forceRequiresApproval: true,
-                pinnedConnectionId: $context->originConnectionId,
+                pinnedConnectionId: $decisionRunContext->originConnectionId,
             );
         } catch (Throwable $throwable) {
             Log::warning('RemoveStuckDownloadTool: dispatch failed', [
@@ -115,14 +115,14 @@ class RemoveStuckDownloadTool extends DecisionTool
             ];
         }
 
-        $context->recordQueued($actionRequest->id, $actionRequest->requires_approval);
+        $decisionRunContext->recordQueued($actionRequest->id, $actionRequest->requires_approval);
 
         return [
             'queued' => true,
             'action_request_id' => $actionRequest->id,
             'status' => $actionRequest->status->value,
             'requires_approval' => $actionRequest->requires_approval,
-            'remaining_budget' => $context->remainingBudget(),
+            'remaining_budget' => $decisionRunContext->remainingBudget(),
             'message' => $actionRequest->requires_approval
                 ? 'Removal queued for human approval.'
                 : 'Removal queued and will auto-run.',

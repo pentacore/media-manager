@@ -196,7 +196,7 @@ class RunDecisionAgent implements ShouldBeUnique, ShouldQueue
             'webhook_event_id' => $webhookEventId,
             'service' => $this->service,
             'event_type' => $this->eventType,
-            'exception' => $throwable === null ? null : $throwable::class,
+            'exception' => $throwable instanceof Throwable ? $throwable::class : null,
             'message' => $reason,
         ]);
 

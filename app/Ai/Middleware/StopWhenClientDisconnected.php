@@ -22,9 +22,7 @@ final class StopWhenClientDisconnected
 {
     public function handle(PendingStep $pendingStep, Closure $next): mixed
     {
-        if (! $pendingStep->isFirstStep() && resolve(ClientConnection::class)->disconnected()) {
-            throw new ClientDisconnectedException;
-        }
+        throw_if(! $pendingStep->isFirstStep() && resolve(ClientConnection::class)->disconnected(), ClientDisconnectedException::class);
 
         return $next($pendingStep);
     }

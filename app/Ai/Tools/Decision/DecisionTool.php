@@ -8,7 +8,6 @@ use App\Ai\Decision\DecisionRunContext;
 use Illuminate\Validation\ValidationException;
 use Laravel\Ai\Contracts\Tool;
 use Laravel\Ai\Tools\Request;
-use Stringable;
 
 /**
  * Base for the DecisionAgent's tools.
@@ -30,7 +29,7 @@ abstract class DecisionTool implements Tool
     /** The result key carrying the tool's success flag. */
     protected const string OUTCOME_KEY = 'queued';
 
-    final public function handle(Request $request): Stringable|string
+    final public function handle(Request $request): string
     {
         $decisionRunContext = $this->runContext();
 

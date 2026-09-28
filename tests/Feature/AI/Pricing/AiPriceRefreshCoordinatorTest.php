@@ -1609,9 +1609,10 @@ test('characterization: the coordinator carries no state from one run into the n
     $aiPriceRefreshCoordinator = resolve(AiPriceRefreshCoordinator::class);
 
     $aiPriceRefreshCoordinator->run(AiPriceRefreshCoordinator::MODE_APPLY, AiPriceRefreshCoordinator::SOURCE_HYBRID, RefreshScope::forProviders(['openai']), null, 'test');
-    $second = $aiPriceRefreshCoordinator->run(AiPriceRefreshCoordinator::MODE_DRY_RUN, AiPriceRefreshCoordinator::SOURCE_MODELS_DEV, RefreshScope::forProviders(['anthropic']), null, 'test');
 
-    expect(AiPriceRefreshRun::query()->findOrFail($second->runId)->unverified_targets)->toBeNull()
-        ->and($second->fallbackProviders)->toBe([])
-        ->and(array_keys(AiPriceRefreshRun::query()->findOrFail($second->runId)->provider_results))->toBe(['anthropic']);
+    $refreshReport = $aiPriceRefreshCoordinator->run(AiPriceRefreshCoordinator::MODE_DRY_RUN, AiPriceRefreshCoordinator::SOURCE_MODELS_DEV, RefreshScope::forProviders(['anthropic']), null, 'test');
+
+    expect(AiPriceRefreshRun::query()->findOrFail($refreshReport->runId)->unverified_targets)->toBeNull()
+        ->and($refreshReport->fallbackProviders)->toBe([])
+        ->and(array_keys(AiPriceRefreshRun::query()->findOrFail($refreshReport->runId)->provider_results))->toBe(['anthropic']);
 });

@@ -54,7 +54,7 @@ function decisionToolProbe(): DecisionTool
  */
 function decisionToolResult(DecisionTool $decisionTool, array $arguments): array
 {
-    return json_decode((string) $decisionTool->handle(new Request($arguments)), true);
+    return json_decode($decisionTool->handle(new Request($arguments)), true);
 }
 
 test('a decision tool refuses to run outside a decision run', function (): void {
@@ -65,6 +65,7 @@ test('a decision tool refuses to run outside a decision run', function (): void 
 test('a decision tool stops once the run reached its action cap', function (): void {
     $decisionRunContext = new DecisionRunContext(null, 1, 'sonarr');
     $decisionRunContext->recordQueued(1, true);
+
     app()->instance(DecisionRunContext::class, $decisionRunContext);
 
     expect(decisionToolResult(decisionToolProbe(), ['service' => 'sonarr']))
