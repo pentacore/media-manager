@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use App\Console\Commands\AggregateStatistics;
+use App\Console\Commands\Ai\PruneConversations;
 use App\Console\Commands\Ai\RefreshAiPrices;
 use App\Console\Commands\BroadcastDashboardStats;
 use App\Console\Commands\CheckAppVersion;
@@ -154,6 +155,12 @@ Schedule::command('model:prune', [
 ])
     ->dailyAt('03:00')
     ->withoutOverlapping(180);
+
+// Opt-in conversation retention (0 = keep) plus the orphaned chat
+// attachment sweep, which always runs.
+Schedule::command(PruneConversations::class)
+    ->dailyAt('03:15')
+    ->withoutOverlapping(60);
 
 // laravel's DatabaseNotification isn't ours to make Prunable; trim directly.
 Schedule::call(function (): void {
