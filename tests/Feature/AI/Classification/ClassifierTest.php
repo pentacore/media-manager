@@ -28,7 +28,7 @@ test('the classification row stores the state and questions as input and the ans
         'state' => 'payload',
         'questions' => ['decision' => ['type' => 'boolean', 'instructions' => 'Needs action?']],
     ])
-        ->and(json_decode((string) $record->response_text, true))->toBe(['decision' => (new BooleanAnswer(0.82))->toArray()]);
+        ->and(json_decode((string) $record->response_text, true))->toBe(['decision' => new BooleanAnswer(0.82)->toArray()]);
 });
 
 test('the classifier fails open when the provider has no key', function (): void {

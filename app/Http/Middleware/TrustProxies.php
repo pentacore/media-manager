@@ -55,7 +55,7 @@ class TrustProxies extends Middleware
             return;
         }
 
-        Log::warning('TRUSTED_PROXIES trusts broad address ranges: any host inside them can forge X-Forwarded-For and dodge IP-based login throttling. Set it to the reverse proxy\'s exact IP.', [
+        Log::warning("TRUSTED_PROXIES trusts broad address ranges: any host inside them can forge X-Forwarded-For and dodge IP-based login throttling. Set it to the reverse proxy's exact IP.", [
             'broad_entries' => $broadEntries,
         ]);
     }

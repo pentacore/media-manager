@@ -12,6 +12,10 @@ concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 
+# Least privilege: no job here writes to the repo, packages or PRs.
+permissions:
+  contents: read
+
 env:
   PHP_VERSION: '8.5'
   NODE_VERSION: '25'
@@ -22,17 +26,17 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v7.0.1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Setup PHP
-        uses: shivammathur/setup-php@v2
+        uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # 2.37.2
         with:
           php-version: ${{ env.PHP_VERSION }}
           tools: composer:v2
           coverage: none
 
       - name: Cache composer
-        uses: actions/cache@v6
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/.cache/composer
           key: composer-${{ runner.os }}-${{ env.PHP_VERSION }}-${{ hashFiles('**/composer.lock') }}
@@ -44,15 +48,97 @@ jobs:
       - name: Run Pint
         run: vendor/bin/pint --test --format=checkstyle
 
+  php-analysis:
+    name: PHP static analysis
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # 2.37.2
+        with:
+          php-version: ${{ env.PHP_VERSION }}
+          tools: composer:v2
+          coverage: none
+
+      - name: Cache composer
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/composer
+          key: composer-${{ runner.os }}-${{ env.PHP_VERSION }}-${{ hashFiles('**/composer.lock') }}
+          restore-keys: composer-${{ runner.os }}-${{ env.PHP_VERSION }}-
+
+      - name: Install composer dependencies
+        run: composer install --no-interaction --prefer-dist --no-progress --no-scripts
+
+      - name: Rector (dry run)
+        run: vendor/bin/rector process --dry-run --no-progress-bar
+
+      # Larastan boots the application. Array/sync drivers keep it off Valkey
+      # (the app otherwise reaches Redis while booting) and sqlite keeps it
+      # off Postgres; nothing is queried.
+      - name: Larastan
+        env:
+          APP_KEY: base64:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=
+          APP_ENV: testing
+          DB_CONNECTION: sqlite
+          DB_DATABASE: ':memory:'
+          CACHE_STORE: array
+          MEDIAMANAGER_CACHE_STORE: array
+          SESSION_DRIVER: array
+          QUEUE_CONNECTION: sync
+          BROADCAST_CONNECTION: 'null'
+          TELESCOPE_ENABLED: 'false'
+        run: vendor/bin/phpstan analyse --memory-limit=2G --no-progress
+
+  dependency-audit:
+    name: Dependency audit
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # 2.37.2
+        with:
+          php-version: ${{ env.PHP_VERSION }}
+          tools: composer:v2
+          coverage: none
+
+      - name: Setup Node
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      # Runtime dependencies ship in the image and the browser/SSR bundle: a
+      # known advisory there blocks the merge.
+      - name: Composer audit (runtime)
+        run: composer audit --locked --no-dev --abandoned=report
+
+      - name: npm audit (runtime, high and above)
+        run: npm audit --omit=dev --audit-level=high --package-lock-only
+
+      # Dev tooling (Pest, Rector, semantic-release, Vite plugins) never
+      # ships. Report its advisories without failing every PR on upstream
+      # release timing; Dependabot opens the fixes.
+      - name: Composer audit (all, report only)
+        continue-on-error: true
+        run: composer audit --locked --abandoned=report
+
+      - name: npm audit (all, report only)
+        continue-on-error: true
+        run: npm audit --audit-level=high --package-lock-only
+
   js-lint:
     name: JS lint, format & types
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v7.0.1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Setup PHP
-        uses: shivammathur/setup-php@v2
+        uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # 2.37.2
         with:
           php-version: ${{ env.PHP_VERSION }}
           extensions: pdo_sqlite, sqlite3
@@ -60,13 +146,13 @@ jobs:
           coverage: none
 
       - name: Setup Node
-        uses: actions/setup-node@v7
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
 
       - name: Cache composer
-        uses: actions/cache@v6
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/.cache/composer
           key: composer-${{ runner.os }}-${{ env.PHP_VERSION }}-${{ hashFiles('**/composer.lock') }}
@@ -174,10 +260,10 @@ jobs:
       TYPESENSE_API_KEY: xyz
 
     steps:
-      - uses: actions/checkout@v7.0.1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Setup PHP
-        uses: shivammathur/setup-php@v2
+        uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # 2.37.2
         with:
           php-version: ${{ env.PHP_VERSION }}
           extensions: pdo_pgsql, redis, intl, bcmath, gd, zip, sodium
@@ -185,13 +271,13 @@ jobs:
           coverage: none
 
       - name: Setup Node
-        uses: actions/setup-node@v7
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
 
       - name: Cache composer
-        uses: actions/cache@v6
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/.cache/composer
           key: composer-${{ runner.os }}-${{ env.PHP_VERSION }}-${{ hashFiles('**/composer.lock') }}
@@ -267,7 +353,7 @@ jobs:
           - 8108:8108
 
     steps:
-      - uses: actions/checkout@v7.0.1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Pre-generate Wayfinder + Typefinder types
         uses: ./.github/actions/generate-types
@@ -280,10 +366,10 @@ jobs:
           DB_PASSWORD: postgres
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v4
+        uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4.2.0
 
       - name: Build production image (amd64, load locally)
-        uses: docker/build-push-action@v7
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
         with:
           context: .
           file: docker/production/Dockerfile
@@ -381,17 +467,17 @@ jobs:
             exit 1
           fi
 
-      # The queue/scheduler/ssr/reverb/migrate entrypoint blocks otherwise run
-      # for the first time in production — a bash typo or renamed artisan
-      # flag would ship green and crash-loop the worker. Boot each role and
-      # assert it stays up. (reverb binds :8080, so the web container is
-      # stopped first; ssr binds :13714.)
-      - name: Smoke queue/scheduler/ssr/reverb roles
+      # The queue/queue-ai/scheduler/ssr/reverb/migrate entrypoint blocks
+      # otherwise run for the first time in production — a bash typo or
+      # renamed artisan flag would ship green and crash-loop the worker. Boot
+      # each role and assert it stays up. (reverb binds :8080, so the web
+      # container is stopped first; ssr binds :13714.)
+      - name: Smoke queue/queue-ai/scheduler/ssr/reverb roles
         env:
           APP_KEY: ${{ steps.app_key.outputs.APP_KEY }}
         run: |
           docker rm -f octane
-          for role in queue scheduler ssr reverb; do
+          for role in queue queue-ai scheduler ssr reverb; do
             docker run -d \
               --name "$role" \
               --network host \
@@ -421,7 +507,7 @@ jobs:
           done
           sleep 10
           fail=0
-          for role in queue scheduler ssr reverb; do
+          for role in queue queue-ai scheduler ssr reverb; do
             if [ "$(docker inspect -f '{{.State.Running}}' "$role")" != "true" ]; then
               echo "--- $role container exited ---" >&2
               docker logs "$role" >&2 || true
@@ -468,4 +554,4 @@ jobs:
 
       - name: Stop containers
         if: always()
-        run: docker rm -f octane queue scheduler ssr reverb || true
+        run: docker rm -f octane queue queue-ai scheduler ssr reverb || true

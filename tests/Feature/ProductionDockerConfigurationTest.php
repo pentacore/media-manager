@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use App\Enums\QueueLane;
 use App\Settings\AiSettings;
 
 test('production queue worker timeout is lower than retry after defaults', function (): void {
@@ -165,4 +166,119 @@ test('production entrypoint seeds action types after migrations on both paths', 
     preg_match('/\s+migrate\)(.*?)\s+;;/s', $entrypoint, $migrateBlock);
     expect($migrateBlock)->not->toBeEmpty()
         ->and($migrateBlock[1])->toContain('run_migrations');
+});
+
+function dockerConfigRoleBlock(string $script, string $role): string
+{
+    preg_match(sprintf('/\n\s+%s\)(.*?)\n\s+;;/s', preg_quote($role, '/')), $script, $block);
+
+    return $block[1] ?? '';
+}
+
+function dockerConfigComposeService(string $compose, string $service): string
+{
+    preg_match(sprintf('/\n  %s:\n(.*?)(?=\n  [a-z][a-z-]+:|\nvolumes:)/s', preg_quote($service, '/')), $compose, $block);
+
+    return $block[1] ?? '';
+}
+
+test('the general queue worker drains every lane unless compose narrows it', function (): void {
+    $entrypoint = (string) file_get_contents(base_path('docker/production/entrypoint.sh'));
+    $compose = (string) file_get_contents(base_path('docker/production/compose.yaml'));
+    $generalLanes = implode(',', array_map(static fn (QueueLane $queueLane): string => $queueLane->value, QueueLane::generalLanes()));
+
+    expect(dockerConfigRoleBlock($entrypoint, 'queue'))
+        ->toContain(sprintf('--queue="${QUEUE_LANES:-%s}"', implode(',', QueueLane::values())))
+        ->and(dockerConfigComposeService($compose, 'queue'))
+        ->toContain('CONTAINER_ROLE: queue')
+        ->toContain(sprintf('QUEUE_LANES: %s', $generalLanes));
+});
+
+test('the ai lane runs in its own worker service with a timeout under retry_after', function (): void {
+    $entrypoint = (string) file_get_contents(base_path('docker/production/entrypoint.sh'));
+    $compose = (string) file_get_contents(base_path('docker/production/compose.yaml'));
+
+    $aiRole = dockerConfigRoleBlock($entrypoint, 'queue-ai');
+    $aiService = dockerConfigComposeService($compose, 'queue-ai');
+    preg_match('/--timeout=(\d+)/', $aiRole, $timeout);
+    preg_match('/stop_grace_period:\s*(\d+)s/', $aiService, $gracePeriod);
+
+    expect($aiRole)->toContain('exec php artisan queue:work')->toContain('--queue=ai,maintenance')
+        ->and($timeout)->not->toBeEmpty()
+        ->and(config('queue.connections.redis.retry_after'))->toBeGreaterThan((int) $timeout[1])
+        ->and($aiService)->toContain('CONTAINER_ROLE: queue-ai')->not->toContain('ports:')
+        ->and($gracePeriod)->not->toBeEmpty()
+        ->and((int) $gracePeriod[1])->toBeGreaterThan((int) $timeout[1])
+        ->and($entrypoint)->toContain('Valid roles: web, queue, queue-ai, scheduler, ssr, reverb, migrate');
+});
+
+test('the dev stack worker drains every lane', function (): void {
+    $compose = (string) file_get_contents(base_path('compose.yaml'));
+    $composer = json_decode((string) file_get_contents(base_path('composer.json')), true, flags: JSON_THROW_ON_ERROR);
+    $lanes = implode(',', QueueLane::values());
+
+    preg_match("/\n    queue:\n(.*?)(?=\n    [a-z][a-z.-]+:\n)/s", $compose, $devQueue);
+
+    expect($devQueue[1] ?? '')->toContain(sprintf("'--queue=%s'", $lanes))
+        ->and(implode(' ', $composer['scripts']['dev']))->toContain(sprintf('queue:listen --queue=%s', $lanes));
+});
+
+test('the octane smoke job boots the queue-ai role', function (): void {
+    $ci = (string) file_get_contents(base_path('.github/workflows/ci.yml'));
+
+    expect(mb_substr_count($ci, 'for role in queue queue-ai scheduler ssr reverb; do'))->toBe(2)
+        ->and($ci)->toContain('docker rm -f octane queue queue-ai scheduler ssr reverb');
+});
+
+test('the scheduler clears stale overlap locks before it starts working', function (): void {
+    $scheduler = dockerConfigRoleBlock((string) file_get_contents(base_path('docker/production/entrypoint.sh')), 'scheduler');
+
+    $clear = mb_strpos($scheduler, 'php artisan schedule:clear-cache --no-interaction');
+    $work = mb_strpos($scheduler, 'exec php artisan schedule:work --no-interaction');
+
+    expect($clear)->not->toBeFalse()
+        ->and($work)->not->toBeFalse()
+        ->and($work)->toBeGreaterThan($clear);
+});
+
+test('the scheduler container gets time to finish in-flight tasks on shutdown', function (): void {
+    $scheduler = dockerConfigComposeService((string) file_get_contents(base_path('docker/production/compose.yaml')), 'scheduler');
+
+    preg_match('/stop_grace_period:\s*(\d+)s/', $scheduler, $gracePeriod);
+
+    expect($gracePeriod)->not->toBeEmpty()
+        ->and((int) $gracePeriod[1])->toBeGreaterThanOrEqual(60);
+});
+
+test('queue and scheduler healthchecks read heartbeat age instead of the process list', function (): void {
+    $healthcheck = (string) file_get_contents(base_path('docker/production/healthcheck.sh'));
+
+    expect($healthcheck)->not->toContain('pgrep')
+        ->and(dockerConfigRoleBlock($healthcheck, 'queue'))
+        ->toContain(sprintf('php artisan ops:check-heartbeat --queue="${QUEUE_LANES:-%s}"', implode(',', QueueLane::values())))
+        ->and(dockerConfigRoleBlock($healthcheck, 'queue-ai'))->toContain('php artisan ops:check-heartbeat --queue=ai,maintenance')
+        ->and(dockerConfigRoleBlock($healthcheck, 'scheduler'))->toContain('php artisan ops:check-heartbeat --scheduler');
+});
+
+test('heartbeat-checked services wait for the first heartbeat before failures count', function (): void {
+    $compose = (string) file_get_contents(base_path('docker/production/compose.yaml'));
+
+    preg_match('/\nx-heartbeat-healthcheck: &heartbeat-healthcheck\n(.*?)\n\n/s', $compose, $anchor);
+
+    expect($anchor[1] ?? '')->toContain('start_period: 120s')->toContain("test: ['CMD', '/usr/local/bin/healthcheck']");
+    foreach (['queue', 'queue-ai', 'scheduler'] as $service) {
+        expect(dockerConfigComposeService($compose, $service))->toContain('healthcheck: *heartbeat-healthcheck');
+    }
+});
+
+test('production documentation covers backups, restore and the APP_KEY', function (): void {
+    $readme = (string) file_get_contents(base_path('README.md'));
+    $environment = (string) file_get_contents(base_path('docker/production/.env.example'));
+
+    expect($readme)->toContain('### Backups and restore')
+        ->toContain('pg_dump -U "$POSTGRES_USER" -d "$POSTGRES_DB" -Fc')
+        ->toContain('pg_restore -U "$POSTGRES_USER" -d "$POSTGRES_DB" --clean --if-exists --no-owner')
+        ->toContain('tar czf - -C /app/storage app')
+        ->toContain('Back up `APP_KEY` together with the database')
+        ->and($environment)->toContain('# Back up APP_KEY with every database backup');
 });

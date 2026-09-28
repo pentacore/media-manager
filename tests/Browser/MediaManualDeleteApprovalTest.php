@@ -134,16 +134,16 @@ test('a double-clicked movie delete confirm sends one request and stays disabled
 
     $this->actingAs(User::factory()->member()->create());
 
-    $page = visit(route('media.movies.show', ['id' => 10], absolute: false))
+    $webpage = visit(route('media.movies.show', ['id' => 10], absolute: false))
         ->assertSee('A Movie')
         ->assertNoSmoke()
         ->click('[data-delete-trigger]')
         ->assertEnabled('[data-delete-confirm]');
 
-    $page->script(manualDeleteHoldDeleteRequestsScript());
-    $page->script(manualDeleteDoubleClickConfirmScript());
+    $webpage->script(manualDeleteHoldDeleteRequestsScript());
+    $webpage->script(manualDeleteDoubleClickConfirmScript());
 
-    $page->assertDisabled('[data-delete-confirm]')
+    $webpage->assertDisabled('[data-delete-confirm]')
         ->assertScript('window.__deleteRequests', 1);
 });
 
@@ -175,15 +175,15 @@ test('a double-clicked series delete confirm sends one request and stays disable
 
     $this->actingAs(User::factory()->member()->create());
 
-    $page = visit(route('media.series.show', ['id' => 20], absolute: false))
+    $webpage = visit(route('media.series.show', ['id' => 20], absolute: false))
         ->assertSee('A Show')
         ->assertNoSmoke()
         ->click('[data-delete-trigger]')
         ->assertEnabled('[data-delete-confirm]');
 
-    $page->script(manualDeleteHoldDeleteRequestsScript());
-    $page->script(manualDeleteDoubleClickConfirmScript());
+    $webpage->script(manualDeleteHoldDeleteRequestsScript());
+    $webpage->script(manualDeleteDoubleClickConfirmScript());
 
-    $page->assertDisabled('[data-delete-confirm]')
+    $webpage->assertDisabled('[data-delete-confirm]')
         ->assertScript('window.__deleteRequests', 1);
 });

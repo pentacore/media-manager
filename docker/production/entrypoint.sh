@@ -76,7 +76,27 @@ case "$role" in
 
     queue)
         warm_caches
+        # Lanes in priority order (App\Enums\QueueLane). The default drains
+        # every lane so an older compose.yaml without the queue-ai service
+        # still runs AI and maintenance jobs; the shipped compose.yaml narrows
+        # it with QUEUE_LANES and runs the ai and maintenance lanes in queue-ai.
         exec php artisan queue:work \
+            --queue="${QUEUE_LANES:-actions,webhooks,default,ai,maintenance}" \
+            --sleep=3 \
+            --tries=3 \
+            --timeout=300 \
+            --no-interaction \
+            --verbose
+        ;;
+
+    queue-ai)
+        warm_caches
+        # AI jobs (decision agent, subtitle advisor, embeddings, titles, price
+        # refresh) first, then maintenance jobs (long housekeeping — e.g. bulk
+        # Seerr request clears, search index reconcile, anime mapping sync).
+        # Keep --timeout below the redis retry_after (330s).
+        exec php artisan queue:work \
+            --queue=ai,maintenance \
             --sleep=3 \
             --tries=3 \
             --timeout=300 \
@@ -86,6 +106,11 @@ case "$role" in
 
     scheduler)
         warm_caches
+        # Overlap locks live in Valkey (persisted). A scheduler killed mid-task
+        # (OOM, SIGKILL after the stop grace period) would otherwise keep its
+        # locks until they expire and silently skip those tasks. This is the
+        # only scheduler, so every lock present at boot is stale.
+        php artisan schedule:clear-cache --no-interaction
         # schedule:work is a long-running supervisor that ticks the scheduler every minute
         exec php artisan schedule:work --no-interaction
         ;;
@@ -107,7 +132,7 @@ case "$role" in
 
     *)
         echo "Unknown CONTAINER_ROLE: $role" >&2
-        echo "Valid roles: web, queue, scheduler, ssr, reverb, migrate" >&2
+        echo "Valid roles: web, queue, queue-ai, scheduler, ssr, reverb, migrate" >&2
         exit 1
         ;;
 esac

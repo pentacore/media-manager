@@ -22,3 +22,5 @@ Never add a model-level `$with`; eager load at the call site with `->with()`. Wh
 
 ## Prune high-volume tables from config
 Give append-only tables `MassPrunable` and a `prunable()` method that reads its window from `config('mediamanager.retention.*_days')`. Treat `0` as "pruning disabled" by returning `whereRaw('1 = 0')`, never an unbounded delete.
+
+Prune only terminal rows, and keep a row while another row's `nullOnDelete`/`cascadeOnDelete` FK still points at it (use `whereNotExists`, never `whereNotIn`, over nullable FK columns). When child rows `restrictOnDelete`, use `Prunable` (not `MassPrunable`) and delete the children in `pruning()` inside a `DB::transaction()` `prune()` override (see `SubtitleCase`).

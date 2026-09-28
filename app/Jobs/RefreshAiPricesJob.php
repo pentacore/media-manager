@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Jobs;
 
+use App\Enums\QueueLane;
 use App\Events\AiPriceRefreshStateChanged;
 use App\Models\AiModelPrice;
 use App\Models\User;
@@ -13,12 +14,14 @@ use App\Services\AiUsage\Pricing\RefreshScope;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
+use Illuminate\Queue\Attributes\Queue;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
 use Throwable;
 
+#[Queue(QueueLane::Ai)]
 class RefreshAiPricesJob implements ShouldQueue
 {
     use Dispatchable;

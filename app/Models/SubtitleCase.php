@@ -14,9 +14,11 @@ use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Prunable;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
+use Illuminate\Support\Facades\DB;
 use InvalidArgumentException;
 use JsonException;
 use Override;
@@ -79,6 +81,8 @@ class SubtitleCase extends Model
 {
     /** @use HasFactory<SubtitleCaseFactory> */
     use HasFactory;
+
+    use Prunable;
 
     /** @var array<string, mixed> */
     #[Override]
@@ -190,5 +194,45 @@ class SubtitleCase extends Model
             'resolved_at' => 'immutable_datetime',
             'superseded_at' => 'immutable_datetime',
         ];
+    }
+
+    /**
+     * Resolved and superseded cases past the retention window, measured from
+     * when they closed. A case with an upload whose file is not cleaned up yet
+     * waits for PruneSubtitleUploads.
+     *
+     * @return Builder<static>
+     */
+    public function prunable(): Builder
+    {
+        $days = (int) config('mediamanager.retention.subtitle_cases_days');
+
+        return static::query()->when(
+            $days > 0,
+            fn (Builder $builder): Builder => $builder
+                ->whereIn('status', SubtitleCaseStatus::prunableStatuses())
+                ->whereRaw('COALESCE(superseded_at, resolved_at, updated_at) < ?', [now()->subDays($days)])
+                ->whereDoesntHave('uploads', fn (Builder $builder): Builder => $builder->whereNull('cleaned_up_at')),
+            fn (Builder $builder): Builder => $builder->whereRaw('1 = 0'),
+        );
+    }
+
+    /**
+     * Attempts and uploads restrict deletion of their case, so they go first,
+     * in the same transaction as the case row.
+     */
+    public function prune(): ?bool
+    {
+        return DB::transaction(function (): ?bool {
+            $this->pruning();
+
+            return $this->delete();
+        });
+    }
+
+    protected function pruning(): void
+    {
+        $this->attempts()->delete();
+        $this->uploads()->delete();
     }
 }

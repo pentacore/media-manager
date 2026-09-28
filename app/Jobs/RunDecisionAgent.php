@@ -8,6 +8,7 @@ use App\Ai\Agents\DecisionAgent;
 use App\Ai\Classification\Classifier;
 use App\Ai\Decision\DecisionRunContext;
 use App\Enums\AgentDecisionStatus;
+use App\Enums\QueueLane;
 use App\Models\AgentDecision;
 use App\Models\WebhookEvent;
 use App\Notifications\DecisionAgentActed;
@@ -21,6 +22,7 @@ use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldBeUnique;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
+use Illuminate\Queue\Attributes\Queue;
 use Illuminate\Queue\Attributes\Timeout;
 use Illuminate\Queue\Attributes\UniqueFor;
 use Illuminate\Queue\InteractsWithQueue;
@@ -37,6 +39,7 @@ use Throwable;
  * capture is disabled the row is trimmed right after processing, so a
  * serialized model could vanish before this job dequeues.
  */
+#[Queue(QueueLane::Ai)]
 #[Timeout(240)]
 #[UniqueFor(600)]
 class RunDecisionAgent implements ShouldBeUnique, ShouldQueue

@@ -1,0 +1,1345 @@
+parameters:
+	ignoreErrors:
+		-
+			message: '#^Method App\\Actions\\Fortify\\CreateNewUser\:\:emailRules\(\) should return array\<int, array\<mixed\>\|Illuminate\\Contracts\\Validation\\Rule\|string\> but returns array\<int, Illuminate\\Validation\\Rules\\Unique\|string\>\.$#'
+			identifier: return.type
+			count: 1
+			path: app/Actions/Fortify/CreateNewUser.php
+
+		-
+			message: '#^Method App\\Ai\\Agents\\MediaFileInspectorAgent\:\:stream\(\) has parameter \$provider with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: app/Ai/Agents/MediaFileInspectorAgent.php
+
+		-
+			message: '#^Parameter \#1 \$array \(list\<string\>\) of array_values is already a list, call has no effect\.$#'
+			identifier: arrayValues.list
+			count: 1
+			path: app/Ai/Agents/PriceFetcherAgent.php
+
+		-
+			message: '#^Method App\\Ai\\Agents\\StuckDownloadInvestigatorAgent\:\:stream\(\) has parameter \$provider with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: app/Ai/Agents/StuckDownloadInvestigatorAgent.php
+
+		-
+			message: '#^Expression on left side of \?\? is not nullable\.$#'
+			identifier: nullCoalesce.expr
+			count: 1
+			path: app/Ai/Decision/DecisionRunContext.php
+
+		-
+			message: '#^Instanceof between Laravel\\Ai\\Storage\\DatabaseConversationStore and Laravel\\Ai\\Contracts\\PaginatesConversations will always evaluate to true\.$#'
+			identifier: instanceof.alwaysTrue
+			count: 1
+			path: app/Ai/Routing/ChatToolRouter.php
+
+		-
+			message: '#^Instanceof between App\\Models\\IndexedSeries and App\\Models\\IndexedSeries will always evaluate to true\.$#'
+			identifier: instanceof.alwaysTrue
+			count: 1
+			path: app/Ai/Tools/Arr/GetMediaTool.php
+
+		-
+			message: '#^Return type \(array\<int, array\<string, mixed\>\>\) of method App\\Ai\\Tools\\Arr\\SearchMediaTool\:\:execute\(\) should be compatible with return type \(array\<string, mixed\>\) of method App\\Ai\\Tools\\BaseTool\:\:execute\(\)$#'
+			identifier: method.childReturnType
+			count: 1
+			path: app/Ai/Tools/Arr/SearchMediaTool.php
+
+		-
+			message: '#^Using nullsafe property access "\?\-\>name" on left side of \?\? is unnecessary\. Use \-\> instead\.$#'
+			identifier: nullsafe.neverNull
+			count: 1
+			path: app/Ai/Tools/BaseTool.php
+
+		-
+			message: '#^Call to function is_array\(\) with array\<string, mixed\> will always evaluate to true\.$#'
+			identifier: function.alreadyNarrowedType
+			count: 1
+			path: app/Ai/Tools/Bazarr/QueueAutomaticReplacementTool.php
+
+		-
+			message: '#^Unable to resolve the template type TKey in call to function collect$#'
+			identifier: argument.templateType
+			count: 1
+			path: app/Ai/Tools/Bazarr/RequestSubtitleOperationTool.php
+
+		-
+			message: '#^Unable to resolve the template type TValue in call to function collect$#'
+			identifier: argument.templateType
+			count: 1
+			path: app/Ai/Tools/Bazarr/RequestSubtitleOperationTool.php
+
+		-
+			message: '#^Using nullsafe property access on non\-nullable type App\\Models\\EmbyUserLink\. Use \-\> instead\.$#'
+			identifier: nullsafe.neverNull
+			count: 1
+			path: app/Ai/Tools/Emby/NowPlayingTool.php
+
+		-
+			message: '#^Using nullsafe property access on non\-nullable type App\\Models\\EmbyUserLink\. Use \-\> instead\.$#'
+			identifier: nullsafe.neverNull
+			count: 1
+			path: app/Ai/Tools/Emby/WatchHistoryTool.php
+
+		-
+			message: '#^Strict comparison using \=\=\= between Illuminate\\Http\\Client\\Response and null will always evaluate to false\.$#'
+			identifier: identical.alwaysFalse
+			count: 1
+			path: app/Ai/Tools/PriceFetcher/WebFetchTool.php
+
+		-
+			message: '#^Return type \(array\<int, array\<string, mixed\>\>\) of method App\\Ai\\Tools\\Prowlarr\\ListIndexersTool\:\:execute\(\) should be compatible with return type \(array\<string, mixed\>\) of method App\\Ai\\Tools\\BaseTool\:\:execute\(\)$#'
+			identifier: method.childReturnType
+			count: 1
+			path: app/Ai/Tools/Prowlarr/ListIndexersTool.php
+
+		-
+			message: '#^Return type \(array\<int, array\<string, mixed\>\>\) of method App\\Ai\\Tools\\Prowlarr\\SearchIndexersTool\:\:execute\(\) should be compatible with return type \(array\<string, mixed\>\) of method App\\Ai\\Tools\\BaseTool\:\:execute\(\)$#'
+			identifier: method.childReturnType
+			count: 1
+			path: app/Ai/Tools/Prowlarr/SearchIndexersTool.php
+
+		-
+			message: '#^Using nullsafe property access on non\-nullable type App\\Models\\EmbyUserLink\. Use \-\> instead\.$#'
+			identifier: nullsafe.neverNull
+			count: 1
+			path: app/Ai/Tools/System/QueryActivityTool.php
+
+		-
+			message: '#^Call to function is_int\(\) with int will always evaluate to true\.$#'
+			identifier: function.alreadyNarrowedType
+			count: 1
+			path: app/Cache/Services/BazarrCache.php
+
+		-
+			message: '#^Parameter \#1 \$items of method App\\Services\\Search\\LibraryEmbedder\:\:embedMany\(\) expects Illuminate\\Support\\Collection\<int, App\\Models\\IndexedMovie\|App\\Models\\IndexedSeries\>, Illuminate\\Database\\Eloquent\\Collection\<\(int\|string\), App\\Models\\IndexedMovie\>\|Illuminate\\Database\\Eloquent\\Collection\<\(int\|string\), App\\Models\\IndexedSeries\> given\.$#'
+			identifier: argument.type
+			count: 1
+			path: app/Console/Commands/Ai/EmbedLibrary.php
+
+		-
+			message: '#^Method App\\Console\\Commands\\BackfillEmbyHistory\:\:resolveLinks\(\) never returns null so it can be removed from the return type\.$#'
+			identifier: return.unusedType
+			count: 1
+			path: app/Console/Commands/BackfillEmbyHistory.php
+
+		-
+			message: '#^Method App\\Console\\Commands\\CreateUser\:\:emailRules\(\) should return array\<int, array\<mixed\>\|Illuminate\\Contracts\\Validation\\Rule\|string\> but returns array\<int, Illuminate\\Validation\\Rules\\Unique\|string\>\.$#'
+			identifier: return.type
+			count: 1
+			path: app/Console/Commands/CreateUser.php
+
+		-
+			message: '#^Expression on left side of \?\? is not nullable\.$#'
+			identifier: nullCoalesce.expr
+			count: 1
+			path: app/Console/Commands/DebugEmbySessions.php
+
+		-
+			message: '#^Using nullsafe method call on non\-nullable type Illuminate\\Http\\Client\\Response\. Use \-\> instead\.$#'
+			identifier: nullsafe.neverNull
+			count: 1
+			path: app/Console/Commands/DebugEmbySessions.php
+
+		-
+			message: '#^Dead catch \- Illuminate\\Http\\Client\\ConnectionException is never thrown in the try block\.$#'
+			identifier: catch.neverThrown
+			count: 1
+			path: app/Console/Commands/PollSabnzbdHistory.php
+
+		-
+			message: '#^Dead catch \- Illuminate\\Http\\Client\\RequestException is never thrown in the try block\.$#'
+			identifier: catch.neverThrown
+			count: 1
+			path: app/Console/Commands/PollSabnzbdHistory.php
+
+		-
+			message: '#^Strict comparison using \!\=\= between Carbon\\CarbonImmutable and null will always evaluate to true\.$#'
+			identifier: notIdentical.alwaysTrue
+			count: 1
+			path: app/Console/Commands/ReconcileMediaReplacementAttempts.php
+
+		-
+			message: '#^Call to function is_array\(\) with array\<string, mixed\> will always evaluate to true\.$#'
+			identifier: function.alreadyNarrowedType
+			count: 2
+			path: app/Console/Commands/TypesenseSeedCommand.php
+
+		-
+			message: '#^Parameter \#1 \$array of function usort contains unresolvable type\.$#'
+			identifier: argument.unresolvableType
+			count: 1
+			path: app/Enums/SeasonPackPolicy.php
+
+		-
+			message: '#^Parameter \#2 \$callback of function usort contains unresolvable type\.$#'
+			identifier: argument.unresolvableType
+			count: 1
+			path: app/Enums/SeasonPackPolicy.php
+
+		-
+			message: '#^Parameter \#1 \$array of function usort contains unresolvable type\.$#'
+			identifier: argument.unresolvableType
+			count: 1
+			path: app/Enums/SubtitleCaseAttemptOutcome.php
+
+		-
+			message: '#^Parameter \#2 \$callback of function usort contains unresolvable type\.$#'
+			identifier: argument.unresolvableType
+			count: 1
+			path: app/Enums/SubtitleCaseAttemptOutcome.php
+
+		-
+			message: '#^Parameter \#1 \$array of function usort contains unresolvable type\.$#'
+			identifier: argument.unresolvableType
+			count: 1
+			path: app/Enums/SubtitleCaseAttemptType.php
+
+		-
+			message: '#^Parameter \#2 \$callback of function usort contains unresolvable type\.$#'
+			identifier: argument.unresolvableType
+			count: 1
+			path: app/Enums/SubtitleCaseAttemptType.php
+
+		-
+			message: '#^Parameter \#1 \$array of function usort contains unresolvable type\.$#'
+			identifier: argument.unresolvableType
+			count: 1
+			path: app/Enums/SubtitleCaseStatus.php
+
+		-
+			message: '#^Parameter \#2 \$callback of function usort contains unresolvable type\.$#'
+			identifier: argument.unresolvableType
+			count: 1
+			path: app/Enums/SubtitleCaseStatus.php
+
+		-
+			message: '#^Parameter \#1 \$array of function usort contains unresolvable type\.$#'
+			identifier: argument.unresolvableType
+			count: 1
+			path: app/Enums/SubtitleRuleStrength.php
+
+		-
+			message: '#^Parameter \#2 \$callback of function usort contains unresolvable type\.$#'
+			identifier: argument.unresolvableType
+			count: 1
+			path: app/Enums/SubtitleRuleStrength.php
+
+		-
+			message: '#^Using nullsafe property access on non\-nullable type App\\Models\\EmbyUserLink\. Use \-\> instead\.$#'
+			identifier: nullsafe.neverNull
+			count: 1
+			path: app/Events/EmbyPlaybackUpdated.php
+
+		-
+			message: '#^Call to function is_array\(\) with array\<mixed\> will always evaluate to true\.$#'
+			identifier: function.alreadyNarrowedType
+			count: 1
+			path: app/Events/MediaReplacementAttemptChanged.php
+
+		-
+			message: '#^Instanceof between Laravel\\Ai\\Storage\\DatabaseConversationStore and Laravel\\Ai\\Contracts\\VerifiesConversationOwnership will always evaluate to true\.$#'
+			identifier: instanceof.alwaysTrue
+			count: 1
+			path: app/Http/Controllers/AI/ChatController.php
+
+		-
+			message: '#^Call to function abort_unless\(\) with true and 500 will always evaluate to true\.$#'
+			identifier: function.alreadyNarrowedType
+			count: 1
+			path: app/Http/Controllers/AI/ConversationController.php
+
+		-
+			message: '#^Instanceof between Laravel\\Ai\\Storage\\DatabaseConversationStore and Laravel\\Ai\\Contracts\\PaginatesConversations will always evaluate to true\.$#'
+			identifier: instanceof.alwaysTrue
+			count: 1
+			path: app/Http/Controllers/AI/ConversationController.php
+
+		-
+			message: '#^Instanceof between Laravel\\Ai\\Storage\\DatabaseConversationStore and Laravel\\Ai\\Contracts\\VerifiesConversationOwnership will always evaluate to true\.$#'
+			identifier: instanceof.alwaysTrue
+			count: 1
+			path: app/Http/Controllers/AI/ConversationController.php
+
+		-
+			message: '#^Call to function abort_unless\(\) with true and 500 will always evaluate to true\.$#'
+			identifier: function.alreadyNarrowedType
+			count: 1
+			path: app/Http/Controllers/Admin/AiConversationController.php
+
+		-
+			message: '#^Instanceof between Laravel\\Ai\\Storage\\DatabaseConversationStore and Laravel\\Ai\\Contracts\\PaginatesConversations will always evaluate to true\.$#'
+			identifier: instanceof.alwaysTrue
+			count: 1
+			path: app/Http/Controllers/Admin/AiConversationController.php
+
+		-
+			message: '#^Parameter \#1 \$array \(list\<array\{content\: string, reasoning\: string, tool_calls\: list\<mixed\>\}\>\) of array_values is already a list, call has no effect\.$#'
+			identifier: arrayValues.list
+			count: 1
+			path: app/Http/Controllers/Admin/AiConversationController.php
+
+		-
+			message: '#^Parameter &\$validated by\-ref type of method App\\Http\\Controllers\\Admin\\AiModelPriceController\:\:pullBooleanFlag\(\) expects array\<string, mixed\>, array given\.$#'
+			identifier: parameterByRef.type
+			count: 1
+			path: app/Http/Controllers/Admin/AiModelPriceController.php
+
+		-
+			message: '#^Unable to resolve the template type TKey in call to function collect$#'
+			identifier: argument.templateType
+			count: 1
+			path: app/Http/Controllers/Admin/AiSettingsController.php
+
+		-
+			message: '#^Unable to resolve the template type TValue in call to function collect$#'
+			identifier: argument.templateType
+			count: 1
+			path: app/Http/Controllers/Admin/AiSettingsController.php
+
+		-
+			message: '#^Using nullsafe property access "\?\-\>value" on left side of \?\? is unnecessary\. Use \-\> instead\.$#'
+			identifier: nullsafe.neverNull
+			count: 1
+			path: app/Http/Controllers/Admin/AiSettingsController.php
+
+		-
+			message: '#^Unable to resolve the template type TKey in call to function collect$#'
+			identifier: argument.templateType
+			count: 1
+			path: app/Http/Controllers/Admin/DecisionAgentSettingsController.php
+
+		-
+			message: '#^Unable to resolve the template type TValue in call to function collect$#'
+			identifier: argument.templateType
+			count: 1
+			path: app/Http/Controllers/Admin/DecisionAgentSettingsController.php
+
+		-
+			message: '#^Variable \$apiKey on left side of \?\? always exists and is not nullable\.$#'
+			identifier: nullCoalesce.variable
+			count: 1
+			path: app/Http/Controllers/Admin/EmbyLinkController.php
+
+		-
+			message: '#^Property Illuminate\\Console\\Scheduling\\Event\:\:\$expression \(string\) on left side of \?\? is not nullable\.$#'
+			identifier: nullCoalesce.property
+			count: 1
+			path: app/Http/Controllers/Admin/JobsController.php
+
+		-
+			message: '#^Property Illuminate\\Console\\Scheduling\\Event\:\:\$withoutOverlapping \(bool\) on left side of \?\? is not nullable\.$#'
+			identifier: nullCoalesce.property
+			count: 1
+			path: app/Http/Controllers/Admin/JobsController.php
+
+		-
+			message: '#^Call to function is_array\(\) with array\<mixed\> will always evaluate to true\.$#'
+			identifier: function.alreadyNarrowedType
+			count: 4
+			path: app/Http/Controllers/Admin/MediaReplacementAttemptController.php
+
+		-
+			message: '#^Using nullsafe property access on non\-nullable type App\\Models\\ActionRequest\. Use \-\> instead\.$#'
+			identifier: nullsafe.neverNull
+			count: 3
+			path: app/Http/Controllers/Admin/MediaReplacementAttemptController.php
+
+		-
+			message: '#^Call to function is_string\(\) with string will always evaluate to true\.$#'
+			identifier: function.alreadyNarrowedType
+			count: 1
+			path: app/Http/Controllers/Admin/ServiceConnectionController.php
+
+		-
+			message: '#^Strict comparison using \!\=\= between non\-empty\-string and null will always evaluate to true\.$#'
+			identifier: notIdentical.alwaysTrue
+			count: 2
+			path: app/Http/Controllers/Admin/ServiceConnectionController.php
+
+		-
+			message: '#^Using nullsafe property access "\?\-\>settings" on left side of \?\? is unnecessary\. Use \-\> instead\.$#'
+			identifier: nullsafe.neverNull
+			count: 1
+			path: app/Http/Controllers/Admin/ServiceConnectionController.php
+
+		-
+			message: '#^Using nullsafe property access on non\-nullable type App\\Models\\ServiceConnection\. Use \-\> instead\.$#'
+			identifier: nullsafe.neverNull
+			count: 4
+			path: app/Http/Controllers/Admin/WebhookLogController.php
+
+		-
+			message: '#^Method App\\Http\\Controllers\\Auth\\AuthentikController\:\:redirect\(\) should return Illuminate\\Http\\RedirectResponse but returns Symfony\\Component\\HttpFoundation\\RedirectResponse\.$#'
+			identifier: return.type
+			count: 1
+			path: app/Http/Controllers/Auth/AuthentikController.php
+
+		-
+			message: '#^Unable to resolve the template type TKey in call to function collect$#'
+			identifier: argument.templateType
+			count: 1
+			path: app/Http/Controllers/Bazarr/OperationController.php
+
+		-
+			message: '#^Unable to resolve the template type TValue in call to function collect$#'
+			identifier: argument.templateType
+			count: 1
+			path: app/Http/Controllers/Bazarr/OperationController.php
+
+		-
+			message: '#^Using nullsafe property access "\?\-\>event_type" on left side of \?\? is unnecessary\. Use \-\> instead\.$#'
+			identifier: nullsafe.neverNull
+			count: 1
+			path: app/Http/Controllers/DashboardController.php
+
+		-
+			message: '#^Using nullsafe property access "\?\-\>name" on left side of \?\? is unnecessary\. Use \-\> instead\.$#'
+			identifier: nullsafe.neverNull
+			count: 2
+			path: app/Http/Controllers/DashboardController.php
+
+		-
+			message: '#^Using nullsafe property access "\?\-\>value" on left side of \?\? is unnecessary\. Use \-\> instead\.$#'
+			identifier: nullsafe.neverNull
+			count: 1
+			path: app/Http/Controllers/DashboardController.php
+
+		-
+			message: '#^Using nullsafe property access on non\-nullable type App\\Models\\ServiceConnection\. Use \-\> instead\.$#'
+			identifier: nullsafe.neverNull
+			count: 2
+			path: app/Http/Controllers/DashboardController.php
+
+		-
+			message: '#^Offset ''NowPlayingItem'' on non\-empty\-array\<string, mixed\> in isset\(\) always exists and is not nullable\.$#'
+			identifier: isset.offset
+			count: 1
+			path: app/Http/Controllers/Emby/NowPlayingController.php
+
+		-
+			message: '#^Access to an undefined property App\\Models\\EmbyActivity\:\:\$completed_sessions\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Http/Controllers/Emby/WatchHistoryController.php
+
+		-
+			message: '#^Access to an undefined property App\\Models\\EmbyActivity\:\:\$sessions\.$#'
+			identifier: property.notFound
+			count: 2
+			path: app/Http/Controllers/Emby/WatchHistoryController.php
+
+		-
+			message: '#^Access to an undefined property App\\Models\\EmbyActivity\:\:\$ticks\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Http/Controllers/Emby/WatchHistoryController.php
+
+		-
+			message: '#^Access to an undefined property App\\Models\\EmbyActivity\:\:\$total_ticks\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Http/Controllers/Emby/WatchHistoryController.php
+
+		-
+			message: '#^Using nullsafe property access "\?\-\>completed_sessions" on left side of \?\? is unnecessary\. Use \-\> instead\.$#'
+			identifier: nullsafe.neverNull
+			count: 1
+			path: app/Http/Controllers/Emby/WatchHistoryController.php
+
+		-
+			message: '#^Using nullsafe property access "\?\-\>sessions" on left side of \?\? is unnecessary\. Use \-\> instead\.$#'
+			identifier: nullsafe.neverNull
+			count: 1
+			path: app/Http/Controllers/Emby/WatchHistoryController.php
+
+		-
+			message: '#^Using nullsafe property access "\?\-\>total_ticks" on left side of \?\? is unnecessary\. Use \-\> instead\.$#'
+			identifier: nullsafe.neverNull
+			count: 1
+			path: app/Http/Controllers/Emby/WatchHistoryController.php
+
+		-
+			message: '#^Using nullsafe property access on non\-nullable type App\\Models\\EmbyUserLink\. Use \-\> instead\.$#'
+			identifier: nullsafe.neverNull
+			count: 1
+			path: app/Http/Controllers/Emby/WatchHistoryController.php
+
+		-
+			message: '#^Unable to resolve the template type TKey in call to function collect$#'
+			identifier: argument.templateType
+			count: 2
+			path: app/Http/Controllers/Media/AnimeController.php
+
+		-
+			message: '#^Unable to resolve the template type TValue in call to function collect$#'
+			identifier: argument.templateType
+			count: 2
+			path: app/Http/Controllers/Media/AnimeController.php
+
+		-
+			message: '#^Dead catch \- Illuminate\\Http\\Client\\ConnectionException is never thrown in the try block\.$#'
+			identifier: catch.neverThrown
+			count: 1
+			path: app/Http/Controllers/Monitoring/ServiceHealthController.php
+
+		-
+			message: '#^Dead catch \- Illuminate\\Http\\Client\\RequestException is never thrown in the try block\.$#'
+			identifier: catch.neverThrown
+			count: 1
+			path: app/Http/Controllers/Monitoring/ServiceHealthController.php
+
+		-
+			message: '#^Dead catch \- Illuminate\\Http\\Client\\ConnectionException is never thrown in the try block\.$#'
+			identifier: catch.neverThrown
+			count: 1
+			path: app/Http/Controllers/Sabnzbd/QueueController.php
+
+		-
+			message: '#^Dead catch \- Illuminate\\Http\\Client\\RequestException is never thrown in the try block\.$#'
+			identifier: catch.neverThrown
+			count: 1
+			path: app/Http/Controllers/Sabnzbd/QueueController.php
+
+		-
+			message: '#^Using nullsafe property access "\?\-\>\(Expression\)" on left side of \?\? is unnecessary\. Use \-\> instead\.$#'
+			identifier: nullsafe.neverNull
+			count: 1
+			path: app/Http/Controllers/Settings/NotificationPreferencesController.php
+
+		-
+			message: '#^Offset ''sum'' on array\{count\: int, sum\: float\} on left side of \?\? always exists and is not nullable\.$#'
+			identifier: nullCoalesce.offset
+			count: 1
+			path: app/Http/Controllers/StatisticsController.php
+
+		-
+			message: '#^Match expression does not handle remaining value\: App\\Enums\\ServiceType\:\:Bazarr$#'
+			identifier: match.unhandled
+			count: 1
+			path: app/Http/Controllers/WebhookController.php
+
+		-
+			message: '#^Parameter \#1 \$boolean of function abort_unless expects bool, App\\Models\\ServiceConnection\|null given\.$#'
+			identifier: argument.type
+			count: 1
+			path: app/Http/Middleware/VerifyWebhookToken.php
+
+		-
+			message: '#^Method App\\Http\\Requests\\Settings\\ProfileUpdateRequest\:\:emailRules\(\) should return array\<int, array\<mixed\>\|Illuminate\\Contracts\\Validation\\Rule\|string\> but returns array\<int, Illuminate\\Validation\\Rules\\Unique\|string\>\.$#'
+			identifier: return.type
+			count: 1
+			path: app/Http/Requests/Settings/ProfileUpdateRequest.php
+
+		-
+			message: '#^Using nullsafe property access on non\-nullable type App\\Models\\EmbyUserLink\. Use \-\> instead\.$#'
+			identifier: nullsafe.neverNull
+			count: 1
+			path: app/Http/Resources/EmbyActivityResource.php
+
+		-
+			message: '#^Anonymous function never returns null so it can be removed from the return type\.$#'
+			identifier: return.unusedType
+			count: 1
+			path: app/Http/Resources/EmbyUserLinkResource.php
+
+		-
+			message: '#^Ternary operator condition is always true\.$#'
+			identifier: ternary.alwaysTrue
+			count: 1
+			path: app/Http/Resources/EmbyUserLinkResource.php
+
+		-
+			message: '#^Strict comparison using \!\=\= between non\-empty\-string and null will always evaluate to true\.$#'
+			identifier: notIdentical.alwaysTrue
+			count: 1
+			path: app/Http/Resources/ServiceConnectionResource.php
+
+		-
+			message: '#^Call to function is_array\(\) with array\<mixed\> will always evaluate to true\.$#'
+			identifier: function.alreadyNarrowedType
+			count: 1
+			path: app/Jobs/AuditImportedSubtitles.php
+
+		-
+			message: '#^Offset ''bazarr''\|''emby''\|''prowlarr''\|''radarr''\|''sabnzbd''\|''seerr''\|''sonarr''\|''whisparr'' on array\{sonarr\: ''Sonarr/Sonarr'', radarr\: ''Radarr/Radarr'', bazarr\: ''morpheus65535/bazarr'', prowlarr\: ''Prowlarr/Prowlarr'', seerr\: ''seerr\-team/seerr'', sabnzbd\: ''sabnzbd/sabnzbd'', emby\: ''MediaBrowser/Emby…'', whisparr\: ''Whisparr/Whisparr''\} on left side of \?\? always exists and is not nullable\.$#'
+			identifier: nullCoalesce.offset
+			count: 1
+			path: app/Jobs/FetchLatestServiceVersion.php
+
+		-
+			message: '#^Strict comparison using \=\=\= between ''MediaBrowser/Emby…''\|''morpheus65535/bazarr''\|''Prowlarr/Prowlarr''\|''Radarr/Radarr''\|''sabnzbd/sabnzbd''\|''seerr\-team/seerr''\|''Sonarr/Sonarr''\|''Whisparr/Whisparr'' and null will always evaluate to false\.$#'
+			identifier: identical.alwaysFalse
+			count: 1
+			path: app/Jobs/FetchLatestServiceVersion.php
+
+		-
+			message: '#^Anonymous function with return type void returns null but should not return anything\.$#'
+			identifier: return.void
+			count: 1
+			path: app/Jobs/Middleware/LimitSubtitleAdvisorConcurrency.php
+
+		-
+			message: '#^Match expression does not handle remaining value\: App\\Enums\\ServiceType\:\:Bazarr$#'
+			identifier: match.unhandled
+			count: 1
+			path: app/Jobs/ProcessWebhookEvent.php
+
+		-
+			message: '#^Strict comparison using \=\=\= between App\\Models\\ServiceConnection and null will always evaluate to false\.$#'
+			identifier: identical.alwaysFalse
+			count: 1
+			path: app/Jobs/ProcessWebhookEvent.php
+
+		-
+			message: '#^Call to function is_array\(\) with array\<string, mixed\> will always evaluate to true\.$#'
+			identifier: function.alreadyNarrowedType
+			count: 1
+			path: app/Jobs/ReconcileBazarrConnection.php
+
+		-
+			message: '#^Call to function is_array\(\) with array\<string, mixed\> will always evaluate to true\.$#'
+			identifier: function.alreadyNarrowedType
+			count: 2
+			path: app/Jobs/ReconcileSearchIndex.php
+
+		-
+			message: '#^Call to function is_array\(\) with array\<string, mixed\> will always evaluate to true\.$#'
+			identifier: function.alreadyNarrowedType
+			count: 1
+			path: app/Jobs/ReconcileSubtitleCase.php
+
+		-
+			message: '#^Property App\\Jobs\\ReconcileSubtitleCase\:\:\$reservationId in isset\(\) is not nullable nor uninitialized\.$#'
+			identifier: isset.initializedProperty
+			count: 1
+			path: app/Jobs/ReconcileSubtitleCase.php
+
+		-
+			message: '#^Readonly property App\\Jobs\\ReconcileSubtitleCase\:\:\$reservationId is assigned outside of the constructor\.$#'
+			identifier: property.readOnlyAssignNotInConstructor
+			count: 1
+			path: app/Jobs/ReconcileSubtitleCase.php
+
+		-
+			message: '#^Call to function is_object\(\) with object will always evaluate to true\.$#'
+			identifier: function.alreadyNarrowedType
+			count: 1
+			path: app/Listeners/Ai/BroadcastAgentStep.php
+
+		-
+			message: '#^Using nullsafe property access "\?\-\>id" on left side of \?\? is unnecessary\. Use \-\> instead\.$#'
+			identifier: nullsafe.neverNull
+			count: 2
+			path: app/Listeners/Ai/RecordAgentUsage.php
+
+		-
+			message: '#^Using nullsafe property access "\?\-\>id" on left side of \?\? is unnecessary\. Use \-\> instead\.$#'
+			identifier: nullsafe.neverNull
+			count: 1
+			path: app/Listeners/Ai/RecordClassificationUsage.php
+
+		-
+			message: '#^Using nullsafe property access "\?\-\>id" on left side of \?\? is unnecessary\. Use \-\> instead\.$#'
+			identifier: nullsafe.neverNull
+			count: 1
+			path: app/Listeners/Ai/RecordEmbeddingsUsage.php
+
+		-
+			message: '#^Property Laravel\\Ai\\Prompts\\Prompt\:\:\$model \(string\) on left side of \?\? is not nullable\.$#'
+			identifier: nullCoalesce.property
+			count: 1
+			path: app/Listeners/Ai/RecordFailedAgentRun.php
+
+		-
+			message: '#^Property Laravel\\Ai\\Prompts\\Prompt\:\:\$provider \(Laravel\\Ai\\Contracts\\Providers\\TextProvider\) in isset\(\) is not nullable\.$#'
+			identifier: isset.property
+			count: 1
+			path: app/Listeners/Ai/RecordFailedAgentRun.php
+
+		-
+			message: '#^Using nullsafe property access "\?\-\>id" on left side of \?\? is unnecessary\. Use \-\> instead\.$#'
+			identifier: nullsafe.neverNull
+			count: 1
+			path: app/Listeners/Ai/RecordFailedAgentRun.php
+
+		-
+			message: '#^Using nullsafe property access "\?\-\>id" on left side of \?\? is unnecessary\. Use \-\> instead\.$#'
+			identifier: nullsafe.neverNull
+			count: 1
+			path: app/Listeners/Ai/RecordFailedOverAttemptUsage.php
+
+		-
+			message: '#^Using nullsafe property access "\?\-\>id" on left side of \?\? is unnecessary\. Use \-\> instead\.$#'
+			identifier: nullsafe.neverNull
+			count: 1
+			path: app/Listeners/Ai/RecordRerankingUsage.php
+
+		-
+			message: '#^Instanceof between App\\Enums\\ServiceType and App\\Enums\\ServiceType will always evaluate to true\.$#'
+			identifier: instanceof.alwaysTrue
+			count: 1
+			path: app/Listeners/RecordWebhookStatistics.php
+
+		-
+			message: '#^Using nullsafe property access on non\-nullable type App\\Models\\ServiceConnection\. Use \-\> instead\.$#'
+			identifier: nullsafe.neverNull
+			count: 1
+			path: app/Listeners/RecordWebhookStatistics.php
+
+		-
+			message: '#^Strict comparison using \=\=\= between ''bazarr''\|''emby''\|''prowlarr''\|''radarr''\|''sabnzbd''\|''seerr''\|''sonarr''\|''whisparr'' and null will always evaluate to false\.$#'
+			identifier: identical.alwaysFalse
+			count: 1
+			path: app/Listeners/RunDecisionAgentForWebhook.php
+
+		-
+			message: '#^Using nullsafe property access on non\-nullable type App\\Models\\ServiceConnection\. Use \-\> instead\.$#'
+			identifier: nullsafe.neverNull
+			count: 1
+			path: app/Listeners/RunDecisionAgentForWebhook.php
+
+		-
+			message: '#^Match arm comparison between App\\Enums\\MediaReplacementStatus\:\:NeedsAttention and App\\Enums\\MediaReplacementStatus\:\:NeedsAttention is always true\.$#'
+			identifier: match.alwaysTrue
+			count: 1
+			path: app/Listeners/UpdateSubtitleCaseFromReplacementAttempt.php
+
+		-
+			message: '#^Method App\\Models\\ActivityLog\:\:prunable\(\) return type with generic class Illuminate\\Database\\Eloquent\\Builder does not specify its types\: TModel$#'
+			identifier: missingType.generics
+			count: 1
+			path: app/Models/ActivityLog.php
+
+		-
+			message: '#^Method App\\Models\\ActivityLog\:\:subject\(\) return type with generic class Illuminate\\Database\\Eloquent\\Relations\\MorphTo does not specify its types\: TRelatedModel, TDeclaringModel$#'
+			identifier: missingType.generics
+			count: 1
+			path: app/Models/ActivityLog.php
+
+		-
+			message: '#^Method App\\Models\\AgentDecision\:\:prunable\(\) return type with generic class Illuminate\\Database\\Eloquent\\Builder does not specify its types\: TModel$#'
+			identifier: missingType.generics
+			count: 1
+			path: app/Models/AgentDecision.php
+
+		-
+			message: '#^Class App\\Models\\AiFreeUsagePool uses generic trait Illuminate\\Database\\Eloquent\\Factories\\HasFactory but does not specify its types\: TFactory$#'
+			identifier: missingType.generics
+			count: 1
+			path: app/Models/AiFreeUsagePool.php
+
+		-
+			message: '#^Class App\\Models\\AiModelPrice uses generic trait Illuminate\\Database\\Eloquent\\Factories\\HasFactory but does not specify its types\: TFactory$#'
+			identifier: missingType.generics
+			count: 1
+			path: app/Models/AiModelPrice.php
+
+		-
+			message: '#^Class App\\Models\\AiModelRateLimit uses generic trait Illuminate\\Database\\Eloquent\\Factories\\HasFactory but does not specify its types\: TFactory$#'
+			identifier: missingType.generics
+			count: 1
+			path: app/Models/AiModelRateLimit.php
+
+		-
+			message: '#^Method App\\Models\\AiToolInvocation\:\:prunable\(\) return type with generic class Illuminate\\Database\\Eloquent\\Builder does not specify its types\: TModel$#'
+			identifier: missingType.generics
+			count: 1
+			path: app/Models/AiToolInvocation.php
+
+		-
+			message: '#^Method App\\Models\\AiUsageRecord\:\:prunable\(\) return type with generic class Illuminate\\Database\\Eloquent\\Builder does not specify its types\: TModel$#'
+			identifier: missingType.generics
+			count: 1
+			path: app/Models/AiUsageRecord.php
+
+		-
+			message: '#^Class App\\Models\\AppSetting uses generic trait Illuminate\\Database\\Eloquent\\Factories\\HasFactory but does not specify its types\: TFactory$#'
+			identifier: missingType.generics
+			count: 1
+			path: app/Models/AppSetting.php
+
+		-
+			message: '#^Method App\\Models\\EmbyActivity\:\:prunable\(\) return type with generic class Illuminate\\Database\\Eloquent\\Builder does not specify its types\: TModel$#'
+			identifier: missingType.generics
+			count: 1
+			path: app/Models/EmbyActivity.php
+
+		-
+			message: '#^Using nullsafe property access "\?\-\>timestamp" on left side of \?\? is unnecessary\. Use \-\> instead\.$#'
+			identifier: nullsafe.neverNull
+			count: 1
+			path: app/Models/IndexedMovie.php
+
+		-
+			message: '#^Using nullsafe property access "\?\-\>timestamp" on left side of \?\? is unnecessary\. Use \-\> instead\.$#'
+			identifier: nullsafe.neverNull
+			count: 1
+			path: app/Models/IndexedSeries.php
+
+		-
+			message: '#^Method App\\Models\\MediaReplacementAttempt\:\:prunable\(\) return type with generic class Illuminate\\Database\\Eloquent\\Builder does not specify its types\: TModel$#'
+			identifier: missingType.generics
+			count: 1
+			path: app/Models/MediaReplacementAttempt.php
+
+		-
+			message: '#^Class App\\Models\\NotificationPreference uses generic trait Illuminate\\Database\\Eloquent\\Factories\\HasFactory but does not specify its types\: TFactory$#'
+			identifier: missingType.generics
+			count: 1
+			path: app/Models/NotificationPreference.php
+
+		-
+			message: '#^Method App\\Models\\SubtitleCase\:\:evidence\(\) return type with generic class Illuminate\\Database\\Eloquent\\Casts\\Attribute does not specify its types\: TGet, TSet$#'
+			identifier: missingType.generics
+			count: 1
+			path: app/Models/SubtitleCase.php
+
+		-
+			message: '#^Method App\\Models\\SubtitleCaseAttempt\:\:summary\(\) return type with generic class Illuminate\\Database\\Eloquent\\Casts\\Attribute does not specify its types\: TGet, TSet$#'
+			identifier: missingType.generics
+			count: 1
+			path: app/Models/SubtitleCaseAttempt.php
+
+		-
+			message: '#^Class App\\Models\\User uses generic trait Illuminate\\Database\\Eloquent\\Factories\\HasFactory but does not specify its types\: TFactory$#'
+			identifier: missingType.generics
+			count: 1
+			path: app/Models/User.php
+
+		-
+			message: '#^Method App\\Models\\WebhookEvent\:\:prunable\(\) return type with generic class Illuminate\\Database\\Eloquent\\Builder does not specify its types\: TModel$#'
+			identifier: missingType.generics
+			count: 1
+			path: app/Models/WebhookEvent.php
+
+		-
+			message: '#^Offset ''error''\|''info''\|''warning'' on array\{error\: 15158332, warning\: 15844367, info\: 3447003\} on left side of \?\? always exists and is not nullable\.$#'
+			identifier: nullCoalesce.offset
+			count: 1
+			path: app/Notifications/Channels/DiscordChannel.php
+
+		-
+			message: '#^Method App\\Providers\\PrometheusServiceProvider\:\:safely\(\) return type has no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: app/Providers/PrometheusServiceProvider.php
+
+		-
+			message: '#^Call to function is_array\(\) with array\{label\: string, value\: string\} will always evaluate to true\.$#'
+			identifier: function.alreadyNarrowedType
+			count: 1
+			path: app/Services/Actions/ActionRequestBrowserPayload.php
+
+		-
+			message: '#^Call to function is_string\(\) with string will always evaluate to true\.$#'
+			identifier: function.alreadyNarrowedType
+			count: 2
+			path: app/Services/Actions/ActionRequestBrowserPayload.php
+
+		-
+			message: '#^Offset ''label'' on array\{label\: string, value\: string\} on left side of \?\? always exists and is not nullable\.$#'
+			identifier: nullCoalesce.offset
+			count: 1
+			path: app/Services/Actions/ActionRequestBrowserPayload.php
+
+		-
+			message: '#^Offset ''value'' on array\{label\: string, value\: string\} on left side of \?\? always exists and is not nullable\.$#'
+			identifier: nullCoalesce.offset
+			count: 1
+			path: app/Services/Actions/ActionRequestBrowserPayload.php
+
+		-
+			message: '#^Method App\\Services\\AiUsage\\AiUsageReporting\:\:aggregateBy\(\) should return Illuminate\\Support\\Collection\<int, object\{key\: string\|null, invocations\: int, total_tokens\: int, total_cost\: string\}\> but returns Illuminate\\Support\\Collection\<int, stdClass\>\.$#'
+			identifier: return.type
+			count: 1
+			path: app/Services/AiUsage/AiUsageReporting.php
+
+		-
+			message: '#^Method App\\Services\\AiUsage\\AiUsageReporting\:\:fitOrPaidUsageRows\(\) should return Illuminate\\Support\\Collection\<int, object\{provider\: string, base_model\: string, used_input\: int, used_output\: int\}\> but returns Illuminate\\Support\\Collection\<int, object\{provider\: string, base_model\: string, used_input\: 0, used_output\: 0\}&stdClass\>\.$#'
+			identifier: return.type
+			count: 1
+			path: app/Services/AiUsage/AiUsageReporting.php
+
+		-
+			message: '#^Method App\\Services\\AiUsage\\AiUsageReporting\:\:poolUsageRecords\(\) should return Illuminate\\Support\\Collection\<int, object\{provider\: string, base_model\: string, kind\: string, prompt_tokens\: int\|string, completion_tokens\: int\|string, cache_read_input_tokens\: int\|string, cache_write_input_tokens\: int\|string, created_at\: string\}\> but returns Illuminate\\Support\\Collection\<int, stdClass\>\.$#'
+			identifier: return.type
+			count: 1
+			path: app/Services/AiUsage/AiUsageReporting.php
+
+		-
+			message: '#^Method App\\Services\\AiUsage\\AiUsageReporting\:\:poolUsageRows\(\) should return Illuminate\\Support\\Collection\<int, object\{provider\: string, base_model\: string, bucket\?\: string, used_input\: int\|string, used_output\: int\|string, window_input\?\: int\|string, window_cache_read\?\: int\|string, window_cache_write\?\: int\|string, window_output\?\: int\|string\}\> but returns Illuminate\\Support\\Collection\<int, stdClass\>\.$#'
+			identifier: return.type
+			count: 1
+			path: app/Services/AiUsage/AiUsageReporting.php
+
+		-
+			message: '#^Method App\\Services\\AiUsage\\AiUsageReporting\:\:recentInvocations\(\) should return Illuminate\\Support\\Collection\<int, object\> but returns Illuminate\\Support\\Collection\<int, stdClass\>\.$#'
+			identifier: return.type
+			count: 1
+			path: app/Services/AiUsage/AiUsageReporting.php
+
+		-
+			message: '#^Method App\\Services\\AiUsage\\AiUsageReporting\:\:replayFitOrPaid\(\) should return Illuminate\\Support\\Collection\<int, object\{provider\: string, base_model\: string, kind\: string, prompt_tokens\: int\|string, completion_tokens\: int\|string, cache_read_input_tokens\: int\|string, cache_write_input_tokens\: int\|string, created_at\: string, fits\: bool\}\> but returns Illuminate\\Support\\Collection\<int, object\{provider\: string, base_model\: string, kind\: string, prompt_tokens\: int\|string, completion_tokens\: int\|string, cache_read_input_tokens\: int\|string, cache_write_input_tokens\: int\|string, created_at\: string\}\>\.$#'
+			identifier: return.type
+			count: 1
+			path: app/Services/AiUsage/AiUsageReporting.php
+
+		-
+			message: '#^Method App\\Services\\AiUsage\\AiUsageReporting\:\:toolStats\(\) should return Illuminate\\Support\\Collection\<int, object\{tool_class\: string, calls\: int, failures\: int, p50_ms\: int\|null, p95_ms\: int\|null\}\> but returns Illuminate\\Support\\Collection\<int, object\{tool_class\: string, calls\: int, failures\: int, p50_ms\: int\|null, p95_ms\: int\|null\}&stdClass\>\.$#'
+			identifier: return.type
+			count: 1
+			path: app/Services/AiUsage/AiUsageReporting.php
+
+		-
+			message: '#^Offset ''cache_read'' does not exist on array\{input\: float, output\: float\}\.$#'
+			identifier: offsetAccess.notFound
+			count: 1
+			path: app/Services/AiUsage/AiUsageReporting.php
+
+		-
+			message: '#^Offset ''cache_write'' does not exist on array\{input\: float, output\: float\}\.$#'
+			identifier: offsetAccess.notFound
+			count: 1
+			path: app/Services/AiUsage/AiUsageReporting.php
+
+		-
+			message: '#^Method App\\Services\\AiUsage\\Pricing\\AiPriceRefreshCoordinator\:\:runFeedPhase\(\) has parameter \$requested with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: app/Services/AiUsage/Pricing/AiPriceRefreshCoordinator.php
+
+		-
+			message: '#^Parameter \#1 \$array of function usort contains unresolvable type\.$#'
+			identifier: argument.unresolvableType
+			count: 1
+			path: app/Services/AiUsage/Pricing/Data/WriteOutcome.php
+
+		-
+			message: '#^Parameter \#2 \$callback of function usort contains unresolvable type\.$#'
+			identifier: argument.unresolvableType
+			count: 1
+			path: app/Services/AiUsage/Pricing/Data/WriteOutcome.php
+
+		-
+			message: '#^Call to function is_string\(\) with string will always evaluate to true\.$#'
+			identifier: function.alreadyNarrowedType
+			count: 1
+			path: app/Services/AiUsage/Pricing/ModelsDevPricingAdapter.php
+
+		-
+			message: '#^Using nullsafe property access "\?\-\>candidates" on left side of \?\? is unnecessary\. Use \-\> instead\.$#'
+			identifier: nullsafe.neverNull
+			count: 1
+			path: app/Services/AiUsage/Pricing/PricingCatalog.php
+
+		-
+			message: '#^Using nullsafe property access "\?\-\>conflicts" on left side of \?\? is unnecessary\. Use \-\> instead\.$#'
+			identifier: nullsafe.neverNull
+			count: 1
+			path: app/Services/AiUsage/Pricing/PricingCatalog.php
+
+		-
+			message: '#^Using nullsafe property access "\?\-\>createSuppressed" on left side of \?\? is unnecessary\. Use \-\> instead\.$#'
+			identifier: nullsafe.neverNull
+			count: 1
+			path: app/Services/AiUsage/Pricing/PricingCatalog.php
+
+		-
+			message: '#^Using nullsafe property access "\?\-\>rejections" on left side of \?\? is unnecessary\. Use \-\> instead\.$#'
+			identifier: nullsafe.neverNull
+			count: 1
+			path: app/Services/AiUsage/Pricing/PricingCatalog.php
+
+		-
+			message: '#^Using nullsafe property access "\?\-\>warnings" on left side of \?\? is unnecessary\. Use \-\> instead\.$#'
+			identifier: nullsafe.neverNull
+			count: 1
+			path: app/Services/AiUsage/Pricing/PricingCatalog.php
+
+		-
+			message: '#^Method App\\Services\\Arr\\ArrClient\:\:getReleases\(\) has parameter \$params with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: app/Services/Arr/ArrClient.php
+
+		-
+			message: '#^Method App\\Services\\Arr\\ArrClient\:\:getReleases\(\) return type has no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: app/Services/Arr/ArrClient.php
+
+		-
+			message: '#^Method App\\Services\\Arr\\ArrClient\:\:runCommand\(\) has parameter \$params with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: app/Services/Arr/ArrClient.php
+
+		-
+			message: '#^Call to function is_int\(\) with int will always evaluate to true\.$#'
+			identifier: function.alreadyNarrowedType
+			count: 2
+			path: app/Services/Bazarr/BazarrClient.php
+
+		-
+			message: '#^Method App\\Services\\Bazarr\\BazarrClient\:\:decodedJson\(\) return type has no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: app/Services/Bazarr/BazarrClient.php
+
+		-
+			message: '#^Call to function is_string\(\) with string will always evaluate to true\.$#'
+			identifier: function.alreadyNarrowedType
+			count: 1
+			path: app/Services/Bazarr/BazarrSettingsAdapter.php
+
+		-
+			message: '#^Parameter \#1 \$array \(list\<array\{id\: int\|string, name\: string, cutoff\: int\|string\|null, languages\: list\<non\-falsy\-string\>\}\>\) of array_values is already a list, call has no effect\.$#'
+			identifier: arrayValues.list
+			count: 1
+			path: app/Services/Bazarr/BazarrSettingsAdapter.php
+
+		-
+			message: '#^Parameter \#1 \$array \(list\<array\{id\: int\|string, name\: string, enabled\: bool\}\>\) of array_values is already a list, call has no effect\.$#'
+			identifier: arrayValues.list
+			count: 1
+			path: app/Services/Bazarr/BazarrSettingsAdapter.php
+
+		-
+			message: '#^Parameter \#1 \$array \(list\<array\{id\: string, name\: string, status\: string\}\>\) of array_values is already a list, call has no effect\.$#'
+			identifier: arrayValues.list
+			count: 1
+			path: app/Services/Bazarr/BazarrSettingsAdapter.php
+
+		-
+			message: '#^Parameter \#1 \$array \(list\<array\{name\: string, status\: string, throttled_until\: string\|null\}\>\) of array_values is already a list, call has no effect\.$#'
+			identifier: arrayValues.list
+			count: 1
+			path: app/Services/Bazarr/BazarrSettingsAdapter.php
+
+		-
+			message: '#^Call to function is_array\(\) with array\<string, mixed\> will always evaluate to true\.$#'
+			identifier: function.alreadyNarrowedType
+			count: 2
+			path: app/Services/Bazarr/SubtitleAdvisorProjection.php
+
+		-
+			message: '#^Parameter \#1 \$array \(list\<array\<string, mixed\>\>\) of array_values is already a list, call has no effect\.$#'
+			identifier: arrayValues.list
+			count: 1
+			path: app/Services/Bazarr/SubtitleAdvisorProjection.php
+
+		-
+			message: '#^Offset ''forced'' on non\-empty\-array\<string, mixed\> on left side of \?\? always exists and is not nullable\.$#'
+			identifier: nullCoalesce.offset
+			count: 1
+			path: app/Services/Bazarr/SubtitleCandidateEligibility.php
+
+		-
+			message: '#^Offset ''hearing_impaired'' on non\-empty\-array\<string, mixed\> on left side of \?\? always exists and is not nullable\.$#'
+			identifier: nullCoalesce.offset
+			count: 1
+			path: app/Services/Bazarr/SubtitleCandidateEligibility.php
+
+		-
+			message: '#^Call to function is_array\(\) with array\<string, mixed\> will always evaluate to true\.$#'
+			identifier: function.alreadyNarrowedType
+			count: 2
+			path: app/Services/Bazarr/SubtitleInventoryService.php
+
+		-
+			message: '#^Instanceof between App\\Models\\ServiceConnection and App\\Models\\ServiceConnection will always evaluate to true\.$#'
+			identifier: instanceof.alwaysTrue
+			count: 2
+			path: app/Services/Bazarr/SubtitleInventoryService.php
+
+		-
+			message: '#^Method App\\Services\\Bazarr\\SubtitleInventoryService\:\:applyFilters\(\) return type has no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: app/Services/Bazarr/SubtitleInventoryService.php
+
+		-
+			message: '#^Method App\\Services\\Emby\\EmbyClient\:\:getUserItems\(\) has parameter \$params with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: app/Services/Emby/EmbyClient.php
+
+		-
+			message: '#^Match expression does not handle remaining value\: string$#'
+			identifier: match.unhandled
+			count: 1
+			path: app/Services/Emby/EmbyHistoryBackfiller.php
+
+		-
+			message: '#^Expression on left side of \?\? is not nullable\.$#'
+			identifier: nullCoalesce.expr
+			count: 1
+			path: app/Services/Emby/EmbyWebhookHandler.php
+
+		-
+			message: '#^Call to function is_array\(\) with array\<mixed\> will always evaluate to true\.$#'
+			identifier: function.alreadyNarrowedType
+			count: 1
+			path: app/Services/MediaReplacement/CompetingGrabSweeper.php
+
+		-
+			message: '#^Call to function is_array\(\) with array\<string, mixed\> will always evaluate to true\.$#'
+			identifier: function.alreadyNarrowedType
+			count: 1
+			path: app/Services/MediaReplacement/CompetingGrabSweeper.php
+
+		-
+			message: '#^Call to function is_array\(\) with array\<string, mixed\> will always evaluate to true\.$#'
+			identifier: function.alreadyNarrowedType
+			count: 1
+			path: app/Services/MediaReplacement/ImportedSubtitleAuditor.php
+
+		-
+			message: '#^Offset ''eventType'' on non\-empty\-array\<mixed, mixed\> on left side of \?\? always exists and is not nullable\.$#'
+			identifier: nullCoalesce.offset
+			count: 1
+			path: app/Services/MediaReplacement/MediaFileInspector.php
+
+		-
+			message: '#^Offset ''eventType'' on non\-empty\-array\<mixed\> on left side of \?\? always exists and is not nullable\.$#'
+			identifier: nullCoalesce.offset
+			count: 1
+			path: app/Services/MediaReplacement/MediaFileInspector.php
+
+		-
+			message: '#^Parameter \#1 \$array \(array\{0\?\: int\}\) of array_values is already a list, call has no effect\.$#'
+			identifier: arrayValues.list
+			count: 1
+			path: app/Services/MediaReplacement/MediaFileInspector.php
+
+		-
+			message: '#^Parameter \#1 \$array \(list\<int\>\) of array_values is already a list, call has no effect\.$#'
+			identifier: arrayValues.list
+			count: 1
+			path: app/Services/MediaReplacement/MediaFileInspector.php
+
+		-
+			message: '#^Call to function is_array\(\) with array\<mixed\> will always evaluate to true\.$#'
+			identifier: function.alreadyNarrowedType
+			count: 1
+			path: app/Services/MediaReplacement/MediaReplacementActions.php
+
+		-
+			message: '#^Call to function is_array\(\) with array\<mixed\> will always evaluate to true\.$#'
+			identifier: function.alreadyNarrowedType
+			count: 3
+			path: app/Services/MediaReplacement/MediaReplacementTracker.php
+
+		-
+			message: '#^Left side of && is always true\.$#'
+			identifier: booleanAnd.leftAlwaysTrue
+			count: 1
+			path: app/Services/MediaReplacement/MediaReplacementTracker.php
+
+		-
+			message: '#^Right side of && is always true\.$#'
+			identifier: booleanAnd.rightAlwaysTrue
+			count: 1
+			path: app/Services/MediaReplacement/MediaReplacementTracker.php
+
+		-
+			message: '#^Ternary operator condition is always true\.$#'
+			identifier: ternary.alwaysTrue
+			count: 1
+			path: app/Services/MediaReplacement/MediaReplacementTracker.php
+
+		-
+			message: '#^Parameter \#1 \$array \(list\<int\>\) of array_values is already a list, call has no effect\.$#'
+			identifier: arrayValues.list
+			count: 1
+			path: app/Services/MediaReplacement/ReleaseCandidateRanker.php
+
+		-
+			message: '#^Parameter \#1 \$array \(list\<int\>\) of array_values is already a list, call has no effect\.$#'
+			identifier: arrayValues.list
+			count: 1
+			path: app/Services/MediaReplacement/ReleaseFingerprint.php
+
+		-
+			message: '#^Call to function is_array\(\) with array\<mixed\> will always evaluate to true\.$#'
+			identifier: function.alreadyNarrowedType
+			count: 1
+			path: app/Services/MediaReplacement/ReplacementCandidateFinder.php
+
+		-
+			message: '#^Call to function is_array\(\) with array\<string, mixed\> will always evaluate to true\.$#'
+			identifier: function.alreadyNarrowedType
+			count: 1
+			path: app/Services/MediaReplacement/ReplacementCandidateFinder.php
+
+		-
+			message: '#^Call to function is_array\(\) with array\<string, mixed\> will always evaluate to true\.$#'
+			identifier: function.alreadyNarrowedType
+			count: 1
+			path: app/Services/MediaReplacement/SonarrRootFolderCatalog.php
+
+		-
+			message: '#^Method App\\Services\\Radarr\\RadarrClient\:\:addMovie\(\) has parameter \$data with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: app/Services/Radarr/RadarrClient.php
+
+		-
+			message: '#^Method App\\Services\\Radarr\\RadarrClient\:\:updateMovie\(\) has parameter \$data with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: app/Services/Radarr/RadarrClient.php
+
+		-
+			message: '#^Expression on left side of \?\? is not nullable\.$#'
+			identifier: nullCoalesce.expr
+			count: 2
+			path: app/Services/Radarr/RadarrWebhookHandler.php
+
+		-
+			message: '#^Strict comparison using \!\=\= between App\\Models\\ServiceConnection and null will always evaluate to true\.$#'
+			identifier: notIdentical.alwaysTrue
+			count: 6
+			path: app/Services/Radarr/RadarrWebhookHandler.php
+
+		-
+			message: '#^Strict comparison using \!\=\= between App\\Models\\ServiceConnection and null will always evaluate to true\.$#'
+			identifier: notIdentical.alwaysTrue
+			count: 1
+			path: app/Services/Sabnzbd/SabnzbdWebhookHandler.php
+
+		-
+			message: '#^Call to an undefined method Laravel\\Scout\\Engines\\Engine\:\:getMultiSearch\(\)\.$#'
+			identifier: method.notFound
+			count: 1
+			path: app/Services/Search/SemanticLibrarySearch.php
+
+		-
+			message: '#^Method App\\Services\\Seerr\\SeerrClient\:\:getRequests\(\) has parameter \$params with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: app/Services/Seerr/SeerrClient.php
+
+		-
+			message: '#^Method App\\Services\\Seerr\\SeerrClient\:\:getUsers\(\) has parameter \$params with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: app/Services/Seerr/SeerrClient.php
+
+		-
+			message: '#^Expression on left side of \?\? is not nullable\.$#'
+			identifier: nullCoalesce.expr
+			count: 1
+			path: app/Services/Seerr/SeerrWebhookHandler.php
+
+		-
+			message: '#^Strict comparison using \!\=\= between App\\Models\\ServiceConnection and null will always evaluate to true\.$#'
+			identifier: notIdentical.alwaysTrue
+			count: 1
+			path: app/Services/Seerr/SeerrWebhookHandler.php
+
+		-
+			message: '#^Method App\\Services\\Sonarr\\SonarrClient\:\:addSeries\(\) has parameter \$data with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: app/Services/Sonarr/SonarrClient.php
+
+		-
+			message: '#^Method App\\Services\\Sonarr\\SonarrClient\:\:updateSeries\(\) has parameter \$data with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: app/Services/Sonarr/SonarrClient.php
+
+		-
+			message: '#^Parameter \#1 \$array \(list\<int\<1, max\>\>\) of array_values is already a list, call has no effect\.$#'
+			identifier: arrayValues.list
+			count: 1
+			path: app/Services/Sonarr/SonarrClient.php
+
+		-
+			message: '#^Expression on left side of \?\? is not nullable\.$#'
+			identifier: nullCoalesce.expr
+			count: 2
+			path: app/Services/Sonarr/SonarrWebhookHandler.php
+
+		-
+			message: '#^Strict comparison using \!\=\= between App\\Models\\ServiceConnection and null will always evaluate to true\.$#'
+			identifier: notIdentical.alwaysTrue
+			count: 6
+			path: app/Services/Sonarr/SonarrWebhookHandler.php
+
+		-
+			message: '#^Strict comparison using \!\=\= between App\\Models\\ServiceConnection and null will always evaluate to true\.$#'
+			identifier: notIdentical.alwaysTrue
+			count: 1
+			path: app/Services/Whisparr/WhisparrWebhookHandler.php
+
+		-
+			message: '#^Using nullsafe property access "\?\-\>value" on left side of \?\? is unnecessary\. Use \-\> instead\.$#'
+			identifier: nullsafe.neverNull
+			count: 1
+			path: app/Settings/AiSettings.php
+
+		-
+			message: '#^Using nullsafe property access "\?\-\>value" on left side of \?\? is unnecessary\. Use \-\> instead\.$#'
+			identifier: nullsafe.neverNull
+			count: 1
+			path: app/Settings/AppSettings.php
+
+		-
+			message: '#^Using nullsafe property access "\?\-\>value" on left side of \?\? is unnecessary\. Use \-\> instead\.$#'
+			identifier: nullsafe.neverNull
+			count: 1
+			path: app/Settings/MediaReplacementSettings.php
+
+		-
+			message: '#^Class Laravel\\Lumen\\Application not found\.$#'
+			identifier: class.notFound
+			count: 1
+			path: config/clockwork.php
+
+		-
+			message: '#^Comparison operation "\>\=" between int\<80500, 80599\> and 80500 is always true\.$#'
+			identifier: greaterOrEqual.alwaysTrue
+			count: 2
+			path: config/database.php
+
+		-
+			message: '#^Using nullsafe property access "\?\-\>id" on left side of \?\? is unnecessary\. Use \-\> instead\.$#'
+			identifier: nullsafe.neverNull
+			count: 1
+			path: database/factories/MediaReplacementAttemptFactory.php
+
+		-
+			message: '#^Cannot access property \$free_input_tokens on array\<mixed\>\|object\.$#'
+			identifier: property.nonObject
+			count: 1
+			path: database/migrations/2026_07_06_095847_create_ai_free_usage_pools_table.php
+
+		-
+			message: '#^Cannot access property \$free_output_tokens on array\<mixed\>\|object\.$#'
+			identifier: property.nonObject
+			count: 1
+			path: database/migrations/2026_07_06_095847_create_ai_free_usage_pools_table.php
+
+		-
+			message: '#^Cannot access property \$unified on array\<mixed\>\|object\.$#'
+			identifier: property.nonObject
+			count: 1
+			path: database/migrations/2026_07_06_095847_create_ai_free_usage_pools_table.php
+
+		-
+			message: '#^Negated boolean expression is always true\.$#'
+			identifier: booleanNot.alwaysTrue
+			count: 1
+			path: database/migrations/2026_07_19_085141_classify_and_normalize_ai_model_prices.php
+
+		-
+			message: '#^Instanceof between Laravel\\Ai\\Storage\\DatabaseConversationStore and Laravel\\Ai\\Contracts\\VerifiesConversationOwnership will always evaluate to true\.$#'
+			identifier: instanceof.alwaysTrue
+			count: 1
+			path: routes/channels.php
