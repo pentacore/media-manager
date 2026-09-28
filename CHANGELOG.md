@@ -1,3 +1,33 @@
+# [1.23.0](https://github.com/pentacore/media-manager/compare/v1.22.0...v1.23.0) (2026-09-28)
+
+
+### Bug Fixes
+
+* **actions:** abort pinned actions whose connection was deactivated ([53130fb](https://github.com/pentacore/media-manager/commit/53130fb6a5c0463dc45df9ceb6fad40e5b20be49))
+* **actions:** log the executing claim and worker_lost failures in the audit trail ([1238b55](https://github.com/pentacore/media-manager/commit/1238b55fe1ad26737e0d72087693095384cca6d3))
+* **actions:** strip scheduler-owned keys from agent-authored emby_library_scan payloads ([631f34c](https://github.com/pentacore/media-manager/commit/631f34cccb3c23b3aa982e035ccd1caed27bb4e4))
+* **auth:** create first-time Emby users through the bootstrap-role lock ([ebde88a](https://github.com/pentacore/media-manager/commit/ebde88a64239c95b12a195c970af402f1f8aa095))
+* **dashboard:** queue the stats rebroadcast with a guaranteed trailing update ([0ef8a3d](https://github.com/pentacore/media-manager/commit/0ef8a3d44d256b6334fa258c567090445074db98))
+* **deploy:** trust no proxy by default and keep the chat timeout below the Octane ceiling ([44d7fc8](https://github.com/pentacore/media-manager/commit/44d7fc8484da90c66148220727235d10577f7dd3))
+* **emby:** coalesce webhook-triggered library scans into one trailing refresh ([d8a385b](https://github.com/pentacore/media-manager/commit/d8a385b54467f239acb2616a6d813d1c4191c35a))
+* **emby:** keep the custom ModelNotFoundException message on a missing scan connection ([be69960](https://github.com/pentacore/media-manager/commit/be69960085decac7bf56cfb1e2bfc00bceef01c8))
+* **media-replacement:** search candidates before taking the submit lock ([f142297](https://github.com/pentacore/media-manager/commit/f1422974fa8e9c9984df6213dc81968be63af907))
+* **monitoring:** give health-check triggers their own throttle bucket ([997f58a](https://github.com/pentacore/media-manager/commit/997f58a8673af195fb81527adab7ef943563cafc))
+* **monitoring:** restrict and throttle on-demand health checks to members ([68b574c](https://github.com/pentacore/media-manager/commit/68b574c4f93d29ece5ec38df1b46673640642fa9))
+* **monitoring:** toast a throttled health-check trigger instead of the raw error dialog ([8a41fbb](https://github.com/pentacore/media-manager/commit/8a41fbb5dea5979b1abce10451f9c8bca43044e6))
+* **seerr:** run bulk request clears in a queued job ([ceec46d](https://github.com/pentacore/media-manager/commit/ceec46d6731b3cbd9e14a733d2ab360011cba46d))
+* **support:** flag the Symfony PRIVATE_SUBNETS and REMOTE_ADDR trusted-proxy keywords as broad ([2e99d2f](https://github.com/pentacore/media-manager/commit/2e99d2f3b86f13b4074bf64a81021f262d9b5291))
+* **users:** never let a delete or role change remove the last admin ([995c16f](https://github.com/pentacore/media-manager/commit/995c16f0609e8c3043689a5d59db08270e7b04f2))
+* **webhooks:** mark events processed after the handler returns so failed runs stay retryable ([3adc63e](https://github.com/pentacore/media-manager/commit/3adc63e41a57d09e574ae302213b1b60c3667edd))
+* **webhooks:** mark no-handler events processed and fix misleading test names ([14575b4](https://github.com/pentacore/media-manager/commit/14575b42be7190f741683370dc7c345785f1e51a))
+* **webhooks:** rate-limit and size-cap webhook ingress, dedupe with capture off, drop the query token ([ffebd4b](https://github.com/pentacore/media-manager/commit/ffebd4b8734e1cc09fb40e6224848631b485ea0f))
+
+
+### Features
+
+* **ai:** warn when a hard budget cannot price the selected models ([8041dc1](https://github.com/pentacore/media-manager/commit/8041dc1dbc79ec598b1ce09a37903044a5bf8ee4))
+* **http:** send baseline security headers and opt-in HSTS ([29859e1](https://github.com/pentacore/media-manager/commit/29859e195e25812df0f9f166fbd5eab3b8955d65))
+
 # [1.22.0](https://github.com/pentacore/media-manager/compare/v1.21.0...v1.22.0) (2026-09-27)
 
 

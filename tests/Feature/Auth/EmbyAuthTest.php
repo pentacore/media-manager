@@ -1,11 +1,13 @@
 <?php
 
+use App\Actions\CreateUserWithBootstrapRole;
 use App\Enums\UserRole;
 use App\Models\EmbyUserLink;
 use App\Models\ServiceConnection;
 use App\Models\User;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Support\Facades\Http;
+use Mockery\MockInterface;
 use PragmaRX\Google2FA\Google2FA;
 
 beforeEach(function (): void {
@@ -286,4 +288,30 @@ test('completing the challenge after emby login authenticates the user', functio
     ])->assertRedirect(route('dashboard'));
 
     $this->assertAuthenticatedAs($user);
+});
+
+test('first-time emby login creates the user through the bootstrap-role action', function (): void {
+    Http::fake([
+        'emby.local:8096/Users/AuthenticateByName' => Http::response([
+            'User' => ['Id' => 'emby-user-900', 'Name' => 'Racer'],
+            'AccessToken' => 'token',
+        ]),
+    ]);
+
+    $this->mock(CreateUserWithBootstrapRole::class, function (MockInterface $mock): void {
+        $mock->shouldReceive('execute')
+            ->once()
+            ->with(['name' => 'Racer', 'email' => 'racer@example.com'])
+            ->andReturnUsing(fn (array $attributes): User => User::factory()->unverified()->create($attributes));
+    });
+
+    $this->post(route('auth.emby'), [
+        'username' => 'Racer',
+        'password' => 'pw',
+        'email' => 'racer@example.com',
+    ])->assertRedirect(route('dashboard'));
+
+    $user = User::query()->where('email', 'racer@example.com')->sole();
+    expect($user->email_verified_at)->not->toBeNull()
+        ->and(EmbyUserLink::query()->where('user_id', $user->id)->where('emby_user_id', 'emby-user-900')->exists())->toBeTrue();
 });

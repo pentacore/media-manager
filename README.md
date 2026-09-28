@@ -105,6 +105,12 @@ docker compose --env-file .env ps
 
 The normal image build creates both the browser bundle and `bootstrap/ssr/ssr.js`. The `ssr` container runs that bundle with Node.js on the private Compose network; port `13714` is not exposed publicly. TLS is terminated by your reverse proxy in front of the `web` and `reverb` ports.
 
+### Reverse proxy and trusted proxies
+
+MediaManager expects a reverse proxy (Traefik, Caddy, nginx) in front of the `web` and `reverb` ports to terminate TLS. Set `TRUSTED_PROXIES` in `docker/production/.env` to that proxy's exact address, for example `TRUSTED_PROXIES=192.168.1.10`. The app then honors the proxy's `X-Forwarded-For` / `X-Forwarded-Proto` headers, so login throttling keys on the real client IP and signed invite and verification links validate.
+
+Leave it empty (the default) when nothing sits in front of the app: no forwarded header is trusted. Do not list whole private ranges such as `192.168.0.0/16`. Compose publishes `WEB_PORT` on every interface, so any host inside a trusted range could send a forged `X-Forwarded-For` and dodge the login and Emby-login throttles. The app logs a warning (at most once a day) while `TRUSTED_PROXIES` contains `*` or a range wider than /24 (IPv6: /64). Where you can, also firewall `WEB_PORT` and `REVERB_BIND_PORT` so only the proxy host reaches them.
+
 ### Verify SSR
 
 ```bash
@@ -299,7 +305,7 @@ Two services deliver differently:
 - **SABnzbd** has no native HTTP webhook — the connection edit page generates a Python notification script (stdlib only, token embedded) to drop into SABnzbd's `scripts/` folder and select under Settings → Notifications.
 - **Bazarr** posts to a dedicated endpoint (`POST {APP_URL}/webhooks/bazarr/{connection_id}`) via Apprise — the Subtitles → Admin page shows the exact `json://` config URI to paste into Bazarr's notification settings. These events are treated as reconciliation hints rather than a typed event vocabulary.
 
-Webhook delivery is logged as a `WebhookEvent` (browseable under Admin → Webhook Log, with a 5-minute payload dedupe), then processed asynchronously by `ProcessWebhookEvent` (requires the queue worker — in dev, `vendor/bin/sail artisan queue:listen`).
+Webhook delivery is logged as a `WebhookEvent` (browseable under Admin → Webhook Log, with a 5-minute payload dedupe), then processed asynchronously by `ProcessWebhookEvent` (requires the queue worker — in dev, `vendor/bin/sail artisan queue:listen`). Each client IP may deliver up to `MEDIAMANAGER_WEBHOOK_RATE_LIMIT` webhooks per minute (default 300) and bodies above `MEDIAMANAGER_WEBHOOK_MAX_PAYLOAD_KB` (default 1024) are refused with 413. The 5-minute dedupe also holds when webhook capture is off. A `?token=` query parameter is never stored with the event.
 
 ### Supported events
 

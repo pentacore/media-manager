@@ -63,6 +63,7 @@ class ServiceHealthController extends Controller
                 'uptime' => $uptime,
                 'avg_latency' => $avgLatency,
             ],
+            'canRunChecks' => (bool) $request->user()?->isMember(),
             'diskSpace' => Inertia::defer(fn (): array => $this->loadDiskSpaceForAll($connections)),
             'prowlarrIndexers' => Inertia::defer(fn (): array => $this->loadProwlarrIndexersForAll($connections)),
         ]);

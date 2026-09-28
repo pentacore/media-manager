@@ -157,6 +157,16 @@ class ActionOrchestrator
             || ($forceRequiresApproval ?? false)
             || ! $description->verified;
 
+        // Scheduler-owned keys: only EmbyLibraryScanScheduler may set these
+        // when coalescing emby_library_scan requests. This payload is
+        // model-authored (a DecisionAgent tool call), so a prompt-injected
+        // emby_connection_id could redirect a refresh to another Emby server,
+        // and forged scan_after/coalesced_events/triggers could poison the
+        // scheduler's coalescing state for a later, legitimate trigger.
+        foreach (['emby_connection_id', 'scan_after', 'coalesced_events', 'triggers'] as $schedulerOwnedKey) {
+            unset($payload[$schedulerOwnedKey]);
+        }
+
         // Pin the originating connection like dispatch() does, but always
         // overwrite: the payload is model-authored, and a prompt-injected
         // service_connection_id must not redirect the action to another

@@ -11,6 +11,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\Admin\UpdateAiSettingsRequest;
 use App\Models\AiModelPrice;
 use App\Services\AiBudget\AiBudgetGuard;
+use App\Services\AiBudget\UnpricedModelDetector;
 use App\Settings\AiSettings;
 use Illuminate\Http\RedirectResponse;
 use Inertia\Inertia;
@@ -25,6 +26,7 @@ class AiSettingsController extends Controller
         AiSettings $aiSettings,
         AiBudgetGuard $aiBudgetGuard,
         ProviderCapabilities $providerCapabilities,
+        UnpricedModelDetector $unpricedModelDetector,
     ): Response {
         return Inertia::render('Admin/AiSettings/Index', [
             'settings' => [
@@ -62,6 +64,7 @@ class AiSettingsController extends Controller
                 'hard' => $aiSettings->hardBudgetUsd(),
                 'soft_notified_at' => $aiSettings->softBudgetNotifiedAt(),
             ],
+            'unpricedModels' => $unpricedModelDetector->forHardCap(),
             'modes' => AiMode::mapForSelect(labelKey: 'label'),
             'models' => $this->modelsByConfiguredProvider(),
             'reasoningLevels' => AiReasoningLevel::mapForSelect(labelKey: 'label'),

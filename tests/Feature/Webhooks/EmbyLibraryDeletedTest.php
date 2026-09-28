@@ -77,7 +77,7 @@ test('library.deleted without ids is skipped', function (): void {
     resolve(EmbyWebhookHandler::class)->handle($webhookEvent);
 
     expect(ActionRequest::count())->toBe(0);
-    expect($webhookEvent->fresh()->processed_at)->not->toBeNull();
+    expect($webhookEvent->fresh()->processed_at)->toBeNull(); // ProcessWebhookEvent marks processed, not the handler
 });
 
 test('library.deleted for unsupported type is skipped', function (): void {

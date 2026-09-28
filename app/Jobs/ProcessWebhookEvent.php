@@ -74,14 +74,17 @@ class ProcessWebhookEvent implements ShouldQueue
                 'webhook_event_id' => $this->webhookEvent->id,
                 'service_type' => $connection->type->value,
             ]);
-            $this->webhookEvent->update(['handling_status' => WebhookHandlingStatus::NoHandler]);
+            $this->webhookEvent->markProcessed(WebhookHandlingStatus::NoHandler);
             $this->discardIfCaptureDisabled();
 
             return;
         }
 
         $webhookHandlingStatus = $handler->handle($this->webhookEvent);
-        $this->webhookEvent->update(['handling_status' => $webhookHandlingStatus]);
+        // Mark processed only now: a throw inside handle() (after its side
+        // effects, e.g. a cache flush) must leave the row reclaimable by
+        // claim() on retry instead of stranded in Processing.
+        $this->webhookEvent->markProcessed($webhookHandlingStatus);
 
         $this->discardIfCaptureDisabled();
     }
@@ -143,7 +146,7 @@ class ProcessWebhookEvent implements ShouldQueue
         $this->webhookEvent->delete();
     }
 
-    private function resolveHandler(ServiceType $serviceType): ?WebhookHandler
+    protected function resolveHandler(ServiceType $serviceType): ?WebhookHandler
     {
         $class = match ($serviceType) {
             ServiceType::Emby => EmbyWebhookHandler::class,

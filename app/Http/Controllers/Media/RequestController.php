@@ -7,6 +7,7 @@ namespace App\Http\Controllers\Media;
 use App\Cache\Services\SeerrCache;
 use App\Enums\ServiceType;
 use App\Http\Controllers\Controller;
+use App\Jobs\ClearSeerrRequests;
 use App\Models\ServiceConnection;
 use App\Services\Arr\ArrClient;
 use App\Services\Radarr\RadarrClient;
@@ -288,9 +289,9 @@ class RequestController extends Controller
     private const int CLEAR_HARD_LIMIT = 500;
 
     /**
-     * Bulk-delete every Seerr request matching a given status. Walks the
-     * paginated upstream list, deletes each match, and busts the cache
-     * once at the end. Returns to the page with a count toast.
+     * Collects matching request ids (capped) and queues ClearSeerrRequests
+     * to delete them, keeping the up-to-500 sequential DELETEs off this
+     * request. Returns to the page with an info toast.
      */
     public function clear(Request $request): RedirectResponse
     {
@@ -324,25 +325,12 @@ class RequestController extends Controller
             return back();
         }
 
-        $deleted = 0;
-        $failed = 0;
+        dispatch(new ClearSeerrRequests($connection->id, $status, $ids, $request->user()?->id));
 
-        foreach ($ids as $id) {
-            try {
-                $seerrClient->deleteRequest($id);
-                $deleted++;
-            } catch (RequestException|ConnectionException) {
-                $failed++;
-            }
-        }
-
-        new SeerrCache($connection)->bustAll();
-
-        if ($failed === 0) {
-            Inertia::flash('toast', ['type' => 'success', 'message' => __('Cleared :n :status request(s).', ['n' => $deleted, 'status' => $status])]);
-        } else {
-            Inertia::flash('toast', ['type' => 'warning', 'message' => __('Cleared :ok of :total :status request(s); :fail failed.', ['ok' => $deleted, 'total' => $deleted + $failed, 'fail' => $failed, 'status' => $status])]);
-        }
+        Inertia::flash('toast', [
+            'type' => 'info',
+            'message' => __('Clearing :n :status request(s) in the background. Use Sync Seerr in a moment to see the result.', ['n' => count($ids), 'status' => $status]),
+        ]);
 
         return to_route('media.requests.index', ['status' => $status]);
     }

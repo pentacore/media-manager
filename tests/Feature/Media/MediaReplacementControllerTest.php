@@ -469,3 +469,39 @@ test('replace still queues Pending in advisory mode even when the action type au
     expect($actionRequest->status)->toBe(ActionRequestStatus::Pending)
         ->and($actionRequest->requires_approval)->toBeTrue();
 });
+
+test('replace searches releases before taking the submission lock', function (): void {
+    $connection = ServiceConnection::factory()->radarr()->create(['url' => 'http://radarr.local:7878']);
+    fakeRadarrMovieWithFile(movieId: 10, fileId: 5);
+    fakeRadarrReleases(movieId: 10);
+    $fingerprint = replacementCurrentFingerprintFor($connection);
+    $candidate = replacementCandidateFingerprintFor($connection);
+    Cache::forget("media-replacement:candidates:{$fingerprint}");
+
+    $lockHeldDuringSearch = null;
+    Http::fake([
+        'radarr.local:7878/api/v3/release*' => function () use ($fingerprint, &$lockHeldDuringSearch): null {
+            $probe = Cache::lock("media-replacement:submit:{$fingerprint}", 1);
+            $acquired = $probe->get();
+
+            if ($acquired) {
+                $probe->release();
+            }
+
+            $lockHeldDuringSearch = ! $acquired;
+
+            return null;
+        },
+    ]);
+
+    $this->actingAs(User::factory()->member()->create())
+        ->postJson(route('media.replacement.replace'), [
+            ...replacementInspectParams($connection),
+            'target_fingerprint' => $fingerprint,
+            'candidate_fingerprint' => $candidate,
+            'verify_subtitles' => true,
+        ])
+        ->assertCreated();
+
+    expect($lockHeldDuringSearch)->toBeFalse();
+});

@@ -8,6 +8,7 @@ use App\Enums\ActionRequestStatus;
 use App\Events\ActionRequestStatusChanged;
 use App\Models\ActionRequest;
 use App\Services\Actions\ActionExecutor;
+use App\Services\Actions\ActionRequestActivityLogger;
 use App\Services\Arr\ManualImportActions;
 use App\Services\Arr\RemoveStuckDownloadActions;
 use App\Services\Bazarr\BazarrActions;
@@ -215,6 +216,9 @@ class ExecuteActionRequest implements ShouldBeUnique, ShouldQueue
         $this->actionRequest->refresh();
 
         if ($claimed === 1) {
+            // The conditional update bypasses ActionRequestObserver; record
+            // the Executing transition in the audit trail explicitly.
+            resolve(ActionRequestActivityLogger::class)->statusChanged($this->actionRequest);
             event(new ActionRequestStatusChanged($this->actionRequest));
 
             return true;

@@ -263,6 +263,20 @@ test('a shared-file case is matched through its episode id list', function (): v
     Queue::assertNotPushed(ReconcileBazarrConnection::class);
 });
 
+test('an oversized bazarr notification is rejected with 413', function (): void {
+    config()->set('mediamanager.webhooks.max_payload_kb', 1);
+    $connection = ServiceConnection::factory()->bazarr()->create([
+        'webhook_token' => 'secret',
+    ]);
+
+    $this->postJson('/webhooks/bazarr/'.$connection->id, [
+        'eventType' => 'Test',
+        'message' => str_repeat('a', 2048),
+    ], ['X-Webhook-Token' => 'secret'])->assertStatus(413);
+
+    expect(WebhookEvent::query()->count())->toBe(0);
+});
+
 test('unidentifiable notifications dispatch unique connection reconciliation', function (): void {
     $connection = ServiceConnection::factory()->bazarr()->create([
         'webhook_token' => 'secret',

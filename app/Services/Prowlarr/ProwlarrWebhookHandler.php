@@ -34,8 +34,6 @@ class ProwlarrWebhookHandler extends AbstractWebhookHandler
             default => $status = $this->ignore($webhookEvent, $eventType),
         };
 
-        $webhookEvent->markProcessed();
-
         return $status;
     }
 

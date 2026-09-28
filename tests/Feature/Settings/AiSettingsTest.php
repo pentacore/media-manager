@@ -92,3 +92,30 @@ test('withMode override does not leak across request scopes', function (): void 
 
     expect(resolve(AiSettings::class)->mode())->toBe(AiMode::Executive);
 });
+
+test('chatTimeout is capped below the Octane request ceiling', function (): void {
+    config()->set('octane.max_execution_time', 120);
+    config()->set('mediamanager.ai.chat_timeout', 120);
+    $aiSettings = resolve(AiSettings::class);
+
+    expect($aiSettings->chatTimeout())->toBe(110);
+
+    $aiSettings->setChatTimeout(600);
+
+    expect($aiSettings->chatTimeout())->toBe(110);
+});
+
+test('chatTimeout keeps a value already below the Octane ceiling', function (): void {
+    config()->set('octane.max_execution_time', 150);
+    config()->set('mediamanager.ai.chat_timeout', 120);
+
+    expect(resolve(AiSettings::class)->chatTimeout())->toBe(120);
+});
+
+test('chatTimeout is not capped when Octane has no request ceiling', function (): void {
+    config()->set('octane.max_execution_time', 0);
+    $aiSettings = resolve(AiSettings::class);
+    $aiSettings->setChatTimeout(600);
+
+    expect($aiSettings->chatTimeout())->toBe(600);
+});
