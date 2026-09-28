@@ -5,16 +5,19 @@ declare(strict_types=1);
 namespace App\Jobs\Ai;
 
 use App\Ai\Agents\TitleAgent;
+use App\Enums\QueueLane;
 use App\Settings\AiSettings;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
+use Illuminate\Queue\Attributes\Queue;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Throwable;
 
+#[Queue(QueueLane::Ai)]
 class GenerateConversationTitle implements ShouldQueue
 {
     use Dispatchable;

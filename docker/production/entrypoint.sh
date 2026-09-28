@@ -76,7 +76,25 @@ case "$role" in
 
     queue)
         warm_caches
+        # Lanes in priority order (App\Enums\QueueLane). The default drains
+        # every lane so an older compose.yaml without the queue-ai service
+        # still runs AI jobs; the shipped compose.yaml narrows it with
+        # QUEUE_LANES and runs the ai lane in queue-ai.
         exec php artisan queue:work \
+            --queue="${QUEUE_LANES:-actions,webhooks,default,ai}" \
+            --sleep=3 \
+            --tries=3 \
+            --timeout=300 \
+            --no-interaction \
+            --verbose
+        ;;
+
+    queue-ai)
+        warm_caches
+        # AI jobs (decision agent, subtitle advisor, embeddings, titles, price
+        # refresh) only. Keep --timeout below the redis retry_after (330s).
+        exec php artisan queue:work \
+            --queue=ai \
             --sleep=3 \
             --tries=3 \
             --timeout=300 \
@@ -107,7 +125,7 @@ case "$role" in
 
     *)
         echo "Unknown CONTAINER_ROLE: $role" >&2
-        echo "Valid roles: web, queue, scheduler, ssr, reverb, migrate" >&2
+        echo "Valid roles: web, queue, queue-ai, scheduler, ssr, reverb, migrate" >&2
         exit 1
         ;;
 esac

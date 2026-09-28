@@ -75,7 +75,7 @@ vendor/bin/sail npm run dev
 
 ## Production deployment
 
-The production stack lives in `docker/production` and runs the published application image as separate web (Octane), queue, scheduler, Reverb, migration, and Inertia SSR services, alongside Postgres, Valkey, and Typesense containers. The SSR service uses the same image as the web service, so both processes always run the same application release and frontend bundle.
+The production stack lives in `docker/production` and runs the published application image as separate web (Octane), queue, queue-ai, scheduler, Reverb, migration, and Inertia SSR services, alongside Postgres, Valkey, and Typesense containers. The SSR service uses the same image as the web service, so both processes always run the same application release and frontend bundle.
 
 For a new deployment, create the production environment file and fill in the required application, database, Reverb, Typesense, and service credentials:
 
@@ -110,6 +110,10 @@ The normal image build creates both the browser bundle and `bootstrap/ssr/ssr.js
 MediaManager expects a reverse proxy (Traefik, Caddy, nginx) in front of the `web` and `reverb` ports to terminate TLS. Set `TRUSTED_PROXIES` in `docker/production/.env` to that proxy's exact address, for example `TRUSTED_PROXIES=192.168.1.10`. The app then honors the proxy's `X-Forwarded-For` / `X-Forwarded-Proto` headers, so login throttling keys on the real client IP and signed invite and verification links validate.
 
 Leave it empty (the default) when nothing sits in front of the app: no forwarded header is trusted. Do not list whole private ranges such as `192.168.0.0/16`. Compose publishes `WEB_PORT` on every interface, so any host inside a trusted range could send a forged `X-Forwarded-For` and dodge the login and Emby-login throttles. The app logs a warning (at most once a day) while `TRUSTED_PROXIES` contains `*` or a range wider than /24 (IPv6: /64). Where you can, also firewall `WEB_PORT` and `REVERB_BIND_PORT` so only the proxy host reaches them.
+
+### Queue workers
+
+Jobs run on four named queues. The `queue` service drains `actions` (approved actions), `webhooks` (inbound webhook processing) and `default` (everything else), in that priority order; the `queue-ai` service drains `ai` (decision agent, subtitle advisor, embeddings, conversation titles, price refresh) so a slow model call never holds up an approved action or a webhook. Both use the same image and a 300-second job timeout. If you run an older `compose.yaml` without the `queue-ai` service, the `queue` service drains all four queues by default — add the `queue-ai` service to split them.
 
 ### Verify SSR
 
@@ -305,7 +309,7 @@ Two services deliver differently:
 - **SABnzbd** has no native HTTP webhook — the connection edit page generates a Python notification script (stdlib only, token embedded) to drop into SABnzbd's `scripts/` folder and select under Settings → Notifications.
 - **Bazarr** posts to a dedicated endpoint (`POST {APP_URL}/webhooks/bazarr/{connection_id}`) via Apprise — the Subtitles → Admin page shows the exact `json://` config URI to paste into Bazarr's notification settings. These events are treated as reconciliation hints rather than a typed event vocabulary.
 
-Webhook delivery is logged as a `WebhookEvent` (browseable under Admin → Webhook Log, with a 5-minute payload dedupe), then processed asynchronously by `ProcessWebhookEvent` (requires the queue worker — in dev, `vendor/bin/sail artisan queue:listen`). Each client IP may deliver up to `MEDIAMANAGER_WEBHOOK_RATE_LIMIT` webhooks per minute (default 300) and bodies above `MEDIAMANAGER_WEBHOOK_MAX_PAYLOAD_KB` (default 1024) are refused with 413. The 5-minute dedupe also holds when webhook capture is off. A `?token=` query parameter is never stored with the event.
+Webhook delivery is logged as a `WebhookEvent` (browseable under Admin → Webhook Log, with a 5-minute payload dedupe), then processed asynchronously by `ProcessWebhookEvent` (requires the queue worker — in dev, the Sail `queue` service or `vendor/bin/sail artisan queue:listen --queue=actions,webhooks,default,ai`). Each client IP may deliver up to `MEDIAMANAGER_WEBHOOK_RATE_LIMIT` webhooks per minute (default 300) and bodies above `MEDIAMANAGER_WEBHOOK_MAX_PAYLOAD_KB` (default 1024) are refused with 413. The 5-minute dedupe also holds when webhook capture is off. A `?token=` query parameter is never stored with the event.
 
 ### Supported events
 

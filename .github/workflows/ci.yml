@@ -381,17 +381,17 @@ jobs:
             exit 1
           fi
 
-      # The queue/scheduler/ssr/reverb/migrate entrypoint blocks otherwise run
-      # for the first time in production — a bash typo or renamed artisan
-      # flag would ship green and crash-loop the worker. Boot each role and
-      # assert it stays up. (reverb binds :8080, so the web container is
-      # stopped first; ssr binds :13714.)
-      - name: Smoke queue/scheduler/ssr/reverb roles
+      # The queue/queue-ai/scheduler/ssr/reverb/migrate entrypoint blocks
+      # otherwise run for the first time in production — a bash typo or
+      # renamed artisan flag would ship green and crash-loop the worker. Boot
+      # each role and assert it stays up. (reverb binds :8080, so the web
+      # container is stopped first; ssr binds :13714.)
+      - name: Smoke queue/queue-ai/scheduler/ssr/reverb roles
         env:
           APP_KEY: ${{ steps.app_key.outputs.APP_KEY }}
         run: |
           docker rm -f octane
-          for role in queue scheduler ssr reverb; do
+          for role in queue queue-ai scheduler ssr reverb; do
             docker run -d \
               --name "$role" \
               --network host \
@@ -421,7 +421,7 @@ jobs:
           done
           sleep 10
           fail=0
-          for role in queue scheduler ssr reverb; do
+          for role in queue queue-ai scheduler ssr reverb; do
             if [ "$(docker inspect -f '{{.State.Running}}' "$role")" != "true" ]; then
               echo "--- $role container exited ---" >&2
               docker logs "$role" >&2 || true
@@ -468,4 +468,4 @@ jobs:
 
       - name: Stop containers
         if: always()
-        run: docker rm -f octane queue scheduler ssr reverb || true
+        run: docker rm -f octane queue queue-ai scheduler ssr reverb || true

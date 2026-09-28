@@ -4,12 +4,14 @@ declare(strict_types=1);
 
 namespace App\Jobs;
 
+use App\Enums\QueueLane;
 use App\Models\IndexedMovie;
 use App\Models\IndexedSeries;
 use App\Services\Search\LibraryEmbedder;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
+use Illuminate\Queue\Attributes\Queue;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
 
@@ -17,6 +19,7 @@ use Illuminate\Queue\SerializesModels;
  * Generates and persists the semantic-search embedding for a single indexed
  * library item. Saving the row re-syncs Scout automatically.
  */
+#[Queue(QueueLane::Ai)]
 class EmbedLibraryItem implements ShouldQueue
 {
     use Dispatchable;

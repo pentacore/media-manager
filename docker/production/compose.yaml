@@ -4,7 +4,7 @@
 # All app roles share one image; CONTAINER_ROLE selects entrypoint behavior.
 # Reverse proxy (traefik/caddy/nginx) terminates TLS in front of `web` and `reverb` services.
 #
-# One-shot migration container runs first; web/queue/scheduler/ssr/reverb start after it exits 0.
+# One-shot migration container runs first; web/queue/queue-ai/scheduler/ssr/reverb start after it exits 0.
 
 x-app: &app
   image: ${IMAGE:-ghcr.io/pentacore/media-manager:latest}
@@ -94,10 +94,20 @@ services:
     <<: *app
     environment:
       CONTAINER_ROLE: queue
+      # Priority order. The ai lane runs in queue-ai so a slow model call
+      # never delays an approved action or an inbound webhook.
+      QUEUE_LANES: actions,webhooks,default
     # Docker's default 10s SIGTERM->SIGKILL window would kill workers mid-job
     # on every deploy; some jobs run non-idempotent external calls (e.g. arr
     # release grabs) that Redis would re-deliver after retry_after. Give the
     # worker its full --timeout=300 (entrypoint.sh) plus margin to finish.
+    stop_grace_period: 310s
+
+  queue-ai:
+    <<: *app
+    environment:
+      CONTAINER_ROLE: queue-ai
+    # Same reasoning as queue: let an in-flight model call finish (--timeout=300).
     stop_grace_period: 310s
 
   scheduler:
