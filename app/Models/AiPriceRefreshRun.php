@@ -9,6 +9,7 @@ use Database\Factories\AiPriceRefreshRunFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\MassPrunable;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Override;
@@ -77,6 +78,8 @@ class AiPriceRefreshRun extends Model
     /** @use HasFactory<AiPriceRefreshRunFactory> */
     use HasFactory;
 
+    use MassPrunable;
+
     /**
      * @return array<string, string>
      */
@@ -110,5 +113,21 @@ class AiPriceRefreshRun extends Model
     public function triggeredBy(): BelongsTo
     {
         return $this->belongsTo(User::class, 'triggered_by_user_id');
+    }
+
+    /**
+     * @return Builder<self>
+     */
+    public function prunable(): Builder
+    {
+        $days = (int) config('mediamanager.retention.ai_price_refresh_runs_days');
+
+        return static::query()->when(
+            $days > 0,
+            fn (Builder $builder): Builder => $builder
+                ->whereNotNull('completed_at')
+                ->where('completed_at', '<', now()->subDays($days)),
+            fn (Builder $builder): Builder => $builder->whereRaw('1 = 0'),
+        );
     }
 }

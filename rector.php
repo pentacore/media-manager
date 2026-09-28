@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use Rector\CodingStyle\Rector\PostInc\PostIncDecToPreIncDecRector;
 use Rector\Config\RectorConfig;
+use Rector\DeadCode\Rector\ClassMethod\RemoveUnusedPublicMethodParameterRector;
 use Rector\Naming\Rector\Class_\RenamePropertyToMatchTypeRector;
 use Rector\Naming\Rector\ClassMethod\RenameParamToMatchTypeRector;
 use RectorLaravel\Rector\StaticCall\RouteActionCallableRector;
@@ -66,4 +67,11 @@ return RectorConfig::configure()
         // call sites (parameter names are part of the public signature in PHP 8).
         RenameParamToMatchTypeRector::class,
         RenamePropertyToMatchTypeRector::class,
+        // Laravel's event auto-discovery binds a Listener::handle() to an
+        // event solely from that parameter's type hint (these classes are
+        // never registered in a provider). Stripping an apparently-unused
+        // one silently unbinds the listener instead of just tidying dead code.
+        RemoveUnusedPublicMethodParameterRector::class => [
+            __DIR__.'/app/Listeners',
+        ],
     ]);

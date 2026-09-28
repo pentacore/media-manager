@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Jobs;
 
+use App\Enums\QueueLane;
 use App\Enums\ServiceType;
 use App\Enums\WebhookHandlingStatus;
 use App\Models\WebhookEvent;
@@ -19,11 +20,13 @@ use App\Settings\WebhookSettings;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
+use Illuminate\Queue\Attributes\Queue;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
 use Illuminate\Support\Facades\Log;
 use Throwable;
 
+#[Queue(QueueLane::Webhooks)]
 class ProcessWebhookEvent implements ShouldQueue
 {
     use Dispatchable;

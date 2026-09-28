@@ -63,6 +63,7 @@ test('an event after the job started schedules a trailing broadcast', function (
     $rebroadcastDashboardStats = resolve(RebroadcastDashboardStats::class);
 
     $rebroadcastDashboardStats->handle(new WebhookReceived($webhookEvent));
+
     app()->call([new BroadcastDashboardStats, 'handle']);
     $rebroadcastDashboardStats->handle(new WebhookReceived($webhookEvent));
 

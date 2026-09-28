@@ -24,25 +24,25 @@ function debouncedScanRequest(array $overrides = []): ActionRequest
 }
 
 test('it waits while imports keep arriving', function (): void {
-    $scan = debouncedScanRequest(['payload' => ['scan_after' => now()->addSeconds(30)->toIso8601String()]]);
+    $actionRequest = debouncedScanRequest(['payload' => ['scan_after' => now()->addSeconds(30)->toIso8601String()]]);
 
-    new ExecuteDebouncedLibraryScan($scan->id)->handle();
+    new ExecuteDebouncedLibraryScan($actionRequest->id)->handle();
 
     Queue::assertNotPushed(ExecuteActionRequest::class);
 });
 
 test('it hands off to execution once the quiet window passed', function (): void {
-    $scan = debouncedScanRequest();
+    $actionRequest = debouncedScanRequest();
 
-    new ExecuteDebouncedLibraryScan($scan->id)->handle();
+    new ExecuteDebouncedLibraryScan($actionRequest->id)->handle();
 
-    Queue::assertPushed(ExecuteActionRequest::class, fn (ExecuteActionRequest $job): bool => $job->actionRequest->id === $scan->id);
+    Queue::assertPushed(ExecuteActionRequest::class, fn (ExecuteActionRequest $job): bool => $job->actionRequest->id === $actionRequest->id);
 });
 
 test('it ignores requests that are no longer approved or no longer exist', function (): void {
-    $completed = debouncedScanRequest(['status' => ActionRequestStatus::Completed]);
+    $actionRequest = debouncedScanRequest(['status' => ActionRequestStatus::Completed]);
 
-    new ExecuteDebouncedLibraryScan($completed->id)->handle();
+    new ExecuteDebouncedLibraryScan($actionRequest->id)->handle();
     new ExecuteDebouncedLibraryScan(999_999)->handle();
 
     Queue::assertNotPushed(ExecuteActionRequest::class);

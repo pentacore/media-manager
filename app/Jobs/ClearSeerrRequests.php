@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Jobs;
 
 use App\Cache\Services\SeerrCache;
+use App\Enums\QueueLane;
 use App\Enums\ServiceType;
 use App\Models\ActivityLog;
 use App\Models\ServiceConnection;
@@ -14,6 +15,9 @@ use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\RequestException;
+use Illuminate\Queue\Attributes\Queue;
+use Illuminate\Queue\Attributes\Timeout;
+use Illuminate\Queue\Attributes\Tries;
 use Illuminate\Queue\Attributes\UniqueFor;
 use Illuminate\Support\Facades\Log;
 
@@ -21,18 +25,19 @@ use Illuminate\Support\Facades\Log;
  * Bulk-deletes Seerr requests picked on the Requests page (up to 500), one
  * DELETE each, off the HTTP request. Stops calling Seerr once it looks down
  * so a dead server cannot pin the worker for the whole list, then records
- * the outcome in the activity feed.
+ * the outcome in the activity feed. Runs on the maintenance lane (drained by
+ * the queue-ai worker): up to 500 sequential HTTP calls would otherwise pin
+ * the general worker behind webhooks and approved actions.
  */
+#[Queue(QueueLane::Maintenance)]
 #[UniqueFor(600)]
+#[Timeout(280)]
+#[Tries(1)]
 final class ClearSeerrRequests implements ShouldBeUnique, ShouldQueue
 {
     use Queueable;
 
     public const int MAX_CONSECUTIVE_CONNECTION_FAILURES = 5;
-
-    public int $tries = 1;
-
-    public int $timeout = 280;
 
     /**
      * @param  list<int>  $requestIds

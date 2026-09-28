@@ -30,7 +30,8 @@ token (id 15368) cannot be added as a bypass actor on personal repos.
 > 2. Moving the release commit/tag push off main-protected refs.
 >
 > Until then, discipline: never merge a PR before `PHP lint (Pint)`,
-> `JS lint, format & types`, and `Pest tests` are green.
+> `PHP static analysis`, `Dependency audit`, `JS lint, format & types`, and
+> `Pest tests` are green.
 
 ## develop protection
 
@@ -46,6 +47,8 @@ token (id 15368) cannot be added as a bypass actor on personal repos.
   must stay in the list).
 - `required_status_checks` — these CI jobs must pass before merge:
   - `PHP lint (Pint)`
+  - `PHP static analysis`
+  - `Dependency audit`
   - `JS lint, format & types`
   - `Pest tests`
 

@@ -8,6 +8,7 @@ use App\Ai\Agents\SubtitleAdvisorAgent;
 use App\Ai\Classification\Classifier;
 use App\Ai\SubtitleAdvisor\SubtitleAdvisorRunContext;
 use App\Enums\ActionRequestStatus;
+use App\Enums\QueueLane;
 use App\Enums\SubtitleCaseAttemptOutcome;
 use App\Enums\SubtitleCaseAttemptType;
 use App\Enums\SubtitleCaseStatus;
@@ -31,6 +32,7 @@ use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\Attributes\FailOnTimeout;
 use Illuminate\Queue\Attributes\MaxExceptions;
+use Illuminate\Queue\Attributes\Queue;
 use Illuminate\Queue\Attributes\Timeout;
 use Illuminate\Queue\Attributes\Tries;
 use Illuminate\Queue\Attributes\UniqueFor;
@@ -41,6 +43,7 @@ use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 use Throwable;
 
+#[Queue(QueueLane::Ai)]
 #[Timeout(180)]
 #[Tries(0)]
 #[MaxExceptions(1)]

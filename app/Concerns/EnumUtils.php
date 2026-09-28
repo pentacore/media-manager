@@ -62,8 +62,10 @@ trait EnumUtils
 
     /**
      * Converts the enum value to a URL-friendly slug.
+     *
+     * @param  array<string, string>  $dictionary
      */
-    public function asSlug($separator = '-', $language = 'en', $dictionary = ['@' => 'at']): string
+    public function asSlug(string $separator = '-', ?string $language = 'en', array $dictionary = ['@' => 'at']): string
     {
         return new Stringable($this->value)->slug($separator, $language, $dictionary)->toString();
     }

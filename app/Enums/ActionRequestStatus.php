@@ -29,8 +29,16 @@ enum ActionRequestStatus: string
         };
     }
 
+    /**
+     * @return list<self>
+     */
+    public static function terminal(): array
+    {
+        return [self::Completed, self::Failed, self::Rejected];
+    }
+
     public function isTerminal(): bool
     {
-        return in_array($this, [self::Completed, self::Failed, self::Rejected]);
+        return in_array($this, self::terminal(), true);
     }
 }

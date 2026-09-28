@@ -49,6 +49,6 @@ test('a worker_lost failure is written to the activity log', function (): void {
 
     $this->artisan('actions:reconcile-stuck')->assertSuccessful();
 
-    $log = ActivityLog::query()->where('subject_id', $actionRequest->id)->where('action', 'action_request.failed')->sole();
-    expect($log->description)->toContain('worker_lost');
+    $activityLog = ActivityLog::query()->where('subject_id', $actionRequest->id)->where('action', 'action_request.failed')->sole();
+    expect($activityLog->description)->toContain('worker_lost');
 });

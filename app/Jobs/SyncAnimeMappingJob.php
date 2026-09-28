@@ -5,12 +5,14 @@ declare(strict_types=1);
 namespace App\Jobs;
 
 use App\Cache\Services\AnimeCache;
+use App\Enums\QueueLane;
 use App\Models\AnimeIdMap;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldBeUnique;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Http\Client\RequestException;
+use Illuminate\Queue\Attributes\Queue;
 use Illuminate\Queue\Attributes\UniqueFor;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
@@ -30,9 +32,12 @@ use Throwable;
  * been fully parsed, so a truncated/empty/error payload can never wipe the
  * mappings. ShouldBeUnique + a timeout below the queue `retry_after` prevent a
  * second worker from reserving this destructive job while it is still running.
+ * Runs on the maintenance lane (drained by the queue-ai worker): the dataset
+ * fetch plus parse can hold the worker for up to 300s.
  *
  * @see https://github.com/Fribb/anime-lists
  */
+#[Queue(QueueLane::Maintenance)]
 #[UniqueFor(1800)]
 class SyncAnimeMappingJob implements ShouldBeUnique, ShouldQueue
 {

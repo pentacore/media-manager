@@ -481,11 +481,11 @@ test('replace searches releases before taking the submission lock', function ():
     $lockHeldDuringSearch = null;
     Http::fake([
         'radarr.local:7878/api/v3/release*' => function () use ($fingerprint, &$lockHeldDuringSearch): null {
-            $probe = Cache::lock("media-replacement:submit:{$fingerprint}", 1);
-            $acquired = $probe->get();
+            $lock = Cache::lock("media-replacement:submit:{$fingerprint}", 1);
+            $acquired = $lock->get();
 
             if ($acquired) {
-                $probe->release();
+                $lock->release();
             }
 
             $lockHeldDuringSearch = ! $acquired;
