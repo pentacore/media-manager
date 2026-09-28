@@ -283,13 +283,14 @@ OPENAI_API_KEY=sk-...
 
 Env vars are only the boot defaults — mode, model, budgets, reasoning level, failover provider chain, and more are editable at runtime under **Admin → AI Settings** (stored in `app_settings`).
 
-Five agents live under `app/Ai/Agents/`:
+Four agents live under `app/Ai/Agents/`:
 
 - **`MediaAgent`** — the interactive chat assistant (admin-only, `/ai/chat`). ~45 tools across `app/Ai/Tools/{Arr,Bazarr,Emby,Seerr,Prowlarr,System,Tmdb,Trakt,Workflow,PriceFetcher}/`; Sonarr/Radarr/Whisparr share the `Arr` tools via a `service` parameter. Prowlarr/Bazarr/TMDB/Trakt tools are only exposed when the matching connection or API key exists.
 - **`DecisionAgent`** — optional autonomous agent that runs once per inbound webhook event (opt-in via `MEDIAMANAGER_DECISION_AGENT_ENABLED` + Admin → Decision Agent). It can propose actions and resolve stuck imports; every proposal is an `ActionRequest` and each run is recorded as an `AgentDecision` audit row.
-- **`SubtitleAdvisorAgent`** — investigates one escalated subtitle case at a time (see [subtitle automation](#media-replacement--subtitle-automation)).
 - **`PriceFetcherAgent`** — re-verifies model prices against first-party pricing pages.
 - **`TitleAgent`** — names chat conversations.
+
+Subtitle escalations are decided in code, not by an agent: `SubtitleAdvisorDecider` (see [subtitle automation](#media-replacement--subtitle-automation)) queues the case's unique automatic replacement candidate when one exists, at no model cost.
 
 Every tool declares a `Risk` tier:
 
@@ -329,7 +330,7 @@ Three things can propose a replacement:
 2. **The automatic subtitle check** — on every Sonarr/Radarr import webhook, items carrying a configured *arr tag are audited against the required subtitle languages; a miss dispatches a replacement request. Configure under **Admin → AI Settings → Media replacement** (global + per-scope languages, confidence threshold, season-pack policy, attempt limits/cooldown, per-scope guidance rules like "this release group guarantees subs") and per-connection (subtitle-check tags, Sonarr root-folder scopes for anime/tv classification).
 3. **The subtitle advisor** — see below.
 
-**Bazarr subtitle cases** close the loop for media whose subtitles Bazarr should be able to fetch. Opt-in under **Subtitles → Admin → Subtitle automation** (`enabled` is off by default). The reconciler (every 5 minutes, plus Bazarr Apprise notifications for instant nudges) discovers media missing required subtitles and tracks each as a `SubtitleCase`: a grace period first (Bazarr usually fixes things itself), then spaced provider probes that queue `bazarr_download_best` action requests for eligible candidates, and — after repeated empty probes — escalation to the **`SubtitleAdvisorAgent`**, which inspects the case and may queue a media replacement when a high-confidence candidate exists, or parks the case as `needs_review` and notifies admins. Cycle sizes, grace hours per scope, probe spacing, escalation thresholds, and advisor concurrency are all tunable on the same page.
+**Bazarr subtitle cases** close the loop for media whose subtitles Bazarr should be able to fetch. Opt-in under **Subtitles → Admin → Subtitle automation** (`enabled` is off by default). The reconciler (every 5 minutes, plus Bazarr Apprise notifications for instant nudges) discovers media missing required subtitles and tracks each as a `SubtitleCase`: a grace period first (Bazarr usually fixes things itself), then spaced provider probes that queue `bazarr_download_best` action requests for eligible candidates, and — after repeated empty probes — escalation to **`SubtitleAdvisorDecider`**, which inspects the case and queues a media replacement when the automatic-selection rules offer a unique candidate, or parks the case as `needs_review` and notifies admins. Cycle sizes, grace hours per scope, probe spacing, escalation thresholds, and advisor concurrency are all tunable on the same page.
 
 The **Subtitle Center** (`/subtitles`, sidebar "Subtitles") is viewer-visible: Overview, Missing, Library, and History tabs project Bazarr's inventory; the Escalations tab lists cases (members can re-run the advisor; admins can filter by status). Members can request manual subtitle operations (download best/exact, upload, delete, sync, translate, scan) — each becomes a `bazarr_*` action request gated by Action Rules and by Bazarr's advertised capabilities, and carries a file fingerprint so a stale page can't act on a replaced file.
 

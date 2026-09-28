@@ -13,3 +13,6 @@ Use `to_route('name')` to send the user elsewhere and `back()` to return to the 
 
 ## Iterate generator streams yourself under Octane FrankenPHP
 With `$_SERVER['LARAVEL_OCTANE']` set, `response()->stream()` keeps a generator callback as-is and expects the server to iterate it; Octane's FrankenPHP client only calls `send()`, so the body is silently empty in production while `artisan serve` works. Any response built from a generator (including laravel/ai protocol streams) must be wrapped so the callback's returned Generator is iterated with echo + `ob_flush()` + `flush()` (see `ChatStreamProtocol::writeFrames()`). Cover it with a feature test that sets `LARAVEL_OCTANE=1`.
+
+## Chat streams stop at the next step when the client leaves
+`ChatStreamProtocol` keeps `ignore_user_abort(true)` (a disconnect must never kill the request mid-billing) and calls `ClientConnection::watch()`; `StopWhenClientDisconnected` (MediaAgent and structured sub-agents) then throws `ClientDisconnectedException` before the next step once `ClientConnection::disconnected()` (a `flush()` poll, then `connection_aborted()`) reports the client gone. The SDK turns that into AgentFailed, so `RecordFailedAgentRun` bills every completed step. Never stop a stream by breaking out of the frame loop: abandoning the generator skips AgentFailed and loses the usage row.

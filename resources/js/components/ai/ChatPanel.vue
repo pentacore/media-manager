@@ -1,14 +1,6 @@
 <script setup lang="ts">
 import { usePage } from '@inertiajs/vue3';
-import {
-    ArrowRight,
-    Check,
-    Cpu,
-    Paperclip,
-    Pencil,
-    Sparkles,
-    X,
-} from '@lucide/vue';
+import { Sparkles } from '@lucide/vue';
 import {
     computed,
     nextTick,
@@ -19,21 +11,22 @@ import {
 } from 'vue';
 import { toast } from 'vue-sonner';
 import AIChatController from '@/actions/App/Http/Controllers/AI/ChatController';
-import { InitialsAvatar, Pill } from '@/components/mm';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { jsonRequest, useAiChat } from '@/composables/useAiChat';
-import type { AgentStep, ConversationMessage } from '@/composables/useAiChat';
+import type { AgentStep } from '@/composables/useAiChat';
 import { ChatStreamError, useChatStream } from '@/composables/useChatStream';
-import { useMarkdown } from '@/composables/useMarkdown';
 import { useWebSocket } from '@/composables/useWebSocket';
 import type { ChannelLease } from '@/composables/useWebSocket';
 import { cn } from '@/lib/utils';
-import AttachmentChips from './AttachmentChips.vue';
-import ConversationPicker from './ConversationPicker.vue';
-import ReasoningBlock from './ReasoningBlock.vue';
+import ChatComposer from './ChatComposer.vue';
+import ChatHeader from './ChatHeader.vue';
+import ChatMessageBubble from './ChatMessageBubble.vue';
 import StepLivenessBanner from './StepLivenessBanner.vue';
-import ToolCallChip from './ToolCallChip.vue';
+import type {
+    ChatMessage,
+    ChatMode,
+    ComposerSubmission,
+    WorkflowProposal,
+} from './types';
 
 const props = withDefaults(
     defineProps<{
@@ -41,24 +34,6 @@ const props = withDefaults(
     }>(),
     { variant: 'page' },
 );
-
-interface WorkflowProposal {
-    id: string;
-    rationale: string;
-    steps: Array<{ action: string; target: string; reason: string }>;
-}
-
-interface ChatMessage extends ConversationMessage {
-    workflow?: WorkflowProposal | null;
-    workflowResolved?: 'approved' | 'declined' | null;
-    /**
-     * Client-local monotonic key. Backend timestamps have second resolution
-     * (a user message and its reply routinely collide) and Date.now() can
-     * collide within a burst — colliding :key values make Vue's keyed diff
-     * patch the wrong bubbles.
-     */
-    uid: number;
-}
 
 let nextMessageUid = 0;
 
@@ -74,7 +49,6 @@ const {
     setActiveConversation,
     upsertConversation,
     loadConversation,
-    renameConversation,
     refreshRecent,
     startNewConversation,
 } = useAiChat();
@@ -82,14 +56,11 @@ const {
 const page = usePage();
 const userId = computed(() => Number(page.props.auth.user?.id ?? 0));
 
-const { render: renderMarkdown } = useMarkdown();
-
 const { streamChat } = useChatStream();
 
 const { acquirePrivateChannel } = useWebSocket();
 
 const messages = ref<ChatMessage[]>([]);
-const input = ref('');
 const sending = ref(false);
 const error = ref<string | null>(null);
 const loading = ref(false);
@@ -97,84 +68,18 @@ const loading = ref(false);
 const olderCursor = ref<string | null>(null);
 const loadingEarlier = ref(false);
 let lastScrollTop = 0;
-const mode = ref<'advisory' | 'executive'>('executive');
-const renaming = ref(false);
-const renameDraft = ref('');
-
-/** Matches the server's chat attachment rules (count and extensions). */
-const MAX_ATTACHMENTS = 3;
-const ATTACHMENT_EXTENSIONS = [
-    'png',
-    'jpg',
-    'jpeg',
-    'webp',
-    'gif',
-    'txt',
-    'log',
-    'json',
-    'pdf',
-];
-
-interface PendingFile {
-    key: string;
-    file: File;
-    previewUrl?: string;
-}
-
-const pendingFiles = ref<PendingFile[]>([]);
+const mode = ref<ChatMode>('executive');
 const streamingIndex = ref<number | null>(null);
-let nextFileKey = 0;
+
+/** Aborts the in-flight streamed turn; null when no stream is running. */
+let streamAbortController: AbortController | null = null;
+
+/** A streamed reply (not a blocking workflow continuation) is in flight. */
+const canStop = computed(() => sending.value && streamingIndex.value !== null);
 
 const scrollRef = useTemplateRef<HTMLDivElement>('scroll');
-const inputRef = useTemplateRef<HTMLTextAreaElement>('inputArea');
-const renameRef = useTemplateRef<HTMLInputElement>('renameInput');
-const fileInput = useTemplateRef<HTMLInputElement>('fileInput');
-
-/**
- * Queue picked or dropped files for the next turn, keeping at most three and
- * only the types the server accepts. Images get an object-URL preview.
- */
-function addFiles(list: FileList | null): void {
-    if (!list) {
-        return;
-    }
-
-    for (const file of Array.from(list)) {
-        if (pendingFiles.value.length >= MAX_ATTACHMENTS) {
-            break;
-        }
-
-        const extension = file.name.split('.').pop()?.toLowerCase() ?? '';
-
-        if (!ATTACHMENT_EXTENSIONS.includes(extension)) {
-            continue;
-        }
-
-        pendingFiles.value.push({
-            key: `file-${nextFileKey++}`,
-            file,
-            previewUrl: file.type.startsWith('image/')
-                ? URL.createObjectURL(file)
-                : undefined,
-        });
-    }
-}
-
-function removeFile(key: string): void {
-    const pending = pendingFiles.value.find((p) => p.key === key);
-
-    if (pending?.previewUrl) {
-        URL.revokeObjectURL(pending.previewUrl);
-    }
-
-    pendingFiles.value = pendingFiles.value.filter((p) => p.key !== key);
-}
-
-function onFileInputChange(event: Event): void {
-    const target = event.target as HTMLInputElement;
-    addFiles(target.files);
-    target.value = '';
-}
+const composerRef =
+    useTemplateRef<InstanceType<typeof ChatComposer>>('composer');
 
 const activeTitle = computed<string>(() => {
     const id = activeConversationId.value;
@@ -234,6 +139,7 @@ watch(
 onUnmounted(() => {
     activeChannelLease?.release();
     activeChannelLease = null;
+    streamAbortController?.abort();
 });
 
 async function scrollToBottom(): Promise<void> {
@@ -242,75 +148,6 @@ async function scrollToBottom(): Promise<void> {
         top: scrollRef.value.scrollHeight,
         behavior: 'smooth',
     });
-}
-
-async function sendMessage(continuationPayload?: {
-    workflow_id: string;
-    workflow_action: 'approved' | 'declined';
-    syntheticUserText: string;
-}): Promise<void> {
-    let bodyMessage: string;
-    let extraBody: Record<string, unknown> = {};
-    let files: File[] = [];
-
-    if (continuationPayload) {
-        bodyMessage = continuationPayload.syntheticUserText;
-        extraBody = {
-            workflow_id: continuationPayload.workflow_id,
-            workflow_action: continuationPayload.workflow_action,
-        };
-    } else {
-        const text = input.value.trim();
-
-        if (!text || sending.value) {
-            return;
-        }
-
-        bodyMessage = text;
-        // The object URLs stay alive so the sent bubble keeps its previews.
-        messages.value.push({
-            role: 'user',
-            text,
-            ts: Date.now(),
-            uid: messageUid(),
-            attachments: pendingFiles.value.map((p) => ({
-                id: 0,
-                name: p.file.name,
-                mime: p.file.type,
-                url: p.previewUrl ?? '',
-            })),
-        });
-        files = pendingFiles.value.map((p) => p.file);
-        pendingFiles.value = [];
-        input.value = '';
-    }
-
-    sending.value = true;
-    error.value = null;
-    setPendingStep(null);
-
-    await scrollToBottom();
-
-    try {
-        if (continuationPayload) {
-            await sendBlockingTurn(bodyMessage, extraBody);
-        } else {
-            await sendStreamingTurn(bodyMessage, files);
-        }
-    } catch (e) {
-        error.value = e instanceof Error ? e.message : 'Unknown error';
-
-        const last = messages.value[messages.value.length - 1];
-
-        if (last?.role === 'assistant' && !last.text) {
-            last.failed = true;
-        }
-    } finally {
-        sending.value = false;
-        streamingIndex.value = null;
-        setPendingStep(null);
-        await scrollToBottom();
-    }
 }
 
 /**
@@ -414,11 +251,14 @@ async function sendStreamingTurn(
 
     const knownConversationId = activeConversationId.value;
 
+    streamAbortController = new AbortController();
+
     const result = await streamChat({
         message: bodyMessage,
         conversationId: knownConversationId,
         mode: mode.value,
         attachments: files,
+        signal: streamAbortController.signal,
         onText: (accumulated) => {
             assistantMessage.text = accumulated;
         },
@@ -439,15 +279,34 @@ async function sendStreamingTurn(
                 occurredAt: new Date().toISOString(),
             });
         },
-    }).catch((e: unknown) => {
-        // A failed turn the server stored still belongs to a conversation
-        // the user can continue — adopt it so a retry doesn't start over.
-        if (e instanceof ChatStreamError && e.conversationId) {
-            adoptConversation(e.conversationId, knownConversationId);
+    })
+        .catch((e: unknown) => {
+            // A failed turn the server stored still belongs to a conversation
+            // the user can continue — adopt it so a retry doesn't start over.
+            if (e instanceof ChatStreamError && e.conversationId) {
+                adoptConversation(e.conversationId, knownConversationId);
+            }
+
+            throw e;
+        })
+        .finally(() => {
+            streamAbortController = null;
+        });
+
+    if (result.stopped) {
+        assistantMessage.stopped = true;
+
+        // A stopped brand-new chat has a row only if a step completed, so
+        // adopting the minted id could 404 the next turn; refresh the picker
+        // instead and let the user open it from there.
+        if (knownConversationId) {
+            rememberConversation(knownConversationId);
+        } else {
+            void refreshRecent(true);
         }
 
-        throw e;
-    });
+        return;
+    }
 
     // RUN_STARTED/RUN_FINISHED carry the conversation id as `threadId`: for an
     // existing conversation it echoes what we sent, for a brand-new one it is
@@ -514,38 +373,8 @@ function declineWorkflow(message: ChatMessage): void {
     );
 }
 
-async function resolveWorkflow(
-    message: ChatMessage,
-    action: 'approved' | 'declined',
-    syntheticUserText: string,
-): Promise<void> {
-    if (!message.workflow || message.workflowResolved) {
-        return;
-    }
-
-    // Optimistically hide the buttons so a double-click can't submit twice,
-    // but restore them if the continuation request fails — the backend
-    // workflow is still `proposed`, and without the buttons the proposal
-    // would be permanently stranded showing a false "Approved."/"Declined."
-    message.workflowResolved = action;
-
-    await sendMessage({
-        workflow_id: message.workflow.id,
-        workflow_action: action,
-        syntheticUserText,
-    });
-
-    if (error.value !== null) {
-        message.workflowResolved = null;
-    }
-}
-
-function newConversation(): void {
-    startNewConversation();
-    messages.value = [];
-    olderCursor.value = null;
-    error.value = null;
-    inputRef.value?.focus();
+function stopStreaming(): void {
+    streamAbortController?.abort();
 }
 
 async function pickConversation(id: string): Promise<void> {
@@ -660,55 +489,97 @@ function onThreadScroll(): void {
     }
 }
 
-function startRename(): void {
-    if (!activeConversationId.value) {
-        return;
-    }
+/**
+ * Run one turn: flag it in flight, send it, and surface a failure on the
+ * empty assistant bubble it left behind.
+ */
+async function runTurn(send: () => Promise<void>): Promise<void> {
+    sending.value = true;
+    error.value = null;
+    setPendingStep(null);
 
-    renameDraft.value = activeTitle.value;
-    renaming.value = true;
-    nextTick(() => renameRef.value?.focus());
-}
-
-async function commitRename(): Promise<void> {
-    const id = activeConversationId.value;
-    const next = renameDraft.value.trim();
-
-    if (!id || next === '') {
-        renaming.value = false;
-
-        return;
-    }
+    await scrollToBottom();
 
     try {
-        const updated = await renameConversation(id, next);
-        toast.success(`Renamed to "${updated.title}"`);
+        await send();
     } catch (e) {
-        toast.error(e instanceof Error ? e.message : 'Rename failed.');
+        error.value = e instanceof Error ? e.message : 'Unknown error';
+
+        const last = messages.value[messages.value.length - 1];
+
+        if (last?.role === 'assistant' && !last.text) {
+            last.failed = true;
+        }
     } finally {
-        renaming.value = false;
+        sending.value = false;
+        streamingIndex.value = null;
+        setPendingStep(null);
+        await scrollToBottom();
     }
 }
 
-function cancelRename(): void {
-    renaming.value = false;
+async function sendUserMessage(submission: ComposerSubmission): Promise<void> {
+    if (sending.value) {
+        return;
+    }
+
+    // The object URLs stay alive so the sent bubble keeps its previews.
+    messages.value.push({
+        role: 'user',
+        text: submission.text,
+        ts: Date.now(),
+        uid: messageUid(),
+        attachments: submission.pendingFiles.map((p) => ({
+            id: 0,
+            name: p.file.name,
+            mime: p.file.type,
+            url: p.previewUrl ?? '',
+        })),
+    });
+
+    await runTurn(() =>
+        sendStreamingTurn(
+            submission.text,
+            submission.pendingFiles.map((p) => p.file),
+        ),
+    );
 }
 
-function onKey(event: KeyboardEvent): void {
-    if (event.key === 'Enter' && !event.shiftKey) {
-        event.preventDefault();
-        void sendMessage();
+async function resolveWorkflow(
+    message: ChatMessage,
+    action: 'approved' | 'declined',
+    syntheticUserText: string,
+): Promise<void> {
+    if (!message.workflow || message.workflowResolved) {
+        return;
+    }
+
+    // Optimistically hide the buttons so a double-click can't submit twice,
+    // but restore them if the continuation request fails — the backend
+    // workflow is still `proposed`, and without the buttons the proposal
+    // would be permanently stranded showing a false "Approved."/"Declined."
+    message.workflowResolved = action;
+
+    const workflowId = message.workflow.id;
+
+    await runTurn(() =>
+        sendBlockingTurn(syntheticUserText, {
+            workflow_id: workflowId,
+            workflow_action: action,
+        }),
+    );
+
+    if (error.value !== null) {
+        message.workflowResolved = null;
     }
 }
 
-function onRenameKey(event: KeyboardEvent): void {
-    if (event.key === 'Enter') {
-        event.preventDefault();
-        void commitRename();
-    } else if (event.key === 'Escape') {
-        event.preventDefault();
-        cancelRename();
-    }
+function newConversation(): void {
+    startNewConversation();
+    messages.value = [];
+    olderCursor.value = null;
+    error.value = null;
+    composerRef.value?.focus();
 }
 </script>
 
@@ -721,89 +592,13 @@ function onRenameKey(event: KeyboardEvent): void {
             )
         "
     >
-        <!-- Header -->
-        <div
-            :class="
-                cn(
-                    'flex items-center justify-between gap-3 border-b border-border',
-                    isSheet ? 'px-4 py-3' : 'px-6 py-3.5',
-                )
-            "
-        >
-            <div class="flex items-center gap-2.5">
-                <Sparkles class="size-4 text-accent" />
-                <span
-                    v-if="!renaming"
-                    :title="activeTitle"
-                    class="max-w-[360px] truncate font-semibold"
-                >
-                    {{ activeTitle }}
-                </span>
-                <Input
-                    v-else
-                    ref="renameInput"
-                    v-model="renameDraft"
-                    class="h-7 w-44 text-sm"
-                    @keydown="onRenameKey"
-                />
-                <Button
-                    v-if="renaming"
-                    variant="ghost"
-                    size="sm"
-                    class="size-7 p-0"
-                    @click="commitRename"
-                >
-                    <Check class="size-3.5" />
-                </Button>
-                <Button
-                    v-if="renaming"
-                    variant="ghost"
-                    size="sm"
-                    class="size-7 p-0"
-                    @click="cancelRename"
-                >
-                    <X class="size-3.5" />
-                </Button>
-                <Button
-                    v-else-if="activeConversationId"
-                    variant="ghost"
-                    size="sm"
-                    class="size-7 p-0 text-muted-foreground hover:text-foreground"
-                    title="Rename conversation"
-                    @click="startRename"
-                >
-                    <Pencil class="size-3.5" />
-                </Button>
-            </div>
-            <div class="flex items-center gap-1.5">
-                <ConversationPicker
-                    @select="pickConversation"
-                    @new="newConversation"
-                    @rename="startRename"
-                />
-                <div
-                    v-if="!isSheet"
-                    class="ml-2 flex items-center gap-0.5 rounded-md border border-border bg-bg-elev p-0.5"
-                >
-                    <button
-                        v-for="m in ['advisory', 'executive'] as const"
-                        :key="m"
-                        type="button"
-                        :class="
-                            cn(
-                                'inline-flex h-6 items-center rounded px-2 text-xs font-medium transition-colors',
-                                mode === m
-                                    ? 'bg-accent text-accent-foreground'
-                                    : 'text-muted-foreground hover:bg-bg-hover hover:text-foreground',
-                            )
-                        "
-                        @click="mode = m"
-                    >
-                        {{ m }}
-                    </button>
-                </div>
-            </div>
-        </div>
+        <ChatHeader
+            v-model:mode="mode"
+            :title="activeTitle"
+            :is-sheet="isSheet"
+            @select="pickConversation"
+            @new="newConversation"
+        />
 
         <!-- Thread -->
         <div
@@ -851,145 +646,16 @@ function onRenameKey(event: KeyboardEvent): void {
                 </p>
             </div>
 
-            <div
-                v-for="m in messages"
+            <ChatMessageBubble
+                v-for="(m, index) in messages"
                 :key="m.uid"
-                :class="
-                    cn(
-                        'flex items-start gap-3',
-                        isSheet ? 'max-w-full' : 'max-w-[720px]',
-                    )
-                "
-            >
-                <InitialsAvatar
-                    v-if="m.role === 'user'"
-                    name="you"
-                    :size="26"
-                />
-                <span
-                    v-else
-                    class="inline-flex size-[26px] items-center justify-center rounded-full border border-accent/28 bg-accent/18 text-accent"
-                >
-                    <Sparkles class="size-3.5" />
-                </span>
-
-                <div class="min-w-0 flex-1">
-                    <div class="mb-1 text-[11.5px] text-muted-foreground">
-                        {{ m.role === 'user' ? 'You' : 'MediaAgent' }}
-                    </div>
-                    <div
-                        v-if="m.workflow"
-                        class="mb-2 rounded-lg border border-border bg-bg-elev p-2.5"
-                    >
-                        <div class="mb-1.5 flex items-center justify-between">
-                            <span class="flex items-center gap-1.5">
-                                <Cpu class="size-3.5 text-fg-subtle" />
-                                <span class="text-[12px] font-medium">
-                                    Proposed workflow
-                                </span>
-                                <Pill
-                                    :variant="
-                                        m.workflowResolved === 'approved'
-                                            ? 'ok'
-                                            : m.workflowResolved === 'declined'
-                                              ? 'danger'
-                                              : 'warn'
-                                    "
-                                    class="text-[10px]"
-                                >
-                                    {{ m.workflowResolved ?? 'awaiting' }}
-                                </Pill>
-                            </span>
-                        </div>
-                        <p class="mb-2 text-[12.5px] text-muted-foreground">
-                            {{ m.workflow.rationale }}
-                        </p>
-                        <ol
-                            class="mb-3 list-inside list-decimal space-y-1 text-[11.5px] text-muted-foreground"
-                        >
-                            <li v-for="(step, i) in m.workflow.steps" :key="i">
-                                <span
-                                    class="font-mono-tabular text-foreground"
-                                    >{{ step.action }}</span
-                                >
-                                on
-                                <span class="font-medium">{{
-                                    step.target
-                                }}</span>
-                                — {{ step.reason }}
-                            </li>
-                        </ol>
-                        <div v-if="!m.workflowResolved" class="flex gap-2">
-                            <Button
-                                size="sm"
-                                class="h-7 text-xs"
-                                :disabled="sending"
-                                @click="approveWorkflow(m)"
-                            >
-                                Approve
-                            </Button>
-                            <Button
-                                size="sm"
-                                variant="outline"
-                                class="h-7 text-xs"
-                                :disabled="sending"
-                                @click="declineWorkflow(m)"
-                            >
-                                Decline
-                            </Button>
-                        </div>
-                        <p v-else class="text-[11.5px] text-muted-foreground">
-                            {{
-                                m.workflowResolved === 'approved'
-                                    ? 'Approved.'
-                                    : 'Declined.'
-                            }}
-                        </p>
-                    </div>
-                    <AttachmentChips
-                        v-if="m.attachments?.length"
-                        :items="
-                            m.attachments.map((a, i) => ({
-                                key: `${m.uid}-${i}`,
-                                name: a.name,
-                                mime: a.mime,
-                                url: a.url || undefined,
-                            }))
-                        "
-                        class="mb-1.5"
-                    />
-                    <ReasoningBlock
-                        v-if="m.reasoning"
-                        :reasoning="m.reasoning"
-                        :streaming="
-                            sending && streamingIndex === messages.indexOf(m)
-                        "
-                    />
-                    <div
-                        v-if="m.toolCalls?.length"
-                        class="mb-2 flex flex-wrap gap-1.5"
-                        data-tool-calls
-                    >
-                        <ToolCallChip
-                            v-for="call in m.toolCalls"
-                            :key="call.id"
-                            :call="call"
-                        />
-                    </div>
-                    <p
-                        v-if="m.failed && !m.text"
-                        class="text-[13px] text-destructive"
-                        data-failed-turn
-                    >
-                        This reply failed.
-                    </p>
-                    <!-- v-html is fed by useMarkdown which sanitizes via DOMPurify. -->
-                    <div
-                        class="mm-markdown text-[14px] leading-relaxed"
-                        v-html="renderMarkdown(m.text)"
-                    />
-                </div>
-            </div>
+                :message="m"
+                :is-sheet="isSheet"
+                :streaming="sending && streamingIndex === index"
+                :busy="sending"
+                @approve="approveWorkflow(m)"
+                @decline="declineWorkflow(m)"
+            />
 
             <div
                 v-if="sending"
@@ -1000,106 +666,15 @@ function onRenameKey(event: KeyboardEvent): void {
             <StepLivenessBanner v-if="sending" :step="pendingStep" />
         </div>
 
-        <!-- Composer -->
-        <div
-            :class="
-                cn('border-t border-border bg-bg-elev', isSheet ? 'p-3' : 'p-5')
-            "
-        >
-            <div
-                v-if="error"
-                class="mb-2 rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive"
-            >
-                {{ error }}
-            </div>
-            <AttachmentChips
-                :items="
-                    pendingFiles.map((p) => ({
-                        key: p.key,
-                        name: p.file.name,
-                        mime: p.file.type,
-                        previewUrl: p.previewUrl,
-                    }))
-                "
-                removable
-                class="mb-2"
-                @remove="removeFile"
-            />
-            <div
-                class="flex items-end gap-2.5 rounded-xl border border-border bg-card p-2.5"
-                @dragover.prevent
-                @drop.prevent="addFiles($event.dataTransfer?.files ?? null)"
-            >
-                <input
-                    ref="fileInput"
-                    type="file"
-                    multiple
-                    class="hidden"
-                    accept=".png,.jpg,.jpeg,.webp,.gif,.txt,.log,.json,.pdf"
-                    data-attachment-input
-                    @change="onFileInputChange"
-                />
-                <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    class="size-7 p-0 text-muted-foreground"
-                    title="Attach files"
-                    data-attach-button
-                    :disabled="
-                        sending || pendingFiles.length >= MAX_ATTACHMENTS
-                    "
-                    @click="fileInput?.click()"
-                >
-                    <Paperclip class="size-3.5" />
-                </Button>
-                <textarea
-                    ref="inputArea"
-                    v-model="input"
-                    :placeholder="
-                        mode === 'executive'
-                            ? 'Ask MediaAgent · destructive calls require approval…'
-                            : 'Ask MediaAgent · advisory mode (read-only)…'
-                    "
-                    rows="1"
-                    class="max-h-[140px] min-h-6 flex-1 resize-none bg-transparent text-[14px] outline-none placeholder:text-fg-subtle"
-                    @keydown="onKey"
-                />
-                <Button
-                    type="button"
-                    size="sm"
-                    class="h-7 gap-1.5 text-xs"
-                    :disabled="sending || !input.trim()"
-                    @click="sendMessage()"
-                >
-                    <ArrowRight class="size-3.5" />Send
-                </Button>
-            </div>
-            <div
-                class="mt-1.5 flex items-center gap-3 text-[11.5px] text-muted-foreground"
-            >
-                <span class="flex items-center gap-1">
-                    <kbd
-                        class="font-mono-tabular rounded border border-border bg-card px-1 text-[10px]"
-                        >↵</kbd
-                    >
-                    send
-                </span>
-                <span class="flex items-center gap-1">
-                    <kbd
-                        class="font-mono-tabular rounded border border-border bg-card px-1 text-[10px]"
-                        >⇧+↵</kbd
-                    >
-                    newline
-                </span>
-                <span v-if="!isSheet" class="ml-auto">
-                    {{
-                        mode === 'executive'
-                            ? 'Destructive tool calls queue an ActionRequest.'
-                            : 'Destructive calls are short-circuited.'
-                    }}
-                </span>
-            </div>
-        </div>
+        <ChatComposer
+            ref="composer"
+            :mode="mode"
+            :is-sheet="isSheet"
+            :sending="sending"
+            :can-stop="canStop"
+            :error="error"
+            @send="sendUserMessage"
+            @stop="stopStreaming"
+        />
     </div>
 </template>

@@ -12,6 +12,7 @@ use App\Services\Actions\ActionDescription;
 use App\Services\Actions\ActionOrchestrator;
 use App\Services\Actions\UndescribableAction;
 use App\Settings\AiSettings;
+use App\Support\UpstreamErrorText;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Validation\ValidationException;
@@ -55,7 +56,9 @@ abstract class BaseTool implements Tool
             return $this->safeEncode([
                 'error' => 'tool_failed',
                 'code' => $this->errorCodeFor($throwable),
-                'message' => 'The tool failed. Tell the user what you were trying to do and suggest they try again.',
+                'message' => $this->exposesFailureDetail()
+                    ? UpstreamErrorText::sanitize($throwable->getMessage())
+                    : 'The tool failed. Tell the user what you were trying to do and suggest they try again.',
             ]);
         }
 
@@ -180,6 +183,19 @@ abstract class BaseTool implements Tool
     protected function actionRequestQueued(ActionRequest $actionRequest, array $candidate): void
     {
         //
+    }
+
+    /**
+     * Whether a caught exception's own message reaches the tool_failed
+     * envelope's `message`, instead of the generic retry hint. False by
+     * default: most tools are LLM-facing, and their internal validation text
+     * isn't written for the model. Override to true only for a tool with no
+     * agent consumer, whose caller needs the specific reason (e.g. to show an
+     * admin an audit summary).
+     */
+    protected function exposesFailureDetail(): bool
+    {
+        return false;
     }
 
     /**

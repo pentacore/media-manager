@@ -17,8 +17,9 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
 use Throwable;
 
 /**
- * AG-UI for the chat panel, with four app behaviours on top: keep draining
- * after a browser disconnect (usage is only recorded once the stream ends),
+ * AG-UI for the chat panel, with four app behaviours on top: keep the
+ * request alive after a browser disconnect so usage is recorded, while the
+ * agent stops at its next step (ClientConnection + StopWhenClientDisconnected),
  * write the frames under Octane, keep them inside a capturing output buffer,
  * and explain failures instead of the SDK's masked "An error occurred."
  * (naming the stored conversation of a failed turn).
@@ -31,6 +32,10 @@ final class ChatStreamProtocol extends AgentUserInteractionProtocol
     public function response(StreamableAgentResponse $response): Response
     {
         ignore_user_abort(true);
+
+        // Keep draining after a disconnect so usage is recorded, but let
+        // StopWhenClientDisconnected end the run at its next step.
+        resolve(ClientConnection::class)->watch();
 
         $streamedResponse = parent::response($response);
 

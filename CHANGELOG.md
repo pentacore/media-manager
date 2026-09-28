@@ -1,3 +1,19 @@
+# [1.25.0](https://github.com/pentacore/media-manager/compare/v1.24.0...v1.25.0) (2026-09-28)
+
+
+### Bug Fixes
+
+* **bazarr:** narrow the decider's inspection catch and surface tool rejection reasons ([a574796](https://github.com/pentacore/media-manager/commit/a57479691d7b0ef41e26f36770a12824f436f318))
+* **chat:** poll the client with a flush at each step boundary before stopping ([f05bdd8](https://github.com/pentacore/media-manager/commit/f05bdd8948f48fad941241d14045113778722977))
+* **chat:** stop a disconnected stream at its next step while still billing it ([b100790](https://github.com/pentacore/media-manager/commit/b10079009aba43815fc16c0c364977b6eaaab43d))
+* **decision-agent:** record a failed decision when the worker stops a run ([aea0c1d](https://github.com/pentacore/media-manager/commit/aea0c1d0fa79c7e38097db769f38018eb0ef0972))
+* **types:** declare the Advisor projection's exceptions and type the feed phase's providers ([9a78c64](https://github.com/pentacore/media-manager/commit/9a78c64719c2f6afd56c97a11730b79863f34d48))
+
+
+### Features
+
+* **chat:** add a stop button that aborts the streaming reply ([5bbdd7a](https://github.com/pentacore/media-manager/commit/5bbdd7aac62b469e1669bc54b5065d55b03e7442))
+
 # [1.24.0](https://github.com/pentacore/media-manager/compare/v1.23.0...v1.24.0) (2026-09-28)
 
 

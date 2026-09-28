@@ -4,10 +4,14 @@ declare(strict_types=1);
 
 use App\Ai\Agents\DecisionAgent;
 use App\Ai\Agents\MediaAgent;
+use App\Ai\Agents\MediaFileInspectorAgent;
 use App\Ai\Agents\PriceFetcherAgent;
-use App\Ai\Agents\SubtitleAdvisorAgent;
+use App\Ai\Agents\StuckDownloadInvestigatorAgent;
 use App\Ai\Middleware\AnswerOnFinalStep;
+use App\Ai\Middleware\ClientDisconnectedException;
 use App\Ai\Middleware\EnforceBudgetEachStep;
+use App\Ai\Middleware\StopWhenClientDisconnected;
+use App\Http\Streaming\ClientConnection;
 use App\Models\AiModelPrice;
 use App\Services\AiBudget\AiBudgetExceededException;
 use App\Settings\AiSettings;
@@ -65,15 +69,88 @@ test('the first step is not re-checked', function (): void {
     expect((new EnforceBudgetEachStep)->handle(stepMiddlewarePendingStep(0, false), fn (): string => 'ok'))->toBe('ok');
 });
 
-test('every tool-using agent runs both step middleware', function (string $agentClass): void {
+test('every tool-using agent runs the step middleware its runs need', function (string $agentClass, array $expected): void {
     $agent = new $agentClass;
 
     expect($agent)->toBeInstanceOf(HasMiddleware::class)
         ->and(array_map(static fn (object $middleware): string => $middleware::class, $agent->middleware()))
-        ->toBe([AnswerOnFinalStep::class, EnforceBudgetEachStep::class]);
+        ->toBe($expected);
 })->with([
-    'media' => MediaAgent::class,
-    'decision' => DecisionAgent::class,
-    'subtitle advisor' => SubtitleAdvisorAgent::class,
-    'price fetcher' => PriceFetcherAgent::class,
+    'media' => [MediaAgent::class, [AnswerOnFinalStep::class, EnforceBudgetEachStep::class, StopWhenClientDisconnected::class]],
+    'stuck download investigator' => [StuckDownloadInvestigatorAgent::class, [AnswerOnFinalStep::class, EnforceBudgetEachStep::class, StopWhenClientDisconnected::class]],
+    'media file inspector' => [MediaFileInspectorAgent::class, [AnswerOnFinalStep::class, EnforceBudgetEachStep::class, StopWhenClientDisconnected::class]],
+    'decision' => [DecisionAgent::class, [AnswerOnFinalStep::class, EnforceBudgetEachStep::class]],
+    'price fetcher' => [PriceFetcherAgent::class, [AnswerOnFinalStep::class, EnforceBudgetEachStep::class]],
 ]);
+
+/**
+ * A client connection whose browser has gone.
+ */
+function stepMiddlewareGoneClient(bool $watched): ClientConnection
+{
+    $clientConnection = new class extends ClientConnection
+    {
+        #[Override]
+        protected function pollConnection(): void {}
+
+        #[Override]
+        protected function connectionAborted(): bool
+        {
+            return true;
+        }
+    };
+
+    if ($watched) {
+        $clientConnection->watch();
+    }
+
+    app()->instance(ClientConnection::class, $clientConnection);
+
+    return $clientConnection;
+}
+
+test('the connection is polled before it is read, and only while watched', function (): void {
+    $clientConnection = new class extends ClientConnection
+    {
+        public int $polls = 0;
+
+        #[Override]
+        protected function pollConnection(): void
+        {
+            $this->polls++;
+        }
+
+        #[Override]
+        protected function connectionAborted(): bool
+        {
+            return $this->polls > 0;
+        }
+    };
+
+    expect($clientConnection->disconnected())->toBeFalse()
+        ->and($clientConnection->polls)->toBe(0);
+
+    $clientConnection->watch();
+
+    expect($clientConnection->disconnected())->toBeTrue()
+        ->and($clientConnection->polls)->toBe(1);
+});
+
+test('a later step stops once the watched chat client disconnected', function (): void {
+    stepMiddlewareGoneClient(watched: true);
+
+    expect(fn (): mixed => (new StopWhenClientDisconnected)->handle(stepMiddlewarePendingStep(2, false), fn (): string => 'ok'))
+        ->toThrow(ClientDisconnectedException::class);
+});
+
+test('the first step always runs', function (): void {
+    stepMiddlewareGoneClient(watched: true);
+
+    expect((new StopWhenClientDisconnected)->handle(stepMiddlewarePendingStep(0, false), fn (): string => 'ok'))->toBe('ok');
+});
+
+test('an unwatched connection never stops a run', function (): void {
+    stepMiddlewareGoneClient(watched: false);
+
+    expect((new StopWhenClientDisconnected)->handle(stepMiddlewarePendingStep(2, false), fn (): string => 'ok'))->toBe('ok');
+});

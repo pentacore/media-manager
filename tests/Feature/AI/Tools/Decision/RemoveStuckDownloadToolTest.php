@@ -3,7 +3,7 @@
 declare(strict_types=1);
 
 use App\Ai\Decision\DecisionRunContext;
-use App\Ai\Decision\RemoveStuckDownloadTool;
+use App\Ai\Tools\Decision\RemoveStuckDownloadTool;
 use App\Enums\ActionRequestStatus;
 use App\Jobs\ExecuteActionRequest;
 use App\Models\ActionRequest;
@@ -115,7 +115,8 @@ test('requires a reason', function (): void {
     ])), true);
 
     expect($result['queued'])->toBeFalse();
-    expect($result['reason'])->toBe('missing_reason');
+    expect($result['reason'])->toBe('invalid_arguments')
+        ->and($result['errors']['reason'][0])->toBe('A short reason is required so the human approver understands why.');
 });
 
 test('rejects an invalid service', function (): void {
@@ -124,7 +125,19 @@ test('rejects an invalid service', function (): void {
     ])), true);
 
     expect($result['queued'])->toBeFalse();
-    expect($result['reason'])->toBe('invalid_service');
+    expect($result['reason'])->toBe('invalid_arguments')
+        ->and($result['errors']['service'][0])->toBe('service must be "sonarr" or "radarr".');
+});
+
+test('accepts the service name in any case', function (): void {
+    ActionTypeConfig::factory()->create(['type' => 'remove_stuck_download', 'requires_approval' => true, 'is_enabled' => true]);
+
+    $result = json_decode((new RemoveStuckDownloadTool)->handle(new Request([
+        'service' => 'SONARR', 'download_id' => 'dl-1', 'reason' => 'Not an upgrade',
+    ])), true);
+
+    expect($result['queued'])->toBeTrue()
+        ->and(ActionRequest::firstWhere('type', 'remove_stuck_download')->payload['service'])->toBe('sonarr');
 });
 
 test('describes the removal from the arr queue record with the decision agent as the reason', function (): void {

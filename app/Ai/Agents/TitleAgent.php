@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Ai\Agents;
 
+use App\Ai\Concerns\UsesFailoverChain;
 use App\Settings\AiSettings;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
 use Illuminate\JsonSchema\Types\Type;
@@ -16,6 +17,7 @@ use Laravel\Ai\Promptable;
 class TitleAgent implements Agent, HasStructuredOutput
 {
     use Promptable;
+    use UsesFailoverChain;
 
     public function model(): string
     {
