@@ -379,6 +379,24 @@ METRICS_TOKEN=          # empty = deny all
 METRICS_ALLOWED_IPS=
 ```
 
+Operational gauges for alerting:
+
+| Gauge | Meaning |
+|---|---|
+| `mediamanager_failed_jobs{queue}` | failed jobs per queue (pruned after 30 days) |
+| `mediamanager_job_queue_size{queue,state}` | pending / delayed / reserved jobs on `actions`, `webhooks`, `default`, `ai` |
+| `mediamanager_heartbeat_age_seconds{component}` | seconds since `scheduler` / `queue:<lane>` last reported; absent until the first heartbeat |
+| `mediamanager_webhook_oldest_pending_age_seconds` | age of the oldest webhook not yet processed (0 when none) |
+
+```yaml
+- alert: MediaManagerWorkerStalled
+  expr: mediamanager_heartbeat_age_seconds > 600 or absent(mediamanager_heartbeat_age_seconds{component="scheduler"})
+  for: 5m
+- alert: MediaManagerWebhookBacklog
+  expr: mediamanager_webhook_oldest_pending_age_seconds > 900
+  for: 5m
+```
+
 ## Local testing
 
 ### Simulate a webhook

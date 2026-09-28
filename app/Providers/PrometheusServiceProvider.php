@@ -6,12 +6,19 @@ namespace App\Providers;
 
 use App\Enums\ActionRequestStatus;
 use App\Enums\HealthStatus;
+use App\Enums\QueueLane;
 use App\Enums\TimeWindow;
+use App\Enums\WebhookHandlingStatus;
 use App\Models\ActionRequest;
 use App\Models\ServiceConnection;
 use App\Models\StatRollup;
+use App\Models\WebhookEvent;
 use App\Services\Statistics\StatisticsRepository;
+use App\Support\OpsHeartbeat;
 use Carbon\CarbonImmutable;
+use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\ServiceProvider;
 use Override;
 use Spatie\Prometheus\Facades\Prometheus;
@@ -32,6 +39,9 @@ class PrometheusServiceProvider extends ServiceProvider
         $this->registerServiceGauges();
         $this->registerActivityGauges();
         $this->registerLatestSampleGauges();
+        $this->registerQueueGauges();
+        $this->registerHeartbeatGauges();
+        $this->registerWebhookLagGauge();
     }
 
     /**
@@ -146,5 +156,85 @@ class PrometheusServiceProvider extends ServiceProvider
     private function repository(): StatisticsRepository
     {
         return $this->app->make(StatisticsRepository::class);
+    }
+
+    /**
+     * Failed jobs and per-lane backlog on the default queue connection. Every
+     * lane is always exported (0 when empty) so alerts have a series to read.
+     */
+    private function registerQueueGauges(): void
+    {
+        Prometheus::addGauge('mediamanager_failed_jobs')
+            ->helpText('Failed queue jobs not yet retried or pruned, by queue')
+            ->label('queue')
+            ->value(function (): array {
+                $counts = DB::table((string) config('queue.failed.table', 'failed_jobs'))
+                    ->select('queue', DB::raw('count(*) as aggregate'))
+                    ->groupBy('queue')
+                    ->pluck('aggregate', 'queue')
+                    ->map(fn (mixed $count): int => (int) $count)
+                    ->all();
+
+                return collect([...array_fill_keys(QueueLane::values(), 0), ...$counts])
+                    ->map(fn (int $count, string $queue): array => [(float) $count, [$queue]])
+                    ->values()
+                    ->all();
+            });
+
+        Prometheus::addGauge('mediamanager_job_queue_size')
+            ->helpText('Jobs on each queue lane of the default queue connection, by state')
+            ->label('queue')
+            ->label('state')
+            ->value(function (): array {
+                $queue = Queue::connection();
+
+                return collect(QueueLane::cases())
+                    ->flatMap(fn (QueueLane $queueLane): array => [
+                        [(float) $queue->pendingSize($queueLane->value), [$queueLane->value, 'pending']],
+                        [(float) $queue->delayedSize($queueLane->value), [$queueLane->value, 'delayed']],
+                        [(float) $queue->reservedSize($queueLane->value), [$queueLane->value, 'reserved']],
+                    ])
+                    ->values()
+                    ->all();
+            });
+    }
+
+    /**
+     * Seconds since the scheduler and each queue lane last reported. A
+     * component that never reported has no series (alert with absent()).
+     */
+    private function registerHeartbeatGauges(): void
+    {
+        Prometheus::addGauge('mediamanager_heartbeat_age_seconds')
+            ->helpText('Seconds since the scheduler or a queue lane last recorded a heartbeat')
+            ->label('component')
+            ->value(fn (): array => collect(OpsHeartbeat::components())
+                ->map(fn (string $component): array => [OpsHeartbeat::ageInSeconds($component), $component])
+                ->reject(fn (array $sample): bool => $sample[0] === null)
+                ->map(fn (array $sample): array => [(float) $sample[0], [$sample[1]]])
+                ->values()
+                ->all());
+    }
+
+    /**
+     * Age of the oldest webhook not yet handled — rises when the webhooks
+     * lane stalls even if its worker is alive.
+     */
+    private function registerWebhookLagGauge(): void
+    {
+        Prometheus::addGauge('mediamanager_webhook_oldest_pending_age_seconds')
+            ->helpText('Age in seconds of the oldest webhook event still waiting to be processed (0 when none)')
+            ->value(function (): float {
+                $oldest = WebhookEvent::query()
+                    ->whereNull('processed_at')
+                    ->where(fn (Builder $builder): Builder => $builder
+                        ->whereNull('handling_status')
+                        ->orWhere('handling_status', WebhookHandlingStatus::Processing))
+                    ->min('created_at');
+
+                return $oldest === null
+                    ? 0.0
+                    : (float) max(0, now()->getTimestamp() - CarbonImmutable::parse($oldest)->getTimestamp());
+            });
     }
 }

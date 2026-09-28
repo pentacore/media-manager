@@ -3,9 +3,17 @@
 declare(strict_types=1);
 
 use App\Enums\HealthStatus;
+use App\Enums\QueueLane;
+use App\Enums\WebhookHandlingStatus;
+use App\Jobs\RecordQueueHeartbeat;
 use App\Models\ServiceConnection;
 use App\Models\StatRollup;
+use App\Models\WebhookEvent;
+use App\Support\OpsHeartbeat;
 use Carbon\CarbonImmutable;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Queue;
+use Illuminate\Support\Str;
 
 beforeEach(function (): void {
     config()->set('mediamanager.metrics.token', 'test-token');
@@ -99,4 +107,52 @@ it('drops latest-sample series whose newest bucket is stale', function (): void 
     $this->get('/metrics?token=test-token')
         ->assertOk()
         ->assertDontSee('mediamanager_queue_depth{service="sabnzbd"}', escape: false);
+});
+
+test('it exports failed jobs and backlog for every queue lane', function (): void {
+    Queue::fake();
+    dispatch(new RecordQueueHeartbeat(QueueLane::Ai));
+    DB::table('failed_jobs')->insert([
+        'uuid' => (string) Str::uuid(), 'connection' => 'redis', 'queue' => 'webhooks',
+        'payload' => '{}', 'exception' => 'RuntimeException: boom', 'failed_at' => now(),
+    ]);
+
+    $this->get('/metrics?token=test-token')
+        ->assertOk()
+        ->assertSee('mediamanager_failed_jobs{queue="webhooks"} 1', escape: false)
+        ->assertSee('mediamanager_failed_jobs{queue="ai"} 0', escape: false)
+        ->assertSee('mediamanager_job_queue_size{queue="ai",state="pending"} 1', escape: false)
+        ->assertSee('mediamanager_job_queue_size{queue="actions",state="pending"} 0', escape: false);
+});
+
+test('it exports heartbeat ages and omits components that never reported', function (): void {
+    $this->freezeTime();
+    OpsHeartbeat::record(OpsHeartbeat::SCHEDULER);
+    $this->travel(42)->seconds();
+
+    $this->get('/metrics?token=test-token')
+        ->assertOk()
+        ->assertSee('mediamanager_heartbeat_age_seconds{component="scheduler"} 42', escape: false)
+        ->assertDontSee('mediamanager_heartbeat_age_seconds{component="queue:ai"}', escape: false);
+});
+
+test('it exports the age of the oldest webhook still waiting to be processed', function (): void {
+    $this->freezeTime();
+    $waiting = WebhookEvent::factory()->create();
+    $inFlight = WebhookEvent::factory()->create(['handling_status' => WebhookHandlingStatus::Processing]);
+    $handled = WebhookEvent::factory()->create(['processed_at' => now(), 'handling_status' => WebhookHandlingStatus::Handled]);
+    $failed = WebhookEvent::factory()->create(['handling_status' => WebhookHandlingStatus::Failed]);
+    WebhookEvent::query()->whereKey($waiting->id)->update(['created_at' => now()->subSeconds(120)]);
+    WebhookEvent::query()->whereKey($inFlight->id)->update(['created_at' => now()->subSeconds(300)]);
+    WebhookEvent::query()->whereKey([$handled->id, $failed->id])->update(['created_at' => now()->subHour()]);
+
+    $this->get('/metrics?token=test-token')
+        ->assertOk()
+        ->assertSee('mediamanager_webhook_oldest_pending_age_seconds 300', escape: false);
+});
+
+test('the webhook lag gauge reads zero when nothing is waiting', function (): void {
+    $this->get('/metrics?token=test-token')
+        ->assertOk()
+        ->assertSee('mediamanager_webhook_oldest_pending_age_seconds 0', escape: false);
 });
