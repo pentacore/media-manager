@@ -15,7 +15,7 @@ Route::middleware(['auth', 'verified', 'password.set'])->group(function (): void
         Route::get('watch-history/export', [WatchHistoryController::class, 'export'])->name('watch-history.export');
         Route::get('service-health', [ServiceHealthController::class, 'index'])->name('service-health');
         Route::post('service-health/run-checks', [ServiceHealthController::class, 'runChecks'])
-            ->middleware(['role:member', 'throttle:6,1'])
+            ->middleware(['role:member', 'throttle:health-checks'])
             ->name('service-health.run-checks');
     });
 

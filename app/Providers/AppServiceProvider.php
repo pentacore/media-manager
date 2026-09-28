@@ -67,6 +67,15 @@ class AppServiceProvider extends ServiceProvider
             fn (Request $request): Limit => Limit::perMinute(max(1, (int) config('mediamanager.webhooks.rate_limit_per_minute', 300)))
                 ->by((string) $request->ip()),
         );
+        // Named so it gets its own bucket: an unnamed `throttle:N,1` keys
+        // solely on the user id, shared across every other unnamed throttle
+        // in the app (heartbeat, password update, notification tests, ...),
+        // so a busy tab could exhaust this budget before the user ever ran
+        // a check.
+        RateLimiter::for(
+            'health-checks',
+            fn (Request $request): Limit => Limit::perMinute(6)->by((string) $request->user()?->getAuthIdentifier()),
+        );
         Event::listen(SocialiteWasCalled::class, AuthentikExtendSocialite::class);
 
         // Pipe the four high-signal upstream events through the debounced

@@ -8,9 +8,11 @@ use App\Models\ServiceConnection;
 use App\Models\User;
 use App\Support\ServiceCheckBatch;
 use Illuminate\Bus\PendingBatch;
+use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Bus;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Redis;
 
 beforeEach(function (): void {
     config()->set('inertia.ssr.enabled', false);
@@ -461,6 +463,29 @@ test('health-check triggers are throttled', function (): void {
     }
 
     $this->actingAs($member)->post(route('monitoring.service-health.run-checks'))->assertTooManyRequests();
+});
+
+test('health-check throttling has its own budget, separate from heartbeat and other unnamed throttles', function (): void {
+    Bus::fake();
+    Artisan::shouldReceive('queue')->with('services:warm-caches')->once();
+    config()->set('mediamanager.presence.key', 'presence:users:test-'.getmypid());
+    config()->set('mediamanager.presence.heartbeat_ttl', 90);
+
+    $member = User::factory()->member()->create();
+
+    // Heartbeat is allowed 120/min per user; exhaust well past run-checks'
+    // budget of 6 to prove the two do not share a throttle bucket.
+    foreach (range(1, 20) as $attempt) {
+        $this->actingAs($member)->post(route('heartbeat'))->assertNoContent();
+    }
+
+    foreach (range(1, 6) as $attempt) {
+        $this->actingAs($member)->post(route('monitoring.service-health.run-checks'))->assertRedirect();
+    }
+
+    $this->actingAs($member)->post(route('monitoring.service-health.run-checks'))->assertTooManyRequests();
+
+    Redis::connection()->del(config('mediamanager.presence.key'));
 });
 
 test('the page tells the client whether the user may run checks', function (bool $isMember, bool $expected): void {
