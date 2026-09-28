@@ -69,8 +69,8 @@ class AppServiceProvider extends ServiceProvider
         );
         Event::listen(SocialiteWasCalled::class, AuthentikExtendSocialite::class);
 
-        // Pipe the four high-signal upstream events through the throttled
-        // dashboard-stats listener so the four counters stay current without
+        // Pipe the four high-signal upstream events through the debounced
+        // dashboard-stats job so the four counters stay current without
         // waiting for the every-5-minute cron.
         foreach ([
             WebhookReceived::class,
