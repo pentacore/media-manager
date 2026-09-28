@@ -91,6 +91,9 @@ function stepMiddlewareGoneClient(bool $watched): ClientConnection
     $clientConnection = new class extends ClientConnection
     {
         #[Override]
+        protected function pollConnection(): void {}
+
+        #[Override]
         protected function connectionAborted(): bool
         {
             return true;
@@ -105,6 +108,33 @@ function stepMiddlewareGoneClient(bool $watched): ClientConnection
 
     return $clientConnection;
 }
+
+test('the connection is polled before it is read, and only while watched', function (): void {
+    $clientConnection = new class extends ClientConnection
+    {
+        public int $polls = 0;
+
+        #[Override]
+        protected function pollConnection(): void
+        {
+            $this->polls++;
+        }
+
+        #[Override]
+        protected function connectionAborted(): bool
+        {
+            return $this->polls > 0;
+        }
+    };
+
+    expect($clientConnection->disconnected())->toBeFalse()
+        ->and($clientConnection->polls)->toBe(0);
+
+    $clientConnection->watch();
+
+    expect($clientConnection->disconnected())->toBeTrue()
+        ->and($clientConnection->polls)->toBe(1);
+});
 
 test('a later step stops once the watched chat client disconnected', function (): void {
     stepMiddlewareGoneClient(watched: true);
