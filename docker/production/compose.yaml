@@ -114,6 +114,10 @@ services:
     <<: *app
     environment:
       CONTAINER_ROLE: scheduler
+    # On SIGTERM schedule:work stops starting new runs and waits for in-flight
+    # schedule:run children. 120s covers the minute/5-minute tasks; a longer
+    # nightly run is cut off and its lock is cleared on the next boot.
+    stop_grace_period: 120s
 
   reverb:
     <<: *app

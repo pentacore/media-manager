@@ -347,7 +347,7 @@ Approval behaviour is editable at `/actions/rules` (admin only). Rows come from 
 
 ## Scheduled tasks
 
-The scheduler runs as its own container in both the dev and production stacks (`schedule:work`) — no host cron needed. Registered schedules (see `routes/console.php`; all `withoutOverlapping`):
+The scheduler runs as its own container in both the dev and production stacks (`schedule:work`) — no host cron needed. Registered schedules (see `routes/console.php`; all `withoutOverlapping` with an explicit lock expiry, and the scheduler container clears stale locks when it starts):
 
 | Cadence | Task |
 |---|---|

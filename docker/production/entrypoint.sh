@@ -104,6 +104,11 @@ case "$role" in
 
     scheduler)
         warm_caches
+        # Overlap locks live in Valkey (persisted). A scheduler killed mid-task
+        # (OOM, SIGKILL after the stop grace period) would otherwise keep its
+        # locks until they expire and silently skip those tasks. This is the
+        # only scheduler, so every lock present at boot is stale.
+        php artisan schedule:clear-cache --no-interaction
         # schedule:work is a long-running supervisor that ticks the scheduler every minute
         exec php artisan schedule:work --no-interaction
         ;;

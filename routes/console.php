@@ -32,37 +32,42 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schedule;
 use Laravel\Telescope\Telescope;
 
+// Every overlap lock carries an explicit expiry (minutes) sized to the task:
+// the 1440-minute default would let one crashed run silently skip a
+// sub-daily task for a day. The scheduler container also clears stale locks
+// at boot (docker/production/entrypoint.sh). ScheduleOverlapExpiryTest
+// enforces 5 <= expiry <= max(10, cadence - 5).
 Schedule::command(CheckServiceHealth::class)
     ->everyFiveMinutes()
-    ->withoutOverlapping();
+    ->withoutOverlapping(10);
 
 Schedule::command(CheckServiceVersions::class)
     ->daily()
-    ->withoutOverlapping();
+    ->withoutOverlapping(60);
 
 Schedule::command(CheckAppVersion::class)
     ->daily()
-    ->withoutOverlapping();
+    ->withoutOverlapping(30);
 
 Schedule::command(BroadcastDashboardStats::class)
     ->everyFiveMinutes()
-    ->withoutOverlapping();
+    ->withoutOverlapping(10);
 
 Schedule::command(PruneAiProposedWorkflows::class)
     ->daily()
-    ->withoutOverlapping();
+    ->withoutOverlapping(60);
 
 Schedule::command(ReconcileMediaReplacementAttempts::class)
     ->hourly()
-    ->withoutOverlapping();
+    ->withoutOverlapping(50);
 
 Schedule::command(ReconcileStuckActionRequests::class)
     ->hourly()
-    ->withoutOverlapping();
+    ->withoutOverlapping(50);
 
 Schedule::command(ReconcileBazarrSubtitles::class)
     ->everyFiveMinutes()
-    ->withoutOverlapping();
+    ->withoutOverlapping(10);
 
 // The weekly run refreshes the whole catalog from the Models.dev feed with
 // verifier fallback; the monthly --verify run re-checks the core providers
@@ -70,59 +75,59 @@ Schedule::command(ReconcileBazarrSubtitles::class)
 // distinct mutex names, so the two never share an overlap lock.
 Schedule::command(RefreshAiPrices::class, ['--scheduled'])
     ->weekly()
-    ->withoutOverlapping();
+    ->withoutOverlapping(120);
 
 Schedule::command(RefreshAiPrices::class, ['--verify', '--scheduled'])
     ->monthly()
-    ->withoutOverlapping();
+    ->withoutOverlapping(120);
 
 Schedule::command(PollSabnzbdHistory::class)
     ->everyFiveMinutes()
-    ->withoutOverlapping();
+    ->withoutOverlapping(10);
 
 Schedule::command(RefreshInterventionCount::class)
     ->everyFiveMinutes()
-    ->withoutOverlapping();
+    ->withoutOverlapping(10);
 
 Schedule::command(RefreshSabnzbdDownloadCounts::class)
     ->everyFiveMinutes()
-    ->withoutOverlapping();
+    ->withoutOverlapping(10);
 
 Schedule::command(WarmServiceCaches::class)
     ->everyMinute()
-    ->withoutOverlapping()
+    ->withoutOverlapping(10)
     ->runInBackground();
 
 Schedule::job(new ReconcileSearchIndex)
     ->dailyAt('03:30')
-    ->withoutOverlapping();
+    ->withoutOverlapping(10);
 
 Schedule::job(new PruneSubtitleUploads)
     ->hourly()
-    ->withoutOverlapping();
+    ->withoutOverlapping(10);
 
 Schedule::job(new SyncAnimeMappingJob)
     ->weekly()
-    ->withoutOverlapping();
+    ->withoutOverlapping(10);
 
 Schedule::command(AggregateStatistics::class)
     ->hourlyAt(5)
-    ->withoutOverlapping();
+    ->withoutOverlapping(50);
 
 Schedule::command(PruneStatistics::class)
     ->dailyAt('04:30')
-    ->withoutOverlapping();
+    ->withoutOverlapping(180);
 
 // The two invocations carry distinct arguments, so Laravel derives distinct
 // scheduling mutex names for them — the five-minute gauge sweep and the daily
 // library/indexer snapshot never share a lock.
 Schedule::command(CollectServiceGauges::class)
     ->everyFiveMinutes()
-    ->withoutOverlapping();
+    ->withoutOverlapping(10);
 
 Schedule::command(CollectServiceGauges::class, ['--library'])
     ->dailyAt('04:00')
-    ->withoutOverlapping();
+    ->withoutOverlapping(60);
 
 // Retention for the fastest-growing tables (config: mediamanager.retention;
 // 0 disables a table). Without this, webhook payloads, activity rows, AI
@@ -139,7 +144,7 @@ Schedule::command('model:prune', [
     ],
 ])
     ->dailyAt('03:00')
-    ->withoutOverlapping();
+    ->withoutOverlapping(180);
 
 // laravel's DatabaseNotification isn't ours to make Prunable; trim directly.
 Schedule::call(function (): void {
@@ -153,7 +158,7 @@ Schedule::call(function (): void {
 })
     ->name('prune-notifications')
     ->daily()
-    ->withoutOverlapping();
+    ->withoutOverlapping(60);
 
 // Telescope is a require-dev package: the class exists on dev machines (where
 // telescope_entries otherwise grows unboundedly) and is absent from the
@@ -161,5 +166,5 @@ Schedule::call(function (): void {
 if (class_exists(Telescope::class)) {
     Schedule::command('telescope:prune', ['--hours' => 48])
         ->daily()
-        ->withoutOverlapping();
+        ->withoutOverlapping(60);
 }

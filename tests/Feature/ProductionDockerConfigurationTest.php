@@ -229,3 +229,23 @@ test('the octane smoke job boots the queue-ai role', function (): void {
     expect(mb_substr_count($ci, 'for role in queue queue-ai scheduler ssr reverb; do'))->toBe(2)
         ->and($ci)->toContain('docker rm -f octane queue queue-ai scheduler ssr reverb');
 });
+
+test('the scheduler clears stale overlap locks before it starts working', function (): void {
+    $scheduler = dockerConfigRoleBlock((string) file_get_contents(base_path('docker/production/entrypoint.sh')), 'scheduler');
+
+    $clear = mb_strpos($scheduler, 'php artisan schedule:clear-cache --no-interaction');
+    $work = mb_strpos($scheduler, 'exec php artisan schedule:work --no-interaction');
+
+    expect($clear)->not->toBeFalse()
+        ->and($work)->not->toBeFalse()
+        ->and($work)->toBeGreaterThan($clear);
+});
+
+test('the scheduler container gets time to finish in-flight tasks on shutdown', function (): void {
+    $scheduler = dockerConfigComposeService((string) file_get_contents(base_path('docker/production/compose.yaml')), 'scheduler');
+
+    preg_match('/stop_grace_period:\s*(\d+)s/', $scheduler, $gracePeriod);
+
+    expect($gracePeriod)->not->toBeEmpty()
+        ->and((int) $gracePeriod[1])->toBeGreaterThanOrEqual(60);
+});
