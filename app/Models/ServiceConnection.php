@@ -169,9 +169,10 @@ class ServiceConnection extends Model
      * `service_connection_id` the orchestrator stamped into the payload from
      * the originating webhook. Media IDs overlap across same-type instances,
      * so re-resolving "the active one" could act on a different server than
-     * the one that emitted the event. A pinned-but-deleted connection aborts;
-     * a pinned connection of a different type (cross-service action, e.g. a
-     * sonarr event triggering an emby scan) falls back to resolveActive().
+     * the one that emitted the event. A pinned-but-deleted or
+     * pinned-but-deactivated connection aborts; a pinned connection of a
+     * different type (cross-service action, e.g. a sonarr event triggering
+     * an emby scan) falls back to resolveActive().
      *
      * @param  array<string, mixed>  $payload
      *
@@ -192,6 +193,21 @@ class ServiceConnection extends Model
             }
 
             if ($connection->type === $serviceType) {
+                // An admin deactivated this instance after the action was
+                // queued (or approved): never act on it, and never silently
+                // redirect the action to another instance either.
+                if (! $connection->is_active) {
+                    // Note: deliberately not chaining ->setModel() here — it
+                    // overwrites the constructor message with a generic
+                    // "No query results for model [...]" string, and nothing
+                    // in this codebase reads getModel()/getIds() on this
+                    // exception.
+                    throw new ModelNotFoundException(sprintf(
+                        'Service connection %d pinned to this action was deactivated; aborting instead of acting on a server an admin disabled.',
+                        $connectionId,
+                    ));
+                }
+
                 return $connection;
             }
         }

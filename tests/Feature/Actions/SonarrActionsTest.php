@@ -5,6 +5,7 @@ declare(strict_types=1);
 use App\Models\ActionRequest;
 use App\Models\ServiceConnection;
 use App\Services\Sonarr\SonarrActions;
+use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Support\Facades\Http;
 
 beforeEach(function (): void {
@@ -137,4 +138,17 @@ test('set_series_quality_profile executor mutates qualityProfileId via getSeries
     Http::assertSent(fn ($r): bool => $r->method() === 'PUT'
         && str_contains((string) $r->url(), '/api/v3/series/42')
         && $r->data()['qualityProfileId'] === 7);
+});
+
+test('an approved delete against a deactivated pinned connection sends nothing', function (): void {
+    $pinned = ServiceConnection::factory()->sonarr()->inactive()->create(['url' => 'http://sonarr-4k.local:8989']);
+    Http::fake();
+
+    $request = ActionRequest::factory()->create([
+        'type' => 'delete_series',
+        'payload' => ['sonarr_series_id' => 42, 'delete_files' => true, 'service_connection_id' => $pinned->id],
+    ]);
+
+    expect(fn (): array => (new SonarrActions)->execute($request))->toThrow(ModelNotFoundException::class);
+    Http::assertNothingSent();
 });
