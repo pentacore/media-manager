@@ -139,3 +139,69 @@ test('an unreachable Seerr leaves a viewer without an id and with an error', fun
     expect(resolve(SeerrUserResolver::class)->requestingContext($this->connection, User::factory()->create()))
         ->toBe(['canChooseUser' => false, 'userId' => null, 'users' => [], 'error' => 'Seerr is unreachable right now.']);
 });
+
+test('a partial match found before a later page fails still becomes the picker default, without being cached', function (): void {
+    $member = User::factory()->member()->create(['email' => 'b@example.com']);
+    $firstPage = collect()->range(1, 100)->map(fn (int $i): array => [
+        'id' => $i,
+        'email' => $i === 50 ? 'b@example.com' : sprintf('user%d@example.com', $i),
+    ])->all();
+
+    // A single stub (see the note above): page 1 always succeeds and
+    // contains the member's match; page 2 fails with a client error (no
+    // retry) until $pageTwoFails is flipped off, so the follow-up resolve()
+    // call below proves the failed walk cached nothing rather than the
+    // partial match.
+    $pageTwoFails = true;
+    Http::fake(['seerr.local:5055/api/v1/user*' => function (Request $request) use ($firstPage, &$pageTwoFails) {
+        parse_str((string) parse_url($request->url(), PHP_URL_QUERY), $query);
+
+        if ((int) ($query['skip'] ?? 0) === 0) {
+            return Http::response(['pageInfo' => ['page' => 1, 'pages' => 2], 'results' => $firstPage]);
+        }
+
+        return $pageTwoFails
+            ? Http::response([], 400)
+            : Http::response(['pageInfo' => ['page' => 2, 'pages' => 2], 'results' => []]);
+    }]);
+
+    $resolver = resolve(SeerrUserResolver::class);
+
+    expect($resolver->pickerOptions($this->connection, $member)['defaultId'])->toBe(50);
+
+    $pageTwoFails = false;
+    expect($resolver->resolve($this->connection, $member))->toBe(50);
+    Http::assertSentCount(4);
+});
+
+test('a "no match" result is cached, so a second resolve() call does not re-fetch', function (): void {
+    $user = User::factory()->create(['email' => 'nobody@example.com']);
+    fakeSeerrUsers([['id' => 4, 'email' => 'other@example.com']]);
+    $resolver = resolve(SeerrUserResolver::class);
+
+    expect($resolver->resolve($this->connection, $user))->toBeNull();
+    expect($resolver->resolve($this->connection, $user))->toBeNull();
+
+    Http::assertSentCount(1);
+});
+
+test('pickerOptions() primes the resolve() cache, so a follow-up resolve() call does not re-fetch', function (): void {
+    $user = User::factory()->create(['email' => 'viewer@example.com']);
+    fakeSeerrUsers([['id' => 4, 'email' => 'viewer@example.com']]);
+    $resolver = resolve(SeerrUserResolver::class);
+
+    $resolver->pickerOptions($this->connection, $user);
+
+    expect($resolver->resolve($this->connection, $user))->toBe(4);
+    Http::assertSentCount(1);
+});
+
+test('an empty MediaManager email never matches a Seerr user with an empty or null email', function (): void {
+    $user = User::factory()->create(['email' => '']);
+    fakeSeerrUsers([
+        ['id' => 4, 'email' => '', 'jellyfinUserId' => null],
+        ['id' => 5, 'email' => null, 'jellyfinUserId' => null],
+    ]);
+
+    expect(resolve(SeerrUserResolver::class)->resolve($this->connection, $user))->toBeNull();
+});

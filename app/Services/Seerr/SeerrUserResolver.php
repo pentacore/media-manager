@@ -52,12 +52,17 @@ final readonly class SeerrUserResolver
     {
         $users = [];
         $defaultId = null;
+        $partialMatch = null;
 
         try {
-            $defaultId = $this->match($serviceConnection, $user, $users);
+            $defaultId = $this->match($serviceConnection, $user, $users, $partialMatch);
             Cache::put($this->cacheKey($serviceConnection, $user), ['id' => $defaultId], self::CACHE_TTL_SECONDS);
         } catch (RequestException|ConnectionException) {
-            // Keep whatever was collected before the failure.
+            // Keep whatever was collected before the failure, including the
+            // best match found on a page fetched before a later page failed
+            // — but never cache it, since the walk didn't complete and "no
+            // match" is not a proven result.
+            $defaultId = $partialMatch;
         }
 
         return ['users' => $users, 'defaultId' => $defaultId ?? ($users[0]['id'] ?? null)];
@@ -91,12 +96,17 @@ final readonly class SeerrUserResolver
      * reference it is filled with every Seerr user (for `pickerOptions()`)
      * and the walk never short-circuits, since the full list is needed;
      * otherwise (`resolve()`'s bare lookup) it stops at the first Emby match.
+     * `$partialMatch`, when passed, always reflects the best match found so
+     * far — including when the walk is cut short by an upstream failure on a
+     * later page — so a caller that only needs "the best we've got" (the
+     * picker default) doesn't lose a match already found on an earlier,
+     * successfully fetched page.
      *
      * @param  list<array{id: int, label: string}>|null  $users
      *
      * @throws RequestException|ConnectionException
      */
-    private function match(ServiceConnection $serviceConnection, User $user, ?array &$users = null): ?int
+    private function match(ServiceConnection $serviceConnection, User $user, ?array &$users = null, ?int &$partialMatch = null): ?int
     {
         $embyIds = $user->embyUserLinks()
             ->pluck('emby_user_id')
@@ -107,31 +117,35 @@ final readonly class SeerrUserResolver
         $embyMatch = null;
         $emailMatch = null;
 
-        foreach ($this->seerrUsers(new SeerrClient($serviceConnection)) as $seerrUser) {
-            $id = (int) ($seerrUser['id'] ?? 0);
+        try {
+            foreach ($this->seerrUsers(new SeerrClient($serviceConnection)) as $seerrUser) {
+                $id = (int) ($seerrUser['id'] ?? 0);
 
-            if ($users !== null) {
-                $users[] = [
-                    'id' => $id,
-                    'label' => (string) ($seerrUser['displayName'] ?? $seerrUser['email'] ?? sprintf('User #%d', $id)),
-                ];
-            }
+                if ($users !== null) {
+                    $users[] = [
+                        'id' => $id,
+                        'label' => (string) ($seerrUser['displayName'] ?? $seerrUser['email'] ?? sprintf('User #%d', $id)),
+                    ];
+                }
 
-            if ($embyMatch === null) {
-                $mediaServerId = $this->normalizeId((string) ($seerrUser['jellyfinUserId'] ?? ''));
+                if ($embyMatch === null) {
+                    $mediaServerId = $this->normalizeId((string) ($seerrUser['jellyfinUserId'] ?? ''));
 
-                if ($mediaServerId !== '' && in_array($mediaServerId, $embyIds, true)) {
-                    $embyMatch = $id;
+                    if ($mediaServerId !== '' && in_array($mediaServerId, $embyIds, true)) {
+                        $embyMatch = $id;
 
-                    if ($users === null) {
-                        return $embyMatch;
+                        if ($users === null) {
+                            return $embyMatch;
+                        }
                     }
                 }
-            }
 
-            if ($emailMatch === null && $email !== '' && Str::lower(trim((string) ($seerrUser['email'] ?? ''))) === $email) {
-                $emailMatch = $id;
+                if ($emailMatch === null && $email !== '' && Str::lower(trim((string) ($seerrUser['email'] ?? ''))) === $email) {
+                    $emailMatch = $id;
+                }
             }
+        } finally {
+            $partialMatch = $embyMatch ?? $emailMatch;
         }
 
         return $embyMatch ?? $emailMatch;
