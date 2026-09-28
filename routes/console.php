@@ -41,7 +41,9 @@ use Laravel\Telescope\Telescope;
 
 // Liveness for the scheduler and every queue lane: the container
 // healthchecks (ops:check-heartbeat) and /metrics read these ages.
-Schedule::command(RecordOpsHeartbeat::class)->everyMinute();
+Schedule::command(RecordOpsHeartbeat::class)
+    ->everyMinute()
+    ->withoutOverlapping(5);
 
 // Every overlap lock carries an explicit expiry (minutes) sized to the task:
 // the 1440-minute default would let one crashed run silently skip a
