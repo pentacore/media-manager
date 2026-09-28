@@ -14,7 +14,9 @@ use Symfony\Component\HttpFoundation\Response;
  * framing is restricted (frame-ancestors, mirrored by X-Frame-Options for
  * older browsers). A header a controller already set wins — chat attachment
  * downloads send their own sandboxing CSP. HSTS is opt-in and only sent on
- * requests the app sees as HTTPS (which needs TRUSTED_PROXIES behind a proxy).
+ * requests the app sees as HTTPS: behind a TLS-terminating proxy with
+ * OCTANE_HTTPS=true, Octane's EnforceRequestScheme marks every request
+ * secure directly, so isSecure() is true without needing TRUSTED_PROXIES.
  */
 final class SetSecurityHeaders
 {
