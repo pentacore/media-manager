@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers\Settings;
 
+use App\Actions\LastAdminException;
+use App\Actions\ModifyUserAccess;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Settings\ProfileDeleteRequest;
 use App\Http\Requests\Settings\ProfileUpdateRequest;
@@ -57,13 +59,19 @@ class ProfileController extends Controller
     /**
      * Delete the user's profile.
      */
-    public function destroy(ProfileDeleteRequest $profileDeleteRequest): RedirectResponse
+    public function destroy(ProfileDeleteRequest $profileDeleteRequest, ModifyUserAccess $modifyUserAccess): RedirectResponse
     {
         $user = $profileDeleteRequest->user();
 
-        Auth::logout();
-
-        $user->delete();
+        try {
+            // Log out inside the guarded delete: after the row is gone,
+            // logout's remember-token save would re-insert the user.
+            $modifyUserAccess->delete($user, beforeDelete: static fn () => Auth::logout());
+        } catch (LastAdminException) {
+            return back()->withErrors([
+                'password' => __('You are the only admin. Make another user an admin before deleting your account.'),
+            ]);
+        }
 
         $profileDeleteRequest->session()->invalidate();
         $profileDeleteRequest->session()->regenerateToken();
