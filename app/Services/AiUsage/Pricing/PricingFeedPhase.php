@@ -37,6 +37,8 @@ class PricingFeedPhase
      * Returns the models.dev status (`ok`, `disabled`, or a transport
      * category); on a global source failure, queues fallback (hybrid only)
      * and records the failure message into `$errorMessage`.
+     *
+     * @param  list<string>  $requested
      */
     public function run(
         PriceRefreshLedger $priceRefreshLedger,
