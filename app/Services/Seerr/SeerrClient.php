@@ -70,6 +70,7 @@ class SeerrClient implements Warmable
     }
 
     /**
+     * @param  array<string, int>|array<string, string>  $params
      * @return array<string, mixed>
      *
      * @throws RequestException|ConnectionException

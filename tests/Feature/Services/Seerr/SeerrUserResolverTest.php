@@ -79,15 +79,15 @@ test('it walks every page of Seerr users', function (): void {
 test('the match, including no match, is cached for ten minutes', function (): void {
     $user = User::factory()->create(['email' => 'viewer@example.com']);
     fakeSeerrUsers([['id' => 4, 'email' => 'viewer@example.com']]);
-    $resolver = resolve(SeerrUserResolver::class);
+    $seerrUserResolver = resolve(SeerrUserResolver::class);
 
-    $resolver->resolve($this->connection, $user);
+    $seerrUserResolver->resolve($this->connection, $user);
     $this->travel(9)->minutes();
-    $resolver->resolve($this->connection, $user);
+    $seerrUserResolver->resolve($this->connection, $user);
     Http::assertSentCount(1);
 
     $this->travel(2)->minutes();
-    $resolver->resolve($this->connection, $user);
+    $seerrUserResolver->resolve($this->connection, $user);
     Http::assertSentCount(2);
 });
 
@@ -98,18 +98,16 @@ test('an unreachable Seerr throws and caches nothing', function (): void {
     // separate Http::fake() calls for the same pattern would leave the first
     // (always-throwing) stub in place and it would fire again on the second
     // request regardless of the later stub.
-    $failing = true;
-    Http::fake(['seerr.local:5055/api/v1/user*' => function () use (&$failing, $user) {
-        if ($failing) {
-            throw new ConnectionException('down');
-        }
+    $seerr = (object) ['failing' => true];
+    Http::fake(['seerr.local:5055/api/v1/user*' => function () use ($seerr, $user) {
+        throw_if($seerr->failing, ConnectionException::class, 'down');
 
         return Http::response(['pageInfo' => ['pages' => 1, 'page' => 1, 'results' => 1], 'results' => [['id' => 4, 'email' => $user->email]]]);
     }]);
 
     expect(fn (): ?int => resolve(SeerrUserResolver::class)->resolve($this->connection, $user))->toThrow(ConnectionException::class);
 
-    $failing = false;
+    $seerr->failing = false;
     expect(resolve(SeerrUserResolver::class)->resolve($this->connection, $user))->toBe(4);
 });
 
@@ -166,14 +164,14 @@ test('a partial match found before a later page fails still becomes the picker d
             : Http::response(['pageInfo' => ['page' => 2, 'pages' => 2], 'results' => []]);
     }]);
 
-    $resolver = resolve(SeerrUserResolver::class);
-    $options = $resolver->pickerOptions($this->connection, $member);
+    $seerrUserResolver = resolve(SeerrUserResolver::class);
+    $options = $seerrUserResolver->pickerOptions($this->connection, $member);
 
     expect($options['defaultId'])->toBe(50);
     expect($options['partial'])->toBeTrue();
 
     $pageTwoFails = false;
-    expect($resolver->resolve($this->connection, $member))->toBe(50);
+    expect($seerrUserResolver->resolve($this->connection, $member))->toBe(50);
     Http::assertSentCount(4);
 });
 
@@ -194,10 +192,10 @@ test('pickerOptions() never falls back to an arbitrary first Seerr user when the
 test('a "no match" result is cached, so a second resolve() call does not re-fetch', function (): void {
     $user = User::factory()->create(['email' => 'nobody@example.com']);
     fakeSeerrUsers([['id' => 4, 'email' => 'other@example.com']]);
-    $resolver = resolve(SeerrUserResolver::class);
+    $seerrUserResolver = resolve(SeerrUserResolver::class);
 
-    expect($resolver->resolve($this->connection, $user))->toBeNull();
-    expect($resolver->resolve($this->connection, $user))->toBeNull();
+    expect($seerrUserResolver->resolve($this->connection, $user))->toBeNull();
+    expect($seerrUserResolver->resolve($this->connection, $user))->toBeNull();
 
     Http::assertSentCount(1);
 });
@@ -205,11 +203,11 @@ test('a "no match" result is cached, so a second resolve() call does not re-fetc
 test('pickerOptions() primes the resolve() cache, so a follow-up resolve() call does not re-fetch', function (): void {
     $user = User::factory()->create(['email' => 'viewer@example.com']);
     fakeSeerrUsers([['id' => 4, 'email' => 'viewer@example.com']]);
-    $resolver = resolve(SeerrUserResolver::class);
+    $seerrUserResolver = resolve(SeerrUserResolver::class);
 
-    $resolver->pickerOptions($this->connection, $user);
+    $seerrUserResolver->pickerOptions($this->connection, $user);
 
-    expect($resolver->resolve($this->connection, $user))->toBe(4);
+    expect($seerrUserResolver->resolve($this->connection, $user))->toBe(4);
     Http::assertSentCount(1);
 });
 

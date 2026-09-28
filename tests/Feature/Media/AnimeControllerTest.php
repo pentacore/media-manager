@@ -468,7 +468,7 @@ test('request submits a movie createRequest without a seasons field', function (
         && ! array_key_exists('seasons', $request->data()));
 });
 
-test('request defaults to the chooser\'s own Seerr match when no userId is posted', function (): void {
+test("request defaults to the chooser's own Seerr match when no userId is posted", function (): void {
     $member = User::factory()->member()->create(['email' => 'seerr-member@example.com']);
 
     fakeAnimeSeerr(['seerr.local:5055/api/v1/request' => Http::response(['id' => 1])]);
