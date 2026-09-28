@@ -116,7 +116,7 @@ test('Health warning notifies admins; HealthRestored does not', function (): voi
     Notification::assertNothingSent();
 });
 
-test('Unknown eventType is skipped (no ActivityLog) but still marked processed', function (): void {
+test('Unknown eventType is skipped (no ActivityLog) and leaves processed_at for the job to set', function (): void {
     $webhookEvent = whisparrEvent($this->connection->id, 'WeirdUnknown', []);
 
     resolve(WhisparrWebhookHandler::class)->handle($webhookEvent);

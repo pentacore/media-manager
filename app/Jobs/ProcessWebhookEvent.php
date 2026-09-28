@@ -74,7 +74,7 @@ class ProcessWebhookEvent implements ShouldQueue
                 'webhook_event_id' => $this->webhookEvent->id,
                 'service_type' => $connection->type->value,
             ]);
-            $this->webhookEvent->update(['handling_status' => WebhookHandlingStatus::NoHandler]);
+            $this->webhookEvent->markProcessed(WebhookHandlingStatus::NoHandler);
             $this->discardIfCaptureDisabled();
 
             return;
@@ -146,7 +146,7 @@ class ProcessWebhookEvent implements ShouldQueue
         $this->webhookEvent->delete();
     }
 
-    private function resolveHandler(ServiceType $serviceType): ?WebhookHandler
+    protected function resolveHandler(ServiceType $serviceType): ?WebhookHandler
     {
         $class = match ($serviceType) {
             ServiceType::Emby => EmbyWebhookHandler::class,

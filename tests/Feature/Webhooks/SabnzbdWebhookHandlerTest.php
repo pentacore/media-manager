@@ -11,7 +11,7 @@ beforeEach(function (): void {
     $this->connection = ServiceConnection::factory()->sabnzbd()->create();
 });
 
-test('complete event writes ActivityLog and marks processed', function (): void {
+test('complete event writes ActivityLog and leaves processed_at for the job to set', function (): void {
     $webhookEvent = WebhookEvent::factory()->create([
         'service_connection_id' => $this->connection->id,
         'event_type' => 'complete',

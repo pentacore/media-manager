@@ -25,7 +25,7 @@ function makeProwlarrWebhookEvent(ServiceConnection $serviceConnection, string $
     ]);
 }
 
-test('Test event writes an ActivityLog row and marks the webhook processed', function (): void {
+test('Test event writes an ActivityLog row and leaves processed_at for the job to set', function (): void {
     $webhookEvent = makeProwlarrWebhookEvent($this->connection, 'Test', ['applicationUrl' => 'http://prowlarr.local']);
 
     $this->handler->handle($webhookEvent);

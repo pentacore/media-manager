@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use App\Enums\ServiceType;
 use App\Enums\WebhookHandlingStatus;
 use App\Events\WebhookEventProcessed;
 use App\Jobs\ProcessWebhookEvent;
@@ -197,4 +198,23 @@ test('a handler failure leaves the event reclaimable and the retry completes it'
     $fresh = $event->fresh();
     expect($fresh->processed_at)->not->toBeNull()
         ->and($fresh->handling_status)->toBe(WebhookHandlingStatus::Handled);
+});
+
+test('a no-handler event is marked processed with NoHandler status, not left unprocessed forever', function (): void {
+    $connection = ServiceConnection::factory()->sonarr()->create();
+    $event = WebhookEvent::factory()->create(['service_connection_id' => $connection->id]);
+
+    $job = new class($event) extends ProcessWebhookEvent
+    {
+        protected function resolveHandler(ServiceType $serviceType): ?WebhookHandler
+        {
+            return null;
+        }
+    };
+
+    $job->handle();
+
+    $fresh = $event->fresh();
+    expect($fresh->processed_at)->not->toBeNull()
+        ->and($fresh->handling_status)->toBe(WebhookHandlingStatus::NoHandler);
 });
