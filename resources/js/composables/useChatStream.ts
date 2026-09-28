@@ -14,12 +14,16 @@ interface StreamChatOptions extends StreamCallbacks {
     conversationId: string | null;
     mode: 'advisory' | 'executive';
     attachments?: File[];
+    /** Aborting it stops reading the stream and closes the request. */
+    signal?: AbortSignal;
 }
 
 export interface StreamChatResult {
     text: string;
     reasoning: string;
     conversationId: string | null;
+    /** True when the caller aborted the stream before it finished. */
+    stopped: boolean;
 }
 
 export interface UseChatStreamReturn {
@@ -48,6 +52,10 @@ function csrfToken(): string {
         document.querySelector<HTMLMetaElement>('meta[name="csrf-token"]')
             ?.content ?? ''
     );
+}
+
+function isAbortError(error: unknown): boolean {
+    return error instanceof DOMException && error.name === 'AbortError';
 }
 
 /**
@@ -129,17 +137,34 @@ export function useChatStream(): UseChatStreamReturn {
         options: StreamChatOptions,
     ): Promise<StreamChatResult> {
         const { body, headers } = requestBody(options);
-        const response = await fetch(AIChatController.stream.url(), {
-            method: 'POST',
-            credentials: 'same-origin',
-            headers: {
-                ...headers,
-                Accept: 'text/event-stream',
-                'X-Requested-With': 'XMLHttpRequest',
-                'X-CSRF-TOKEN': csrfToken(),
-            },
-            body,
-        });
+
+        let response: Response;
+
+        try {
+            response = await fetch(AIChatController.stream.url(), {
+                method: 'POST',
+                credentials: 'same-origin',
+                headers: {
+                    ...headers,
+                    Accept: 'text/event-stream',
+                    'X-Requested-With': 'XMLHttpRequest',
+                    'X-CSRF-TOKEN': csrfToken(),
+                },
+                body,
+                signal: options.signal,
+            });
+        } catch (error) {
+            if (isAbortError(error)) {
+                return {
+                    text: '',
+                    reasoning: '',
+                    conversationId: options.conversationId,
+                    stopped: true,
+                };
+            }
+
+            throw error;
+        }
 
         if (!response.ok || !response.body) {
             const data = await response
@@ -267,22 +292,30 @@ export function useChatStream(): UseChatStreamReturn {
             }
         };
 
-        for (;;) {
-            const { done, value } = await reader.read();
+        try {
+            for (;;) {
+                const { done, value } = await reader.read();
 
-            if (done) {
-                break;
+                if (done) {
+                    break;
+                }
+
+                buffer += decoder.decode(value, { stream: true });
+
+                let boundary: number;
+
+                while ((boundary = buffer.indexOf('\n\n')) !== -1) {
+                    const rawEvent = buffer.slice(0, boundary);
+                    buffer = buffer.slice(boundary + 2);
+                    handleRawEvent(rawEvent);
+                }
+            }
+        } catch (error) {
+            if (isAbortError(error)) {
+                return { text, reasoning, conversationId, stopped: true };
             }
 
-            buffer += decoder.decode(value, { stream: true });
-
-            let boundary: number;
-
-            while ((boundary = buffer.indexOf('\n\n')) !== -1) {
-                const rawEvent = buffer.slice(0, boundary);
-                buffer = buffer.slice(boundary + 2);
-                handleRawEvent(rawEvent);
-            }
+            throw error;
         }
 
         // The closing frame (RUN_FINISHED / RUN_ERROR) can arrive without its
@@ -293,7 +326,7 @@ export function useChatStream(): UseChatStreamReturn {
             handleRawEvent(buffer);
         }
 
-        return { text, reasoning, conversationId };
+        return { text, reasoning, conversationId, stopped: false };
     }
 
     return { streamChat };

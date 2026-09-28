@@ -2,8 +2,9 @@
 
 declare(strict_types=1);
 
-namespace App\Ai\Decision;
+namespace App\Ai\Tools\Decision;
 
+use App\Ai\Decision\DecisionRunContext;
 use App\Enums\ServiceType;
 use App\Models\ServiceConnection;
 use App\Services\Arr\ManualImportResolver;
@@ -12,48 +13,60 @@ use App\Services\Sonarr\SonarrClient;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
 use Illuminate\JsonSchema\Types\Type;
 use Illuminate\Support\Facades\Log;
-use Laravel\Ai\Contracts\Tool;
 use Laravel\Ai\Tools\Request;
 use Stringable;
 use Throwable;
 
 /**
  * Read-only inspection of a stuck Sonarr/Radarr import. Returns each candidate
- * file's mapping status, what it is, and the RAW upstream rejection reasons so
- * the DecisionAgent can reason over them and decide what to do (import via
- * ResolveManualImportTool, drop via RemoveStuckDownloadTool, or leave it).
+ * file's mapping status, what it is, and the RAW upstream rejection reasons.
+ * Two callers use it — the DecisionAgent (acting through ResolveManualImportTool
+ * / RemoveStuckDownloadTool) and the chat StuckDownloadInvestigatorAgent (whose
+ * parent acts through the *ChatTool variants) — so its description names no
+ * acting tool.
  *
  * Intentionally NOT gated by the manual-import capability: looking is always
- * safe and lets the agent write a useful summary even when it can't act.
+ * safe and lets the agent write a useful summary even when it can't act. Also
+ * works without a decision run bound, since the chat sub-agent calls it too.
  */
-class InspectStuckImportTool implements Tool
+class InspectStuckImportTool extends DecisionTool
 {
+    protected const string OUTCOME_KEY = 'ok';
+
     public function description(): Stringable|string
     {
-        return 'Inspect a stuck Sonarr/Radarr import (a "manual interaction required" download). Returns each candidate file, whether it maps to a series/movie, and the upstream rejection reasons verbatim. Call this FIRST for a ManualInteractionRequired event, read the rejections, then decide: import it (ResolveManualImportTool), remove it (RemoveStuckDownloadTool), or leave it for a human.';
+        return 'Inspect a stuck Sonarr/Radarr import (a "manual interaction required" download). Read-only. Returns each candidate file, whether it maps to a series/movie, and the upstream rejection reasons verbatim. Call this first for a stuck download and read the rejections before deciding whether it should be imported, removed, or left for a human.';
     }
 
-    public function handle(Request $request): Stringable|string
+    protected function requiresRunContext(): bool
     {
-        $args = $request->toArray();
-        $service = mb_strtolower((string) ($args['service'] ?? ''));
-        $downloadId = (string) ($args['download_id'] ?? '');
+        return false;
+    }
 
-        $type = match ($service) {
-            'sonarr' => ServiceType::Sonarr,
-            'radarr' => ServiceType::Radarr,
-            default => null,
-        };
-        if ($type === null) {
-            return $this->encode(['ok' => false, 'reason' => 'invalid_service', 'message' => 'service must be "sonarr" or "radarr".']);
-        }
+    protected function countsTowardActionCap(): bool
+    {
+        return false;
+    }
 
-        if ($downloadId === '') {
-            return $this->encode(['ok' => false, 'reason' => 'missing_download_id', 'message' => 'download_id is required (from the event payload).']);
-        }
+    /**
+     * @return array<string, mixed>
+     */
+    protected function execute(Request $request): array
+    {
+        $validated = $request->validate([
+            'service' => ['required', 'string', 'regex:/^(sonarr|radarr)$/Di'],
+            'download_id' => ['required', 'string'],
+        ], [
+            'service.required' => 'service must be "sonarr" or "radarr".',
+            'service.regex' => 'service must be "sonarr" or "radarr".',
+            'download_id.required' => 'download_id is required (from the event payload).',
+        ]);
+        $service = mb_strtolower((string) $validated['service']);
+        $downloadId = (string) $validated['download_id'];
+        $type = $service === 'sonarr' ? ServiceType::Sonarr : ServiceType::Radarr;
 
         try {
-            $context = app()->bound(DecisionRunContext::class) ? resolve(DecisionRunContext::class) : null;
+            $context = $this->runContext();
             $connection = $context instanceof DecisionRunContext
                 ? $context->resolveConnection($type)
                 : ServiceConnection::resolveActive($type);
@@ -69,13 +82,13 @@ class InspectStuckImportTool implements Tool
                 'message' => $throwable->getMessage(),
             ]);
 
-            return $this->encode(['ok' => false, 'reason' => 'lookup_failed', 'message' => 'Could not enumerate import candidates.']);
+            return ['ok' => false, 'reason' => 'lookup_failed', 'message' => 'Could not enumerate import candidates.'];
         }
 
         $manualImportResolver = resolve(ManualImportResolver::class);
         $assessment = $manualImportResolver->assess($candidates, $service, $downloadId);
 
-        return $this->encode([
+        return [
             'ok' => true,
             'service' => $service,
             'download_id' => $downloadId,
@@ -83,7 +96,7 @@ class InspectStuckImportTool implements Tool
             'importable' => $assessment['importable'],
             'fully_mapped' => $assessment['fully_mapped'],
             'files' => $manualImportResolver->describe($candidates, $service),
-        ]);
+        ];
     }
 
     /**
@@ -99,15 +112,5 @@ class InspectStuckImportTool implements Tool
                 ->description('The downloadId from the ManualInteractionRequired event payload.')
                 ->required(),
         ];
-    }
-
-    /**
-     * @param  array<string, mixed>  $payload
-     */
-    private function encode(array $payload): string
-    {
-        $encoded = json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_PARTIAL_OUTPUT_ON_ERROR);
-
-        return $encoded === false ? '{"ok":false,"reason":"encoding_failed"}' : $encoded;
     }
 }

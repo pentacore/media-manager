@@ -191,6 +191,17 @@ final class QueueAutomaticReplacementTool extends BaseTool
         $context->recordQueued($actionRequest->id);
     }
 
+    /**
+     * This tool has no agent consumer — only SubtitleAdvisorDecider, which
+     * needs the specific validation failure (e.g. "The automatic candidate
+     * changed.") to write an accurate audit summary for the Escalations tab.
+     */
+    #[Override]
+    protected function exposesFailureDetail(): bool
+    {
+        return true;
+    }
+
     private function context(): SubtitleAdvisorRunContext
     {
         $context = app()->bound(SubtitleAdvisorRunContext::class)

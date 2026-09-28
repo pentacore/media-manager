@@ -4,44 +4,37 @@ declare(strict_types=1);
 
 namespace App\Ai\Agents;
 
-use App\Ai\Decision\InspectStuckImportTool;
-use App\Ai\Middleware\AnswerOnFinalStep;
-use App\Ai\Middleware\EnforceBudgetEachStep;
+use App\Ai\Concerns\ActsAsStructuredSubAgent;
+use App\Ai\Concerns\UsesFailoverChain;
 use App\Ai\Tools\Arr\GetDownloadHistoryTool;
 use App\Ai\Tools\Arr\GetDownloadQueueTool;
+use App\Ai\Tools\Decision\InspectStuckImportTool;
 use App\Settings\AiSettings;
-use Generator;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
 use Illuminate\JsonSchema\Types\Type;
-use Illuminate\Support\Facades\Date;
-use Illuminate\Support\Str;
-use Laravel\Ai\Approvals\Decisions;
 use Laravel\Ai\Attributes\MaxSteps;
 use Laravel\Ai\Attributes\RepairToolCalls;
 use Laravel\Ai\Contracts\Agent;
-use Laravel\Ai\Contracts\AgentInput;
 use Laravel\Ai\Contracts\CanActAsTool;
 use Laravel\Ai\Contracts\HasMiddleware;
 use Laravel\Ai\Contracts\HasStructuredOutput;
 use Laravel\Ai\Contracts\HasTools;
 use Laravel\Ai\Contracts\Tool;
-use Laravel\Ai\Enums\Lab;
-use Laravel\Ai\Messages\UserMessage;
 use Laravel\Ai\Promptable;
-use Laravel\Ai\Responses\Data\Meta;
-use Laravel\Ai\Responses\StreamableAgentResponse;
-use Laravel\Ai\Streaming\Events\TextDelta;
 
 /**
- * Read-only investigation of a stuck Sonarr/Radarr/Whisparr download, run as
- * a MediaAgent sub-agent. It never imports or removes anything — MediaAgent
+ * Read-only investigation of a stuck Sonarr/Radarr download, run as a
+ * MediaAgent sub-agent. It never imports or removes anything — MediaAgent
  * acts on the structured findings through its own destructive tools.
  */
 #[MaxSteps(8)]
 #[RepairToolCalls]
 final class StuckDownloadInvestigatorAgent implements Agent, CanActAsTool, HasMiddleware, HasStructuredOutput, HasTools
 {
-    use Promptable;
+    use ActsAsStructuredSubAgent, Promptable {
+        ActsAsStructuredSubAgent::stream insteadof Promptable;
+    }
+    use UsesFailoverChain;
 
     public function name(): string
     {
@@ -50,7 +43,7 @@ final class StuckDownloadInvestigatorAgent implements Agent, CanActAsTool, HasMi
 
     public function description(): string
     {
-        return 'Investigates why a Sonarr/Radarr/Whisparr download is stuck and recommends import, remove or manual handling. Read-only. In the task, name the service and the download (download_id if known, otherwise the title).';
+        return 'Investigates why a Sonarr/Radarr download is stuck and recommends import, remove or manual handling. Read-only. In the task, name the service (sonarr or radarr) and the download (download_id if known, otherwise the title).';
     }
 
     public function model(): string
@@ -91,7 +84,7 @@ PROMPT;
     public function schema(JsonSchema $schema): array
     {
         return [
-            'service' => $schema->string()->enum(['sonarr', 'radarr', 'whisparr'])->required(),
+            'service' => $schema->string()->enum(['sonarr', 'radarr'])->required(),
             'download_id' => $schema->string()->description('Exactly as returned by the tools.')->required(),
             'title' => $schema->string()->required(),
             'files' => $schema->array()->items($schema->string())->description('One line per candidate file: "<path> | mapped|unmapped | <rejections>".')->required(),
@@ -100,41 +93,5 @@ PROMPT;
             'search_replacement' => $schema->boolean()->required(),
             'reason' => $schema->string()->description('One or two plain-language sentences for the user.')->required(),
         ];
-    }
-
-    /**
-     * Wrap every generation step: refuse a step once the hard budget is
-     * crossed mid-run, and force a plain answer on the final allowed step.
-     *
-     * @return array<int, object>
-     */
-    public function middleware(): array
-    {
-        return [new AnswerOnFinalStep, new EnforceBudgetEachStep];
-    }
-
-    /**
-     * laravel/ai 1.0 refuses to stream structured output, and a streamed
-     * parent run delegates through AgentTool::stream(). Run the structured
-     * prompt instead and hand its JSON back as the stream's only text, so
-     * the parent receives the findings on the streaming path too.
-     *
-     * @param  array<int, mixed>  $attachments
-     */
-    public function stream(AgentInput|UserMessage|Decisions|string $prompt, array $attachments = [], Lab|array|string|null $provider = null, ?string $model = null, ?int $timeout = null): StreamableAgentResponse
-    {
-        $meta = new Meta;
-
-        $streamableAgentResponse = new StreamableAgentResponse((string) Str::uuid7(), function () use (&$streamableAgentResponse, $meta, $prompt, $attachments, $provider, $model, $timeout): Generator {
-            $agentResponse = $this->prompt($prompt, $attachments, $provider, $model, $timeout);
-
-            $streamableAgentResponse->invocationId = $agentResponse->invocationId;
-            $meta->provider = $agentResponse->meta->provider;
-            $meta->model = $agentResponse->meta->model;
-
-            yield new TextDelta(Str::lower((string) Str::uuid7()), Str::lower((string) Str::uuid7()), $agentResponse->text, Date::now()->getTimestamp());
-        }, $meta);
-
-        return $streamableAgentResponse;
     }
 }

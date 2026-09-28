@@ -9,6 +9,7 @@ use App\Ai\Classification\Classifier;
 use App\Ai\Decision\DecisionRunContext;
 use App\Enums\AgentDecisionStatus;
 use App\Enums\QueueLane;
+use App\Models\ActionRequest;
 use App\Models\AgentDecision;
 use App\Models\WebhookEvent;
 use App\Notifications\DecisionAgentActed;
@@ -96,10 +97,7 @@ class RunDecisionAgent implements ShouldBeUnique, ShouldQueue
         // The source row may already be gone (webhook capture disabled trims it
         // right after processing). Drop the FK reference in that case so neither
         // the AgentDecision nor any proposed ActionRequest violates it.
-        $webhookEventId = $this->webhookEventId !== null
-            && WebhookEvent::query()->whereKey($this->webhookEventId)->exists()
-                ? $this->webhookEventId
-                : null;
+        $webhookEventId = $this->persistedWebhookEventId();
 
         // Dedupe: never decide the same processed event twice.
         if ($webhookEventId !== null
@@ -152,11 +150,7 @@ class RunDecisionAgent implements ShouldBeUnique, ShouldQueue
         app()->instance(DecisionRunContext::class, $decisionRunContext);
 
         try {
-            $decisionAgent = new DecisionAgent;
-            $chain = $aiSettings->providerChainWithModel($decisionAgentSettings->model());
-            $response = $chain === null
-                ? $decisionAgent->prompt($this->buildPrompt())
-                : $decisionAgent->prompt($this->buildPrompt(), provider: $chain);
+            $response = (new DecisionAgent)->prompt($this->buildPrompt());
             $summary = trim($response->text) !== '' ? trim($response->text) : 'No summary produced.';
         } catch (Throwable $throwable) {
             Log::warning('RunDecisionAgent: agent run failed', [
@@ -176,6 +170,66 @@ class RunDecisionAgent implements ShouldBeUnique, ShouldQueue
         $status = $decisionRunContext->count() > 0 ? AgentDecisionStatus::Completed : AgentDecisionStatus::NoAction;
         $this->record($webhookEventId, $status, $summary, $decisionRunContext);
         $this->notify($decisionRunContext, $summary, $decisionAgentSettings);
+    }
+
+    /**
+     * The worker timed out or killed this run ($tries = 1, so both land
+     * here). handle() may already have claimed the subject cooldown, so
+     * without a row the subject goes quiet for SUBJECT_COOLDOWN_SECONDS with
+     * nothing in the decision log. Record a Failed decision with the reason,
+     * linking every action the run queued before it stopped. A run that
+     * recorded its own outcome is left untouched. The cooldown stays claimed:
+     * clearing it would let the next webhook start a run that can time out
+     * again at full cost.
+     */
+    public function failed(?Throwable $throwable): void
+    {
+        $webhookEventId = $this->persistedWebhookEventId();
+
+        $actionRequestIds = $webhookEventId === null
+            ? []
+            : ActionRequest::query()->where('webhook_event_id', $webhookEventId)->orderBy('id')->pluck('id')->all();
+
+        $reason = trim((string) $throwable?->getMessage());
+
+        Log::warning('RunDecisionAgent: worker stopped the run', [
+            'webhook_event_id' => $webhookEventId,
+            'service' => $this->service,
+            'event_type' => $this->eventType,
+            'exception' => $throwable instanceof Throwable ? $throwable::class : null,
+            'message' => $reason,
+        ]);
+
+        $attributes = [
+            'service' => $this->service,
+            'event_type' => $this->eventType,
+            'status' => AgentDecisionStatus::Failed,
+            'summary' => Str::limit('Agent run stopped by the worker: '.($reason !== '' ? $reason : 'no reason given.'), 4000, ''),
+            'actions_count' => count($actionRequestIds),
+            'action_request_ids' => $actionRequestIds,
+        ];
+
+        if ($webhookEventId !== null) {
+            AgentDecision::query()->firstOrCreate(['webhook_event_id' => $webhookEventId], $attributes);
+
+            return;
+        }
+
+        AgentDecision::query()->create($attributes);
+    }
+
+    /**
+     * The triggering event's id while its row still exists. With webhook
+     * capture off the row is trimmed right after processing; the FK is
+     * dropped then so neither the AgentDecision nor a proposed ActionRequest
+     * violates it.
+     */
+    private function persistedWebhookEventId(): ?int
+    {
+        return $this->webhookEventId !== null
+            && WebhookEvent::query()->whereKey($this->webhookEventId)->exists()
+                ? $this->webhookEventId
+                : null;
     }
 
     /**

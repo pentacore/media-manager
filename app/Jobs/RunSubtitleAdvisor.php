@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace App\Jobs;
 
-use App\Ai\Agents\SubtitleAdvisorAgent;
 use App\Ai\Classification\Classifier;
 use App\Ai\SubtitleAdvisor\SubtitleAdvisorRunContext;
 use App\Enums\ActionRequestStatus;
@@ -20,6 +19,7 @@ use App\Notifications\SubtitleCaseNeedsReview;
 use App\Providers\AIServiceProvider;
 use App\Services\AiBudget\AiBudgetExceededException;
 use App\Services\AiBudget\AiBudgetGuard;
+use App\Services\Bazarr\SubtitleAdvisorDecider;
 use App\Services\Bazarr\SubtitleCaseLifecycle;
 use App\Services\Notifications\AdminNotifier;
 use App\Settings\AiSettings;
@@ -82,6 +82,7 @@ final class RunSubtitleAdvisor implements ShouldBeUnique, ShouldQueue
         AiBudgetGuard $aiBudgetGuard,
         AiSettings $aiSettings,
         Classifier $classifier,
+        SubtitleAdvisorDecider $subtitleAdvisorDecider,
     ): void {
         $subtitleCase = SubtitleCase::query()->find($this->subtitleCaseId);
 
@@ -152,15 +153,7 @@ final class RunSubtitleAdvisor implements ShouldBeUnique, ShouldQueue
         app()->instance(SubtitleAdvisorRunContext::class, $subtitleAdvisorRunContext);
 
         try {
-            $subtitleAdvisorAgent = new SubtitleAdvisorAgent;
-            $providerChain = $aiSettings->providerChainWithModel($subtitleAdvisorAgent->model());
-            $prompt = $this->prompt($subtitleCase);
-            $response = $providerChain === null
-                ? $subtitleAdvisorAgent->prompt($prompt)
-                : $subtitleAdvisorAgent->prompt($prompt, provider: $providerChain);
-            $summary = trim($response->text) !== ''
-                ? trim($response->text)
-                : 'The Advisor produced no audit summary.';
+            $summary = $subtitleAdvisorDecider->decide($subtitleCase);
         } catch (Throwable $throwable) {
             Log::warning('Subtitle Advisor run failed.', [
                 'subtitle_case_id' => $subtitleCase->id,
@@ -245,14 +238,6 @@ final class RunSubtitleAdvisor implements ShouldBeUnique, ShouldQueue
             'The Media Advisor worker stopped before completing the investigation.',
             'worker_failure',
             $throwable,
-        );
-    }
-
-    private function prompt(SubtitleCase $subtitleCase): string
-    {
-        return sprintf(
-            'Investigate subtitle case %d. Bazarr exhausted its configured retries without satisfying the required subtitles. Inspect this exact case once, queue only its unique automatic candidate if one exists, then provide a concise audit summary.',
-            $subtitleCase->id,
         );
     }
 

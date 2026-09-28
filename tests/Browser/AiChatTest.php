@@ -444,3 +444,105 @@ function aiChatInsertMessage(User $user, string $conversationId, int $position, 
         'updated_at' => now()->addSeconds($position),
     ]);
 }
+
+/**
+ * Hold every chat stream request open until it is aborted, recording the
+ * abort, and keep the real fetch at window.__realFetch for later turns.
+ */
+function aiChatHoldStreamScript(): string
+{
+    return <<<'JS'
+        () => {
+            window.__chatStreamAborted = false;
+            window.__realFetch = window.fetch.bind(window);
+            window.fetch = (input, init = {}) => {
+                const url = typeof input === 'string' ? input : input.url;
+
+                if (! url.includes('/ai/chat/stream')) {
+                    return window.__realFetch(input, init);
+                }
+
+                return new Promise((resolve, reject) => {
+                    init.signal?.addEventListener('abort', () => {
+                        window.__chatStreamAborted = true;
+                        reject(new DOMException('The user aborted a request.', 'AbortError'));
+                    });
+                });
+            };
+        }
+        JS;
+}
+
+test('the stop button aborts a streaming reply and frees the composer', function (): void {
+    Bus::fake([GenerateConversationTitle::class]);
+    MediaAgent::fake(['This reply never arrives.']);
+    $this->actingAs(User::factory()->admin()->create());
+
+    $pendingAwaitablePage = visit(route('ai.chat', absolute: false));
+    $pendingAwaitablePage->assertNoSmoke();
+    $pendingAwaitablePage->script(aiChatHoldStreamScript());
+
+    $pendingAwaitablePage->type('textarea[placeholder^="Ask"]', 'Find me something to watch')
+        ->click('Send')
+        ->assertVisible('[data-chat-stop]')
+        ->click('[data-chat-stop]')
+        ->assertSeeIn('[data-chat-thread] [data-stopped-turn]', 'Stopped.')
+        ->assertMissing('[data-chat-stop]')
+        ->assertMissing('[data-chat-error]')
+        ->assertScript('window.__chatStreamAborted', true)
+        ->assertNoJavaScriptErrors();
+
+    MediaAgent::assertNeverPrompted();
+});
+
+test('a message after stopping a new chat is answered normally', function (): void {
+    Bus::fake([GenerateConversationTitle::class]);
+    MediaAgent::fake(['Here is a fresh answer.']);
+    $this->actingAs(User::factory()->admin()->create());
+
+    $pendingAwaitablePage = visit(route('ai.chat', absolute: false));
+    $pendingAwaitablePage->assertNoSmoke();
+    $pendingAwaitablePage->script(aiChatHoldStreamScript());
+
+    $pendingAwaitablePage->type('textarea[placeholder^="Ask"]', 'First question')
+        ->click('Send')
+        ->click('[data-chat-stop]')
+        ->assertVisible('[data-stopped-turn]');
+
+    $pendingAwaitablePage->script('() => { window.fetch = window.__realFetch; }');
+
+    $pendingAwaitablePage->type('textarea[placeholder^="Ask"]', 'Second question')
+        ->click('Send')
+        ->assertSeeIn('[data-chat-thread]', 'Here is a fresh answer.')
+        ->assertMissing('[data-chat-error]')
+        ->assertNoJavaScriptErrors();
+});
+
+test('the active conversation can be renamed from the chat header', function (): void {
+    Bus::fake([GenerateConversationTitle::class]);
+    MediaAgent::fake(['Here you go.']);
+    $this->actingAs(User::factory()->admin()->create());
+
+    visit(route('ai.chat', absolute: false))
+        ->assertNoSmoke()
+        ->type('textarea[placeholder^="Ask"]', 'Weekend movie ideas')
+        ->click('Send')
+        ->assertSeeIn('[data-chat-thread]', 'Here you go.')
+        ->click('[data-chat-rename]')
+        ->type('[data-chat-rename-input]', 'Weekend picks')
+        ->click('[data-chat-rename-save]')
+        ->assertSeeIn('[data-chat-title]', 'Weekend picks')
+        ->assertNoJavaScriptErrors();
+
+    expect(DB::table('agent_conversations')->value('title'))->toBe('Weekend picks');
+});
+
+test('switching to advisory mode changes the composer hint', function (): void {
+    $this->actingAs(User::factory()->admin()->create());
+
+    visit(route('ai.chat', absolute: false))
+        ->assertNoSmoke()
+        ->click('[data-chat-mode="advisory"]')
+        ->assertAttribute('[data-chat-input]', 'placeholder', 'Ask MediaAgent · advisory mode (read-only)…')
+        ->assertNoJavaScriptErrors();
+});

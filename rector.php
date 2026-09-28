@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use Rector\CodingStyle\Rector\PostInc\PostIncDecToPreIncDecRector;
+use Rector\CodingStyle\Rector\Use_\SeparateMultiUseImportsRector;
 use Rector\Config\RectorConfig;
 use Rector\DeadCode\Rector\ClassMethod\RemoveUnusedPublicMethodParameterRector;
 use Rector\Naming\Rector\Class_\RenamePropertyToMatchTypeRector;
@@ -73,5 +74,10 @@ return RectorConfig::configure()
         // one silently unbinds the listener instead of just tidying dead code.
         RemoveUnusedPublicMethodParameterRector::class => [
             __DIR__.'/app/Listeners',
+        ],
+        // Splitting a grouped trait `use` drops its `insteadof` block, which
+        // structured sub-agents need to resolve the stream() collision with Promptable.
+        SeparateMultiUseImportsRector::class => [
+            __DIR__.'/app/Ai/Agents',
         ],
     ]);
