@@ -7,6 +7,7 @@ namespace App\Ai\Agents;
 use App\Ai\Concerns\UsesFailoverChain;
 use App\Ai\Middleware\AnswerOnFinalStep;
 use App\Ai\Middleware\EnforceBudgetEachStep;
+use App\Ai\Middleware\StopWhenClientDisconnected;
 use App\Ai\Tools\Arr\AddMediaTool;
 use App\Ai\Tools\Arr\DeleteMediaTool;
 use App\Ai\Tools\Arr\GetMediaTool;
@@ -148,13 +149,14 @@ PROMPT;
 
     /**
      * Wrap every generation step: refuse a step once the hard budget is
-     * crossed mid-run, and force a plain answer on the final allowed step.
+     * crossed mid-run, force a plain answer on the final allowed step, and
+     * stop at the next step once the chat client disconnected.
      *
      * @return array<int, object>
      */
     public function middleware(): array
     {
-        return [new AnswerOnFinalStep, new EnforceBudgetEachStep];
+        return [new AnswerOnFinalStep, new EnforceBudgetEachStep, new StopWhenClientDisconnected];
     }
 
     /**

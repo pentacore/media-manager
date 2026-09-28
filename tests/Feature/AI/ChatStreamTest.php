@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use App\Ai\Agents\MediaAgent;
 use App\Http\Streaming\ChatStreamProtocol;
+use App\Http\Streaming\ClientConnection;
 use App\Jobs\Ai\GenerateConversationTitle;
 use App\Listeners\Ai\RecordAgentUsage;
 use App\Models\AiModelPrice;
@@ -437,3 +438,53 @@ function chatStreamFrame(string $body, string $type): string
 
     return '';
 }
+
+/**
+ * Bind a client connection whose browser has gone.
+ */
+function chatStreamGoneClient(): void
+{
+    app()->instance(ClientConnection::class, new class extends ClientConnection
+    {
+        #[Override]
+        protected function connectionAborted(): bool
+        {
+            return true;
+        }
+    });
+}
+
+test('a disconnected client stops the turn at the next step and still bills what ran', function (): void {
+    Bus::fake([GenerateConversationTitle::class]);
+    chatStreamGoneClient();
+    MediaAgent::fake([
+        new ToolCall(id: 'call-1', name: 'GetServiceStatusTool', arguments: []),
+        'Second step reply that must never be generated.',
+    ]);
+    $admin = User::factory()->admin()->create();
+
+    $body = $this->actingAs($admin)
+        ->post(route('ai.chat.stream'), ['message' => 'Check my services'], ['Accept' => 'text/event-stream'])
+        ->streamedContent();
+
+    $usage = AiUsageRecord::query()->where('agent_class', MediaAgent::class)->sole();
+
+    expect($body)->not->toContain('Second step reply')
+        ->and(chatStreamFrame($body, 'RUN_ERROR'))->toContain('"code":"stopped"')
+        ->and($usage->status)->toBe('failed')
+        ->and($usage->error_message)->toContain('client disconnected');
+});
+
+test('a non-streamed turn is never stopped by the disconnect check', function (): void {
+    Bus::fake([GenerateConversationTitle::class]);
+    chatStreamGoneClient();
+    MediaAgent::fake([
+        new ToolCall(id: 'call-1', name: 'GetServiceStatusTool', arguments: []),
+        'Both steps ran.',
+    ]);
+
+    $this->actingAs(User::factory()->admin()->create())
+        ->postJson(route('ai.chat.send'), ['message' => 'Check my services'])
+        ->assertOk()
+        ->assertJsonPath('text', 'Both steps ran.');
+});
