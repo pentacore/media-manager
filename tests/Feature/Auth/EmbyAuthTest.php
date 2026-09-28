@@ -302,7 +302,7 @@ test('first-time emby login creates the user through the bootstrap-role action',
         $mock->shouldReceive('execute')
             ->once()
             ->with(['name' => 'Racer', 'email' => 'racer@example.com'])
-            ->andReturnUsing(fn (array $attributes): User => User::factory()->create($attributes));
+            ->andReturnUsing(fn (array $attributes): User => User::factory()->unverified()->create($attributes));
     });
 
     $this->post(route('auth.emby'), [

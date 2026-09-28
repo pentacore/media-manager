@@ -10,6 +10,7 @@ import {
     X,
 } from '@lucide/vue';
 import { computed, onMounted, ref } from 'vue';
+import { toast } from 'vue-sonner';
 import ServiceHealthController from '@/actions/App/Http/Controllers/Monitoring/ServiceHealthController';
 import {
     Pill,
@@ -85,6 +86,18 @@ function runChecks(): void {
         {
             preserveScroll: true,
             preserveState: true,
+            // The throttle middleware rejects before the controller runs, so
+            // there is no Inertia flash to render the toast for us — show one
+            // here and suppress Inertia's raw-response error dialog.
+            onHttpException: (response) => {
+                if (response.status === 429) {
+                    toast.error(
+                        'Health checks were just run — try again in a minute.',
+                    );
+
+                    return false;
+                }
+            },
             onFinish: () => {
                 checking.value = false;
             },
