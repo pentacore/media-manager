@@ -249,3 +249,24 @@ test('the scheduler container gets time to finish in-flight tasks on shutdown', 
     expect($gracePeriod)->not->toBeEmpty()
         ->and((int) $gracePeriod[1])->toBeGreaterThanOrEqual(60);
 });
+
+test('queue and scheduler healthchecks read heartbeat age instead of the process list', function (): void {
+    $healthcheck = (string) file_get_contents(base_path('docker/production/healthcheck.sh'));
+
+    expect($healthcheck)->not->toContain('pgrep')
+        ->and(dockerConfigRoleBlock($healthcheck, 'queue'))
+        ->toContain(sprintf('php artisan ops:check-heartbeat --queue="${QUEUE_LANES:-%s}"', implode(',', QueueLane::values())))
+        ->and(dockerConfigRoleBlock($healthcheck, 'queue-ai'))->toContain('php artisan ops:check-heartbeat --queue=ai')
+        ->and(dockerConfigRoleBlock($healthcheck, 'scheduler'))->toContain('php artisan ops:check-heartbeat --scheduler');
+});
+
+test('heartbeat-checked services wait for the first heartbeat before failures count', function (): void {
+    $compose = (string) file_get_contents(base_path('docker/production/compose.yaml'));
+
+    preg_match('/\nx-heartbeat-healthcheck: &heartbeat-healthcheck\n(.*?)\n\n/s', $compose, $anchor);
+
+    expect($anchor[1] ?? '')->toContain('start_period: 120s')->toContain("test: ['CMD', '/usr/local/bin/healthcheck']");
+    foreach (['queue', 'queue-ai', 'scheduler'] as $service) {
+        expect(dockerConfigComposeService($compose, $service))->toContain('healthcheck: *heartbeat-healthcheck');
+    }
+});

@@ -23,6 +23,16 @@ x-app: &app
     - app-storage:/app/storage/app
     - app-public-storage:/app/storage/app/public
 
+# queue / queue-ai / scheduler report liveness through heartbeats
+# (ops:check-heartbeat). The first heartbeat needs the scheduler's first tick
+# plus a worker pass, so failures only count after two minutes.
+x-heartbeat-healthcheck: &heartbeat-healthcheck
+  test: ['CMD', '/usr/local/bin/healthcheck']
+  interval: 30s
+  timeout: 10s
+  retries: 3
+  start_period: 120s
+
 services:
   pgsql:
     image: postgres:18-alpine
@@ -97,6 +107,7 @@ services:
       # Priority order. The ai lane runs in queue-ai so a slow model call
       # never delays an approved action or an inbound webhook.
       QUEUE_LANES: actions,webhooks,default
+    healthcheck: *heartbeat-healthcheck
     # Docker's default 10s SIGTERM->SIGKILL window would kill workers mid-job
     # on every deploy; some jobs run non-idempotent external calls (e.g. arr
     # release grabs) that Redis would re-deliver after retry_after. Give the
@@ -107,6 +118,7 @@ services:
     <<: *app
     environment:
       CONTAINER_ROLE: queue-ai
+    healthcheck: *heartbeat-healthcheck
     # Same reasoning as queue: let an in-flight model call finish (--timeout=300).
     stop_grace_period: 310s
 
@@ -114,6 +126,7 @@ services:
     <<: *app
     environment:
       CONTAINER_ROLE: scheduler
+    healthcheck: *heartbeat-healthcheck
     # On SIGTERM schedule:work stops starting new runs and waits for in-flight
     # schedule:run children. 120s covers the minute/5-minute tasks; a longer
     # nightly run is cut off and its lock is cleared on the next boot.

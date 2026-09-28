@@ -16,6 +16,7 @@ use App\Console\Commands\PruneStatistics;
 use App\Console\Commands\ReconcileBazarrSubtitles;
 use App\Console\Commands\ReconcileMediaReplacementAttempts;
 use App\Console\Commands\ReconcileStuckActionRequests;
+use App\Console\Commands\RecordOpsHeartbeat;
 use App\Console\Commands\RefreshInterventionCount;
 use App\Console\Commands\RefreshSabnzbdDownloadCounts;
 use App\Console\Commands\WarmServiceCaches;
@@ -37,6 +38,10 @@ use Illuminate\Queue\Console\PruneFailedJobsCommand;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schedule;
 use Laravel\Telescope\Telescope;
+
+// Liveness for the scheduler and every queue lane: the container
+// healthchecks (ops:check-heartbeat) and /metrics read these ages.
+Schedule::command(RecordOpsHeartbeat::class)->everyMinute();
 
 // Every overlap lock carries an explicit expiry (minutes) sized to the task:
 // the 1440-minute default would let one crashed run silently skip a

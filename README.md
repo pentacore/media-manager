@@ -115,6 +115,11 @@ Leave it empty (the default) when nothing sits in front of the app: no forwarded
 
 Jobs run on four named queues. The `queue` service drains `actions` (approved actions), `webhooks` (inbound webhook processing) and `default` (everything else), in that priority order; the `queue-ai` service drains `ai` (decision agent, subtitle advisor, embeddings, conversation titles, price refresh) so a slow model call never holds up an approved action or a webhook. Both use the same image and a 300-second job timeout. If you run an older `compose.yaml` without the `queue-ai` service, the `queue` service drains all four queues by default — add the `queue-ai` service to split them.
 
+### Health checks
+
+- `web`: `GET /up` answers 200 only when Postgres and the Valkey connections the app uses (cache and queue) respond. Upstream media services are not part of it.
+- `queue`, `queue-ai`, `scheduler`: the scheduler records a heartbeat every minute and queues a heartbeat job on every queue; each worker records the queues it drains. The containers report unhealthy when their heartbeat is older than 10 minutes (queues) or 3 minutes (scheduler); override with `HEARTBEAT_MAX_AGE` (seconds). Because the scheduler queues the worker heartbeats, a stopped scheduler turns `queue` and `queue-ai` unhealthy too — check the scheduler first. Check by hand with `docker compose --env-file .env exec queue php artisan ops:check-heartbeat --queue=actions,webhooks,default`.
+
 ### Verify SSR
 
 ```bash
