@@ -365,12 +365,24 @@ test('index still dispatches the sync job when only a user_confirmed row exists'
     Queue::assertPushed(SyncAnimeMappingJob::class);
 });
 
+/**
+ * @param  array<string, mixed>  $extra
+ */
+function fakeAnimeSeerr(array $extra = []): void
+{
+    // A single Seerr user (id 42) the chooser can post as; each test's
+    // $extra overrides/add its own /api/v1/request response.
+    Http::fake(array_merge([
+        'seerr.local:5055/api/v1/user*' => Http::response(['results' => [
+            ['id' => 42, 'email' => 'seerr-member@example.com', 'displayName' => 'Seerr Member'],
+        ]]),
+    ], $extra));
+}
+
 test('request submits a tv createRequest with the given season and userId', function (): void {
     $member = User::factory()->member()->create();
 
-    Http::fake([
-        'seerr.local:5055/api/v1/request' => Http::response(['id' => 1]),
-    ]);
+    fakeAnimeSeerr(['seerr.local:5055/api/v1/request' => Http::response(['id' => 1])]);
 
     $this->actingAs($member)
         ->from(route('media.anime.index'))
@@ -378,7 +390,7 @@ test('request submits a tv createRequest with the given season and userId', func
             'tmdbId' => 1396,
             'mediaType' => 'tv',
             'tmdbSeason' => 3,
-            'userId' => 9,
+            'userId' => 42,
         ])
         ->assertRedirect(route('media.anime.index'))
         ->assertSessionHas('inertia.flash_data.toast.type', 'success')
@@ -392,16 +404,14 @@ test('request submits a tv createRequest with the given season and userId', func
             'mediaType' => 'tv',
             'mediaId' => 1396,
             'seasons' => [3],
-            'userId' => 9,
+            'userId' => 42,
         ]);
 });
 
 test('request treats tmdbSeason 0 (specials) as a valid season', function (): void {
     $member = User::factory()->member()->create();
 
-    Http::fake([
-        'seerr.local:5055/api/v1/request' => Http::response(['id' => 1]),
-    ]);
+    fakeAnimeSeerr(['seerr.local:5055/api/v1/request' => Http::response(['id' => 1])]);
 
     $this->actingAs($member)
         ->from(route('media.anime.index'))
@@ -409,6 +419,7 @@ test('request treats tmdbSeason 0 (specials) as a valid season', function (): vo
             'tmdbId' => 1396,
             'mediaType' => 'tv',
             'tmdbSeason' => 0,
+            'userId' => 42,
         ])
         ->assertRedirect(route('media.anime.index'));
 
@@ -420,9 +431,124 @@ test('request treats tmdbSeason 0 (specials) as a valid season', function (): vo
 test('request flashes a failed requestOutcome when the Seerr request fails', function (): void {
     $member = User::factory()->member()->create();
 
+    fakeAnimeSeerr(['seerr.local:5055/api/v1/request' => Http::response(['message' => 'nope'], 500)]);
+
+    $this->actingAs($member)
+        ->from(route('media.anime.index'))
+        ->post(route('media.anime.request'), [
+            'tmdbId' => 1396,
+            'mediaType' => 'tv',
+            'userId' => 42,
+        ])
+        ->assertRedirect(route('media.anime.index'))
+        ->assertSessionHas('inertia.flash_data.requestOutcome.ok', false)
+        ->assertSessionHas('inertia.flash_data.requestOutcome.tmdbId', 1396);
+
+    Http::assertSent(fn ($request): bool => $request->method() === 'POST'
+        && str_ends_with((string) $request->url(), '/api/v1/request'));
+});
+
+test('request submits a movie createRequest without a seasons field', function (): void {
+    $member = User::factory()->member()->create();
+
+    fakeAnimeSeerr(['seerr.local:5055/api/v1/request' => Http::response(['id' => 2])]);
+
+    $this->actingAs($member)
+        ->from(route('media.anime.index'))
+        ->post(route('media.anime.request'), [
+            'tmdbId' => 129,
+            'mediaType' => 'movie',
+            'userId' => 42,
+        ])
+        ->assertRedirect(route('media.anime.index'));
+
+    Http::assertSent(fn ($request): bool => $request->method() === 'POST'
+        && ($request->data()['mediaType'] ?? null) === 'movie'
+        && ($request->data()['mediaId'] ?? null) === 129
+        && ! array_key_exists('seasons', $request->data()));
+});
+
+test('request defaults to the chooser\'s own Seerr match when no userId is posted', function (): void {
+    $member = User::factory()->member()->create(['email' => 'seerr-member@example.com']);
+
+    fakeAnimeSeerr(['seerr.local:5055/api/v1/request' => Http::response(['id' => 1])]);
+
+    $this->actingAs($member)
+        ->from(route('media.anime.index'))
+        ->post(route('media.anime.request'), [
+            'tmdbId' => 1396,
+            'mediaType' => 'tv',
+            'tmdbSeason' => 3,
+        ])
+        ->assertRedirect(route('media.anime.index'))
+        ->assertSessionHas('inertia.flash_data.toast.type', 'success');
+
+    Http::assertSent(fn ($request): bool => str_ends_with((string) $request->url(), '/api/v1/request')
+        && ($request->data()['userId'] ?? null) === 42);
+});
+
+test('request refuses an unknown userId on a complete Seerr user list without posting', function (): void {
+    $member = User::factory()->member()->create();
+
+    fakeAnimeSeerr();
+
+    $this->actingAs($member)
+        ->from(route('media.anime.index'))
+        ->post(route('media.anime.request'), [
+            'tmdbId' => 1396,
+            'mediaType' => 'tv',
+            'userId' => 999,
+        ])
+        ->assertRedirect(route('media.anime.index'))
+        ->assertSessionHas('inertia.flash_data.toast.message', 'That Seerr user was not found.')
+        ->assertSessionHas('inertia.flash_data.requestOutcome.ok', false);
+
+    Http::assertNotSent(fn ($request): bool => $request->method() === 'POST');
+});
+
+test('request gives the outage message, not "not found", for an unknown userId during a partial Seerr user-list walk', function (): void {
+    $member = User::factory()->member()->create();
+
+    // Page 1 is a full page (forces the walk to continue) and succeeds;
+    // page 2 fails — the walk is cut short, so the users list is incomplete
+    // and an id missing from it is not proven unknown.
+    $firstPage = collect()->range(1, 100)->map(fn (int $i): array => [
+        'id' => $i,
+        'email' => sprintf('user%d@example.com', $i),
+    ])->all();
+
     Http::fake([
-        'seerr.local:5055/api/v1/request' => Http::response(['message' => 'nope'], 500),
+        'seerr.local:5055/api/v1/user*' => function ($request) use ($firstPage) {
+            parse_str((string) parse_url($request->url(), PHP_URL_QUERY), $query);
+
+            if ((int) ($query['skip'] ?? 0) === 0) {
+                return Http::response(['pageInfo' => ['page' => 1, 'pages' => 2], 'results' => $firstPage]);
+            }
+
+            // A 4xx so SeerrClient's retry-on-server-error never kicks in.
+            return Http::response([], 400);
+        },
+        'seerr.local:5055/api/v1/request' => Http::response(['id' => 1]),
     ]);
+
+    $this->actingAs($member)
+        ->from(route('media.anime.index'))
+        ->post(route('media.anime.request'), [
+            'tmdbId' => 1396,
+            'mediaType' => 'tv',
+            'userId' => 999,
+        ])
+        ->assertRedirect(route('media.anime.index'))
+        ->assertSessionHas('inertia.flash_data.toast.message', 'Seerr is unreachable right now.')
+        ->assertSessionHas('inertia.flash_data.requestOutcome.ok', false);
+
+    Http::assertNotSent(fn ($request): bool => $request->method() === 'POST');
+});
+
+test('request refuses to guess when the chooser has no own match and posts no userId', function (): void {
+    $member = User::factory()->member()->create(['email' => 'nobody@example.com']);
+
+    fakeAnimeSeerr();
 
     $this->actingAs($member)
         ->from(route('media.anime.index'))
@@ -431,29 +557,10 @@ test('request flashes a failed requestOutcome when the Seerr request fails', fun
             'mediaType' => 'tv',
         ])
         ->assertRedirect(route('media.anime.index'))
-        ->assertSessionHas('inertia.flash_data.requestOutcome.ok', false)
-        ->assertSessionHas('inertia.flash_data.requestOutcome.tmdbId', 1396);
-});
+        ->assertSessionHas('inertia.flash_data.toast.message', 'Choose which Seerr user to request as.')
+        ->assertSessionHas('inertia.flash_data.requestOutcome.ok', false);
 
-test('request submits a movie createRequest without a seasons field', function (): void {
-    $member = User::factory()->member()->create();
-
-    Http::fake([
-        'seerr.local:5055/api/v1/request' => Http::response(['id' => 2]),
-    ]);
-
-    $this->actingAs($member)
-        ->from(route('media.anime.index'))
-        ->post(route('media.anime.request'), [
-            'tmdbId' => 129,
-            'mediaType' => 'movie',
-        ])
-        ->assertRedirect(route('media.anime.index'));
-
-    Http::assertSent(fn ($request): bool => $request->method() === 'POST'
-        && ($request->data()['mediaType'] ?? null) === 'movie'
-        && ($request->data()['mediaId'] ?? null) === 129
-        && ! array_key_exists('seasons', $request->data()));
+    Http::assertNotSent(fn ($request): bool => $request->method() === 'POST');
 });
 
 test('request validates media type', function (): void {
@@ -497,9 +604,7 @@ test('findMatch returns up to three tv or movie candidates', function (): void {
 test('confirmMatch persists a user_confirmed tv row then requests it', function (): void {
     $member = User::factory()->member()->create();
 
-    Http::fake([
-        'seerr.local:5055/api/v1/request' => Http::response(['id' => 3]),
-    ]);
+    fakeAnimeSeerr(['seerr.local:5055/api/v1/request' => Http::response(['id' => 3])]);
 
     $this->actingAs($member)
         ->from(route('media.anime.index'))
@@ -508,6 +613,7 @@ test('confirmMatch persists a user_confirmed tv row then requests it', function 
             'tmdbId' => 1396,
             'mediaType' => 'tv',
             'tmdbSeason' => 1,
+            'userId' => 42,
         ])
         ->assertRedirect(route('media.anime.index'));
 
@@ -525,9 +631,7 @@ test('confirmMatch persists a user_confirmed tv row then requests it', function 
 test('confirmMatch persists a movie mapping under tmdb_movie_id and requests it as a movie', function (): void {
     $member = User::factory()->member()->create();
 
-    Http::fake([
-        'seerr.local:5055/api/v1/request' => Http::response(['id' => 4]),
-    ]);
+    fakeAnimeSeerr(['seerr.local:5055/api/v1/request' => Http::response(['id' => 4])]);
 
     $this->actingAs($member)
         ->from(route('media.anime.index'))
@@ -535,6 +639,7 @@ test('confirmMatch persists a movie mapping under tmdb_movie_id and requests it 
             'anilistId' => 54321,
             'tmdbId' => 129,
             'mediaType' => 'movie',
+            'userId' => 42,
         ])
         ->assertRedirect(route('media.anime.index'));
 
@@ -553,9 +658,7 @@ test('confirmMatch persists a movie mapping under tmdb_movie_id and requests it 
 test('confirmMatch honours the posted media type even when it differs from the anime format', function (): void {
     $member = User::factory()->member()->create();
 
-    Http::fake([
-        'seerr.local:5055/api/v1/request' => Http::response(['id' => 5]),
-    ]);
+    fakeAnimeSeerr(['seerr.local:5055/api/v1/request' => Http::response(['id' => 5])]);
 
     // The chosen candidate is a movie even though the request also carries a
     // tv-ish season hint: the candidate's media type wins and it persists as a
@@ -567,6 +670,7 @@ test('confirmMatch honours the posted media type even when it differs from the a
             'tmdbId' => 777,
             'mediaType' => 'movie',
             'tmdbSeason' => 1,
+            'userId' => 42,
         ])
         ->assertRedirect(route('media.anime.index'));
 

@@ -352,7 +352,15 @@ function isRequesting(entry: SeasonEntry): boolean {
 }
 
 function requestEntry(entry: SeasonEntry): void {
-    if (entry.mapping.tmdbId === null || isRequesting(entry)) {
+    // Guards the disabled Request button: pickerOptions() no longer falls
+    // back to an arbitrary Seerr user, so resolvedUserId can be null and
+    // must never be posted — the server would file the request under
+    // whichever account owns the Seerr API key.
+    if (
+        entry.mapping.tmdbId === null ||
+        isRequesting(entry) ||
+        resolvedUserId.value === null
+    ) {
         return;
     }
 
@@ -543,7 +551,10 @@ const matchEntryContext = computed(() =>
                     >
                     <Skeleton v-if="!requestingReady" class="h-7 w-40" />
                     <Select v-else v-model="userSelectValue">
-                        <SelectTrigger class="h-7 w-40 text-xs">
+                        <SelectTrigger
+                            class="h-7 w-40 text-xs"
+                            data-anime-user-select
+                        >
                             <SelectValue placeholder="Select user" />
                         </SelectTrigger>
                         <SelectContent>
@@ -707,7 +718,16 @@ const matchEntryContext = computed(() =>
                             <Button
                                 size="sm"
                                 class="h-7 flex-1 text-xs"
-                                :disabled="isRequesting(entry)"
+                                data-anime-request
+                                :disabled="
+                                    isRequesting(entry) ||
+                                    resolvedUserId === null
+                                "
+                                :title="
+                                    resolvedUserId === null
+                                        ? 'Select a user to request as'
+                                        : undefined
+                                "
                                 @click="requestEntry(entry)"
                             >
                                 <Loader2

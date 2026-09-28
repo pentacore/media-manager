@@ -222,3 +222,73 @@ test('an empty MediaManager email never matches a Seerr user with an empty or nu
 
     expect(resolve(SeerrUserResolver::class)->resolve($this->connection, $user))->toBeNull();
 });
+
+// ── resolveUserId() ─────────────────────────────────────────────────────
+// Pure logic over a requestingContext() shape — no HTTP needed. Shared by
+// DiscoverController and AnimeController so both file requests under the
+// same identity rules.
+
+/**
+ * @param  list<array{id: int, label: string}>  $users
+ * @return array{canChooseUser: bool, userId: int|null, users: list<array{id: int, label: string}>, partial: bool, error: string|null}
+ */
+function seerrContext(bool $canChooseUser, ?int $userId, array $users = [], bool $partial = false, ?string $error = null): array
+{
+    return ['canChooseUser' => $canChooseUser, 'userId' => $userId, 'users' => $users, 'partial' => $partial, 'error' => $error];
+}
+
+test('resolveUserId reports the context error immediately, before any identity rule', function (): void {
+    $context = seerrContext(true, 5, [['id' => 5, 'label' => 'Me']], error: 'Seerr is unreachable right now.');
+
+    expect(resolve(SeerrUserResolver::class)->resolveUserId($context, null))
+        ->toBe(['userId' => null, 'error' => 'Seerr is unreachable right now.']);
+});
+
+test('resolveUserId gives a non-chooser their own resolved match, ignoring any posted id', function (): void {
+    $context = seerrContext(false, 7);
+
+    expect(resolve(SeerrUserResolver::class)->resolveUserId($context, 999))
+        ->toBe(['userId' => 7, 'error' => null]);
+});
+
+test('resolveUserId refuses a non-chooser with no Seerr account', function (): void {
+    $context = seerrContext(false, null);
+
+    expect(resolve(SeerrUserResolver::class)->resolveUserId($context, null))
+        ->toBe(['userId' => null, 'error' => 'No Seerr account is linked to you — ask an admin.']);
+});
+
+test('resolveUserId defaults a chooser to their own match when no id is posted', function (): void {
+    $context = seerrContext(true, 5, [['id' => 4, 'label' => 'A'], ['id' => 5, 'label' => 'B']]);
+
+    expect(resolve(SeerrUserResolver::class)->resolveUserId($context, null))
+        ->toBe(['userId' => 5, 'error' => null]);
+});
+
+test('resolveUserId lets a chooser pick a different Seerr user than their own match', function (): void {
+    $context = seerrContext(true, 5, [['id' => 4, 'label' => 'A'], ['id' => 5, 'label' => 'B']]);
+
+    expect(resolve(SeerrUserResolver::class)->resolveUserId($context, 4))
+        ->toBe(['userId' => 4, 'error' => null]);
+});
+
+test('resolveUserId refuses an id missing from a complete users list as not found', function (): void {
+    $context = seerrContext(true, null, [['id' => 4, 'label' => 'A']], partial: false);
+
+    expect(resolve(SeerrUserResolver::class)->resolveUserId($context, 999))
+        ->toBe(['userId' => null, 'error' => 'That Seerr user was not found.']);
+});
+
+test('resolveUserId treats an id missing from a partial users list as an outage, not "not found"', function (): void {
+    $context = seerrContext(true, null, [['id' => 4, 'label' => 'A']], partial: true);
+
+    expect(resolve(SeerrUserResolver::class)->resolveUserId($context, 999))
+        ->toBe(['userId' => null, 'error' => 'Seerr is unreachable right now.']);
+});
+
+test('resolveUserId refuses a chooser with no own match and no posted id, never guessing an arbitrary user', function (): void {
+    $context = seerrContext(true, null, [['id' => 4, 'label' => 'A'], ['id' => 5, 'label' => 'B']]);
+
+    expect(resolve(SeerrUserResolver::class)->resolveUserId($context, null))
+        ->toBe(['userId' => null, 'error' => 'Choose which Seerr user to request as.']);
+});

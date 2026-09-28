@@ -26,13 +26,11 @@ class DiscoverController extends Controller
 {
     private const int UPCOMING_LIMIT = 20;
 
-    private const string UNREACHABLE = 'Seerr is unreachable right now.';
-
-    private const string NO_SEERR_ACCOUNT = 'No Seerr account is linked to you — ask an admin.';
-
-    private const string UNKNOWN_SEERR_USER = 'That Seerr user was not found.';
-
-    private const string NO_USER_CHOSEN = 'Choose which Seerr user to request as.';
+    // The identity-resolution messages (no Seerr account, unknown chosen
+    // user, no user chosen) live on SeerrUserResolver::resolveUserId() now,
+    // shared with AnimeController — only messages specific to this
+    // controller stay here.
+    private const string UNREACHABLE = SeerrUserResolver::UNREACHABLE;
 
     private const string CONNECTION_REJECTED = 'Seerr rejected the request — check the Seerr connection.';
 
@@ -99,45 +97,13 @@ class DiscoverController extends Controller
         // requestingContext() never throws: it swallows RequestException /
         // ConnectionException itself and reports them via `error`.
         $context = $seerrUserResolver->requestingContext($connection, $user);
+        $resolved = $seerrUserResolver->resolveUserId($context, isset($validated['userId']) ? (int) $validated['userId'] : null);
 
-        if ($context['error'] !== null) {
-            return $this->outcome(false, $tmdbId, $mediaType, 'error', __(self::UNREACHABLE));
+        if ($resolved['error'] !== null) {
+            return $this->outcome(false, $tmdbId, $mediaType, 'error', $resolved['error']);
         }
 
-        // A viewer's posted userId is ignored outright: canChooseUser is
-        // false for them, so $userId stays their own resolve()d id and the
-        // "choose someone else" branch below never runs.
-        if (! $context['canChooseUser']) {
-            $userId = $context['userId'];
-
-            if ($userId === null) {
-                return $this->outcome(false, $tmdbId, $mediaType, 'error', __(self::NO_SEERR_ACCOUNT));
-            }
-        } elseif (isset($validated['userId'])) {
-            // Only a manage-requests user may choose someone else, and only
-            // a Seerr id that came back from pickerOptions() (i.e. is a
-            // real Seerr user) — never trust the posted id at face value.
-            // When that user list is only partial (a later page failed) an
-            // id missing from it is not proven unknown, so it gets the
-            // outage message instead of "not found".
-            $chosenUserId = (int) $validated['userId'];
-
-            if (! in_array($chosenUserId, array_column($context['users'], 'id'), true)) {
-                return $context['partial']
-                    ? $this->outcome(false, $tmdbId, $mediaType, 'error', __(self::UNREACHABLE))
-                    : $this->outcome(false, $tmdbId, $mediaType, 'error', __(self::UNKNOWN_SEERR_USER));
-            }
-
-            $userId = $chosenUserId;
-        } elseif ($context['userId'] !== null) {
-            // No id was posted: default to the chooser's own match, if any.
-            $userId = $context['userId'];
-        } else {
-            // A chooser with no own Seerr match must pick someone
-            // explicitly — never silently fall back to an arbitrary Seerr
-            // user.
-            return $this->outcome(false, $tmdbId, $mediaType, 'error', __(self::NO_USER_CHOSEN));
-        }
+        $userId = $resolved['userId'];
 
         $seasons = array_values(array_map(intval(...), $validated['seasons'] ?? []));
 

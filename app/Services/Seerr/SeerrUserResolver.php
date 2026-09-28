@@ -23,6 +23,14 @@ final readonly class SeerrUserResolver
 {
     public const int CACHE_TTL_SECONDS = 600;
 
+    public const string UNREACHABLE = 'Seerr is unreachable right now.';
+
+    public const string NO_SEERR_ACCOUNT = 'No Seerr account is linked to you — ask an admin.';
+
+    public const string UNKNOWN_SEERR_USER = 'That Seerr user was not found.';
+
+    public const string NO_USER_CHOSEN = 'Choose which Seerr user to request as.';
+
     private const int PAGE_SIZE = 100;
 
     /**
@@ -100,6 +108,59 @@ final readonly class SeerrUserResolver
         } catch (RequestException|ConnectionException) {
             return ['canChooseUser' => false, 'userId' => null, 'users' => [], 'partial' => false, 'error' => 'Seerr is unreachable right now.'];
         }
+    }
+
+    /**
+     * Resolve which Seerr user id a "file a request" action should use,
+     * applying the same identity rules everywhere a request can be filed —
+     * this is the single source of truth for both the rule and its messages,
+     * shared by every controller that files a Seerr request:
+     *   - the context itself failed (Seerr unreachable) → UNREACHABLE
+     *   - a non-chooser (viewer) has no own Seerr match → NO_SEERR_ACCOUNT;
+     *     a posted id is ignored outright — a viewer can never choose
+     *     someone else
+     *   - a chooser posted an id missing from a *complete* user list →
+     *     UNKNOWN_SEERR_USER
+     *   - ...missing from a *partial* list (a later Seerr page failed) →
+     *     UNREACHABLE instead, since an incomplete list can't prove the id
+     *     doesn't exist
+     *   - a chooser posted no id → defaults to their own match, if any
+     *   - ...and has no own match either → NO_USER_CHOSEN; never silently
+     *     falls back to an arbitrary Seerr user
+     *
+     * @param  array{canChooseUser: bool, userId: int|null, users: list<array{id: int, label: string}>, partial: bool, error: string|null}  $context  from requestingContext(), which never throws
+     * @return array{userId: int|null, error: string|null}
+     */
+    public function resolveUserId(array $context, ?int $postedUserId): array
+    {
+        if ($context['error'] !== null) {
+            return ['userId' => null, 'error' => __(self::UNREACHABLE)];
+        }
+
+        if (! $context['canChooseUser']) {
+            $userId = $context['userId'];
+
+            return $userId === null
+                ? ['userId' => null, 'error' => __(self::NO_SEERR_ACCOUNT)]
+                : ['userId' => $userId, 'error' => null];
+        }
+
+        if ($postedUserId !== null) {
+            if (! in_array($postedUserId, array_column($context['users'], 'id'), true)) {
+                return [
+                    'userId' => null,
+                    'error' => $context['partial'] ? __(self::UNREACHABLE) : __(self::UNKNOWN_SEERR_USER),
+                ];
+            }
+
+            return ['userId' => $postedUserId, 'error' => null];
+        }
+
+        if ($context['userId'] !== null) {
+            return ['userId' => $context['userId'], 'error' => null];
+        }
+
+        return ['userId' => null, 'error' => __(self::NO_USER_CHOSEN)];
     }
 
     /**

@@ -71,9 +71,14 @@ class AnimeController extends Controller
     }
 
     /**
-     * File a Seerr request for a mapped seasonal anime entry.
+     * File a Seerr request for a mapped seasonal anime entry. Every anime
+     * route sits behind `can:manage-requests`, so the requester is always a
+     * chooser — but the identity rules (validate a posted userId against
+     * Seerr's own user list, default to the chooser's own match, refuse
+     * rather than guess) are shared with DiscoverController via
+     * SeerrUserResolver::resolveUserId(), so they can never drift apart.
      */
-    public function request(Request $request): RedirectResponse
+    public function request(Request $request, SeerrUserResolver $seerrUserResolver): RedirectResponse
     {
         $validated = $request->validate([
             'tmdbId' => ['required', 'integer'],
@@ -82,37 +87,40 @@ class AnimeController extends Controller
             'startDate' => ['nullable', 'date'],
             'userId' => ['nullable', 'integer'],
         ]);
+        $tmdbId = (int) $validated['tmdbId'];
+        $mediaType = (string) $validated['mediaType'];
 
         try {
             $connection = ServiceConnection::resolveActive(ServiceType::Seerr);
+        } catch (ModelNotFoundException) {
+            return $this->noConnectionRedirect();
+        }
+
+        // requestingContext() never throws: it swallows RequestException /
+        // ConnectionException itself and reports them via `error`.
+        $context = $seerrUserResolver->requestingContext($connection, $request->user());
+        $resolved = $seerrUserResolver->resolveUserId($context, isset($validated['userId']) ? (int) $validated['userId'] : null);
+
+        if ($resolved['error'] !== null) {
+            return $this->outcome(false, $tmdbId, $mediaType, 'error', $resolved['error']);
+        }
+
+        try {
             $seerrClient = new SeerrClient($connection);
 
-            $seasons = $validated['mediaType'] === 'tv'
+            $seasons = $mediaType === 'tv'
                 ? $this->resolveSeasons($seerrClient, $validated)
                 : 'all';
 
-            $seerrClient->createRequest(
-                (int) $validated['tmdbId'],
-                $validated['mediaType'],
-                $seasons,
-                isset($validated['userId']) ? (int) $validated['userId'] : null,
-            );
-        } catch (ModelNotFoundException) {
-            return $this->noConnectionRedirect();
+            $seerrClient->createRequest($tmdbId, $mediaType, $seasons, $resolved['userId']);
         } catch (RequestException|ConnectionException) {
             // A failure still redirects (a successful Inertia visit), so signal
             // the outcome explicitly rather than letting the client assume the
             // card is now requested.
-            Inertia::flash('toast', ['type' => 'error', 'message' => __('Failed to submit request.')]);
-            Inertia::flash('requestOutcome', ['ok' => false, 'tmdbId' => (int) $validated['tmdbId'], 'mediaType' => $validated['mediaType']]);
-
-            return back();
+            return $this->outcome(false, $tmdbId, $mediaType, 'error', __('Failed to submit request.'));
         }
 
-        Inertia::flash('toast', ['type' => 'success', 'message' => __('Request submitted.')]);
-        Inertia::flash('requestOutcome', ['ok' => true, 'tmdbId' => (int) $validated['tmdbId'], 'mediaType' => $validated['mediaType']]);
-
-        return back();
+        return $this->outcome(true, $tmdbId, $mediaType, 'success', __('Request submitted.'));
     }
 
     /**
@@ -143,7 +151,7 @@ class AnimeController extends Controller
     /**
      * Persist a user-confirmed match, then request it.
      */
-    public function confirmMatch(Request $request): RedirectResponse
+    public function confirmMatch(Request $request, SeerrUserResolver $seerrUserResolver): RedirectResponse
     {
         $validated = $request->validate([
             'anilistId' => ['nullable', 'integer'],
@@ -175,7 +183,7 @@ class AnimeController extends Controller
         // mapped, so drop the season cache before re-rendering.
         new AnimeCache()->bustAll();
 
-        return $this->request($request);
+        return $this->request($request, $seerrUserResolver);
     }
 
     /**
@@ -420,5 +428,13 @@ class AnimeController extends Controller
         Inertia::flash('toast', ['type' => 'error', 'message' => __('No active Seerr connection configured.')]);
 
         return to_route('dashboard');
+    }
+
+    private function outcome(bool $ok, int $tmdbId, string $mediaType, string $type, string $message): RedirectResponse
+    {
+        Inertia::flash('toast', ['type' => $type, 'message' => $message]);
+        Inertia::flash('requestOutcome', ['ok' => $ok, 'tmdbId' => $tmdbId, 'mediaType' => $mediaType]);
+
+        return back();
     }
 }
