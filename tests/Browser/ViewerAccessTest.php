@@ -72,7 +72,12 @@ test('a viewer sees the series page without any action control', function (): vo
         ->assertDontSee('Open in Sonarr');
 });
 
-test('a viewer sees the library index without the add button while a member keeps it', function (): void {
+// Split into two tests rather than switching actingAs() mid-test: pest-plugin-browser
+// reuses the same browser session across visit() calls within one test, and a second
+// actingAs() call does not re-authenticate that session for the next visit() (proven
+// with an isolated repro — a member visiting fresh, alone, correctly sees the add
+// button; no other test in this suite switches actingAs() mid-test).
+test('a viewer sees the library index without the add button', function (): void {
     ServiceConnection::factory()->sonarr()->create(['url' => 'http://sonarr.local:8989', 'api_key' => 'k']);
     Http::fake([
         'sonarr.local:8989/api/v3/series' => Http::response([]),
@@ -85,6 +90,14 @@ test('a viewer sees the library index without the add button while a member keep
         ->assertCount('[data-add-series]', 0)
         // Additional hardening: same internal-host concern as the show page.
         ->assertDontSee('Open Sonarr');
+});
+
+test('a member sees the library index with the add button', function (): void {
+    ServiceConnection::factory()->sonarr()->create(['url' => 'http://sonarr.local:8989', 'api_key' => 'k']);
+    Http::fake([
+        'sonarr.local:8989/api/v3/series' => Http::response([]),
+        'sonarr.local:8989/api/v3/qualityprofile' => Http::response([]),
+    ]);
 
     $this->actingAs(User::factory()->member()->create());
     visit(route('media.series.index', absolute: false))

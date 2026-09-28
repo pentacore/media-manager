@@ -212,7 +212,7 @@ function sonarrSeriesUrl(): string | null {
             </Link>
             <div class="flex items-center gap-2">
                 <a
-                    v-if="series.title_slug && can('manage-library')"
+                    v-if="series.title_slug && can('manage-library') && connection.url"
                     :href="sonarrSeriesUrl() ?? undefined"
                     target="_blank"
                     rel="noopener noreferrer"
