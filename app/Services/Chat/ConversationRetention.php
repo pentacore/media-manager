@@ -69,16 +69,22 @@ final readonly class ConversationRetention
     {
         $swept = 0;
 
+        // Both branches must live inside ONE outer where(): chunkById appends
+        // a top-level `and id > lastId`, which binds only to the last
+        // top-level orWhere branch. Left ungrouped, that turns the query into
+        // `A OR (B AND id > lastId)`, so branch-A rows a failed file delete
+        // keeps in the table are re-fetched on every page forever.
         ChatAttachment::query()
-            ->where(fn (Builder $builder): Builder => $builder
-                ->whereNotNull('conversation_id')
-                ->whereNotExists(fn (QueryBuilder $query): QueryBuilder => $query
-                    ->selectRaw('1')
-                    ->from('agent_conversations')
-                    ->whereColumn('agent_conversations.id', 'chat_attachments.conversation_id')))
-            ->orWhere(fn (Builder $builder): Builder => $builder
-                ->whereNull('conversation_id')
-                ->where('created_at', '<', now()->subHours(self::UNASSIGNED_ATTACHMENT_GRACE_HOURS)))
+            ->where(fn (Builder $outer): Builder => $outer
+                ->where(fn (Builder $builder): Builder => $builder
+                    ->whereNotNull('conversation_id')
+                    ->whereNotExists(fn (QueryBuilder $query): QueryBuilder => $query
+                        ->selectRaw('1')
+                        ->from('agent_conversations')
+                        ->whereColumn('agent_conversations.id', 'chat_attachments.conversation_id')))
+                ->orWhere(fn (Builder $builder): Builder => $builder
+                    ->whereNull('conversation_id')
+                    ->where('created_at', '<', now()->subHours(self::UNASSIGNED_ATTACHMENT_GRACE_HOURS))))
             ->chunkById(100, function (EloquentCollection $attachments) use (&$swept): void {
                 foreach ($attachments as $attachment) {
                     if ($attachment->conversation_id === null && $this->isReferencedByAStoredMessage($attachment)) {
