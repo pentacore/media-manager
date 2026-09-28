@@ -2,6 +2,8 @@
 
 declare(strict_types=1);
 
+use App\Settings\AiSettings;
+
 test('production queue worker timeout is lower than retry after defaults', function (): void {
     $entrypoint = file_get_contents(base_path('docker/production/entrypoint.sh'));
 
@@ -51,6 +53,38 @@ test('production migrate role delegates to run_migrations', function (): void {
     expect($migrateBlock)->not->toBeEmpty();
 
     expect($migrateBlock[1])->toContain('run_migrations');
+});
+
+test('production template trusts no proxy by default', function (): void {
+    $environment = (string) file_get_contents(base_path('docker/production/.env.example'));
+
+    preg_match('/^TRUSTED_PROXIES=(.*)$/m', $environment, $trustedProxies);
+
+    expect($trustedProxies)->not->toBeEmpty()
+        ->and(trim($trustedProxies[1]))->toBe('');
+});
+
+test('production Octane ceiling stays above the AI chat timeout plus its margin', function (): void {
+    $environment = (string) file_get_contents(base_path('docker/production/.env.example'));
+    $octaneConfig = (string) file_get_contents(base_path('config/octane.php'));
+    $phpIni = (string) file_get_contents(base_path('docker/production/php.ini'));
+
+    preg_match('/^OCTANE_MAX_EXECUTION_TIME=(\d+)$/m', $environment, $octane);
+    preg_match('/^MEDIAMANAGER_AI_CHAT_TIMEOUT=(\d+)$/m', $environment, $chat);
+    preg_match('/^max_execution_time = (\d+)$/m', $phpIni, $iniLimit);
+
+    expect($octane)->not->toBeEmpty()
+        ->and($chat)->not->toBeEmpty()
+        ->and((int) $octane[1])->toBeGreaterThanOrEqual((int) $chat[1] + AiSettings::OCTANE_TIMEOUT_MARGIN_SECONDS)
+        ->and($octaneConfig)->toContain(sprintf("env('OCTANE_MAX_EXECUTION_TIME', %d)", (int) $octane[1]))
+        ->and((int) ($iniLimit[1] ?? 0))->toBe((int) $octane[1]);
+});
+
+test('production documentation explains trusting only the reverse proxy', function (): void {
+    $readme = (string) file_get_contents(base_path('README.md'));
+
+    expect($readme)->toContain('### Reverse proxy and trusted proxies')
+        ->and($readme)->toContain('TRUSTED_PROXIES=192.168.1.10');
 });
 
 test('production frontend build creates an Inertia SSR bundle', function (): void {

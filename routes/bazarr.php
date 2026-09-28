@@ -19,7 +19,7 @@ use Illuminate\Support\Facades\Route;
 
 Route::post('webhooks/bazarr/{serviceConnection}', BazarrNotificationController::class)
     ->withoutMiddleware(PreventRequestForgery::class)
-    ->middleware(['throttle:60,1'])
+    ->middleware(['throttle:60,1', 'webhook.payload-limit'])
     ->name('webhooks.bazarr');
 
 Route::middleware(['auth', 'verified', 'password.set', 'role:viewer'])

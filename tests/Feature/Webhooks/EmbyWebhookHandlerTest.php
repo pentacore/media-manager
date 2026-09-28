@@ -48,7 +48,7 @@ test('playback.start creates an in-progress activity row', function (): void {
     ]);
 
     Event::assertDispatched(EmbyPlaybackUpdated::class);
-    expect($webhookEvent->fresh()->processed_at)->not->toBeNull();
+    expect($webhookEvent->fresh()->processed_at)->toBeNull(); // ProcessWebhookEvent marks processed, not the handler
 });
 
 test('playback.start upserts an existing in-progress row instead of duplicating', function (): void {
@@ -205,7 +205,7 @@ test('handler skips when no EmbyUserLink exists for the Emby user', function ():
 
     expect(EmbyActivity::count())->toBe(0);
     Event::assertNotDispatched(EmbyPlaybackUpdated::class);
-    expect($webhookEvent->fresh()->processed_at)->not->toBeNull();
+    expect($webhookEvent->fresh()->processed_at)->toBeNull(); // ProcessWebhookEvent marks processed, not the handler
 });
 
 test('handler ignores unsupported event types', function (): void {
@@ -219,7 +219,7 @@ test('handler ignores unsupported event types', function (): void {
 
     expect(EmbyActivity::count())->toBe(0);
     Event::assertNotDispatched(EmbyPlaybackUpdated::class);
-    expect($webhookEvent->fresh()->processed_at)->not->toBeNull();
+    expect($webhookEvent->fresh()->processed_at)->toBeNull(); // ProcessWebhookEvent marks processed, not the handler
 });
 
 test('handler ignores unsupported media types', function (): void {

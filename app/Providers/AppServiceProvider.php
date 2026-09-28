@@ -17,6 +17,7 @@ use App\Settings\AppSettings;
 use App\Settings\DecisionAgentSettings;
 use Carbon\CarbonImmutable;
 use Illuminate\Cache\RateLimiting\Limit;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Date;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Event;
@@ -61,10 +62,24 @@ class AppServiceProvider extends ServiceProvider
             'bazarr-reconciliation',
             fn (ReconcileBazarrConnection $reconcileBazarrConnection): Limit => Limit::perMinute(30)->by((string) $reconcileBazarrConnection->connectionId),
         );
+        RateLimiter::for(
+            'webhooks',
+            fn (Request $request): Limit => Limit::perMinute(max(1, (int) config('mediamanager.webhooks.rate_limit_per_minute', 300)))
+                ->by((string) $request->ip()),
+        );
+        // Named so it gets its own bucket: an unnamed `throttle:N,1` keys
+        // solely on the user id, shared across every other unnamed throttle
+        // in the app (heartbeat, password update, notification tests, ...),
+        // so a busy tab could exhaust this budget before the user ever ran
+        // a check.
+        RateLimiter::for(
+            'health-checks',
+            fn (Request $request): Limit => Limit::perMinute(6)->by((string) $request->user()?->getAuthIdentifier()),
+        );
         Event::listen(SocialiteWasCalled::class, AuthentikExtendSocialite::class);
 
-        // Pipe the four high-signal upstream events through the throttled
-        // dashboard-stats listener so the four counters stay current without
+        // Pipe the four high-signal upstream events through the debounced
+        // dashboard-stats job so the four counters stay current without
         // waiting for the every-5-minute cron.
         foreach ([
             WebhookReceived::class,

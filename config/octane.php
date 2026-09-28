@@ -219,10 +219,11 @@ return [
     | This is a hard ceiling on every request, so it must stay above the AI
     | chat timeout (`mediamanager.ai.chat_timeout`) — otherwise Octane aborts
     | an agent turn before that timeout can apply. It is aligned with the
-    | container's php.ini max_execution_time.
+    | container's php.ini max_execution_time. The app also caps the effective
+    | chat timeout 10 seconds below this value (AiSettings::chatTimeout()).
     |
     */
 
-    'max_execution_time' => (int) env('OCTANE_MAX_EXECUTION_TIME', 120),
+    'max_execution_time' => (int) env('OCTANE_MAX_EXECUTION_TIME', 150),
 
 ];

@@ -55,7 +55,7 @@ test('TEST_NOTIFICATION writes ActivityLog', function (): void {
         'service_connection_id' => $this->connection->id,
         'action' => 'webhook.seerr.test',
     ]);
-    expect($webhookEvent->fresh()->processed_at)->not->toBeNull();
+    expect($webhookEvent->fresh()->processed_at)->toBeNull(); // ProcessWebhookEvent marks processed, not the handler
 });
 
 test('MEDIA_PENDING writes ActivityLog with requester info', function (): void {
@@ -82,7 +82,7 @@ test('MEDIA_PENDING writes ActivityLog with requester info', function (): void {
     expect($log->metadata['media_type'])->toBe('movie');
     expect($log->metadata['tmdb_id'])->toBe('603');
     expect($log->metadata['requester'])->toBe('alice');
-    expect($webhookEvent->fresh()->processed_at)->not->toBeNull();
+    expect($webhookEvent->fresh()->processed_at)->toBeNull(); // ProcessWebhookEvent marks processed, not the handler
 });
 
 test('MEDIA_APPROVED writes ActivityLog', function (): void {
@@ -98,7 +98,7 @@ test('MEDIA_APPROVED writes ActivityLog', function (): void {
         'service_connection_id' => $this->connection->id,
         'action' => 'webhook.seerr.request_approved',
     ]);
-    expect($webhookEvent->fresh()->processed_at)->not->toBeNull();
+    expect($webhookEvent->fresh()->processed_at)->toBeNull(); // ProcessWebhookEvent marks processed, not the handler
 });
 
 test('MEDIA_AUTO_APPROVED writes ActivityLog with request_approved action', function (): void {
@@ -117,7 +117,7 @@ test('MEDIA_AUTO_APPROVED writes ActivityLog with request_approved action', func
 
     $log = ActivityLog::where('action', 'webhook.seerr.request_approved')->first();
     expect($log->description)->toContain('auto-approved');
-    expect($webhookEvent->fresh()->processed_at)->not->toBeNull();
+    expect($webhookEvent->fresh()->processed_at)->toBeNull(); // ProcessWebhookEvent marks processed, not the handler
 });
 
 test('MEDIA_DECLINED writes ActivityLog', function (): void {
@@ -133,7 +133,7 @@ test('MEDIA_DECLINED writes ActivityLog', function (): void {
         'service_connection_id' => $this->connection->id,
         'action' => 'webhook.seerr.request_declined',
     ]);
-    expect($webhookEvent->fresh()->processed_at)->not->toBeNull();
+    expect($webhookEvent->fresh()->processed_at)->toBeNull(); // ProcessWebhookEvent marks processed, not the handler
 });
 
 test('MEDIA_AVAILABLE writes ActivityLog and dispatches emby_library_scan', function (): void {
@@ -164,7 +164,7 @@ test('MEDIA_AVAILABLE writes ActivityLog and dispatches emby_library_scan', func
     expect($request->webhook_event_id)->toBe($webhookEvent->id);
     expect($request->payload['trigger'])->toBe('seerr_media_available');
     expect($request->payload['subject'])->toBe('The Matrix (1999)');
-    expect($webhookEvent->fresh()->processed_at)->not->toBeNull();
+    expect($webhookEvent->fresh()->processed_at)->toBeNull(); // ProcessWebhookEvent marks processed, not the handler
 });
 
 test('MEDIA_FAILED writes ActivityLog', function (): void {
@@ -180,7 +180,7 @@ test('MEDIA_FAILED writes ActivityLog', function (): void {
         'service_connection_id' => $this->connection->id,
         'action' => 'webhook.seerr.request_failed',
     ]);
-    expect($webhookEvent->fresh()->processed_at)->not->toBeNull();
+    expect($webhookEvent->fresh()->processed_at)->toBeNull(); // ProcessWebhookEvent marks processed, not the handler
 });
 
 test('ISSUE_CREATED writes ActivityLog with issue metadata', function (): void {
@@ -212,7 +212,7 @@ test('ISSUE_CREATED writes ActivityLog with issue metadata', function (): void {
     expect($log->metadata['issue']['issue_id'])->toBe('7');
     expect($log->metadata['issue']['issue_type'])->toBe('AUDIO');
     expect($log->metadata['reporter'])->toBe('alice');
-    expect($webhookEvent->fresh()->processed_at)->not->toBeNull();
+    expect($webhookEvent->fresh()->processed_at)->toBeNull(); // ProcessWebhookEvent marks processed, not the handler
 });
 
 test('ISSUE_COMMENT writes ActivityLog', function (): void {
@@ -235,7 +235,7 @@ test('ISSUE_COMMENT writes ActivityLog', function (): void {
         'service_connection_id' => $this->connection->id,
         'action' => 'webhook.seerr.issue_comment',
     ]);
-    expect($webhookEvent->fresh()->processed_at)->not->toBeNull();
+    expect($webhookEvent->fresh()->processed_at)->toBeNull(); // ProcessWebhookEvent marks processed, not the handler
 });
 
 test('ISSUE_RESOLVED writes ActivityLog', function (): void {
@@ -251,7 +251,7 @@ test('ISSUE_RESOLVED writes ActivityLog', function (): void {
         'service_connection_id' => $this->connection->id,
         'action' => 'webhook.seerr.issue_resolved',
     ]);
-    expect($webhookEvent->fresh()->processed_at)->not->toBeNull();
+    expect($webhookEvent->fresh()->processed_at)->toBeNull(); // ProcessWebhookEvent marks processed, not the handler
 });
 
 test('ISSUE_REOPENED writes ActivityLog', function (): void {
@@ -267,7 +267,7 @@ test('ISSUE_REOPENED writes ActivityLog', function (): void {
         'service_connection_id' => $this->connection->id,
         'action' => 'webhook.seerr.issue_reopened',
     ]);
-    expect($webhookEvent->fresh()->processed_at)->not->toBeNull();
+    expect($webhookEvent->fresh()->processed_at)->toBeNull(); // ProcessWebhookEvent marks processed, not the handler
 });
 
 test('unknown notification_type is logged and skipped (no ActivityLog)', function (): void {
@@ -280,7 +280,7 @@ test('unknown notification_type is logged and skipped (no ActivityLog)', functio
     resolve(SeerrWebhookHandler::class)->handle($webhookEvent);
 
     expect(ActivityLog::count())->toBe(0);
-    expect($webhookEvent->fresh()->processed_at)->not->toBeNull();
+    expect($webhookEvent->fresh()->processed_at)->toBeNull(); // ProcessWebhookEvent marks processed, not the handler
 });
 
 test('ProcessWebhookEvent routes seerr connections to SeerrWebhookHandler', function (): void {
@@ -300,5 +300,6 @@ test('ProcessWebhookEvent routes seerr connections to SeerrWebhookHandler', func
         'service_connection_id' => $this->connection->id,
         'action' => 'webhook.seerr.test',
     ]);
+    // Goes through the job (ProcessWebhookEvent), which now owns marking processed.
     expect($webhookEvent->fresh()->processed_at)->not->toBeNull();
 });

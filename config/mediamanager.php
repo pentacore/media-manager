@@ -273,6 +273,15 @@ return [
 
     'webhooks' => [
         'capture_enabled' => (bool) env('MEDIAMANAGER_WEBHOOKS_CAPTURE_ENABLED', true),
+
+        // Bodies above this many KB are refused with 413 before the token
+        // check. Arr/Emby/Seerr payloads are a few KB; season-pack imports
+        // stay far below the default.
+        'max_payload_kb' => (int) env('MEDIAMANAGER_WEBHOOK_MAX_PAYLOAD_KB', 1024),
+
+        // Deliveries accepted per client IP per minute. Generous because a
+        // season pack fires one Download webhook per episode in seconds.
+        'rate_limit_per_minute' => (int) env('MEDIAMANAGER_WEBHOOK_RATE_LIMIT', 300),
     ],
 
     /*
@@ -361,8 +370,9 @@ return [
     |
     | The production stack terminates TLS at a reverse proxy in front of the
     | web and reverb containers, so Octane only ever sees the proxy's IP and
-    | plain http. Listing the proxy addresses (comma-separated IPs/CIDRs, or
-    | "*" to trust every upstream) makes Request::ip()/isSecure() honor the
+    | plain http. Listing the proxy's exact address (comma-separated IPs;
+    | CIDRs and "*" are accepted but logged as a warning when broad — see
+    | App\Support\TrustedProxyRanges) makes Request::ip()/isSecure() honor the
     | X-Forwarded-* headers — required for correct login throttling keys and
     | for signed URLs (invites, email verification) to validate. Unset means
     | no proxy is trusted.
@@ -370,6 +380,23 @@ return [
     */
 
     'trusted_proxies' => env('TRUSTED_PROXIES'),
+
+    /*
+    |--------------------------------------------------------------------------
+    | Security headers
+    |--------------------------------------------------------------------------
+    |
+    | App\Http\Middleware\SetSecurityHeaders always sends nosniff, a referrer
+    | policy and same-origin framing rules. Strict-Transport-Security is
+    | opt-in: enable it only once the site is served over HTTPS end to end,
+    | because browsers then refuse plain http for max_age seconds.
+    |
+    */
+
+    'security' => [
+        'hsts_enabled' => (bool) env('MEDIAMANAGER_HSTS_ENABLED', false),
+        'hsts_max_age' => (int) env('MEDIAMANAGER_HSTS_MAX_AGE', 31536000),
+    ],
 
     /*
     |--------------------------------------------------------------------------

@@ -7,5 +7,5 @@ use App\Http\Middleware\VerifyWebhookToken;
 use Illuminate\Support\Facades\Route;
 
 Route::post('webhooks/{service}/{connection}', [WebhookController::class, 'handle'])
-    ->middleware(VerifyWebhookToken::class)
+    ->middleware(['throttle:webhooks', 'webhook.payload-limit', VerifyWebhookToken::class])
     ->name('webhooks.handle');

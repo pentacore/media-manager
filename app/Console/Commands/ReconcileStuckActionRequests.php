@@ -7,6 +7,7 @@ namespace App\Console\Commands;
 use App\Enums\ActionRequestStatus;
 use App\Events\ActionRequestStatusChanged;
 use App\Models\ActionRequest;
+use App\Services\Actions\ActionRequestActivityLogger;
 use Carbon\CarbonImmutable;
 use Illuminate\Console\Attributes\Description;
 use Illuminate\Console\Attributes\Signature;
@@ -16,7 +17,7 @@ use Illuminate\Console\Command;
 #[Signature('actions:reconcile-stuck {--hours=2 : Fail executing action requests last updated more than this many hours ago}')]
 class ReconcileStuckActionRequests extends Command
 {
-    public function handle(): int
+    public function handle(ActionRequestActivityLogger $actionRequestActivityLogger): int
     {
         $hours = max(1, (int) $this->option('hours'));
         $cutoff = CarbonImmutable::now()->subHours($hours);
@@ -49,7 +50,10 @@ class ReconcileStuckActionRequests extends Command
             }
 
             $failed++;
-            event(new ActionRequestStatusChanged($actionRequest->refresh()));
+            $actionRequest->refresh();
+            // The conditional update bypasses ActionRequestObserver.
+            $actionRequestActivityLogger->statusChanged($actionRequest);
+            event(new ActionRequestStatusChanged($actionRequest));
         }
 
         $this->info(sprintf('Failed %d action request(s) stuck in executing.', $failed));

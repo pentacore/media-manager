@@ -87,6 +87,32 @@ test('admin cannot delete themselves', function (): void {
         ->assertForbidden();
 });
 
+test('a role change that would leave no admin is refused', function (): void {
+    $actor = User::factory()->admin()->create();
+    $target = User::factory()->admin()->create();
+    User::query()->whereKey($actor->id)->update(['role' => UserRole::Viewer->value]);
+
+    $this->actingAs($actor)
+        ->patch(route('admin.users.update-role', $target), ['role' => UserRole::Viewer->value])
+        ->assertRedirect(route('admin.users.index'))
+        ->assertSessionHas('inertia.flash_data.toast.type', 'error');
+
+    expect($target->fresh()->role)->toBe(UserRole::Admin);
+});
+
+test('deleting the last remaining admin is refused', function (): void {
+    $actor = User::factory()->admin()->create();
+    $target = User::factory()->admin()->create();
+    User::query()->whereKey($actor->id)->update(['role' => UserRole::Viewer->value]);
+
+    $this->actingAs($actor)
+        ->delete(route('admin.users.destroy', $target))
+        ->assertRedirect(route('admin.users.index'))
+        ->assertSessionHas('inertia.flash_data.toast.type', 'error');
+
+    expect($target->fresh())->not->toBeNull();
+});
+
 test('admin can invite a user', function (): void {
     Mail::fake();
 

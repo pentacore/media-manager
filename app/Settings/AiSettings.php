@@ -35,6 +35,13 @@ class AiSettings
 
     public const string CHAT_TIMEOUT_KEY = 'ai.chat_timeout';
 
+    /**
+     * Seconds kept between the chat timeout and Octane's hard request
+     * ceiling, so the agent's own timeout fires (and the turn ends cleanly)
+     * before Octane kills the request.
+     */
+    public const int OCTANE_TIMEOUT_MARGIN_SECONDS = 10;
+
     public const string MODELS_DEV_PRICING_ENABLED_KEY = 'ai.pricing.models_dev_enabled';
 
     public const string OPENROUTER_PRICING_ENABLED_KEY = 'ai.pricing.openrouter_enabled';
@@ -196,17 +203,22 @@ class AiSettings
     /**
      * Seconds MediaAgent waits for a provider response before aborting a chat
      * turn. A saved value overrides the `mediamanager.ai.chat_timeout` config
-     * default; when nothing is persisted the config default applies.
+     * default; when nothing is persisted the config default applies. Either
+     * way the result stays OCTANE_TIMEOUT_MARGIN_SECONDS below
+     * `octane.max_execution_time` (0 means no ceiling): past it Octane aborts
+     * the request mid-stream instead of letting this timeout apply.
      */
     public function chatTimeout(): int
     {
         $stored = $this->appSettings->get(self::CHAT_TIMEOUT_KEY);
+        $timeout = $stored === null ? (int) config('mediamanager.ai.chat_timeout', 120) : (int) $stored;
+        $requestCeiling = (int) config('octane.max_execution_time', 0);
 
-        if ($stored === null) {
-            return (int) config('mediamanager.ai.chat_timeout', 120);
+        if ($requestCeiling <= 0) {
+            return $timeout;
         }
 
-        return (int) $stored;
+        return max(1, min($timeout, $requestCeiling - self::OCTANE_TIMEOUT_MARGIN_SECONDS));
     }
 
     /**

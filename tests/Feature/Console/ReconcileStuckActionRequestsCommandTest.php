@@ -5,6 +5,7 @@ declare(strict_types=1);
 use App\Enums\ActionRequestStatus;
 use App\Events\ActionRequestStatusChanged;
 use App\Models\ActionRequest;
+use App\Models\ActivityLog;
 use Illuminate\Support\Facades\Event;
 
 beforeEach(function (): void {
@@ -40,4 +41,14 @@ test('terminal requests are never touched', function (): void {
     $this->artisan('actions:reconcile-stuck')->assertSuccessful();
 
     expect($completed->fresh()->status)->toBe(ActionRequestStatus::Completed);
+});
+
+test('a worker_lost failure is written to the activity log', function (): void {
+    $actionRequest = ActionRequest::factory()->create(['status' => ActionRequestStatus::Executing]);
+    ActionRequest::query()->whereKey($actionRequest->id)->update(['updated_at' => now()->subHours(5)]);
+
+    $this->artisan('actions:reconcile-stuck')->assertSuccessful();
+
+    $log = ActivityLog::query()->where('subject_id', $actionRequest->id)->where('action', 'action_request.failed')->sole();
+    expect($log->description)->toContain('worker_lost');
 });

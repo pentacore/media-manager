@@ -9,6 +9,7 @@ use App\Enums\TimeWindow;
 use App\Http\Controllers\Controller;
 use App\Models\AiModelPrice;
 use App\Models\AiUsageRecord;
+use App\Services\AiBudget\UnpricedModelDetector;
 use App\Services\AiUsage\AiUsageReporting;
 use App\Services\AiUsage\Scenario;
 use App\Settings\AiSettings;
@@ -21,8 +22,12 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class AiUsageController extends Controller
 {
-    public function index(Request $request, AiUsageReporting $aiUsageReporting, AiSettings $aiSettings): Response
-    {
+    public function index(
+        Request $request,
+        AiUsageReporting $aiUsageReporting,
+        AiSettings $aiSettings,
+        UnpricedModelDetector $unpricedModelDetector,
+    ): Response {
         $timeWindow = TimeWindow::fromRequest($request->string('window')->value() ?: null);
         $since = $timeWindow->cutoff();
         $scenario = Scenario::fromArray((array) $request->input('scenario', []));
@@ -54,6 +59,7 @@ class AiUsageController extends Controller
             // switched enforcement on; the page words the card accordingly.
             'rate_limits' => $aiUsageReporting->rateLimitStatus(),
             'rate_limits_enforced' => $aiSettings->rateLimitsEnforced(),
+            'unpricedModels' => $unpricedModelDetector->forHardCap(),
         ];
 
         if ($scenario instanceof Scenario) {

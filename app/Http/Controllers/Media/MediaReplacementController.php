@@ -138,6 +138,39 @@ class MediaReplacementController extends Controller
             ]);
         }
 
+        // Candidate search can call Sonarr/Radarr's release search (120s
+        // timeout on a cold cache); run it before the submission lock so the
+        // lock only guards the short guard→dispatch section it exists for.
+        try {
+            $result = Cache::remember(
+                "media-replacement:candidates:{$fingerprint}",
+                120,
+                fn (): array => $replacementCandidateFinder->find($snapshot, serviceConnection: $connection),
+            );
+        } catch (RequestException|ConnectionException) {
+            return response()->json(['message' => 'Sonarr/Radarr is unreachable.'], 502);
+        }
+
+        $candidate = collect($result['candidates'])
+            ->firstWhere('fingerprint', $validated['candidate_fingerprint']);
+
+        if ($candidate === null) {
+            throw ValidationException::withMessages([
+                'candidate_fingerprint' => 'That release is no longer available — search again.',
+            ]);
+        }
+
+        $built = $replacementRequestBuilder->build(
+            $snapshot,
+            $candidate,
+            $result['effective_languages'],
+            'manual',
+            sprintf('Manual replacement requested by %s', $request->user()->name),
+            verifySubtitles: (bool) ($validated['verify_subtitles'] ?? true),
+        );
+
+        $isRadarr = $validated['service'] === 'radarr';
+
         // Two concurrent POSTs for the same target could both pass the guard
         // check below before either dispatches, creating duplicate pending
         // ActionRequests. Serialize the guard→dispatch section per target.
@@ -160,39 +193,6 @@ class MediaReplacementController extends Controller
                 'A replacement for this file is already in flight.',
             );
 
-            try {
-                $result = Cache::remember(
-                    "media-replacement:candidates:{$fingerprint}",
-                    120,
-                    fn (): array => $replacementCandidateFinder->find($snapshot, serviceConnection: $connection),
-                );
-            } catch (RequestException|ConnectionException) {
-                return response()->json(['message' => 'Sonarr/Radarr is unreachable.'], 502);
-            }
-
-            $candidate = collect($result['candidates'])
-                ->firstWhere('fingerprint', $validated['candidate_fingerprint']);
-
-            if ($candidate === null) {
-                throw ValidationException::withMessages([
-                    'candidate_fingerprint' => 'That release is no longer available — search again.',
-                ]);
-            }
-
-            $built = $replacementRequestBuilder->build(
-                $snapshot,
-                $candidate,
-                $result['effective_languages'],
-                'manual',
-                sprintf('Manual replacement requested by %s', $request->user()->name),
-                verifySubtitles: (bool) ($validated['verify_subtitles'] ?? true),
-            );
-
-            $isRadarr = $validated['service'] === 'radarr';
-
-            // Exact signature: dispatch(string $type, string $sourceService, string $targetService,
-            //   array $payload, ?WebhookEvent $webhookEvent = null, ?bool $forceRequiresApproval = null,
-            //   bool $deferExecution = false): ?ActionRequest  — same call shape as ImportedSubtitleAuditor.
             $actionRequest = $actionOrchestrator->dispatch(
                 type: 'replace_media_file',
                 sourceService: $isRadarr ? 'radarr' : 'sonarr',
