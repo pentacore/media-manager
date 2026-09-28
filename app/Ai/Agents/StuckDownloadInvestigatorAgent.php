@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Ai\Agents;
 
+use App\Ai\Concerns\UsesFailoverChain;
 use App\Ai\Decision\InspectStuckImportTool;
 use App\Ai\Middleware\AnswerOnFinalStep;
 use App\Ai\Middleware\EnforceBudgetEachStep;
@@ -42,6 +43,7 @@ use Laravel\Ai\Streaming\Events\TextDelta;
 final class StuckDownloadInvestigatorAgent implements Agent, CanActAsTool, HasMiddleware, HasStructuredOutput, HasTools
 {
     use Promptable;
+    use UsesFailoverChain;
 
     public function name(): string
     {

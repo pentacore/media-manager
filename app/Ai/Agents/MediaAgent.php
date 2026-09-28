@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Ai\Agents;
 
+use App\Ai\Concerns\UsesFailoverChain;
 use App\Ai\Middleware\AnswerOnFinalStep;
 use App\Ai\Middleware\EnforceBudgetEachStep;
 use App\Ai\Tools\Arr\AddMediaTool;
@@ -70,6 +71,7 @@ class MediaAgent implements Agent, Conversational, HasMiddleware, HasProviderOpt
 {
     use Promptable;
     use RemembersConversations;
+    use UsesFailoverChain;
 
     public function model(): string
     {

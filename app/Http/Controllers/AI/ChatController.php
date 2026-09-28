@@ -83,12 +83,8 @@ class ChatController extends Controller
             $groups = $continuation === null ? $chatToolRouter->route($messageToSend, $conversationId) : null;
             $agent = (new MediaAgent)->continueOrStart($conversationId, as: $user)
                 ->withTools(fn (array $declared): array => $toolPayload->build($groups === null ? $declared : $chatToolRouter->filter($declared, $groups)));
-            $aiSettings = resolve(AiSettings::class);
-            $chain = $aiSettings->providerChainWithModel($aiSettings->model());
             $sdkAttachments = $chatAttachmentStore->toSdkAttachments($attachments);
-            $response = $chain === null
-                ? $agent->prompt($messageToSend, attachments: $sdkAttachments)
-                : $agent->prompt($messageToSend, attachments: $sdkAttachments, provider: $chain);
+            $response = $agent->prompt($messageToSend, attachments: $sdkAttachments);
         } catch (Throwable $throwable) {
             return $this->handleAgentFailure($throwable, $user);
         }
@@ -149,12 +145,8 @@ class ChatController extends Controller
             $groups = $chatToolRouter->route($message, $conversationId);
             $agent = (new MediaAgent)->continueOrStart($conversationId, as: $user)
                 ->withTools(fn (array $declared): array => $toolPayload->build($groups === null ? $declared : $chatToolRouter->filter($declared, $groups)));
-            $aiSettings = resolve(AiSettings::class);
-            $chain = $aiSettings->providerChainWithModel($aiSettings->model());
             $sdkAttachments = $chatAttachmentStore->toSdkAttachments($attachments);
-            $stream = $chain === null
-                ? $agent->stream($message, attachments: $sdkAttachments)
-                : $agent->stream($message, attachments: $sdkAttachments, provider: $chain);
+            $stream = $agent->stream($message, attachments: $sdkAttachments);
         } catch (Throwable $throwable) {
             return $this->handleAgentFailure($throwable, $user);
         }

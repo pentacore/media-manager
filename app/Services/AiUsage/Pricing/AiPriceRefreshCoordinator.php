@@ -16,7 +16,6 @@ use App\Services\AiUsage\Pricing\Data\PricingRejection;
 use App\Services\AiUsage\Pricing\Data\ProviderPricingResult;
 use App\Services\AiUsage\Pricing\Data\RefreshReport;
 use App\Services\AiUsage\Pricing\Data\WriteOutcome;
-use App\Settings\AiSettings;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\DetectsLostConnections;
 use Illuminate\Support\Facades\DB;
@@ -506,14 +505,9 @@ final class AiPriceRefreshCoordinator
 
             $prompt = 'Verify and correct the catalog pricing for your scoped providers now. Fetch each canonical pricing page first, then upsert the rates you read.';
 
-            $aiSettings = resolve(AiSettings::class);
-            $chain = $aiSettings->providerChainWithModel($aiSettings->priceUpdaterModel());
-
             // Queued refreshes have no authenticated user, so attribute the
             // verifier's usage to whoever triggered the run.
-            $agentResponse = resolve(AiRunAttribution::class)->during($user, fn (): AgentResponse => $chain === null
-                ? $agent->prompt($prompt)
-                : $agent->prompt($prompt, provider: $chain));
+            $agentResponse = resolve(AiRunAttribution::class)->during($user, fn (): AgentResponse => $agent->prompt($prompt));
 
             $this->sourceCitations = $agentResponse->meta->citations
                 ->filter(fn (Citation $citation): bool => $citation instanceof UrlCitation)

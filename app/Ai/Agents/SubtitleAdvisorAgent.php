@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Ai\Agents;
 
+use App\Ai\Concerns\UsesFailoverChain;
 use App\Ai\Middleware\AnswerOnFinalStep;
 use App\Ai\Middleware\EnforceBudgetEachStep;
 use App\Ai\Tools\Bazarr\InspectSubtitleEscalationTool;
@@ -22,6 +23,7 @@ use Laravel\Ai\Promptable;
 final class SubtitleAdvisorAgent implements Agent, HasMiddleware, HasTools
 {
     use Promptable;
+    use UsesFailoverChain;
 
     public function model(): string
     {

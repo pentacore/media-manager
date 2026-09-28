@@ -152,12 +152,7 @@ final class RunSubtitleAdvisor implements ShouldBeUnique, ShouldQueue
         app()->instance(SubtitleAdvisorRunContext::class, $subtitleAdvisorRunContext);
 
         try {
-            $subtitleAdvisorAgent = new SubtitleAdvisorAgent;
-            $providerChain = $aiSettings->providerChainWithModel($subtitleAdvisorAgent->model());
-            $prompt = $this->prompt($subtitleCase);
-            $response = $providerChain === null
-                ? $subtitleAdvisorAgent->prompt($prompt)
-                : $subtitleAdvisorAgent->prompt($prompt, provider: $providerChain);
+            $response = (new SubtitleAdvisorAgent)->prompt($this->prompt($subtitleCase));
             $summary = trim($response->text) !== ''
                 ? trim($response->text)
                 : 'The Advisor produced no audit summary.';

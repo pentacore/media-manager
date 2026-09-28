@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Ai\Agents;
 
+use App\Ai\Concerns\UsesFailoverChain;
 use App\Ai\Middleware\AnswerOnFinalStep;
 use App\Ai\Middleware\EnforceBudgetEachStep;
 use App\Ai\Tools\Arr\FindReplacementCandidatesTool;
@@ -43,6 +44,7 @@ use Laravel\Ai\Streaming\Events\TextDelta;
 final class MediaFileInspectorAgent implements Agent, CanActAsTool, HasMiddleware, HasStructuredOutput, HasTools
 {
     use Promptable;
+    use UsesFailoverChain;
 
     public function name(): string
     {

@@ -152,11 +152,7 @@ class RunDecisionAgent implements ShouldBeUnique, ShouldQueue
         app()->instance(DecisionRunContext::class, $decisionRunContext);
 
         try {
-            $decisionAgent = new DecisionAgent;
-            $chain = $aiSettings->providerChainWithModel($decisionAgentSettings->model());
-            $response = $chain === null
-                ? $decisionAgent->prompt($this->buildPrompt())
-                : $decisionAgent->prompt($this->buildPrompt(), provider: $chain);
+            $response = (new DecisionAgent)->prompt($this->buildPrompt());
             $summary = trim($response->text) !== '' ? trim($response->text) : 'No summary produced.';
         } catch (Throwable $throwable) {
             Log::warning('RunDecisionAgent: agent run failed', [

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Ai\Agents;
 
+use App\Ai\Concerns\UsesFailoverChain;
 use App\Ai\Decision\InspectStuckImportTool;
 use App\Ai\Decision\ProposeActionTool;
 use App\Ai\Decision\RemoveStuckDownloadTool;
@@ -44,6 +45,7 @@ use Stringable;
 class DecisionAgent implements Agent, HasMiddleware, HasProviderOptions, HasTools
 {
     use Promptable;
+    use UsesFailoverChain;
 
     public function model(): string
     {
