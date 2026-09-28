@@ -59,6 +59,9 @@ test('a coalesced scan whose emby server was deactivated sends nothing', functio
         'payload' => ['emby_connection_id' => $inactive->id],
     ]);
 
-    expect(fn (): array => (new EmbyActions)->execute($request))->toThrow(ModelNotFoundException::class);
+    expect(fn (): array => (new EmbyActions)->execute($request))->toThrow(
+        ModelNotFoundException::class,
+        sprintf('Emby connection %d this library scan was queued for is missing or deactivated.', $inactive->id),
+    );
     Http::assertNothingSent();
 });

@@ -59,6 +59,6 @@ class EmbyActions implements ActionExecutor
             ->firstOr(static fn (): never => throw new ModelNotFoundException(sprintf(
                 'Emby connection %d this library scan was queued for is missing or deactivated.',
                 $connectionId,
-            ))->setModel(ServiceConnection::class, [$connectionId]));
+            )));
     }
 }
