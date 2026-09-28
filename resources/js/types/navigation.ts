@@ -1,5 +1,6 @@
 import type { InertiaLinkProps } from '@inertiajs/vue3';
 import type { LucideIcon } from '@lucide/vue';
+import type { Ability } from './auth';
 
 export type BreadcrumbItem = {
     title: string;
@@ -24,6 +25,8 @@ export type NavItem = {
      * drops them.
      */
     mobileOnly?: boolean;
+    /** Hidden unless `auth.can[ability]` is true. Children inherit nothing — tag each. */
+    ability?: Ability;
 };
 
 /**

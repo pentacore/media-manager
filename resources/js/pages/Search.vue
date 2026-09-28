@@ -13,6 +13,7 @@ import SearchController from '@/actions/App/Http/Controllers/Media/SearchControl
 import { Pill, Poster, StatusPill, SvcChip } from '@/components/mm';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Skeleton } from '@/components/ui/skeleton';
+import { useCan } from '@/composables/useCan';
 import { tmdbPosterUrl } from '@/lib/tmdb';
 import { cn } from '@/lib/utils';
 import { dashboard } from '@/routes';
@@ -99,6 +100,8 @@ defineOptions({
         ],
     },
 });
+
+const { can } = useCan();
 
 const query = ref(props.query);
 const submitting = ref(false);
@@ -313,22 +316,25 @@ const seerrStatusKey = (status: number | null): string => {
             </form>
 
             <div class="mt-3 flex flex-wrap items-center gap-1.5">
-                <button
-                    v-for="s in SCOPES"
-                    :key="s.id"
-                    type="button"
-                    :class="
-                        cn(
-                            'inline-flex h-7 items-center gap-1.5 rounded-md px-2.5 text-xs font-medium transition-colors',
-                            scope === s.id
-                                ? 'bg-accent text-accent-foreground'
-                                : 'text-muted-foreground hover:bg-bg-hover hover:text-foreground',
-                        )
-                    "
-                    @click="setScope(s.id)"
-                >
-                    {{ s.label }}
-                </button>
+                <template v-if="can('manage-library')">
+                    <button
+                        v-for="s in SCOPES"
+                        :key="s.id"
+                        type="button"
+                        data-search-scope
+                        :class="
+                            cn(
+                                'inline-flex h-7 items-center gap-1.5 rounded-md px-2.5 text-xs font-medium transition-colors',
+                                scope === s.id
+                                    ? 'bg-accent text-accent-foreground'
+                                    : 'text-muted-foreground hover:bg-bg-hover hover:text-foreground',
+                            )
+                        "
+                        @click="setScope(s.id)"
+                    >
+                        {{ s.label }}
+                    </button>
+                </template>
                 <span class="ml-auto text-[11.5px] text-fg-subtle">
                     <template v-if="query">
                         <span class="font-mono-tabular">{{

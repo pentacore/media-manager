@@ -38,6 +38,7 @@ import {
     TooltipProvider,
     TooltipTrigger,
 } from '@/components/ui/tooltip';
+import { useCan } from '@/composables/useCan';
 import { dashboard } from '@/routes';
 
 interface QualityProfile {
@@ -86,17 +87,19 @@ interface SeriesDetail {
     overview: string | null;
     network: string | null;
     runtime: number | null;
-    root_folder_path: string | null;
+    root_folder_path?: string | null;
     seasons: Season[];
 }
 
 const props = defineProps<{
-    connection: { url: string };
+    connection: { url: string | null };
     service_connection_id: number;
     series: SeriesDetail;
     episodes?: Episode[];
     qualityProfiles?: QualityProfile[];
 }>();
+
+const { can } = useCan();
 
 defineOptions({
     layout: {
@@ -188,7 +191,7 @@ function confirmDelete() {
 }
 
 function sonarrSeriesUrl(): string | null {
-    if (!props.series.title_slug) {
+    if (!props.series.title_slug || !props.connection.url) {
         return null;
     }
 
@@ -209,7 +212,7 @@ function sonarrSeriesUrl(): string | null {
             </Link>
             <div class="flex items-center gap-2">
                 <a
-                    v-if="series.title_slug"
+                    v-if="series.title_slug && can('manage-library')"
                     :href="sonarrSeriesUrl() ?? undefined"
                     target="_blank"
                     rel="noopener noreferrer"
@@ -219,53 +222,58 @@ function sonarrSeriesUrl(): string | null {
                         Open in Sonarr
                     </Button>
                 </a>
-                <Dialog v-model:open="deleteDialogOpen">
-                    <DialogTrigger as-child>
-                        <Button
-                            variant="destructive"
-                            size="sm"
-                            class="h-8 text-xs"
-                            data-delete-trigger
-                        >
-                            <Trash2 class="size-3.5" />
-                            Delete
-                        </Button>
-                    </DialogTrigger>
-                    <DialogContent>
-                        <DialogHeader>
-                            <DialogTitle>
-                                Delete {{ series.title }}?
-                            </DialogTitle>
-                            <DialogDescription data-delete-description>
-                                Removes the series from Sonarr. Cannot be
-                                undone. Deletion may require approval in the
-                                Action Queue.
-                            </DialogDescription>
-                        </DialogHeader>
-                        <div class="flex items-center gap-2 py-2">
-                            <Checkbox id="delete_files" v-model="deleteFiles" />
-                            <Label for="delete_files"
-                                >Also delete files on disk</Label
-                            >
-                        </div>
-                        <DialogFooter>
-                            <Button
-                                variant="outline"
-                                @click="deleteDialogOpen = false"
-                            >
-                                Cancel
-                            </Button>
+                <template v-if="can('manage-library')">
+                    <Dialog v-model:open="deleteDialogOpen">
+                        <DialogTrigger as-child>
                             <Button
                                 variant="destructive"
-                                data-delete-confirm
-                                :disabled="deleting"
-                                @click="confirmDelete"
+                                size="sm"
+                                class="h-8 text-xs"
+                                data-delete-trigger
                             >
+                                <Trash2 class="size-3.5" />
                                 Delete
                             </Button>
-                        </DialogFooter>
-                    </DialogContent>
-                </Dialog>
+                        </DialogTrigger>
+                        <DialogContent>
+                            <DialogHeader>
+                                <DialogTitle>
+                                    Delete {{ series.title }}?
+                                </DialogTitle>
+                                <DialogDescription data-delete-description>
+                                    Removes the series from Sonarr. Cannot be
+                                    undone. Deletion may require approval in
+                                    the Action Queue.
+                                </DialogDescription>
+                            </DialogHeader>
+                            <div class="flex items-center gap-2 py-2">
+                                <Checkbox
+                                    id="delete_files"
+                                    v-model="deleteFiles"
+                                />
+                                <Label for="delete_files"
+                                    >Also delete files on disk</Label
+                                >
+                            </div>
+                            <DialogFooter>
+                                <Button
+                                    variant="outline"
+                                    @click="deleteDialogOpen = false"
+                                >
+                                    Cancel
+                                </Button>
+                                <Button
+                                    variant="destructive"
+                                    data-delete-confirm
+                                    :disabled="deleting"
+                                    @click="confirmDelete"
+                                >
+                                    Delete
+                                </Button>
+                            </DialogFooter>
+                        </DialogContent>
+                    </Dialog>
+                </template>
             </div>
         </div>
 
@@ -557,7 +565,10 @@ function sonarrSeriesUrl(): string | null {
                                                 }}
                                             </Pill>
                                             <TooltipProvider
-                                                v-if="episode.has_file"
+                                                v-if="
+                                                    episode.has_file &&
+                                                    can('manage-library')
+                                                "
                                                 :delay-duration="200"
                                             >
                                                 <Tooltip>

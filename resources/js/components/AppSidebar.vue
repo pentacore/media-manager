@@ -18,12 +18,14 @@ import {
     useSidebar,
 } from '@/components/ui/sidebar';
 import { useAiChat } from '@/composables/useAiChat';
+import { useCan } from '@/composables/useCan';
 import { useNavCounts } from '@/composables/useNavCounts';
 import { useNavItems } from '@/composables/useNavItems';
 import { dashboard } from '@/routes';
 import type { NavGroup, NavItem } from '@/types';
 
 const page = usePage();
+const { can } = useCan();
 const { isMobile } = useSidebar();
 const { openChat } = useAiChat();
 
@@ -46,17 +48,7 @@ const visibleGroups = computed<NavGroup[]>(() =>
     })),
 );
 
-const isAdmin = computed(() => {
-    const role = page.props.auth.user?.role;
-
-    if (!role) {
-        return false;
-    }
-
-    const value = typeof role === 'string' ? role : role.value;
-
-    return value === 'admin';
-});
+const isAdmin = computed(() => can('admin'));
 
 const aiEnabled = computed(() =>
     Boolean(

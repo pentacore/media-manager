@@ -10,22 +10,14 @@ import {
 } from '@/components/ui/sheet';
 import { useAiChat } from '@/composables/useAiChat';
 import { useAiChatWidth } from '@/composables/useAiChatWidth';
+import { useCan } from '@/composables/useCan';
 import { cn } from '@/lib/utils';
 import ChatPanel from './ai/ChatPanel.vue';
 
 const page = usePage();
+const { can } = useCan();
 
-const isAdmin = computed(() => {
-    const role = page.props.auth.user?.role;
-
-    if (!role) {
-        return false;
-    }
-
-    const value = typeof role === 'string' ? role : role.value;
-
-    return value === 'admin';
-});
+const isAdmin = computed(() => can('admin'));
 
 const aiEnabled = computed(() =>
     Boolean(

@@ -365,6 +365,52 @@ test('series index prefers external_url for connection link', function (): void 
         );
 });
 
+test('viewers do not receive the connection url on the series index shell', function (): void {
+    $this->actingAs(User::factory()->create())
+        ->get(route('media.series.index'))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->component('Sonarr/Series/Index')
+            ->where('connection.url', null)
+        );
+});
+
+test('viewers do not receive the connection url or root folder path on the series show page', function (): void {
+    Http::fake([
+        'sonarr.local:8989/api/v3/series/42' => Http::response([
+            'id' => 42, 'title' => 'My Show', 'titleSlug' => 'my-show', 'year' => 2024, 'overview' => 'A show', 'status' => 'ended', 'monitored' => true, 'qualityProfileId' => 1, 'seasons' => [], 'statistics' => ['sizeOnDisk' => 0, 'episodeCount' => 0, 'episodeFileCount' => 0], 'images' => [], 'network' => 'HBO', 'runtime' => 60, 'rootFolderPath' => '/tv',
+        ]),
+        'sonarr.local:8989/api/v3/episode*' => Http::response([]),
+    ]);
+
+    $this->actingAs(User::factory()->create())
+        ->get(route('media.series.show', 42))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->component('Sonarr/Series/Show')
+            ->where('connection.url', null)
+            ->missing('series.root_folder_path')
+        );
+});
+
+test('members still receive the connection url and root folder path on the series show page', function (): void {
+    Http::fake([
+        'sonarr.local:8989/api/v3/series/42' => Http::response([
+            'id' => 42, 'title' => 'My Show', 'titleSlug' => 'my-show', 'year' => 2024, 'overview' => 'A show', 'status' => 'ended', 'monitored' => true, 'qualityProfileId' => 1, 'seasons' => [], 'statistics' => ['sizeOnDisk' => 0, 'episodeCount' => 0, 'episodeFileCount' => 0], 'images' => [], 'network' => 'HBO', 'runtime' => 60, 'rootFolderPath' => '/tv',
+        ]),
+        'sonarr.local:8989/api/v3/episode*' => Http::response([]),
+    ]);
+
+    $this->actingAs(User::factory()->member()->create())
+        ->get(route('media.series.show', 42))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->component('Sonarr/Series/Show')
+            ->where('connection.url', 'http://sonarr.local:8989')
+            ->where('series.root_folder_path', '/tv')
+        );
+});
+
 test('destroy follows the rule even when the chat AI is in advisory mode', function (): void {
     resolve(AiSettings::class)->setMode(AiMode::Advisory);
     $member = User::factory()->member()->create();

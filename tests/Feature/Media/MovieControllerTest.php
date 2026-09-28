@@ -351,6 +351,55 @@ test('destroy reports a disabled rule', function (): void {
     expect(ActionRequest::query()->where('type', 'delete_movie')->exists())->toBeFalse();
 });
 
+test('viewers do not receive the connection url on the movies index shell', function (): void {
+    $this->actingAs(User::factory()->create())
+        ->get(route('media.movies.index'))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->component('Radarr/Movies/Index')
+            ->where('connection.url', null)
+        );
+});
+
+test('viewers do not receive the connection url, root folder path or file path on the movie show page', function (): void {
+    Http::fake([
+        'radarr.local:7878/api/v3/movie/42' => Http::response([
+            'id' => 42, 'title' => 'My Movie', 'titleSlug' => 'my-movie-2024', 'year' => 2024, 'overview' => 'A film', 'status' => 'released', 'monitored' => true, 'hasFile' => true, 'qualityProfileId' => 1, 'sizeOnDisk' => 5000, 'images' => [], 'runtime' => 120, 'studio' => 'A24', 'rootFolderPath' => '/movies',
+            'movieFile' => ['quality' => ['quality' => ['name' => 'Bluray-1080p']], 'size' => 5000, 'relativePath' => 'My Movie/movie.mkv'],
+        ]),
+    ]);
+
+    $this->actingAs(User::factory()->create())
+        ->get(route('media.movies.show', 42))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->component('Radarr/Movies/Show')
+            ->where('connection.url', null)
+            ->missing('movie.root_folder_path')
+            ->where('movie.movie_file.quality', 'Bluray-1080p')
+            ->missing('movie.movie_file.relative_path')
+        );
+});
+
+test('members still receive the connection url, root folder path and file path on the movie show page', function (): void {
+    Http::fake([
+        'radarr.local:7878/api/v3/movie/42' => Http::response([
+            'id' => 42, 'title' => 'My Movie', 'titleSlug' => 'my-movie-2024', 'year' => 2024, 'overview' => 'A film', 'status' => 'released', 'monitored' => true, 'hasFile' => true, 'qualityProfileId' => 1, 'sizeOnDisk' => 5000, 'images' => [], 'runtime' => 120, 'studio' => 'A24', 'rootFolderPath' => '/movies',
+            'movieFile' => ['quality' => ['quality' => ['name' => 'Bluray-1080p']], 'size' => 5000, 'relativePath' => 'My Movie/movie.mkv'],
+        ]),
+    ]);
+
+    $this->actingAs(User::factory()->member()->create())
+        ->get(route('media.movies.show', 42))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->component('Radarr/Movies/Show')
+            ->where('connection.url', 'http://radarr.local:7878')
+            ->where('movie.root_folder_path', '/movies')
+            ->where('movie.movie_file.relative_path', 'My Movie/movie.mkv')
+        );
+});
+
 test('destroy follows the rule even when the chat AI is in advisory mode', function (): void {
     resolve(AiSettings::class)->setMode(AiMode::Advisory);
     $member = User::factory()->member()->create();

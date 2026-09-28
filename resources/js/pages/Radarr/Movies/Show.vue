@@ -23,6 +23,7 @@ import {
     DialogTitle,
     DialogTrigger,
 } from '@/components/ui/dialog';
+import { useCan } from '@/composables/useCan';
 import { dashboard } from '@/routes';
 
 interface MovieImage {
@@ -34,7 +35,7 @@ interface MovieImage {
 interface MovieFile {
     quality: string | null;
     size: number;
-    relative_path: string | null;
+    relative_path?: string | null;
 }
 
 interface MovieDetail {
@@ -51,15 +52,17 @@ interface MovieDetail {
     overview: string | null;
     runtime: number | null;
     studio: string | null;
-    root_folder_path: string | null;
+    root_folder_path?: string | null;
     movie_file: MovieFile | null;
 }
 
 const props = defineProps<{
-    connection: { url: string };
+    connection: { url: string | null };
     service_connection_id: number;
     movie: MovieDetail;
 }>();
+
+const { can } = useCan();
 
 defineOptions({
     layout: {
@@ -135,7 +138,7 @@ function confirmDelete() {
             </Link>
             <div class="flex items-center gap-2">
                 <a
-                    v-if="movie.title_slug"
+                    v-if="movie.title_slug && can('manage-library') && connection.url"
                     :href="`${connection.url}/movie/${movie.title_slug}`"
                     target="_blank"
                     rel="noopener noreferrer"
@@ -146,7 +149,7 @@ function confirmDelete() {
                     </Button>
                 </a>
                 <Button
-                    v-if="movie.has_file"
+                    v-if="movie.has_file && can('manage-library')"
                     variant="outline"
                     size="sm"
                     class="h-8 text-xs"
@@ -156,54 +159,61 @@ function confirmDelete() {
                     <Replace class="size-3.5" />
                     Replace file
                 </Button>
-                <Dialog v-model:open="deleteDialogOpen">
-                    <DialogTrigger as-child>
-                        <Button
-                            variant="destructive"
-                            size="sm"
-                            class="h-8 text-xs"
-                            data-delete-trigger
-                        >
-                            <Trash2 class="size-3.5" />
-                            Delete
-                        </Button>
-                    </DialogTrigger>
-                    <DialogContent>
-                        <DialogHeader>
-                            <DialogTitle>Delete {{ movie.title }}?</DialogTitle>
-                            <DialogDescription data-delete-description>
-                                Removes the movie from Radarr. Cannot be undone.
-                                Deletion may require approval in the Action
-                                Queue.
-                            </DialogDescription>
-                        </DialogHeader>
-                        <div class="flex items-center gap-2 py-2">
-                            <Checkbox id="delete_files" v-model="deleteFiles" />
-                            <label
-                                for="delete_files"
-                                class="text-[13px] leading-none"
-                            >
-                                Also delete files from disk
-                            </label>
-                        </div>
-                        <DialogFooter>
-                            <Button
-                                variant="outline"
-                                @click="deleteDialogOpen = false"
-                            >
-                                Cancel
-                            </Button>
+                <template v-if="can('manage-library')">
+                    <Dialog v-model:open="deleteDialogOpen">
+                        <DialogTrigger as-child>
                             <Button
                                 variant="destructive"
-                                data-delete-confirm
-                                :disabled="deleting"
-                                @click="confirmDelete"
+                                size="sm"
+                                class="h-8 text-xs"
+                                data-delete-trigger
                             >
-                                Confirm
+                                <Trash2 class="size-3.5" />
+                                Delete
                             </Button>
-                        </DialogFooter>
-                    </DialogContent>
-                </Dialog>
+                        </DialogTrigger>
+                        <DialogContent>
+                            <DialogHeader>
+                                <DialogTitle
+                                    >Delete {{ movie.title }}?</DialogTitle
+                                >
+                                <DialogDescription data-delete-description>
+                                    Removes the movie from Radarr. Cannot be
+                                    undone. Deletion may require approval in
+                                    the Action Queue.
+                                </DialogDescription>
+                            </DialogHeader>
+                            <div class="flex items-center gap-2 py-2">
+                                <Checkbox
+                                    id="delete_files"
+                                    v-model="deleteFiles"
+                                />
+                                <label
+                                    for="delete_files"
+                                    class="text-[13px] leading-none"
+                                >
+                                    Also delete files from disk
+                                </label>
+                            </div>
+                            <DialogFooter>
+                                <Button
+                                    variant="outline"
+                                    @click="deleteDialogOpen = false"
+                                >
+                                    Cancel
+                                </Button>
+                                <Button
+                                    variant="destructive"
+                                    data-delete-confirm
+                                    :disabled="deleting"
+                                    @click="confirmDelete"
+                                >
+                                    Confirm
+                                </Button>
+                            </DialogFooter>
+                        </DialogContent>
+                    </Dialog>
+                </template>
             </div>
         </div>
 
