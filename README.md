@@ -105,6 +105,12 @@ docker compose --env-file .env ps
 
 The normal image build creates both the browser bundle and `bootstrap/ssr/ssr.js`. The `ssr` container runs that bundle with Node.js on the private Compose network; port `13714` is not exposed publicly. TLS is terminated by your reverse proxy in front of the `web` and `reverb` ports.
 
+### Reverse proxy and trusted proxies
+
+MediaManager expects a reverse proxy (Traefik, Caddy, nginx) in front of the `web` and `reverb` ports to terminate TLS. Set `TRUSTED_PROXIES` in `docker/production/.env` to that proxy's exact address, for example `TRUSTED_PROXIES=192.168.1.10`. The app then honors the proxy's `X-Forwarded-For` / `X-Forwarded-Proto` headers, so login throttling keys on the real client IP and signed invite and verification links validate.
+
+Leave it empty (the default) when nothing sits in front of the app: no forwarded header is trusted. Do not list whole private ranges such as `192.168.0.0/16`. Compose publishes `WEB_PORT` on every interface, so any host inside a trusted range could send a forged `X-Forwarded-For` and dodge the login and Emby-login throttles. The app logs a warning (at most once a day) while `TRUSTED_PROXIES` contains `*` or a range wider than /24 (IPv6: /64). Where you can, also firewall `WEB_PORT` and `REVERB_BIND_PORT` so only the proxy host reaches them.
+
 ### Verify SSR
 
 ```bash
