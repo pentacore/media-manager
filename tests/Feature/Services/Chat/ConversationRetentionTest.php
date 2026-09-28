@@ -30,15 +30,13 @@ test('sweeping orphaned attachments across more than one chunk visits each row o
     $legacyMock->shouldReceive('delete')->andReturnUsing(function () use (&$deleteAttempts): bool {
         $deleteAttempts++;
 
-        if ($deleteAttempts > 300) {
-            throw new RuntimeException('sweepOrphanedAttachments revisited rows instead of terminating');
-        }
+        throw_if($deleteAttempts > 300, RuntimeException::class, 'sweepOrphanedAttachments revisited rows instead of terminating');
 
         return false;
     });
     Storage::set('local', $legacyMock);
 
-    $swept = app(ConversationRetention::class)->sweepOrphanedAttachments();
+    $swept = resolve(ConversationRetention::class)->sweepOrphanedAttachments();
 
     expect($deleteAttempts)->toBe(150)
         ->and($swept)->toBe(0)
