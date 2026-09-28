@@ -9,11 +9,12 @@ use App\Concerns\EnumUtils;
 /**
  * Named queues ("lanes") on the default queue connection. Case order is the
  * worker priority order: a general worker drains actions before webhooks
- * before everything else. The ai lane has its own worker (the production
- * queue-ai service) so a slow model call never delays an approved action or
- * an inbound webhook. Default must equal the connection's default queue name:
- * jobs without a #[Queue] attribute, broadcasts, Scout syncs and queued
- * notifications land there.
+ * before everything else. The ai and maintenance lanes have their own worker
+ * (the production queue-ai service, ai first) so a slow model call or a long
+ * housekeeping job never delays an approved action or an inbound webhook.
+ * Default must equal the connection's default queue name: jobs without a
+ * #[Queue] attribute, broadcasts, Scout syncs and queued notifications land
+ * there.
  */
 enum QueueLane: string
 {
@@ -23,6 +24,7 @@ enum QueueLane: string
     case Webhooks = 'webhooks';
     case Default = 'default';
     case Ai = 'ai';
+    case Maintenance = 'maintenance';
 
     public function label(): string
     {
@@ -31,12 +33,13 @@ enum QueueLane: string
             self::Webhooks => 'Webhooks',
             self::Default => 'Default',
             self::Ai => 'AI',
+            self::Maintenance => 'Maintenance',
         };
     }
 
     public function hasDedicatedWorker(): bool
     {
-        return $this === self::Ai;
+        return $this === self::Ai || $this === self::Maintenance;
     }
 
     /**

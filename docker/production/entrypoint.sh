@@ -78,10 +78,10 @@ case "$role" in
         warm_caches
         # Lanes in priority order (App\Enums\QueueLane). The default drains
         # every lane so an older compose.yaml without the queue-ai service
-        # still runs AI jobs; the shipped compose.yaml narrows it with
-        # QUEUE_LANES and runs the ai lane in queue-ai.
+        # still runs AI and maintenance jobs; the shipped compose.yaml narrows
+        # it with QUEUE_LANES and runs the ai and maintenance lanes in queue-ai.
         exec php artisan queue:work \
-            --queue="${QUEUE_LANES:-actions,webhooks,default,ai}" \
+            --queue="${QUEUE_LANES:-actions,webhooks,default,ai,maintenance}" \
             --sleep=3 \
             --tries=3 \
             --timeout=300 \
@@ -92,9 +92,11 @@ case "$role" in
     queue-ai)
         warm_caches
         # AI jobs (decision agent, subtitle advisor, embeddings, titles, price
-        # refresh) only. Keep --timeout below the redis retry_after (330s).
+        # refresh) first, then maintenance jobs (long housekeeping — e.g. bulk
+        # Seerr request clears, search index reconcile, anime mapping sync).
+        # Keep --timeout below the redis retry_after (330s).
         exec php artisan queue:work \
-            --queue=ai \
+            --queue=ai,maintenance \
             --sleep=3 \
             --tries=3 \
             --timeout=300 \

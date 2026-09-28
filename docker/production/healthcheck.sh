@@ -17,10 +17,11 @@ case "$role" in
     queue)
         # Heartbeats are queued by the scheduler every minute and recorded by
         # the worker that drains each lane; a lane can sit behind one 300s job.
-        php artisan ops:check-heartbeat --queue="${QUEUE_LANES:-actions,webhooks,default,ai}" --max-age="${HEARTBEAT_MAX_AGE:-600}" --no-interaction > /dev/null
+        php artisan ops:check-heartbeat --queue="${QUEUE_LANES:-actions,webhooks,default,ai,maintenance}" --max-age="${HEARTBEAT_MAX_AGE:-600}" --no-interaction > /dev/null
         ;;
     queue-ai)
-        php artisan ops:check-heartbeat --queue=ai --max-age="${HEARTBEAT_MAX_AGE:-600}" --no-interaction > /dev/null
+        # Checks both lanes this worker drains (ai, maintenance).
+        php artisan ops:check-heartbeat --queue=ai,maintenance --max-age="${HEARTBEAT_MAX_AGE:-600}" --no-interaction > /dev/null
         ;;
     scheduler)
         php artisan ops:check-heartbeat --scheduler --max-age="${HEARTBEAT_MAX_AGE:-180}" --no-interaction > /dev/null

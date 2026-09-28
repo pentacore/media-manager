@@ -104,8 +104,9 @@ services:
     <<: *app
     environment:
       CONTAINER_ROLE: queue
-      # Priority order. The ai lane runs in queue-ai so a slow model call
-      # never delays an approved action or an inbound webhook.
+      # Priority order. The ai and maintenance lanes run in queue-ai so a slow
+      # model call or a long housekeeping job never delays an approved action
+      # or an inbound webhook.
       QUEUE_LANES: actions,webhooks,default
     healthcheck: *heartbeat-healthcheck
     # Docker's default 10s SIGTERM->SIGKILL window would kill workers mid-job
@@ -119,7 +120,9 @@ services:
     environment:
       CONTAINER_ROLE: queue-ai
     healthcheck: *heartbeat-healthcheck
-    # Same reasoning as queue: let an in-flight model call finish (--timeout=300).
+    # Drains ai (model calls) then maintenance (long housekeeping — bulk Seerr
+    # request clears, search index reconcile, anime mapping sync). Same
+    # reasoning as queue: let an in-flight job finish (--timeout=300).
     stop_grace_period: 310s
 
   scheduler:

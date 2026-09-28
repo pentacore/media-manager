@@ -10,9 +10,11 @@ use App\Jobs\EmbedLibraryItem;
 use App\Jobs\ExecuteActionRequest;
 use App\Jobs\ExecuteDebouncedLibraryScan;
 use App\Jobs\ProcessWebhookEvent;
+use App\Jobs\ReconcileSearchIndex;
 use App\Jobs\RefreshAiPricesJob;
 use App\Jobs\RunDecisionAgent;
 use App\Jobs\RunSubtitleAdvisor;
+use App\Jobs\SyncAnimeMappingJob;
 use App\Models\ActionRequest;
 use App\Models\IndexedMovie;
 use App\Models\User;
@@ -38,13 +40,15 @@ test('each job is pushed onto its lane', function (Closure $makeJob, QueueLane $
     'price refresh' => [fn (): RefreshAiPricesJob => new RefreshAiPricesJob(User::factory()->admin()->create()), QueueLane::Ai],
     'library embedding' => [fn (): EmbedLibraryItem => new EmbedLibraryItem(IndexedMovie::class, 1), QueueLane::Ai],
     'conversation title' => [fn (): GenerateConversationTitle => new GenerateConversationTitle('01J9ZZZZZZZZZZZZZZZZZZZZZZ', 'hello'), QueueLane::Ai],
+    'bulk seerr request clear' => [fn (): ClearSeerrRequests => new ClearSeerrRequests(1, 'pending', [1, 2, 3], null), QueueLane::Maintenance],
+    'search index reconcile' => [fn (): ReconcileSearchIndex => new ReconcileSearchIndex, QueueLane::Maintenance],
+    'anime mapping sync' => [fn (): SyncAnimeMappingJob => new SyncAnimeMappingJob, QueueLane::Maintenance],
 ]);
 
 test('jobs that neither execute actions, process webhooks nor call a model stay on the default lane', function (string $jobClass): void {
     expect(new ReflectionClass($jobClass)->getAttributes(QueueAttribute::class))->toBe([]);
 })->with([
     'dashboard stats rebroadcast' => [BroadcastDashboardStats::class],
-    'bulk seerr request clear' => [ClearSeerrRequests::class],
 ]);
 
 test('every queued job either stays on the default lane or names a known lane', function (): void {
@@ -60,8 +64,9 @@ test('every queued job either stays on the default lane or names a known lane', 
     expect($unknownLanes)->toBe([]);
 });
 
-test('the general worker lanes are every lane except the ai lane, in priority order', function (): void {
-    expect(QueueLane::values())->toBe(['actions', 'webhooks', 'default', 'ai'])
+test('the general worker lanes are every lane except the ai and maintenance lanes, in priority order', function (): void {
+    expect(QueueLane::values())->toBe(['actions', 'webhooks', 'default', 'ai', 'maintenance'])
         ->and(QueueLane::generalLanes())->toBe([QueueLane::Actions, QueueLane::Webhooks, QueueLane::Default])
-        ->and(QueueLane::Ai->hasDedicatedWorker())->toBeTrue();
+        ->and(QueueLane::Ai->hasDedicatedWorker())->toBeTrue()
+        ->and(QueueLane::Maintenance->hasDedicatedWorker())->toBeTrue();
 });

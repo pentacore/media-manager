@@ -203,7 +203,7 @@ test('the ai lane runs in its own worker service with a timeout under retry_afte
     preg_match('/--timeout=(\d+)/', $aiRole, $timeout);
     preg_match('/stop_grace_period:\s*(\d+)s/', $aiService, $gracePeriod);
 
-    expect($aiRole)->toContain('exec php artisan queue:work')->toContain('--queue=ai')
+    expect($aiRole)->toContain('exec php artisan queue:work')->toContain('--queue=ai,maintenance')
         ->and($timeout)->not->toBeEmpty()
         ->and(config('queue.connections.redis.retry_after'))->toBeGreaterThan((int) $timeout[1])
         ->and($aiService)->toContain('CONTAINER_ROLE: queue-ai')->not->toContain('ports:')
@@ -256,7 +256,7 @@ test('queue and scheduler healthchecks read heartbeat age instead of the process
     expect($healthcheck)->not->toContain('pgrep')
         ->and(dockerConfigRoleBlock($healthcheck, 'queue'))
         ->toContain(sprintf('php artisan ops:check-heartbeat --queue="${QUEUE_LANES:-%s}"', implode(',', QueueLane::values())))
-        ->and(dockerConfigRoleBlock($healthcheck, 'queue-ai'))->toContain('php artisan ops:check-heartbeat --queue=ai')
+        ->and(dockerConfigRoleBlock($healthcheck, 'queue-ai'))->toContain('php artisan ops:check-heartbeat --queue=ai,maintenance')
         ->and(dockerConfigRoleBlock($healthcheck, 'scheduler'))->toContain('php artisan ops:check-heartbeat --scheduler');
 });
 

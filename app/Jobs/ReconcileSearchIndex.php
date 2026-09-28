@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Jobs;
 
+use App\Enums\QueueLane;
 use App\Enums\ServiceType;
 use App\Models\IndexedMovie;
 use App\Models\IndexedSeries;
@@ -16,6 +17,7 @@ use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldBeUnique;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
+use Illuminate\Queue\Attributes\Queue;
 use Illuminate\Queue\Attributes\UniqueFor;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
@@ -25,8 +27,12 @@ use Throwable;
 /**
  * ShouldBeUnique + a timeout below the queue `retry_after` (330s) prevent two
  * instances interleaving upserts with each other's delete-what-wasn't-seen
- * prunes — the schedule's withoutOverlapping() only guards the dispatch.
+ * prunes — the schedule's withoutOverlapping() only guards the dispatch. Runs
+ * on the maintenance lane (drained by the queue-ai worker): a full Sonarr and
+ * Radarr walk with a 300s timeout would otherwise pin the general worker
+ * behind webhooks and approved actions.
  */
+#[Queue(QueueLane::Maintenance)]
 #[UniqueFor(1800)]
 class ReconcileSearchIndex implements ShouldBeUnique, ShouldQueue
 {

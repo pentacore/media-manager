@@ -122,8 +122,10 @@ test('it exports failed jobs and backlog for every queue lane', function (): voi
         ->assertOk()
         ->assertSee('mediamanager_failed_jobs{queue="webhooks"} 1', escape: false)
         ->assertSee('mediamanager_failed_jobs{queue="ai"} 0', escape: false)
+        ->assertSee('mediamanager_failed_jobs{queue="maintenance"} 0', escape: false)
         ->assertSee('mediamanager_job_queue_size{queue="ai",state="pending"} 1', escape: false)
-        ->assertSee('mediamanager_job_queue_size{queue="actions",state="pending"} 0', escape: false);
+        ->assertSee('mediamanager_job_queue_size{queue="actions",state="pending"} 0', escape: false)
+        ->assertSee('mediamanager_job_queue_size{queue="maintenance",state="pending"} 0', escape: false);
 });
 
 test('it exports heartbeat ages and omits components that never reported', function (): void {

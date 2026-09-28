@@ -31,7 +31,8 @@ test('a processed queue heartbeat records its own lane only', function (): void 
     $this->travel(90)->seconds();
 
     expect(OpsHeartbeat::ageInSeconds('queue:webhooks'))->toBe(90)
-        ->and(OpsHeartbeat::ageInSeconds('queue:ai'))->toBeNull();
+        ->and(OpsHeartbeat::ageInSeconds('queue:ai'))->toBeNull()
+        ->and(OpsHeartbeat::ageInSeconds('queue:maintenance'))->toBeNull();
 });
 
 test('a heartbeat read back as a numeric string, as the Redis store returns it, still has an age', function (): void {
