@@ -18,6 +18,16 @@ final class TrustedProxyRanges
     public const int NARROWEST_BROAD_IPV6_PREFIX = 64;
 
     /**
+     * Symfony `Request::setTrustedProxies()` keywords that expand to
+     * something far broader than a single proxy: `PRIVATE_SUBNETS` resolves
+     * to every RFC1918/RFC4193 range, and `REMOTE_ADDR` trusts whoever the
+     * socket sees as the caller, i.e. anyone who can reach the port.
+     *
+     * @var list<string>
+     */
+    private const array BROAD_KEYWORDS = ['PRIVATE_SUBNETS', 'REMOTE_ADDR'];
+
+    /**
      * @param  array<int, string>|string  $proxies
      * @return list<string>
      */
@@ -26,7 +36,7 @@ final class TrustedProxyRanges
         $broad = [];
 
         foreach ((array) $proxies as $entry) {
-            if ($entry === '*' || $entry === '**') {
+            if ($entry === '*' || $entry === '**' || in_array(strtoupper($entry), self::BROAD_KEYWORDS, true)) {
                 $broad[] = $entry;
 
                 continue;

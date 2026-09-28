@@ -9,6 +9,15 @@ test('it flags wildcards as broad', function (): void {
         ->and(TrustedProxyRanges::broadEntries(['**']))->toBe(['**']);
 });
 
+test('it flags the Symfony PRIVATE_SUBNETS and REMOTE_ADDR keywords as broad, case-insensitively', function (): void {
+    expect(TrustedProxyRanges::broadEntries(['PRIVATE_SUBNETS']))->toBe(['PRIVATE_SUBNETS'])
+        ->and(TrustedProxyRanges::broadEntries(['private_subnets']))->toBe(['private_subnets'])
+        ->and(TrustedProxyRanges::broadEntries(['REMOTE_ADDR']))->toBe(['REMOTE_ADDR'])
+        ->and(TrustedProxyRanges::broadEntries(['remote_addr']))->toBe(['remote_addr'])
+        ->and(TrustedProxyRanges::broadEntries(['192.168.1.10', 'PRIVATE_SUBNETS', 'remote_addr']))
+        ->toBe(['PRIVATE_SUBNETS', 'remote_addr']);
+});
+
 test('it flags ranges wider than a /24 or an IPv6 /64 but not exact addresses or narrow ranges', function (): void {
     expect(TrustedProxyRanges::broadEntries([
         '10.0.0.0/8',
