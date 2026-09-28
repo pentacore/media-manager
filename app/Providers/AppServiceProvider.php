@@ -65,6 +65,10 @@ class AppServiceProvider extends ServiceProvider
             fn (ReconcileBazarrConnection $reconcileBazarrConnection): Limit => Limit::perMinute(30)->by((string) $reconcileBazarrConnection->connectionId),
         );
         RateLimiter::for(
+            'seerr-request',
+            fn (Request $request): Limit => Limit::perMinute(10)->by((string) ($request->user()?->getAuthIdentifier() ?? $request->ip())),
+        );
+        RateLimiter::for(
             'webhooks',
             fn (Request $request): Limit => Limit::perMinute(max(1, (int) config('mediamanager.webhooks.rate_limit_per_minute', 300)))
                 ->by((string) $request->ip()),

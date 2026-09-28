@@ -37,6 +37,7 @@ dataset('viewer read routes', [
     'movies show' => ['media.movies.show', ['id' => 1]],
     'search' => ['media.search.index', ['q' => 'dune']],
     'instant search' => ['media.search.instant', ['q' => 'dune']],
+    'discover' => ['media.discover.index', []],
 ]);
 
 dataset('member-only routes', [

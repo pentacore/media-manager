@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use App\Http\Controllers\Library\ActivityController as LibraryActivityController;
 use App\Http\Controllers\Media\AnimeController;
+use App\Http\Controllers\Media\DiscoverController;
 use App\Http\Controllers\Media\InstantSearchController;
 use App\Http\Controllers\Media\MediaReplacementController;
 use App\Http\Controllers\Media\MovieController;
@@ -26,6 +27,20 @@ Route::middleware(['auth', 'verified', 'password.set'])
             // Unified search — viewers get the Seerr scope only (SearchController).
             Route::get('search', [SearchController::class, 'index'])->name('search.index');
             Route::get('search/instant', InstantSearchController::class)->name('search.instant');
+
+            // Seerr discovery (read-only; requests go through the request-media group)
+            Route::get('discover', [DiscoverController::class, 'index'])->name('discover.index');
+            Route::get('discover/{mediaType}/{tmdbId}', [DiscoverController::class, 'title'])
+                ->whereIn('mediaType', ['movie', 'tv'])
+                ->whereNumber('tmdbId')
+                ->name('discover.title');
+        });
+
+        // Filing Seerr requests as oneself — every role (Seerr's own approval and quotas apply).
+        Route::middleware('can:request-media')->group(function (): void {
+            Route::post('discover/request', [DiscoverController::class, 'request'])
+                ->middleware('throttle:seerr-request')
+                ->name('discover.request');
         });
 
         // Library writes — members and admins.

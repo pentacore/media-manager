@@ -5,10 +5,12 @@ declare(strict_types=1);
 namespace App\Http\Middleware;
 
 use App\Enums\ActionRequestStatus;
+use App\Enums\ServiceType;
 use App\Http\Resources\SharedUserResource;
 use App\Models\ActionRequest;
 use App\Models\EmbyActivity;
 use App\Models\MediaReplacementAttempt;
+use App\Models\ServiceConnection;
 use App\Models\User;
 use App\Providers\AIServiceProvider;
 use App\Services\Library\InterventionCounter;
@@ -65,6 +67,12 @@ class HandleInertiaRequests extends Middleware
             ],
             'ai' => [
                 'enabled' => AIServiceProvider::enabled(),
+            ],
+            'integrations' => [
+                'seerr' => $user !== null && ServiceConnection::query()
+                    ->where('type', ServiceType::Seerr)
+                    ->where('is_active', true)
+                    ->exists(),
             ],
             'nav' => $user ? $this->navCounts($user) : ['pendingActions' => 0, 'activeSessions' => 0, 'unreadNotifications' => 0, 'libraryIntervention' => 0, 'sabnzbdDownloads' => ['queued' => 0, 'completed' => 0], 'replacementAttention' => 0],
             'version' => $user ? [

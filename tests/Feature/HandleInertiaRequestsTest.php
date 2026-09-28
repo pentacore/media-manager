@@ -150,6 +150,18 @@ test('shared auth.can is all false for guests', function (): void {
             ->where('auth.can.admin', false));
 });
 
+test('integrations.seerr reports whether an active Seerr connection exists', function (): void {
+    $user = User::factory()->create();
+
+    $this->actingAs($user)->get(route('dashboard'))
+        ->assertInertia(fn ($page) => $page->where('integrations.seerr', false));
+
+    ServiceConnection::factory()->seerr()->create(['url' => 'http://seerr.local:5055']);
+
+    $this->actingAs($user)->get(route('dashboard'))
+        ->assertInertia(fn ($page) => $page->where('integrations.seerr', true));
+});
+
 test('nav.replacementAttention counts unacknowledged needs_attention attempts for admins only', function (): void {
     MediaReplacementAttempt::factory()->needsAttention()->create();
     MediaReplacementAttempt::factory()->needsAttention()->acknowledged()->create();
