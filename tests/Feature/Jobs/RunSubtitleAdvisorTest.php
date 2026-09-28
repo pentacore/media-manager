@@ -2,7 +2,6 @@
 
 declare(strict_types=1);
 
-use App\Ai\Agents\SubtitleAdvisorAgent;
 use App\Ai\SubtitleAdvisor\SubtitleAdvisorRunContext;
 use App\Enums\ActionRequestStatus;
 use App\Enums\AiMode;
@@ -15,6 +14,7 @@ use App\Jobs\Middleware\LimitSubtitleAdvisorConcurrency;
 use App\Jobs\RunSubtitleAdvisor;
 use App\Models\ActionRequest;
 use App\Models\ActionTypeConfig;
+use App\Models\AiUsageRecord;
 use App\Models\ServiceConnection;
 use App\Models\SubtitleCase;
 use App\Models\SubtitleCaseAttempt;
@@ -22,8 +22,8 @@ use App\Models\User;
 use App\Notifications\SubtitleCaseNeedsReview;
 use App\Services\AiBudget\AiBudgetExceededException;
 use App\Services\AiBudget\AiBudgetGuard;
+use App\Services\Bazarr\SubtitleAdvisorDecider;
 use App\Services\Bazarr\SubtitleCaseFingerprint;
-use App\Services\MediaReplacement\ReleaseFingerprint;
 use App\Settings\AiSettings;
 use App\Settings\BazarrAutomationSettings;
 use App\Settings\MediaReplacementSettings;
@@ -38,7 +38,6 @@ use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Notification;
 use Illuminate\Support\Facades\Queue;
-use Laravel\Ai\Responses\Data\ToolCall;
 
 beforeEach(function (): void {
     Cache::flush();
@@ -120,23 +119,21 @@ test('disabled AI or automation skips without changing the case', function (stri
         resolve(BazarrAutomationSettings::class)->setConfiguration(['enabled' => false]);
     }
 
-    SubtitleAdvisorAgent::fake(['should not run']);
+    $this->mock(SubtitleAdvisorDecider::class)->shouldNotReceive('decide');
 
     runAdvisorJob(new RunSubtitleAdvisor($this->case->id));
 
     expect($this->case->fresh()->status)->toBe(SubtitleCaseStatus::ReplacementEligible)
         ->and(SubtitleCaseAttempt::query()->count())->toBe(0);
-    SubtitleAdvisorAgent::assertNeverPrompted();
 })->with(['ai', 'automation']);
 
 test('a case outside replacement eligible is ignored', function (): void {
     $this->case->update(['status' => SubtitleCaseStatus::NeedsReview]);
-    SubtitleAdvisorAgent::fake(['should not run']);
+    $this->mock(SubtitleAdvisorDecider::class)->shouldNotReceive('decide');
 
     runAdvisorJob(new RunSubtitleAdvisor($this->case->id));
 
     expect(SubtitleCaseAttempt::query()->count())->toBe(0);
-    SubtitleAdvisorAgent::assertNeverPrompted();
 });
 
 test('budget exhaustion records one failed attempt and routes the case to review', function (): void {
@@ -144,7 +141,7 @@ test('budget exhaustion records one failed attempt and routes the case to review
         ->shouldReceive('enforce')
         ->once()
         ->andThrow(new AiBudgetExceededException(10.0, 5.0));
-    SubtitleAdvisorAgent::fake(['should not run']);
+    $this->mock(SubtitleAdvisorDecider::class)->shouldNotReceive('decide');
 
     runAdvisorJob(new RunSubtitleAdvisor($this->case->id));
 
@@ -154,13 +151,10 @@ test('budget exhaustion records one failed attempt and routes the case to review
         ->and($subtitleCaseAttempt->type)->toBe(SubtitleCaseAttemptType::Advisor)
         ->and($subtitleCaseAttempt->outcome)->toBe(SubtitleCaseAttemptOutcome::Failed)
         ->and($subtitleCaseAttempt->error_category)->toBe('budget_exceeded');
-    SubtitleAdvisorAgent::assertNeverPrompted();
     Notification::assertSentTo($this->admin, SubtitleCaseNeedsReview::class);
 });
 
 test('a pending automatic replacement is linked and transitions the case', function (): void {
-    fakeSuccessfulAdvisorRun($this->case);
-
     runAdvisorJob(new RunSubtitleAdvisor($this->case->id));
 
     $actionRequest = ActionRequest::query()->sole();
@@ -178,7 +172,6 @@ test('an auto-approved replacement is linked without creating a second action', 
     ActionTypeConfig::query()
         ->where('type', 'replace_media_file')
         ->update(['requires_approval' => false]);
-    fakeSuccessfulAdvisorRun($this->case);
 
     runAdvisorJob(new RunSubtitleAdvisor($this->case->id));
 
@@ -188,27 +181,23 @@ test('an auto-approved replacement is linked without creating a second action', 
     Queue::assertPushed(ExecuteActionRequest::class, 1);
 });
 
-test('a queued replacement is recovered when the final agent response fails', function (): void {
-    ActionTypeConfig::query()
-        ->where('type', 'replace_media_file')
-        ->update(['requires_approval' => false]);
-    SubtitleAdvisorAgent::fake([
-        new ToolCall(
-            id: 'inspect',
-            name: 'InspectSubtitleEscalationTool',
-            arguments: ['case_id' => $this->case->id],
-        ),
-        new ToolCall(
-            id: 'queue',
-            name: 'QueueAutomaticReplacementTool',
-            arguments: [
-                'case_id' => $this->case->id,
-                'candidate_fingerprint' => advisorJobReleaseFingerprint(),
-                'reason' => 'Bazarr exhausted its subtitle search without English.',
-            ],
-        ),
-        fn (): never => throw new RuntimeException('provider failed after queueing'),
-    ]);
+test('a replacement queued before the decision failed is still linked', function (): void {
+    $this->mock(SubtitleAdvisorDecider::class)
+        ->shouldReceive('decide')
+        ->once()
+        ->andReturnUsing(function (SubtitleCase $subtitleCase): never {
+            $actionRequest = ActionRequest::factory()->create([
+                'type' => 'replace_media_file',
+                'source_service' => 'subtitle_advisor',
+                'target_service' => 'radarr',
+                'status' => ActionRequestStatus::Approved,
+                'requires_approval' => false,
+                'payload' => ['subtitle_case_id' => $subtitleCase->id],
+            ]);
+            resolve(SubtitleAdvisorRunContext::class)->recordQueued($actionRequest->id);
+
+            throw new RuntimeException('failed after queueing');
+        });
 
     runAdvisorJob(new RunSubtitleAdvisor($this->case->id));
 
@@ -224,7 +213,10 @@ test('a queued replacement is recovered when the final agent response fails', fu
 });
 
 test('no queued action becomes durable human review with a bounded summary', function (): void {
-    SubtitleAdvisorAgent::fake([str_repeat('N', 5_000)]);
+    $this->mock(SubtitleAdvisorDecider::class)
+        ->shouldReceive('decide')
+        ->once()
+        ->andReturn(str_repeat('N', 5_000));
 
     runAdvisorJob(new RunSubtitleAdvisor($this->case->id));
 
@@ -238,8 +230,11 @@ test('no queued action becomes durable human review with a bounded summary', fun
     Notification::assertSentTo($this->admin, SubtitleCaseNeedsReview::class);
 });
 
-test('agent or tool exceptions fail once, clear scoped state, and notify review', function (): void {
-    SubtitleAdvisorAgent::fake(fn (): never => throw new RuntimeException('provider exploded'));
+test('a decider exception fails once, clears scoped state, and notifies review', function (): void {
+    $this->mock(SubtitleAdvisorDecider::class)
+        ->shouldReceive('decide')
+        ->once()
+        ->andThrow(new RuntimeException('inspection exploded'));
 
     runAdvisorJob(new RunSubtitleAdvisor($this->case->id));
 
@@ -319,7 +314,7 @@ test('a redelivered job recovers a durably recorded replacement action', functio
         'summary' => ['result' => 'started'],
         'completed_at' => null,
     ]);
-    SubtitleAdvisorAgent::fake(['should not run']);
+    $this->mock(SubtitleAdvisorDecider::class)->shouldNotReceive('decide');
 
     runAdvisorJob(new RunSubtitleAdvisor($this->case->id));
 
@@ -327,14 +322,13 @@ test('a redelivered job recovers a durably recorded replacement action', functio
         ->and($this->case->fresh()->replacement_action_request_id)->toBe($actionRequest->id)
         ->and($attempt->fresh()->outcome)->toBe(SubtitleCaseAttemptOutcome::Succeeded);
     Queue::assertPushed(ExecuteActionRequest::class, 1);
-    SubtitleAdvisorAgent::assertNeverPrompted();
     Notification::assertNothingSent();
 })->with([
     SubtitleCaseStatus::AdvisorRunning,
     SubtitleCaseStatus::ReplacementRequested,
 ]);
 
-test('a redelivered started run without an action becomes review instead of retrying the agent', function (): void {
+test('a redelivered started run without an action becomes review instead of deciding again', function (): void {
     $this->case->update(['status' => SubtitleCaseStatus::AdvisorRunning]);
     $attempt = SubtitleCaseAttempt::factory()->for($this->case)->create([
         'type' => SubtitleCaseAttemptType::Advisor,
@@ -342,14 +336,13 @@ test('a redelivered started run without an action becomes review instead of retr
         'summary' => ['result' => 'started'],
         'completed_at' => null,
     ]);
-    SubtitleAdvisorAgent::fake(['should not run']);
+    $this->mock(SubtitleAdvisorDecider::class)->shouldNotReceive('decide');
 
     runAdvisorJob(new RunSubtitleAdvisor($this->case->id));
 
     expect($this->case->fresh()->status)->toBe(SubtitleCaseStatus::NeedsReview)
         ->and($attempt->fresh()->outcome)->toBe(SubtitleCaseAttemptOutcome::Failed)
         ->and($attempt->fresh()->error_category)->toBe('worker_interrupted');
-    SubtitleAdvisorAgent::assertNeverPrompted();
     Notification::assertSentTo($this->admin, SubtitleCaseNeedsReview::class);
 });
 
@@ -380,18 +373,16 @@ test('redelivery recovery runs before feature gates', function (string $disabled
         resolve(BazarrAutomationSettings::class)->setConfiguration(['enabled' => false]);
     }
 
-    SubtitleAdvisorAgent::fake(['should not run']);
+    $this->mock(SubtitleAdvisorDecider::class)->shouldNotReceive('decide');
 
     runAdvisorJob(new RunSubtitleAdvisor($this->case->id));
 
     expect($attempt->fresh()->outcome)->toBe(SubtitleCaseAttemptOutcome::Succeeded);
     Queue::assertPushed(ExecuteActionRequest::class, 1);
-    SubtitleAdvisorAgent::assertNeverPrompted();
     Notification::assertNothingSent();
 })->with(['ai', 'automation']);
 
 test('two jobs for one case produce at most one run and one action request', function (): void {
-    fakeSuccessfulAdvisorRun($this->case);
     $first = new RunSubtitleAdvisor($this->case->id);
     $second = new RunSubtitleAdvisor($this->case->id);
 
@@ -402,30 +393,66 @@ test('two jobs for one case produce at most one run and one action request', fun
         ->and(ActionRequest::query()->count())->toBe(1);
 });
 
+test('the automatic candidate is queued in code with a templated summary and no model call', function (): void {
+    runAdvisorJob(new RunSubtitleAdvisor($this->case->id));
+
+    $subtitleCaseAttempt = SubtitleCaseAttempt::query()->sole();
+
+    expect($this->case->fresh()->status)->toBe(SubtitleCaseStatus::ReplacementRequested)
+        ->and($subtitleCaseAttempt->outcome)->toBe(SubtitleCaseAttemptOutcome::Succeeded)
+        ->and($subtitleCaseAttempt->summary['summary'])
+        ->toStartWith('Queued the unique automatic replacement candidate "Advisor.Movie.2026.CR" for ')
+        ->toContain('(required subtitles: ')
+        ->toEndWith('The replacement is requested, not yet verified.')
+        ->and(ActionRequest::query()->sole()->payload['subtitle_case_id'])->toBe($this->case->id)
+        ->and(AiUsageRecord::query()->count())->toBe(0);
+});
+
+test('without an automatic candidate the case goes to review with a templated summary', function (): void {
+    configureAdvisorJobReplacement(automaticSelection: false);
+
+    runAdvisorJob(new RunSubtitleAdvisor($this->case->id));
+
+    $subtitleCaseAttempt = SubtitleCaseAttempt::query()->sole();
+
+    expect($this->case->fresh()->status)->toBe(SubtitleCaseStatus::NeedsReview)
+        ->and($subtitleCaseAttempt->outcome)->toBe(SubtitleCaseAttemptOutcome::NeedsReview)
+        ->and($subtitleCaseAttempt->error_category)->toBe('no_automatic_candidate')
+        ->and($subtitleCaseAttempt->summary['summary'])->toStartWith('No unique automatic replacement candidate for ')
+        ->and(ActionRequest::query()->count())->toBe(0)
+        ->and(AiUsageRecord::query()->count())->toBe(0);
+    Notification::assertSentTo($this->admin, SubtitleCaseNeedsReview::class);
+});
+
+test('advisory mode leaves the automatic candidate for human review', function (): void {
+    resolve(AiSettings::class)->setMode(AiMode::Advisory);
+
+    runAdvisorJob(new RunSubtitleAdvisor($this->case->id));
+
+    $subtitleCaseAttempt = SubtitleCaseAttempt::query()->sole();
+
+    expect($this->case->fresh()->status)->toBe(SubtitleCaseStatus::NeedsReview)
+        ->and($subtitleCaseAttempt->error_category)->toBe('no_automatic_candidate')
+        ->and($subtitleCaseAttempt->summary['summary'])->toContain('(advisory_mode_blocks_destructive)')
+        ->and(ActionRequest::query()->count())->toBe(0);
+});
+
+test('a case whose file changed goes to review instead of queueing', function (): void {
+    $this->case->update(['file_fingerprint' => str_repeat('0', 64)]);
+
+    runAdvisorJob(new RunSubtitleAdvisor($this->case->id));
+
+    $subtitleCaseAttempt = SubtitleCaseAttempt::query()->sole();
+
+    expect($this->case->fresh()->status)->toBe(SubtitleCaseStatus::NeedsReview)
+        ->and($subtitleCaseAttempt->error_category)->toBe('no_automatic_candidate')
+        ->and($subtitleCaseAttempt->summary['summary'])->toContain('The installed file changed after the subtitle case was observed.')
+        ->and(ActionRequest::query()->count())->toBe(0);
+});
+
 function runAdvisorJob(RunSubtitleAdvisor $runSubtitleAdvisor): void
 {
     app()->call($runSubtitleAdvisor->handle(...));
-}
-
-function fakeSuccessfulAdvisorRun(SubtitleCase $subtitleCase): void
-{
-    SubtitleAdvisorAgent::fake([
-        new ToolCall(
-            id: 'inspect',
-            name: 'InspectSubtitleEscalationTool',
-            arguments: ['case_id' => $subtitleCase->id],
-        ),
-        new ToolCall(
-            id: 'queue',
-            name: 'QueueAutomaticReplacementTool',
-            arguments: [
-                'case_id' => $subtitleCase->id,
-                'candidate_fingerprint' => advisorJobReleaseFingerprint(),
-                'reason' => 'Bazarr exhausted its subtitle search without English.',
-            ],
-        ),
-        'Queued the unique automatic replacement candidate for review.',
-    ]);
 }
 
 function advisorJobCase(ServiceConnection $bazarr, ServiceConnection $radarr): SubtitleCase
@@ -450,11 +477,6 @@ function advisorJobCase(ServiceConnection $bazarr, ServiceConnection $radarr): S
         'requirements_fingerprint' => resolve(SubtitleCaseFingerprint::class)
             ->requirements('movie', ['eng']),
     ]);
-}
-
-function advisorJobReleaseFingerprint(): string
-{
-    return resolve(ReleaseFingerprint::class)->make('radarr', advisorJobRelease());
 }
 
 /**
@@ -501,10 +523,10 @@ function fakeAdvisorJobApis(): void
     ]);
 }
 
-function configureAdvisorJobReplacement(): void
+function configureAdvisorJobReplacement(bool $automaticSelection = true): void
 {
     resolve(MediaReplacementSettings::class)->setConfiguration([
-        'automatic_selection_enabled' => true,
+        'automatic_selection_enabled' => $automaticSelection,
         'automatic_selection_threshold' => 90,
         'global_languages' => ['English'],
         'scoped_languages' => ['anime' => null, 'tv' => null, 'movie' => null],

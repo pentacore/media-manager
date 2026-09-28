@@ -7,7 +7,6 @@ use App\Ai\Agents\MediaAgent;
 use App\Ai\Agents\MediaFileInspectorAgent;
 use App\Ai\Agents\PriceFetcherAgent;
 use App\Ai\Agents\StuckDownloadInvestigatorAgent;
-use App\Ai\Agents\SubtitleAdvisorAgent;
 use App\Ai\Middleware\AnswerOnFinalStep;
 use App\Ai\Middleware\EnforceBudgetEachStep;
 use App\Models\AiModelPrice;
@@ -76,7 +75,6 @@ test('every tool-using agent runs both step middleware', function (string $agent
 })->with([
     'media' => MediaAgent::class,
     'decision' => DecisionAgent::class,
-    'subtitle advisor' => SubtitleAdvisorAgent::class,
     'price fetcher' => PriceFetcherAgent::class,
     'stuck download investigator' => StuckDownloadInvestigatorAgent::class,
     'media file inspector' => MediaFileInspectorAgent::class,

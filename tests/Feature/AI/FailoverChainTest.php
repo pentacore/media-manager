@@ -7,7 +7,6 @@ use App\Ai\Agents\MediaAgent;
 use App\Ai\Agents\MediaFileInspectorAgent;
 use App\Ai\Agents\PriceFetcherAgent;
 use App\Ai\Agents\StuckDownloadInvestigatorAgent;
-use App\Ai\Agents\SubtitleAdvisorAgent;
 use App\Ai\Agents\TitleAgent;
 use App\Enums\AgentDecisionStatus;
 use App\Jobs\Ai\GenerateConversationTitle;
@@ -66,7 +65,6 @@ test('every agent offers the failover chain for its own model', function (string
 })->with([
     MediaAgent::class,
     DecisionAgent::class,
-    SubtitleAdvisorAgent::class,
     TitleAgent::class,
     PriceFetcherAgent::class,
     StuckDownloadInvestigatorAgent::class,
@@ -78,7 +76,6 @@ test('without a failover provider every agent leaves the provider to the SDK def
 })->with([
     MediaAgent::class,
     DecisionAgent::class,
-    SubtitleAdvisorAgent::class,
     TitleAgent::class,
     PriceFetcherAgent::class,
     StuckDownloadInvestigatorAgent::class,

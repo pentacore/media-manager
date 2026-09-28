@@ -2,7 +2,6 @@
 
 declare(strict_types=1);
 
-use App\Ai\Agents\SubtitleAdvisorAgent;
 use App\Ai\SubtitleAdvisor\SubtitleAdvisorRunContext;
 use App\Enums\AiMode;
 use App\Enums\SubtitleCaseAttemptOutcome;
@@ -14,6 +13,7 @@ use App\Models\SubtitleCase;
 use App\Models\SubtitleCaseAttempt;
 use App\Models\User;
 use App\Notifications\SubtitleCaseNeedsReview;
+use App\Services\Bazarr\SubtitleAdvisorDecider;
 use App\Settings\AiSettings;
 use App\Settings\BazarrAutomationSettings;
 use Illuminate\Support\Facades\Cache;
@@ -60,13 +60,12 @@ function runTriageAdvisorJob(SubtitleCase $subtitleCase): void
 
 test('a case triaged below the threshold goes to review without running the Advisor', function (): void {
     Classification::fake([['decision' => new BooleanAnswer(0.1)]]);
-    SubtitleAdvisorAgent::fake(['should not run']);
+    $this->mock(SubtitleAdvisorDecider::class)->shouldNotReceive('decide');
 
     runTriageAdvisorJob($this->case);
 
     $subtitleCaseAttempt = SubtitleCaseAttempt::query()->latest('id')->firstOrFail();
 
-    SubtitleAdvisorAgent::assertNeverPrompted();
     expect($subtitleCaseAttempt->error_category)->toBe('triaged_out')
         ->and($subtitleCaseAttempt->outcome)->toBe(SubtitleCaseAttemptOutcome::NeedsReview)
         ->and($subtitleCaseAttempt->summary['triage_probability'])->toBe(0.1)
@@ -78,31 +77,36 @@ test('a case triaged below the threshold goes to review without running the Advi
 
 test('a case triaged above the threshold runs the Advisor', function (): void {
     Classification::fake([['decision' => new BooleanAnswer(0.8)]]);
-    SubtitleAdvisorAgent::fake(['No unique automatic candidate was found.']);
+    $this->mock(SubtitleAdvisorDecider::class)
+        ->shouldReceive('decide')
+        ->once()
+        ->andReturn('No unique automatic candidate was found.');
 
     runTriageAdvisorJob($this->case);
 
-    SubtitleAdvisorAgent::assertPrompted(fn (): bool => true);
     expect(SubtitleCaseAttempt::query()->latest('id')->firstOrFail()->error_category)
         ->toBe('no_automatic_candidate');
 });
 
 test('a classifier failure fails open and runs the Advisor', function (): void {
     Classification::fake(fn () => throw new RuntimeException('down'));
-    SubtitleAdvisorAgent::fake(['No unique automatic candidate was found.']);
+    $this->mock(SubtitleAdvisorDecider::class)
+        ->shouldReceive('decide')
+        ->once()
+        ->andReturn('No unique automatic candidate was found.');
 
     runTriageAdvisorJob($this->case);
-
-    SubtitleAdvisorAgent::assertPrompted(fn (): bool => true);
 });
 
 test('disabled triage never classifies', function (): void {
     resolve(AiSettings::class)->setSubtitleTriageEnabled(false);
     Classification::fake([['decision' => new BooleanAnswer(0.0)]]);
-    SubtitleAdvisorAgent::fake(['No unique automatic candidate was found.']);
+    $this->mock(SubtitleAdvisorDecider::class)
+        ->shouldReceive('decide')
+        ->once()
+        ->andReturn('No unique automatic candidate was found.');
 
     runTriageAdvisorJob($this->case);
 
-    SubtitleAdvisorAgent::assertPrompted(fn (): bool => true);
     Classification::assertNothingClassified();
 });
