@@ -56,6 +56,7 @@ const props = defineProps<{
     metrics?: MetricsBundle;
     diskSpace?: Record<number, DiskSpace[]>;
     prowlarrIndexers?: Record<number, Indexer[]>;
+    canRunChecks: boolean;
 }>();
 
 defineOptions({
@@ -282,8 +283,10 @@ function barHeight(bucket: MetricBucket): number {
                     Strip · last 60 min
                 </span>
                 <Button
+                    v-if="props.canRunChecks"
                     size="sm"
                     class="h-7 gap-1.5 text-xs"
+                    data-run-health-checks
                     :disabled="checking"
                     @click="runChecks"
                 >

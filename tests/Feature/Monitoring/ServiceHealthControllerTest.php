@@ -412,7 +412,7 @@ test('disk display sum=free attaches metric to the synthetic sum row', function 
 test('runChecks dispatches a service-health batch for active connections', function (): void {
     Bus::fake();
 
-    $user = User::factory()->create();
+    $user = User::factory()->member()->create();
     ServiceConnection::factory()->sonarr()->create();
     ServiceConnection::factory()->radarr()->create();
     ServiceConnection::factory()->emby()->inactive()->create();
@@ -431,7 +431,7 @@ test('runChecks dispatches a service-health batch for active connections', funct
 test('runChecks does nothing when there are no active connections', function (): void {
     Bus::fake();
 
-    $user = User::factory()->create();
+    $user = User::factory()->member()->create();
     ServiceConnection::factory()->sonarr()->inactive()->create();
 
     $this->actingAs($user)
@@ -440,3 +440,36 @@ test('runChecks does nothing when there are no active connections', function ():
 
     Bus::assertNothingBatched();
 });
+
+test('viewers cannot trigger health checks', function (): void {
+    Bus::fake();
+    ServiceConnection::factory()->sonarr()->create();
+
+    $this->actingAs(User::factory()->create())
+        ->post(route('monitoring.service-health.run-checks'))
+        ->assertForbidden();
+
+    Bus::assertNothingBatched();
+});
+
+test('health-check triggers are throttled', function (): void {
+    Bus::fake();
+    $member = User::factory()->member()->create();
+
+    foreach (range(1, 6) as $attempt) {
+        $this->actingAs($member)->post(route('monitoring.service-health.run-checks'))->assertRedirect();
+    }
+
+    $this->actingAs($member)->post(route('monitoring.service-health.run-checks'))->assertTooManyRequests();
+});
+
+test('the page tells the client whether the user may run checks', function (bool $isMember, bool $expected): void {
+    $user = $isMember ? User::factory()->member()->create() : User::factory()->create();
+
+    $this->actingAs($user)
+        ->get(route('monitoring.service-health'))
+        ->assertInertia(fn ($page) => $page->component('Monitoring/ServiceHealth')->where('canRunChecks', $expected));
+})->with([
+    'member' => [true, true],
+    'viewer' => [false, false],
+]);
