@@ -374,6 +374,23 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Security headers
+    |--------------------------------------------------------------------------
+    |
+    | App\Http\Middleware\SetSecurityHeaders always sends nosniff, a referrer
+    | policy and same-origin framing rules. Strict-Transport-Security is
+    | opt-in: enable it only once the site is served over HTTPS end to end,
+    | because browsers then refuse plain http for max_age seconds.
+    |
+    */
+
+    'security' => [
+        'hsts_enabled' => (bool) env('MEDIAMANAGER_HSTS_ENABLED', false),
+        'hsts_max_age' => (int) env('MEDIAMANAGER_HSTS_MAX_AGE', 31536000),
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
     | Statistics
     |--------------------------------------------------------------------------
     |
