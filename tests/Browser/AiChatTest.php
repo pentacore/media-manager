@@ -517,3 +517,32 @@ test('a message after stopping a new chat is answered normally', function (): vo
         ->assertMissing('[data-chat-error]')
         ->assertNoJavaScriptErrors();
 });
+
+test('the active conversation can be renamed from the chat header', function (): void {
+    Bus::fake([GenerateConversationTitle::class]);
+    MediaAgent::fake(['Here you go.']);
+    $this->actingAs(User::factory()->admin()->create());
+
+    visit(route('ai.chat', absolute: false))
+        ->assertNoSmoke()
+        ->type('textarea[placeholder^="Ask"]', 'Weekend movie ideas')
+        ->click('Send')
+        ->assertSeeIn('[data-chat-thread]', 'Here you go.')
+        ->click('[data-chat-rename]')
+        ->type('[data-chat-rename-input]', 'Weekend picks')
+        ->click('[data-chat-rename-save]')
+        ->assertSeeIn('[data-chat-title]', 'Weekend picks')
+        ->assertNoJavaScriptErrors();
+
+    expect(DB::table('agent_conversations')->value('title'))->toBe('Weekend picks');
+});
+
+test('switching to advisory mode changes the composer hint', function (): void {
+    $this->actingAs(User::factory()->admin()->create());
+
+    visit(route('ai.chat', absolute: false))
+        ->assertNoSmoke()
+        ->click('[data-chat-mode="advisory"]')
+        ->assertAttribute('[data-chat-input]', 'placeholder', 'Ask MediaAgent · advisory mode (read-only)…')
+        ->assertNoJavaScriptErrors();
+});

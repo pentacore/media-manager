@@ -140,7 +140,7 @@ function stopStreaming(): void {
 
 const scrollRef = useTemplateRef<HTMLDivElement>('scroll');
 const inputRef = useTemplateRef<HTMLTextAreaElement>('inputArea');
-const renameRef = useTemplateRef<HTMLInputElement>('renameInput');
+const renameRef = useTemplateRef<InstanceType<typeof Input>>('renameInput');
 const fileInput = useTemplateRef<HTMLInputElement>('fileInput');
 
 /**
@@ -703,7 +703,9 @@ function startRename(): void {
 
     renameDraft.value = activeTitle.value;
     renaming.value = true;
-    nextTick(() => renameRef.value?.focus());
+    nextTick(
+        () => (renameRef.value?.$el as HTMLInputElement | undefined)?.focus(),
+    );
 }
 
 async function commitRename(): Promise<void> {
@@ -772,6 +774,7 @@ function onRenameKey(event: KeyboardEvent): void {
                     v-if="!renaming"
                     :title="activeTitle"
                     class="max-w-[360px] truncate font-semibold"
+                    data-chat-title
                 >
                     {{ activeTitle }}
                 </span>
@@ -780,6 +783,7 @@ function onRenameKey(event: KeyboardEvent): void {
                     ref="renameInput"
                     v-model="renameDraft"
                     class="h-7 w-44 text-sm"
+                    data-chat-rename-input
                     @keydown="onRenameKey"
                 />
                 <Button
@@ -787,6 +791,7 @@ function onRenameKey(event: KeyboardEvent): void {
                     variant="ghost"
                     size="sm"
                     class="size-7 p-0"
+                    data-chat-rename-save
                     @click="commitRename"
                 >
                     <Check class="size-3.5" />
@@ -806,6 +811,7 @@ function onRenameKey(event: KeyboardEvent): void {
                     size="sm"
                     class="size-7 p-0 text-muted-foreground hover:text-foreground"
                     title="Rename conversation"
+                    data-chat-rename
                     @click="startRename"
                 >
                     <Pencil class="size-3.5" />
@@ -825,6 +831,7 @@ function onRenameKey(event: KeyboardEvent): void {
                         v-for="m in ['advisory', 'executive'] as const"
                         :key="m"
                         type="button"
+                        :data-chat-mode="m"
                         :class="
                             cn(
                                 'inline-flex h-6 items-center rounded px-2 text-xs font-medium transition-colors',
@@ -1107,6 +1114,7 @@ function onRenameKey(event: KeyboardEvent): void {
                     "
                     rows="1"
                     class="max-h-[140px] min-h-6 flex-1 resize-none bg-transparent text-[14px] outline-none placeholder:text-fg-subtle"
+                    data-chat-input
                     @keydown="onKey"
                 />
                 <Button
