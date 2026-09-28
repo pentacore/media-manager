@@ -391,6 +391,66 @@ class SeerrClient implements Warmable
         );
     }
 
+    /**
+     * Trending movies and TV across TMDB (`GET /discover/trending`).
+     *
+     * @return array<string, mixed>
+     *
+     * @throws RequestException|ConnectionException
+     */
+    public function discoverTrending(int $page = 1): array
+    {
+        return $this->cache()->rememberList(
+            'discover:trending:'.$page,
+            fn (): array => $this->buildClient()
+                ->get(sprintf('/api/%s/discover/trending', $this->apiVersion), ['page' => $page])
+                ->throw()
+                ->json() ?? [],
+        );
+    }
+
+    /**
+     * Upcoming movies (`/discover/movies/upcoming`) or TV (`/discover/tv/upcoming`).
+     *
+     * @return array<string, mixed>
+     *
+     * @throws RequestException|ConnectionException
+     */
+    public function discoverUpcoming(string $mediaType, int $page = 1): array
+    {
+        $path = match ($mediaType) {
+            'movie' => 'discover/movies/upcoming',
+            'tv' => 'discover/tv/upcoming',
+            default => throw new InvalidArgumentException(sprintf('Invalid media type "%s". Expected "tv" or "movie".', $mediaType)),
+        };
+
+        return $this->cache()->rememberList(
+            sprintf('discover:upcoming:%s:%d', $mediaType, $page),
+            fn (): array => $this->buildClient()
+                ->get(sprintf('/api/%s/%s', $this->apiVersion, $path), ['page' => $page])
+                ->throw()
+                ->json() ?? [],
+        );
+    }
+
+    /**
+     * One Seerr user's requests, newest first (`GET /request?requestedBy=`).
+     *
+     * @return array<string, mixed>
+     *
+     * @throws RequestException|ConnectionException
+     */
+    public function getRequestsByUser(int $seerrUserId, int $take = 20, int $skip = 0): array
+    {
+        return $this->getRequests([
+            'take' => $take,
+            'skip' => $skip,
+            'sort' => 'added',
+            'filter' => 'all',
+            'requestedBy' => $seerrUserId,
+        ]);
+    }
+
     public function warm(): void
     {
         $cache = $this->cache();
