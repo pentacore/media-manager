@@ -1,0 +1,121 @@
+<?php
+
+declare(strict_types=1);
+
+namespace App\Services\Emby;
+
+use App\Enums\ActionRequestStatus;
+use App\Enums\ServiceType;
+use App\Jobs\ExecuteDebouncedLibraryScan;
+use App\Models\ActionRequest;
+use App\Models\ServiceConnection;
+use App\Models\WebhookEvent;
+use App\Services\Actions\ActionDescription;
+use App\Services\Actions\ActionOrchestrator;
+use Carbon\CarbonImmutable;
+use Illuminate\Support\Facades\DB;
+
+/**
+ * Coalesces the Emby library refreshes that arr/Seerr webhooks request.
+ * A season pack fires one Download webhook per episode; each used to queue
+ * its own full library refresh. Triggers for the same Emby connection now
+ * fold into one not-yet-started request whose execution is pushed back
+ * DEBOUNCE_SECONDS after the latest trigger, so one refresh runs after the
+ * burst. Coalescing stops MAX_COALESCE_MINUTES after the request was created
+ * so a continuous stream still refreshes regularly.
+ */
+final readonly class EmbyLibraryScanScheduler
+{
+    public const int DEBOUNCE_SECONDS = 60;
+
+    public const int MAX_COALESCE_MINUTES = 10;
+
+    public const int MAX_RECORDED_TRIGGERS = 20;
+
+    public function __construct(private ActionOrchestrator $actionOrchestrator) {}
+
+    /**
+     * @param  array<string, mixed>  $scanPayload  must carry a `trigger` string
+     */
+    public function schedule(string $sourceService, array $scanPayload, ActionDescription $description, WebhookEvent $webhookEvent): ?ActionRequest
+    {
+        $embyConnectionId = ServiceConnection::query()
+            ->where('type', ServiceType::Emby)
+            ->where('is_active', true)
+            ->orderBy('id')
+            ->value('id');
+
+        if ($embyConnectionId === null) {
+            return $this->actionOrchestrator->dispatch(
+                type: 'emby_library_scan',
+                sourceService: $sourceService,
+                targetService: 'emby',
+                payload: $scanPayload,
+                description: $description,
+                webhookEvent: $webhookEvent,
+            );
+        }
+
+        return DB::transaction(function () use ($sourceService, $scanPayload, $description, $webhookEvent, $embyConnectionId): ?ActionRequest {
+            DB::select('SELECT pg_advisory_xact_lock(hashtext(?))', [sprintf('emby-library-scan:%d', $embyConnectionId)]);
+
+            $scanAfter = now()->addSeconds(self::DEBOUNCE_SECONDS);
+            $trigger = (string) ($scanPayload['trigger'] ?? $sourceService);
+
+            $pendingScan = ActionRequest::query()
+                ->where('type', 'emby_library_scan')
+                ->whereIn('status', [ActionRequestStatus::Pending->value, ActionRequestStatus::Approved->value])
+                ->where('payload->emby_connection_id', (string) $embyConnectionId)
+                ->where('created_at', '>=', now()->subMinutes(self::MAX_COALESCE_MINUTES))
+                ->latest('id')
+                ->lockForUpdate()
+                ->first();
+
+            if ($pendingScan instanceof ActionRequest) {
+                $payload = $pendingScan->payload;
+                $payload['coalesced_events'] = (int) ($payload['coalesced_events'] ?? 1) + 1;
+                $payload['triggers'] = array_slice([...($payload['triggers'] ?? []), $trigger], -self::MAX_RECORDED_TRIGGERS);
+                $payload['scan_after'] = $scanAfter->toIso8601String();
+                $pendingScan->update(['payload' => $payload]);
+
+                $this->wakeAfter($pendingScan, $scanAfter);
+
+                return $pendingScan;
+            }
+
+            $actionRequest = $this->actionOrchestrator->dispatch(
+                type: 'emby_library_scan',
+                sourceService: $sourceService,
+                targetService: 'emby',
+                payload: [
+                    ...$scanPayload,
+                    'emby_connection_id' => $embyConnectionId,
+                    'scan_after' => $scanAfter->toIso8601String(),
+                    'coalesced_events' => 1,
+                    'triggers' => [$trigger],
+                ],
+                description: $description,
+                webhookEvent: $webhookEvent,
+                deferExecution: true,
+            );
+
+            if ($actionRequest instanceof ActionRequest) {
+                $this->wakeAfter($actionRequest, $scanAfter);
+            }
+
+            return $actionRequest;
+        });
+    }
+
+    /**
+     * Pending requests wait for approval, which dispatches execution itself.
+     */
+    private function wakeAfter(ActionRequest $actionRequest, CarbonImmutable $scanAfter): void
+    {
+        if ($actionRequest->status !== ActionRequestStatus::Approved) {
+            return;
+        }
+
+        dispatch(new ExecuteDebouncedLibraryScan($actionRequest->id))->delay($scanAfter)->afterCommit();
+    }
+}

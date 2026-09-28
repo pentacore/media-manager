@@ -52,6 +52,25 @@ test('Download event dispatches emby_library_scan', function (): void {
     ]);
 });
 
+test('a season-pack burst of Download events queues a single emby scan', function (): void {
+    Queue::fake();
+    ServiceConnection::factory()->emby()->create();
+
+    foreach (range(1, 4) as $episode) {
+        resolve(SonarrWebhookHandler::class)->handle(WebhookEvent::factory()->create([
+            'service_connection_id' => $this->connection->id,
+            'event_type' => 'Download',
+            'payload' => [
+                'eventType' => 'Download',
+                'series' => ['id' => 42, 'title' => 'My Show'],
+                'episodes' => [['seasonNumber' => 1, 'episodeNumber' => $episode]],
+            ],
+        ]));
+    }
+
+    expect(ActionRequest::query()->where('type', 'emby_library_scan')->count())->toBe(1);
+});
+
 test('Grab event correlates a pending replacement attempt and attaches the download id', function (): void {
     $attempt = MediaReplacementAttempt::factory()->create([
         'service_connection_id' => $this->connection->id,

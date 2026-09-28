@@ -19,3 +19,6 @@ Model the outcome of a multi-step process as a `final readonly` class with promo
 
 ## Webhook handlers never mark events processed
 `ProcessWebhookEvent` calls `WebhookEvent::markProcessed($status)` after `handle()` returns (one write of `processed_at` + `handling_status`, then `WebhookEventProcessed`). Handlers return a `WebhookHandlingStatus` and must not touch `processed_at`: a handler that marked processed and then threw (e.g. in a cache `bustAll()`) left the row stuck in `Processing`, because `claim()` skips processed rows on retry.
+
+## Emby library scans go through EmbyLibraryScanScheduler
+Webhook handlers request Emby refreshes with `EmbyLibraryScanScheduler::schedule()`, never `ActionOrchestrator::dispatch('emby_library_scan', …)`. It folds triggers for one Emby connection into one not-yet-started request (Pending or Approved, < 10 min old) and delays execution 60 s past the latest trigger via `ExecuteDebouncedLibraryScan`, so a season pack yields one refresh. `EmbyActions` scans `payload.emby_connection_id` when present.

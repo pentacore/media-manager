@@ -8,14 +8,14 @@ use App\Cache\Services\SeerrCache;
 use App\Enums\WebhookHandlingStatus;
 use App\Models\WebhookEvent;
 use App\Services\Actions\ActionDescriber;
-use App\Services\Actions\ActionOrchestrator;
+use App\Services\Emby\EmbyLibraryScanScheduler;
 use App\Services\Webhook\AbstractWebhookHandler;
 
 class SeerrWebhookHandler extends AbstractWebhookHandler
 {
     public function __construct(
-        private readonly ActionOrchestrator $actionOrchestrator,
         private readonly ActionDescriber $actionDescriber,
+        private readonly EmbyLibraryScanScheduler $embyLibraryScanScheduler,
     ) {}
 
     protected function serviceSlug(): string
@@ -106,11 +106,9 @@ class SeerrWebhookHandler extends AbstractWebhookHandler
         $scanPayload = ['trigger' => 'seerr_media_available', 'subject' => $payload['subject'] ?? null];
         $subject = is_string($payload['subject'] ?? null) && $payload['subject'] !== '' ? sprintf('"%s"', $payload['subject']) : 'a title';
 
-        $this->actionOrchestrator->dispatch(
-            type: 'emby_library_scan',
+        $this->embyLibraryScanScheduler->schedule(
             sourceService: 'seerr',
-            targetService: 'emby',
-            payload: $scanPayload,
+            scanPayload: $scanPayload,
             description: $this->actionDescriber->describe('emby_library_scan', $scanPayload)
                 ->because(sprintf('Seerr reported %s is now available.', $subject))
                 ->withDetail('Triggered by', sprintf('Seerr › %s', $webhookEvent->serviceConnection?->name ?? 'unknown connection')),
