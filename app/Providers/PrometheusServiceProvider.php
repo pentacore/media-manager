@@ -29,10 +29,13 @@ use Throwable;
 /**
  * Registers the MediaManager gauges exported on the token-gated /metrics
  * endpoint. Each gauge closure runs at scrape time, so reads must stay cheap
- * and side-effect free. Aggregate counts come from the pre-rolled
- * `stat_rollups` via {@see StatisticsRepository}; live gauges (queue depth,
- * active sessions, free disk) read the newest hour bucket per dimension set
- * so a scrape reflects the last collector pass rather than a summed total.
+ * and side-effect free, and every closure is wrapped in {@see self::safely()}
+ * so one gauge's dependency failure (DB, Redis) degrades that gauge alone
+ * instead of 500ing the whole scrape. Aggregate counts come from the
+ * pre-rolled `stat_rollups` via {@see StatisticsRepository}; live gauges
+ * (queue depth, active sessions, free disk) read the newest hour bucket per
+ * dimension set so a scrape reflects the last collector pass rather than a
+ * summed total.
  */
 class PrometheusServiceProvider extends ServiceProvider
 {
@@ -55,14 +58,14 @@ class PrometheusServiceProvider extends ServiceProvider
         Prometheus::addGauge('mediamanager_service_up')
             ->helpText('1 when an active service connection is healthy, 0 otherwise')
             ->label('service')
-            ->value(fn (): array => ServiceConnection::query()
+            ->value(fn (): array|float => $this->safely('mediamanager_service_up', fn (): array => ServiceConnection::query()
                 ->where('is_active', true)
                 ->get()
                 ->map(fn (ServiceConnection $serviceConnection): array => [
                     $serviceConnection->health_status === HealthStatus::Healthy ? 1 : 0,
                     [$serviceConnection->name],
                 ])
-                ->all());
+                ->all()));
     }
 
     /**
@@ -72,28 +75,28 @@ class PrometheusServiceProvider extends ServiceProvider
     {
         Prometheus::addGauge('mediamanager_pending_actions')
             ->helpText('Number of ActionRequests awaiting approval')
-            ->value(fn (): float => (float) ActionRequest::query()
+            ->value(fn (): array|float => $this->safely('mediamanager_pending_actions', fn (): float => (float) ActionRequest::query()
                 ->where('status', ActionRequestStatus::Pending)
-                ->count());
+                ->count()));
 
         Prometheus::addGauge('mediamanager_webhooks_received_today')
             ->helpText('Webhooks received today, by service')
             ->label('service')
-            ->value(fn (): array => collect($this->repository()->breakdown('webhooks.received', TimeWindow::Today, 'service'))
+            ->value(fn (): array|float => $this->safely('mediamanager_webhooks_received_today', fn (): array => collect($this->repository()->breakdown('webhooks.received', TimeWindow::Today, 'service'))
                 ->map(fn (array $row): array => [(float) $row['count'], [$row['key']]])
-                ->all());
+                ->all()));
 
         Prometheus::addGauge('mediamanager_ai_cost_usd_today')
             ->helpText('AI spend in USD accrued today')
-            ->value(fn (): float => $this->repository()->total('ai.usage', TimeWindow::Today)['sum']);
+            ->value(fn (): array|float => $this->safely('mediamanager_ai_cost_usd_today', fn (): float => $this->repository()->total('ai.usage', TimeWindow::Today)['sum']));
 
         Prometheus::addGauge('mediamanager_watch_plays_today')
             ->helpText('Watch plays recorded today')
-            ->value(fn (): float => (float) $this->repository()->total('watch.plays', TimeWindow::Today)['count']);
+            ->value(fn (): array|float => $this->safely('mediamanager_watch_plays_today', fn (): float => (float) $this->repository()->total('watch.plays', TimeWindow::Today)['count']));
 
         Prometheus::addGauge('mediamanager_downloads_completed_today')
             ->helpText('Downloads completed today')
-            ->value(fn (): float => (float) $this->repository()->total('downloads.completed', TimeWindow::Today)['count']);
+            ->value(fn (): array|float => $this->safely('mediamanager_downloads_completed_today', fn (): float => (float) $this->repository()->total('downloads.completed', TimeWindow::Today)['count']));
     }
 
     /**
@@ -104,18 +107,18 @@ class PrometheusServiceProvider extends ServiceProvider
         Prometheus::addGauge('mediamanager_queue_depth')
             ->helpText('Latest sampled download-queue depth, by service')
             ->label('service')
-            ->value(fn (): array => $this->latestSamples('queue.depth', ['service']));
+            ->value(fn (): array|float => $this->safely('mediamanager_queue_depth', fn (): array => $this->latestSamples('queue.depth', ['service'])));
 
         Prometheus::addGauge('mediamanager_sessions_active')
             ->helpText('Latest sampled active playback sessions, by connection')
             ->label('connection')
-            ->value(fn (): array => $this->latestSamples('sessions.active', ['connection']));
+            ->value(fn (): array|float => $this->safely('mediamanager_sessions_active', fn (): array => $this->latestSamples('sessions.active', ['connection'])));
 
         Prometheus::addGauge('mediamanager_disk_free_bytes')
             ->helpText('Latest sampled free disk space in bytes, by connection and path')
             ->label('connection')
             ->label('path')
-            ->value(fn (): array => $this->latestSamples('service.disk_free_bytes', ['connection', 'path']));
+            ->value(fn (): array|float => $this->safely('mediamanager_disk_free_bytes', fn (): array => $this->latestSamples('service.disk_free_bytes', ['connection', 'path'])));
     }
 
     /**

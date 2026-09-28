@@ -216,6 +216,26 @@ test('the webhook-lag gauge failing does not take down the rest of the scrape', 
         ->assertDontSee('mediamanager_webhook_oldest_pending_age_seconds', escape: false);
 });
 
+test('a pre-existing gauge failing does not take down the rest of the scrape', function (): void {
+    // A previously-unguarded gauge (mediamanager_service_up), first in
+    // registration order; same rename-inside-the-transaction trick as the
+    // webhook-lag isolation test. Postgres aborts the rest of the test's
+    // wrapping transaction once this query fails, so every later DB-backed
+    // gauge in this same request would also read as absent — that's a
+    // RefreshDatabase/Postgres test artifact, not a production bug (outside
+    // tests nothing wraps the request in one transaction). Assert against
+    // mediamanager_job_queue_size instead: it reads the faked Queue
+    // connection, not the database, so it isn't touched by the poisoned
+    // transaction and proves the scrape as a whole still completes.
+    ServiceConnection::factory()->create(['is_active' => true, 'health_status' => HealthStatus::Healthy, 'name' => 'sonarr']);
+    Schema::rename('service_connections', 'service_connections_renamed_for_test');
+
+    $this->get('/metrics?token=test-token')
+        ->assertOk()
+        ->assertSee('mediamanager_job_queue_size{queue="ai",state="pending"} 0', escape: false)
+        ->assertDontSee('mediamanager_service_up{service="sonarr"}', escape: false);
+});
+
 test('the pending-webhook partial index exists and covers the lag query predicate', function (): void {
     $indexDefinition = (string) DB::table('pg_indexes')
         ->where('indexname', 'webhook_events_pending_created_at_index')
