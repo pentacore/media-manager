@@ -169,3 +169,29 @@ test('dispatchFromAgent pins a caller-supplied connection when the webhook event
     expect($actionRequest->fresh()->payload['service_connection_id'])->toBe($connectionB->id)
         ->and($actionRequest->webhook_event_id)->toBeNull();
 });
+
+test('dispatchFromAgent strips scheduler-owned emby_library_scan keys from a model-authored payload', function (): void {
+    ActionTypeConfig::factory()->create(['type' => 'emby_library_scan', 'requires_approval' => true, 'is_enabled' => true]);
+    $otherConnection = ServiceConnection::factory()->emby()->create(['url' => 'http://emby-other.local:8096']);
+
+    $actionRequest = resolve(ActionOrchestrator::class)->dispatchFromAgent(
+        type: 'emby_library_scan',
+        sourceService: 'sonarr',
+        targetService: 'emby',
+        payload: [
+            'emby_connection_id' => $otherConnection->id,
+            'scan_after' => now()->addMinute()->toIso8601String(),
+            'coalesced_events' => 5,
+            'triggers' => ['forged'],
+        ],
+        rationale: 'Rescan.',
+        description: new ActionDescription('Test action', 'Test effect.'),
+    );
+
+    $payload = $actionRequest->fresh()->payload;
+
+    expect($payload)->not->toHaveKey('emby_connection_id')
+        ->and($payload)->not->toHaveKey('scan_after')
+        ->and($payload)->not->toHaveKey('coalesced_events')
+        ->and($payload)->not->toHaveKey('triggers');
+});
