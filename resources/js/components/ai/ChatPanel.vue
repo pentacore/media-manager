@@ -7,6 +7,7 @@ import {
     Paperclip,
     Pencil,
     Sparkles,
+    Square,
     X,
 } from '@lucide/vue';
 import {
@@ -58,6 +59,8 @@ interface ChatMessage extends ConversationMessage {
      * patch the wrong bubbles.
      */
     uid: number;
+    /** True when the user stopped the reply before it finished. */
+    stopped?: boolean;
 }
 
 let nextMessageUid = 0;
@@ -124,6 +127,16 @@ interface PendingFile {
 const pendingFiles = ref<PendingFile[]>([]);
 const streamingIndex = ref<number | null>(null);
 let nextFileKey = 0;
+
+/** Aborts the in-flight streamed turn; null when no stream is running. */
+let streamAbortController: AbortController | null = null;
+
+/** A streamed reply (not a blocking workflow continuation) is in flight. */
+const canStop = computed(() => sending.value && streamingIndex.value !== null);
+
+function stopStreaming(): void {
+    streamAbortController?.abort();
+}
 
 const scrollRef = useTemplateRef<HTMLDivElement>('scroll');
 const inputRef = useTemplateRef<HTMLTextAreaElement>('inputArea');
@@ -234,6 +247,7 @@ watch(
 onUnmounted(() => {
     activeChannelLease?.release();
     activeChannelLease = null;
+    streamAbortController?.abort();
 });
 
 async function scrollToBottom(): Promise<void> {
@@ -414,11 +428,14 @@ async function sendStreamingTurn(
 
     const knownConversationId = activeConversationId.value;
 
+    streamAbortController = new AbortController();
+
     const result = await streamChat({
         message: bodyMessage,
         conversationId: knownConversationId,
         mode: mode.value,
         attachments: files,
+        signal: streamAbortController.signal,
         onText: (accumulated) => {
             assistantMessage.text = accumulated;
         },
@@ -439,15 +456,34 @@ async function sendStreamingTurn(
                 occurredAt: new Date().toISOString(),
             });
         },
-    }).catch((e: unknown) => {
-        // A failed turn the server stored still belongs to a conversation
-        // the user can continue — adopt it so a retry doesn't start over.
-        if (e instanceof ChatStreamError && e.conversationId) {
-            adoptConversation(e.conversationId, knownConversationId);
+    })
+        .catch((e: unknown) => {
+            // A failed turn the server stored still belongs to a conversation
+            // the user can continue — adopt it so a retry doesn't start over.
+            if (e instanceof ChatStreamError && e.conversationId) {
+                adoptConversation(e.conversationId, knownConversationId);
+            }
+
+            throw e;
+        })
+        .finally(() => {
+            streamAbortController = null;
+        });
+
+    if (result.stopped) {
+        assistantMessage.stopped = true;
+
+        // A stopped brand-new chat has a row only if a step completed, so
+        // adopting the minted id could 404 the next turn; refresh the picker
+        // instead and let the user open it from there.
+        if (knownConversationId) {
+            rememberConversation(knownConversationId);
+        } else {
+            void refreshRecent(true);
         }
 
-        throw e;
-    });
+        return;
+    }
 
     // RUN_STARTED/RUN_FINISHED carry the conversation id as `threadId`: for an
     // existing conversation it echoes what we sent, for a brand-new one it is
@@ -988,6 +1024,13 @@ function onRenameKey(event: KeyboardEvent): void {
                         class="mm-markdown text-[14px] leading-relaxed"
                         v-html="renderMarkdown(m.text)"
                     />
+                    <p
+                        v-if="m.stopped"
+                        class="text-[12px] text-muted-foreground"
+                        data-stopped-turn
+                    >
+                        Stopped.
+                    </p>
                 </div>
             </div>
 
@@ -1009,6 +1052,7 @@ function onRenameKey(event: KeyboardEvent): void {
             <div
                 v-if="error"
                 class="mb-2 rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive"
+                data-chat-error
             >
                 {{ error }}
             </div>
@@ -1066,6 +1110,18 @@ function onRenameKey(event: KeyboardEvent): void {
                     @keydown="onKey"
                 />
                 <Button
+                    v-if="canStop"
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    class="h-7 gap-1.5 text-xs"
+                    data-chat-stop
+                    @click="stopStreaming"
+                >
+                    <Square class="size-3.5" />Stop
+                </Button>
+                <Button
+                    v-else
                     type="button"
                     size="sm"
                     class="h-7 gap-1.5 text-xs"
