@@ -85,3 +85,11 @@ test('uses the active connection when no decision run context is bound', functio
     expect($result['ok'])->toBeTrue();
     Http::assertSent(fn (Illuminate\Http\Client\Request $sentRequest): bool => str_contains($sentRequest->url(), 'sonarr.local:8989/api/v3/manualimport'));
 });
+
+test('the inspection describes itself without naming an acting tool only one caller has', function (): void {
+    $description = (string) (new InspectStuckImportTool)->description();
+
+    expect($description)->toContain('Read-only')
+        ->not->toContain('ResolveManualImportTool')
+        ->not->toContain('RemoveStuckDownloadTool');
+});

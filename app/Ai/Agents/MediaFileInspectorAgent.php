@@ -4,35 +4,24 @@ declare(strict_types=1);
 
 namespace App\Ai\Agents;
 
+use App\Ai\Concerns\ActsAsStructuredSubAgent;
 use App\Ai\Concerns\UsesFailoverChain;
-use App\Ai\Middleware\AnswerOnFinalStep;
-use App\Ai\Middleware\EnforceBudgetEachStep;
 use App\Ai\Tools\Arr\FindReplacementCandidatesTool;
 use App\Ai\Tools\Arr\GetMediaTool;
 use App\Ai\Tools\Arr\InspectMediaFileTool;
 use App\Ai\Tools\Arr\SearchMediaTool;
 use App\Settings\AiSettings;
-use Generator;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
 use Illuminate\JsonSchema\Types\Type;
-use Illuminate\Support\Facades\Date;
-use Illuminate\Support\Str;
-use Laravel\Ai\Approvals\Decisions;
 use Laravel\Ai\Attributes\MaxSteps;
 use Laravel\Ai\Attributes\RepairToolCalls;
 use Laravel\Ai\Contracts\Agent;
-use Laravel\Ai\Contracts\AgentInput;
 use Laravel\Ai\Contracts\CanActAsTool;
 use Laravel\Ai\Contracts\HasMiddleware;
 use Laravel\Ai\Contracts\HasStructuredOutput;
 use Laravel\Ai\Contracts\HasTools;
 use Laravel\Ai\Contracts\Tool;
-use Laravel\Ai\Enums\Lab;
-use Laravel\Ai\Messages\UserMessage;
 use Laravel\Ai\Promptable;
-use Laravel\Ai\Responses\Data\Meta;
-use Laravel\Ai\Responses\StreamableAgentResponse;
-use Laravel\Ai\Streaming\Events\TextDelta;
 
 /**
  * Read-only resolution and inspection of one Sonarr/Radarr media file and its
@@ -43,7 +32,9 @@ use Laravel\Ai\Streaming\Events\TextDelta;
 #[RepairToolCalls]
 final class MediaFileInspectorAgent implements Agent, CanActAsTool, HasMiddleware, HasStructuredOutput, HasTools
 {
-    use Promptable;
+    use ActsAsStructuredSubAgent, Promptable {
+        ActsAsStructuredSubAgent::stream insteadof Promptable;
+    }
     use UsesFailoverChain;
 
     public function name(): string
@@ -102,41 +93,5 @@ PROMPT;
             'candidates' => $schema->array()->items($schema->string())->description('One line per candidate, same order as candidate_fingerprints.')->required(),
             'automatic_candidate' => $schema->string()->description('Fingerprint exactly as returned, or null.')->nullable()->required(),
         ];
-    }
-
-    /**
-     * Wrap every generation step: refuse a step once the hard budget is
-     * crossed mid-run, and force a plain answer on the final allowed step.
-     *
-     * @return array<int, object>
-     */
-    public function middleware(): array
-    {
-        return [new AnswerOnFinalStep, new EnforceBudgetEachStep];
-    }
-
-    /**
-     * laravel/ai 1.0 refuses to stream structured output, and a streamed
-     * parent run delegates through AgentTool::stream(). Run the structured
-     * prompt instead and hand its JSON back as the stream's only text, so
-     * the parent receives the findings on the streaming path too.
-     *
-     * @param  array<int, mixed>  $attachments
-     */
-    public function stream(AgentInput|UserMessage|Decisions|string $prompt, array $attachments = [], Lab|array|string|null $provider = null, ?string $model = null, ?int $timeout = null): StreamableAgentResponse
-    {
-        $meta = new Meta;
-
-        $streamableAgentResponse = new StreamableAgentResponse((string) Str::uuid7(), function () use (&$streamableAgentResponse, $meta, $prompt, $attachments, $provider, $model, $timeout): Generator {
-            $agentResponse = $this->prompt($prompt, $attachments, $provider, $model, $timeout);
-
-            $streamableAgentResponse->invocationId = $agentResponse->invocationId;
-            $meta->provider = $agentResponse->meta->provider;
-            $meta->model = $agentResponse->meta->model;
-
-            yield new TextDelta(Str::lower((string) Str::uuid7()), Str::lower((string) Str::uuid7()), $agentResponse->text, Date::now()->getTimestamp());
-        }, $meta);
-
-        return $streamableAgentResponse;
     }
 }

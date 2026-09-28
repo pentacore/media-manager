@@ -4,7 +4,9 @@ declare(strict_types=1);
 
 use App\Ai\Agents\DecisionAgent;
 use App\Ai\Agents\MediaAgent;
+use App\Ai\Agents\MediaFileInspectorAgent;
 use App\Ai\Agents\PriceFetcherAgent;
+use App\Ai\Agents\StuckDownloadInvestigatorAgent;
 use App\Ai\Agents\SubtitleAdvisorAgent;
 use App\Ai\Middleware\AnswerOnFinalStep;
 use App\Ai\Middleware\EnforceBudgetEachStep;
@@ -76,4 +78,6 @@ test('every tool-using agent runs both step middleware', function (string $agent
     'decision' => DecisionAgent::class,
     'subtitle advisor' => SubtitleAdvisorAgent::class,
     'price fetcher' => PriceFetcherAgent::class,
+    'stuck download investigator' => StuckDownloadInvestigatorAgent::class,
+    'media file inspector' => MediaFileInspectorAgent::class,
 ]);

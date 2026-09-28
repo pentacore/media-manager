@@ -19,9 +19,11 @@ use Throwable;
 
 /**
  * Read-only inspection of a stuck Sonarr/Radarr import. Returns each candidate
- * file's mapping status, what it is, and the RAW upstream rejection reasons so
- * the DecisionAgent can reason over them and decide what to do (import via
- * ResolveManualImportTool, drop via RemoveStuckDownloadTool, or leave it).
+ * file's mapping status, what it is, and the RAW upstream rejection reasons.
+ * Two callers use it — the DecisionAgent (acting through ResolveManualImportTool
+ * / RemoveStuckDownloadTool) and the chat StuckDownloadInvestigatorAgent (whose
+ * parent acts through the *ChatTool variants) — so its description names no
+ * acting tool.
  *
  * Intentionally NOT gated by the manual-import capability: looking is always
  * safe and lets the agent write a useful summary even when it can't act. Also
@@ -33,7 +35,7 @@ class InspectStuckImportTool extends DecisionTool
 
     public function description(): Stringable|string
     {
-        return 'Inspect a stuck Sonarr/Radarr import (a "manual interaction required" download). Returns each candidate file, whether it maps to a series/movie, and the upstream rejection reasons verbatim. Call this FIRST for a ManualInteractionRequired event, read the rejections, then decide: import it (ResolveManualImportTool), remove it (RemoveStuckDownloadTool), or leave it for a human.';
+        return 'Inspect a stuck Sonarr/Radarr import (a "manual interaction required" download). Read-only. Returns each candidate file, whether it maps to a series/movie, and the upstream rejection reasons verbatim. Call this first for a stuck download and read the rejections before deciding whether it should be imported, removed, or left for a human.';
     }
 
     protected function requiresRunContext(): bool
