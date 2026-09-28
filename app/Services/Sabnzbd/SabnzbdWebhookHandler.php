@@ -38,8 +38,6 @@ class SabnzbdWebhookHandler extends AbstractWebhookHandler
             default => $status = $this->ignore($webhookEvent, $eventType),
         };
 
-        $webhookEvent->markProcessed();
-
         if ($webhookEvent->serviceConnection !== null) {
             new SabnzbdCache($webhookEvent->serviceConnection)->bustAll();
         }

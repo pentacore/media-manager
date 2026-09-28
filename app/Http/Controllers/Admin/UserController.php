@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers\Admin;
 
+use App\Actions\LastAdminException;
+use App\Actions\ModifyUserAccess;
 use App\Enums\UserRole;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Admin\CreateUserRequest;
@@ -72,22 +74,34 @@ class UserController extends Controller
         return to_route('admin.users.index');
     }
 
-    public function updateRole(UpdateUserRoleRequest $updateUserRoleRequest, User $user): RedirectResponse
+    public function updateRole(UpdateUserRoleRequest $updateUserRoleRequest, User $user, ModifyUserAccess $modifyUserAccess): RedirectResponse
     {
         abort_if($user->id === $updateUserRoleRequest->user()->id, 403);
 
-        $user->update(['role' => $updateUserRoleRequest->validated('role')]);
+        try {
+            $modifyUserAccess->changeRole($user, UserRole::from((string) $updateUserRoleRequest->validated('role')));
+        } catch (LastAdminException) {
+            Inertia::flash('toast', ['type' => 'error', 'message' => __('At least one admin must remain.')]);
+
+            return to_route('admin.users.index');
+        }
 
         Inertia::flash('toast', ['type' => 'success', 'message' => __('User role updated.')]);
 
         return to_route('admin.users.index');
     }
 
-    public function destroy(User $user): RedirectResponse
+    public function destroy(User $user, ModifyUserAccess $modifyUserAccess): RedirectResponse
     {
         abort_if($user->id === request()->user()->id, 403);
 
-        $user->delete();
+        try {
+            $modifyUserAccess->delete($user);
+        } catch (LastAdminException) {
+            Inertia::flash('toast', ['type' => 'error', 'message' => __('At least one admin must remain.')]);
+
+            return to_route('admin.users.index');
+        }
 
         Inertia::flash('toast', ['type' => 'success', 'message' => __('User deleted.')]);
 

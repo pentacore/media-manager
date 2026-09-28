@@ -25,13 +25,13 @@ function makeProwlarrWebhookEvent(ServiceConnection $serviceConnection, string $
     ]);
 }
 
-test('Test event writes an ActivityLog row and marks the webhook processed', function (): void {
+test('Test event writes an ActivityLog row and leaves processed_at for the job to set', function (): void {
     $webhookEvent = makeProwlarrWebhookEvent($this->connection, 'Test', ['applicationUrl' => 'http://prowlarr.local']);
 
     $this->handler->handle($webhookEvent);
 
     expect(ActivityLog::where('action', 'webhook.prowlarr.test')->count())->toBe(1);
-    expect($webhookEvent->fresh()->processed_at)->not->toBeNull();
+    expect($webhookEvent->fresh()->processed_at)->toBeNull(); // ProcessWebhookEvent marks processed, not the handler
 });
 
 test('Health event writes an ActivityLog row and dispatches a health re-ping', function (): void {
@@ -86,5 +86,5 @@ test('unknown event types are ignored without writing ActivityLog', function ():
     $this->handler->handle($webhookEvent);
 
     expect(ActivityLog::count())->toBe(0);
-    expect($webhookEvent->fresh()->processed_at)->not->toBeNull();
+    expect($webhookEvent->fresh()->processed_at)->toBeNull(); // ProcessWebhookEvent marks processed, not the handler
 });

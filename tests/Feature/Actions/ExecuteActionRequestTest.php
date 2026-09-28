@@ -6,6 +6,7 @@ use App\Enums\ActionRequestStatus;
 use App\Events\ActionRequestStatusChanged;
 use App\Jobs\ExecuteActionRequest;
 use App\Models\ActionRequest;
+use App\Models\ActivityLog;
 use App\Services\Actions\ActionExecutor;
 use App\Services\Bazarr\BazarrActions;
 use App\Services\Bazarr\BazarrIndeterminateOutcomeException;
@@ -279,4 +280,24 @@ test('job has timeout and unique-for duration', function (): void {
 
     expect($reflection->getAttributes(Timeout::class)[0]->newInstance()->timeout)->toBe(300)
         ->and($reflection->getAttributes(UniqueFor::class)[0]->newInstance()->uniqueFor)->toBe(3600);
+});
+
+test('claiming a request writes the executing entry to the activity log', function (): void {
+    $request = ActionRequest::factory()->autoExecute()->create(['type' => 'delete_series']);
+    $mock = Mockery::mock(ActionExecutor::class);
+    $mock->shouldReceive('execute')->once()->andReturn([]);
+    $this->app->bind(SonarrActions::class, fn (): ActionExecutor => $mock);
+
+    new ExecuteActionRequest($request)->handle();
+
+    expect(ActivityLog::query()->where('subject_id', $request->id)->where('action', 'action_request.executing')->count())->toBe(1)
+        ->and(ActivityLog::query()->where('subject_id', $request->id)->where('action', 'action_request.completed')->count())->toBe(1);
+});
+
+test('a skipped claim writes no executing entry', function (): void {
+    $request = ActionRequest::factory()->create(['status' => ActionRequestStatus::Pending]);
+
+    new ExecuteActionRequest($request)->handle();
+
+    expect(ActivityLog::query()->where('subject_id', $request->id)->where('action', 'action_request.executing')->exists())->toBeFalse();
 });

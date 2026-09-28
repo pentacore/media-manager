@@ -10,7 +10,7 @@ use App\Jobs\AuditImportedSubtitles;
 use App\Models\WebhookEvent;
 use App\Notifications\ServiceWarning;
 use App\Services\Actions\ActionDescriber;
-use App\Services\Actions\ActionOrchestrator;
+use App\Services\Emby\EmbyLibraryScanScheduler;
 use App\Services\Library\InterventionCounter;
 use App\Services\MediaReplacement\MediaReplacementTracker;
 use App\Services\Notifications\AdminNotifier;
@@ -20,11 +20,11 @@ use App\Services\Webhook\AbstractWebhookHandler;
 class RadarrWebhookHandler extends AbstractWebhookHandler
 {
     public function __construct(
-        private readonly ActionOrchestrator $actionOrchestrator,
         private readonly MovieIndexer $movieIndexer,
         private readonly MediaReplacementTracker $mediaReplacementTracker,
         private readonly AdminNotifier $adminNotifier,
         private readonly ActionDescriber $actionDescriber,
+        private readonly EmbyLibraryScanScheduler $embyLibraryScanScheduler,
     ) {}
 
     protected function serviceSlug(): string
@@ -53,8 +53,6 @@ class RadarrWebhookHandler extends AbstractWebhookHandler
             'ApplicationUpdate' => $this->handleApplicationUpdate($webhookEvent, $payload),
             default => $status = $this->ignore($webhookEvent, $eventType),
         };
-
-        $webhookEvent->markProcessed();
 
         if ($webhookEvent->serviceConnection !== null) {
             new RadarrCache($webhookEvent->serviceConnection)->bustAll();
@@ -134,11 +132,9 @@ class RadarrWebhookHandler extends AbstractWebhookHandler
 
         $scanPayload = ['trigger' => 'radarr_download', 'movie_title' => $movieTitle];
 
-        $this->actionOrchestrator->dispatch(
-            type: 'emby_library_scan',
+        $this->embyLibraryScanScheduler->schedule(
             sourceService: 'radarr',
-            targetService: 'emby',
-            payload: $scanPayload,
+            scanPayload: $scanPayload,
             description: $this->actionDescriber->describe('emby_library_scan', $scanPayload)
                 ->because(sprintf('Radarr imported "%s".', $movieTitle))
                 ->withDetail('Triggered by', sprintf('Radarr › %s', $webhookEvent->serviceConnection?->name ?? 'unknown connection')),
@@ -219,11 +215,9 @@ class RadarrWebhookHandler extends AbstractWebhookHandler
 
         $scanPayload = ['trigger' => 'radarr_movie_deleted', 'movie_title' => $movieTitle];
 
-        $this->actionOrchestrator->dispatch(
-            type: 'emby_library_scan',
+        $this->embyLibraryScanScheduler->schedule(
             sourceService: 'radarr',
-            targetService: 'emby',
-            payload: $scanPayload,
+            scanPayload: $scanPayload,
             description: $this->actionDescriber->describe('emby_library_scan', $scanPayload)
                 ->because(sprintf('Radarr deleted "%s".', $movieTitle))
                 ->withDetail('Triggered by', sprintf('Radarr › %s', $webhookEvent->serviceConnection?->name ?? 'unknown connection')),

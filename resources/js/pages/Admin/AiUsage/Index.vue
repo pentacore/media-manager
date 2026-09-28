@@ -4,6 +4,7 @@ import { ChevronDown, ChevronRight, Download, Sparkles } from '@lucide/vue';
 import { computed, ref } from 'vue';
 import AiModelPriceController from '@/actions/App/Http/Controllers/Admin/AiModelPriceController';
 import AiUsageController from '@/actions/App/Http/Controllers/Admin/AiUsageController';
+import UnpricedModelWarning from '@/components/ai/UnpricedModelWarning.vue';
 import {
     InitialsAvatar,
     Pill,
@@ -212,6 +213,7 @@ const props = defineProps<{
     free_pools: FreePoolRow[];
     rate_limits: RateLimitStatusRow[];
     rate_limits_enforced: boolean;
+    unpricedModels: { role: string; provider: string; model: string }[];
 }>();
 
 defineOptions({
@@ -633,6 +635,8 @@ function formatTimestamp(value: string): string {
                 </a>
             </div>
         </div>
+
+        <UnpricedModelWarning :models="props.unpricedModels" />
 
         <!-- Stat cards -->
         <div class="grid gap-4 md:grid-cols-2 xl:grid-cols-4">

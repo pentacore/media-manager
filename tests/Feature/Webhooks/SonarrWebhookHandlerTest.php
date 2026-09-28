@@ -44,12 +44,31 @@ test('Download event dispatches emby_library_scan', function (): void {
     expect($request->source_service)->toBe('sonarr');
     expect($request->target_service)->toBe('emby');
     expect($request->webhook_event_id)->toBe($webhookEvent->id);
-    expect($webhookEvent->fresh()->processed_at)->not->toBeNull();
+    expect($webhookEvent->fresh()->processed_at)->toBeNull(); // ProcessWebhookEvent marks processed, not the handler
 
     $this->assertDatabaseHas('activity_logs', [
         'service_connection_id' => $this->connection->id,
         'action' => 'webhook.sonarr.download',
     ]);
+});
+
+test('a season-pack burst of Download events queues a single emby scan', function (): void {
+    Queue::fake();
+    ServiceConnection::factory()->emby()->create();
+
+    foreach (range(1, 4) as $episode) {
+        resolve(SonarrWebhookHandler::class)->handle(WebhookEvent::factory()->create([
+            'service_connection_id' => $this->connection->id,
+            'event_type' => 'Download',
+            'payload' => [
+                'eventType' => 'Download',
+                'series' => ['id' => 42, 'title' => 'My Show'],
+                'episodes' => [['seasonNumber' => 1, 'episodeNumber' => $episode]],
+            ],
+        ]));
+    }
+
+    expect(ActionRequest::query()->where('type', 'emby_library_scan')->count())->toBe(1);
 });
 
 test('Grab event correlates a pending replacement attempt and attaches the download id', function (): void {
@@ -131,7 +150,7 @@ test('unknown events are ignored', function (): void {
 
     expect(ActionRequest::count())->toBe(0);
     expect(ActivityLog::count())->toBe(0);
-    expect($webhookEvent->fresh()->processed_at)->not->toBeNull();
+    expect($webhookEvent->fresh()->processed_at)->toBeNull(); // ProcessWebhookEvent marks processed, not the handler
 });
 
 test('Test event writes ActivityLog', function (): void {
@@ -152,7 +171,7 @@ test('Test event writes ActivityLog', function (): void {
         'service_connection_id' => $this->connection->id,
         'action' => 'webhook.sonarr.test',
     ]);
-    expect($webhookEvent->fresh()->processed_at)->not->toBeNull();
+    expect($webhookEvent->fresh()->processed_at)->toBeNull(); // ProcessWebhookEvent marks processed, not the handler
 });
 
 test('Grab event writes ActivityLog', function (): void {
@@ -377,7 +396,7 @@ test('Unknown eventType is logged and skipped (no ActivityLog)', function (): vo
 
     expect(ActionRequest::count())->toBe(0);
     expect(ActivityLog::count())->toBe(0);
-    expect($webhookEvent->fresh()->processed_at)->not->toBeNull();
+    expect($webhookEvent->fresh()->processed_at)->toBeNull(); // ProcessWebhookEvent marks processed, not the handler
 });
 
 test('Download event queues the automatic subtitle check', function (): void {

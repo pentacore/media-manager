@@ -2,6 +2,7 @@
 import { Form, Head } from '@inertiajs/vue3';
 import { computed, ref } from 'vue';
 import AiSettingsController from '@/actions/App/Http/Controllers/Admin/AiSettingsController';
+import UnpricedModelWarning from '@/components/ai/UnpricedModelWarning.vue';
 import InputError from '@/components/InputError.vue';
 import { Field, Pill, Toggle } from '@/components/mm';
 import { Button } from '@/components/ui/button';
@@ -85,6 +86,7 @@ interface BudgetSnapshot {
 const props = defineProps<{
     settings: AiSettingsState;
     budget: BudgetSnapshot;
+    unpricedModels: { role: string; provider: string; model: string }[];
     modes: ModeOption[];
     models: Record<string, string[]>;
     reasoningLevels: SelectOptionGroup<AiReasoningLevel>;
@@ -207,6 +209,8 @@ const budgetState = computed<{
                 <span class="font-mono-tabular">.env</span> at runtime.
             </p>
         </div>
+
+        <UnpricedModelWarning :models="props.unpricedModels" />
 
         <Form
             v-bind="AiSettingsController.update.form()"

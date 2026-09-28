@@ -68,7 +68,7 @@ test('Test event writes ActivityLog', function (): void {
         'service_connection_id' => $this->connection->id,
         'action' => 'webhook.radarr.test',
     ]);
-    expect($webhookEvent->fresh()->processed_at)->not->toBeNull();
+    expect($webhookEvent->fresh()->processed_at)->toBeNull(); // ProcessWebhookEvent marks processed, not the handler
 });
 
 test('Grab event writes ActivityLog', function (): void {
@@ -117,7 +117,7 @@ test('Download event writes ActivityLog and dispatches emby_library_scan', funct
         'service_connection_id' => $this->connection->id,
         'action' => 'webhook.radarr.download',
     ]);
-    expect($webhookEvent->fresh()->processed_at)->not->toBeNull();
+    expect($webhookEvent->fresh()->processed_at)->toBeNull(); // ProcessWebhookEvent marks processed, not the handler
 });
 
 test('Rename event writes ActivityLog', function (): void {
@@ -313,7 +313,7 @@ test('Unknown eventType is logged and skipped (no ActivityLog)', function (): vo
 
     expect(ActionRequest::count())->toBe(0);
     expect(ActivityLog::count())->toBe(0);
-    expect($webhookEvent->fresh()->processed_at)->not->toBeNull();
+    expect($webhookEvent->fresh()->processed_at)->toBeNull(); // ProcessWebhookEvent marks processed, not the handler
 });
 
 test('Download event queues the automatic subtitle check', function (): void {

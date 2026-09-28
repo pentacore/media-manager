@@ -103,9 +103,17 @@ class WebhookEvent extends Model
         return $this->hasMany(ActivityLog::class);
     }
 
-    public function markProcessed(): void
+    /**
+     * Terminal bookkeeping, owned by ProcessWebhookEvent: it runs only after
+     * the handler returned, so a handler that throws midway (e.g. a cache
+     * flush) leaves processed_at null and the retry can reclaim the row.
+     */
+    public function markProcessed(WebhookHandlingStatus $webhookHandlingStatus): void
     {
-        $this->update(['processed_at' => now()]);
+        $this->update([
+            'processed_at' => now(),
+            'handling_status' => $webhookHandlingStatus,
+        ]);
         event(new WebhookEventProcessed($this));
     }
 

@@ -10,6 +10,7 @@ import {
     X,
 } from '@lucide/vue';
 import { computed, onMounted, ref } from 'vue';
+import { toast } from 'vue-sonner';
 import ServiceHealthController from '@/actions/App/Http/Controllers/Monitoring/ServiceHealthController';
 import {
     Pill,
@@ -56,6 +57,7 @@ const props = defineProps<{
     metrics?: MetricsBundle;
     diskSpace?: Record<number, DiskSpace[]>;
     prowlarrIndexers?: Record<number, Indexer[]>;
+    canRunChecks: boolean;
 }>();
 
 defineOptions({
@@ -84,6 +86,18 @@ function runChecks(): void {
         {
             preserveScroll: true,
             preserveState: true,
+            // The throttle middleware rejects before the controller runs, so
+            // there is no Inertia flash to render the toast for us — show one
+            // here and suppress Inertia's raw-response error dialog.
+            onHttpException: (response) => {
+                if (response.status === 429) {
+                    toast.error(
+                        'Health checks were just run — try again in a minute.',
+                    );
+
+                    return false;
+                }
+            },
             onFinish: () => {
                 checking.value = false;
             },
@@ -282,8 +296,10 @@ function barHeight(bucket: MetricBucket): number {
                     Strip · last 60 min
                 </span>
                 <Button
+                    v-if="props.canRunChecks"
                     size="sm"
                     class="h-7 gap-1.5 text-xs"
+                    data-run-health-checks
                     :disabled="checking"
                     @click="runChecks"
                 >

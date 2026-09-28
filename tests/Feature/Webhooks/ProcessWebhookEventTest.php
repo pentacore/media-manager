@@ -2,7 +2,9 @@
 
 declare(strict_types=1);
 
+use App\Enums\ServiceType;
 use App\Enums\WebhookHandlingStatus;
+use App\Events\WebhookEventProcessed;
 use App\Jobs\ProcessWebhookEvent;
 use App\Models\ActivityLog;
 use App\Models\ServiceConnection;
@@ -12,6 +14,7 @@ use App\Services\Sonarr\SonarrWebhookHandler;
 use App\Services\Webhook\WebhookHandler;
 use Illuminate\Contracts\Queue\Job;
 use Illuminate\Contracts\Queue\ShouldQueue;
+use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Log;
 
 test('job is queued', function (): void {
@@ -140,4 +143,78 @@ test('already-processed events are skipped without invoking the handler', functi
         ->withArgs(fn (string $message, array $context): bool => str_contains($message, 'already processed'));
 
     new ProcessWebhookEvent($event)->handle();
+});
+
+test('the job marks the event processed after the handler returns', function (): void {
+    Event::fake([WebhookEventProcessed::class]);
+    $connection = ServiceConnection::factory()->sonarr()->create();
+    $event = WebhookEvent::factory()->create(['service_connection_id' => $connection->id]);
+
+    $mock = Mockery::mock(WebhookHandler::class);
+    $mock->shouldReceive('handle')->once()->andReturnUsing(function (WebhookEvent $webhookEvent): WebhookHandlingStatus {
+        expect($webhookEvent->fresh()->processed_at)->toBeNull();
+
+        return WebhookHandlingStatus::Ignored;
+    });
+    $this->app->bind(SonarrWebhookHandler::class, fn (): WebhookHandler => $mock);
+
+    new ProcessWebhookEvent($event)->handle();
+
+    $fresh = $event->fresh();
+    expect($fresh->processed_at)->not->toBeNull()
+        ->and($fresh->handling_status)->toBe(WebhookHandlingStatus::Ignored);
+    Event::assertDispatchedTimes(WebhookEventProcessed::class, 1);
+});
+
+test('a handler failure leaves the event reclaimable and the retry completes it', function (): void {
+    $connection = ServiceConnection::factory()->sonarr()->create();
+    $event = WebhookEvent::factory()->create(['service_connection_id' => $connection->id]);
+
+    $calls = 0;
+    $mock = Mockery::mock(WebhookHandler::class);
+    $mock->shouldReceive('handle')->twice()->andReturnUsing(function () use (&$calls): WebhookHandlingStatus {
+        $calls++;
+
+        // First run: side effects happened, then the trailing cache flush threw.
+        throw_if($calls === 1, RuntimeException::class, 'cache flush failed');
+
+        return WebhookHandlingStatus::Handled;
+    });
+    $this->app->bind(SonarrWebhookHandler::class, fn (): WebhookHandler => $mock);
+
+    expect(fn () => new ProcessWebhookEvent($event)->handle())->toThrow(RuntimeException::class);
+
+    $stranded = $event->fresh();
+    expect($stranded->processed_at)->toBeNull()
+        ->and($stranded->handling_status)->toBe(WebhookHandlingStatus::Processing);
+
+    $retry = new ProcessWebhookEvent($event);
+    $queueJob = Mockery::mock(Job::class);
+    $queueJob->shouldReceive('attempts')->andReturn(2);
+    $queueJob->shouldIgnoreMissing();
+    $retry->setJob($queueJob);
+    $retry->handle();
+
+    $fresh = $event->fresh();
+    expect($fresh->processed_at)->not->toBeNull()
+        ->and($fresh->handling_status)->toBe(WebhookHandlingStatus::Handled);
+});
+
+test('a no-handler event is marked processed with NoHandler status, not left unprocessed forever', function (): void {
+    $connection = ServiceConnection::factory()->sonarr()->create();
+    $event = WebhookEvent::factory()->create(['service_connection_id' => $connection->id]);
+
+    $job = new class($event) extends ProcessWebhookEvent
+    {
+        protected function resolveHandler(ServiceType $serviceType): ?WebhookHandler
+        {
+            return null;
+        }
+    };
+
+    $job->handle();
+
+    $fresh = $event->fresh();
+    expect($fresh->processed_at)->not->toBeNull()
+        ->and($fresh->handling_status)->toBe(WebhookHandlingStatus::NoHandler);
 });

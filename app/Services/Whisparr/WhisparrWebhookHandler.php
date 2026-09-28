@@ -44,8 +44,6 @@ class WhisparrWebhookHandler extends AbstractWebhookHandler
             default => $status = $this->ignore($webhookEvent, $eventType),
         };
 
-        $webhookEvent->markProcessed();
-
         if ($webhookEvent->serviceConnection !== null) {
             new WhisparrCache($webhookEvent->serviceConnection)->bustAll();
         }

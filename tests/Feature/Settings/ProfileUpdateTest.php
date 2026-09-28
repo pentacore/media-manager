@@ -83,3 +83,30 @@ test('correct password must be provided to delete account', function (): void {
 
     expect($user->fresh())->not->toBeNull();
 });
+
+test('the only admin cannot delete their account', function (): void {
+    $admin = User::factory()->admin()->create();
+    User::factory()->member()->create();
+
+    $this->actingAs($admin)
+        ->from(route('profile.edit'))
+        ->delete(route('profile.destroy'), ['password' => 'password'])
+        ->assertSessionHasErrors('password')
+        ->assertRedirect(route('profile.edit'));
+
+    $this->assertAuthenticatedAs($admin);
+    expect($admin->fresh())->not->toBeNull();
+});
+
+test('an admin can delete their account while another admin remains', function (): void {
+    $admin = User::factory()->admin()->create();
+    User::factory()->admin()->create();
+
+    $this->actingAs($admin)
+        ->delete(route('profile.destroy'), ['password' => 'password'])
+        ->assertSessionHasNoErrors()
+        ->assertRedirect(route('home'));
+
+    $this->assertGuest();
+    expect($admin->fresh())->toBeNull();
+});

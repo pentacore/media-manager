@@ -2,9 +2,11 @@
 
 declare(strict_types=1);
 
+use App\Jobs\ClearSeerrRequests;
 use App\Models\ServiceConnection;
 use App\Models\User;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Queue;
 
 beforeEach(function (): void {
     config()->set('inertia.ssr.enabled', false);
@@ -736,7 +738,7 @@ test('admin can bulk-clear available requests', function (): void {
         ->from(route('media.requests.index'))
         ->post(route('media.requests.clear'), ['status' => 'available'])
         ->assertRedirect(route('media.requests.index', ['status' => 'available']))
-        ->assertSessionHas('inertia.flash_data.toast.type', 'success');
+        ->assertSessionHas('inertia.flash_data.toast.type', 'info');
 
     Http::assertSent(fn ($request): bool => $request->method() === 'DELETE'
         && str_ends_with((string) $request->url(), '/api/v1/request/11')
@@ -744,6 +746,34 @@ test('admin can bulk-clear available requests', function (): void {
     Http::assertSent(fn ($request): bool => $request->method() === 'DELETE'
         && str_ends_with((string) $request->url(), '/api/v1/request/22')
     );
+});
+
+test('bulk clear queues the deletes instead of running them in the request', function (): void {
+    Queue::fake([ClearSeerrRequests::class]);
+    $admin = User::factory()->admin()->create();
+
+    Http::fake([
+        'seerr.local:5055/api/v1/request*' => Http::response([
+            'pageInfo' => ['page' => 1, 'pages' => 1, 'pageSize' => 100, 'results' => 2],
+            'results' => [
+                ['id' => 11, 'status' => 5, 'media' => ['mediaType' => 'movie', 'tmdbId' => 1]],
+                ['id' => 22, 'status' => 5, 'media' => ['mediaType' => 'movie', 'tmdbId' => 2]],
+            ],
+        ]),
+    ]);
+
+    $this->actingAs($admin)
+        ->from(route('media.requests.index'))
+        ->post(route('media.requests.clear'), ['status' => 'available'])
+        ->assertRedirect(route('media.requests.index', ['status' => 'available']))
+        ->assertSessionHas('inertia.flash_data.toast.type', 'info')
+        ->assertSessionHas('inertia.flash_data.toast.message', fn (string $message): bool => str_contains($message, 'Clearing 2 available'));
+
+    Queue::assertPushed(ClearSeerrRequests::class, fn (ClearSeerrRequests $job): bool => $job->requestIds === [11, 22]
+        && $job->status === 'available'
+        && $job->serviceConnectionId === $this->connection->id
+        && $job->userId === $admin->id);
+    Http::assertNotSent(fn ($request): bool => $request->method() === 'DELETE');
 });
 
 test('bulk-clear declined uses local status filter', function (): void {

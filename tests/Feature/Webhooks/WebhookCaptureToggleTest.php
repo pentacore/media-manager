@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use App\Enums\WebhookHandlingStatus;
 use App\Jobs\ProcessWebhookEvent;
+use App\Models\ActivityLog;
 use App\Models\ServiceConnection;
 use App\Models\User;
 use App\Models\WebhookEvent;
@@ -91,4 +92,32 @@ test('webhook log index exposes capture setting to the page', function (): void 
         ->assertInertia(fn ($page) => $page
             ->component('Admin/WebhookLog/Index')
             ->where('settings.capture_enabled', false));
+});
+
+test('a redelivery is dropped after capture-off processing deleted the row', function (): void {
+    resolve(WebhookSettings::class)->setCaptureEnabled(false);
+    $connection = ServiceConnection::factory()->sonarr()->create(['webhook_token' => 'secret']);
+    $url = route('webhooks.handle', ['service' => 'sonarr', 'connection' => $connection->id]);
+    $payload = ['eventType' => 'Test', 'instanceName' => 'Sonarr'];
+
+    // Queue is sync in tests: the first POST is handled and its row trimmed.
+    $this->postJson($url, $payload, ['X-Webhook-Token' => 'secret'])->assertOk();
+    expect(WebhookEvent::query()->count())->toBe(0);
+
+    $this->postJson($url, $payload, ['X-Webhook-Token' => 'secret'])->assertOk();
+
+    expect(ActivityLog::query()->where('action', 'webhook.sonarr.test')->count())->toBe(1);
+});
+
+test('the same payload is processed again once the dedupe window passed', function (): void {
+    resolve(WebhookSettings::class)->setCaptureEnabled(false);
+    $connection = ServiceConnection::factory()->sonarr()->create(['webhook_token' => 'secret']);
+    $url = route('webhooks.handle', ['service' => 'sonarr', 'connection' => $connection->id]);
+    $payload = ['eventType' => 'Test', 'instanceName' => 'Sonarr'];
+
+    $this->postJson($url, $payload, ['X-Webhook-Token' => 'secret'])->assertOk();
+    $this->travel(6)->minutes();
+    $this->postJson($url, $payload, ['X-Webhook-Token' => 'secret'])->assertOk();
+
+    expect(ActivityLog::query()->where('action', 'webhook.sonarr.test')->count())->toBe(2);
 });

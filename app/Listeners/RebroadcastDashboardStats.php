@@ -4,44 +4,27 @@ declare(strict_types=1);
 
 namespace App\Listeners;
 
-use App\Services\Dashboard\DashboardStatsService;
+use App\Jobs\BroadcastDashboardStats;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
 
 class RebroadcastDashboardStats
 {
-    public function __construct(private readonly DashboardStatsService $dashboardStatsService) {}
-
     /**
      * Triggered by WebhookReceived, ActionRequestCreated,
-     * ActionRequestStatusChanged, and ServiceHealthChanged. Re-runs the
-     * dashboard stats query and rebroadcasts.
-     *
-     * Throttled to at most one broadcast per second so a burst of webhooks
-     * (e.g. a Sonarr import grabbing 24 episodes at once) doesn't fan out
-     * 24 broadcasts.
+     * ActionRequestStatusChanged, and ServiceHealthChanged. Schedules one
+     * delayed BroadcastDashboardStats per burst instead of running the seven
+     * COUNT queries on the webhook request. Deferred past commit so a pending
+     * job can never snapshot before this event's write is visible.
      */
     public function handle(object $event): void
     {
-        $lock = Cache::lock('dashboard-stats-broadcast', 1);
-
-        if (! $lock->get()) {
-            // Record that work arrived while a broadcast was in flight — the
-            // holder rebroadcasts once more, so the trailing edge of a burst
-            // (e.g. the last of 24 imported episodes) is never dropped.
-            Cache::put('dashboard-stats-broadcast:dirty', true, 60);
-
-            return;
-        }
-
-        try {
-            $this->dashboardStatsService->broadcast();
-
-            if (Cache::pull('dashboard-stats-broadcast:dirty') !== null) {
-                $this->dashboardStatsService->broadcast();
+        DB::afterCommit(static function (): void {
+            if (! Cache::add(BroadcastDashboardStats::PENDING_CACHE_KEY, true, BroadcastDashboardStats::PENDING_TTL_SECONDS)) {
+                return;
             }
-        } finally {
-            // Lock auto-expires after 1s; explicit release is a no-op if the
-            // listener finished within the TTL.
-        }
+
+            dispatch(new BroadcastDashboardStats)->delay(now()->addSeconds(BroadcastDashboardStats::DELAY_SECONDS));
+        });
     }
 }
