@@ -46,13 +46,22 @@ final readonly class SeerrUserResolver
      * the match in the same pass — and primes the `resolve()` cache with the
      * result so a later `resolve()` call for this user+connection is free.
      *
-     * @return array{users: list<array{id: int, label: string}>, defaultId: int|null}
+     * `defaultId` is only ever the caller's own Emby/email match (or the
+     * best match found before a partial failure) — it never falls back to
+     * an arbitrary "first" Seerr user, since that would silently file a
+     * request under a user the caller never picked. `partial` is true when
+     * the walk was cut short by an upstream failure, so `users` is an
+     * incomplete list a caller must not treat as proof a chosen id is
+     * unknown to Seerr.
+     *
+     * @return array{users: list<array{id: int, label: string}>, defaultId: int|null, partial: bool}
      */
     public function pickerOptions(ServiceConnection $serviceConnection, User $user): array
     {
         $users = [];
         $defaultId = null;
         $partialMatch = null;
+        $partial = false;
 
         try {
             $defaultId = $this->match($serviceConnection, $user, $users, $partialMatch);
@@ -63,13 +72,14 @@ final readonly class SeerrUserResolver
             // — but never cache it, since the walk didn't complete and "no
             // match" is not a proven result.
             $defaultId = $partialMatch;
+            $partial = true;
         }
 
-        return ['users' => $users, 'defaultId' => $defaultId ?? ($users[0]['id'] ?? null)];
+        return ['users' => $users, 'defaultId' => $defaultId, 'partial' => $partial];
     }
 
     /**
-     * @return array{canChooseUser: bool, userId: int|null, users: list<array{id: int, label: string}>, error: string|null}
+     * @return array{canChooseUser: bool, userId: int|null, users: list<array{id: int, label: string}>, partial: bool, error: string|null}
      */
     public function requestingContext(ServiceConnection $serviceConnection, User $user): array
     {
@@ -80,14 +90,15 @@ final readonly class SeerrUserResolver
                 'canChooseUser' => true,
                 'userId' => $options['defaultId'],
                 'users' => $options['users'],
+                'partial' => $options['partial'],
                 'error' => $options['users'] === [] ? 'Seerr is unreachable right now.' : null,
             ];
         }
 
         try {
-            return ['canChooseUser' => false, 'userId' => $this->resolve($serviceConnection, $user), 'users' => [], 'error' => null];
+            return ['canChooseUser' => false, 'userId' => $this->resolve($serviceConnection, $user), 'users' => [], 'partial' => false, 'error' => null];
         } catch (RequestException|ConnectionException) {
-            return ['canChooseUser' => false, 'userId' => null, 'users' => [], 'error' => 'Seerr is unreachable right now.'];
+            return ['canChooseUser' => false, 'userId' => null, 'users' => [], 'partial' => false, 'error' => 'Seerr is unreachable right now.'];
         }
     }
 

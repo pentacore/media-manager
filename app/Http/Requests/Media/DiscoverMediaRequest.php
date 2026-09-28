@@ -17,8 +17,8 @@ class DiscoverMediaRequest extends FormRequest
         return [
             'tmdbId' => ['required', 'integer', 'min:1'],
             'mediaType' => ['required', Rule::in(['movie', 'tv'])],
-            'seasons' => ['nullable', 'array'],
-            'seasons.*' => ['integer', 'min:1'],
+            'seasons' => ['nullable', 'array', 'max:100'],
+            'seasons.*' => ['integer', 'min:1', 'distinct'],
             'userId' => ['nullable', 'integer', 'min:1'],
         ];
     }

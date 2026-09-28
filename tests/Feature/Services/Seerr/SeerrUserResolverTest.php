@@ -118,7 +118,7 @@ test('a viewer gets their own match and no picker', function (): void {
     fakeSeerrUsers([['id' => 4, 'email' => 'viewer@example.com', 'displayName' => 'Viewer'], ['id' => 5, 'email' => 'b@example.com', 'displayName' => 'B']]);
 
     expect(resolve(SeerrUserResolver::class)->requestingContext($this->connection, $viewer))
-        ->toBe(['canChooseUser' => false, 'userId' => 4, 'users' => [], 'error' => null]);
+        ->toBe(['canChooseUser' => false, 'userId' => 4, 'users' => [], 'partial' => false, 'error' => null]);
 });
 
 test('a member gets the picker defaulting to their own match', function (): void {
@@ -129,6 +129,7 @@ test('a member gets the picker defaulting to their own match', function (): void
         'canChooseUser' => true,
         'userId' => 5,
         'users' => [['id' => 4, 'label' => 'A'], ['id' => 5, 'label' => 'B']],
+        'partial' => false,
         'error' => null,
     ]);
 });
@@ -137,7 +138,7 @@ test('an unreachable Seerr leaves a viewer without an id and with an error', fun
     Http::fake(['seerr.local:5055/api/v1/user*' => Http::response([], 503)]);
 
     expect(resolve(SeerrUserResolver::class)->requestingContext($this->connection, User::factory()->create()))
-        ->toBe(['canChooseUser' => false, 'userId' => null, 'users' => [], 'error' => 'Seerr is unreachable right now.']);
+        ->toBe(['canChooseUser' => false, 'userId' => null, 'users' => [], 'partial' => false, 'error' => 'Seerr is unreachable right now.']);
 });
 
 test('a partial match found before a later page fails still becomes the picker default, without being cached', function (): void {
@@ -166,12 +167,28 @@ test('a partial match found before a later page fails still becomes the picker d
     }]);
 
     $resolver = resolve(SeerrUserResolver::class);
+    $options = $resolver->pickerOptions($this->connection, $member);
 
-    expect($resolver->pickerOptions($this->connection, $member)['defaultId'])->toBe(50);
+    expect($options['defaultId'])->toBe(50);
+    expect($options['partial'])->toBeTrue();
 
     $pageTwoFails = false;
     expect($resolver->resolve($this->connection, $member))->toBe(50);
     Http::assertSentCount(4);
+});
+
+test('pickerOptions() never falls back to an arbitrary first Seerr user when the caller has no own match', function (): void {
+    $member = User::factory()->member()->create(['email' => 'nobody@example.com']);
+    fakeSeerrUsers([
+        ['id' => 4, 'email' => 'a@example.com', 'displayName' => 'A'],
+        ['id' => 5, 'email' => 'b@example.com', 'displayName' => 'B'],
+    ]);
+
+    $options = resolve(SeerrUserResolver::class)->pickerOptions($this->connection, $member);
+
+    expect($options['defaultId'])->toBeNull();
+    expect($options['partial'])->toBeFalse();
+    expect($options['users'])->toHaveCount(2);
 });
 
 test('a "no match" result is cached, so a second resolve() call does not re-fetch', function (): void {

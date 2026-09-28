@@ -30,6 +30,12 @@ class DiscoverController extends Controller
 
     private const string NO_SEERR_ACCOUNT = 'No Seerr account is linked to you — ask an admin.';
 
+    private const string UNKNOWN_SEERR_USER = 'That Seerr user was not found.';
+
+    private const string NO_USER_CHOSEN = 'Choose which Seerr user to request as.';
+
+    private const string CONNECTION_REJECTED = 'Seerr rejected the request — check the Seerr connection.';
+
     public function index(Request $request, SeerrTitlePresenter $seerrTitlePresenter, SeerrUserResolver $seerrUserResolver): Response
     {
         $connection = $this->seerrConnection();
@@ -98,26 +104,39 @@ class DiscoverController extends Controller
             return $this->outcome(false, $tmdbId, $mediaType, 'error', __(self::UNREACHABLE));
         }
 
-        $userId = $context['userId'];
+        // A viewer's posted userId is ignored outright: canChooseUser is
+        // false for them, so $userId stays their own resolve()d id and the
+        // "choose someone else" branch below never runs.
+        if (! $context['canChooseUser']) {
+            $userId = $context['userId'];
 
-        // Only a manage-requests user may choose someone else, and only a
-        // Seerr id that came back from pickerOptions() (i.e. is a real
-        // Seerr user) — never trust the posted id at face value. A viewer's
-        // posted userId is ignored outright: canChooseUser is false for
-        // them, so this block never runs and $userId stays their own
-        // resolve()d id.
-        if ($context['canChooseUser'] && isset($validated['userId'])) {
+            if ($userId === null) {
+                return $this->outcome(false, $tmdbId, $mediaType, 'error', __(self::NO_SEERR_ACCOUNT));
+            }
+        } elseif (isset($validated['userId'])) {
+            // Only a manage-requests user may choose someone else, and only
+            // a Seerr id that came back from pickerOptions() (i.e. is a
+            // real Seerr user) — never trust the posted id at face value.
+            // When that user list is only partial (a later page failed) an
+            // id missing from it is not proven unknown, so it gets the
+            // outage message instead of "not found".
             $chosenUserId = (int) $validated['userId'];
 
             if (! in_array($chosenUserId, array_column($context['users'], 'id'), true)) {
-                return $this->outcome(false, $tmdbId, $mediaType, 'error', __(self::NO_SEERR_ACCOUNT));
+                return $context['partial']
+                    ? $this->outcome(false, $tmdbId, $mediaType, 'error', __(self::UNREACHABLE))
+                    : $this->outcome(false, $tmdbId, $mediaType, 'error', __(self::UNKNOWN_SEERR_USER));
             }
 
             $userId = $chosenUserId;
-        }
-
-        if ($userId === null) {
-            return $this->outcome(false, $tmdbId, $mediaType, 'error', __(self::NO_SEERR_ACCOUNT));
+        } elseif ($context['userId'] !== null) {
+            // No id was posted: default to the chooser's own match, if any.
+            $userId = $context['userId'];
+        } else {
+            // A chooser with no own Seerr match must pick someone
+            // explicitly — never silently fall back to an arbitrary Seerr
+            // user.
+            return $this->outcome(false, $tmdbId, $mediaType, 'error', __(self::NO_USER_CHOSEN));
         }
 
         $seasons = array_values(array_map(intval(...), $validated['seasons'] ?? []));
@@ -189,12 +208,17 @@ class DiscoverController extends Controller
     private function refusal(RequestException $requestException): string
     {
         $status = $requestException->response->status();
-        $message = (string) ($requestException->response->json('message') ?? '');
+        $json = $requestException->response->json('message');
+        // Seerr's error body is not guaranteed to carry a string `message`
+        // (a malformed or unexpected payload could hand back an array or
+        // scalar) — only ever trust it when it actually is one.
+        $message = is_string($json) ? Str::limit($json, 200) : '';
 
         return match (true) {
             $status === 409 => __('This title has already been requested.'),
             $status === 403 && Str::contains($message, 'quota', ignoreCase: true) => __('Seerr quota reached — try again later.'),
             $status === 403 && $message !== '' => __('Seerr refused the request: :message', ['message' => $message]),
+            in_array($status, [400, 401], true) => __(self::CONNECTION_REJECTED),
             default => __(self::UNREACHABLE),
         };
     }

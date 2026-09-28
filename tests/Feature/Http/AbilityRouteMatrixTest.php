@@ -84,3 +84,17 @@ test('member-level routes pass the ability gate for members', function (string $
 
     expect($response->getStatusCode())->not->toBe(403);
 })->with('member write routes');
+
+test('media.discover.title passes the ability gate for viewers (view-library)', function (): void {
+    $response = $this->actingAs(User::factory()->create())
+        ->getJson(route('media.discover.title', ['mediaType' => 'movie', 'tmdbId' => 1]));
+
+    expect($response->getStatusCode())->not->toBe(403);
+});
+
+test('media.discover.request passes the ability gate for viewers (request-media)', function (): void {
+    $response = $this->actingAs(User::factory()->create())
+        ->post(route('media.discover.request'), ['tmdbId' => 1, 'mediaType' => 'movie']);
+
+    expect($response->getStatusCode())->not->toBe(403);
+});

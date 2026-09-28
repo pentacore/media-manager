@@ -115,6 +115,31 @@ test('title detail answers 502 when Seerr is down', function (): void {
         ->assertJsonPath('message', 'Seerr is unreachable right now.');
 });
 
+test('title detail answers 404 when Seerr itself does not know the title', function (): void {
+    discoverSeerr();
+    Http::fake(['seerr.local:5055/api/v1/movie/1' => Http::response(['message' => 'Movie not found.'], 404)]);
+
+    $this->actingAs(User::factory()->create())
+        ->getJson(route('media.discover.title', ['mediaType' => 'movie', 'tmdbId' => 1]))
+        ->assertNotFound();
+});
+
+test('title detail answers 404 when the Seerr payload is malformed', function (): void {
+    discoverSeerr();
+    // No id/title — SeerrTitlePresenter::detail() returns null for this.
+    Http::fake(['seerr.local:5055/api/v1/movie/1' => Http::response(['foo' => 'bar'])]);
+
+    $this->actingAs(User::factory()->create())
+        ->getJson(route('media.discover.title', ['mediaType' => 'movie', 'tmdbId' => 1]))
+        ->assertNotFound();
+});
+
+test('title detail answers 422 without an active Seerr connection', function (): void {
+    $this->actingAs(User::factory()->create())
+        ->getJson(route('media.discover.title', ['mediaType' => 'movie', 'tmdbId' => 1]))
+        ->assertStatus(422);
+});
+
 test('a viewer requests as their resolved Seerr user even when the body names another user', function (): void {
     discoverSeerr();
     fakeDiscoverSeerr();
@@ -161,7 +186,52 @@ test('a member choosing a user Seerr does not know is refused before anything is
 
     $this->actingAs(User::factory()->member()->create(['email' => 'member@example.com']))
         ->post(route('media.discover.request'), ['tmdbId' => 1, 'mediaType' => 'movie', 'userId' => 999])
-        ->assertSessionHas('inertia.flash_data.toast.message', 'No Seerr account is linked to you — ask an admin.')
+        ->assertSessionHas('inertia.flash_data.toast.message', 'That Seerr user was not found.')
+        ->assertSessionHas('inertia.flash_data.requestOutcome.ok', false);
+
+    Http::assertNotSent(fn (Request $request): bool => $request->method() === 'POST');
+});
+
+test('a member choosing an unknown user during a partial Seerr user-list walk gets the outage message, not "not found"', function (): void {
+    discoverSeerr();
+    // Page 1 is a full page (100 users, forcing the walk to continue) and
+    // succeeds; page 2 fails — the walk is cut short, so the id list
+    // pickerOptions() returns is incomplete.
+    $firstPage = collect()->range(1, 100)->map(fn (int $i): array => [
+        'id' => $i,
+        'email' => sprintf('user%d@example.com', $i),
+    ])->all();
+
+    Http::fake([
+        'seerr.local:5055/api/v1/user*' => function (Request $request) use ($firstPage) {
+            parse_str((string) parse_url($request->url(), PHP_URL_QUERY), $query);
+
+            if ((int) ($query['skip'] ?? 0) === 0) {
+                return Http::response(['pageInfo' => ['page' => 1, 'pages' => 2], 'results' => $firstPage]);
+            }
+
+            // A 4xx (not 5xx) so SeerrClient's retry-on-server-error never
+            // kicks in — the walk fails on the first attempt at page 2.
+            return Http::response([], 400);
+        },
+        'seerr.local:5055/api/v1/request' => Http::response(['id' => 99, 'status' => 1], 201),
+    ]);
+
+    $this->actingAs(User::factory()->member()->create(['email' => 'member@example.com']))
+        ->post(route('media.discover.request'), ['tmdbId' => 1, 'mediaType' => 'movie', 'userId' => 999])
+        ->assertSessionHas('inertia.flash_data.toast.message', 'Seerr is unreachable right now.')
+        ->assertSessionHas('inertia.flash_data.requestOutcome.ok', false);
+
+    Http::assertNotSent(fn (Request $request): bool => $request->method() === 'POST');
+});
+
+test('a chooser with no own Seerr match and no chosen userId is asked to pick one, never defaulted to an arbitrary user', function (): void {
+    discoverSeerr();
+    fakeDiscoverSeerr();
+
+    $this->actingAs(User::factory()->member()->create(['email' => 'nobody@example.com']))
+        ->post(route('media.discover.request'), ['tmdbId' => 1, 'mediaType' => 'movie'])
+        ->assertSessionHas('inertia.flash_data.toast.message', 'Choose which Seerr user to request as.')
         ->assertSessionHas('inertia.flash_data.requestOutcome.ok', false);
 
     Http::assertNotSent(fn (Request $request): bool => $request->method() === 'POST');
@@ -180,6 +250,9 @@ test('Seerr errors become clear toasts', function (int $status, array $body, str
     'permission' => [403, ['message' => 'You do not have permission to request 4K movies.'], 'Seerr refused the request: You do not have permission to request 4K movies.'],
     'duplicate' => [409, ['message' => 'Request for this media already exists.'], 'This title has already been requested.'],
     'server error' => [500, [], 'Seerr is unreachable right now.'],
+    'bad request' => [400, ['message' => 'Malformed request.'], 'Seerr rejected the request — check the Seerr connection.'],
+    'unauthorized' => [401, ['message' => 'Invalid API key.'], 'Seerr rejected the request — check the Seerr connection.'],
+    'non-string message' => [403, ['message' => ['nested' => 'oops']], 'Seerr is unreachable right now.'],
 ]);
 
 test('a lost Seerr response tells the user to check before retrying', function (): void {
@@ -211,6 +284,10 @@ test('requests are rate limited per user', function (): void {
     }
 
     $this->actingAs($viewer)->post(route('media.discover.request'), ['tmdbId' => 11, 'mediaType' => 'movie'])->assertTooManyRequests();
+
+    // The limit is per user, not global: a different user is unaffected.
+    $otherViewer = User::factory()->create(['email' => 'member@example.com']);
+    $this->actingAs($otherViewer)->post(route('media.discover.request'), ['tmdbId' => 1, 'mediaType' => 'movie'])->assertRedirect();
 });
 
 test('the request is validated', function (): void {
