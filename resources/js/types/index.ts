@@ -1,5 +1,6 @@
 export * from './auth';
 export * from './discover';
+export * from './library';
 export * from './navigation';
 export * from './preferences';
 export * from './ui';

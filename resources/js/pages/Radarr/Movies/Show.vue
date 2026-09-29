@@ -10,6 +10,7 @@ import {
 } from '@lucide/vue';
 import { ref } from 'vue';
 import MovieController from '@/actions/App/Http/Controllers/Media/MovieController';
+import { InteractiveSearchDialog, MonitorButton, QualityProfileSelect, SearchButton } from '@/components/library-actions';
 import ReplaceFileDialog from '@/components/media-replacement/ReplaceFileDialog.vue';
 import { Pill, Poster, StatusPill } from '@/components/mm';
 import { Button } from '@/components/ui/button';
@@ -60,6 +61,7 @@ const props = defineProps<{
     connection: { url: string | null };
     service_connection_id: number;
     movie: MovieDetail;
+    qualityProfiles?: { id: number; name: string }[];
 }>();
 
 const { can } = useCan();
@@ -77,6 +79,7 @@ const deleteDialogOpen = ref(false);
 const deleting = ref(false);
 const deleteFiles = ref(false);
 const replaceDialogOpen = ref(false);
+const interactiveOpen = ref(false);
 
 function formatSize(bytes: number): string {
     if (!bytes || bytes <= 0) {
@@ -137,6 +140,37 @@ function confirmDelete() {
                 </Button>
             </Link>
             <div class="flex items-center gap-2">
+                <div v-if="can('manage-library')" class="flex items-center gap-2" data-movie-actions>
+                    <MonitorButton
+                        service="radarr"
+                        :connection-id="service_connection_id"
+                        :item-id="movie.id"
+                        :monitored="movie.monitored"
+                    />
+                    <SearchButton
+                        service="radarr"
+                        :connection-id="service_connection_id"
+                        command="movies_search"
+                        :movie-ids="[movie.id]"
+                        label="Search movie"
+                    />
+                    <Button
+                        variant="outline"
+                        size="sm"
+                        class="h-8 text-xs"
+                        data-interactive-search
+                        @click="interactiveOpen = true"
+                    >
+                        Interactive search
+                    </Button>
+                    <QualityProfileSelect
+                        service="radarr"
+                        :connection-id="service_connection_id"
+                        :item-id="movie.id"
+                        :profiles="qualityProfiles"
+                        :current-id="movie.quality_profile_id"
+                    />
+                </div>
                 <a
                     v-if="movie.title_slug && can('manage-library') && connection.url"
                     :href="`${connection.url}/movie/${movie.title_slug}`"
@@ -389,5 +423,13 @@ function confirmDelete() {
         service="radarr"
         :connection-id="service_connection_id"
         :item-id="movie.id"
+    />
+
+    <InteractiveSearchDialog
+        v-model:open="interactiveOpen"
+        service="radarr"
+        :connection-id="service_connection_id"
+        :item-id="movie.id"
+        :heading="movie.title"
     />
 </template>
