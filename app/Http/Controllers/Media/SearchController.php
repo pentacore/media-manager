@@ -70,7 +70,7 @@ class SearchController extends Controller
         return Inertia::render('Search', [
             'query' => $term,
             'scope' => $scope,
-            'connections' => $this->resolveConnectionUrls(),
+            'connections' => $this->resolveConnectionUrls($seerrOnly),
             'seriesResults' => $term === '' || $seerrOnly
                 ? $empty
                 : Inertia::defer(fn (): array => $this->searchSonarr($term)),
@@ -101,13 +101,34 @@ class SearchController extends Controller
     /**
      * @return array{sonarr: ?array{url: string}, radarr: ?array{url: string}, seerr: ?array{url: string}}
      */
-    private function resolveConnectionUrls(): array
+    private function resolveConnectionUrls(bool $seerrOnly): array
     {
+        if ($seerrOnly) {
+            return [
+                'sonarr' => null,
+                'radarr' => null,
+                'seerr' => $this->externalConnectionUrlFor(ServiceType::Seerr),
+            ];
+        }
+
         return [
             'sonarr' => $this->connectionUrlFor(ServiceType::Sonarr),
             'radarr' => $this->connectionUrlFor(ServiceType::Radarr),
             'seerr' => $this->connectionUrlFor(ServiceType::Seerr),
         ];
+    }
+
+    /**
+     * A viewer only ever gets the connection's public external URL — never the
+     * internal URL linkUrl() would fall back to.
+     *
+     * @return ?array{url: string}
+     */
+    private function externalConnectionUrlFor(ServiceType $serviceType): ?array
+    {
+        $externalUrl = $this->activeConnection($serviceType)?->external_url;
+
+        return is_string($externalUrl) && $externalUrl !== '' ? ['url' => rtrim($externalUrl, '/')] : null;
     }
 
     /**

@@ -73,6 +73,44 @@ test('search exposes connection urls as a non-deferred prop', function (): void 
         );
 });
 
+test('viewers get only the Seerr external url in the connections prop', function (): void {
+    ServiceConnection::factory()->sonarr()->create(['url' => 'http://sonarr.local:8989', 'external_url' => 'https://sonarr.example.com', 'api_key' => 'sk']);
+    ServiceConnection::factory()->radarr()->create(['url' => 'http://radarr.local:7878', 'external_url' => 'https://radarr.example.com', 'api_key' => 'rk']);
+    ServiceConnection::factory()->seerr()->create(['url' => 'http://seerr.local:5055', 'external_url' => 'https://requests.example.com/', 'api_key' => 'jk']);
+
+    $this->actingAs(User::factory()->create())
+        ->get(route('media.search.index'))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->where('connections.sonarr', null)
+            ->where('connections.radarr', null)
+            ->where('connections.seerr.url', 'https://requests.example.com'));
+});
+
+test('viewers never receive the internal Seerr url when no external url is set', function (): void {
+    ServiceConnection::factory()->seerr()->create(['url' => 'http://seerr.local:5055', 'external_url' => null, 'api_key' => 'jk']);
+
+    $response = $this->actingAs(User::factory()->create())
+        ->get(route('media.search.index'))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page->where('connections.seerr', null));
+
+    expect(json_encode($response->viewData('page')['props'], JSON_THROW_ON_ERROR))->not->toContain('seerr.local');
+});
+
+test('members keep every connection link, falling back to the internal url', function (): void {
+    ServiceConnection::factory()->sonarr()->create(['url' => 'http://sonarr.local:8989', 'external_url' => 'https://sonarr.example.com', 'api_key' => 'sk']);
+    ServiceConnection::factory()->seerr()->create(['url' => 'http://seerr.local:5055', 'external_url' => null, 'api_key' => 'jk']);
+
+    $this->actingAs(User::factory()->member()->create())
+        ->get(route('media.search.index'))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->where('connections.sonarr.url', 'https://sonarr.example.com')
+            ->where('connections.radarr', null)
+            ->where('connections.seerr.url', 'http://seerr.local:5055'));
+});
+
 test('search reports null connection entries when services are not configured', function (): void {
     $member = User::factory()->member()->create();
 
