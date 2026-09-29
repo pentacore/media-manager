@@ -1,3 +1,35 @@
+# [1.26.0](https://github.com/pentacore/media-manager/compare/v1.25.0...v1.26.0) (2026-09-29)
+
+
+### Bug Fixes
+
+* **admin:** clear the stale failover model on a provider change and fix embeddings labels ([c7b54eb](https://github.com/pentacore/media-manager/commit/c7b54eb62854ca4634ed6052fa8bd6126813238c))
+* **admin:** keep model select trigger ids and option labels for browser selectors ([5033b68](https://github.com/pentacore/media-manager/commit/5033b68319c9e493da89ac5475a3dc7efc08da32))
+* **admin:** keep the OpenRouter picker open when an import fails ([a914209](https://github.com/pentacore/media-manager/commit/a91420977ace4a6f28dc76150d24786ea57f1801))
+* **ai:** give each re-embed chain its own running-flag token ([861b577](https://github.com/pentacore/media-manager/commit/861b577dd3d17876ed14fc8737112ee288927ed7))
+* **ai:** guard the library re-embed against parallel chains ([50bc631](https://github.com/pentacore/media-manager/commit/50bc6317aea94867e449ed2ddeb6252394c020ec))
+* **ai:** let "OpenRouter default" sort override a configured env sort ([22a7475](https://github.com/pentacore/media-manager/commit/22a74755171d18b86c0b3b4a19a2d6977ec11efd))
+* **ai:** send OpenRouter routing preferences on classify and rerank calls ([d62b5ad](https://github.com/pentacore/media-manager/commit/d62b5ad71aeb05c7ff149a889af11046be5393b2))
+* **ai:** validate OpenRouter upstream provider slugs ([ef45879](https://github.com/pentacore/media-manager/commit/ef45879945cf51e49859f5f3754eb0f25ce2b5b7))
+* **jobs:** expire the re-embed page lock and cover its dedup ([b87c757](https://github.com/pentacore/media-manager/commit/b87c757f6bc7a2609737ddbd4cc171ee88fda467))
+* **jobs:** stamp the re-embed signature it ran with, not the one at completion ([44bf391](https://github.com/pentacore/media-manager/commit/44bf391f56173799520c66bd9750aa7e0786d086))
+* **pricing:** count a blank embeddings model's provider default as in use ([e249c7f](https://github.com/pentacore/media-manager/commit/e249c7ff59fe5e31c94a5916970bad64fc5e5cee))
+* **prowlarr:** stop sending release download links and guids to the browser ([5fe27cf](https://github.com/pentacore/media-manager/commit/5fe27cfec2afc31859d01be964c6233a00585bb2))
+* **search:** treat wrong-dimensioned embedding vectors as failed ([d5f9554](https://github.com/pentacore/media-manager/commit/d5f9554eeed5958a3a0aa7776544484f4dddbc49))
+
+
+### Features
+
+* **admin:** add OpenRouter models from a searchable picker ([7cb4069](https://github.com/pentacore/media-manager/commit/7cb406903a337b286f7404af3c203d0414533461))
+* **admin:** choose the embeddings model and re-embed the library on demand ([1b87085](https://github.com/pentacore/media-manager/commit/1b8708541005aee751aabfd18cf1d91727304776))
+* **admin:** pick provider and model together and edit OpenRouter routing ([38c5eac](https://github.com/pentacore/media-manager/commit/38c5eacbc0a2d31bd39e0af196c06344c956aee5))
+* **admin:** save provider selections and OpenRouter routing preferences ([bc4148f](https://github.com/pentacore/media-manager/commit/bc4148fe49eeb807af6e4e697ca7f81d7e7809bc))
+* **ai:** run each agent on its own provider and model selection ([7ba429c](https://github.com/pentacore/media-manager/commit/7ba429ca5a29ce8381065d89edec38f7d6141e72))
+* **ai:** send reasoning effort and routing preferences to OpenRouter ([253d931](https://github.com/pentacore/media-manager/commit/253d931e7289a72db401e27c67255c1a3d26e3dd))
+* **ai:** store a provider alongside each model setting ([1138958](https://github.com/pentacore/media-manager/commit/1138958c46c02f289bc9da4efe954400843732b5))
+* **pricing:** import selected OpenRouter models into the catalog ([b6806b7](https://github.com/pentacore/media-manager/commit/b6806b715e86264a9636364c3aa3dee8cb01b548))
+* **search:** embed the library with an admin-selected provider and model ([2a9a5a5](https://github.com/pentacore/media-manager/commit/2a9a5a54df437d8187f0babee38e2784a90993c2))
+
 # [1.25.0](https://github.com/pentacore/media-manager/compare/v1.24.0...v1.25.0) (2026-09-28)
 
 
