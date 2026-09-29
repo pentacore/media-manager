@@ -5,7 +5,9 @@ declare(strict_types=1);
 namespace App\Ai\Agents;
 
 use App\Ai\Concerns\ActsAsStructuredSubAgent;
+use App\Ai\Concerns\SendsOpenRouterOptions;
 use App\Ai\Concerns\UsesFailoverChain;
+use App\Ai\ModelSelection;
 use App\Ai\Tools\Arr\GetDownloadHistoryTool;
 use App\Ai\Tools\Arr\GetDownloadQueueTool;
 use App\Ai\Tools\Decision\InspectStuckImportTool;
@@ -17,6 +19,7 @@ use Laravel\Ai\Attributes\RepairToolCalls;
 use Laravel\Ai\Contracts\Agent;
 use Laravel\Ai\Contracts\CanActAsTool;
 use Laravel\Ai\Contracts\HasMiddleware;
+use Laravel\Ai\Contracts\HasProviderOptions;
 use Laravel\Ai\Contracts\HasStructuredOutput;
 use Laravel\Ai\Contracts\HasTools;
 use Laravel\Ai\Contracts\Tool;
@@ -29,11 +32,12 @@ use Laravel\Ai\Promptable;
  */
 #[MaxSteps(8)]
 #[RepairToolCalls]
-final class StuckDownloadInvestigatorAgent implements Agent, CanActAsTool, HasMiddleware, HasStructuredOutput, HasTools
+final class StuckDownloadInvestigatorAgent implements Agent, CanActAsTool, HasMiddleware, HasProviderOptions, HasStructuredOutput, HasTools
 {
     use ActsAsStructuredSubAgent, Promptable {
         ActsAsStructuredSubAgent::stream insteadof Promptable;
     }
+    use SendsOpenRouterOptions;
     use UsesFailoverChain;
 
     public function name(): string
@@ -49,6 +53,11 @@ final class StuckDownloadInvestigatorAgent implements Agent, CanActAsTool, HasMi
     public function model(): string
     {
         return resolve(AiSettings::class)->subAgentModel();
+    }
+
+    public function modelSelection(): ModelSelection
+    {
+        return resolve(AiSettings::class)->subAgentSelection();
     }
 
     public function instructions(): string

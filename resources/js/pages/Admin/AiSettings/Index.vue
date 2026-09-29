@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { Form, Head } from '@inertiajs/vue3';
+import { Form, Head, router } from '@inertiajs/vue3';
 import { computed, ref } from 'vue';
 import AiSettingsController from '@/actions/App/Http/Controllers/Admin/AiSettingsController';
+import ModelSelect from '@/components/ai/ModelSelect.vue';
 import UnpricedModelWarning from '@/components/ai/UnpricedModelWarning.vue';
 import InputError from '@/components/InputError.vue';
 import { Field, Pill, Toggle } from '@/components/mm';
@@ -10,9 +11,7 @@ import { Input } from '@/components/ui/input';
 import {
     Select,
     SelectContent,
-    SelectGroup,
     SelectItem,
-    SelectLabel,
     SelectTrigger,
     SelectValue,
 } from '@/components/ui/select';
@@ -57,8 +56,22 @@ interface AiSettingsState {
     chat_routing_enabled: boolean;
     reranking_provider: string;
     reranking_model: string | null;
+    embeddings_provider: string;
+    embeddings_model: string | null;
     sub_agent_model: string | null;
     price_updater_model: string | null;
+    model_provider: string;
+    title_model_provider: string;
+    sub_agent_model_provider: string | null;
+    price_updater_model_provider: string | null;
+    failover_model: string | null;
+    openrouter: {
+        sort: string | null;
+        deny_data_collection: boolean;
+        allow_fallbacks: boolean;
+        order: string;
+        ignore: string;
+    };
 }
 
 interface ProviderOption {
@@ -96,6 +109,14 @@ const props = defineProps<{
     rerankingProviders: ProviderOption[];
     providerKeys: Record<string, boolean>;
     advancedTools: AdvancedTools;
+    openRouterSorts: ProviderOption[];
+    embeddings: {
+        stale: boolean;
+        indexed_with: string;
+        signature: string;
+        reembedding: boolean;
+    };
+    embeddingsProviders: ProviderOption[];
 }>();
 
 defineOptions({
@@ -108,8 +129,6 @@ defineOptions({
 });
 
 const selectedMode = ref(props.settings.mode);
-const selectedModel = ref(props.settings.model);
-const titleModel = ref(props.settings.title_model);
 const selectedReasoningLevel = ref(props.settings.advisor_reasoning_level);
 const selectedFailoverProvider = ref(props.settings.failover_provider);
 const modelsDevPricingEnabled = ref(props.settings.models_dev_pricing_enabled);
@@ -132,28 +151,31 @@ const subtitleTriageEnabled = ref(props.settings.subtitle_triage_enabled);
 const chatRoutingEnabled = ref(props.settings.chat_routing_enabled);
 const selectedRerankingProvider = ref(props.settings.reranking_provider);
 const rerankingModel = ref(props.settings.reranking_model ?? '');
+const selectedEmbeddingsProvider = ref(props.settings.embeddings_provider);
 
-/**
- * Select items cannot carry an empty value, so "Same as chat model" uses a
- * sentinel in the select and posts an empty string through a hidden input.
- */
-const SAME_AS_CHAT_MODEL = '__same_as_chat_model__';
-const selectedSubAgentModel = ref(
-    props.settings.sub_agent_model ?? SAME_AS_CHAT_MODEL,
+function reembedLibrary(): void {
+    router.post(
+        AiSettingsController.reembed.url(),
+        {},
+        { preserveScroll: true },
+    );
+}
+
+const chatProvider = ref(props.settings.model_provider);
+const chatModel = ref(props.settings.model);
+const titleProvider = ref(props.settings.title_model_provider);
+const titleModel = ref(props.settings.title_model);
+const subAgentProvider = ref(props.settings.sub_agent_model_provider ?? '');
+const subAgentModel = ref(props.settings.sub_agent_model ?? '');
+const priceUpdaterProvider = ref(
+    props.settings.price_updater_model_provider ?? '',
 );
-const subAgentModelValue = computed(() =>
-    selectedSubAgentModel.value === SAME_AS_CHAT_MODEL
-        ? ''
-        : selectedSubAgentModel.value,
+const priceUpdaterModel = ref(props.settings.price_updater_model ?? '');
+const openRouterSort = ref(props.settings.openrouter.sort ?? 'default');
+const openRouterDenyDataCollection = ref(
+    props.settings.openrouter.deny_data_collection,
 );
-const selectedPriceUpdaterModel = ref(
-    props.settings.price_updater_model ?? SAME_AS_CHAT_MODEL,
-);
-const priceUpdaterModelValue = computed(() =>
-    selectedPriceUpdaterModel.value === SAME_AS_CHAT_MODEL
-        ? ''
-        : selectedPriceUpdaterModel.value,
-);
+const openRouterAllowFallbacks = ref(props.settings.openrouter.allow_fallbacks);
 
 function formatUsd(value: number | null): string {
     if (value === null) {
@@ -259,38 +281,21 @@ const budgetState = computed<{
                 >
                     <Field
                         label="Model"
-                        hint="Pick a model from the pricing catalog. Add new entries via Admin → AI prices."
+                        hint="Pick a provider and model from the pricing catalog. Add models via Admin → AI prices (including OpenRouter models)."
                     >
                         <span />
                     </Field>
-                    <div>
-                        <Select
+                    <div data-chat-model>
+                        <ModelSelect
+                            :models="models"
                             name="model"
-                            v-model="selectedModel"
-                            :default-value="settings.model"
-                        >
-                            <SelectTrigger class="h-8 max-w-[320px] text-sm">
-                                <SelectValue placeholder="Select a model" />
-                            </SelectTrigger>
-                            <SelectContent>
-                                <SelectGroup
-                                    v-for="(modelList, provider) in models"
-                                    :key="provider"
-                                >
-                                    <SelectLabel class="capitalize">
-                                        {{ provider }}
-                                    </SelectLabel>
-                                    <SelectItem
-                                        v-for="modelId in modelList"
-                                        :key="modelId"
-                                        :value="modelId"
-                                    >
-                                        {{ modelId }}
-                                    </SelectItem>
-                                </SelectGroup>
-                            </SelectContent>
-                        </Select>
-                        <InputError :message="errors.model" class="mt-1" />
+                            v-model:provider="chatProvider"
+                            v-model:model="chatModel"
+                        />
+                        <InputError
+                            :message="errors.model_provider ?? errors.model"
+                            class="mt-1"
+                        />
                     </div>
                 </div>
 
@@ -377,7 +382,7 @@ const budgetState = computed<{
                 >
                     <Field
                         label="Failover provider"
-                        hint="If the primary provider errors, the request retries on this provider using its default model. Leave as None to disable failover."
+                        hint="If the model's provider errors, the request retries on this provider. Leave the model blank for the provider's default model. Leave as None to disable failover."
                     >
                         <span />
                     </Field>
@@ -406,6 +411,188 @@ const budgetState = computed<{
                             :message="errors.failover_provider"
                             class="mt-1"
                         />
+                        <Input
+                            id="failover_model"
+                            name="failover_model"
+                            type="text"
+                            class="mt-2 h-8 max-w-[320px] text-sm"
+                            :default-value="settings.failover_model ?? ''"
+                            placeholder="Failover model (blank = provider default)"
+                        />
+                        <InputError
+                            :message="errors.failover_model"
+                            class="mt-1"
+                        />
+                    </div>
+                </div>
+
+                <Separator />
+
+                <!-- OpenRouter routing -->
+                <div class="flex flex-col gap-5" data-openrouter-settings>
+                    <div>
+                        <h2
+                            class="text-[15px] leading-tight font-semibold tracking-tight"
+                        >
+                            OpenRouter routing
+                        </h2>
+                        <p
+                            class="mt-0.5 max-w-[560px] text-[12px] text-muted-foreground"
+                        >
+                            Applied to every request sent through OpenRouter.
+                            Upstreams are OpenRouter provider slugs such as
+                            <span class="font-mono-tabular">anthropic</span> or
+                            <span class="font-mono-tabular">amazon-bedrock</span
+                            >.
+                        </p>
+                    </div>
+
+                    <div
+                        class="grid items-start gap-6"
+                        style="grid-template-columns: 200px 1fr"
+                    >
+                        <Field
+                            label="Sort upstreams"
+                            hint="Leave on OpenRouter default for load-balanced routing."
+                        >
+                            <span />
+                        </Field>
+                        <div>
+                            <Select
+                                name="openrouter_sort"
+                                v-model="openRouterSort"
+                            >
+                                <SelectTrigger class="h-8 w-56 text-sm">
+                                    <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="default">
+                                        OpenRouter default
+                                    </SelectItem>
+                                    <SelectItem
+                                        v-for="sort in openRouterSorts"
+                                        :key="sort.value"
+                                        :value="sort.value"
+                                    >
+                                        {{ sort.label }}
+                                    </SelectItem>
+                                </SelectContent>
+                            </Select>
+                            <InputError
+                                :message="errors.openrouter_sort"
+                                class="mt-1"
+                            />
+                        </div>
+                    </div>
+
+                    <div
+                        class="grid items-start gap-6"
+                        style="grid-template-columns: 200px 1fr"
+                    >
+                        <Field
+                            label="Data collection"
+                            hint="Only use upstreams that neither store nor train on prompts."
+                        >
+                            <span />
+                        </Field>
+                        <div>
+                            <Toggle
+                                v-model="openRouterDenyDataCollection"
+                                data-openrouter-deny-data-collection
+                                :label="
+                                    openRouterDenyDataCollection
+                                        ? 'Denied'
+                                        : 'Allowed'
+                                "
+                            />
+                            <input
+                                type="hidden"
+                                name="openrouter_deny_data_collection"
+                                :value="
+                                    openRouterDenyDataCollection ? '1' : '0'
+                                "
+                            />
+                        </div>
+                    </div>
+
+                    <div
+                        class="grid items-start gap-6"
+                        style="grid-template-columns: 200px 1fr"
+                    >
+                        <Field
+                            label="Allow fallbacks"
+                            hint="Let OpenRouter use other upstreams when the preferred ones fail."
+                        >
+                            <span />
+                        </Field>
+                        <div>
+                            <Toggle
+                                v-model="openRouterAllowFallbacks"
+                                data-openrouter-allow-fallbacks
+                                :label="
+                                    openRouterAllowFallbacks
+                                        ? 'Allowed'
+                                        : 'Disabled'
+                                "
+                            />
+                            <input
+                                type="hidden"
+                                name="openrouter_allow_fallbacks"
+                                :value="openRouterAllowFallbacks ? '1' : '0'"
+                            />
+                        </div>
+                    </div>
+
+                    <div
+                        class="grid items-start gap-6"
+                        style="grid-template-columns: 200px 1fr"
+                    >
+                        <Field
+                            label="Preferred upstreams"
+                            hint="Comma-separated, tried in this order."
+                        >
+                            <span />
+                        </Field>
+                        <div>
+                            <Input
+                                id="openrouter_order"
+                                name="openrouter_order"
+                                type="text"
+                                class="h-8 max-w-[420px] text-sm"
+                                :default-value="settings.openrouter.order"
+                                placeholder="anthropic, amazon-bedrock"
+                            />
+                            <InputError
+                                :message="errors.openrouter_order"
+                                class="mt-1"
+                            />
+                        </div>
+                    </div>
+
+                    <div
+                        class="grid items-start gap-6"
+                        style="grid-template-columns: 200px 1fr"
+                    >
+                        <Field
+                            label="Ignored upstreams"
+                            hint="Comma-separated upstreams OpenRouter must never use."
+                        >
+                            <span />
+                        </Field>
+                        <div>
+                            <Input
+                                id="openrouter_ignore"
+                                name="openrouter_ignore"
+                                type="text"
+                                class="h-8 max-w-[420px] text-sm"
+                                :default-value="settings.openrouter.ignore"
+                                placeholder="deepinfra"
+                            />
+                            <InputError
+                                :message="errors.openrouter_ignore"
+                                class="mt-1"
+                            />
+                        </div>
                     </div>
                 </div>
 
@@ -420,19 +607,21 @@ const budgetState = computed<{
                         <span />
                     </Field>
                     <div>
-                        <Input
-                            id="title_model"
+                        <ModelSelect
+                            :models="models"
                             name="title_model"
-                            type="text"
-                            class="h-8 max-w-[320px] text-sm"
-                            v-model="titleModel"
-                            placeholder="gpt-5.4-nano"
+                            allow-auto
+                            v-model:provider="titleProvider"
+                            v-model:model="titleModel"
                         />
                         <p class="mt-1 text-xs text-muted-foreground">
-                            auto = provider's cheapest model
+                            auto = the provider's cheapest model
                         </p>
                         <InputError
-                            :message="errors.title_model"
+                            :message="
+                                errors.title_model_provider ??
+                                errors.title_model
+                            "
                             class="mt-1"
                         />
                     </div>
@@ -775,6 +964,133 @@ const budgetState = computed<{
 
                 <Separator />
 
+                <!-- Embeddings -->
+                <div class="flex flex-col gap-5" data-embeddings-settings>
+                    <div>
+                        <h2
+                            class="text-[15px] leading-tight font-semibold tracking-tight"
+                        >
+                            Embeddings
+                        </h2>
+                        <p
+                            class="mt-0.5 max-w-[560px] text-[12px] text-muted-foreground"
+                        >
+                            Vectors behind semantic library search. Changing the
+                            provider or model requires re-embedding the whole
+                            library.
+                        </p>
+                    </div>
+
+                    <div
+                        v-if="embeddings.stale"
+                        class="flex items-center justify-between gap-4 rounded-md border border-border bg-bg-hover px-3 py-2 text-[13px]"
+                        data-embeddings-stale
+                    >
+                        <span
+                            v-if="embeddings.reembedding"
+                            class="text-muted-foreground"
+                            data-embeddings-reembedding
+                        >
+                            Re-embedding the library…
+                        </span>
+                        <span v-else class="text-warning">
+                            Library embeddings are stale — built with
+                            <span class="font-mono-tabular">{{
+                                embeddings.indexed_with
+                            }}</span
+                            >, search now uses
+                            <span class="font-mono-tabular">{{
+                                embeddings.signature
+                            }}</span
+                            >.
+                        </span>
+                        <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            class="h-7 text-xs"
+                            data-embeddings-reembed
+                            :disabled="embeddings.reembedding"
+                            @click="reembedLibrary"
+                        >
+                            Re-embed library
+                        </Button>
+                    </div>
+                    <div
+                        v-else-if="embeddings.reembedding"
+                        class="rounded-md border border-border bg-bg-hover px-3 py-2 text-[13px] text-muted-foreground"
+                        data-embeddings-reembedding
+                    >
+                        Re-embedding the library…
+                    </div>
+
+                    <div
+                        class="grid items-start gap-6"
+                        style="grid-template-columns: 200px 1fr"
+                    >
+                        <Field
+                            label="Provider"
+                            hint="Provider library and query embeddings are generated on."
+                        >
+                            <span />
+                        </Field>
+                        <div>
+                            <Select
+                                name="embeddings_provider"
+                                v-model="selectedEmbeddingsProvider"
+                                :default-value="settings.embeddings_provider"
+                            >
+                                <SelectTrigger class="h-8 w-48 text-sm">
+                                    <SelectValue
+                                        placeholder="Select a provider"
+                                    />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem
+                                        v-for="provider in embeddingsProviders"
+                                        :key="provider.value"
+                                        :value="provider.value"
+                                    >
+                                        {{ provider.label }}
+                                    </SelectItem>
+                                </SelectContent>
+                            </Select>
+                            <InputError
+                                :message="errors.embeddings_provider"
+                                class="mt-1"
+                            />
+                        </div>
+                    </div>
+
+                    <div
+                        class="grid items-start gap-6"
+                        style="grid-template-columns: 200px 1fr"
+                    >
+                        <Field
+                            label="Model"
+                            hint="Embeddings model. Leave blank to use the provider's default. Must support 256 dimensions."
+                        >
+                            <span />
+                        </Field>
+                        <div>
+                            <Input
+                                id="embeddings_model"
+                                name="embeddings_model"
+                                type="text"
+                                class="h-8 max-w-[320px] text-sm"
+                                :default-value="settings.embeddings_model ?? ''"
+                                placeholder="text-embedding-3-small"
+                            />
+                            <InputError
+                                :message="errors.embeddings_model"
+                                class="mt-1"
+                            />
+                        </div>
+                    </div>
+                </div>
+
+                <Separator />
+
                 <!-- Sub-agent model -->
                 <div
                     class="grid items-start gap-6"
@@ -788,38 +1104,18 @@ const budgetState = computed<{
                         <span />
                     </Field>
                     <div>
-                        <Select v-model="selectedSubAgentModel">
-                            <SelectTrigger class="h-8 max-w-[320px] text-sm">
-                                <SelectValue placeholder="Select a model" />
-                            </SelectTrigger>
-                            <SelectContent>
-                                <SelectItem :value="SAME_AS_CHAT_MODEL">
-                                    Same as chat model
-                                </SelectItem>
-                                <SelectGroup
-                                    v-for="(modelList, provider) in models"
-                                    :key="provider"
-                                >
-                                    <SelectLabel class="capitalize">
-                                        {{ provider }}
-                                    </SelectLabel>
-                                    <SelectItem
-                                        v-for="modelId in modelList"
-                                        :key="modelId"
-                                        :value="modelId"
-                                    >
-                                        {{ modelId }}
-                                    </SelectItem>
-                                </SelectGroup>
-                            </SelectContent>
-                        </Select>
-                        <input
-                            type="hidden"
+                        <ModelSelect
+                            :models="models"
                             name="sub_agent_model"
-                            :value="subAgentModelValue"
+                            inherit-label="Same as chat model"
+                            v-model:provider="subAgentProvider"
+                            v-model:model="subAgentModel"
                         />
                         <InputError
-                            :message="errors.sub_agent_model"
+                            :message="
+                                errors.sub_agent_model_provider ??
+                                errors.sub_agent_model
+                            "
                             class="mt-1"
                         />
                     </div>
@@ -832,7 +1128,7 @@ const budgetState = computed<{
                 >
                     <Field
                         label="Advanced tools"
-                        hint="Provider-hosted tools register only when every provider in the failover chain supports them."
+                        hint="Provider-hosted tools register only when every provider the chat (tool search) or price updater (code execution) may reach supports them."
                     >
                         <span />
                     </Field>
@@ -1290,42 +1586,18 @@ const budgetState = computed<{
                             <span />
                         </Field>
                         <div>
-                            <Select v-model="selectedPriceUpdaterModel">
-                                <SelectTrigger
-                                    id="price_updater_model"
-                                    class="h-8 max-w-[320px] text-sm"
-                                >
-                                    <SelectValue placeholder="Select a model" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    <SelectItem :value="SAME_AS_CHAT_MODEL">
-                                        Same as chat model
-                                    </SelectItem>
-                                    <SelectGroup
-                                        v-for="(modelList, provider) in models"
-                                        :key="provider"
-                                    >
-                                        <SelectLabel class="capitalize">
-                                            {{ provider }}
-                                        </SelectLabel>
-                                        <SelectItem
-                                            v-for="modelId in modelList"
-                                            :key="modelId"
-                                            :value="modelId"
-                                            :aria-label="modelId"
-                                        >
-                                            {{ modelId }}
-                                        </SelectItem>
-                                    </SelectGroup>
-                                </SelectContent>
-                            </Select>
-                            <input
-                                type="hidden"
+                            <ModelSelect
+                                :models="models"
                                 name="price_updater_model"
-                                :value="priceUpdaterModelValue"
+                                inherit-label="Same as chat model"
+                                v-model:provider="priceUpdaterProvider"
+                                v-model:model="priceUpdaterModel"
                             />
                             <InputError
-                                :message="errors.price_updater_model"
+                                :message="
+                                    errors.price_updater_model_provider ??
+                                    errors.price_updater_model
+                                "
                                 class="mt-1"
                             />
                         </div>

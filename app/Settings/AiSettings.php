@@ -4,10 +4,12 @@ declare(strict_types=1);
 
 namespace App\Settings;
 
+use App\Ai\ModelSelection;
 use App\Enums\AiMode;
 use App\Enums\AiReasoningLevel;
 use Laravel\Ai\Ai;
 use Laravel\Ai\Enums\Lab;
+use Throwable;
 
 class AiSettings
 {
@@ -76,7 +78,23 @@ class AiSettings
 
     public const string RERANKING_MODEL_KEY = 'ai.reranking.model';
 
+    public const string EMBEDDINGS_PROVIDER_KEY = 'ai.embeddings.provider';
+
+    public const string EMBEDDINGS_MODEL_KEY = 'ai.embeddings.model';
+
+    public const string EMBEDDINGS_INDEXED_WITH_KEY = 'ai.embeddings.indexed_with';
+
     public const string SUB_AGENT_MODEL_KEY = 'ai.sub_agent_model';
+
+    public const string MODEL_PROVIDER_KEY = 'ai.model_provider';
+
+    public const string TITLE_MODEL_PROVIDER_KEY = 'ai.title_model_provider';
+
+    public const string SUB_AGENT_MODEL_PROVIDER_KEY = 'ai.sub_agent_model_provider';
+
+    public const string PRICE_UPDATER_MODEL_PROVIDER_KEY = 'ai.pricing.updater_model_provider';
+
+    public const string FAILOVER_MODEL_KEY = 'ai.failover_model';
 
     /**
      * Providers that can serve classification calls.
@@ -147,25 +165,76 @@ class AiSettings
     }
 
     /**
-     * The model used to generate conversation titles.
+     * The provider the chat model runs on. Nothing saved (every install from
+     * before per-model providers) follows `ai.default`.
+     */
+    public function modelProvider(): string
+    {
+        return $this->optionalString($this->appSettings->get(self::MODEL_PROVIDER_KEY)) ?? $this->defaultTextProvider();
+    }
+
+    /**
+     * Persist the chat provider. A null value clears the setting so the
+     * provider falls back to `ai.default` again.
+     */
+    public function setModelProvider(?string $provider): void
+    {
+        $this->appSettings->set(self::MODEL_PROVIDER_KEY, $provider);
+    }
+
+    /**
+     * The provider + model MediaAgent and the Subtitle Advisor run on.
+     */
+    public function chatSelection(): ModelSelection
+    {
+        return new ModelSelection($this->modelProvider(), $this->model());
+    }
+
+    /**
+     * The provider conversation titles are generated on.
+     */
+    public function titleModelProvider(): string
+    {
+        return $this->optionalString($this->appSettings->get(self::TITLE_MODEL_PROVIDER_KEY)) ?? $this->defaultTextProvider();
+    }
+
+    /**
+     * Persist the title provider; null falls back to `ai.default`.
+     */
+    public function setTitleModelProvider(?string $provider): void
+    {
+        $this->appSettings->set(self::TITLE_MODEL_PROVIDER_KEY, $provider);
+    }
+
+    /**
+     * The provider + model TitleAgent runs on. The `auto` sentinel resolves to
+     * the title provider's cheapest text model so every caller sends a
+     * concrete model name.
+     */
+    public function titleSelection(): ModelSelection
+    {
+        $provider = $this->titleModelProvider();
+        $model = $this->rawTitleModel();
+
+        if ($model === self::AUTO_MODEL) {
+            $model = Ai::textProvider($provider)->cheapestTextModel();
+        }
+
+        return new ModelSelection($provider, $model);
+    }
+
+    /**
+     * The model used to generate conversation titles: the title provider's
+     * cheapest text model.
      *
-     * The persisted `auto` sentinel is translated to the default provider's
+     * The persisted `auto` sentinel is translated to the title provider's
      * cheapest text model here, so every caller — including the queued job
      * that passes this value as an explicit `model:` argument — sends a
      * concrete model name rather than the literal `auto` string.
      */
     public function titleModel(): string
     {
-        $value = (string) $this->appSettings->get(
-            self::TITLE_MODEL_KEY,
-            config('mediamanager.ai.title_model', 'gpt-5.4-nano'),
-        );
-
-        if ($value === self::AUTO_MODEL) {
-            return Ai::textProvider()->cheapestTextModel();
-        }
-
-        return $value !== '' ? $value : 'gpt-5.4-nano';
+        return $this->titleSelection()->model;
     }
 
     /**
@@ -249,6 +318,42 @@ class AiSettings
     public function setFailoverProvider(?Lab $lab): void
     {
         $this->appSettings->set(self::FAILOVER_PROVIDER_KEY, $lab?->value ?? '');
+    }
+
+    /**
+     * The model the failover provider runs, or null for that provider's
+     * default model.
+     */
+    public function failoverModel(): ?string
+    {
+        return $this->optionalString($this->appSettings->get(self::FAILOVER_MODEL_KEY));
+    }
+
+    /**
+     * Persist the failover model; null falls back to the provider default.
+     */
+    public function setFailoverModel(?string $model): void
+    {
+        $this->appSettings->set(self::FAILOVER_MODEL_KEY, $model);
+    }
+
+    /**
+     * The explicit provider => model map an agent passes to laravel/ai: the
+     * selection first, then the failover provider (with its optional model)
+     * when one is configured and differs from the selection's provider.
+     *
+     * @return array<string, string|null>
+     */
+    public function providerChainFor(ModelSelection $modelSelection): array
+    {
+        $chain = [$modelSelection->provider => $modelSelection->model];
+        $failover = $this->failoverProvider();
+
+        if ($failover instanceof Lab && $failover->value !== $modelSelection->provider) {
+            $chain[$failover->value] = $this->failoverModel();
+        }
+
+        return $chain;
     }
 
     /**
@@ -551,6 +656,91 @@ class AiSettings
     }
 
     /**
+     * The provider library embeddings are generated on. Nothing saved follows
+     * `ai.default_for_embeddings`.
+     */
+    public function embeddingsProvider(): string
+    {
+        return $this->optionalString($this->appSettings->get(self::EMBEDDINGS_PROVIDER_KEY))
+            ?? (string) config('ai.default_for_embeddings', 'openai');
+    }
+
+    /**
+     * Persist the embeddings provider; null falls back to the config default.
+     */
+    public function setEmbeddingsProvider(?string $provider): void
+    {
+        $this->appSettings->set(self::EMBEDDINGS_PROVIDER_KEY, $provider);
+    }
+
+    /**
+     * The embeddings model, or null for the provider's default model.
+     */
+    public function embeddingsModel(): ?string
+    {
+        return $this->optionalString($this->appSettings->get(self::EMBEDDINGS_MODEL_KEY));
+    }
+
+    /**
+     * Persist the embeddings model; null uses the provider default again.
+     */
+    public function setEmbeddingsModel(?string $model): void
+    {
+        $this->appSettings->set(self::EMBEDDINGS_MODEL_KEY, $model);
+    }
+
+    /**
+     * `provider|model` of the current embeddings selection, with the model
+     * resolved to the provider default when none is saved.
+     */
+    public function embeddingsSignature(): string
+    {
+        return $this->signatureFor($this->embeddingsProvider(), $this->embeddingsModel());
+    }
+
+    /**
+     * `provider|model` of the last completed full re-embed. Nothing saved
+     * means the library was built with the pre-setting default
+     * (`ai.default_for_embeddings` and its default model).
+     */
+    public function embeddingsIndexedWith(): string
+    {
+        return $this->optionalString($this->appSettings->get(self::EMBEDDINGS_INDEXED_WITH_KEY))
+            ?? $this->signatureFor((string) config('ai.default_for_embeddings', 'openai'), null);
+    }
+
+    /**
+     * Record that the whole library was just embedded with the current
+     * selection.
+     */
+    public function markEmbeddingsIndexed(): void
+    {
+        $this->appSettings->set(self::EMBEDDINGS_INDEXED_WITH_KEY, $this->embeddingsSignature());
+    }
+
+    /**
+     * Whether stored library vectors come from a different provider/model
+     * than the one queries are now embedded with.
+     */
+    public function embeddingsStale(): bool
+    {
+        return $this->embeddingsIndexedWith() !== $this->embeddingsSignature();
+    }
+
+    private function signatureFor(string $provider, ?string $model): string
+    {
+        if ($model === null) {
+            try {
+                $model = Ai::embeddingProvider($provider)->defaultEmbeddingsModel();
+            } catch (Throwable) {
+                $model = 'default';
+            }
+        }
+
+        return sprintf('%s|%s', $provider, $model);
+    }
+
+    /**
      * The model investigation sub-agents run on. Empty (nothing saved and no
      * `mediamanager.ai.sub_agent_model` default) follows the chat model.
      */
@@ -578,6 +768,31 @@ class AiSettings
     public function setSubAgentModel(?string $model): void
     {
         $this->appSettings->set(self::SUB_AGENT_MODEL_KEY, $model);
+    }
+
+    /**
+     * The sub-agent provider as saved, or null when none is saved.
+     */
+    public function rawSubAgentModelProvider(): ?string
+    {
+        return $this->optionalString($this->appSettings->get(self::SUB_AGENT_MODEL_PROVIDER_KEY));
+    }
+
+    /**
+     * Persist the sub-agent provider; null clears it.
+     */
+    public function setSubAgentModelProvider(?string $provider): void
+    {
+        $this->appSettings->set(self::SUB_AGENT_MODEL_PROVIDER_KEY, $provider);
+    }
+
+    /**
+     * The provider + model investigation sub-agents run on. Without a saved
+     * sub-agent model the whole chat selection is inherited.
+     */
+    public function subAgentSelection(): ModelSelection
+    {
+        return $this->inheritingSelection($this->rawSubAgentModel(), $this->rawSubAgentModelProvider());
     }
 
     /**
@@ -609,6 +824,53 @@ class AiSettings
     public function setPriceUpdaterModel(?string $model): void
     {
         $this->appSettings->set(self::PRICE_UPDATER_MODEL_KEY, $model);
+    }
+
+    /**
+     * The price updater provider as saved, or null when none is saved.
+     */
+    public function rawPriceUpdaterModelProvider(): ?string
+    {
+        return $this->optionalString($this->appSettings->get(self::PRICE_UPDATER_MODEL_PROVIDER_KEY));
+    }
+
+    /**
+     * Persist the price updater provider; null clears it.
+     */
+    public function setPriceUpdaterModelProvider(?string $provider): void
+    {
+        $this->appSettings->set(self::PRICE_UPDATER_MODEL_PROVIDER_KEY, $provider);
+    }
+
+    /**
+     * The provider + model PriceFetcherAgent runs on. Without a saved price
+     * updater model the whole chat selection is inherited.
+     */
+    public function priceUpdaterSelection(): ModelSelection
+    {
+        return $this->inheritingSelection($this->rawPriceUpdaterModel(), $this->rawPriceUpdaterModelProvider());
+    }
+
+    /**
+     * A selection for a setting that follows the chat selection when its own
+     * model is unset. A model saved before per-model providers existed keeps
+     * `ai.default` as its provider.
+     */
+    private function inheritingSelection(?string $model, ?string $provider): ModelSelection
+    {
+        if ($model === null) {
+            return $this->chatSelection();
+        }
+
+        return new ModelSelection($provider ?? $this->defaultTextProvider(), $model);
+    }
+
+    /**
+     * The provider a model setting without a saved provider runs on.
+     */
+    public function defaultTextProvider(): string
+    {
+        return (string) config('ai.default', 'openai');
     }
 
     private function threshold(string $key): float
@@ -718,70 +980,6 @@ class AiSettings
             ),
             fn (string $provider): bool => $provider !== '',
         ));
-    }
-
-    /**
-     * Primary-then-failover provider chain for prompt()/stream() calls, or
-     * null when no failover is configured (callers omit the provider arg and
-     * fall back to the SDK default). The primary is the configured default
-     * text provider (`ai.default`); when it equals the failover the chain
-     * collapses to null since there is nothing to fail over to.
-     *
-     * @return array<int, Lab>|null
-     */
-    public function providerChain(): ?array
-    {
-        $failover = $this->failoverProvider();
-
-        if (! $failover instanceof Lab) {
-            return null;
-        }
-
-        $lab = $this->primaryProvider();
-
-        if ($lab === $failover) {
-            return null;
-        }
-
-        return [$lab, $failover];
-    }
-
-    /**
-     * The failover chain expressed as a per-provider model map for a caller
-     * that pins an explicit primary model.
-     *
-     * A plain list array (`[$primary, $failover]`) makes the SDK ignore the
-     * agent's own model() entirely and resolve each provider's default model
-     * — so the primary would lose its configured model. This map keeps the
-     * caller's model on the primary and lets the failover provider use its
-     * own default (null), which also guarantees the OpenAI-shaped model never
-     * leaks onto a non-OpenAI failover provider.
-     *
-     * @return array<string, string|null>|null
-     */
-    public function providerChainWithModel(string $primaryModel): ?array
-    {
-        $chain = $this->providerChain();
-
-        if ($chain === null) {
-            return null;
-        }
-
-        [$primary, $failover] = $chain;
-
-        return [
-            $primary->value => $primaryModel,
-            $failover->value => null,
-        ];
-    }
-
-    /**
-     * The provider every agent talks to first (`ai.default`), before any
-     * failover.
-     */
-    public function primaryProvider(): Lab
-    {
-        return Lab::tryFrom((string) config('ai.default', 'openai')) ?? Lab::OpenAI;
     }
 
     /**

@@ -2,11 +2,13 @@
 
 declare(strict_types=1);
 
+use App\Ai\OpenRouterRequestOptions;
 use App\Enums\AiUsageKind;
 use App\Models\AiUsageRecord;
 use App\Services\Search\LibraryEmbedder;
 use App\Services\Search\SemanticLibrarySearch;
 use App\Settings\AiSettings;
+use App\Settings\OpenRouterSettings;
 use Laravel\Ai\Embeddings;
 use Laravel\Ai\Prompts\RerankingPrompt;
 use Laravel\Ai\Reranking;
@@ -214,6 +216,46 @@ test('reranking uses the admin-selected provider', function (): void {
     Reranking::assertReranked(fn (RerankingPrompt $rerankingPrompt): bool => $rerankingPrompt->provider->name() === 'jina');
 });
 
+test('reranking on OpenRouter carries the routing preferences', function (): void {
+    config()->set('mediamanager.ai.enabled', true);
+    config()->set('scout.driver', 'typesense');
+    config()->set('ai.providers.openrouter.key', 'test-key');
+
+    resolve(AiSettings::class)->setRerankingProvider('openrouter');
+    resolve(OpenRouterSettings::class)->setDenyDataCollection(true);
+    Embeddings::fake();
+    Reranking::fake();
+
+    $semanticLibrarySearch = makeSearchWithHits([
+        'movies' => [hit(['radarr_id' => 11, 'title' => 'Blade Runner', 'year' => 1982, 'overview' => 'a'], 0.05)],
+        'series' => [],
+    ]);
+
+    $semanticLibrarySearch->search('moody sci-fi', 10);
+
+    Reranking::assertReranked(fn (RerankingPrompt $rerankingPrompt): bool => $rerankingPrompt->providerOptions === ['provider' => ['data_collection' => 'deny']]);
+});
+
+test('reranking on a non-OpenRouter provider carries no routing preferences', function (): void {
+    config()->set('mediamanager.ai.enabled', true);
+    config()->set('scout.driver', 'typesense');
+    config()->set('ai.default_for_reranking', 'cohere');
+    config()->set('ai.providers.cohere.key', 'test-key');
+
+    resolve(OpenRouterSettings::class)->setDenyDataCollection(true);
+    Embeddings::fake();
+    Reranking::fake();
+
+    $semanticLibrarySearch = makeSearchWithHits([
+        'movies' => [hit(['radarr_id' => 11, 'title' => 'Blade Runner', 'year' => 1982, 'overview' => 'a'], 0.05)],
+        'series' => [],
+    ]);
+
+    $semanticLibrarySearch->search('moody sci-fi', 10);
+
+    Reranking::assertReranked(fn (RerankingPrompt $rerankingPrompt): bool => $rerankingPrompt->providerOptions === []);
+});
+
 /**
  * Build a Typesense-hit array shaped like a multi_search document hit.
  *
@@ -233,14 +275,14 @@ function hit(array $document, float $distance): array
  */
 function makeSearchWithHits(array $hitsByCollection): SemanticLibrarySearch
 {
-    return new class(resolve(LibraryEmbedder::class), resolve(AiSettings::class), $hitsByCollection) extends SemanticLibrarySearch
+    return new class(resolve(LibraryEmbedder::class), resolve(AiSettings::class), resolve(OpenRouterRequestOptions::class), $hitsByCollection) extends SemanticLibrarySearch
     {
         /**
          * @param  array<string, array<int, array<string, mixed>>>  $hitsByCollection
          */
-        public function __construct(LibraryEmbedder $libraryEmbedder, AiSettings $aiSettings, private readonly array $hitsByCollection)
+        public function __construct(LibraryEmbedder $libraryEmbedder, AiSettings $aiSettings, OpenRouterRequestOptions $openRouterRequestOptions, private readonly array $hitsByCollection)
         {
-            parent::__construct($libraryEmbedder, $aiSettings);
+            parent::__construct($libraryEmbedder, $aiSettings, $openRouterRequestOptions);
         }
 
         protected function rawVectorSearch(array $vector, string $collection, int $k): array

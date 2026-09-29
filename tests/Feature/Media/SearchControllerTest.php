@@ -543,6 +543,37 @@ test('scope=indexers fans out to Prowlarr and returns release rows', function ()
         );
 });
 
+test('scope=indexers never exposes Prowlarr download links or guids', function (): void {
+    $member = User::factory()->member()->create();
+    ServiceConnection::factory()->prowlarr()->create([
+        'url' => 'http://prowlarr.local:9696',
+        'api_key' => 'prowlarr-secret-key',
+    ]);
+
+    Http::fake([
+        'prowlarr.local:9696/api/v1/search*' => Http::response([[
+            'guid' => 'https://tracker.example/download/1?passkey=tracker-passkey',
+            'title' => 'Severance.S02E07.1080p.WEB-DL.x264',
+            'indexer' => 'ETTV',
+            'size' => 2_500_000_000,
+            'downloadUrl' => 'http://prowlarr.local:9696/3/download?apikey=prowlarr-secret-key&link=abc',
+            'infoUrl' => 'https://tracker.example/details/1',
+        ]]),
+    ]);
+
+    $this->actingAs($member)
+        ->get(route('media.search.index', ['q' => 'severance', 'scope' => 'indexers']))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->loadDeferredProps(fn ($page) => $page
+                ->missing('indexerResults.results.0.download_url')
+                ->missing('indexerResults.results.0.guid')
+                ->where('indexerResults.results.0.key', md5('https://tracker.example/download/1?passkey=tracker-passkey'))
+                ->where('indexerResults.results.0.info_url', 'https://tracker.example/details/1')
+            )
+        );
+});
+
 test('typesense driver returns indexed series results scoped to active connection', function (): void {
     config()->set('mediamanager.search.driver', 'typesense');
     config()->set('scout.driver', 'database');
