@@ -289,34 +289,10 @@ parameters:
 			path: app/Http/Controllers/Admin/AiModelPriceController.php
 
 		-
-			message: '#^Unable to resolve the template type TKey in call to function collect$#'
-			identifier: argument.templateType
-			count: 1
-			path: app/Http/Controllers/Admin/AiSettingsController.php
-
-		-
-			message: '#^Unable to resolve the template type TValue in call to function collect$#'
-			identifier: argument.templateType
-			count: 1
-			path: app/Http/Controllers/Admin/AiSettingsController.php
-
-		-
 			message: '#^Using nullsafe property access "\?\-\>value" on left side of \?\? is unnecessary\. Use \-\> instead\.$#'
 			identifier: nullsafe.neverNull
 			count: 1
 			path: app/Http/Controllers/Admin/AiSettingsController.php
-
-		-
-			message: '#^Unable to resolve the template type TKey in call to function collect$#'
-			identifier: argument.templateType
-			count: 1
-			path: app/Http/Controllers/Admin/DecisionAgentSettingsController.php
-
-		-
-			message: '#^Unable to resolve the template type TValue in call to function collect$#'
-			identifier: argument.templateType
-			count: 1
-			path: app/Http/Controllers/Admin/DecisionAgentSettingsController.php
 
 		-
 			message: '#^Variable \$apiKey on left side of \?\? always exists and is not nullable\.$#'

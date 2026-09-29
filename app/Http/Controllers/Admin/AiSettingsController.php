@@ -4,15 +4,17 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers\Admin;
 
+use App\Ai\ModelCatalog;
 use App\Ai\ProviderCapabilities;
 use App\Enums\AiMode;
 use App\Enums\AiReasoningLevel;
+use App\Enums\OpenRouterSort;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Admin\UpdateAiSettingsRequest;
-use App\Models\AiModelPrice;
 use App\Services\AiBudget\AiBudgetGuard;
 use App\Services\AiBudget\UnpricedModelDetector;
 use App\Settings\AiSettings;
+use App\Settings\OpenRouterSettings;
 use Illuminate\Http\RedirectResponse;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -27,6 +29,8 @@ class AiSettingsController extends Controller
         AiBudgetGuard $aiBudgetGuard,
         ProviderCapabilities $providerCapabilities,
         UnpricedModelDetector $unpricedModelDetector,
+        ModelCatalog $modelCatalog,
+        OpenRouterSettings $openRouterSettings,
     ): Response {
         return Inertia::render('Admin/AiSettings/Index', [
             'settings' => [
@@ -57,6 +61,21 @@ class AiSettingsController extends Controller
                 'reranking_model' => $aiSettings->rerankingModel(),
                 'sub_agent_model' => $aiSettings->rawSubAgentModel(),
                 'price_updater_model' => $aiSettings->rawPriceUpdaterModel(),
+                'model_provider' => $aiSettings->modelProvider(),
+                'title_model_provider' => $aiSettings->titleModelProvider(),
+                // Null while the setting follows the chat selection; otherwise
+                // the effective provider (a legacy row without one resolves to
+                // ai.default), so the form never guesses it.
+                'sub_agent_model_provider' => $aiSettings->rawSubAgentModel() === null ? null : $aiSettings->subAgentSelection()->provider,
+                'price_updater_model_provider' => $aiSettings->rawPriceUpdaterModel() === null ? null : $aiSettings->priceUpdaterSelection()->provider,
+                'failover_model' => $aiSettings->failoverModel(),
+                'openrouter' => [
+                    'sort' => $openRouterSettings->sort()?->value,
+                    'deny_data_collection' => $openRouterSettings->denyDataCollection(),
+                    'allow_fallbacks' => $openRouterSettings->allowFallbacks(),
+                    'order' => implode(', ', $openRouterSettings->order()),
+                    'ignore' => implode(', ', $openRouterSettings->ignore()),
+                ],
             ],
             'budget' => [
                 'spend' => round($aiBudgetGuard->currentMonthSpend(), 4),
@@ -66,7 +85,7 @@ class AiSettingsController extends Controller
             ],
             'unpricedModels' => $unpricedModelDetector->forHardCap(),
             'modes' => AiMode::mapForSelect(labelKey: 'label'),
-            'models' => $this->modelsByConfiguredProvider(),
+            'models' => $modelCatalog->modelsByConfiguredProvider(),
             'reasoningLevels' => AiReasoningLevel::mapForSelect(labelKey: 'label'),
             'failoverProviders' => [
                 ['value' => 'none', 'label' => 'None'],
@@ -75,7 +94,12 @@ class AiSettingsController extends Controller
                 ['value' => Lab::Gemini->value, 'label' => 'Gemini'],
                 ['value' => Lab::Groq->value, 'label' => 'Groq'],
                 ['value' => Lab::Mistral->value, 'label' => 'Mistral'],
+                ['value' => Lab::OpenRouter->value, 'label' => 'OpenRouter'],
             ],
+            'openRouterSorts' => array_map(
+                static fn (OpenRouterSort $openRouterSort): array => ['value' => $openRouterSort->value, 'label' => $openRouterSort->label()],
+                OpenRouterSort::cases(),
+            ),
             'pricingProviders' => $this->pricingProviders(),
             'classificationProviders' => [
                 ['value' => 'openrouter', 'label' => 'OpenRouter'],
@@ -94,31 +118,6 @@ class AiSettingsController extends Controller
                 'code_execution' => $providerCapabilities->everyProviderSupports(SupportsCodeExecution::class, $aiSettings->priceUpdaterSelection()),
             ],
         ]);
-    }
-
-    /**
-     * @return array<string, array<int, string>>
-     */
-    private function modelsByConfiguredProvider(): array
-    {
-        $configured = collect(config('ai.providers', []))
-            // Ollama runs locally and ignores the key; treat it as always configured when listed.
-            ->filter(fn (array $cfg, string $name): bool => $name === 'ollama' || filled($cfg['key'] ?? null))
-            ->keys()
-            ->all();
-
-        if ($configured === []) {
-            return [];
-        }
-
-        return AiModelPrice::query()
-            ->whereIn('provider', $configured)
-            ->orderBy('provider')
-            ->orderBy('model')
-            ->get(['provider', 'model'])
-            ->groupBy('provider')
-            ->map(fn ($rows): array => $rows->pluck('model')->all())
-            ->all();
     }
 
     /**
@@ -183,6 +182,7 @@ class AiSettingsController extends Controller
     public function update(
         UpdateAiSettingsRequest $updateAiSettingsRequest,
         AiSettings $aiSettings,
+        OpenRouterSettings $openRouterSettings,
     ): RedirectResponse {
         $validated = $updateAiSettingsRequest->validated();
 
@@ -202,6 +202,11 @@ class AiSettingsController extends Controller
         $aiSettings->setFailoverProvider(
             empty($validated['failover_provider']) ? null : Lab::tryFrom($validated['failover_provider']),
         );
+
+        if (array_key_exists('failover_model', $validated)) {
+            $aiSettings->setFailoverModel($validated['failover_model']);
+        }
+
         $aiSettings->setModelsDevPricingEnabled(
             array_key_exists('models_dev_pricing_enabled', $validated)
                 ? (bool) $validated['models_dev_pricing_enabled']
@@ -231,6 +236,8 @@ class AiSettingsController extends Controller
         );
 
         $this->updateClassificationSettings($aiSettings, $validated);
+        $this->updateModelProviders($aiSettings, $validated);
+        $this->updateOpenRouterSettings($openRouterSettings, $validated);
 
         Inertia::flash('toast', ['type' => 'success', 'message' => __('AI settings updated.')]);
 
@@ -288,6 +295,60 @@ class AiSettingsController extends Controller
 
         if (array_key_exists('price_updater_model', $validated)) {
             $aiSettings->setPriceUpdaterModel($validated['price_updater_model']);
+        }
+    }
+
+    /**
+     * Persist the provider half of each submitted model selection. An absent
+     * field leaves its saved provider untouched; a blank one clears it.
+     *
+     * @param  array<string, mixed>  $validated
+     */
+    private function updateModelProviders(AiSettings $aiSettings, array $validated): void
+    {
+        if (array_key_exists('model_provider', $validated)) {
+            $aiSettings->setModelProvider($validated['model_provider']);
+        }
+
+        if (array_key_exists('title_model_provider', $validated)) {
+            $aiSettings->setTitleModelProvider($validated['title_model_provider']);
+        }
+
+        if (array_key_exists('sub_agent_model_provider', $validated)) {
+            $aiSettings->setSubAgentModelProvider($validated['sub_agent_model_provider']);
+        }
+
+        if (array_key_exists('price_updater_model_provider', $validated)) {
+            $aiSettings->setPriceUpdaterModelProvider($validated['price_updater_model_provider']);
+        }
+    }
+
+    /**
+     * Persist the submitted OpenRouter routing preferences. Order and ignore
+     * arrive as comma-separated slugs.
+     *
+     * @param  array<string, mixed>  $validated
+     */
+    private function updateOpenRouterSettings(OpenRouterSettings $openRouterSettings, array $validated): void
+    {
+        if (array_key_exists('openrouter_sort', $validated)) {
+            $openRouterSettings->setSort(OpenRouterSort::tryFrom((string) $validated['openrouter_sort']));
+        }
+
+        if (array_key_exists('openrouter_deny_data_collection', $validated)) {
+            $openRouterSettings->setDenyDataCollection((bool) $validated['openrouter_deny_data_collection']);
+        }
+
+        if (array_key_exists('openrouter_allow_fallbacks', $validated)) {
+            $openRouterSettings->setAllowFallbacks((bool) $validated['openrouter_allow_fallbacks']);
+        }
+
+        if (array_key_exists('openrouter_order', $validated)) {
+            $openRouterSettings->setOrder(explode(',', (string) $validated['openrouter_order']));
+        }
+
+        if (array_key_exists('openrouter_ignore', $validated)) {
+            $openRouterSettings->setIgnore(explode(',', (string) $validated['openrouter_ignore']));
         }
     }
 }
