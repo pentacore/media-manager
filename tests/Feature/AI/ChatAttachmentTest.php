@@ -5,9 +5,12 @@ declare(strict_types=1);
 use App\Ai\Agents\MediaAgent;
 use App\Models\ChatAttachment;
 use App\Models\User;
+use App\Services\Chat\ChatAttachmentStore;
+use App\Settings\AiSettings;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
 use Laravel\Ai\Files;
+use Laravel\Ai\Files\ProviderImage;
 
 beforeEach(function (): void {
     config()->set('mediamanager.ai.enabled', true);
@@ -68,3 +71,20 @@ test('raster images are served inline and everything else as a hardened download
     'text' => ['text/plain', 'sonarr.log', 'attachment'],
     'svg is never inline' => ['image/svg+xml', 'x.svg', 'attachment'],
 ]);
+
+test('a single-provider OpenRouter chat selection uploads the attachment to OpenRouter\'s Files API', function (): void {
+    config()->set('ai.providers.openrouter.key', 'sk-or-test');
+    $aiSettings = resolve(AiSettings::class);
+    $aiSettings->setModelProvider('openrouter');
+    $aiSettings->setModel('anthropic/claude-sonnet-5');
+    Files::fake();
+
+    $attachment = ChatAttachment::factory()->create();
+
+    $files = resolve(ChatAttachmentStore::class)->toSdkAttachments(collect([$attachment]));
+
+    // OpenRouterProvider implements FileProvider, so a single-provider chain
+    // on it uploads and references the file by provider id.
+    expect($files[0])->toBeInstanceOf(ProviderImage::class);
+    Files::assertStored(fn (): bool => true);
+});
