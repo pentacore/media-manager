@@ -64,9 +64,18 @@ test('the configured agent models count as in use under their own selection prov
     $aiSettings->setTitleModel('gpt-title');
     $aiSettings->setSubAgentModel('gpt-sub-agent');
     $aiSettings->setPriceUpdaterModel('gpt-updater');
+    // Keep the default embeddings selection (also openai) out of this
+    // provider's bucket so it doesn't confound the assertion below.
+    $aiSettings->setEmbeddingsProvider('openrouter');
 
     expect(resolve(InUsePricingModels::class)->forProvider('openai'))
         ->toBe(['gpt-title', 'gpt-chat', 'gpt-sub-agent', 'gpt-updater']);
+});
+
+test('a blank embeddings model counts the provider default embeddings model as in use', function (): void {
+    resolve(AiSettings::class)->setEmbeddingsProvider('openrouter');
+
+    expect(resolve(InUsePricingModels::class)->contains('openrouter', 'google/gemini-embedding-001'))->toBeTrue();
 });
 
 test('the auto title model sentinel is never counted as a model name', function (): void {

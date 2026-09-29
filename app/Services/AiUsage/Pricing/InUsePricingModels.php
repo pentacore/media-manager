@@ -111,7 +111,8 @@ final class InUsePricingModels
             $pairs[] = [$modelSelection->provider, $modelSelection->model];
         }
 
-        $pairs[] = [$this->aiSettings->embeddingsProvider(), $this->aiSettings->embeddingsModel()];
+        $embeddingsProvider = $this->aiSettings->embeddingsProvider();
+        $pairs[] = [$embeddingsProvider, $this->aiSettings->embeddingsModel() ?? $this->defaultEmbeddingsModel($embeddingsProvider)];
 
         $providerModels = [];
 
@@ -149,6 +150,15 @@ final class InUsePricingModels
     {
         try {
             return Ai::rerankingProvider($provider)->defaultRerankingModel();
+        } catch (InvalidArgumentException|LogicException) {
+            return null;
+        }
+    }
+
+    private function defaultEmbeddingsModel(string $provider): ?string
+    {
+        try {
+            return Ai::embeddingProvider($provider)->defaultEmbeddingsModel();
         } catch (InvalidArgumentException|LogicException) {
             return null;
         }
