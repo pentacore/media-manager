@@ -449,3 +449,62 @@ test('admin bulk-adds openrouter models from the catalog', function (): void {
         ->assertMissing('[data-catalog-row="anthropic/claude-opus-5.5"]')
         ->assertNoSmoke();
 });
+
+test('picking a catalog model fills the add form and saves a synced row', function (): void {
+    catalogPickerBrowserFeeds();
+
+    visit('/admin/ai-prices')
+        ->assertNoSmoke()
+        ->click('[data-create-price]')
+        ->fill('provider', 'openrouter')
+        ->click('[data-catalog-pick-toggle]')
+        ->click('[data-catalog-row="anthropic/claude-opus-5.5"]')
+        ->assertValue('model', 'anthropic/claude-opus-5.5')
+        ->assertValue('input_per_mtok', '4')
+        ->assertValue('output_per_mtok', '20')
+        ->assertSee('On — kept in sync online')
+        ->click('[data-create-price-submit]')
+        ->assertSee('Model price added.')
+        ->assertSee('OpenRouter');
+
+    $aiModelPrice = AiModelPrice::query()->where('model', 'anthropic/claude-opus-5.5')->sole();
+
+    expect($aiModelPrice->pricing_source)->toBe(PricingSource::OpenRouter)
+        ->and($aiModelPrice->is_price_locked)->toBeFalse();
+});
+
+test('editing a picked price saves the row as manual and locked', function (): void {
+    catalogPickerBrowserFeeds();
+
+    visit('/admin/ai-prices')
+        ->click('[data-create-price]')
+        ->fill('provider', 'openrouter')
+        ->click('[data-catalog-pick-toggle]')
+        ->click('[data-catalog-row="anthropic/claude-opus-5.5"]')
+        ->fill('input_per_mtok', '5')
+        ->assertSee('Off — locked to manual price')
+        ->click('[data-create-price-submit]')
+        ->assertSee('Model price added.');
+
+    $aiModelPrice = AiModelPrice::query()->where('model', 'anthropic/claude-opus-5.5')->sole();
+
+    expect($aiModelPrice->pricing_source)->toBe(PricingSource::Manual)
+        ->and($aiModelPrice->is_price_locked)->toBeTrue();
+});
+
+test('a free-text provider outside the catalog keeps the form fully manual', function (): void {
+    visit('/admin/ai-prices')
+        ->click('[data-create-price]')
+        ->fill('provider', 'my-local-llm')
+        ->assertMissing('[data-catalog-pick-toggle]')
+        ->fill('model', 'llama-local')
+        ->fill('input_per_mtok', '0')
+        ->fill('output_per_mtok', '0')
+        ->fill('cache_read_per_mtok', '0')
+        ->fill('cache_write_per_mtok', '0')
+        ->fill('reasoning_per_mtok', '0')
+        ->click('[data-create-price-submit]')
+        ->assertSee('Model price added.');
+
+    expect(AiModelPrice::query()->where('model', 'llama-local')->sole()->pricing_source)->toBe(PricingSource::Manual);
+});
