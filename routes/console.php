@@ -19,6 +19,7 @@ use App\Console\Commands\ReconcileStuckActionRequests;
 use App\Console\Commands\RecordOpsHeartbeat;
 use App\Console\Commands\RefreshInterventionCount;
 use App\Console\Commands\RefreshSabnzbdDownloadCounts;
+use App\Console\Commands\RefreshWantedCount;
 use App\Console\Commands\WarmServiceCaches;
 use App\Jobs\PruneSubtitleUploads;
 use App\Jobs\ReconcileSearchIndex;
@@ -103,6 +104,10 @@ Schedule::command(RefreshInterventionCount::class)
     ->withoutOverlapping(10);
 
 Schedule::command(RefreshSabnzbdDownloadCounts::class)
+    ->everyFiveMinutes()
+    ->withoutOverlapping(10);
+
+Schedule::command(RefreshWantedCount::class)
     ->everyFiveMinutes()
     ->withoutOverlapping(10);
 

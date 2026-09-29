@@ -164,10 +164,11 @@ class HandleInertiaRequests extends Middleware
             return $wantedCounter->get();
         }
 
-        // Same cold-cache warm-up as libraryInterventionCount(): never let a
-        // flaky *arr 500 a page render.
+        // Cold cache only (the scheduled library:refresh-wanted-count keeps
+        // it warm): warm() lets one request recompute under a short lock with
+        // non-retrying calls, and never lets a flaky *arr 500 a page render.
         try {
-            return $wantedCounter->recompute();
+            return $wantedCounter->warm();
         } catch (Throwable) {
             return 0;
         }

@@ -8,6 +8,7 @@ use App\Models\ServiceConnection;
 use App\Models\User;
 use App\Services\Library\InterventionCounter;
 use App\Services\Library\WantedCounter;
+use App\Services\Sabnzbd\SabnzbdDownloadCounter;
 use App\Support\AppVersion;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
@@ -187,4 +188,61 @@ test('nav.wantedMissing is the cached missing count for members and zero for vie
 
     $this->actingAs(User::factory()->create())->get(route('dashboard'))
         ->assertInertia(fn ($page) => $page->where('nav.wantedMissing', 0));
+});
+
+test('a cold wanted cache with a failing upstream caches the member badge for sixty seconds', function (): void {
+    config()->set('inertia.ssr.enabled', false);
+    Http::preventStrayRequests();
+    Cache::forget(WantedCounter::CACHE_KEY);
+    Cache::put(InterventionCounter::CACHE_KEY, 0, 600);
+    Cache::put(SabnzbdDownloadCounter::CACHE_KEY, ['queued' => 0, 'completed' => 0], 600);
+    ServiceConnection::factory()->sonarr()->create(['url' => 'http://sonarr.local:8989', 'api_key' => 'k']);
+    Http::fake(['sonarr.local:8989/api/v3/wanted/missing*' => Http::response([], 503)]);
+
+    $this->actingAs(User::factory()->member()->create())->get(route('dashboard'))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page->where('nav.wantedMissing', 0));
+
+    Http::assertSentCount(1);
+    expect(Cache::get(WantedCounter::CACHE_KEY))->toBe(0);
+
+    $this->travel(WantedCounter::FAILURE_CACHE_TTL - 1)->seconds();
+    expect(Cache::has(WantedCounter::CACHE_KEY))->toBeTrue();
+
+    $this->travel(2)->seconds();
+    expect(Cache::has(WantedCounter::CACHE_KEY))->toBeFalse();
+});
+
+test('a viewer on a cold wanted cache triggers no upstream call', function (): void {
+    config()->set('inertia.ssr.enabled', false);
+    Http::preventStrayRequests();
+    Cache::forget(WantedCounter::CACHE_KEY);
+    Cache::put(InterventionCounter::CACHE_KEY, 0, 600);
+    Cache::put(SabnzbdDownloadCounter::CACHE_KEY, ['queued' => 0, 'completed' => 0], 600);
+    ServiceConnection::factory()->sonarr()->create(['url' => 'http://sonarr.local:8989', 'api_key' => 'k']);
+
+    $this->actingAs(User::factory()->create())->get(route('dashboard'))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page->where('nav.wantedMissing', 0));
+
+    Http::assertNothingSent();
+    expect(Cache::has(WantedCounter::CACHE_KEY))->toBeFalse();
+});
+
+test('a member request on a cold wanted cache skips the recompute while another request holds the lock', function (): void {
+    config()->set('inertia.ssr.enabled', false);
+    Http::preventStrayRequests();
+    Cache::forget(WantedCounter::CACHE_KEY);
+    Cache::put(InterventionCounter::CACHE_KEY, 0, 600);
+    Cache::put(SabnzbdDownloadCounter::CACHE_KEY, ['queued' => 0, 'completed' => 0], 600);
+    ServiceConnection::factory()->sonarr()->create(['url' => 'http://sonarr.local:8989', 'api_key' => 'k']);
+    $lock = Cache::lock(WantedCounter::RECOMPUTE_LOCK_KEY, 10);
+    $lock->get();
+
+    $this->actingAs(User::factory()->member()->create())->get(route('dashboard'))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page->where('nav.wantedMissing', 0));
+
+    Http::assertNothingSent();
+    $lock->release();
 });

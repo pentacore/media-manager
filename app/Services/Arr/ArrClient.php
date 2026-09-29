@@ -150,11 +150,11 @@ abstract class ArrClient
      *
      * @throws RequestException|ConnectionException
      */
-    public function getWanted(string $list, int $page, int $pageSize, bool $monitored): array
+    public function getWanted(string $list, int $page, int $pageSize, bool $monitored, bool $withRetry = true): array
     {
         throw_unless(in_array($list, ['missing', 'cutoff'], true), InvalidArgumentException::class, sprintf('Unknown wanted list "%s".', $list));
 
-        $body = $this->buildClient()->get(sprintf('/api/%s/wanted/%s', $this->apiVersion, $list), [
+        $body = $this->buildClient($withRetry)->get(sprintf('/api/%s/wanted/%s', $this->apiVersion, $list), [
             'page' => $page,
             'pageSize' => $pageSize,
             'sortDirection' => 'descending',
