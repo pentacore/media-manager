@@ -21,6 +21,7 @@ import {
     ListTodo,
     MessageSquare,
     Play,
+    Radar,
     Replace,
     ScrollText,
     Search,
@@ -54,6 +55,7 @@ import NowPlayingController from '@/actions/App/Http/Controllers/Emby/NowPlaying
 import WatchHistoryController from '@/actions/App/Http/Controllers/Emby/WatchHistoryController';
 import LibraryActivityController from '@/actions/App/Http/Controllers/Library/ActivityController';
 import CalendarController from '@/actions/App/Http/Controllers/Library/CalendarController';
+import WantedController from '@/actions/App/Http/Controllers/Library/WantedController';
 import AnimeController from '@/actions/App/Http/Controllers/Media/AnimeController';
 import DiscoverController from '@/actions/App/Http/Controllers/Media/DiscoverController';
 import MovieController from '@/actions/App/Http/Controllers/Media/MovieController';
@@ -163,6 +165,13 @@ export function useNavItems(counts?: NavCounts): ComputedRef<NavGroup[]> {
                         href: CalendarController.url(),
                         icon: CalendarDays,
                         ability: 'view-library',
+                    },
+                    {
+                        title: 'Wanted',
+                        href: WantedController.url(),
+                        icon: Radar,
+                        ability: 'manage-library',
+                        badge: counts ? () => counts.wantedMissing.value : undefined,
                     },
                     {
                         title: 'Requests',

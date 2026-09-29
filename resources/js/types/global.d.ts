@@ -34,6 +34,7 @@ declare module '@inertiajs/core' {
                 libraryIntervention: number;
                 sabnzbdDownloads: { queued: number; completed: number };
                 replacementAttention: number;
+                wantedMissing: number;
             };
             sidebarOpen: boolean;
             version: {

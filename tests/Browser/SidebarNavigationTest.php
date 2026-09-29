@@ -5,6 +5,8 @@ declare(strict_types=1);
 use App\Enums\ActionRequestStatus;
 use App\Models\ActionRequest;
 use App\Models\User;
+use App\Services\Library\WantedCounter;
+use Illuminate\Support\Facades\Cache;
 
 test('the Action Queue badge renders the pending action count', function (): void {
     $member = User::factory()->member()->create();
@@ -52,6 +54,18 @@ test('the Action Queue badge is absent when nothing is pending', function (): vo
         ->assertNoSmoke()
         ->assertSeeIn('[data-sidebar="content"]', 'Action Queue')
         ->assertCount('[data-sidebar="menu-badge"]', 0);
+});
+
+test('the Wanted badge shows the cached missing count for members', function (): void {
+    Cache::put(WantedCounter::CACHE_KEY, 4, 600);
+    $this->actingAs(User::factory()->member()->create());
+
+    // Nothing is pending, so the Wanted badge is the only badge above zero and
+    // `[data-sidebar="menu-badge"]` resolves to exactly one element.
+    visit('/dashboard')
+        ->assertNoSmoke()
+        ->assertSeeIn('[data-sidebar="content"]', 'Wanted')
+        ->assertSeeIn('[data-sidebar="menu-badge"]', '4');
 });
 
 // The negative assertions below are scoped to `[data-sidebar="content"]` (the
@@ -136,21 +150,21 @@ test('the Search link is hidden on desktop and shown on mobile', function (): vo
     // AppSidebarHeader's "Search media, requests, actions…" placeholder whether
     // the mobile-only nav entry rendered or not.
     //
-    // The link counts pin the whole visible taxonomy in one number — 15 leaf
-    // links at desktop (3 Overview + 6 Media, including Subtitles and Calendar
-    // + 6 Activity) and 16 at mobile where `Search` joins them. Admin
-    // sub-group children are not counted at either width: their parents are
-    // CollapsibleTrigger buttons and the closed CollapsibleContent is out of
-    // the DOM, so an admin also sees 15.
+    // The link counts pin the whole visible taxonomy in one number — 16 leaf
+    // links at desktop (3 Overview + 7 Media, including Subtitles, Calendar
+    // and Wanted + 6 Activity) and 17 at mobile where `Search` joins them.
+    // Admin sub-group children are not counted at either width: their
+    // parents are CollapsibleTrigger buttons and the closed
+    // CollapsibleContent is out of the DOM, so an admin also sees 16.
     visit('/dashboard')
         ->assertNoSmoke()
         ->assertDontSeeIn('[data-sidebar="content"]', 'Search')
         ->assertSeeIn('[data-sidebar="content"]', 'Subtitles')
-        ->assertCount('[data-sidebar="content"] a', 15)
+        ->assertCount('[data-sidebar="content"] a', 16)
         ->resize(390, 844)
         ->click('[data-sidebar="trigger"]')
         ->assertSeeIn('[data-sidebar="content"]', 'Search')
-        ->assertCount('[data-sidebar="content"] a', 16);
+        ->assertCount('[data-sidebar="content"] a', 17);
 });
 
 test('admin sub-groups start collapsed and reveal children on click', function (): void {

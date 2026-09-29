@@ -12,6 +12,7 @@ export type NavCounts = {
     sabnzbdQueued: Ref<number>;
     sabnzbdCompleted: Ref<number>;
     replacementAttention: Ref<number>;
+    wantedMissing: Ref<number>;
 };
 
 type NavCountsPayload = {
@@ -20,6 +21,7 @@ type NavCountsPayload = {
     libraryIntervention?: number;
     sabnzbdDownloads?: { queued: number; completed: number };
     replacementAttention?: number;
+    wantedMissing?: number;
 };
 
 type PlaybackPayload = {
@@ -60,6 +62,7 @@ export function useNavCounts(): NavCounts {
     const sabnzbdQueued = ref(initialNav?.sabnzbdDownloads?.queued ?? 0);
     const sabnzbdCompleted = ref(initialNav?.sabnzbdDownloads?.completed ?? 0);
     const replacementAttention = ref(initialNav?.replacementAttention ?? 0);
+    const wantedMissing = ref(initialNav?.wantedMissing ?? 0);
     const { can } = useCan();
 
     const recentSessionIds = new Set<number>();
@@ -109,6 +112,7 @@ export function useNavCounts(): NavCounts {
             sabnzbdQueued.value = nav.sabnzbdDownloads?.queued ?? 0;
             sabnzbdCompleted.value = nav.sabnzbdDownloads?.completed ?? 0;
             replacementAttention.value = nav.replacementAttention ?? 0;
+            wantedMissing.value = nav.wantedMissing ?? 0;
             recentSessionIds.clear();
             sessionTimestamps.clear();
             pendingIds.clear();
@@ -227,5 +231,6 @@ export function useNavCounts(): NavCounts {
         sabnzbdQueued,
         sabnzbdCompleted,
         replacementAttention,
+        wantedMissing,
     };
 }

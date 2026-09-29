@@ -9,6 +9,7 @@ use App\Jobs\ExecuteActionRequest;
 use App\Jobs\FetchLatestServiceVersion;
 use App\Jobs\PingServiceHealth;
 use App\Services\Library\InterventionCounter;
+use App\Services\Library\WantedCounter;
 use App\Services\Sabnzbd\SabnzbdDownloadCounter;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Client\Request;
@@ -68,6 +69,10 @@ pest()->extend(TestCase::class)
         config()->set('mediamanager.cache.store', 'array');
         Cache::store('array')->flush();
 
+        // Like the intervention counter: page renders must never walk the
+        // *arr wanted endpoints (browser.md). WantedCounterTest forgets the key.
+        Cache::put(WantedCounter::CACHE_KEY, 0, 600);
+
         // Feature tests assert Inertia props on controllers whose Vue page
         // may not be in the committed Vite manifest yet (added in a later
         // task). withoutVite() skips the manifest lookup while the Blade
@@ -94,6 +99,10 @@ pest()->extend(TestCase::class)
         // (InterventionCounterTest, HandleInertiaRequestsTest).
         Cache::put(InterventionCounter::CACHE_KEY, 0, 600);
         Cache::put(SabnzbdDownloadCounter::CACHE_KEY, ['queued' => 0, 'completed' => 0], 600);
+
+        // Like the intervention counter: page renders must never walk the
+        // *arr wanted endpoints (browser.md). WantedCounterTest forgets the key.
+        Cache::put(WantedCounter::CACHE_KEY, 0, 600);
     })
     ->in('Browser');
 

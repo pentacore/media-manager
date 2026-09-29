@@ -64,6 +64,7 @@ dataset('member-only routes', [
     'library search' => ['POST', 'media.library.actions.search', []],
     'library releases' => ['GET', 'media.library.actions.releases', []],
     'library grab' => ['POST', 'media.library.actions.grab', []],
+    'wanted' => ['GET', 'media.wanted.index', []],
 ]);
 
 dataset('member write routes', [

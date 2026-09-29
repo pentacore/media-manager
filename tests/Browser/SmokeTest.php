@@ -350,6 +350,7 @@ function browserSmokeMemberRouteNames(): array
         'media.requests.index',
         'media.requests.mine',
         'media.calendar.index',
+        'media.wanted.index',
         'media.anime.index',
         'bazarr.overview',
         'bazarr.missing',

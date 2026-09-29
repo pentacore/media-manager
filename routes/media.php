@@ -5,6 +5,7 @@ declare(strict_types=1);
 use App\Http\Controllers\Library\ActivityController as LibraryActivityController;
 use App\Http\Controllers\Library\CalendarController;
 use App\Http\Controllers\Library\MediaActionController;
+use App\Http\Controllers\Library\WantedController;
 use App\Http\Controllers\Media\AnimeController;
 use App\Http\Controllers\Media\DiscoverController;
 use App\Http\Controllers\Media\InstantSearchController;
@@ -62,6 +63,9 @@ Route::middleware(['auth', 'verified', 'password.set'])
             Route::get('movies/create', [MovieController::class, 'create'])->name('movies.create');
             Route::post('movies', [MovieController::class, 'store'])->name('movies.store');
             Route::delete('movies/{id}', [MovieController::class, 'destroy'])->whereNumber('id')->name('movies.destroy');
+
+            // Missing / cutoff-unmet lists from the primary Sonarr + Radarr
+            Route::get('wanted', WantedController::class)->name('wanted.index');
 
             // Manual media replacement
             Route::get('replacement/inspect', [MediaReplacementController::class, 'inspect'])->name('replacement.inspect');

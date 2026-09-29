@@ -7,6 +7,7 @@ use App\Models\MediaReplacementAttempt;
 use App\Models\ServiceConnection;
 use App\Models\User;
 use App\Services\Library\InterventionCounter;
+use App\Services\Library\WantedCounter;
 use App\Support\AppVersion;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
@@ -176,4 +177,14 @@ test('nav.replacementAttention counts unacknowledged needs_attention attempts fo
         ->get(route('dashboard'))
         ->assertOk()
         ->assertInertia(fn ($page) => $page->where('nav.replacementAttention', 0));
+});
+
+test('nav.wantedMissing is the cached missing count for members and zero for viewers', function (): void {
+    Cache::put(WantedCounter::CACHE_KEY, 7, 600);
+
+    $this->actingAs(User::factory()->member()->create())->get(route('dashboard'))
+        ->assertInertia(fn ($page) => $page->where('nav.wantedMissing', 7));
+
+    $this->actingAs(User::factory()->create())->get(route('dashboard'))
+        ->assertInertia(fn ($page) => $page->where('nav.wantedMissing', 0));
 });

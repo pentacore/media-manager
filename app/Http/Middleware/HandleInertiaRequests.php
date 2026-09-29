@@ -14,6 +14,7 @@ use App\Models\ServiceConnection;
 use App\Models\User;
 use App\Providers\AIServiceProvider;
 use App\Services\Library\InterventionCounter;
+use App\Services\Library\WantedCounter;
 use App\Services\Sabnzbd\SabnzbdDownloadCounter;
 use App\Support\Abilities;
 use App\Support\AppVersion;
@@ -74,7 +75,7 @@ class HandleInertiaRequests extends Middleware
                     ->where('is_active', true)
                     ->exists(),
             ],
-            'nav' => $user ? $this->navCounts($user) : ['pendingActions' => 0, 'activeSessions' => 0, 'unreadNotifications' => 0, 'libraryIntervention' => 0, 'sabnzbdDownloads' => ['queued' => 0, 'completed' => 0], 'replacementAttention' => 0],
+            'nav' => $user ? $this->navCounts($user) : ['pendingActions' => 0, 'activeSessions' => 0, 'unreadNotifications' => 0, 'libraryIntervention' => 0, 'sabnzbdDownloads' => ['queued' => 0, 'completed' => 0], 'replacementAttention' => 0, 'wantedMissing' => 0],
             'version' => $user ? [
                 'current' => AppVersion::current(),
                 'latest' => AppVersion::latest(),
@@ -89,7 +90,7 @@ class HandleInertiaRequests extends Middleware
      * indexed columns and bound clauses. Live updates layer on top via
      * the sidebar's WS subscriptions.
      *
-     * @return array{pendingActions: int, activeSessions: int, unreadNotifications: int, libraryIntervention: int, sabnzbdDownloads: array{queued: int, completed: int}, replacementAttention: int}
+     * @return array{pendingActions: int, activeSessions: int, unreadNotifications: int, libraryIntervention: int, sabnzbdDownloads: array{queued: int, completed: int}, replacementAttention: int, wantedMissing: int}
      */
     private function navCounts(User $user): array
     {
@@ -110,6 +111,10 @@ class HandleInertiaRequests extends Middleware
             // Admin-only surface (Admin → Media Replacement → Attempts); members
             // get a constant zero so the shared shape stays stable.
             'replacementAttention' => $user->isAdmin() ? MediaReplacementAttempt::unacknowledgedAttentionCount() : 0,
+            // Wanted page is manage-library only (isMember() spans Member and
+            // Admin, matching that ability's minimum role); viewers get a
+            // constant zero so they never trigger the upstream walk.
+            'wantedMissing' => $user->isMember() ? $this->wantedMissingCount() : 0,
         ];
     }
 
@@ -148,6 +153,23 @@ class HandleInertiaRequests extends Middleware
             return $sabnzbdDownloadCounter->recompute();
         } catch (Throwable) {
             return ['queued' => 0, 'completed' => 0];
+        }
+    }
+
+    private function wantedMissingCount(): int
+    {
+        $wantedCounter = resolve(WantedCounter::class);
+
+        if (Cache::has(WantedCounter::CACHE_KEY)) {
+            return $wantedCounter->get();
+        }
+
+        // Same cold-cache warm-up as libraryInterventionCount(): never let a
+        // flaky *arr 500 a page render.
+        try {
+            return $wantedCounter->recompute();
+        } catch (Throwable) {
+            return 0;
         }
     }
 }
