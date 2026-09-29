@@ -70,6 +70,26 @@ test('it merges Sonarr episodes and Radarr movies in air order with their states
         ->and($calendar['failures'])->toBe([]);
 });
 
+test('an episode of an unmonitored series keeps its own monitored flag beside the combined state', function (): void {
+    ServiceConnection::factory()->sonarr()->create(['url' => 'http://sonarr.local:8989']);
+    ServiceConnection::factory()->radarr()->create(['url' => 'http://radarr.local:7878']);
+    Http::fake([
+        'sonarr.local:8989/api/v3/calendar*' => Http::response([
+            calendarEpisode(['series' => ['title' => 'Old Show', 'monitored' => false, 'images' => []]]),
+            calendarEpisode(['id' => 71, 'monitored' => false, 'airDateUtc' => '2026-09-11T02:00:00Z']),
+        ]),
+        'radarr.local:7878/api/v3/calendar*' => Http::response([
+            ['id' => 10, 'title' => 'Dune', 'monitored' => true, 'hasFile' => false, 'digitalRelease' => '2026-09-30T00:00:00Z', 'images' => []],
+        ]),
+    ]);
+
+    $items = resolve(LibraryCalendar::class)->between($this->start, $this->end)['items'];
+
+    expect($items[0])->toMatchArray(['episode_id' => 70, 'state' => 'unmonitored', 'monitored' => false, 'episode_monitored' => true])
+        ->and($items[1])->toMatchArray(['episode_id' => 71, 'state' => 'unmonitored', 'monitored' => false, 'episode_monitored' => false])
+        ->and($items[2])->toMatchArray(['movie_id' => 10, 'monitored' => true, 'episode_monitored' => null]);
+});
+
 test('one unreachable service still returns the other and names the failure', function (): void {
     ServiceConnection::factory()->sonarr()->create(['url' => 'http://sonarr.local:8989']);
     ServiceConnection::factory()->radarr()->create(['url' => 'http://radarr.local:7878', 'name' => 'Movies box']);

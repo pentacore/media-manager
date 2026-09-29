@@ -1,4 +1,5 @@
-export type CalendarState = 'downloaded' | 'missing' | 'upcoming' | 'unmonitored';
+export type CalendarState =
+    'downloaded' | 'missing' | 'upcoming' | 'unmonitored';
 
 export interface CalendarItem {
     key: string;
@@ -10,7 +11,10 @@ export interface CalendarItem {
     code: string;
     air_date_utc: string;
     state: CalendarState;
+    /** Display state: false for an episode of an unmonitored series. */
     monitored: boolean;
+    /** The episode's own flag (what its Monitor toggle flips); null for movies. */
+    episode_monitored: boolean | null;
     poster_url: string | null;
     library_url: string | null;
     series_id: number | null;

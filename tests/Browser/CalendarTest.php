@@ -64,6 +64,35 @@ test('a member searches an episode inline from the agenda', function (): void {
     Http::assertSent(fn (Request $request): bool => str_ends_with($request->url(), '/api/v3/command') && $request['name'] === 'EpisodeSearch' && $request['episodeIds'] === [70]);
 });
 
+test('a member toggles an episode of an unmonitored series by its own monitored flag', function (): void {
+    // Http::fake keeps the first matching stub, so the beforeEach Sonarr
+    // calendar stub cannot be overridden; move Sonarr to a host whose stubs
+    // describe an unmonitored series with a monitored episode instead.
+    $this->sonarr->update(['url' => 'http://sonarr-unmonitored.local:8989']);
+    Http::fake([
+        'sonarr-unmonitored.local:8989/api/v3/calendar*' => Http::response([[
+            'id' => 80, 'seriesId' => 8, 'seasonNumber' => 1, 'episodeNumber' => 1, 'title' => 'Pilot',
+            'airDateUtc' => '2026-09-12T02:00:00Z', 'hasFile' => false, 'monitored' => true,
+            'series' => [
+                'title' => 'Old Show', 'monitored' => false,
+                'images' => [['coverType' => 'poster', 'remoteUrl' => 'https://img.test/old-show.jpg']],
+            ],
+        ]]),
+        'sonarr-unmonitored.local:8989/api/v3/episode/monitor' => Http::response([], 202),
+        'sonarr-unmonitored.local:8989/api/v3/series/8' => Http::response(['id' => 8, 'title' => 'Old Show', 'year' => 2019]),
+    ]);
+    $this->actingAs(User::factory()->member()->create());
+
+    visit(route('media.calendar.index', ['month' => '2026-09'], absolute: false))
+        ->assertNoSmoke()
+        ->click('[data-calendar-view="agenda"]')
+        ->assertAttribute(sprintf('[data-calendar-item="sonarr:%d:80"] [data-monitor-toggle]', $this->sonarr->id), 'aria-pressed', 'true')
+        ->click(sprintf('[data-calendar-item="sonarr:%d:80"] [data-monitor-toggle]', $this->sonarr->id))
+        ->assertSee('Monitoring updated.');
+
+    Http::assertSent(fn (Request $request): bool => str_ends_with($request->url(), '/api/v3/episode/monitor') && $request['episodeIds'] === [80] && $request['monitored'] === false);
+});
+
 test('an unreachable service is named in a banner while the rest still shows', function (): void {
     // Http::fake keeps the first matching stub, so the beforeEach Radarr
     // calendar stub cannot be overridden; move Radarr to a host whose only

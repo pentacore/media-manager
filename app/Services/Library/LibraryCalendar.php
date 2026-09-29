@@ -81,7 +81,11 @@ final readonly class LibraryCalendar
         }
 
         $series = is_array($episode['series'] ?? null) ? $episode['series'] : [];
-        $monitored = (bool) ($episode['monitored'] ?? false) && (bool) ($series['monitored'] ?? true);
+        // `monitored` is the display state (an episode of an unmonitored
+        // series is effectively unmonitored); `episode_monitored` is the
+        // episode's own flag, which is what the Monitor toggle flips.
+        $episodeMonitored = (bool) ($episode['monitored'] ?? false);
+        $monitored = $episodeMonitored && (bool) ($series['monitored'] ?? true);
 
         return [
             'key' => sprintf('sonarr:%d:%d', $serviceConnection->id, $episodeId),
@@ -94,6 +98,7 @@ final readonly class LibraryCalendar
             'air_date_utc' => $airDate->toIso8601ZuluString(),
             'state' => $this->state((bool) ($episode['hasFile'] ?? false), $monitored, $airDate),
             'monitored' => $monitored,
+            'episode_monitored' => $episodeMonitored,
             'poster_url' => $this->poster($series['images'] ?? null),
             'library_url' => $primary ? route('media.series.show', ['id' => $seriesId], absolute: false) : null,
             'series_id' => $seriesId,
@@ -139,6 +144,7 @@ final readonly class LibraryCalendar
             'air_date_utc' => $releaseDate->toIso8601ZuluString(),
             'state' => $this->state((bool) ($movie['hasFile'] ?? false), $monitored, $releaseDate),
             'monitored' => $monitored,
+            'episode_monitored' => null,
             'poster_url' => $this->poster($movie['images'] ?? null),
             'library_url' => $primary ? route('media.movies.show', ['id' => $movieId], absolute: false) : null,
             'series_id' => null,

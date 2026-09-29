@@ -7,7 +7,10 @@ import { useCan } from '@/composables/useCan';
 import { useDateTime } from '@/composables/useDateTime';
 import type { CalendarItem } from '@/types';
 
-const props = withDefaults(defineProps<{ item: CalendarItem; compact?: boolean }>(), { compact: false });
+const props = withDefaults(
+    defineProps<{ item: CalendarItem; compact?: boolean }>(),
+    { compact: false },
+);
 
 const { can } = useCan();
 const { formatTime } = useDateTime();
@@ -24,11 +27,19 @@ const state = computed(() => STATES[props.item.state]);
 
 <template>
     <div
-        :class="compact ? 'truncate rounded px-1 py-0.5 text-[11px] hover:bg-bg-hover' : 'flex items-center gap-3 px-3 py-2.5'"
+        :class="
+            compact
+                ? 'truncate rounded px-1 py-0.5 text-[11px] hover:bg-bg-hover'
+                : 'flex items-center gap-3 px-3 py-2.5'
+        "
         :data-calendar-item="item.key"
     >
         <template v-if="compact">
-            <Link v-if="item.library_url" :href="item.library_url" class="block truncate">
+            <Link
+                v-if="item.library_url"
+                :href="item.library_url"
+                class="block truncate"
+            >
                 <span class="font-medium">{{ item.title }}</span>
                 <span class="text-muted-foreground"> {{ item.code }}</span>
             </Link>
@@ -40,14 +51,22 @@ const state = computed(() => STATES[props.item.state]);
         <template v-else>
             <Poster :hint="item.title" size="sm" :src="item.poster_url" />
             <div class="min-w-0 flex-1">
-                <component :is="item.library_url ? Link : 'span'" :href="item.library_url ?? undefined" class="block truncate text-[13px] font-medium">
+                <component
+                    :is="item.library_url ? Link : 'span'"
+                    :href="item.library_url ?? undefined"
+                    class="block truncate text-[13px] font-medium"
+                >
                     {{ item.title }}
                 </component>
                 <div class="truncate text-[11.5px] text-muted-foreground">
                     <span class="font-mono-tabular">{{ item.code }}</span>
-                    <template v-if="item.episode_title"> · {{ item.episode_title }}</template>
+                    <template v-if="item.episode_title">
+                        · {{ item.episode_title }}</template
+                    >
                     · {{ formatTime(item.air_date_utc) }}
-                    <template v-if="item.instance"> · {{ item.instance }}</template>
+                    <template v-if="item.instance">
+                        · {{ item.instance }}</template
+                    >
                 </div>
             </div>
             <Pill :variant="state.variant">{{ state.label }}</Pill>
@@ -73,7 +92,7 @@ const state = computed(() => STATES[props.item.state]);
                     :connection-id="item.service_connection_id"
                     :series-id="item.series_id"
                     :episode-ids="[item.episode_id]"
-                    :monitored="item.monitored"
+                    :monitored="item.episode_monitored ?? item.monitored"
                 />
                 <MonitorButton
                     v-else-if="item.movie_id !== null"
