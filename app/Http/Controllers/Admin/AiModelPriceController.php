@@ -14,6 +14,7 @@ use App\Http\Requests\Admin\UpdateAiModelPriceRequest;
 use App\Jobs\RefreshAiPricesJob;
 use App\Models\AiFreeUsagePool;
 use App\Models\AiModelPrice;
+use App\Services\AiUsage\Pricing\CatalogModelBrowser;
 use App\Settings\AiSettings;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Support\Arr;
@@ -45,9 +46,10 @@ class AiModelPriceController extends Controller
         'batch_search_unit_per_k',
     ];
 
-    public function index(AiSettings $aiSettings): Response
+    public function index(AiSettings $aiSettings, CatalogModelBrowser $catalogModelBrowser): Response
     {
         return Inertia::render('Admin/AiPrices/Index', [
+            'catalog_providers' => $catalogModelBrowser->providers(),
             'prices' => AiModelPrice::query()
                 ->with('rateLimits')
                 ->orderBy('provider')

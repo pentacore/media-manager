@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use App\Http\Controllers\Admin\AiConversationController;
 use App\Http\Controllers\Admin\AiFreeUsagePoolController;
+use App\Http\Controllers\Admin\AiModelCatalogController;
 use App\Http\Controllers\Admin\AiModelPriceController;
 use App\Http\Controllers\Admin\AiOpenRouterModelController;
 use App\Http\Controllers\Admin\AiSettingsController;
@@ -97,6 +98,9 @@ Route::middleware(['auth', 'verified', 'password.set', 'role:admin'])->prefix('a
         Route::post('ai-prices/openrouter-models', [AiOpenRouterModelController::class, 'store'])->name('ai-prices.openrouter-models.store');
         Route::put('ai-prices/{aiModelPrice}', [AiModelPriceController::class, 'update'])->name('ai-prices.update');
         Route::delete('ai-prices/{aiModelPrice}', [AiModelPriceController::class, 'destroy'])->name('ai-prices.destroy');
+        Route::get('ai-prices/catalog/{provider}', [AiModelCatalogController::class, 'index'])
+            ->whereIn('provider', array_values(array_unique(config('mediamanager.ai.pricing.providers', []))))
+            ->name('ai-prices.catalog.index');
 
         Route::post('ai-free-usage-pools', [AiFreeUsagePoolController::class, 'store'])->name('ai-free-usage-pools.store');
         Route::put('ai-free-usage-pools/{aiFreeUsagePool}', [AiFreeUsagePoolController::class, 'update'])->name('ai-free-usage-pools.update');

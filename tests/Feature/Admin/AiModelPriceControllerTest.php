@@ -678,3 +678,12 @@ test('index exposes rate limits on price rows', function (): void {
             ->where('prices.0.rate_limits.0.metric', 'requests')
             ->where('prices.0.rate_limits.0.limit_value', 500));
 });
+
+test('index shares the catalog providers', function (): void {
+    $this->actingAs(User::factory()->admin()->create())
+        ->get(route('admin.ai-prices.index'))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->where('catalog_providers', fn ($providers): bool => in_array('openrouter', $providers->all(), true)
+                && ! in_array('google', $providers->all(), true)));
+});
