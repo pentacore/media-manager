@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { Head, Link, router } from '@inertiajs/vue3';
-import { Antenna, ExternalLink, Search } from '@lucide/vue';
+import { Antenna, Search } from '@lucide/vue';
 import { ref } from 'vue';
 import ServiceConnectionController from '@/actions/App/Http/Controllers/Admin/ServiceConnectionController';
 import SearchIndexersController from '@/actions/App/Http/Controllers/Prowlarr/SearchIndexersController';
@@ -23,7 +23,6 @@ interface IndexerRelease {
     size: number;
     seeders: number | null;
     age: number;
-    downloadUrl: string | null;
     publishDate: string | null;
 }
 
@@ -145,7 +144,7 @@ function formatAge(days: number): string {
             No releases found for "{{ query }}".
         </div>
 
-        <Table v-if="results.length > 0">
+        <Table v-if="results.length > 0" data-prowlarr-results>
             <TableHeader>
                 <TableRow>
                     <TableHead>Title</TableHead>
@@ -153,7 +152,6 @@ function formatAge(days: number): string {
                     <TableHead class="text-right">Size</TableHead>
                     <TableHead class="text-right">Seeders</TableHead>
                     <TableHead class="text-right">Age</TableHead>
-                    <TableHead class="text-right">Open</TableHead>
                 </TableRow>
             </TableHeader>
             <TableBody>
@@ -178,21 +176,6 @@ function formatAge(days: number): string {
                     <TableCell class="text-right text-muted-foreground">{{
                         formatAge(release.age)
                     }}</TableCell>
-                    <TableCell class="text-right">
-                        <a
-                            v-if="release.downloadUrl"
-                            :href="release.downloadUrl"
-                            target="_blank"
-                            rel="noopener"
-                            class="inline-flex items-center gap-1 text-xs underline"
-                        >
-                            <ExternalLink class="size-3" />
-                            Download
-                        </a>
-                        <span v-else class="text-xs text-muted-foreground"
-                            >-</span
-                        >
-                    </TableCell>
                 </TableRow>
             </TableBody>
         </Table>

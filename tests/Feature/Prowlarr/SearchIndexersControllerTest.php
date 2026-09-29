@@ -86,3 +86,42 @@ test('renders an error message when the Prowlarr client throws', function (): vo
             ->where('error', 'Indexer search failed.')
             ->where('results', []));
 });
+
+test('results never carry Prowlarr download links or other credential-bearing fields', function (): void {
+    ServiceConnection::factory()->prowlarr()->create([
+        'url' => 'http://prowlarr.local:9696',
+        'api_key' => 'prowlarr-secret-key',
+    ]);
+
+    Http::fake([
+        'prowlarr.local:9696/api/v1/search*' => Http::response([[
+            'guid' => 'https://tracker.example/download/1?passkey=tracker-passkey',
+            'title' => 'Demo.S01E01.1080p',
+            'indexer' => 'Demo',
+            'indexerId' => 3,
+            'size' => 1_000_000_000,
+            'seeders' => 10,
+            'age' => 1,
+            'publishDate' => '2026-04-20T00:00:00Z',
+            'downloadUrl' => 'http://prowlarr.local:9696/3/download?apikey=prowlarr-secret-key&link=abc',
+            'magnetUrl' => 'magnet:?xt=urn:btih:abc&tr=https://tracker.example/announce?passkey=tracker-passkey',
+        ]]),
+    ]);
+
+    $response = $this->actingAs($this->member)->get('/prowlarr/search?q=Demo');
+
+    $response->assertOk()
+        ->assertInertia(fn (AssertableInertia $assertableInertia): AssertableInertia => $assertableInertia
+            ->where('results.0', [
+                'title' => 'Demo.S01E01.1080p',
+                'indexer' => 'Demo',
+                'size' => 1_000_000_000,
+                'seeders' => 10,
+                'age' => 1,
+                'publishDate' => '2026-04-20T00:00:00Z',
+            ]));
+
+    expect($response->getContent())
+        ->not->toContain('prowlarr-secret-key')
+        ->not->toContain('tracker-passkey');
+});

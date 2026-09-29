@@ -69,7 +69,7 @@ interface Connections {
 }
 
 interface IndexerResult {
-    guid: string | null;
+    key: string | null;
     title: string | null;
     tracker: string | null;
     category: string | null;
@@ -77,7 +77,6 @@ interface IndexerResult {
     seeders: number | null;
     leechers: number | null;
     age: string | null;
-    download_url: string | null;
     info_url: string | null;
     score: number | null;
 }
@@ -659,7 +658,10 @@ const seerrStatusKey = (status: number | null): string => {
                 No indexer hits.
             </div>
             <div v-else class="overflow-x-auto">
-                <table class="w-full border-collapse text-[13px]">
+                <table
+                    class="w-full border-collapse text-[13px]"
+                    data-indexer-results
+                >
                     <thead>
                         <tr>
                             <th
@@ -670,7 +672,6 @@ const seerrStatusKey = (status: number | null): string => {
                                     'Size',
                                     'S / L',
                                     'Age',
-                                    '',
                                 ]"
                                 :key="h"
                                 class="border-b border-border bg-card px-3 py-2 text-left text-[11.5px] font-medium tracking-[0.05em] text-muted-foreground uppercase"
@@ -682,7 +683,7 @@ const seerrStatusKey = (status: number | null): string => {
                     <tbody>
                         <tr
                             v-for="(hit, i) in indexerResults.results"
-                            :key="hit.guid ?? i"
+                            :key="hit.key ?? i"
                             class="border-b border-border last:border-b-0 hover:bg-bg-hover"
                         >
                             <td class="px-3 py-2.5">
@@ -728,17 +729,6 @@ const seerrStatusKey = (status: number | null): string => {
                                 class="font-mono-tabular px-3 py-2.5 text-[11.5px] text-fg-subtle"
                             >
                                 {{ hit.age ?? '—' }}
-                            </td>
-                            <td class="px-3 py-2.5 text-right">
-                                <a
-                                    v-if="hit.download_url"
-                                    :href="hit.download_url"
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    class="inline-flex h-6 items-center gap-1 rounded-md border border-border px-2 text-[11.5px] hover:bg-bg-hover"
-                                >
-                                    Grab
-                                </a>
                             </td>
                         </tr>
                     </tbody>
