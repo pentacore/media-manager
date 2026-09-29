@@ -1189,12 +1189,6 @@ parameters:
 			path: app/Services/Search/SemanticLibrarySearch.php
 
 		-
-			message: '#^Method App\\Services\\Seerr\\SeerrClient\:\:getRequests\(\) has parameter \$params with no value type specified in iterable type array\.$#'
-			identifier: missingType.iterableValue
-			count: 1
-			path: app/Services/Seerr/SeerrClient.php
-
-		-
 			message: '#^Method App\\Services\\Seerr\\SeerrClient\:\:getUsers\(\) has parameter \$params with no value type specified in iterable type array\.$#'
 			identifier: missingType.iterableValue
 			count: 1
