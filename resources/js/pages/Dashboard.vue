@@ -317,6 +317,8 @@ onMounted(() => {
                 :spark="servicesSpark"
             />
             <StatCard
+                v-if="canManageLibrary"
+                data-dashboard-webhooks-card
                 label="Webhooks · 24h"
                 :value="recentWebhooks.toString()"
                 hint="ingest stream"
