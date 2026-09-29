@@ -211,6 +211,65 @@ test('pickerOptions() primes the resolve() cache, so a follow-up resolve() call 
     Http::assertSentCount(1);
 });
 
+test('the Seerr users list is cached per connection, shared across pickerOptions() calls for different users', function (): void {
+    $memberA = User::factory()->member()->create(['email' => 'a@example.com']);
+    $memberB = User::factory()->member()->create(['email' => 'b@example.com']);
+    fakeSeerrUsers([
+        ['id' => 4, 'email' => 'a@example.com', 'displayName' => 'A'],
+        ['id' => 5, 'email' => 'b@example.com', 'displayName' => 'B'],
+    ]);
+    $seerrUserResolver = resolve(SeerrUserResolver::class);
+
+    $seerrUserResolver->pickerOptions($this->connection, $memberA);
+    $seerrUserResolver->pickerOptions($this->connection, $memberB);
+
+    Http::assertSentCount(1);
+});
+
+test('the Seerr users list cache expires after five minutes', function (): void {
+    $member = User::factory()->member()->create(['email' => 'b@example.com']);
+    fakeSeerrUsers([['id' => 4, 'email' => 'a@example.com'], ['id' => 5, 'email' => 'b@example.com']]);
+    $seerrUserResolver = resolve(SeerrUserResolver::class);
+
+    $seerrUserResolver->pickerOptions($this->connection, $member);
+    $this->travel(4)->minutes();
+    $seerrUserResolver->pickerOptions($this->connection, $member);
+    Http::assertSentCount(1);
+
+    $this->travel(2)->minutes();
+    $seerrUserResolver->pickerOptions($this->connection, $member);
+    Http::assertSentCount(2);
+});
+
+test('a partial Seerr users-list walk is never cached, so the next call walks again', function (): void {
+    $member = User::factory()->member()->create(['email' => 'b@example.com']);
+    $firstPage = collect()->range(1, 100)->map(fn (int $i): array => [
+        'id' => $i,
+        'email' => $i === 50 ? 'b@example.com' : sprintf('user%d@example.com', $i),
+    ])->all();
+
+    $pageTwoFails = true;
+    Http::fake(['seerr.local:5055/api/v1/user*' => function (Request $request) use ($firstPage, &$pageTwoFails) {
+        parse_str((string) parse_url($request->url(), PHP_URL_QUERY), $query);
+
+        if ((int) ($query['skip'] ?? 0) === 0) {
+            return Http::response(['pageInfo' => ['page' => 1, 'pages' => 2], 'results' => $firstPage]);
+        }
+
+        return $pageTwoFails
+            ? Http::response([], 400)
+            : Http::response(['pageInfo' => ['page' => 2, 'pages' => 2], 'results' => []]);
+    }]);
+
+    $seerrUserResolver = resolve(SeerrUserResolver::class);
+    $seerrUserResolver->pickerOptions($this->connection, $member);
+    Http::assertSentCount(2);
+
+    $pageTwoFails = false;
+    $seerrUserResolver->pickerOptions($this->connection, $member);
+    Http::assertSentCount(4);
+});
+
 test('an empty MediaManager email never matches a Seerr user with an empty or null email', function (): void {
     $user = User::factory()->create(['email' => '']);
     fakeSeerrUsers([
@@ -219,6 +278,65 @@ test('an empty MediaManager email never matches a Seerr user with an empty or nu
     ]);
 
     expect(resolve(SeerrUserResolver::class)->resolve($this->connection, $user))->toBeNull();
+});
+
+// ── cache invalidation ──────────────────────────────────────────────────
+
+// The connection-wide users-list cache (above) means invalidating a user's
+// match does not necessarily force a fresh /user walk — Seerr's own user
+// list hasn't changed, so the match recomputes cheaply from the still-warm
+// list. What must change is the *served match*, proven by the resolved id
+// flipping once the per-user cache entry is gone.
+
+test('linking an Emby account invalidates the cached Seerr match, so the next resolve() finds it', function (): void {
+    $user = User::factory()->create(['email' => 'nobody@example.com']);
+    fakeSeerrUsers([['id' => 4, 'email' => 'somebody-else@example.com', 'jellyfinUserId' => 'abc123']]);
+    $seerrUserResolver = resolve(SeerrUserResolver::class);
+
+    expect($seerrUserResolver->resolve($this->connection, $user))->toBeNull();
+
+    EmbyUserLink::factory()->for($user)->create(['emby_user_id' => 'abc123']);
+
+    expect($seerrUserResolver->resolve($this->connection, $user))->toBe(4);
+});
+
+test('unlinking an Emby account invalidates the cached Seerr match, so the next resolve() loses it', function (): void {
+    $user = User::factory()->create(['email' => 'nobody@example.com']);
+    $embyUserLink = EmbyUserLink::factory()->for($user)->create(['emby_user_id' => 'abc123']);
+    fakeSeerrUsers([['id' => 4, 'email' => 'somebody-else@example.com', 'jellyfinUserId' => 'abc123']]);
+    $seerrUserResolver = resolve(SeerrUserResolver::class);
+
+    expect($seerrUserResolver->resolve($this->connection, $user))->toBe(4);
+
+    $embyUserLink->delete();
+
+    expect($seerrUserResolver->resolve($this->connection, $user))->toBeNull();
+});
+
+test("changing a user's email invalidates their cached Seerr match, so the next resolve() re-derives it", function (): void {
+    $user = User::factory()->create(['email' => 'old@example.com']);
+    fakeSeerrUsers([['id' => 4, 'email' => 'old@example.com'], ['id' => 5, 'email' => 'new@example.com']]);
+    $seerrUserResolver = resolve(SeerrUserResolver::class);
+
+    expect($seerrUserResolver->resolve($this->connection, $user))->toBe(4);
+
+    $user->update(['email' => 'new@example.com']);
+
+    expect($seerrUserResolver->resolve($this->connection, $user))->toBe(5);
+});
+
+test('updating a user without changing their email keeps the cached Seerr match', function (): void {
+    $user = User::factory()->create(['email' => 'someone@example.com', 'name' => 'Old Name']);
+    fakeSeerrUsers([['id' => 4, 'email' => 'someone@example.com']]);
+    $seerrUserResolver = resolve(SeerrUserResolver::class);
+
+    expect($seerrUserResolver->resolve($this->connection, $user))->toBe(4);
+    Http::assertSentCount(1);
+
+    $user->update(['name' => 'New Name']);
+
+    $seerrUserResolver->resolve($this->connection, $user);
+    Http::assertSentCount(1);
 });
 
 // ── resolveUserId() ─────────────────────────────────────────────────────

@@ -20,8 +20,10 @@ use Throwable;
 
 class SonarrActions implements ActionExecutor
 {
-    // Defaults keep `new SonarrActions` (used throughout the tests) working;
-    // the container still injects when resolving.
+    /**
+     * Defaults keep `new SonarrActions` (used throughout the tests) working;
+     * the container still injects when resolving.
+     */
     public function __construct(
         private readonly PendingReplacementGuard $pendingReplacementGuard = new PendingReplacementGuard,
         private readonly ReleaseGrabber $releaseGrabber = new ReleaseGrabber,

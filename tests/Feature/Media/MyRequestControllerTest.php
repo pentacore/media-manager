@@ -68,6 +68,20 @@ test('a user with no Seerr account sees the unlinked state', function (): void {
                 ->where('requests.results', [])));
 });
 
+test('a row whose requestedBy is not the caller is dropped, even though Seerr already scoped the query', function (): void {
+    fakeMyRequestsSeerr(['seerr.local:5055/api/v1/request*' => Http::response(['pageInfo' => ['pages' => 1, 'page' => 1, 'results' => 2, 'pageSize' => 20], 'results' => [
+        ['id' => 41, 'status' => 1, 'type' => 'movie', 'createdAt' => '2026-09-20T10:00:00.000Z', 'media' => ['tmdbId' => 1, 'mediaType' => 'movie', 'status' => 2], 'requestedBy' => ['id' => 7]],
+        ['id' => 99, 'status' => 1, 'type' => 'movie', 'createdAt' => '2026-09-19T10:00:00.000Z', 'media' => ['tmdbId' => 3, 'mediaType' => 'movie', 'status' => 2], 'requestedBy' => ['id' => 55]],
+    ]])]);
+
+    $this->actingAs(User::factory()->create(['email' => 'viewer@example.com']))
+        ->get(route('media.requests.mine'))
+        ->assertInertia(fn ($page) => $page
+            ->loadDeferredProps(fn ($reload) => $reload
+                ->where('requests.results.0.id', 41)
+                ->has('requests.results', 1)));
+});
+
 test('an unreachable Seerr is an error state, not an empty list', function (): void {
     Http::fake(['seerr.local:5055/*' => Http::response([], 503)]);
 
@@ -106,6 +120,26 @@ test('an approved request cannot be cancelled', function (): void {
         ->assertSessionHas('inertia.flash_data.toast.message', 'Only pending requests can be cancelled.');
 
     Http::assertNotSent(fn (Request $request): bool => $request->method() === 'DELETE');
+});
+
+test('a user with no Seerr account is forbidden before any request is ever read from Seerr', function (): void {
+    fakeMyRequestsSeerr();
+
+    $this->actingAs(User::factory()->create(['email' => 'nobody@example.com']))
+        ->delete(route('media.requests.mine.destroy', ['id' => 41]))
+        ->assertForbidden();
+
+    Http::assertNotSent(fn (Request $request): bool => str_contains($request->url(), '/api/v1/request/41'));
+});
+
+test('a failure walking the Seerr user list is reported as unreachable, not "request no longer exists"', function (): void {
+    fakeMyRequestsSeerr(['seerr.local:5055/api/v1/user*' => Http::response([], 404)]);
+
+    $this->actingAs(User::factory()->create(['email' => 'viewer@example.com']))
+        ->delete(route('media.requests.mine.destroy', ['id' => 41]))
+        ->assertSessionHas('inertia.flash_data.toast.message', 'Seerr is unreachable right now.');
+
+    Http::assertNotSent(fn (Request $request): bool => str_contains($request->url(), '/api/v1/request/41'));
 });
 
 test('the ownership check reads the live request, not a cached copy', function (): void {

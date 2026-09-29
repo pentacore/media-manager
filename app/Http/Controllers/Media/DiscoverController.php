@@ -26,10 +26,12 @@ class DiscoverController extends Controller
 {
     private const int UPCOMING_LIMIT = 20;
 
-    // The identity-resolution messages (no Seerr account, unknown chosen
-    // user, no user chosen) live on SeerrUserResolver::resolveUserId() now,
-    // shared with AnimeController — only messages specific to this
-    // controller stay here.
+    /**
+     * The identity-resolution messages (no Seerr account, unknown chosen
+     * user, no user chosen) live on SeerrUserResolver::resolveUserId() now,
+     * shared with AnimeController — only messages specific to this
+     * controller stay here.
+     */
     private const string UNREACHABLE = SeerrUserResolver::UNREACHABLE;
 
     private const string CONNECTION_REJECTED = 'Seerr rejected the request — check the Seerr connection.';
@@ -82,6 +84,10 @@ class DiscoverController extends Controller
         return response()->json($presented);
     }
 
+    /**
+     * requestingContext() never throws: it swallows RequestException /
+     * ConnectionException itself and reports them via `error`.
+     */
     public function request(DiscoverMediaRequest $discoverMediaRequest, SeerrUserResolver $seerrUserResolver): RedirectResponse
     {
         $validated = $discoverMediaRequest->validated();
@@ -94,8 +100,6 @@ class DiscoverController extends Controller
             return $this->outcome(false, $tmdbId, $mediaType, 'error', __('No active Seerr connection configured.'));
         }
 
-        // requestingContext() never throws: it swallows RequestException /
-        // ConnectionException itself and reports them via `error`.
         $context = $seerrUserResolver->requestingContext($connection, $user);
         $resolved = $seerrUserResolver->resolveUserId($context, isset($validated['userId']) ? (int) $validated['userId'] : null);
 

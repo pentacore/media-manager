@@ -65,7 +65,11 @@ const props = defineProps<{
         previous: { year: number; season: AnimeSeason };
         next: { year: number; season: AnimeSeason };
     };
-    requestingUsers?: { users: RequestingUser[]; defaultId: number | null };
+    requestingUsers?: {
+        users: RequestingUser[];
+        defaultId: number | null;
+        partial: boolean;
+    };
     entries?: SeasonEntry[];
 }>();
 
@@ -133,6 +137,14 @@ const seasonModel = computed<string>({
 const selectedUserId = ref<string>('');
 
 const requestingReady = computed(() => Boolean(props.requestingUsers));
+
+// pickerOptions() never returns an `error` string, but an empty user list is
+// always either an outage (a failed/partial walk) or, in practice, never a
+// legitimate "zero Seerr users" state — so treat it the same way the other
+// choosers (Discover/Search) treat a picker outage.
+const seerrPickerUnreachable = computed(
+    () => requestingReady.value && (props.requestingUsers?.users.length ?? 0) === 0,
+);
 
 // Once the deferred users arrive, default to the email-matched id.
 const resolvedUserId = computed<number | null>(() => {
@@ -550,6 +562,13 @@ const matchEntryContext = computed(() =>
                         >Requesting as</span
                     >
                     <Skeleton v-if="!requestingReady" class="h-7 w-40" />
+                    <span
+                        v-else-if="seerrPickerUnreachable"
+                        class="text-xs text-destructive"
+                        data-seerr-picker-unreachable
+                    >
+                        Seerr is unreachable right now.
+                    </span>
                     <Select v-else v-model="userSelectValue">
                         <SelectTrigger
                             class="h-7 w-40 text-xs"

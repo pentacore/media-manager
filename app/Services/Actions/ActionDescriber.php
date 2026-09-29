@@ -227,6 +227,17 @@ final readonly class ActionDescriber
 
         if ($command === MediaSearchCommand::MoviesSearch) {
             $movieIds = (array) ($payload['movie_ids'] ?? []);
+
+            if (count($movieIds) > 1) {
+                $count = count($movieIds);
+                $actionTarget = $this->actionTargets->arrConnection(ServiceType::Radarr, $payload);
+
+                return $actionTarget->describe(
+                    sprintf('Search for %d movies', $count),
+                    sprintf('Radarr will search its indexers for the %d movies.', $count),
+                )->withDetail('Search', $command->label())->withDetail('Movies', $count);
+            }
+
             $actionTarget = $this->actionTargets->radarrMovie($this->id($type, ['movie_ids' => $movieIds[0] ?? null], 'movie_ids'), $payload, $fallbackName, strictPin: true);
 
             return $actionTarget->describe(sprintf('Search for %s', $actionTarget->label()), 'Radarr will search its indexers for the movie.')

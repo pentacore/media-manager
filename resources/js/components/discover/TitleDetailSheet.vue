@@ -168,25 +168,38 @@ function submit(): void {
     );
 }
 
+// Tracks the requesting context's own default id, so a later reload of the
+// (page-level, shared-across-titles) `requesting` prop with the *same*
+// default doesn't clobber a chooser's manual pick — only a genuine change of
+// the context's default, or opening the sheet for a different title, resets
+// the selection.
+let lastContextUserId: number | null = null;
+
+function syncChosenUserFromContext(): void {
+    lastContextUserId = props.requesting?.userId ?? null;
+    chosenUserId.value = lastContextUserId !== null ? String(lastContextUserId) : null;
+}
+
 watch(
     () => [props.open, props.item] as const,
     ([isOpen, item]) => {
         if (isOpen && item) {
             void load(item);
+            syncChosenUserFromContext();
         }
     },
     { immediate: true },
 );
 
 watch(
-    () => props.requesting,
-    (context) => {
-        chosenUserId.value =
-            context?.userId !== null && context?.userId !== undefined
-                ? String(context.userId)
-                : null;
+    () => props.requesting?.userId ?? null,
+    (userId) => {
+        if (userId === lastContextUserId) {
+            return;
+        }
+
+        syncChosenUserFromContext();
     },
-    { immediate: true },
 );
 
 // Seerr failures still redirect back (a successful Inertia visit), so the
@@ -307,6 +320,14 @@ onBeforeUnmount(() => {
                             </SelectContent>
                         </Select>
                     </div>
+
+                    <p
+                        v-if="chosenUserMissing"
+                        class="text-[13px] text-muted-foreground"
+                        data-no-user-chosen
+                    >
+                        Choose which Seerr user to request as.
+                    </p>
 
                     <p v-if="requesting?.error" class="text-[13px] text-destructive">
                         {{ requesting.error }}

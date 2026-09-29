@@ -123,7 +123,7 @@ function confirm(): void {
     const entry = props.entry;
     const candidate = selectedCandidate.value;
 
-    if (!entry || candidate === null) {
+    if (!entry || candidate === null || props.userId === null) {
         return;
     }
 
@@ -227,13 +227,23 @@ function confirm(): void {
                 </button>
             </div>
 
+            <p
+                v-if="selectedCandidate !== null && userId === null"
+                class="text-[13px] text-muted-foreground"
+                data-no-user-chosen
+            >
+                Choose which Seerr user to request as.
+            </p>
             <DialogFooter>
                 <Button variant="ghost" :disabled="confirming" @click="close">
                     Cancel
                 </Button>
                 <Button
                     :disabled="
-                        confirming || searching || selectedCandidate === null
+                        confirming ||
+                        searching ||
+                        selectedCandidate === null ||
+                        userId === null
                     "
                     @click="confirm"
                 >

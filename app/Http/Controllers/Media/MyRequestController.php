@@ -63,6 +63,17 @@ class MyRequestController extends Controller
 
         try {
             $seerrUserId = $seerrUserResolver->resolve($connection, $request->user());
+        } catch (RequestException|ConnectionException) {
+            Inertia::flash('toast', ['type' => 'error', 'message' => __('Seerr is unreachable right now.')]);
+
+            return back();
+        }
+
+        // No own Seerr match means nothing this user could have requested —
+        // refuse before ever reading the request from Seerr.
+        abort_if($seerrUserId === null, 403);
+
+        try {
             $seerrRequest = $seerrClient->getRequestByIdUncached($id);
         } catch (RequestException $requestException) {
             Inertia::flash('toast', ['type' => 'error', 'message' => $requestException->response->status() === 404
@@ -78,7 +89,7 @@ class MyRequestController extends Controller
 
         // MediaManager talks to Seerr with the admin API key, so Seerr's own
         // "owner + pending" rule does not apply — enforce it here.
-        abort_unless($seerrUserId !== null && (int) ($seerrRequest['requestedBy']['id'] ?? 0) === $seerrUserId, 403);
+        abort_unless((int) ($seerrRequest['requestedBy']['id'] ?? 0) === $seerrUserId, 403);
 
         if ((int) ($seerrRequest['status'] ?? 0) !== self::PENDING) {
             Inertia::flash('toast', ['type' => 'error', 'message' => __('Only pending requests can be cancelled.')]);
@@ -121,6 +132,13 @@ class MyRequestController extends Controller
         }
 
         $rows = is_array($response['results'] ?? null) ? array_values(array_filter($response['results'], is_array(...))) : [];
+        // Defence in depth: getRequestsByUser() is already scoped to
+        // $seerrUserId, but never trust an upstream filter to be the only
+        // guard against showing someone else's request.
+        $rows = array_values(array_filter(
+            $rows,
+            fn (array $row): bool => (int) ($row['requestedBy']['id'] ?? 0) === $seerrUserId,
+        ));
         $pageInfo = is_array($response['pageInfo'] ?? null) ? $response['pageInfo'] : [];
         $media = $seerrTitleResolver->resolve($serviceConnection, $seerrClient, $rows);
 

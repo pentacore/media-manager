@@ -23,19 +23,20 @@ final readonly class ManualActionDispatcher
 
     /**
      * @param  array<string, mixed>  $payload
+     *
+     * monitor_episodes/search_media/grab_release resolve their pinned
+     * connection strictly (ServiceConnection::resolvePinnedStrict()), which
+     * throws InvalidArgumentException for a missing/wrong-type pin and
+     * ModelNotFoundException for a deleted/deactivated one. The describer
+     * resolves the same way, so both can surface in the catch below in
+     * addition to UndescribableAction — none of them is a server error, they
+     * all mean "refresh and try again".
      */
     public function dispatch(string $type, ServiceType $serviceType, array $payload, string $because): ManualActionOutcome
     {
         try {
             $description = $this->actionDescriber->describe($type, $payload)->because($because);
         } catch (UndescribableAction|InvalidArgumentException|ModelNotFoundException) {
-            // monitor_episodes/search_media/grab_release resolve their pinned
-            // connection strictly (ServiceConnection::resolvePinnedStrict()),
-            // which throws InvalidArgumentException for a missing/wrong-type
-            // pin and ModelNotFoundException for a deleted/deactivated one.
-            // The describer resolves the same way, so both can surface here
-            // in addition to UndescribableAction — none of them is a server
-            // error, they all mean "refresh and try again".
             return new ManualActionOutcome(state: ManualActionOutcome::UNDESCRIBABLE);
         }
 

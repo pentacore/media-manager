@@ -74,6 +74,54 @@ test('a viewer with no Seerr account sees why instead of a request button', func
         ->assertCount('[data-request-submit]', 0);
 });
 
+// The `requesting` prop is page-level and shared across every title sheet;
+// TitleDetailSheet used to reset the chosen user back to the context default
+// on every reload of that prop, silently discarding a chooser's manual pick.
+// A request submission redirects back() with preserveState (the sheet stays
+// mounted, `requesting` refetches) — exactly the reload that must not reset
+// a pick the chooser already made.
+test("a chooser's manual user pick survives a requesting-context reload after submitting", function (): void {
+    ServiceConnection::factory()->seerr()->create(['url' => 'http://seerr.local:5055', 'api_key' => 'k']);
+    Http::fake([
+        'seerr.local:5055/api/v1/user*' => Http::response(['pageInfo' => ['pages' => 1, 'page' => 1], 'results' => [
+            ['id' => 7, 'email' => 'chooser@example.com', 'displayName' => 'Chooser'],
+            ['id' => 8, 'email' => 'other@example.com', 'displayName' => 'Other'],
+        ]]),
+        'seerr.local:5055/api/v1/discover/trending*' => Http::response(['results' => [
+            ['id' => 95396, 'mediaType' => 'tv', 'name' => 'Severance', 'firstAirDate' => '2022-02-17', 'posterPath' => '/severance.jpg', 'mediaInfo' => ['status' => 4]],
+        ]]),
+        'seerr.local:5055/api/v1/discover/movies/upcoming*' => Http::response(['results' => []]),
+        'seerr.local:5055/api/v1/discover/tv/upcoming*' => Http::response(['results' => []]),
+        'seerr.local:5055/api/v1/discover/movies' => Http::response(['results' => []]),
+        'seerr.local:5055/api/v1/discover/tv' => Http::response(['results' => []]),
+        'seerr.local:5055/api/v1/tv/95396' => Http::response([
+            'id' => 95396, 'name' => 'Severance', 'firstAirDate' => '2022-02-17', 'overview' => 'Work-life balance.',
+            'posterPath' => '/severance.jpg', 'voteAverage' => 8.4, 'numberOfSeasons' => 2, 'episodeRunTime' => [55],
+            'seasons' => [['seasonNumber' => 1, 'name' => 'Season 1', 'episodeCount' => 9], ['seasonNumber' => 2, 'name' => 'Season 2', 'episodeCount' => 10]],
+            'mediaInfo' => ['status' => 4, 'seasons' => [['seasonNumber' => 1, 'status' => 5]]],
+        ]),
+        'seerr.local:5055/api/v1/request' => Http::response(['id' => 99, 'status' => 1], 201),
+    ]);
+
+    $this->actingAs(User::factory()->member()->create(['email' => 'chooser@example.com']));
+
+    $webpage = visit(route('media.discover.index', absolute: false))
+        ->assertNoSmoke()
+        ->click('[data-title-card="tv-95396"]')
+        ->assertSeeIn('[data-title-sheet]', 'Season 2');
+
+    $webpage->click('[data-slot="select-trigger"]')
+        ->click('[data-slot="select-item"]:has-text("Other")')
+        ->click('[data-request-submit]')
+        ->assertSee('Request submitted.');
+
+    Http::assertSent(fn (Request $request): bool => $request->method() === 'POST'
+        && str_ends_with($request->url(), '/api/v1/request')
+        && $request['userId'] === 8);
+
+    $webpage->assertSeeIn('[data-slot="select-trigger"]', 'Other');
+});
+
 test('discover explains itself when Seerr is not connected', function (): void {
     $this->actingAs(User::factory()->create());
 
@@ -98,10 +146,12 @@ test('a chooser with no Seerr match must pick a user before Request enables', fu
         ->assertNoSmoke()
         ->click('[data-title-card="tv-95396"]')
         ->assertSeeIn('[data-title-sheet]', 'Season 2')
-        ->assertDisabled('[data-request-submit]');
+        ->assertDisabled('[data-request-submit]')
+        ->assertSeeIn('[data-no-user-chosen]', 'Choose which Seerr user to request as.');
 
     $webpage->click('[data-slot="select-trigger"]')
         ->click('[data-slot="select-item"]:has-text("Viewer")')
+        ->assertDontSee('Choose which Seerr user to request as.')
         ->assertEnabled('[data-request-submit]')
         ->click('[data-request-submit]')
         ->assertSee('Request submitted.');

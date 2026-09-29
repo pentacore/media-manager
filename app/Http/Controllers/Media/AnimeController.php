@@ -78,6 +78,10 @@ class AnimeController extends Controller
      * rather than guess) are shared with DiscoverController via
      * SeerrUserResolver::resolveUserId(), so they can never drift apart.
      */
+    /**
+     * requestingContext() never throws: it swallows RequestException /
+     * ConnectionException itself and reports them via `error`.
+     */
     public function request(Request $request, SeerrUserResolver $seerrUserResolver): RedirectResponse
     {
         $validated = $request->validate([
@@ -96,8 +100,6 @@ class AnimeController extends Controller
             return $this->noConnectionRedirect();
         }
 
-        // requestingContext() never throws: it swallows RequestException /
-        // ConnectionException itself and reports them via `error`.
         $context = $seerrUserResolver->requestingContext($connection, $request->user());
         $resolved = $seerrUserResolver->resolveUserId($context, isset($validated['userId']) ? (int) $validated['userId'] : null);
 

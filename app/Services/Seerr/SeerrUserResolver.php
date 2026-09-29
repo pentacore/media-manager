@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Services\Seerr;
 
+use App\Enums\ServiceType;
 use App\Models\ServiceConnection;
 use App\Models\User;
 use App\Support\Abilities;
@@ -22,6 +23,8 @@ use Illuminate\Support\Str;
 final readonly class SeerrUserResolver
 {
     public const int CACHE_TTL_SECONDS = 600;
+
+    public const int USERS_LIST_CACHE_TTL_SECONDS = 300;
 
     public const string UNREACHABLE = 'Seerr is unreachable right now.';
 
@@ -99,14 +102,14 @@ final readonly class SeerrUserResolver
                 'userId' => $options['defaultId'],
                 'users' => $options['users'],
                 'partial' => $options['partial'],
-                'error' => $options['users'] === [] ? 'Seerr is unreachable right now.' : null,
+                'error' => $options['users'] === [] ? __(self::UNREACHABLE) : null,
             ];
         }
 
         try {
             return ['canChooseUser' => false, 'userId' => $this->resolve($serviceConnection, $user), 'users' => [], 'partial' => false, 'error' => null];
         } catch (RequestException|ConnectionException) {
-            return ['canChooseUser' => false, 'userId' => null, 'users' => [], 'partial' => false, 'error' => 'Seerr is unreachable right now.'];
+            return ['canChooseUser' => false, 'userId' => null, 'users' => [], 'partial' => false, 'error' => __(self::UNREACHABLE)];
         }
     }
 
@@ -190,7 +193,7 @@ final readonly class SeerrUserResolver
         $emailMatch = null;
 
         try {
-            foreach ($this->seerrUsers(new SeerrClient($serviceConnection)) as $seerrUser) {
+            foreach ($this->seerrUsers(new SeerrClient($serviceConnection), $serviceConnection) as $seerrUser) {
                 $id = (int) ($seerrUser['id'] ?? 0);
 
                 if ($users !== null) {
@@ -223,9 +226,26 @@ final readonly class SeerrUserResolver
         return $embyMatch ?? $emailMatch;
     }
 
+    /**
+     * Forget this user's cached match on every Seerr connection — called
+     * when an EmbyUserLink is created/deleted or the user's email changes,
+     * since either can change which Seerr user they match.
+     */
+    public function forgetMatchCache(User $user): void
+    {
+        ServiceConnection::query()->where('type', ServiceType::Seerr)->get(['id'])->each(
+            fn (ServiceConnection $serviceConnection): bool => Cache::forget($this->cacheKey($serviceConnection, $user)),
+        );
+    }
+
     private function cacheKey(ServiceConnection $serviceConnection, User $user): string
     {
         return sprintf('seerr:user-match:%d:%d', $serviceConnection->id, $user->id);
+    }
+
+    private function usersListCacheKey(ServiceConnection $serviceConnection): string
+    {
+        return sprintf('seerr:users-list:%d', $serviceConnection->id);
     }
 
     private function normalizeId(string $id): string
@@ -234,11 +254,49 @@ final readonly class SeerrUserResolver
     }
 
     /**
+     * The full Seerr user list, shared across pickerOptions()/
+     * requestingContext()/resolve() for the same connection so a caller
+     * walking Discover, Search and Anime in quick succession pages
+     * `/api/v1/user` at most once every five minutes. Serves a cached list
+     * with no upstream call when present; otherwise walks live and caches
+     * the result only once the walk exhausts every page — a walk cut short
+     * by an upstream failure propagates its exception before reaching the
+     * cache write, so a partial list is never cached as complete.
+     *
      * @return iterable<int, array<string, mixed>>
      *
      * @throws RequestException|ConnectionException
      */
-    private function seerrUsers(SeerrClient $seerrClient): iterable
+    private function seerrUsers(SeerrClient $seerrClient, ServiceConnection $serviceConnection): iterable
+    {
+        $cacheKey = $this->usersListCacheKey($serviceConnection);
+
+        /** @var list<array<string, mixed>>|null $cached */
+        $cached = Cache::get($cacheKey);
+
+        if (is_array($cached)) {
+            yield from $cached;
+
+            return;
+        }
+
+        $collected = [];
+
+        foreach ($this->walkSeerrUsers($seerrClient) as $seerrUser) {
+            $collected[] = $seerrUser;
+
+            yield $seerrUser;
+        }
+
+        Cache::put($cacheKey, $collected, self::USERS_LIST_CACHE_TTL_SECONDS);
+    }
+
+    /**
+     * @return iterable<int, array<string, mixed>>
+     *
+     * @throws RequestException|ConnectionException
+     */
+    private function walkSeerrUsers(SeerrClient $seerrClient): iterable
     {
         $skip = 0;
 

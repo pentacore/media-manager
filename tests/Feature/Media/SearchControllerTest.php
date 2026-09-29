@@ -52,6 +52,19 @@ test('search with empty query returns empty results immediately', function (): v
             ->where('movieResults.error', null)
             ->where('requestResults.results', [])
             ->where('requestResults.error', null)
+            ->where('requesting', null)
+        );
+});
+
+test('search reports no requesting context when there is no active Seerr connection', function (): void {
+    $member = User::factory()->member()->create();
+
+    $this->actingAs($member)
+        ->get(route('media.search.index', ['q' => 'dune']))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->component('Search')
+            ->where('requesting', null)
         );
 });
 

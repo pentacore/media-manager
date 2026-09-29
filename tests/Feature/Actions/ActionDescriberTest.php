@@ -249,6 +249,16 @@ test('search_media names the movie', function (): void {
         ->toBe('Search for movie "Dune (2021)"');
 });
 
+test('search_media describes a count instead of naming only the first movie when more than one is targeted', function (): void {
+    ServiceConnection::factory()->radarr()->create(['url' => 'http://radarr.local:7878', 'name' => 'Radarr']);
+
+    $actionDescription = resolve(ActionDescriber::class)->describe('search_media', ['service' => 'radarr', 'command' => 'movies_search', 'movie_ids' => [10, 11, 12]]);
+
+    expect($actionDescription->title)->toBe('Search for 3 movies')
+        ->and($actionDescription->description)->toBe('Radarr will search its indexers for the 3 movies.')
+        ->and($actionDescription->verified)->toBeTrue();
+});
+
 test('library-wide searches name the server', function (string $command, string $title): void {
     describerSeries();
     describerMovie();

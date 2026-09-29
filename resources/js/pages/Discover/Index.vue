@@ -24,7 +24,7 @@ const props = defineProps<{
 defineOptions({
     layout: {
         breadcrumbs: [
-            { title: 'Dashboard', href: dashboard() },
+            { title: 'Dashboard', href: dashboard().url },
             { title: 'Discover', href: DiscoverController.index.url() },
         ],
     },

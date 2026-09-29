@@ -77,3 +77,55 @@ test('the request button stays disabled until a Seerr user is picked, then submi
         && str_ends_with((string) $request->url(), '/api/v1/request')
         && ($request->data()['userId'] ?? null) === 4);
 });
+
+test('a picker outage shows an unreachable message instead of an empty user select', function (): void {
+    config()->set('mediamanager.anime.source', 'anilist');
+    Date::setTestNow(Date::create(2026, 8, 15, 12));
+    Queue::fake();
+
+    ServiceConnection::factory()->seerr()->create([
+        'url' => 'http://seerr.local:5055',
+        'api_key' => 'test-api-key',
+    ]);
+
+    AnimeIdMap::factory()->tv()->create([
+        'anilist_id' => 154587,
+        'tmdb_tv_id' => 1396,
+        'tvdb_id' => 81189,
+        'tmdb_season' => 1,
+    ]);
+
+    Http::fake([
+        'graphql.anilist.co' => Http::response([
+            'data' => [
+                'Page' => [
+                    'pageInfo' => ['hasNextPage' => false],
+                    'media' => [
+                        [
+                            'id' => 154587,
+                            'idMal' => 52991,
+                            'format' => 'TV',
+                            'status' => 'RELEASING',
+                            'episodes' => 12,
+                            'popularity' => 5000,
+                            'averageScore' => 88,
+                            'title' => ['romaji' => 'Test', 'english' => 'Test Show'],
+                            'startDate' => ['year' => 2026, 'month' => 7, 'day' => 1],
+                            'coverImage' => ['large' => 'https://img/test.jpg'],
+                        ],
+                    ],
+                ],
+            ],
+        ]),
+        'seerr.local:5055/api/v1/request*' => Http::response(['results' => []]),
+        'seerr.local:5055/api/v1/user*' => Http::response([], 503),
+    ]);
+
+    $member = User::factory()->member()->create(['email' => 'nobody@example.com']);
+    $this->actingAs($member);
+
+    visit(route('media.anime.index', absolute: false))
+        ->assertNoSmoke()
+        ->assertSee('Test Show')
+        ->assertSeeIn('[data-seerr-picker-unreachable]', 'Seerr is unreachable right now.');
+});
