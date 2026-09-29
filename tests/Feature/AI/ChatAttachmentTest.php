@@ -72,7 +72,7 @@ test('raster images are served inline and everything else as a hardened download
     'svg is never inline' => ['image/svg+xml', 'x.svg', 'attachment'],
 ]);
 
-test('a single-provider OpenRouter chat selection uploads the attachment to OpenRouter\'s Files API', function (): void {
+test("a single-provider OpenRouter chat selection uploads the attachment to OpenRouter's Files API", function (): void {
     config()->set('ai.providers.openrouter.key', 'sk-or-test');
     $aiSettings = resolve(AiSettings::class);
     $aiSettings->setModelProvider('openrouter');

@@ -220,6 +220,7 @@ test('reranking on OpenRouter carries the routing preferences', function (): voi
     config()->set('mediamanager.ai.enabled', true);
     config()->set('scout.driver', 'typesense');
     config()->set('ai.providers.openrouter.key', 'test-key');
+
     resolve(AiSettings::class)->setRerankingProvider('openrouter');
     resolve(OpenRouterSettings::class)->setDenyDataCollection(true);
     Embeddings::fake();
@@ -240,6 +241,7 @@ test('reranking on a non-OpenRouter provider carries no routing preferences', fu
     config()->set('scout.driver', 'typesense');
     config()->set('ai.default_for_reranking', 'cohere');
     config()->set('ai.providers.cohere.key', 'test-key');
+
     resolve(OpenRouterSettings::class)->setDenyDataCollection(true);
     Embeddings::fake();
     Reranking::fake();
