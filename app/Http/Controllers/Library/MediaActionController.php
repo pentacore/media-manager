@@ -148,10 +148,13 @@ class MediaActionController extends Controller
             return response()->json(['message' => sprintf('%s is unreachable.', ucfirst($serviceType->value))], 502);
         }
 
+        $itemId = (int) $validated['item_id'];
+        $seasonNumber = isset($validated['season_number']) ? (int) $validated['season_number'] : null;
+        $episodeId = isset($validated['episode_id']) ? (int) $validated['episode_id'] : null;
         $rows = [];
 
         foreach ($releases as $release) {
-            $row = is_array($release) ? $releaseSelectionCache->remember($connection, $release) : null;
+            $row = is_array($release) ? $releaseSelectionCache->remember($connection, $release, $itemId, $seasonNumber, $episodeId) : null;
 
             if ($row !== null) {
                 $rows[] = $row;
@@ -166,16 +169,20 @@ class MediaActionController extends Controller
         $validated = $grabReleaseRequest->validated();
         $connection = $grabReleaseRequest->connection();
         $serviceType = $grabReleaseRequest->serviceType();
-        $release = $releaseSelectionCache->find($connection, (int) $validated['indexer_id'], (string) $validated['guid']);
+        $itemId = (int) $validated['item_id'];
+        $release = $releaseSelectionCache->find($connection, (int) $validated['indexer_id'], (string) $validated['release_key']);
 
-        abort_if($release === null, 422, 'That release is no longer available — run the search again.');
+        abort_if($release === null || ($release['target']['item_id'] ?? null) !== $itemId, 422, 'That release is no longer available — run the search again.');
+
+        $releaseFacts = $release;
+        unset($releaseFacts['target']);
 
         $manualActionOutcome = $manualActionDispatcher->dispatch('grab_release', $serviceType, [
             'service' => $serviceType->value,
-            $serviceType === ServiceType::Sonarr ? 'series_id' : 'movie_id' => (int) $validated['item_id'],
+            $serviceType === ServiceType::Sonarr ? 'series_id' : 'movie_id' => $itemId,
             'guid' => $release['guid'],
             'indexer_id' => $release['indexer_id'],
-            'release' => $release,
+            'release' => $releaseFacts,
             'service_connection_id' => $connection->id,
         ], sprintf('Picked from interactive search by %s.', $grabReleaseRequest->user()->name));
 

@@ -12,6 +12,13 @@ use Illuminate\Support\Facades\Cache;
  * long as Sonarr/Radarr keep the release in their own cache (30 minutes), so
  * a grab can only target a release MediaManager fetched — and its Action
  * Queue card shows upstream facts, not browser-sent text.
+ *
+ * The raw release guid can carry a private tracker passkey, so it never
+ * reaches the browser: rows are keyed and exposed by sha256(guid) ("release
+ * key") instead, and the guid stays server-side in the cached row for the
+ * executor payload. A grab is also bound to the search that produced the
+ * row — the cached row records the item (and season/episode) it was found
+ * for, so a grab against a different item is refused.
  */
 final readonly class ReleaseSelectionCache
 {
@@ -19,25 +26,38 @@ final readonly class ReleaseSelectionCache
 
     /**
      * @param  array<string, mixed>  $release
-     * @return array{guid: string, indexer_id: int, title: string, quality: string|null, size: int, age_hours: float|null, peers: int|null, protocol: string|null, indexer: string|null, rejected: bool, rejections: list<string>}|null
+     * @return array{key: string, indexer_id: int, title: string, quality: string|null, size: int, age_hours: float|null, peers: int|null, protocol: string|null, indexer: string|null, rejected: bool, rejections: list<string>}|null
      */
-    public function remember(ServiceConnection $serviceConnection, array $release): ?array
+    public function remember(ServiceConnection $serviceConnection, array $release, int $itemId, ?int $seasonNumber = null, ?int $episodeId = null): ?array
     {
         $row = $this->present($release);
 
-        if ($row !== null) {
-            Cache::put($this->key($serviceConnection->id, $row['indexer_id'], $row['guid']), $row, self::TTL_SECONDS);
+        if ($row === null) {
+            return null;
         }
 
-        return $row;
+        $releaseKey = hash('sha256', $row['guid']);
+        $cached = [
+            ...$row,
+            'target' => ['item_id' => $itemId, 'season_number' => $seasonNumber, 'episode_id' => $episodeId],
+        ];
+
+        Cache::put($this->key($serviceConnection->id, $row['indexer_id'], $releaseKey), $cached, self::TTL_SECONDS);
+
+        unset($row['guid']);
+
+        return ['key' => $releaseKey, ...$row];
     }
 
     /**
+     * Returns the full cached row (guid and search target included) for
+     * server-side use only — never expose it to the browser.
+     *
      * @return array<string, mixed>|null
      */
-    public function find(ServiceConnection $serviceConnection, int $indexerId, string $guid): ?array
+    public function find(ServiceConnection $serviceConnection, int $indexerId, string $releaseKey): ?array
     {
-        $row = Cache::get($this->key($serviceConnection->id, $indexerId, $guid));
+        $row = Cache::get($this->key($serviceConnection->id, $indexerId, $releaseKey));
 
         return is_array($row) ? $row : null;
     }
@@ -76,8 +96,8 @@ final readonly class ReleaseSelectionCache
         ];
     }
 
-    private function key(int $connectionId, int $indexerId, string $guid): string
+    private function key(int $connectionId, int $indexerId, string $releaseKey): string
     {
-        return sprintf('library-release:%d:%d:%s', $connectionId, $indexerId, hash('sha256', $guid));
+        return sprintf('library-release:%d:%d:%s', $connectionId, $indexerId, $releaseKey);
     }
 }

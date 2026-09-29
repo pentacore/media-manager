@@ -147,11 +147,15 @@ test('releases are fetched from Sonarr for a season, presented and remembered fo
         ->getJson(route('media.library.actions.releases', ['service' => 'sonarr', 'service_connection_id' => $this->sonarr->id, 'item_id' => 7, 'season_number' => 1]))
         ->assertOk()
         ->assertJsonPath('releases.0', [
-            'guid' => 'guid-1', 'indexer_id' => 3, 'title' => 'Severance.S01.1080p', 'quality' => 'WEBDL-1080p', 'size' => 10000,
+            'key' => hash('sha256', 'guid-1'), 'indexer_id' => 3, 'title' => 'Severance.S01.1080p', 'quality' => 'WEBDL-1080p', 'size' => 10000,
             'age_hours' => 30.3, 'peers' => null, 'protocol' => 'usenet', 'indexer' => 'NZBgeek', 'rejected' => false, 'rejections' => [],
         ])
         ->assertJsonPath('releases.1.peers', 12)
-        ->assertJsonPath('releases.1.rejected', true);
+        ->assertJsonPath('releases.1.rejected', true)
+        ->assertJsonMissingPath('releases.0.guid')
+        ->assertJsonMissingPath('releases.1.guid')
+        ->assertDontSee('guid-1', false)
+        ->assertDontSee('guid-2', false);
 
     Http::assertSent(fn (Request $request): bool => $request['seriesId'] === 7 && $request['seasonNumber'] === 1);
 });
@@ -182,13 +186,16 @@ test('grab dispatches the remembered release and never trusts browser-sent relea
     $this->actingAs($this->member)->getJson(route('media.library.actions.releases', ['service' => 'radarr', 'service_connection_id' => $this->radarr->id, 'item_id' => 10]));
 
     $this->actingAs($this->member)
-        ->postJson(route('media.library.actions.grab'), ['service' => 'radarr', 'service_connection_id' => $this->radarr->id, 'item_id' => 10, 'guid' => 'guid-9', 'indexer_id' => 5, 'title' => 'Forged Title'])
+        ->postJson(route('media.library.actions.grab'), ['service' => 'radarr', 'service_connection_id' => $this->radarr->id, 'item_id' => 10, 'release_key' => hash('sha256', 'guid-9'), 'indexer_id' => 5, 'title' => 'Forged Title'])
         ->assertCreated()
         ->assertJsonPath('requires_approval', false)
         ->assertJsonPath('message', 'Release sent to the download client.');
 
     $actionRequest = ActionRequest::query()->where('type', 'grab_release')->sole();
     expect($actionRequest->payload['release']['title'])->toBe('Dune.2021.2160p')
+        ->and($actionRequest->payload['release']['guid'])->toBe('guid-9')
+        ->and($actionRequest->payload['release'])->not->toHaveKey('target')
+        ->and($actionRequest->payload['guid'])->toBe('guid-9')
         ->and($actionRequest->payload['movie_id'])->toBe(10)
         ->and($actionRequest->payload['service_connection_id'])->toBe($this->radarr->id)
         ->and($actionRequest->description)->toContain('Dune.2021.2160p');
@@ -196,7 +203,21 @@ test('grab dispatches the remembered release and never trusts browser-sent relea
 
 test('grabbing a release that was never listed is refused', function (): void {
     $this->actingAs($this->member)
-        ->postJson(route('media.library.actions.grab'), ['service' => 'sonarr', 'service_connection_id' => $this->sonarr->id, 'item_id' => 7, 'guid' => 'nope', 'indexer_id' => 1])
+        ->postJson(route('media.library.actions.grab'), ['service' => 'sonarr', 'service_connection_id' => $this->sonarr->id, 'item_id' => 7, 'release_key' => str_repeat('0', 64), 'indexer_id' => 1])
+        ->assertStatus(422)
+        ->assertJsonPath('message', 'That release is no longer available — run the search again.');
+
+    expect(ActionRequest::query()->count())->toBe(0);
+});
+
+test('grabbing a release with the item id of a different title is refused', function (): void {
+    Http::fake(['sonarr.local:8989/api/v3/release*' => Http::response([
+        ['guid' => 'guid-1', 'indexerId' => 3, 'title' => 'Severance.S01.1080p', 'protocol' => 'usenet', 'size' => 10_000, 'rejections' => [], 'quality' => ['quality' => ['name' => 'WEBDL-1080p']]],
+    ])]);
+    $this->actingAs($this->member)->getJson(route('media.library.actions.releases', ['service' => 'sonarr', 'service_connection_id' => $this->sonarr->id, 'item_id' => 7, 'season_number' => 1]));
+
+    $this->actingAs($this->member)
+        ->postJson(route('media.library.actions.grab'), ['service' => 'sonarr', 'service_connection_id' => $this->sonarr->id, 'item_id' => 99, 'release_key' => hash('sha256', 'guid-1'), 'indexer_id' => 3])
         ->assertStatus(422)
         ->assertJsonPath('message', 'That release is no longer available — run the search again.');
 

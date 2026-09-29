@@ -77,7 +77,7 @@ class SeriesController extends BaseArrController
             ], $this->tryClientCall($connection, fn (SonarrClient $sonarrClient): array => $sonarrClient->getEpisodesBySeries($id)))),
             'qualityProfiles' => Inertia::defer(fn (): array => $this->mapQualityProfiles(
                 $this->tryClientCall($connection, fn (SonarrClient $sonarrClient): array => $sonarrClient->getQualityProfiles()),
-            )),
+            ), 'qualityProfiles'),
         ]);
     }
 

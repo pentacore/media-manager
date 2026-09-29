@@ -19,7 +19,7 @@ class GrabReleaseRequest extends FormRequest
         return [
             ...$this->mediaActionTargetRules(),
             'item_id' => ['required', 'integer', 'min:1'],
-            'guid' => ['required', 'string', 'max:2048'],
+            'release_key' => ['required', 'string', 'size:64', 'regex:/^[0-9a-f]{64}$/'],
             'indexer_id' => ['required', 'integer', 'min:1'],
         ];
     }

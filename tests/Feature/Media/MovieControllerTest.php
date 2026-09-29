@@ -435,5 +435,5 @@ test('the movie page defers the quality profiles for the profile dropdown', func
         ->get(route('media.movies.show', ['id' => 1]))
         ->assertInertia(fn ($page) => $page
             ->missing('qualityProfiles')
-            ->loadDeferredProps(fn ($reload) => $reload->where('qualityProfiles', [['id' => 6, 'name' => 'Ultra-HD']])));
+            ->loadDeferredProps('qualityProfiles', fn ($reload) => $reload->where('qualityProfiles', [['id' => 6, 'name' => 'Ultra-HD']])));
 });

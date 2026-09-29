@@ -67,7 +67,7 @@ class MovieController extends BaseArrController
             'movie' => $this->mapMovie($movie, detailed: true, canManageLibrary: $canManageLibrary),
             'qualityProfiles' => Inertia::defer(fn (): array => $this->mapQualityProfiles(
                 $this->tryClientCall($connection, fn (RadarrClient $radarrClient): array => $radarrClient->getQualityProfiles()),
-            )),
+            ), 'qualityProfiles'),
         ]);
     }
 
