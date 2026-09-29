@@ -6,6 +6,7 @@ namespace App\Services\AiUsage\Pricing;
 
 use App\Models\AiUsageRecord;
 use App\Settings\AiSettings;
+use App\Settings\DecisionAgentSettings;
 use InvalidArgumentException;
 use Laravel\Ai\Ai;
 use LogicException;
@@ -23,8 +24,8 @@ use LogicException;
  * - the classification and reranking models (the provider's default model when
  *   none is set), only while that provider has an API key, since the callers
  *   skip a keyless provider;
- * - the chat, title, sub-agent and price updater models under the primary
- *   provider.
+ * - the chat, title, sub-agent, decision-agent and price updater selections,
+ *   each under its own provider.
  *
  * The map is built once per instance; bound scoped so a long-running worker
  * rebuilds it for every request or job.
@@ -38,7 +39,10 @@ final class InUsePricingModels
      */
     private ?array $providerModels = null;
 
-    public function __construct(private readonly AiSettings $aiSettings) {}
+    public function __construct(
+        private readonly AiSettings $aiSettings,
+        private readonly DecisionAgentSettings $decisionAgentSettings,
+    ) {}
 
     /**
      * Whether the given provider/model pair is in use.
@@ -95,13 +99,20 @@ final class InUsePricingModels
             $pairs[] = [$rerankingProvider, $this->aiSettings->rerankingModel() ?? $this->defaultRerankingModel($rerankingProvider)];
         }
 
-        $primaryProvider = $this->aiSettings->primaryProvider()->value;
         $titleModel = $this->aiSettings->rawTitleModel();
+        $pairs[] = [$this->aiSettings->titleModelProvider(), $titleModel === AiSettings::AUTO_MODEL ? null : $titleModel];
 
-        $pairs[] = [$primaryProvider, $this->aiSettings->model()];
-        $pairs[] = [$primaryProvider, $titleModel === AiSettings::AUTO_MODEL ? null : $titleModel];
-        $pairs[] = [$primaryProvider, $this->aiSettings->subAgentModel()];
-        $pairs[] = [$primaryProvider, $this->aiSettings->priceUpdaterModel()];
+        foreach ([
+            $this->aiSettings->chatSelection(),
+            $this->aiSettings->subAgentSelection(),
+            $this->aiSettings->priceUpdaterSelection(),
+            $this->decisionAgentSettings->selection(),
+        ] as $modelSelection) {
+            $pairs[] = [$modelSelection->provider, $modelSelection->model];
+        }
+
+        $embeddingsProvider = $this->aiSettings->embeddingsProvider();
+        $pairs[] = [$embeddingsProvider, $this->aiSettings->embeddingsModel() ?? $this->defaultEmbeddingsModel($embeddingsProvider)];
 
         $providerModels = [];
 
@@ -139,6 +150,15 @@ final class InUsePricingModels
     {
         try {
             return Ai::rerankingProvider($provider)->defaultRerankingModel();
+        } catch (InvalidArgumentException|LogicException) {
+            return null;
+        }
+    }
+
+    private function defaultEmbeddingsModel(string $provider): ?string
+    {
+        try {
+            return Ai::embeddingProvider($provider)->defaultEmbeddingsModel();
         } catch (InvalidArgumentException|LogicException) {
             return null;
         }

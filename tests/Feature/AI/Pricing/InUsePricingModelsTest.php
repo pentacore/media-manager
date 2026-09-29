@@ -19,7 +19,7 @@ test('models recorded in ai usage count as in use under their canonical provider
     AiUsageRecord::factory()->create(['provider' => 'google', 'model' => 'gemini-used']);
     AiUsageRecord::factory()->create(['provider' => null, 'model' => 'orphan']);
 
-    $inUsePricingModels = new InUsePricingModels(resolve(AiSettings::class));
+    $inUsePricingModels = resolve(InUsePricingModels::class);
 
     expect($inUsePricingModels->contains('openrouter', 'vendor/used'))->toBeTrue()
         ->and($inUsePricingModels->contains('gemini', 'gemini-used'))->toBeTrue()
@@ -35,7 +35,7 @@ test('the configured classification and reranking models count as in use when th
     $aiSettings->setRerankingProvider('openrouter');
     $aiSettings->setRerankingModel('vendor/reranker');
 
-    $inUsePricingModels = new InUsePricingModels($aiSettings);
+    $inUsePricingModels = resolve(InUsePricingModels::class);
 
     expect($inUsePricingModels->forProvider('openrouter'))->toBe(['vendor/classifier', 'vendor/reranker']);
 });
@@ -46,7 +46,7 @@ test('an unset classification model counts the provider default model as in use'
 
     resolve(AiSettings::class)->setClassificationProvider('openrouter');
 
-    expect(new InUsePricingModels(resolve(AiSettings::class))->contains('openrouter', 'vendor/default-classifier'))->toBeTrue();
+    expect(resolve(InUsePricingModels::class)->contains('openrouter', 'vendor/default-classifier'))->toBeTrue();
 });
 
 test('classification and reranking models are not in use when their provider has no key', function (): void {
@@ -55,18 +55,27 @@ test('classification and reranking models are not in use when their provider has
     $aiSettings->setClassificationProvider('openrouter');
     $aiSettings->setClassificationModel('vendor/classifier');
 
-    expect(new InUsePricingModels($aiSettings)->forProvider('openrouter'))->toBe([]);
+    expect(resolve(InUsePricingModels::class)->forProvider('openrouter'))->toBe([]);
 });
 
-test('the configured agent models count as in use under the primary provider', function (): void {
+test('the configured agent models count as in use under their own selection provider', function (): void {
     $aiSettings = resolve(AiSettings::class);
     $aiSettings->setModel('gpt-chat');
     $aiSettings->setTitleModel('gpt-title');
     $aiSettings->setSubAgentModel('gpt-sub-agent');
     $aiSettings->setPriceUpdaterModel('gpt-updater');
+    // Keep the default embeddings selection (also openai) out of this
+    // provider's bucket so it doesn't confound the assertion below.
+    $aiSettings->setEmbeddingsProvider('openrouter');
 
-    expect(new InUsePricingModels($aiSettings)->forProvider('openai'))
-        ->toBe(['gpt-chat', 'gpt-title', 'gpt-sub-agent', 'gpt-updater']);
+    expect(resolve(InUsePricingModels::class)->forProvider('openai'))
+        ->toBe(['gpt-title', 'gpt-chat', 'gpt-sub-agent', 'gpt-updater']);
+});
+
+test('a blank embeddings model counts the provider default embeddings model as in use', function (): void {
+    resolve(AiSettings::class)->setEmbeddingsProvider('openrouter');
+
+    expect(resolve(InUsePricingModels::class)->contains('openrouter', 'google/gemini-embedding-001'))->toBeTrue();
 });
 
 test('the auto title model sentinel is never counted as a model name', function (): void {
@@ -74,5 +83,5 @@ test('the auto title model sentinel is never counted as a model name', function 
     $aiSettings->setModel('gpt-chat');
     $aiSettings->setTitleModel(AiSettings::AUTO_MODEL);
 
-    expect(new InUsePricingModels($aiSettings)->contains('openai', AiSettings::AUTO_MODEL))->toBeFalse();
+    expect(resolve(InUsePricingModels::class)->contains('openai', AiSettings::AUTO_MODEL))->toBeFalse();
 });

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { Head, useForm } from '@inertiajs/vue3';
 import DecisionAgentSettingsController from '@/actions/App/Http/Controllers/Admin/DecisionAgentSettingsController';
+import ModelSelect from '@/components/ai/ModelSelect.vue';
 import InputError from '@/components/InputError.vue';
 import { Field, Toggle } from '@/components/mm';
 import { Button } from '@/components/ui/button';
@@ -8,9 +9,7 @@ import { Input } from '@/components/ui/input';
 import {
     Select,
     SelectContent,
-    SelectGroup,
     SelectItem,
-    SelectLabel,
     SelectTrigger,
     SelectValue,
 } from '@/components/ui/select';
@@ -21,6 +20,7 @@ import type { AiReasoningLevel } from '@/typefinder';
 interface DecisionAgentState {
     enabled: boolean;
     model: string;
+    model_provider: string;
     event_allowlist: string[];
     allow_manual_import: boolean;
     notify_on_suggest: boolean;
@@ -51,6 +51,7 @@ defineOptions({
 const form = useForm<DecisionAgentState>({
     enabled: props.settings.enabled,
     model: props.settings.model,
+    model_provider: props.settings.model_provider,
     event_allowlist: [...props.settings.event_allowlist],
     allow_manual_import: props.settings.allow_manual_import,
     notify_on_suggest: props.settings.notify_on_suggest,
@@ -149,29 +150,17 @@ function submit(): void {
                         <span />
                     </Field>
                     <div>
-                        <Select v-model="form.model">
-                            <SelectTrigger class="h-8 max-w-[320px] text-sm">
-                                <SelectValue placeholder="Select a model" />
-                            </SelectTrigger>
-                            <SelectContent>
-                                <SelectGroup
-                                    v-for="(modelList, provider) in models"
-                                    :key="provider"
-                                >
-                                    <SelectLabel class="capitalize">
-                                        {{ provider }}
-                                    </SelectLabel>
-                                    <SelectItem
-                                        v-for="modelId in modelList"
-                                        :key="modelId"
-                                        :value="modelId"
-                                    >
-                                        {{ modelId }}
-                                    </SelectItem>
-                                </SelectGroup>
-                            </SelectContent>
-                        </Select>
-                        <InputError :message="form.errors.model" class="mt-1" />
+                        <ModelSelect
+                            :models="models"
+                            v-model:provider="form.model_provider"
+                            v-model:model="form.model"
+                        />
+                        <InputError
+                            :message="
+                                form.errors.model_provider ?? form.errors.model
+                            "
+                            class="mt-1"
+                        />
                     </div>
                 </div>
 

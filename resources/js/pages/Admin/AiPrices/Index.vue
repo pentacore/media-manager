@@ -5,6 +5,7 @@ import { onMounted, onUnmounted, ref } from 'vue';
 import { toast } from 'vue-sonner';
 import AiFreeUsagePoolController from '@/actions/App/Http/Controllers/Admin/AiFreeUsagePoolController';
 import AiModelPriceController from '@/actions/App/Http/Controllers/Admin/AiModelPriceController';
+import OpenRouterModelPicker from '@/components/ai/OpenRouterModelPicker.vue';
 import InputError from '@/components/InputError.vue';
 import {
     Pill,
@@ -112,6 +113,7 @@ const props = defineProps<{
     refresh_running: boolean;
     rate_limit_metrics: Array<{ value: string; label: string }>;
     rate_limit_periods: Array<{ value: string; label: string }>;
+    openrouter_pricing_enabled: boolean;
 }>();
 
 defineOptions({
@@ -500,6 +502,9 @@ const priciest = ref(
                         :class="{ 'animate-spin': refreshing }"
                     />Refresh online
                 </Button>
+                <OpenRouterModelPicker
+                    :pricing-enabled="openrouter_pricing_enabled"
+                />
                 <Dialog v-model:open="showCreateDialog">
                     <DialogTrigger as-child>
                         <Button size="sm" class="h-7 gap-1.5 text-xs">

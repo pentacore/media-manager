@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Settings;
 
+use App\Ai\ModelSelection;
 use App\Enums\AiReasoningLevel;
 
 /**
@@ -20,6 +21,8 @@ class DecisionAgentSettings
     public const string ENABLED_KEY = 'decision_agent.enabled';
 
     public const string MODEL_KEY = 'decision_agent.model';
+
+    public const string MODEL_PROVIDER_KEY = 'decision_agent.model_provider';
 
     public const string ALLOWLIST_KEY = 'decision_agent.event_allowlist';
 
@@ -52,20 +55,50 @@ class DecisionAgentSettings
     }
 
     /**
-     * Model identifier for the DecisionAgent. Falls back to the chat
-     * model when unset so a fresh install works without extra config.
+     * Model identifier for the DecisionAgent. Falls back to the chat model
+     * when unset so a fresh install works without extra config.
      */
     public function model(): string
     {
-        $value = (string) $this->appSettings->get(self::MODEL_KEY, '');
+        return $this->selection()->model;
+    }
 
-        if ($value !== '') {
-            return $value;
+    /**
+     * The provider + model the DecisionAgent runs on. Without a saved (or
+     * configured) model the whole chat selection is inherited; a model saved
+     * before per-model providers existed keeps `ai.default`.
+     */
+    public function selection(): ModelSelection
+    {
+        $model = (string) $this->appSettings->get(self::MODEL_KEY, '');
+
+        if ($model === '') {
+            $model = (string) config('mediamanager.decision_agent.model', '');
         }
 
-        $configured = (string) config('mediamanager.decision_agent.model', '');
+        if ($model === '') {
+            return $this->aiSettings->chatSelection();
+        }
 
-        return $configured !== '' ? $configured : $this->aiSettings->model();
+        return new ModelSelection($this->rawModelProvider() ?? $this->aiSettings->defaultTextProvider(), $model);
+    }
+
+    /**
+     * The decision-agent provider as saved, or null when none is saved.
+     */
+    public function rawModelProvider(): ?string
+    {
+        $value = trim((string) $this->appSettings->get(self::MODEL_PROVIDER_KEY, ''));
+
+        return $value !== '' ? $value : null;
+    }
+
+    /**
+     * Persist the decision-agent provider; null clears it.
+     */
+    public function setModelProvider(?string $provider): void
+    {
+        $this->appSettings->set(self::MODEL_PROVIDER_KEY, $provider);
     }
 
     public function setModel(string $model): void

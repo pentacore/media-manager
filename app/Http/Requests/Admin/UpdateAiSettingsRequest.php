@@ -4,8 +4,12 @@ declare(strict_types=1);
 
 namespace App\Http\Requests\Admin;
 
+use App\Ai\ModelCatalog;
+use App\Concerns\ModelSelectionValidationRules;
+use App\Concerns\OpenRouterRoutingValidationRules;
 use App\Enums\AiMode;
 use App\Enums\AiReasoningLevel;
+use App\Enums\OpenRouterSort;
 use App\Settings\AiSettings;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
@@ -14,6 +18,9 @@ use Override;
 
 class UpdateAiSettingsRequest extends FormRequest
 {
+    use ModelSelectionValidationRules;
+    use OpenRouterRoutingValidationRules;
+
     /**
      * @return array<string, ValidationRule|array<mixed>|string>
      */
@@ -30,7 +37,7 @@ class UpdateAiSettingsRequest extends FormRequest
             // turn chains many) but below the PHP/proxy request ceiling that
             // would cut the response off before the timeout could fire.
             'chat_timeout' => ['nullable', 'integer', 'between:30,600'],
-            'failover_provider' => ['nullable', 'string', 'in:anthropic,openai,gemini,groq,mistral'],
+            'failover_provider' => ['nullable', 'string', 'in:anthropic,openai,gemini,groq,mistral,openrouter'],
             'models_dev_pricing_enabled' => ['nullable', 'boolean'],
             'openrouter_pricing_enabled' => ['nullable', 'boolean'],
             'litellm_pricing_enabled' => ['nullable', 'boolean'],
@@ -49,8 +56,24 @@ class UpdateAiSettingsRequest extends FormRequest
             'chat_routing_enabled' => ['sometimes', 'boolean'],
             'reranking_provider' => ['sometimes', 'string', Rule::in(AiSettings::RERANKING_PROVIDERS)],
             'reranking_model' => ['nullable', 'string', 'max:100'],
+            'embeddings_provider' => ['sometimes', 'string', Rule::in(resolve(ModelCatalog::class)->embeddingProviders())],
+            'embeddings_model' => ['nullable', 'string', 'max:100'],
             'sub_agent_model' => ['nullable', 'string', 'max:100'],
             'price_updater_model' => ['nullable', 'string', 'max:100'],
+            'model_provider' => ['sometimes', ...$this->modelProviderRules()],
+            'title_model_provider' => ['sometimes', ...$this->modelProviderRules()],
+            'sub_agent_model_provider' => ['nullable', ...$this->modelProviderRules()],
+            'price_updater_model_provider' => ['nullable', ...$this->modelProviderRules()],
+            'failover_model' => ['nullable', 'string', 'max:100'],
+            // The select's "OpenRouter default" option posts the `default`
+            // sentinel alongside the enum values, so the controller can
+            // tell it apart from an absent field (leaves the setting
+            // untouched) and call `useDefaultSort()` instead of `setSort()`.
+            'openrouter_sort' => ['nullable', 'string', Rule::in([...OpenRouterSort::values(), 'default'])],
+            'openrouter_deny_data_collection' => ['sometimes', 'boolean'],
+            'openrouter_allow_fallbacks' => ['sometimes', 'boolean'],
+            'openrouter_order' => $this->openRouterSlugListRules(),
+            'openrouter_ignore' => $this->openRouterSlugListRules(),
         ];
     }
 
@@ -76,7 +99,7 @@ class UpdateAiSettingsRequest extends FormRequest
 
         // A blank model field means "use the default", which the nullable rules
         // store as a cleared setting.
-        foreach (['classification_model', 'reranking_model', 'sub_agent_model', 'price_updater_model'] as $field) {
+        foreach (['classification_model', 'reranking_model', 'embeddings_model', 'sub_agent_model', 'price_updater_model', 'sub_agent_model_provider', 'price_updater_model_provider', 'failover_model'] as $field) {
             if ($this->has($field) && trim((string) $this->input($field)) === '') {
                 $this->merge([$field => null]);
             }
@@ -117,6 +140,7 @@ class UpdateAiSettingsRequest extends FormRequest
     {
         return [
             'hard_budget_usd.gte' => 'The hard cap must be greater than or equal to the soft cap.',
+            ...self::openRouterSlugListMessages(),
         ];
     }
 }

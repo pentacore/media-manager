@@ -55,5 +55,19 @@ test('a model shared by several roles is reported for each role', function (): v
     priceModels('title-model');
 
     expect(array_column(resolve(UnpricedModelDetector::class)->forHardCap(), 'role'))
-        ->toBe(['Chat', 'Decision agent', 'Sub-agents']);
+        ->toBe(['Chat', 'Decision agent', 'Sub-agents', 'Price updater']);
+});
+
+test('each selected model is looked up under its own provider', function (): void {
+    config()->set('ai.providers.openrouter.key', 'sk-or-test');
+    $aiSettings = resolve(AiSettings::class);
+    $aiSettings->setHardBudgetUsd(25.0);
+    $aiSettings->setModelProvider('openrouter');
+    $aiSettings->setModel('anthropic/claude-sonnet-5');
+    priceModels('title-model', 'sub-agent-model', 'decision-model');
+    AiModelPrice::factory()->create(['provider' => 'openai', 'model' => 'anthropic/claude-sonnet-5']);
+
+    expect(resolve(UnpricedModelDetector::class)->forHardCap())->toContain(
+        ['role' => 'Chat', 'provider' => 'openrouter', 'model' => 'anthropic/claude-sonnet-5'],
+    );
 });

@@ -6,7 +6,10 @@ use App\Ai\Classification\Classifier;
 use App\Enums\AiUsageKind;
 use App\Jobs\RunDecisionAgent;
 use App\Models\AiUsageRecord;
+use App\Settings\AiSettings;
+use App\Settings\OpenRouterSettings;
 use Laravel\Ai\Classification;
+use Laravel\Ai\Prompts\ClassificationPrompt;
 use Laravel\Ai\Responses\Data\BooleanAnswer;
 
 test('probability returns the boolean answer probability and bills a classification row', function (): void {
@@ -41,4 +44,24 @@ test('the classifier fails open when classification throws', function (): void {
     Classification::fake(fn () => throw new RuntimeException('down'));
 
     expect(resolve(Classifier::class)->probability('x', 'payload', 'Needs action?'))->toBeNull();
+});
+
+test('an OpenRouter classification call carries the routing preferences', function (): void {
+    resolve(OpenRouterSettings::class)->setDenyDataCollection(true);
+    Classification::fake([['decision' => new BooleanAnswer(0.5)]]);
+
+    resolve(Classifier::class)->probability('x', 'payload', 'Needs action?');
+
+    Classification::assertClassified(fn (ClassificationPrompt $prompt): bool => $prompt->providerOptions === ['provider' => ['data_collection' => 'deny']]);
+});
+
+test('a non-OpenRouter classification call carries no routing preferences', function (): void {
+    resolve(OpenRouterSettings::class)->setDenyDataCollection(true);
+    config()->set('ai.providers.typesafe.key', 'test-key');
+    resolve(AiSettings::class)->setClassificationProvider('typesafe');
+    Classification::fake([['decision' => new BooleanAnswer(0.5)]]);
+
+    resolve(Classifier::class)->probability('x', 'payload', 'Needs action?');
+
+    Classification::assertClassified(fn (ClassificationPrompt $prompt): bool => $prompt->providerOptions === []);
 });
