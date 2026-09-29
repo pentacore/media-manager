@@ -170,6 +170,21 @@ test('an episode release search asks Sonarr by episode id', function (): void {
     Http::assertSent(fn (Request $request): bool => $request['episodeId'] === 70 && ! isset($request['seriesId']));
 });
 
+test('release searches are throttled per user, with a JSON message the dialog can show', function (): void {
+    Http::fake(['sonarr.local:8989/api/v3/release*' => Http::response([])]);
+
+    for ($attempt = 1; $attempt <= 6; $attempt++) {
+        $this->actingAs($this->member)
+            ->getJson(route('media.library.actions.releases', ['service' => 'sonarr', 'service_connection_id' => $this->sonarr->id, 'item_id' => 7, 'season_number' => 1]))
+            ->assertOk();
+    }
+
+    $this->actingAs($this->member)
+        ->getJson(route('media.library.actions.releases', ['service' => 'sonarr', 'service_connection_id' => $this->sonarr->id, 'item_id' => 7, 'season_number' => 1]))
+        ->assertStatus(429)
+        ->assertJsonPath('message', 'Too many release searches — wait a moment.');
+});
+
 test('an unreachable Sonarr answers 502 for releases', function (): void {
     Http::fake(['sonarr.local:8989/api/v3/release*' => Http::response([], 503)]);
 
@@ -199,6 +214,77 @@ test('grab dispatches the remembered release and never trusts browser-sent relea
         ->and($actionRequest->payload['movie_id'])->toBe(10)
         ->and($actionRequest->payload['service_connection_id'])->toBe($this->radarr->id)
         ->and($actionRequest->description)->toContain('Dune.2021.2160p');
+});
+
+test('a release cached under one connection is refused for a grab pinned to another', function (): void {
+    $otherSonarr = ServiceConnection::factory()->sonarr()->create(['url' => 'http://sonarr2.local:8989', 'api_key' => 'k2', 'name' => 'Sonarr 2']);
+    IndexedSeries::factory()->for($otherSonarr, 'serviceConnection')->create(['sonarr_id' => 7, 'title' => 'Severance', 'year' => 2022]);
+    Http::fake(['sonarr.local:8989/api/v3/release*' => Http::response([
+        ['guid' => 'guid-1', 'indexerId' => 3, 'title' => 'Severance.S01.1080p', 'protocol' => 'usenet', 'size' => 10_000, 'rejections' => [], 'quality' => ['quality' => ['name' => 'WEBDL-1080p']]],
+    ])]);
+    $this->actingAs($this->member)->getJson(route('media.library.actions.releases', ['service' => 'sonarr', 'service_connection_id' => $this->sonarr->id, 'item_id' => 7, 'season_number' => 1]));
+
+    $this->actingAs($this->member)
+        ->postJson(route('media.library.actions.grab'), ['service' => 'sonarr', 'service_connection_id' => $otherSonarr->id, 'item_id' => 7, 'release_key' => hash('sha256', 'guid-1'), 'indexer_id' => 3])
+        ->assertStatus(422)
+        ->assertJsonPath('message', 'That release is no longer available — run the search again.');
+
+    expect(ActionRequest::query()->count())->toBe(0);
+});
+
+test('a grab queued for approval reports requires_approval and the queued message', function (): void {
+    ActionTypeConfig::query()->where('type', 'grab_release')->update(['requires_approval' => true]);
+    Http::fake(['radarr.local:7878/api/v3/release*' => Http::response([
+        ['guid' => 'guid-9', 'indexerId' => 5, 'title' => 'Dune.2021.2160p', 'protocol' => 'torrent', 'seeders' => 40, 'size' => 50_000, 'rejections' => [], 'quality' => ['quality' => ['name' => 'Bluray-2160p']]],
+    ])]);
+    $this->actingAs($this->member)->getJson(route('media.library.actions.releases', ['service' => 'radarr', 'service_connection_id' => $this->radarr->id, 'item_id' => 10]));
+
+    $this->actingAs($this->member)
+        ->postJson(route('media.library.actions.grab'), ['service' => 'radarr', 'service_connection_id' => $this->radarr->id, 'item_id' => 10, 'release_key' => hash('sha256', 'guid-9'), 'indexer_id' => 5])
+        ->assertCreated()
+        ->assertJsonPath('requires_approval', true)
+        ->assertJsonPath('message', 'Queued for approval in the Action Queue.');
+
+    expect(ActionRequest::query()->where('type', 'grab_release')->sole()->status)->toBe(ActionRequestStatus::Pending);
+});
+
+test('grabbing a disabled action type answers 422 with the disabled message', function (): void {
+    ActionTypeConfig::query()->where('type', 'grab_release')->update(['is_enabled' => false]);
+    Http::fake(['radarr.local:7878/api/v3/release*' => Http::response([
+        ['guid' => 'guid-9', 'indexerId' => 5, 'title' => 'Dune.2021.2160p', 'protocol' => 'torrent', 'seeders' => 40, 'size' => 50_000, 'rejections' => [], 'quality' => ['quality' => ['name' => 'Bluray-2160p']]],
+    ])]);
+    $this->actingAs($this->member)->getJson(route('media.library.actions.releases', ['service' => 'radarr', 'service_connection_id' => $this->radarr->id, 'item_id' => 10]));
+
+    $this->actingAs($this->member)
+        ->postJson(route('media.library.actions.grab'), ['service' => 'radarr', 'service_connection_id' => $this->radarr->id, 'item_id' => 10, 'release_key' => hash('sha256', 'guid-9'), 'indexer_id' => 5])
+        ->assertStatus(422)
+        ->assertJsonPath('message', 'This action is disabled in Action Rules.');
+
+    expect(ActionRequest::query()->count())->toBe(0);
+});
+
+// The controller maps an undescribable outcome onto the same HTTP 422 path
+// as a disabled one (`abort_unless($outcome->dispatched(), 422, $outcome
+// ->toast('')['message'])`), already exercised end-to-end above for
+// DISABLED. Reaching UNDESCRIBABLE for real needs a pinned connection that
+// vanished between search and grab, but GrabReleaseRequest::connection()
+// already 422s that case before ManualActionDispatcher ever runs — and both
+// ManualActionDispatcher and ActionDescriber are final, so the outcome can't
+// be mocked in from the HTTP layer either. Assert the message text itself
+// directly, alongside the dispatcher-level test above that proves the state
+// is reachable.
+test('an undescribable outcome carries the refresh-and-retry toast message', function (): void {
+    expect(new ManualActionOutcome(state: ManualActionOutcome::UNDESCRIBABLE)->toast('')['message'])
+        ->toBe('That item could not be found — refresh and try again.');
+});
+
+test('an unreachable Radarr answers 502 for releases', function (): void {
+    Http::fake(['radarr.local:7878/api/v3/release*' => Http::response([], 503)]);
+
+    $this->actingAs($this->member)
+        ->getJson(route('media.library.actions.releases', ['service' => 'radarr', 'service_connection_id' => $this->radarr->id, 'item_id' => 10]))
+        ->assertStatus(502)
+        ->assertJsonPath('message', 'Radarr is unreachable.');
 });
 
 test('grabbing a release that was never listed is refused', function (): void {

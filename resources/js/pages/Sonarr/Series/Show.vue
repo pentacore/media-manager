@@ -187,9 +187,11 @@ function episodeIdsForSeason(seasonNumber: number): number[] {
 }
 
 /**
- * The season toggle's state comes from its episodes, not Sonarr's season
- * flag: toggling posts episode monitoring, which leaves that flag untouched,
- * so it would never flip. Monitored only when every episode is.
+ * Both the season header pill and the season toggle read their monitored
+ * state from this — not Sonarr's own season flag: toggling posts episode
+ * monitoring, which leaves that flag untouched, so a pill reading it
+ * directly would drift out of sync with the toggle it sits beside. Monitored
+ * only when every episode is.
  */
 function seasonEpisodesMonitored(seasonNumber: number): boolean {
     const episodes = episodesForSeason(seasonNumber);
@@ -544,13 +546,26 @@ function sonarrSeriesUrl(): string | null {
                                         }}
                                     </span>
                                     <Pill
-                                        :variant="
-                                            season.monitored ? 'ok' : 'default'
+                                        :data-season-pill="
+                                            season.season_number
                                         "
-                                        :dot="season.monitored"
+                                        :variant="
+                                            seasonEpisodesMonitored(
+                                                season.season_number,
+                                            )
+                                                ? 'ok'
+                                                : 'default'
+                                        "
+                                        :dot="
+                                            seasonEpisodesMonitored(
+                                                season.season_number,
+                                            )
+                                        "
                                     >
                                         {{
-                                            season.monitored
+                                            seasonEpisodesMonitored(
+                                                season.season_number,
+                                            )
                                                 ? 'Monitored'
                                                 : 'Unmonitored'
                                         }}

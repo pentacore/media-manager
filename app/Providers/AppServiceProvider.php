@@ -18,6 +18,7 @@ use App\Settings\DecisionAgentSettings;
 use App\Support\Abilities;
 use Carbon\CarbonImmutable;
 use Illuminate\Cache\RateLimiting\Limit;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Date;
 use Illuminate\Support\Facades\DB;
@@ -67,6 +68,12 @@ class AppServiceProvider extends ServiceProvider
         RateLimiter::for(
             'seerr-request',
             fn (Request $request): Limit => Limit::perMinute(10)->by((string) ($request->user()?->getAuthIdentifier() ?? $request->ip())),
+        );
+        RateLimiter::for(
+            'release-search',
+            fn (Request $request): Limit => Limit::perMinute(6)
+                ->by((string) ($request->user()?->getAuthIdentifier() ?? $request->ip()))
+                ->response(fn (): JsonResponse => response()->json(['message' => __('Too many release searches — wait a moment.')], 429)),
         );
         RateLimiter::for(
             'webhooks',

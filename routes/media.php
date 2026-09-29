@@ -82,7 +82,9 @@ Route::middleware(['auth', 'verified', 'password.set'])
                 Route::post('monitor-episodes', [MediaActionController::class, 'monitorEpisodes'])->name('monitor-episodes');
                 Route::post('quality-profile', [MediaActionController::class, 'qualityProfile'])->name('quality-profile');
                 Route::post('search', [MediaActionController::class, 'search'])->name('search');
-                Route::get('releases', [MediaActionController::class, 'releases'])->name('releases');
+                Route::get('releases', [MediaActionController::class, 'releases'])
+                    ->middleware('throttle:release-search')
+                    ->name('releases');
                 Route::post('grab', [MediaActionController::class, 'grab'])->name('grab');
             });
 

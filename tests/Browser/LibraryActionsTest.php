@@ -178,6 +178,7 @@ test('the season toggle follows its episodes and flips both ways', function (): 
         ->assertNoSmoke()
         ->click('Season 1')
         ->assertAttribute($seasonToggle, 'aria-pressed', 'true')
+        ->assertSeeIn('[data-season-pill="1"]', 'Monitored')
         ->click($seasonToggle)
         ->assertSee('Monitoring updated.');
 
@@ -185,10 +186,15 @@ test('the season toggle follows its episodes and flips both ways', function (): 
 
     $webpage->assertSeeIn('[data-season-actions="1"]', 'Season unmonitored')
         ->assertAttribute($seasonToggle, 'aria-pressed', 'false')
+        // The header pill must never disagree with the toggle beside it —
+        // both read the same episode-derived state.
+        ->assertSeeIn('[data-season-pill="1"]', 'Unmonitored')
         ->click($seasonToggle)
         ->assertSee('Monitoring updated.');
 
     Http::assertSent(fn (Request $request): bool => str_ends_with($request->url(), '/api/v3/episode/monitor') && $request['episodeIds'] === [551, 552] && $request['monitored'] === true);
+
+    $webpage->assertSeeIn('[data-season-pill="1"]', 'Monitored');
 });
 
 test('a queued grab shows the queued-for-approval message', function (): void {
