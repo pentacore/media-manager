@@ -142,6 +142,55 @@ test('a season with no episodes yet hides the season monitor toggle', function (
         ->assertNoSmoke();
 });
 
+test('the season toggle follows its episodes and flips both ways', function (): void {
+    // Sonarr keeps the season flag set when its episodes are unmonitored, so
+    // the fixture lives on its own host: the beforeEach episode* stub would
+    // otherwise match first. Episode monitoring is stateful so the reload
+    // after each toggle sees the change.
+    ServiceConnection::query()->where('type', 'sonarr')->update(['url' => 'http://sonarr-season.local:8989']);
+    $episodeMonitored = [551 => true, 552 => true];
+    Http::fake([
+        'sonarr-season.local:8989/api/v3/series/55*' => Http::response([
+            'id' => 55, 'title' => 'Andor', 'titleSlug' => 'andor', 'year' => 2022, 'status' => 'ended',
+            'monitored' => true, 'qualityProfileId' => 1, 'images' => [],
+            'seasons' => [['seasonNumber' => 1, 'monitored' => true, 'statistics' => ['episodeCount' => 2, 'episodeFileCount' => 0, 'sizeOnDisk' => 0]]],
+            'statistics' => ['sizeOnDisk' => 0, 'episodeCount' => 2, 'episodeFileCount' => 0],
+        ]),
+        'sonarr-season.local:8989/api/v3/episode/monitor' => function (Request $request) use (&$episodeMonitored) {
+            foreach ($request['episodeIds'] as $episodeId) {
+                $episodeMonitored[$episodeId] = $request['monitored'];
+            }
+
+            return Http::response([], 202);
+        },
+        'sonarr-season.local:8989/api/v3/episode*' => function () use (&$episodeMonitored) {
+            return Http::response([
+                ['id' => 551, 'seasonNumber' => 1, 'episodeNumber' => 1, 'title' => 'Kassa', 'airDate' => '2022-09-21', 'hasFile' => false, 'monitored' => $episodeMonitored[551]],
+                ['id' => 552, 'seasonNumber' => 1, 'episodeNumber' => 2, 'title' => 'That Would Be Me', 'airDate' => '2022-09-21', 'hasFile' => false, 'monitored' => $episodeMonitored[552]],
+            ]);
+        },
+        'sonarr-season.local:8989/api/v3/qualityprofile' => Http::response([['id' => 1, 'name' => 'HD-1080p']]),
+    ]);
+    $this->actingAs(User::factory()->member()->create());
+    $seasonToggle = '[data-season-actions="1"] [data-monitor-toggle]';
+
+    $page = visit(route('media.series.show', ['id' => 55], absolute: false))
+        ->assertNoSmoke()
+        ->click('Season 1')
+        ->assertAttribute($seasonToggle, 'aria-pressed', 'true')
+        ->click($seasonToggle)
+        ->assertSee('Monitoring updated.');
+
+    Http::assertSent(fn (Request $request): bool => str_ends_with($request->url(), '/api/v3/episode/monitor') && $request['episodeIds'] === [551, 552] && $request['monitored'] === false);
+
+    $page->assertSeeIn('[data-season-actions="1"]', 'Season unmonitored')
+        ->assertAttribute($seasonToggle, 'aria-pressed', 'false')
+        ->click($seasonToggle)
+        ->assertSee('Monitoring updated.');
+
+    Http::assertSent(fn (Request $request): bool => str_ends_with($request->url(), '/api/v3/episode/monitor') && $request['episodeIds'] === [551, 552] && $request['monitored'] === true);
+});
+
 test('a queued grab shows the queued-for-approval message', function (): void {
     ActionTypeConfig::query()->where('type', 'grab_release')->update(['requires_approval' => true]);
     $this->actingAs(User::factory()->member()->create());

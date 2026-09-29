@@ -12,7 +12,12 @@ import {
 } from '@lucide/vue';
 import { ref } from 'vue';
 import SeriesController from '@/actions/App/Http/Controllers/Media/SeriesController';
-import { InteractiveSearchDialog, MonitorButton, QualityProfileSelect, SearchButton } from '@/components/library-actions';
+import {
+    InteractiveSearchDialog,
+    MonitorButton,
+    QualityProfileSelect,
+    SearchButton,
+} from '@/components/library-actions';
 import ReplaceFileDialog from '@/components/media-replacement/ReplaceFileDialog.vue';
 import { Pill, Poster, StatusPill } from '@/components/mm';
 import { Button } from '@/components/ui/button';
@@ -178,7 +183,11 @@ const interactive = ref<{
     episodeId: number | null;
 } | null>(null);
 
-function openInteractive(heading: string, seasonNumber: number | null, episodeId: number | null): void {
+function openInteractive(
+    heading: string,
+    seasonNumber: number | null,
+    episodeId: number | null,
+): void {
     interactive.value = { heading, seasonNumber, episodeId };
     interactiveOpen.value = true;
 }
@@ -187,6 +196,19 @@ function episodeIdsForSeason(seasonNumber: number): number[] {
     return episodesForSeason(seasonNumber)
         .map((episode) => episode.id)
         .filter((id): id is number => id !== null);
+}
+
+/**
+ * The season toggle's state comes from its episodes, not Sonarr's season
+ * flag: toggling posts episode monitoring, which leaves that flag untouched,
+ * so it would never flip. Monitored only when every episode is.
+ */
+function seasonEpisodesMonitored(seasonNumber: number): boolean {
+    const episodes = episodesForSeason(seasonNumber);
+
+    return (
+        episodes.length > 0 && episodes.every((episode) => episode.monitored)
+    );
 }
 
 function episodeCode(episode: Episode): string {
@@ -234,7 +256,11 @@ function sonarrSeriesUrl(): string | null {
                 </Button>
             </Link>
             <div class="flex items-center gap-2">
-                <div v-if="can('manage-library')" class="flex items-center gap-2" data-series-actions>
+                <div
+                    v-if="can('manage-library')"
+                    class="flex items-center gap-2"
+                    data-series-actions
+                >
                     <MonitorButton
                         service="sonarr"
                         :connection-id="service_connection_id"
@@ -250,7 +276,11 @@ function sonarrSeriesUrl(): string | null {
                     />
                 </div>
                 <a
-                    v-if="series.title_slug && can('manage-library') && connection.url"
+                    v-if="
+                        series.title_slug &&
+                        can('manage-library') &&
+                        connection.url
+                    "
                     :href="sonarrSeriesUrl() ?? undefined"
                     target="_blank"
                     rel="noopener noreferrer"
@@ -280,8 +310,8 @@ function sonarrSeriesUrl(): string | null {
                                 </DialogTitle>
                                 <DialogDescription data-delete-description>
                                     Removes the series from Sonarr. Cannot be
-                                    undone. Deletion may require approval in
-                                    the Action Queue.
+                                    undone. Deletion may require approval in the
+                                    Action Queue.
                                 </DialogDescription>
                             </DialogHeader>
                             <div class="flex items-center gap-2 py-2">
@@ -570,24 +600,48 @@ function sonarrSeriesUrl(): string | null {
                                 >
                                     <template
                                         v-if="
-                                            episodeIdsForSeason(season.season_number).length > 0
+                                            episodeIdsForSeason(
+                                                season.season_number,
+                                            ).length > 0
                                         "
                                     >
                                         <MonitorButton
                                             service="sonarr"
-                                            :connection-id="service_connection_id"
+                                            :connection-id="
+                                                service_connection_id
+                                            "
                                             :series-id="series.id"
-                                            :episode-ids="episodeIdsForSeason(season.season_number)"
-                                            :season-number="season.season_number"
-                                            :monitored="season.monitored"
-                                            :label="season.monitored ? 'Season monitored' : 'Season unmonitored'"
+                                            :episode-ids="
+                                                episodeIdsForSeason(
+                                                    season.season_number,
+                                                )
+                                            "
+                                            :season-number="
+                                                season.season_number
+                                            "
+                                            :monitored="
+                                                seasonEpisodesMonitored(
+                                                    season.season_number,
+                                                )
+                                            "
+                                            :label="
+                                                seasonEpisodesMonitored(
+                                                    season.season_number,
+                                                )
+                                                    ? 'Season monitored'
+                                                    : 'Season unmonitored'
+                                            "
                                         />
                                         <SearchButton
                                             service="sonarr"
-                                            :connection-id="service_connection_id"
+                                            :connection-id="
+                                                service_connection_id
+                                            "
                                             command="season_search"
                                             :series-id="series.id"
-                                            :season-number="season.season_number"
+                                            :season-number="
+                                                season.season_number
+                                            "
                                             label="Search season"
                                         />
                                     </template>
@@ -664,20 +718,31 @@ function sonarrSeriesUrl(): string | null {
                                                 }}
                                             </Pill>
                                             <div
-                                                v-if="can('manage-library') && episode.id !== null"
+                                                v-if="
+                                                    can('manage-library') &&
+                                                    episode.id !== null
+                                                "
                                                 class="flex items-center gap-1.5"
-                                                :data-episode-actions="episode.id"
+                                                :data-episode-actions="
+                                                    episode.id
+                                                "
                                             >
                                                 <MonitorButton
                                                     service="sonarr"
-                                                    :connection-id="service_connection_id"
+                                                    :connection-id="
+                                                        service_connection_id
+                                                    "
                                                     :series-id="series.id"
                                                     :episode-ids="[episode.id]"
-                                                    :monitored="episode.monitored"
+                                                    :monitored="
+                                                        episode.monitored
+                                                    "
                                                 />
                                                 <SearchButton
                                                     service="sonarr"
-                                                    :connection-id="service_connection_id"
+                                                    :connection-id="
+                                                        service_connection_id
+                                                    "
                                                     command="episode_search"
                                                     :series-id="series.id"
                                                     :episode-ids="[episode.id]"
