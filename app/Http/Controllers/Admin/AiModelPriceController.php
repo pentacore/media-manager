@@ -14,6 +14,7 @@ use App\Http\Requests\Admin\UpdateAiModelPriceRequest;
 use App\Jobs\RefreshAiPricesJob;
 use App\Models\AiFreeUsagePool;
 use App\Models\AiModelPrice;
+use App\Settings\AiSettings;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\Auth;
@@ -44,7 +45,7 @@ class AiModelPriceController extends Controller
         'batch_search_unit_per_k',
     ];
 
-    public function index(): Response
+    public function index(AiSettings $aiSettings): Response
     {
         return Inertia::render('Admin/AiPrices/Index', [
             'prices' => AiModelPrice::query()
@@ -59,6 +60,7 @@ class AiModelPriceController extends Controller
             'refresh_running' => RefreshAiPricesJob::isRunning(),
             'rate_limit_metrics' => RateLimitMetric::options(),
             'rate_limit_periods' => RateLimitPeriod::options(),
+            'openrouter_pricing_enabled' => $aiSettings->openRouterPricingEnabled(),
         ]);
     }
 

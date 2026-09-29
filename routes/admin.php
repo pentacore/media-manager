@@ -5,6 +5,7 @@ declare(strict_types=1);
 use App\Http\Controllers\Admin\AiConversationController;
 use App\Http\Controllers\Admin\AiFreeUsagePoolController;
 use App\Http\Controllers\Admin\AiModelPriceController;
+use App\Http\Controllers\Admin\AiOpenRouterModelController;
 use App\Http\Controllers\Admin\AiSettingsController;
 use App\Http\Controllers\Admin\AiUsageController;
 use App\Http\Controllers\Admin\DecisionAgentSettingsController;
@@ -91,6 +92,8 @@ Route::middleware(['auth', 'verified', 'password.set', 'role:admin'])->prefix('a
         Route::get('ai-prices', [AiModelPriceController::class, 'index'])->name('ai-prices.index');
         Route::post('ai-prices', [AiModelPriceController::class, 'store'])->name('ai-prices.store');
         Route::post('ai-prices/refresh', [AiModelPriceController::class, 'refresh'])->name('ai-prices.refresh');
+        Route::get('ai-prices/openrouter-models', [AiOpenRouterModelController::class, 'index'])->name('ai-prices.openrouter-models.index');
+        Route::post('ai-prices/openrouter-models', [AiOpenRouterModelController::class, 'store'])->name('ai-prices.openrouter-models.store');
         Route::put('ai-prices/{aiModelPrice}', [AiModelPriceController::class, 'update'])->name('ai-prices.update');
         Route::delete('ai-prices/{aiModelPrice}', [AiModelPriceController::class, 'destroy'])->name('ai-prices.destroy');
 
