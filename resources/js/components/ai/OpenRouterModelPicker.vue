@@ -14,6 +14,7 @@ import {
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { jsonRequest } from '@/composables/useAiChat';
+import type { FlashToast } from '@/types/ui';
 
 interface OpenRouterModelOption {
     id: string;
@@ -86,12 +87,26 @@ function price(value: string | null): string {
 
 function submit(): void {
     submitting.value = true;
+    let importFailed = false;
+
     router.post(
         AiOpenRouterModelController.store.url(),
         { models: selected.value },
         {
             preserveScroll: true,
+            onFlash: (flash) => {
+                const toast = flash.toast as FlashToast | undefined;
+                importFailed = toast?.type === 'error';
+            },
             onSuccess: () => {
+                // A failed import (e.g. OpenRouter unreachable) still
+                // redirects back as a normal success visit with an error
+                // toast, so keep the dialog open and the admin's search and
+                // selection intact rather than discarding them.
+                if (importFailed) {
+                    return;
+                }
+
                 open.value = false;
                 selected.value = [];
                 options.value = [];
