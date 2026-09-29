@@ -8,6 +8,7 @@ use App\Models\User;
 use App\Settings\AiSettings;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Queue;
+use Illuminate\Support\Str;
 
 beforeEach(function (): void {
     config()->set('mediamanager.ai.enabled', true);
@@ -33,7 +34,7 @@ test('changing the embeddings model shows the stale banner and re-embeds on requ
 
 test('a running re-embed shows the running status and disables the button', function (): void {
     resolve(AiSettings::class)->setEmbeddingsModel('text-embedding-3-large');
-    Cache::put(ReembedLibrary::RUNNING_CACHE_KEY, true, ReembedLibrary::RUNNING_CACHE_TTL);
+    Cache::put(ReembedLibrary::RUNNING_CACHE_KEY, (string) Str::uuid7(), ReembedLibrary::RUNNING_CACHE_TTL);
     $this->actingAs(User::factory()->admin()->create());
 
     visit(route('admin.ai-settings.index', absolute: false))
