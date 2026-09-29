@@ -8,6 +8,7 @@ use App\Http\Controllers\Media\DiscoverController;
 use App\Http\Controllers\Media\InstantSearchController;
 use App\Http\Controllers\Media\MediaReplacementController;
 use App\Http\Controllers\Media\MovieController;
+use App\Http\Controllers\Media\MyRequestController;
 use App\Http\Controllers\Media\RequestController;
 use App\Http\Controllers\Media\SearchController;
 use App\Http\Controllers\Media\SeriesController;
@@ -41,6 +42,10 @@ Route::middleware(['auth', 'verified', 'password.set'])
             Route::post('discover/request', [DiscoverController::class, 'request'])
                 ->middleware('throttle:seerr-request')
                 ->name('discover.request');
+
+            // My requests — list and cancel your own pending Seerr requests.
+            Route::get('requests/mine', [MyRequestController::class, 'index'])->name('requests.mine');
+            Route::delete('requests/mine/{id}', [MyRequestController::class, 'destroy'])->whereNumber('id')->name('requests.mine.destroy');
         });
 
         // Library writes — members and admins.

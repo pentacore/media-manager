@@ -348,6 +348,7 @@ function browserSmokeMemberRouteNames(): array
         'media.movies.create',
         'media.discover.index',
         'media.requests.index',
+        'media.requests.mine',
         'media.anime.index',
         'bazarr.overview',
         'bazarr.missing',

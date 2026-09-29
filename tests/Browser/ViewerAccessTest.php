@@ -21,6 +21,7 @@ function viewerSidebarPaths(): array
         '/media/series',
         '/media/movies',
         '/media/discover',
+        '/media/requests/mine',
         '/monitoring/now-playing',
         '/monitoring/watch-history',
     ];

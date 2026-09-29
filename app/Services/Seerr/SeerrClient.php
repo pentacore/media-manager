@@ -97,6 +97,19 @@ class SeerrClient implements Warmable
     }
 
     /**
+     * Live read of one request, bypassing the entity cache — for ownership and
+     * state checks that must not act on a stale "pending" copy.
+     *
+     * @return array<string, mixed>
+     *
+     * @throws RequestException|ConnectionException
+     */
+    public function getRequestByIdUncached(int $id): array
+    {
+        return $this->buildClient()->get(sprintf('/api/%s/request/%d', $this->apiVersion, $id))->throw()->json() ?? [];
+    }
+
+    /**
      * @throws RequestException|ConnectionException
      */
     public function deleteRequest(int $id): void

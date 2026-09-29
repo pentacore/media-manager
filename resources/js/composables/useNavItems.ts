@@ -16,6 +16,7 @@ import {
     Inbox,
     LayoutGrid,
     Link as LinkIcon,
+    ListChecks,
     ListTodo,
     MessageSquare,
     Play,
@@ -54,6 +55,7 @@ import LibraryActivityController from '@/actions/App/Http/Controllers/Library/Ac
 import AnimeController from '@/actions/App/Http/Controllers/Media/AnimeController';
 import DiscoverController from '@/actions/App/Http/Controllers/Media/DiscoverController';
 import MovieController from '@/actions/App/Http/Controllers/Media/MovieController';
+import MyRequestController from '@/actions/App/Http/Controllers/Media/MyRequestController';
 import RequestController from '@/actions/App/Http/Controllers/Media/RequestController';
 import SearchController from '@/actions/App/Http/Controllers/Media/SearchController';
 import SeriesController from '@/actions/App/Http/Controllers/Media/SeriesController';
@@ -159,6 +161,13 @@ export function useNavItems(counts?: NavCounts): ComputedRef<NavGroup[]> {
                         href: RequestController.index.url(),
                         icon: Heart,
                         ability: 'manage-requests',
+                    },
+                    {
+                        title: 'My requests',
+                        href: MyRequestController.index.url(),
+                        icon: ListChecks,
+                        ability: 'request-media',
+                        requiresSeerr: true,
                     },
                     {
                         title: 'Seasonal Anime',
