@@ -10,6 +10,7 @@ use App\Services\AiUsage\Pricing\AiModelPriceWriter;
 use App\Services\AiUsage\Pricing\CatalogModelBrowser;
 use App\Services\AiUsage\Pricing\CatalogUnavailableException;
 use App\Services\AiUsage\Pricing\Data\CatalogModelOption;
+use App\Services\AiUsage\Pricing\Data\ModelPriceCandidate;
 use App\Services\AiUsage\Pricing\Data\WriteOutcome;
 use App\Services\AiUsage\Pricing\RefreshScope;
 use Illuminate\Http\JsonResponse;
@@ -60,7 +61,7 @@ class AiModelCatalogController extends Controller
             foreach ($models as $model) {
                 $candidate = $catalogModelBrowser->addableCandidate($provider, $model);
 
-                if ($candidate !== null && $aiModelPriceWriter->write($candidate, $refreshScope, $candidate->source) === WriteOutcome::Created) {
+                if ($candidate instanceof ModelPriceCandidate && $aiModelPriceWriter->write($candidate, $refreshScope, $candidate->source) === WriteOutcome::Created) {
                     $added++;
                 }
             }
