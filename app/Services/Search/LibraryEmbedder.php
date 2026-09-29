@@ -87,7 +87,28 @@ class LibraryEmbedder
             return $items->map(static fn (): ?array => null)->all();
         }
 
-        return $response->embeddings;
+        $wrongDimensions = null;
+
+        $vectors = array_map(function (array $vector) use (&$wrongDimensions): ?array {
+            if (count($vector) !== self::DIMENSIONS) {
+                $wrongDimensions ??= count($vector);
+
+                return null;
+            }
+
+            return $vector;
+        }, $response->embeddings);
+
+        if ($wrongDimensions !== null) {
+            Log::warning('LibraryEmbedder: embedding vector had the wrong dimensions', [
+                'provider' => $response->meta->provider,
+                'model' => $response->meta->model,
+                'expected' => self::DIMENSIONS,
+                'actual' => $wrongDimensions,
+            ]);
+        }
+
+        return $vectors;
     }
 
     /**

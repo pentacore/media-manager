@@ -11,6 +11,9 @@ use Illuminate\Queue\Attributes\UniqueFor;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Queue;
 use Laravel\Ai\Embeddings;
+use Laravel\Ai\Responses\Data\Meta;
+use Laravel\Ai\Responses\Data\Usage;
+use Laravel\Ai\Responses\EmbeddingsResponse;
 
 beforeEach(function (): void {
     Cache::flush();
@@ -33,6 +36,19 @@ test('a re-embed covers movies then series and stamps the new signature', functi
 
 test('a re-embed with failures leaves the library marked stale', function (): void {
     Embeddings::fake(fn () => throw new RuntimeException('provider down'));
+    IndexedMovie::factory()->create(['embedding' => [0.1]]);
+    $aiSettings = resolve(AiSettings::class);
+    $aiSettings->setEmbeddingsModel('text-embedding-3-large');
+
+    dispatch_sync(new ReembedLibrary);
+
+    expect($aiSettings->embeddingsStale())->toBeTrue();
+});
+
+test('a re-embed with wrong-dimensioned vectors leaves the library marked stale', function (): void {
+    // A provider that ignores the requested `dimensions` and always returns
+    // its own vector size.
+    Embeddings::fake([new EmbeddingsResponse([[0.1, 0.2]], new Usage, new Meta('openai', 'text-embedding-3-large'))]);
     IndexedMovie::factory()->create(['embedding' => [0.1]]);
     $aiSettings = resolve(AiSettings::class);
     $aiSettings->setEmbeddingsModel('text-embedding-3-large');

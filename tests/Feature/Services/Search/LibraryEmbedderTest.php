@@ -8,7 +8,11 @@ use App\Models\IndexedMovie;
 use App\Models\IndexedSeries;
 use App\Services\Search\LibraryEmbedder;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Log;
 use Laravel\Ai\Embeddings;
+use Laravel\Ai\Responses\Data\Meta;
+use Laravel\Ai\Responses\Data\Usage;
+use Laravel\Ai\Responses\EmbeddingsResponse;
 
 test('embeddingText folds title, year, genres, and overview', function (): void {
     $movie = IndexedMovie::factory()->make([
@@ -94,6 +98,27 @@ test('embedMany returns nulls without generating when ai is disabled', function 
 
     expect($vectors)->toBe([null, null]);
     Embeddings::assertNothingGenerated();
+});
+
+test('embedMany treats a wrong-dimensioned vector as a failed embedding and logs once', function (): void {
+    config()->set('mediamanager.ai.enabled', true);
+    // Two vectors, both the wrong size (a provider that ignores `dimensions`).
+    Embeddings::fake([new EmbeddingsResponse([[0.1, 0.2], [0.3, 0.4]], new Usage, new Meta('openai', 'text-embedding-3-large'))]);
+
+    Log::shouldReceive('warning')
+        ->once()
+        ->withArgs(fn (string $message, array $context): bool => $message === 'LibraryEmbedder: embedding vector had the wrong dimensions'
+            && $context['expected'] === LibraryEmbedder::DIMENSIONS
+            && $context['actual'] === 2);
+
+    $items = new Collection([
+        IndexedMovie::factory()->make(['title' => 'Alpha']),
+        IndexedSeries::factory()->make(['title' => 'Beta']),
+    ]);
+
+    $vectors = resolve(LibraryEmbedder::class)->embedMany($items);
+
+    expect($vectors)->toBe([null, null]);
 });
 
 test('enabled reflects the mediamanager ai config flag', function (): void {
