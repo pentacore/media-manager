@@ -5,14 +5,25 @@ declare(strict_types=1);
 namespace App\Services\Sonarr;
 
 use App\Cache\Services\SonarrCache;
+use App\Enums\MediaSearchCommand;
 use App\Enums\ServiceType;
 use App\Models\ActionRequest;
 use App\Models\ServiceConnection;
 use App\Services\Actions\ActionExecutor;
+use App\Services\Arr\ReleaseGrabber;
+use App\Services\MediaReplacement\PendingReplacementGuard;
+use App\Services\MediaReplacement\ReplacementInFlight;
 use InvalidArgumentException;
 
 class SonarrActions implements ActionExecutor
 {
+    // Defaults keep `new SonarrActions` (used throughout the tests) working;
+    // the container still injects when resolving.
+    public function __construct(
+        private readonly PendingReplacementGuard $pendingReplacementGuard = new PendingReplacementGuard,
+        private readonly ReleaseGrabber $releaseGrabber = new ReleaseGrabber,
+    ) {}
+
     /**
      * @return array<string, mixed>
      */
@@ -23,6 +34,9 @@ class SonarrActions implements ActionExecutor
             'add_series' => $this->addSeries($actionRequest),
             'monitor_series' => $this->monitorSeries($actionRequest),
             'set_series_quality_profile' => $this->setSeriesQualityProfile($actionRequest),
+            'monitor_episodes' => $this->monitorEpisodes($actionRequest),
+            'search_media' => $this->searchMedia($actionRequest),
+            'grab_release' => $this->grabRelease($actionRequest),
             default => throw new InvalidArgumentException(sprintf('SonarrActions cannot execute type "%s"', $actionRequest->type)),
         };
     }
@@ -99,6 +113,9 @@ class SonarrActions implements ActionExecutor
         $monitored = (bool) ($payload['monitored'] ?? true);
 
         $serviceConnection = ServiceConnection::resolvePinned($payload, ServiceType::Sonarr);
+
+        throw_if($this->pendingReplacementGuard->inFlightForMedia($serviceConnection->id, seriesId: $seriesId), ReplacementInFlight::forTitle());
+
         $sonarrClient = new SonarrClient($serviceConnection);
         $series = $sonarrClient->getSeriesById($seriesId);
         $series['monitored'] = $monitored;
@@ -133,6 +150,77 @@ class SonarrActions implements ActionExecutor
         return [
             'sonarr_series_id' => $seriesId,
             'quality_profile_id' => $qualityProfileId,
+        ];
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function monitorEpisodes(ActionRequest $actionRequest): array
+    {
+        $payload = $actionRequest->payload;
+        $seriesId = (int) ($payload['series_id'] ?? 0);
+        $episodeIds = array_values(array_unique(array_filter(
+            array_map(intval(...), (array) ($payload['episode_ids'] ?? [])),
+            static fn (int $id): bool => $id > 0,
+        )));
+
+        throw_if($seriesId <= 0, InvalidArgumentException::class, 'series_id is required');
+        throw_if($episodeIds === [], InvalidArgumentException::class, 'episode_ids is required');
+
+        $monitored = (bool) ($payload['monitored'] ?? true);
+        $serviceConnection = ServiceConnection::resolvePinned($payload, ServiceType::Sonarr);
+
+        throw_if($this->pendingReplacementGuard->inFlightForMedia($serviceConnection->id, seriesId: $seriesId), ReplacementInFlight::forTitle());
+
+        new SonarrClient($serviceConnection)->setEpisodesMonitored($episodeIds, $monitored);
+        new SonarrCache($serviceConnection)->bustAll();
+
+        return [
+            'sonarr_series_id' => $seriesId,
+            'episode_ids' => $episodeIds,
+            'monitored' => $monitored,
+        ];
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function searchMedia(ActionRequest $actionRequest): array
+    {
+        $payload = $actionRequest->payload;
+        $command = MediaSearchCommand::tryFrom((string) ($payload['command'] ?? ''));
+
+        throw_unless($command instanceof MediaSearchCommand && $command->service() === ServiceType::Sonarr, InvalidArgumentException::class, 'command is not a Sonarr search');
+
+        $serviceConnection = ServiceConnection::resolvePinned($payload, ServiceType::Sonarr);
+        $response = new SonarrClient($serviceConnection)->runCommand($command->arrCommand(), $command->arrParameters($payload));
+
+        return [
+            'command' => $command->value,
+            'arr_command_id' => $response['id'] ?? null,
+        ];
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function grabRelease(ActionRequest $actionRequest): array
+    {
+        $payload = $actionRequest->payload;
+        $guid = (string) ($payload['guid'] ?? '');
+        $indexerId = (int) ($payload['indexer_id'] ?? 0);
+
+        throw_if($guid === '' || $indexerId <= 0, InvalidArgumentException::class, 'guid and indexer_id are required');
+
+        $serviceConnection = ServiceConnection::resolvePinned($payload, ServiceType::Sonarr);
+        $this->releaseGrabber->grab(new SonarrClient($serviceConnection), 'Sonarr', $guid, $indexerId);
+        new SonarrCache($serviceConnection)->bustAll();
+
+        return [
+            'guid' => $guid,
+            'indexer_id' => $indexerId,
+            'title' => is_string($payload['release']['title'] ?? null) ? $payload['release']['title'] : null,
         ];
     }
 }

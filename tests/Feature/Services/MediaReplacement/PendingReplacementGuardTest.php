@@ -131,3 +131,32 @@ test('a pending replace_media_file request for the same episode blocks, but a si
     expect(resolve(PendingReplacementGuard::class)->inFlightFor(replacementGuardEpisodeTarget()))->toBeTrue()
         ->and(resolve(PendingReplacementGuard::class)->inFlightFor(replacementGuardEpisodeTarget(['episode_numbers' => [2]])))->toBeFalse();
 });
+
+test('inFlightForMedia blocks a series while any of its episodes is being replaced', function (): void {
+    MediaReplacementAttempt::factory()->create([
+        'status' => MediaReplacementStatus::Downloading,
+        'target' => replacementGuardEpisodeTarget(['season_number' => 3, 'episode_numbers' => [9]]),
+    ]);
+
+    $pendingReplacementGuard = resolve(PendingReplacementGuard::class);
+
+    expect($pendingReplacementGuard->inFlightForMedia(1, seriesId: 42))->toBeTrue()
+        ->and($pendingReplacementGuard->inFlightForMedia(1, seriesId: 43))->toBeFalse()
+        ->and($pendingReplacementGuard->inFlightForMedia(2, seriesId: 42))->toBeFalse();
+});
+
+test('inFlightForMedia blocks a movie with a queued replacement request', function (): void {
+    ActionRequest::factory()->create([
+        'type' => 'replace_media_file',
+        'status' => ActionRequestStatus::Approved,
+        'payload' => ['target' => replacementGuardTarget(), 'service_connection_id' => 1],
+    ]);
+
+    expect(resolve(PendingReplacementGuard::class)->inFlightForMedia(1, movieId: 10))->toBeTrue();
+});
+
+test('inFlightForMedia ignores finished replacements', function (): void {
+    MediaReplacementAttempt::factory()->create(['status' => MediaReplacementStatus::Verified, 'target' => replacementGuardTarget()]);
+
+    expect(resolve(PendingReplacementGuard::class)->inFlightForMedia(1, movieId: 10))->toBeFalse();
+});

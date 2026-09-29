@@ -21,7 +21,7 @@ test('seeder is idempotent', function (): void {
     $this->seed(ActionTypeConfigSeeder::class);
     $this->seed(ActionTypeConfigSeeder::class);
 
-    expect(ActionTypeConfig::count())->toBe(28);
+    expect(ActionTypeConfig::count())->toBe(31);
 });
 
 test('seeds the media replacement rule as enabled and requiring approval', function (): void {
@@ -73,3 +73,9 @@ test('seeds Bazarr file operations as enabled and approval required', function (
             ->and($config->description)->not->toBeEmpty();
     }
 });
+
+test('the library action types are seeded to run without approval', function (string $type): void {
+    $this->seed(ActionTypeConfigSeeder::class);
+
+    expect(ActionTypeConfig::query()->where('type', $type)->value('requires_approval'))->toBeFalse();
+})->with(['monitor_episodes', 'search_media', 'grab_release']);
