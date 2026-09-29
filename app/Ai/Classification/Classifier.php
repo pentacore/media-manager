@@ -4,12 +4,14 @@ declare(strict_types=1);
 
 namespace App\Ai\Classification;
 
+use App\Ai\OpenRouterRequestOptions;
 use App\Services\AiUsage\AiUsageCaller;
 use App\Settings\AiSettings;
 use Illuminate\Support\Facades\Log;
 use Laravel\Ai\Classification;
 use Laravel\Ai\Classification\Boolean;
 use Laravel\Ai\Contracts\Question;
+use Laravel\Ai\Providers\Provider;
 use Laravel\Ai\Responses\ClassificationResponse;
 use Laravel\Ai\Responses\Data\Answer;
 use Laravel\Ai\Responses\Data\BooleanAnswer;
@@ -26,6 +28,7 @@ final readonly class Classifier
     public function __construct(
         private AiSettings $aiSettings,
         private AiUsageCaller $aiUsageCaller,
+        private OpenRouterRequestOptions $openRouterRequestOptions,
     ) {}
 
     /**
@@ -45,6 +48,7 @@ final readonly class Classifier
             $response = $this->aiUsageCaller->during($caller, fn (): ClassificationResponse => Classification::of($state)
                 ->questions($questions)
                 ->timeout(self::TIMEOUT_SECONDS)
+                ->withProviderOptions(fn (Provider $resolvedProvider): array => $this->openRouterRequestOptions->for($resolvedProvider->driver()))
                 ->classify($provider, $this->aiSettings->classificationModel()));
 
             return array_combine(

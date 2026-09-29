@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Ai\Routing;
 
 use App\Ai\ProviderCapabilities;
+use App\Settings\AiSettings;
 use Laravel\Ai\Contracts\Providers\SupportsToolSearch;
 use Laravel\Ai\Providers\Tools\ToolSearch;
 
@@ -15,7 +16,10 @@ use Laravel\Ai\Providers\Tools\ToolSearch;
  */
 final readonly class ToolPayload
 {
-    public function __construct(private ProviderCapabilities $providerCapabilities) {}
+    public function __construct(
+        private ProviderCapabilities $providerCapabilities,
+        private AiSettings $aiSettings,
+    ) {}
 
     /**
      * Core tools stay first-class; every other tool is deferred behind one
@@ -26,7 +30,7 @@ final readonly class ToolPayload
      */
     public function build(array $tools): array
     {
-        if (! $this->providerCapabilities->everyProviderSupports(SupportsToolSearch::class)) {
+        if (! $this->providerCapabilities->everyProviderSupports(SupportsToolSearch::class, $this->aiSettings->chatSelection())) {
             return $tools;
         }
 

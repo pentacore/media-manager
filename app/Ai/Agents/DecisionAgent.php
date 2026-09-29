@@ -7,6 +7,8 @@ namespace App\Ai\Agents;
 use App\Ai\Concerns\UsesFailoverChain;
 use App\Ai\Middleware\AnswerOnFinalStep;
 use App\Ai\Middleware\EnforceBudgetEachStep;
+use App\Ai\ModelSelection;
+use App\Ai\OpenRouterRequestOptions;
 use App\Ai\Tools\Arr\GetMediaTool;
 use App\Ai\Tools\Arr\SearchMediaTool;
 use App\Ai\Tools\Decision\InspectStuckImportTool;
@@ -52,13 +54,20 @@ class DecisionAgent implements Agent, HasMiddleware, HasProviderOptions, HasTool
         return resolve(DecisionAgentSettings::class)->model();
     }
 
+    public function modelSelection(): ModelSelection
+    {
+        return resolve(DecisionAgentSettings::class)->selection();
+    }
+
     public function providerOptions(Lab|string $provider): array
     {
+        $reasoningLevel = resolve(DecisionAgentSettings::class)->reasoning();
+
         return match ($provider) {
             Lab::OpenAI => [
-                'reasoning' => ['effort' => resolve(DecisionAgentSettings::class)->reasoning()],
+                'reasoning' => ['effort' => $reasoningLevel],
             ],
-            default => [],
+            default => resolve(OpenRouterRequestOptions::class)->for($provider, $reasoningLevel),
         };
     }
 

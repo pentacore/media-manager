@@ -71,8 +71,10 @@ test('every agent offers the failover chain for its own model', function (string
     MediaFileInspectorAgent::class,
 ]);
 
-test('without a failover provider every agent leaves the provider to the SDK default', function (string $agentClass): void {
-    expect((new $agentClass)->provider())->toBeNull();
+test('without a failover provider every agent sends an explicit single-provider chain', function (string $agentClass): void {
+    $agent = new $agentClass;
+
+    expect($agent->provider())->toBe([Lab::OpenAI->value => $agent->model()]);
 })->with([
     MediaAgent::class,
     DecisionAgent::class,

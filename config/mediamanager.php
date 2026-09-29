@@ -71,6 +71,17 @@ return [
             'model' => env('MEDIAMANAGER_AI_CLASSIFICATION_MODEL'),
         ],
 
+        // OpenRouter upstream routing preferences sent with every OpenRouter
+        // request (Admin > AI Settings persists on top). Empty values leave
+        // OpenRouter's own defaults in place.
+        'openrouter' => [
+            'sort' => env('AI_OPENROUTER_SORT'),
+            'deny_data_collection' => (bool) env('AI_OPENROUTER_DENY_DATA_COLLECTION', false),
+            'allow_fallbacks' => (bool) env('AI_OPENROUTER_ALLOW_FALLBACKS', true),
+            'order' => array_values(array_filter(array_map(trim(...), explode(',', (string) env('AI_OPENROUTER_ORDER', ''))))),
+            'ignore' => array_values(array_filter(array_map(trim(...), explode(',', (string) env('AI_OPENROUTER_IGNORE', ''))))),
+        ],
+
         // Model for investigation sub-agents; empty follows the chat model.
         'sub_agent_model' => env('MEDIAMANAGER_AI_SUB_AGENT_MODEL', ''),
 

@@ -189,20 +189,24 @@ test('exception messages are surfaced to the client in local env', function (): 
 });
 
 /**
- * Exhaust a one-request-per-minute limit on the configured chat model.
+ * Exhaust a one-request-per-minute limit on the given chat model, the
+ * configured chat selection's provider/model by default.
  */
-function exhaustChatModelRateLimit(): void
+function exhaustChatModelRateLimit(?string $provider = null, ?string $model = null): void
 {
     resolve(AiSettings::class)->setRateLimitsEnforced(true);
 
-    $price = AiModelPrice::factory()->create(['provider' => 'openai', 'model' => resolve(AiSettings::class)->model()]);
+    $provider ??= 'openai';
+    $model ??= resolve(AiSettings::class)->model();
+
+    $price = AiModelPrice::factory()->create(['provider' => $provider, 'model' => $model]);
     $price->rateLimits()->create(['metric' => 'requests', 'period' => 'minute', 'limit_value' => 1]);
 
     DB::table('ai_usage_records')->insert([
         'invocation_id' => 'inv-'.uniqid(),
         'agent_class' => 'TestAgent',
-        'provider' => 'openai',
-        'model' => resolve(AiSettings::class)->model(),
+        'provider' => $provider,
+        'model' => $model,
         'prompt_tokens' => 10,
         'completion_tokens' => 5,
         'cache_read_input_tokens' => 0,
@@ -226,6 +230,25 @@ test('send refuses with 429 when the chat model has exhausted its rate limit and
 
     expect($response->json('error'))->toBe('rate_limited')
         ->and($response->json('message'))->toContain('Rate limit reached for openai/');
+
+    expect($response->getContent())->not->toContain('Should never run.');
+});
+
+test('send refuses with 429 when the chat model is on OpenRouter and has exhausted its rate limit', function (): void {
+    config()->set('ai.providers.openrouter.key', 'sk-or-test');
+    $aiSettings = resolve(AiSettings::class);
+    $aiSettings->setModelProvider('openrouter');
+    $aiSettings->setModel('anthropic/claude-sonnet-5');
+    exhaustChatModelRateLimit('openrouter', 'anthropic/claude-sonnet-5');
+    MediaAgent::fake(['Should never run.']);
+    $admin = User::factory()->admin()->create();
+
+    $response = $this->actingAs($admin)
+        ->postJson(route('ai.chat.send'), ['message' => 'hi'])
+        ->assertStatus(429);
+
+    expect($response->json('error'))->toBe('rate_limited')
+        ->and($response->json('message'))->toContain('Rate limit reached for openrouter/');
 
     expect($response->getContent())->not->toContain('Should never run.');
 });

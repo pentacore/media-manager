@@ -30,19 +30,19 @@ final readonly class UnpricedModelDetector
             return [];
         }
 
-        $provider = $this->aiSettings->primaryProvider()->value;
-        $selectedModels = [
-            'Chat' => $this->aiSettings->model(),
-            'Decision agent' => $this->decisionAgentSettings->model(),
-            'Sub-agents' => $this->aiSettings->subAgentModel(),
-            'Chat titles' => $this->aiSettings->titleModel(),
+        $selections = [
+            'Chat' => $this->aiSettings->chatSelection(),
+            'Decision agent' => $this->decisionAgentSettings->selection(),
+            'Sub-agents' => $this->aiSettings->subAgentSelection(),
+            'Chat titles' => $this->aiSettings->titleSelection(),
+            'Price updater' => $this->aiSettings->priceUpdaterSelection(),
         ];
 
         $unpriced = [];
 
-        foreach ($selectedModels as $role => $model) {
-            if ($this->modelPriceLookup->snapshotFor($provider, $model, false) === null) {
-                $unpriced[] = ['role' => $role, 'provider' => $provider, 'model' => $model];
+        foreach ($selections as $role => $modelSelection) {
+            if ($this->modelPriceLookup->snapshotFor($modelSelection->provider, $modelSelection->model, false) === null) {
+                $unpriced[] = ['role' => $role, 'provider' => $modelSelection->provider, 'model' => $modelSelection->model];
             }
         }
 

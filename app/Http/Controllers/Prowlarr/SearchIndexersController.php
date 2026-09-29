@@ -63,9 +63,29 @@ class SearchIndexersController extends Controller
 
         return Inertia::render('Prowlarr/Search', [
             'query' => $query,
-            'results' => $results,
+            'results' => array_map($this->presentRelease(...), $results),
             'hasConnection' => true,
             'error' => null,
         ]);
+    }
+
+    /**
+     * Keep only the display fields. Prowlarr's downloadUrl embeds its own
+     * API key, and guid/magnetUrl can carry a tracker passkey, so the raw
+     * release must never reach the browser.
+     *
+     * @param  array<string, mixed>  $release
+     * @return array{title: mixed, indexer: mixed, size: mixed, seeders: mixed, age: mixed, publishDate: mixed}
+     */
+    private function presentRelease(array $release): array
+    {
+        return [
+            'title' => $release['title'] ?? null,
+            'indexer' => $release['indexer'] ?? null,
+            'size' => $release['size'] ?? null,
+            'seeders' => $release['seeders'] ?? null,
+            'age' => $release['age'] ?? null,
+            'publishDate' => $release['publishDate'] ?? null,
+        ];
     }
 }
