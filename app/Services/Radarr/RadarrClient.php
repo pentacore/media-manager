@@ -7,6 +7,7 @@ namespace App\Services\Radarr;
 use App\Cache\Services\RadarrCache;
 use App\Services\Arr\ArrClient;
 use App\Support\Cache\Warmable;
+use Carbon\CarbonImmutable;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\RequestException;
 use Override;
@@ -129,6 +130,29 @@ class RadarrClient extends ArrClient implements Warmable
             'tags',
             fn (): array => parent::getTags(),
         );
+    }
+
+    /**
+     * @return list<array<string, mixed>>
+     *
+     * @throws RequestException|ConnectionException
+     */
+    #[Override]
+    public function getCalendar(CarbonImmutable $start, CarbonImmutable $end): array
+    {
+        return $this->cache()->rememberList(
+            sprintf('calendar:%s:%s', $start->toDateString(), $end->toDateString()),
+            fn (): array => parent::getCalendar($start, $end),
+        );
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    #[Override]
+    protected function wantedQuery(): array
+    {
+        return ['sortKey' => 'movieMetadata.digitalRelease'];
     }
 
     public function warm(): void

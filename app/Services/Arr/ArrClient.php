@@ -5,10 +5,12 @@ declare(strict_types=1);
 namespace App\Services\Arr;
 
 use App\Models\ServiceConnection;
+use Carbon\CarbonImmutable;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\PendingRequest;
 use Illuminate\Http\Client\RequestException;
 use Illuminate\Support\Facades\Http;
+use InvalidArgumentException;
 use Throwable;
 
 abstract class ArrClient
@@ -112,6 +114,62 @@ abstract class ArrClient
             'name' => $name,
             ...$params,
         ])->throw()->json() ?? [];
+    }
+
+    /**
+     * Episodes (Sonarr) or movies (Radarr) airing/releasing in the range,
+     * monitored or not — the calendar filters monitored-only client-side.
+     *
+     * @return list<array<string, mixed>>
+     *
+     * @throws RequestException|ConnectionException
+     */
+    public function getCalendar(CarbonImmutable $start, CarbonImmutable $end): array
+    {
+        return $this->buildClient()->get(sprintf('/api/%s/calendar', $this->apiVersion), [
+            'start' => $start->toIso8601ZuluString(),
+            'end' => $end->toIso8601ZuluString(),
+            'unmonitored' => 'true',
+            ...$this->calendarQuery(),
+        ])->throw()->json() ?? [];
+    }
+
+    /**
+     * One page of `wanted/missing` or `wanted/cutoff`, newest air date first.
+     * `$monitored` is the upstream switch: true lists monitored items, false
+     * lists unmonitored ones (there is no "both").
+     *
+     * @return array<string, mixed>
+     *
+     * @throws RequestException|ConnectionException
+     */
+    public function getWanted(string $list, int $page, int $pageSize, bool $monitored): array
+    {
+        throw_unless(in_array($list, ['missing', 'cutoff'], true), InvalidArgumentException::class, sprintf('Unknown wanted list "%s".', $list));
+
+        return $this->buildClient()->get(sprintf('/api/%s/wanted/%s', $this->apiVersion, $list), [
+            'page' => $page,
+            'pageSize' => $pageSize,
+            'sortDirection' => 'descending',
+            'monitored' => $monitored ? 'true' : 'false',
+            ...$this->wantedQuery(),
+        ])->throw()->json() ?? [];
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    protected function calendarQuery(): array
+    {
+        return [];
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    protected function wantedQuery(): array
+    {
+        return [];
     }
 
     /**
