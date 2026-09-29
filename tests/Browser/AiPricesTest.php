@@ -503,7 +503,7 @@ test('picking a catalog model fills the add form and saves a synced row', functi
         ->click('[data-create-price-submit]')
         ->assertSee('Model price added.')
         ->assertSeeIn('[data-prices-table]', 'anthropic/claude-opus-5.5')
-        ->assertSeeIn('[data-prices-table]', 'OpenRouter');
+        ->assertSeeIn('[data-prices-table] [data-price-source]', 'OpenRouter');
 
     $aiModelPrice = AiModelPrice::query()->where('model', 'anthropic/claude-opus-5.5')->sole();
 

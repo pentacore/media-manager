@@ -874,6 +874,7 @@ const priciest = ref(
                                                         price.pricing_source,
                                                     )
                                                 "
+                                                data-price-source
                                             >
                                                 {{
                                                     sourceLabel(
@@ -889,6 +890,7 @@ const priciest = ref(
                                                     price.pricing_source,
                                                 )
                                             "
+                                            data-price-source
                                         >
                                             {{
                                                 sourceLabel(
