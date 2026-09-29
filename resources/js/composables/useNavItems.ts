@@ -7,6 +7,7 @@ import {
     Captions,
     ChartLine,
     Clock,
+    Compass,
     DollarSign,
     Download,
     Film,
@@ -51,6 +52,7 @@ import NowPlayingController from '@/actions/App/Http/Controllers/Emby/NowPlaying
 import WatchHistoryController from '@/actions/App/Http/Controllers/Emby/WatchHistoryController';
 import LibraryActivityController from '@/actions/App/Http/Controllers/Library/ActivityController';
 import AnimeController from '@/actions/App/Http/Controllers/Media/AnimeController';
+import DiscoverController from '@/actions/App/Http/Controllers/Media/DiscoverController';
 import MovieController from '@/actions/App/Http/Controllers/Media/MovieController';
 import RequestController from '@/actions/App/Http/Controllers/Media/RequestController';
 import SearchController from '@/actions/App/Http/Controllers/Media/SearchController';
@@ -80,6 +82,10 @@ export function useNavItems(counts?: NavCounts): ComputedRef<NavGroup[]> {
     );
 
     function visible(item: NavItem): boolean {
+        if (item.requiresSeerr === true && !page.props.integrations?.seerr) {
+            return false;
+        }
+
         return item.ability === undefined || can(item.ability);
     }
 
@@ -140,6 +146,13 @@ export function useNavItems(counts?: NavCounts): ComputedRef<NavGroup[]> {
                         href: MovieController.index.url(),
                         icon: Film,
                         ability: 'view-library',
+                    },
+                    {
+                        title: 'Discover',
+                        href: DiscoverController.index.url(),
+                        icon: Compass,
+                        ability: 'request-media',
+                        requiresSeerr: true,
                     },
                     {
                         title: 'Requests',

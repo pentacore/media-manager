@@ -27,6 +27,8 @@ export type NavItem = {
     mobileOnly?: boolean;
     /** Hidden unless `auth.can[ability]` is true. Children inherit nothing — tag each. */
     ability?: Ability;
+    /** Hidden unless an active Seerr connection exists (shared `integrations.seerr`). */
+    requiresSeerr?: boolean;
 };
 
 /**

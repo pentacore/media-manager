@@ -20,6 +20,7 @@ function viewerSidebarPaths(): array
         '/dashboard',
         '/media/series',
         '/media/movies',
+        '/media/discover',
         '/monitoring/now-playing',
         '/monitoring/watch-history',
     ];
@@ -35,6 +36,12 @@ function viewerSidebarPathsScript(): string
 }
 
 test('a viewer sidebar lists exactly the pages a viewer can open', function (): void {
+    // The nav item only shows with an active Seerr connection; the dashboard
+    // itself never calls Seerr, so this host-scoped fake is only a guard
+    // against a stray lookup — never a bare '*' catch-all (see browser.md).
+    ServiceConnection::factory()->seerr()->create(['url' => 'http://seerr.local:5055', 'api_key' => 'k']);
+    Http::fake(['seerr.local:5055/*' => Http::response([])]);
+
     $this->actingAs(User::factory()->create());
 
     visit('/dashboard')
