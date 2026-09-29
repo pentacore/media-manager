@@ -42,10 +42,12 @@ final readonly class RefreshScope
     /**
      * @param  list<string>|null  $providers  Canonical provider allowlist, or null for all supported providers.
      * @param  array<string, list<string>|null>|null  $providerModels  Canonical provider => allowed models, or null when not model-scoped. A per-provider null value means every model of that provider is allowed (a provider-level wildcard within an otherwise model-scoped map).
+     * @param  array<string, list<string>>  $explicitCreates  Canonical provider => models an admin explicitly picked to add; these may be created even when the provider is update-only.
      */
     private function __construct(
         private ?array $providers,
         private ?array $providerModels,
+        private array $explicitCreates = [],
     ) {}
 
     /**
@@ -143,6 +145,27 @@ final readonly class RefreshScope
     }
 
     /**
+     * Restrict writes to models an admin explicitly picked to add from the
+     * pricing catalog. Unlike every automatic scope, these exact models may be
+     * created even when their provider is off the auto-create list — the
+     * admin choosing them is the create decision.
+     *
+     * @param  list<string>  $models
+     */
+    public static function forExplicitCreates(string $provider, array $models): self
+    {
+        $id = self::canonicalize($provider);
+
+        if ($id === null) {
+            return new self(providers: [], providerModels: []);
+        }
+
+        $models = array_values(array_unique($models));
+
+        return new self(providers: [$id], providerModels: [$id => $models], explicitCreates: [$id => $models]);
+    }
+
+    /**
      * Whether the scope permits writing the given provider/model pair.
      */
     public function allowsWrite(string $provider, string $model): bool
@@ -215,14 +238,21 @@ final readonly class RefreshScope
 
     /**
      * Whether an automatic write may create a new row for this exact model: the
+     * model was explicitly picked by an admin ({@see forExplicitCreates()}), the
      * provider is on the auto-create list, or the model is one the app uses
      * ({@see InUsePricingModels}), so an update-only provider still prices the
      * models it is actually called with.
      */
     public function allowsCreateModel(string $provider, string $model): bool
     {
+        $id = self::canonicalize($provider);
+
+        if ($id !== null && in_array($model, $this->explicitCreates[$id] ?? [], true)) {
+            return true;
+        }
+
         return $this->allowsCreate($provider)
-            || (self::canonicalize($provider) !== null && resolve(InUsePricingModels::class)->contains($provider, $model));
+            || ($id !== null && resolve(InUsePricingModels::class)->contains($provider, $model));
     }
 
     /**
