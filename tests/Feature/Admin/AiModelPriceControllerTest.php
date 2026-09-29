@@ -8,9 +8,12 @@ use App\Jobs\RefreshAiPricesJob;
 use App\Models\AiFreeUsagePool;
 use App\Models\AiModelPrice;
 use App\Models\User;
+use App\Services\AiUsage\Pricing\CatalogModelBrowser;
 use Illuminate\Support\Facades\Bus;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Event;
+use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Sleep;
 
 test('guests cannot access AI prices', function (): void {
     $this->get(route('admin.ai-prices.index'))
@@ -686,4 +689,116 @@ test('index shares the catalog providers', function (): void {
         ->assertInertia(fn ($page) => $page
             ->where('catalog_providers', fn ($providers): bool => in_array('openrouter', $providers->all(), true)
                 && ! in_array('google', $providers->all(), true)));
+});
+
+function catalogPickerStoreSetup(int $status = 200): void
+{
+    Sleep::fake();
+
+    foreach (['models_dev', 'litellm', 'xai'] as $source) {
+        config()->set(sprintf('mediamanager.ai.pricing.%s.enabled', $source), false);
+    }
+
+    config()->set('mediamanager.ai.pricing.openrouter.enabled', true);
+    config()->set('mediamanager.ai.pricing.openrouter.retries', 0);
+
+    Http::fake([
+        'openrouter.ai/*' => $status === 200
+            ? Http::response((string) file_get_contents(base_path('tests/Fixtures/OpenRouter/models.json')))
+            : Http::response('failure', $status),
+    ]);
+}
+
+/**
+ * The Add-form payload a catalog pick of claude-opus-5.5 fills in.
+ *
+ * @return array<string, mixed>
+ */
+function catalogPickerOpusPayload(array $overrides = []): array
+{
+    $option = collect(resolve(CatalogModelBrowser::class)->available('openrouter'))
+        ->firstWhere('model', 'anthropic/claude-opus-5.5');
+
+    return [
+        'provider' => 'openrouter',
+        'model' => 'anthropic/claude-opus-5.5',
+        'input_per_mtok' => $option->prices['input_per_mtok'],
+        'output_per_mtok' => $option->prices['output_per_mtok'],
+        'cache_read_per_mtok' => $option->prices['cache_read_per_mtok'] ?? '0',
+        'cache_write_per_mtok' => $option->prices['cache_write_per_mtok'] ?? '0',
+        'reasoning_per_mtok' => $option->prices['reasoning_per_mtok'] ?? '0',
+        'from_catalog' => '1',
+        'automatic_updates_enabled' => '1',
+        ...$overrides,
+    ];
+}
+
+test('a catalog pick with unchanged prices keeps feed provenance and stays unlocked', function (): void {
+    catalogPickerStoreSetup();
+
+    $this->actingAs(User::factory()->admin()->create())
+        ->post(route('admin.ai-prices.store'), catalogPickerOpusPayload())
+        ->assertRedirect(route('admin.ai-prices.index'));
+
+    $aiModelPrice = AiModelPrice::query()->where('model', 'anthropic/claude-opus-5.5')->sole();
+
+    expect($aiModelPrice->pricing_source)->toBe(PricingSource::OpenRouter)
+        ->and($aiModelPrice->pricing_source_url)->toBe('https://openrouter.ai/api/v1/models')
+        ->and($aiModelPrice->pricing_synced_at)->not->toBeNull()
+        ->and($aiModelPrice->is_price_locked)->toBeFalse();
+});
+
+test('a catalog pick with an edited price is saved as manual', function (bool $automaticUpdates, bool $locked): void {
+    catalogPickerStoreSetup();
+
+    $this->actingAs(User::factory()->admin()->create())
+        ->post(route('admin.ai-prices.store'), catalogPickerOpusPayload([
+            'input_per_mtok' => '9.99',
+            'automatic_updates_enabled' => $automaticUpdates ? '1' : '0',
+        ]))
+        ->assertRedirect(route('admin.ai-prices.index'));
+
+    $aiModelPrice = AiModelPrice::query()->where('model', 'anthropic/claude-opus-5.5')->sole();
+
+    expect($aiModelPrice->pricing_source)->toBe(PricingSource::Manual)
+        ->and($aiModelPrice->is_price_locked)->toBe($locked)
+        ->and($aiModelPrice->input_per_mtok)->toBe('9.9900');
+})->with([
+    'automatic updates off' => [false, true],
+    'automatic updates on' => [true, false],
+]);
+
+test('a catalog pick with automatic updates off stays manual and locked even at catalog prices', function (): void {
+    catalogPickerStoreSetup();
+
+    $this->actingAs(User::factory()->admin()->create())
+        ->post(route('admin.ai-prices.store'), catalogPickerOpusPayload(['automatic_updates_enabled' => '0']));
+
+    $aiModelPrice = AiModelPrice::query()->where('model', 'anthropic/claude-opus-5.5')->sole();
+
+    expect($aiModelPrice->pricing_source)->toBe(PricingSource::Manual)
+        ->and($aiModelPrice->is_price_locked)->toBeTrue();
+});
+
+test('a catalog pick falls back to manual when the catalog is down at save time', function (): void {
+    catalogPickerStoreSetup(503);
+
+    // The payload is hand-built from the fixture's known opus rates: the
+    // catalog is down, so it cannot be read back through the browser.
+    $this->actingAs(User::factory()->admin()->create())
+        ->post(route('admin.ai-prices.store'), [
+            'provider' => 'openrouter',
+            'model' => 'anthropic/claude-opus-5.5',
+            'input_per_mtok' => '4',
+            'output_per_mtok' => '20',
+            'cache_read_per_mtok' => '0.2',
+            'cache_write_per_mtok' => '5',
+            'reasoning_per_mtok' => '20',
+            'from_catalog' => '1',
+            'automatic_updates_enabled' => '1',
+        ])
+        ->assertRedirect(route('admin.ai-prices.index'));
+
+    expect(AiModelPrice::query()->where('model', 'anthropic/claude-opus-5.5')->sole()->pricing_source)
+        ->toBe(PricingSource::Manual);
 });

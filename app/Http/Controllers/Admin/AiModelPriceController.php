@@ -66,11 +66,12 @@ class AiModelPriceController extends Controller
         ]);
     }
 
-    public function store(StoreAiModelPriceRequest $storeAiModelPriceRequest): RedirectResponse
+    public function store(StoreAiModelPriceRequest $storeAiModelPriceRequest, CatalogModelBrowser $catalogModelBrowser): RedirectResponse
     {
         $validated = $storeAiModelPriceRequest->validated();
         $rateLimits = Arr::pull($validated, 'rate_limits') ?? [];
         $automaticUpdatesEnabled = $this->pullBooleanFlag($validated, 'automatic_updates_enabled');
+        $fromCatalog = $this->pullBooleanFlag($validated, 'from_catalog');
         $this->zeroBlankSearchUnitRate($validated);
 
         // A manually entered price is owned by the admin: it defaults to
@@ -78,6 +79,16 @@ class AiModelPriceController extends Controller
         // admin opts into automatic updates at creation time.
         $validated['pricing_source'] = PricingSource::Manual;
         $validated['is_price_locked'] = $automaticUpdatesEnabled !== true;
+
+        // A price picked from the catalog and saved unedited with automatic
+        // updates on keeps the feed's provenance, so it reads as synced.
+        if ($fromCatalog === true && $automaticUpdatesEnabled === true) {
+            $catalogAttributes = $catalogModelBrowser->catalogAttributes($validated['provider'], $validated['model'], $validated);
+
+            if ($catalogAttributes !== null) {
+                $validated = [...$validated, ...$catalogAttributes];
+            }
+        }
 
         $aiModelPrice = AiModelPrice::create($validated);
         $aiModelPrice->rateLimits()->createMany($rateLimits);
