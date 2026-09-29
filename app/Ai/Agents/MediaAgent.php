@@ -9,6 +9,7 @@ use App\Ai\Middleware\AnswerOnFinalStep;
 use App\Ai\Middleware\EnforceBudgetEachStep;
 use App\Ai\Middleware\StopWhenClientDisconnected;
 use App\Ai\ModelSelection;
+use App\Ai\OpenRouterRequestOptions;
 use App\Ai\Tools\Arr\AddMediaTool;
 use App\Ai\Tools\Arr\DeleteMediaTool;
 use App\Ai\Tools\Arr\GetMediaTool;
@@ -99,11 +100,13 @@ class MediaAgent implements Agent, Conversational, HasMiddleware, HasProviderOpt
 
     public function providerOptions(Lab|string $provider): array
     {
+        $reasoningLevel = resolve(AiSettings::class)->advisorReasoningLevel();
+
         $options = match ($provider) {
             Lab::OpenAI => [
-                'reasoning' => ['effort' => resolve(AiSettings::class)->advisorReasoningLevel(), 'summary' => 'auto'],
+                'reasoning' => ['effort' => $reasoningLevel, 'summary' => 'auto'],
             ],
-            default => [],
+            default => resolve(OpenRouterRequestOptions::class)->for($provider, $reasoningLevel),
         };
         Log::debug('MediaAgent provider options', ['provider' => $provider, 'options' => $options]);
 

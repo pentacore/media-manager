@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Ai\Agents;
 
+use App\Ai\Concerns\SendsOpenRouterOptions;
 use App\Ai\Concerns\UsesFailoverChain;
 use App\Ai\Middleware\AnswerOnFinalStep;
 use App\Ai\Middleware\EnforceBudgetEachStep;
@@ -21,6 +22,7 @@ use Laravel\Ai\Attributes\MaxSteps;
 use Laravel\Ai\Attributes\RepairToolCalls;
 use Laravel\Ai\Contracts\Agent;
 use Laravel\Ai\Contracts\HasMiddleware;
+use Laravel\Ai\Contracts\HasProviderOptions;
 use Laravel\Ai\Contracts\HasTools;
 use Laravel\Ai\Contracts\Providers\SupportsCodeExecution;
 use Laravel\Ai\Contracts\Tool;
@@ -33,9 +35,10 @@ use Stringable;
 #[RepairToolCalls]
 #[CacheInstructions]
 #[CacheToolDefinitions]
-class PriceFetcherAgent implements Agent, HasMiddleware, HasTools
+class PriceFetcherAgent implements Agent, HasMiddleware, HasProviderOptions, HasTools
 {
     use Promptable;
+    use SendsOpenRouterOptions;
     use UsesFailoverChain;
 
     /**
