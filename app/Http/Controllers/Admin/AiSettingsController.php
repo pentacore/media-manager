@@ -90,8 +90,8 @@ class AiSettingsController extends Controller
                 ->mapWithKeys(fn (string $provider): array => [$provider => filled(config(sprintf('ai.providers.%s.key', $provider)))])
                 ->all(),
             'advancedTools' => [
-                'tool_search' => $providerCapabilities->everyProviderSupports(SupportsToolSearch::class),
-                'code_execution' => $providerCapabilities->everyProviderSupports(SupportsCodeExecution::class),
+                'tool_search' => $providerCapabilities->everyProviderSupports(SupportsToolSearch::class, $aiSettings->chatSelection()),
+                'code_execution' => $providerCapabilities->everyProviderSupports(SupportsCodeExecution::class, $aiSettings->priceUpdaterSelection()),
             ],
         ]);
     }

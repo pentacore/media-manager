@@ -250,7 +250,7 @@ class PriceFetcherAgent implements Agent, HasMiddleware, HasTools
      */
     private function codeExecutionAvailable(): bool
     {
-        return resolve(ProviderCapabilities::class)->everyProviderSupports(SupportsCodeExecution::class);
+        return resolve(ProviderCapabilities::class)->everyProviderSupports(SupportsCodeExecution::class, resolve(AiSettings::class)->priceUpdaterSelection());
     }
 
     /**

@@ -6,7 +6,6 @@ namespace App\Ai;
 
 use App\Settings\AiSettings;
 use Laravel\Ai\Ai;
-use Laravel\Ai\Enums\Lab;
 use Throwable;
 
 /**
@@ -20,26 +19,27 @@ final readonly class ProviderCapabilities
     public function __construct(private AiSettings $aiSettings) {}
 
     /**
-     * The primary provider followed by the failover provider, if any.
+     * The providers an agent on this selection may reach, in failover order.
      *
-     * @return list<Lab>
+     * @return list<string>
      */
-    public function chain(): array
+    public function chain(ModelSelection $modelSelection): array
     {
-        return array_values($this->aiSettings->providerChain() ?? [$this->aiSettings->primaryProvider()]);
+        return array_keys($this->aiSettings->providerChainFor($modelSelection));
     }
 
     /**
-     * Whether every provider in the chain implements the given contract. A
-     * provider that cannot be resolved counts as unsupported.
+     * Whether every provider an agent on this selection may reach implements
+     * the given contract. A provider that cannot be resolved counts as
+     * unsupported.
      *
      * @param  class-string  $contract  a `Laravel\Ai\Contracts\Providers\*` interface
      */
-    public function everyProviderSupports(string $contract): bool
+    public function everyProviderSupports(string $contract, ModelSelection $modelSelection): bool
     {
-        foreach ($this->chain() as $lab) {
+        foreach ($this->chain($modelSelection) as $provider) {
             try {
-                if (! Ai::textProvider($lab->value) instanceof $contract) {
+                if (! Ai::textProvider($provider) instanceof $contract) {
                     return false;
                 }
             } catch (Throwable) {
