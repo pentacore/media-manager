@@ -31,50 +31,40 @@ final readonly class ActionTargets
 {
     /**
      * @param  array<string, mixed>  $pinContext
+     * @param  bool  $strictPin  When true, a pin naming a different-type,
+     *                           deleted or deactivated connection aborts
+     *                           instead of silently falling back to the
+     *                           active connection — for action types (like
+     *                           monitor_episodes/search_media/grab_release)
+     *                           whose executor resolves the same way via
+     *                           {@see ServiceConnection::resolvePinnedStrict()}.
+     *                           Pre-existing callers leave this false and
+     *                           keep the original resolvePinned() fallback.
      */
-    public function sonarrSeries(int $sonarrId, array $pinContext = [], ?string $fallbackName = null, bool $fallbackVerified = false): ActionTarget
+    public function sonarrSeries(int $sonarrId, array $pinContext = [], ?string $fallbackName = null, bool $fallbackVerified = false, bool $strictPin = false): ActionTarget
     {
-        return $this->attempt('series', $sonarrId, $fallbackName, $fallbackVerified, function () use ($sonarrId, $pinContext): ?ActionTarget {
-            $serviceConnection = ServiceConnection::resolvePinned($pinContext, ServiceType::Sonarr);
-            $indexed = IndexedSeries::query()
-                ->where('service_connection_id', $serviceConnection->id)
-                ->where('sonarr_id', $sonarrId)
-                ->first(['title', 'year']);
+        if ($strictPin) {
+            $serviceConnection = $this->resolvePinnedConnection(ServiceType::Sonarr, $pinContext);
 
-            $name = $indexed instanceof IndexedSeries
-                ? $this->withYear($indexed->title, $indexed->year)
-                : $this->nameFrom(new SonarrClient($serviceConnection)->getSeriesById($sonarrId));
+            return $this->attempt('series', $sonarrId, $fallbackName, $fallbackVerified, fn (): ?ActionTarget => $this->sonarrSeriesTarget($sonarrId, $serviceConnection));
+        }
 
-            return $name === null ? null : new ActionTarget('series', $name, [
-                ['label' => 'Series', 'value' => $name],
-                ['label' => 'Sonarr ID', 'value' => (string) $sonarrId],
-                ['label' => 'Connection', 'value' => $serviceConnection->name],
-            ]);
-        });
+        return $this->attempt('series', $sonarrId, $fallbackName, $fallbackVerified, fn (): ?ActionTarget => $this->sonarrSeriesTarget($sonarrId, ServiceConnection::resolvePinned($pinContext, ServiceType::Sonarr)));
     }
 
     /**
      * @param  array<string, mixed>  $pinContext
+     * @param  bool  $strictPin  See {@see sonarrSeries()}.
      */
-    public function radarrMovie(int $radarrId, array $pinContext = [], ?string $fallbackName = null, bool $fallbackVerified = false): ActionTarget
+    public function radarrMovie(int $radarrId, array $pinContext = [], ?string $fallbackName = null, bool $fallbackVerified = false, bool $strictPin = false): ActionTarget
     {
-        return $this->attempt('movie', $radarrId, $fallbackName, $fallbackVerified, function () use ($radarrId, $pinContext): ?ActionTarget {
-            $serviceConnection = ServiceConnection::resolvePinned($pinContext, ServiceType::Radarr);
-            $indexed = IndexedMovie::query()
-                ->where('service_connection_id', $serviceConnection->id)
-                ->where('radarr_id', $radarrId)
-                ->first(['title', 'year']);
+        if ($strictPin) {
+            $serviceConnection = $this->resolvePinnedConnection(ServiceType::Radarr, $pinContext);
 
-            $name = $indexed instanceof IndexedMovie
-                ? $this->withYear($indexed->title, $indexed->year)
-                : $this->nameFrom(new RadarrClient($serviceConnection)->getMovieById($radarrId));
+            return $this->attempt('movie', $radarrId, $fallbackName, $fallbackVerified, fn (): ?ActionTarget => $this->radarrMovieTarget($radarrId, $serviceConnection));
+        }
 
-            return $name === null ? null : new ActionTarget('movie', $name, [
-                ['label' => 'Movie', 'value' => $name],
-                ['label' => 'Radarr ID', 'value' => (string) $radarrId],
-                ['label' => 'Connection', 'value' => $serviceConnection->name],
-            ]);
-        });
+        return $this->attempt('movie', $radarrId, $fallbackName, $fallbackVerified, fn (): ?ActionTarget => $this->radarrMovieTarget($radarrId, ServiceConnection::resolvePinned($pinContext, ServiceType::Radarr)));
     }
 
     /**
@@ -265,15 +255,67 @@ final readonly class ActionTargets
      */
     public function arrConnection(ServiceType $serviceType, array $pinContext = []): ActionTarget
     {
-        $connectionId = (int) ($pinContext['service_connection_id'] ?? 0);
-
-        $serviceConnection = $connectionId > 0
-            ? ServiceConnection::resolvePinnedStrict($pinContext, $serviceType)
-            : ServiceConnection::resolveActive($serviceType);
+        $serviceConnection = $this->resolvePinnedConnection($serviceType, $pinContext);
 
         return new ActionTarget(sprintf('%s server', ucfirst($serviceType->value)), $serviceConnection->name, [
             ['label' => 'Connection', 'value' => $serviceConnection->name],
         ]);
+    }
+
+    private function sonarrSeriesTarget(int $sonarrId, ServiceConnection $serviceConnection): ?ActionTarget
+    {
+        $indexed = IndexedSeries::query()
+            ->where('service_connection_id', $serviceConnection->id)
+            ->where('sonarr_id', $sonarrId)
+            ->first(['title', 'year']);
+
+        $name = $indexed instanceof IndexedSeries
+            ? $this->withYear($indexed->title, $indexed->year)
+            : $this->nameFrom(new SonarrClient($serviceConnection)->getSeriesById($sonarrId));
+
+        return $name === null ? null : new ActionTarget('series', $name, [
+            ['label' => 'Series', 'value' => $name],
+            ['label' => 'Sonarr ID', 'value' => (string) $sonarrId],
+            ['label' => 'Connection', 'value' => $serviceConnection->name],
+        ]);
+    }
+
+    private function radarrMovieTarget(int $radarrId, ServiceConnection $serviceConnection): ?ActionTarget
+    {
+        $indexed = IndexedMovie::query()
+            ->where('service_connection_id', $serviceConnection->id)
+            ->where('radarr_id', $radarrId)
+            ->first(['title', 'year']);
+
+        $name = $indexed instanceof IndexedMovie
+            ? $this->withYear($indexed->title, $indexed->year)
+            : $this->nameFrom(new RadarrClient($serviceConnection)->getMovieById($radarrId));
+
+        return $name === null ? null : new ActionTarget('movie', $name, [
+            ['label' => 'Movie', 'value' => $name],
+            ['label' => 'Radarr ID', 'value' => (string) $radarrId],
+            ['label' => 'Connection', 'value' => $serviceConnection->name],
+        ]);
+    }
+
+    /**
+     * The shared "pin present → resolvePinnedStrict(), otherwise
+     * resolveActive()" policy used by arrConnection() and every
+     * strict-pin target lookup: a pin naming a different-type, deleted
+     * or deactivated connection aborts rather than silently falling
+     * back to another instance.
+     *
+     * @param  array<string, mixed>  $pinContext
+     *
+     * @throws ModelNotFoundException|InvalidArgumentException
+     */
+    private function resolvePinnedConnection(ServiceType $serviceType, array $pinContext): ServiceConnection
+    {
+        $connectionId = (int) ($pinContext['service_connection_id'] ?? 0);
+
+        return $connectionId > 0
+            ? ServiceConnection::resolvePinnedStrict($pinContext, $serviceType)
+            : ServiceConnection::resolveActive($serviceType);
     }
 
     /**

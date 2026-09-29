@@ -53,7 +53,7 @@ final readonly class ActionDescriber
             'emby_library_scan' => $this->libraryScan(),
             'remove_stuck_download' => $this->removeStuckDownload($type, $payload, $fallbackName),
             'resolve_manual_import' => $this->resolveManualImport($type, $payload, $fallbackName),
-            'monitor_episodes' => $this->monitorEpisodes($this->actionTargets->sonarrSeries($this->id($type, $payload, 'series_id'), $payload, $fallbackName), $payload),
+            'monitor_episodes' => $this->monitorEpisodes($this->actionTargets->sonarrSeries($this->id($type, $payload, 'series_id'), $payload, $fallbackName, strictPin: true), $payload),
             'search_media' => $this->searchMedia($type, $payload, $fallbackName),
             'grab_release' => $this->grabRelease($type, $payload, $fallbackName),
             default => throw UndescribableAction::unsupportedType($type),
@@ -227,13 +227,13 @@ final readonly class ActionDescriber
 
         if ($command === MediaSearchCommand::MoviesSearch) {
             $movieIds = (array) ($payload['movie_ids'] ?? []);
-            $actionTarget = $this->actionTargets->radarrMovie($this->id($type, ['movie_ids' => $movieIds[0] ?? null], 'movie_ids'), $payload, $fallbackName);
+            $actionTarget = $this->actionTargets->radarrMovie($this->id($type, ['movie_ids' => $movieIds[0] ?? null], 'movie_ids'), $payload, $fallbackName, strictPin: true);
 
             return $actionTarget->describe(sprintf('Search for %s', $actionTarget->label()), 'Radarr will search its indexers for the movie.')
                 ->withDetail('Search', $command->label());
         }
 
-        $actionTarget = $this->actionTargets->sonarrSeries($this->id($type, $payload, 'series_id'), $payload, $fallbackName);
+        $actionTarget = $this->actionTargets->sonarrSeries($this->id($type, $payload, 'series_id'), $payload, $fallbackName, strictPin: true);
         $count = count((array) ($payload['episode_ids'] ?? []));
         $season = (int) ($payload['season_number'] ?? 0);
 
@@ -267,8 +267,8 @@ final readonly class ActionDescriber
         throw_if($releaseTitle === null, UndescribableAction::missingTarget($type, 'release'));
 
         [$actionTarget, $service] = match ($payload['service'] ?? null) {
-            'sonarr' => [$this->actionTargets->sonarrSeries($this->id($type, $payload, 'series_id'), $payload, $fallbackName), 'Sonarr'],
-            'radarr' => [$this->actionTargets->radarrMovie($this->id($type, $payload, 'movie_id'), $payload, $fallbackName), 'Radarr'],
+            'sonarr' => [$this->actionTargets->sonarrSeries($this->id($type, $payload, 'series_id'), $payload, $fallbackName, strictPin: true), 'Sonarr'],
+            'radarr' => [$this->actionTargets->radarrMovie($this->id($type, $payload, 'movie_id'), $payload, $fallbackName, strictPin: true), 'Radarr'],
             default => throw UndescribableAction::missingTarget($type, 'service'),
         };
 

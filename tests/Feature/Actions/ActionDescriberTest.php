@@ -357,3 +357,44 @@ test('a library-wide search aborts when the pin names a connection of the wrong 
         'command' => 'missing_episode_search', 'service_connection_id' => $radarr->id,
     ]))->toThrow(InvalidArgumentException::class);
 });
+
+test('monitor_episodes aborts when the pin names a connection of the wrong service', function (): void {
+    describerSeries();
+    $radarr = ServiceConnection::factory()->radarr()->create(['url' => 'http://radarr.local:7878']);
+
+    expect(fn () => resolve(ActionDescriber::class)->describe('monitor_episodes', [
+        'series_id' => 142, 'episode_ids' => [1], 'monitored' => true, 'service_connection_id' => $radarr->id,
+    ]))->toThrow(InvalidArgumentException::class);
+});
+
+test('a series-targeted search_media aborts when the pin names a connection of the wrong service', function (): void {
+    describerSeries();
+    $radarr = ServiceConnection::factory()->radarr()->create(['url' => 'http://radarr.local:7878']);
+
+    expect(fn () => resolve(ActionDescriber::class)->describe('search_media', [
+        'service' => 'sonarr', 'series_id' => 142, 'command' => 'series_search', 'service_connection_id' => $radarr->id,
+    ]))->toThrow(InvalidArgumentException::class);
+});
+
+test('a movie search_media aborts when the pin names a connection of the wrong service', function (): void {
+    describerMovie();
+    $sonarr = ServiceConnection::factory()->sonarr()->create(['url' => 'http://sonarr.local:8989']);
+
+    expect(fn () => resolve(ActionDescriber::class)->describe('search_media', [
+        'service' => 'radarr', 'command' => 'movies_search', 'movie_ids' => [10], 'service_connection_id' => $sonarr->id,
+    ]))->toThrow(InvalidArgumentException::class);
+});
+
+test('grab_release aborts when the pin names a connection of the wrong service', function (): void {
+    describerSeries();
+    $radarr = ServiceConnection::factory()->radarr()->create(['url' => 'http://radarr.local:7878']);
+
+    expect(fn () => resolve(ActionDescriber::class)->describe('grab_release', [
+        'service' => 'sonarr',
+        'series_id' => 142,
+        'guid' => 'g',
+        'indexer_id' => 3,
+        'service_connection_id' => $radarr->id,
+        'release' => ['title' => 'Severance.S02E01.1080p'],
+    ]))->toThrow(InvalidArgumentException::class);
+});
