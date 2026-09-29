@@ -14,6 +14,7 @@ use App\Services\Seerr\SeerrClient;
 use App\Services\Sonarr\SonarrClient;
 use App\Services\Whisparr\WhisparrClient;
 use Closure;
+use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Support\Facades\Log;
 use InvalidArgumentException;
 use Throwable;
@@ -248,6 +249,31 @@ final readonly class ActionTargets
         }
 
         return null;
+    }
+
+    /**
+     * The Sonarr/Radarr server itself, for library-wide actions. Resolved
+     * strictly when the payload pins a connection — a pin naming a
+     * different-type or deleted/deactivated connection aborts rather than
+     * silently falling back to another instance, matching the executor's
+     * `resolvePinnedStrict()`. Without a pin, falls back to the active
+     * connection like every other target here.
+     *
+     * @param  array<string, mixed>  $pinContext
+     *
+     * @throws ModelNotFoundException|InvalidArgumentException
+     */
+    public function arrConnection(ServiceType $serviceType, array $pinContext = []): ActionTarget
+    {
+        $connectionId = (int) ($pinContext['service_connection_id'] ?? 0);
+
+        $serviceConnection = $connectionId > 0
+            ? ServiceConnection::resolvePinnedStrict($pinContext, $serviceType)
+            : ServiceConnection::resolveActive($serviceType);
+
+        return new ActionTarget(sprintf('%s server', ucfirst($serviceType->value)), $serviceConnection->name, [
+            ['label' => 'Connection', 'value' => $serviceConnection->name],
+        ]);
     }
 
     /**

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Services\Actions;
 
+use App\Enums\MediaSearchCommand;
 use App\Enums\ServiceType;
 
 /**
@@ -52,6 +53,9 @@ final readonly class ActionDescriber
             'emby_library_scan' => $this->libraryScan(),
             'remove_stuck_download' => $this->removeStuckDownload($type, $payload, $fallbackName),
             'resolve_manual_import' => $this->resolveManualImport($type, $payload, $fallbackName),
+            'monitor_episodes' => $this->monitorEpisodes($this->actionTargets->sonarrSeries($this->id($type, $payload, 'series_id'), $payload, $fallbackName), $payload),
+            'search_media' => $this->searchMedia($type, $payload, $fallbackName),
+            'grab_release' => $this->grabRelease($type, $payload, $fallbackName),
             default => throw UndescribableAction::unsupportedType($type),
         };
     }
@@ -174,6 +178,118 @@ final readonly class ActionDescriber
             ->withDetail('Importable files', sprintf('%d of %d', $importable, $total))
             ->withDetail('Fully matched', ($assessment['fully_mapped'] ?? false) === true)
             ->withDetail('Notes', $reasons === [] ? null : implode(' ', $reasons));
+    }
+
+    /**
+     * @param  array<string, mixed>  $payload
+     */
+    private function monitorEpisodes(ActionTarget $target, array $payload): ActionDescription
+    {
+        $monitored = (bool) ($payload['monitored'] ?? true);
+        $count = count(array_filter((array) ($payload['episode_ids'] ?? []), static fn (mixed $id): bool => (int) $id > 0));
+        $season = is_numeric($payload['season_number'] ?? null) ? (int) $payload['season_number'] : null;
+        $scope = $season !== null ? sprintf('season %d', $season) : sprintf('%d %s', $count, $count === 1 ? 'episode' : 'episodes');
+
+        return $target->describe(
+            sprintf('%s %s of %s', $monitored ? 'Monitor' : 'Unmonitor', $scope, $target->label()),
+            sprintf('Sonarr will %s monitoring %s.', $monitored ? 'start' : 'stop', $season !== null ? 'every episode in the season' : 'the selected episodes'),
+        )
+            ->withDetail('Episodes', $count)
+            ->withDetail('Season', $season)
+            ->withDetail('Monitored', $monitored);
+    }
+
+    /**
+     * @param  array<string, mixed>  $payload
+     */
+    private function searchMedia(string $type, array $payload, ?string $fallbackName): ActionDescription
+    {
+        $command = MediaSearchCommand::tryFrom((string) ($payload['command'] ?? ''));
+
+        throw_unless($command instanceof MediaSearchCommand, UndescribableAction::missingTarget($type, 'command'));
+
+        $service = $this->serviceName($command->service());
+
+        if ($command->isLibraryWide()) {
+            $actionTarget = $this->actionTargets->arrConnection($command->service(), $payload);
+            $what = match ($command) {
+                MediaSearchCommand::MissingEpisodeSearch => 'missing episodes',
+                MediaSearchCommand::CutoffUnmetEpisodeSearch => 'episodes below their quality cutoff',
+                MediaSearchCommand::MissingMoviesSearch => 'missing movies',
+                default => 'movies below their quality cutoff',
+            };
+
+            return $actionTarget->describe(
+                sprintf('Search for all %s in %s', $what, $actionTarget->label()),
+                sprintf('%s will search its indexers for all monitored %s.', $service, $what),
+            )->withDetail('Search', $command->label());
+        }
+
+        if ($command === MediaSearchCommand::MoviesSearch) {
+            $movieIds = (array) ($payload['movie_ids'] ?? []);
+            $actionTarget = $this->actionTargets->radarrMovie($this->id($type, ['movie_ids' => $movieIds[0] ?? null], 'movie_ids'), $payload, $fallbackName);
+
+            return $actionTarget->describe(sprintf('Search for %s', $actionTarget->label()), 'Radarr will search its indexers for the movie.')
+                ->withDetail('Search', $command->label());
+        }
+
+        $actionTarget = $this->actionTargets->sonarrSeries($this->id($type, $payload, 'series_id'), $payload, $fallbackName);
+        $count = count((array) ($payload['episode_ids'] ?? []));
+        $season = (int) ($payload['season_number'] ?? 0);
+
+        return match ($command) {
+            MediaSearchCommand::SeasonSearch => $actionTarget->describe(
+                sprintf('Search for season %d of %s', $season, $actionTarget->label()),
+                sprintf('Sonarr will search its indexers for the monitored episodes of season %d.', $season),
+            ),
+            MediaSearchCommand::EpisodeSearch => $actionTarget->describe(
+                sprintf('Search for %d %s of %s', $count, $count === 1 ? 'episode' : 'episodes', $actionTarget->label()),
+                'Sonarr will search its indexers for the selected episodes.',
+            )->withDetail('Episodes', $count),
+            default => $actionTarget->describe(
+                sprintf('Search for %s', $actionTarget->label()),
+                'Sonarr will search its indexers for every monitored episode of the series.',
+            ),
+        };
+    }
+
+    /**
+     * The release facts come from the server-side cache of the Sonarr/Radarr
+     * search response (ReleaseSelectionCache), never from the browser.
+     *
+     * @param  array<string, mixed>  $payload
+     */
+    private function grabRelease(string $type, array $payload, ?string $fallbackName): ActionDescription
+    {
+        $release = is_array($payload['release'] ?? null) ? $payload['release'] : [];
+        $releaseTitle = is_string($release['title'] ?? null) ? $release['title'] : null;
+
+        throw_if($releaseTitle === null, UndescribableAction::missingTarget($type, 'release'));
+
+        [$actionTarget, $service] = match ($payload['service'] ?? null) {
+            'sonarr' => [$this->actionTargets->sonarrSeries($this->id($type, $payload, 'series_id'), $payload, $fallbackName), 'Sonarr'],
+            'radarr' => [$this->actionTargets->radarrMovie($this->id($type, $payload, 'movie_id'), $payload, $fallbackName), 'Radarr'],
+            default => throw UndescribableAction::missingTarget($type, 'service'),
+        };
+
+        $rejections = array_values(array_filter((array) ($release['rejections'] ?? []), is_string(...)));
+
+        return $actionTarget->describe(
+            sprintf('Grab release for %s', $actionTarget->label()),
+            sprintf('%s will send "%s" to its download client.', $service, $releaseTitle),
+        )
+            ->withDetail('Release', $releaseTitle)
+            ->withDetail('Quality', is_string($release['quality'] ?? null) ? $release['quality'] : null)
+            ->withDetail('Size', is_numeric($release['size'] ?? null) && (int) $release['size'] > 0 ? $this->humanSize((int) $release['size']) : null)
+            ->withDetail('Indexer', is_string($release['indexer'] ?? null) ? $release['indexer'] : null)
+            ->withDetail('Rejected by', $rejections === [] ? null : implode('; ', $rejections));
+    }
+
+    private function humanSize(int $bytes): string
+    {
+        return $bytes >= 1024 ** 3
+            ? sprintf('%.1f GB', $bytes / 1024 ** 3)
+            : sprintf('%d MB', (int) round($bytes / 1024 ** 2));
     }
 
     /**
