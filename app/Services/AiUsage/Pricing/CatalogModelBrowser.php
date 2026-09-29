@@ -161,17 +161,6 @@ final readonly class CatalogModelBrowser
     }
 
     /**
-     * The writer-ready candidate for a model the admin may add, or null when
-     * the catalog does not list it or it already has a price row.
-     *
-     * @throws CatalogUnavailableException
-     */
-    public function addableCandidate(string $provider, string $model): ?ModelPriceCandidate
-    {
-        return $this->addableCandidates($provider, [$model])[$model] ?? null;
-    }
-
-    /**
      * Writer-ready candidates, keyed by model id, for the requested models the
      * admin may add: listed in the catalog and without a price row. Reads the
      * existing rows and the catalog slice once for the whole batch.

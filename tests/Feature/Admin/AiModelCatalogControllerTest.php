@@ -37,6 +37,18 @@ test('guests and members cannot read the catalog', function (): void {
         ->assertForbidden();
 });
 
+test('guests and members cannot bulk add catalog models', function (): void {
+    $payload = ['provider' => 'openrouter', 'models' => ['anthropic/claude-opus-5.5']];
+
+    $this->postJson(route('admin.ai-prices.catalog.store'), $payload)->assertUnauthorized();
+
+    $this->actingAs(User::factory()->member()->create())
+        ->postJson(route('admin.ai-prices.catalog.store'), $payload)
+        ->assertForbidden();
+
+    expect(AiModelPrice::query()->exists())->toBeFalse();
+});
+
 test('admin reads the addable catalog models as json', function (): void {
     catalogPickerControllerFake();
     AiModelPrice::factory()->create(['provider' => 'openrouter', 'model' => 'anthropic/claude-haiku-6']);
@@ -138,15 +150,16 @@ test('bulk add skips existing and vanished models and leaves existing rows untou
             'models' => ['anthropic/claude-opus-5.5', 'vendor/gone', 'anthropic/claude-haiku-6'],
         ])
         ->assertRedirect(route('admin.ai-prices.index'))
-        ->assertSessionHas('inertia.flash_data.toast.message', 'Added 1 of 3 models; 2 were already added or are no longer in the catalog.');
+        ->assertSessionHas('inertia.flash_data.toast.message', 'Added 1 of 3; 2 models skipped (already added, no longer in the catalog, or rejected).');
 
     expect($existing->fresh()->input_per_mtok)->toBe('1.5000')
         ->and(AiModelPrice::query()->where('model', 'vendor/gone')->exists())->toBeFalse()
         ->and(AiModelPrice::query()->where('model', 'anthropic/claude-haiku-6')->exists())->toBeTrue();
 });
 
-test('bulk add with the catalog down writes nothing and flashes an error', function (): void {
-    catalogPickerControllerFake(503);
+test('bulk add names a single skipped model in the singular', function (): void {
+    catalogPickerControllerFake();
+    AiModelPrice::factory()->create(['provider' => 'openrouter', 'model' => 'anthropic/claude-opus-5.5']);
 
     $this->actingAs(User::factory()->admin()->create())
         ->post(route('admin.ai-prices.catalog.store'), [
@@ -154,7 +167,20 @@ test('bulk add with the catalog down writes nothing and flashes an error', funct
             'models' => ['anthropic/claude-opus-5.5'],
         ])
         ->assertRedirect(route('admin.ai-prices.index'))
-        ->assertSessionHas('inertia.flash_data.toast.type', 'error');
+        ->assertSessionHas('inertia.flash_data.toast.type', 'info')
+        ->assertSessionHas('inertia.flash_data.toast.message', 'Added 0 of 1; 1 model skipped (already added, no longer in the catalog, or rejected).');
+});
+
+test('bulk add with the catalog down writes nothing and returns a models error', function (): void {
+    catalogPickerControllerFake(503);
+
+    $this->actingAs(User::factory()->admin()->create())
+        ->post(route('admin.ai-prices.catalog.store'), [
+            'provider' => 'openrouter',
+            'models' => ['anthropic/claude-opus-5.5'],
+        ])
+        ->assertSessionHasErrors('models')
+        ->assertSessionMissing('inertia.flash_data.toast');
 
     expect(AiModelPrice::query()->where('provider', 'openrouter')->exists())->toBeFalse();
 });

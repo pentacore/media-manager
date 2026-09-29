@@ -10,11 +10,11 @@ use App\Services\AiUsage\Pricing\AiModelPriceWriter;
 use App\Services\AiUsage\Pricing\CatalogModelBrowser;
 use App\Services\AiUsage\Pricing\CatalogUnavailableException;
 use App\Services\AiUsage\Pricing\Data\CatalogModelOption;
-use App\Services\AiUsage\Pricing\Data\ModelPriceCandidate;
 use App\Services\AiUsage\Pricing\Data\WriteOutcome;
 use App\Services\AiUsage\Pricing\RefreshScope;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
+use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 
 class AiModelCatalogController extends Controller
@@ -57,21 +57,22 @@ class AiModelCatalogController extends Controller
         /** @var list<string> $models */
         $models = $validated['models'];
 
+        try {
+            $candidates = $catalogModelBrowser->addableCandidates($provider, $models);
+        } catch (CatalogUnavailableException $catalogUnavailableException) {
+            // A validation error keeps the dialog open with the admin's picks.
+            throw ValidationException::withMessages([
+                'models' => __('Could not load the pricing catalog: :message', ['message' => $catalogUnavailableException->getMessage()]),
+            ]);
+        }
+
         $refreshScope = RefreshScope::forExplicitCreates($provider, $models);
         $added = 0;
 
-        try {
-            foreach ($models as $model) {
-                $candidate = $catalogModelBrowser->addableCandidate($provider, $model);
-
-                if ($candidate instanceof ModelPriceCandidate && $aiModelPriceWriter->write($candidate, $refreshScope, $candidate->source) === WriteOutcome::Created) {
-                    $added++;
-                }
+        foreach ($candidates as $candidate) {
+            if ($aiModelPriceWriter->write($candidate, $refreshScope, $candidate->source) === WriteOutcome::Created) {
+                $added++;
             }
-        } catch (CatalogUnavailableException $catalogUnavailableException) {
-            Inertia::flash('toast', ['type' => 'error', 'message' => __('Could not load the pricing catalog: :message', ['message' => $catalogUnavailableException->getMessage()])]);
-
-            return to_route('admin.ai-prices.index');
         }
 
         $total = count($models);
@@ -81,7 +82,11 @@ class AiModelCatalogController extends Controller
             'type' => $added > 0 ? 'success' : 'info',
             'message' => $skipped === 0
                 ? trans_choice('Added :count model.|Added :count models.', $added)
-                : __('Added :added of :total models; :skipped were already added or are no longer in the catalog.', ['added' => $added, 'total' => $total, 'skipped' => $skipped]),
+                : trans_choice(
+                    'Added :added of :total; :count model skipped (already added, no longer in the catalog, or rejected).|Added :added of :total; :count models skipped (already added, no longer in the catalog, or rejected).',
+                    $skipped,
+                    ['added' => $added, 'total' => $total],
+                ),
         ]);
 
         return to_route('admin.ai-prices.index');

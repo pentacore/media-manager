@@ -153,6 +153,27 @@ test('a cold fetch releases the per-provider lock once the slice is cached', fun
     expect(Cache::lock('ai-pricing:catalog-fetch:openrouter', 10)->get())->toBeTrue();
 });
 
+test('addableCandidates returns catalog candidates only for models without a row, with one feed fetch', function (): void {
+    catalogPickerFakeOpenRouter();
+    $catalogModelBrowser = resolve(CatalogModelBrowser::class);
+
+    AiModelPrice::factory()->create(['provider' => 'openrouter', 'model' => 'anthropic/claude-haiku-6']);
+
+    $candidates = $catalogModelBrowser->addableCandidates('openrouter', [
+        'anthropic/claude-opus-5.5',
+        'vendor/missing',
+        'anthropic/claude-haiku-6',
+        'openai/gpt-6-luna',
+    ]);
+
+    expect(array_keys($candidates))->toBe(['anthropic/claude-opus-5.5', 'openai/gpt-6-luna'])
+        ->and($candidates['anthropic/claude-opus-5.5']->source)->toBe(PricingSource::OpenRouter)
+        ->and($candidates['anthropic/claude-opus-5.5']->provider)->toBe('openrouter')
+        ->and($candidates['anthropic/claude-opus-5.5']->fields['input_per_mtok']->value)->toBe('4.0000');
+
+    Http::assertSentCount(1);
+});
+
 test('catalogAttributes returns feed provenance only when the submitted rates match', function (): void {
     catalogPickerFakeOpenRouter();
     $catalogModelBrowser = resolve(CatalogModelBrowser::class);
