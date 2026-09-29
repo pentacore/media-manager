@@ -246,3 +246,30 @@ test('a member request on a cold wanted cache skips the recompute while another 
     Http::assertNothingSent();
     $lock->release();
 });
+
+test('viewers get zero library badges without any recompute or upstream call', function (): void {
+    config()->set('inertia.ssr.enabled', false);
+    Http::preventStrayRequests();
+    Cache::forget(InterventionCounter::CACHE_KEY);
+    Cache::forget(SabnzbdDownloadCounter::CACHE_KEY);
+    Cache::forget(WantedCounter::CACHE_KEY);
+    ServiceConnection::factory()->sonarr()->create(['url' => 'http://sonarr.local:8989', 'api_key' => 'k']);
+    ServiceConnection::factory()->sabnzbd()->create(['url' => 'http://sabnzbd.local:8080', 'api_key' => 'k']);
+    Http::fake([
+        'sonarr.local:8989/api/v3/queue*' => Http::response(['records' => []]),
+        'sonarr.local:8989/api/v3/wanted/missing*' => Http::response(['totalRecords' => 3, 'records' => []]),
+        'sabnzbd.local:8080/*' => Http::response(['queue' => ['slots' => []], 'history' => ['slots' => []]]),
+    ]);
+
+    $this->actingAs(User::factory()->create())->get(route('dashboard'))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->where('nav.libraryIntervention', 0)
+            ->where('nav.sabnzbdDownloads', ['queued' => 0, 'completed' => 0])
+            ->where('nav.wantedMissing', 0));
+
+    Http::assertNothingSent();
+    expect(Cache::has(InterventionCounter::CACHE_KEY))->toBeFalse()
+        ->and(Cache::has(SabnzbdDownloadCounter::CACHE_KEY))->toBeFalse()
+        ->and(Cache::has(WantedCounter::CACHE_KEY))->toBeFalse();
+});

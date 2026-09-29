@@ -449,3 +449,20 @@ test('the series page defers the quality profiles for the profile dropdown', fun
             ->missing('qualityProfiles')
             ->loadDeferredProps('qualityProfiles', fn ($reload) => $reload->where('qualityProfiles', [['id' => 6, 'name' => 'Ultra-HD']])));
 });
+
+test('viewers never trigger the quality profile lookup on the series page', function (): void {
+    Http::fake([
+        'sonarr.local:8989/api/v3/series/1' => Http::response(['id' => 1, 'title' => 'Show', 'seasons' => [], 'images' => []]),
+        'sonarr.local:8989/api/v3/episode*' => Http::response([]),
+    ]);
+
+    $response = $this->actingAs(User::factory()->create())
+        ->get(route('media.series.show', ['id' => 1]))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->missing('qualityProfiles')
+            ->loadDeferredProps(fn ($reload) => $reload->where('episodes', [])->missing('qualityProfiles')));
+
+    expect($response->viewData('page')['deferredProps'] ?? [])->not->toHaveKey('qualityProfiles');
+    Http::assertNotSent(fn ($request): bool => str_contains($request->url(), '/qualityprofile'));
+});

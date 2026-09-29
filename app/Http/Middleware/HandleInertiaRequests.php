@@ -94,6 +94,11 @@ class HandleInertiaRequests extends Middleware
      */
     private function navCounts(User $user): array
     {
+        // The library badges (intervention queue, SABnzbd, Wanted) sit on
+        // manage-library pages; viewers get constant zeros and never trigger
+        // a recompute or an upstream call.
+        $canManageLibrary = $user->can(Abilities::MANAGE_LIBRARY);
+
         return [
             'pendingActions' => ActionRequest::where('status', ActionRequestStatus::Pending)->count(),
             'activeSessions' => EmbyActivity::where('action', 'played')
@@ -106,15 +111,12 @@ class HandleInertiaRequests extends Middleware
             // boot (cache empty, scheduler not yet ticked) we recompute
             // inline once so the badge isn't silently zero for the first
             // five minutes after deploy.
-            'libraryIntervention' => $this->libraryInterventionCount(),
-            'sabnzbdDownloads' => $this->sabnzbdDownloadCounts(),
+            'libraryIntervention' => $canManageLibrary ? $this->libraryInterventionCount() : 0,
+            'sabnzbdDownloads' => $canManageLibrary ? $this->sabnzbdDownloadCounts() : ['queued' => 0, 'completed' => 0],
             // Admin-only surface (Admin → Media Replacement → Attempts); members
             // get a constant zero so the shared shape stays stable.
             'replacementAttention' => $user->isAdmin() ? MediaReplacementAttempt::unacknowledgedAttentionCount() : 0,
-            // Wanted page is manage-library only (isMember() spans Member and
-            // Admin, matching that ability's minimum role); viewers get a
-            // constant zero so they never trigger the upstream walk.
-            'wantedMissing' => $user->isMember() ? $this->wantedMissingCount() : 0,
+            'wantedMissing' => $canManageLibrary ? $this->wantedMissingCount() : 0,
         ];
     }
 

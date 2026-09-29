@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use App\Models\ServiceConnection;
 use App\Models\User;
+use Illuminate\Http\Client\Request;
 use Illuminate\Support\Facades\Http;
 
 /**
@@ -78,7 +79,11 @@ test('a viewer sees the series page without any action control', function (): vo
         ->assertCount('[data-replacement-trigger]', 0)
         // Additional hardening: the connection host/port is internal detail —
         // no "Open in Sonarr" deep link for a viewer.
-        ->assertDontSee('Open in Sonarr');
+        ->assertDontSee('Open in Sonarr')
+        // Viewers get no profile dropdown, so the page never looks profiles up.
+        ->assertDontSee('Quality profile');
+
+    Http::assertNotSent(fn (Request $request): bool => str_contains($request->url(), '/qualityprofile'));
 });
 
 // Split into two tests rather than switching actingAs() mid-test: pest-plugin-browser

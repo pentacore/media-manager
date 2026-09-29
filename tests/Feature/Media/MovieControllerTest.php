@@ -437,3 +437,17 @@ test('the movie page defers the quality profiles for the profile dropdown', func
             ->missing('qualityProfiles')
             ->loadDeferredProps('qualityProfiles', fn ($reload) => $reload->where('qualityProfiles', [['id' => 6, 'name' => 'Ultra-HD']])));
 });
+
+test('viewers never trigger the quality profile lookup on the movie page', function (): void {
+    Http::fake([
+        'radarr.local:7878/api/v3/movie/1' => Http::response(['id' => 1, 'title' => 'Movie', 'images' => []]),
+    ]);
+
+    $response = $this->actingAs(User::factory()->create())
+        ->get(route('media.movies.show', ['id' => 1]))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page->missing('qualityProfiles'));
+
+    expect($response->viewData('page')['deferredProps'] ?? [])->toBe([]);
+    Http::assertNotSent(fn ($request): bool => str_contains($request->url(), '/qualityprofile'));
+});

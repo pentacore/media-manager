@@ -75,9 +75,13 @@ class SeriesController extends BaseArrController
                 'monitored' => $ep['monitored'] ?? false,
                 'overview' => $ep['overview'] ?? null,
             ], $this->tryClientCall($connection, fn (SonarrClient $sonarrClient): array => $sonarrClient->getEpisodesBySeries($id)))),
-            'qualityProfiles' => Inertia::defer(fn (): array => $this->mapQualityProfiles(
-                $this->tryClientCall($connection, fn (SonarrClient $sonarrClient): array => $sonarrClient->getQualityProfiles()),
-            ), 'qualityProfiles'),
+            // Only the profile dropdown needs these, and only manage-library
+            // users get the dropdown — viewers trigger no upstream lookup.
+            ...$canManageLibrary ? [
+                'qualityProfiles' => Inertia::defer(fn (): array => $this->mapQualityProfiles(
+                    $this->tryClientCall($connection, fn (SonarrClient $sonarrClient): array => $sonarrClient->getQualityProfiles()),
+                ), 'qualityProfiles'),
+            ] : [],
         ]);
     }
 

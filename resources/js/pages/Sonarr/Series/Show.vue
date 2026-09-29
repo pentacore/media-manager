@@ -158,18 +158,6 @@ function formatSize(bytes: number): string {
     return `${mb.toFixed(0)} MB`;
 }
 
-function qualityName(): string {
-    if (!props.series.quality_profile_id || !props.qualityProfiles) {
-        return '-';
-    }
-
-    return (
-        props.qualityProfiles.find(
-            (profile) => profile.id === props.series.quality_profile_id,
-        )?.name ?? '-'
-    );
-}
-
 function episodesForSeason(seasonNumber: number): Episode[] {
     return (props.episodes ?? [])
         .filter((episode) => episode.season_number === seasonNumber)
@@ -425,7 +413,7 @@ function sonarrSeriesUrl(): string | null {
                                 }}
                             </div>
                         </div>
-                        <div>
+                        <div v-if="can('manage-library')">
                             <div
                                 class="text-[11.5px] font-semibold tracking-[0.05em] text-muted-foreground uppercase"
                             >
@@ -433,14 +421,12 @@ function sonarrSeriesUrl(): string | null {
                             </div>
                             <div class="mt-0.5 text-[13px]">
                                 <QualityProfileSelect
-                                    v-if="can('manage-library')"
                                     service="sonarr"
                                     :connection-id="service_connection_id"
                                     :item-id="series.id"
                                     :profiles="qualityProfiles"
                                     :current-id="series.quality_profile_id"
                                 />
-                                <template v-else>{{ qualityName() }}</template>
                             </div>
                         </div>
                         <div>
