@@ -691,7 +691,7 @@ test('index shares the catalog providers', function (): void {
                 && ! in_array('google', $providers->all(), true)));
 });
 
-function catalogPickerStoreSetup(int $status = 200): void
+function catalogPickerStoreSetup(): void
 {
     Sleep::fake();
 
@@ -703,9 +703,7 @@ function catalogPickerStoreSetup(int $status = 200): void
     config()->set('mediamanager.ai.pricing.openrouter.retries', 0);
 
     Http::fake([
-        'openrouter.ai/*' => $status === 200
-            ? Http::response((string) file_get_contents(base_path('tests/Fixtures/OpenRouter/models.json')))
-            : Http::response('failure', $status),
+        'openrouter.ai/*' => Http::response((string) file_get_contents(base_path('tests/Fixtures/OpenRouter/models.json'))),
     ]);
 }
 
@@ -780,11 +778,11 @@ test('a catalog pick with automatic updates off stays manual and locked even at 
         ->and($aiModelPrice->is_price_locked)->toBeTrue();
 });
 
-test('a catalog pick falls back to manual when the catalog is down at save time', function (): void {
-    catalogPickerStoreSetup(503);
+test('a catalog pick falls back to manual without calling a feed when the catalog is not cached', function (): void {
+    catalogPickerStoreSetup();
 
-    // The payload is hand-built from the fixture's known opus rates: the
-    // catalog is down, so it cannot be read back through the browser.
+    // The payload is hand-built from the fixture's known opus rates: reading
+    // it through the browser would warm the cache this test needs cold.
     $this->actingAs(User::factory()->admin()->create())
         ->post(route('admin.ai-prices.store'), [
             'provider' => 'openrouter',
@@ -801,4 +799,6 @@ test('a catalog pick falls back to manual when the catalog is down at save time'
 
     expect(AiModelPrice::query()->where('model', 'anthropic/claude-opus-5.5')->sole()->pricing_source)
         ->toBe(PricingSource::Manual);
+
+    Http::assertNothingSent();
 });

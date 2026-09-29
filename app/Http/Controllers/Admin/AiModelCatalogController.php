@@ -21,7 +21,8 @@ class AiModelCatalogController extends Controller
 {
     /**
      * Catalog models for one provider that have no price row yet, for the
-     * admin "add from catalog" pickers.
+     * admin "add from catalog" pickers. `covered` is false when no enabled
+     * feed prices the provider at all.
      */
     public function index(string $provider, CatalogModelBrowser $catalogModelBrowser): JsonResponse
     {
@@ -29,12 +30,14 @@ class AiModelCatalogController extends Controller
 
         try {
             $options = $catalogModelBrowser->available($provider);
+            $covered = $catalogModelBrowser->covers($provider);
         } catch (CatalogUnavailableException $catalogUnavailableException) {
             return response()->json(['message' => $catalogUnavailableException->getMessage()], 503);
         }
 
         return response()->json([
             'models' => array_map(fn (CatalogModelOption $catalogModelOption): array => $catalogModelOption->toArray(), $options),
+            'covered' => $covered,
         ]);
     }
 

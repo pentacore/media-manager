@@ -9,21 +9,49 @@ use App\Models\AiModelPrice;
 use App\Services\AiUsage\Pricing\Data\CandidatePriceField;
 use App\Services\AiUsage\Pricing\Data\CatalogModelOption;
 use App\Services\AiUsage\Pricing\Data\ModelPriceCandidate;
+use App\Services\AiUsage\Pricing\Data\PricingCatalogResult;
+use App\Settings\AiSettings;
 use Carbon\CarbonImmutable;
+use Illuminate\Contracts\Cache\LockTimeoutException;
 use Illuminate\Support\Facades\Cache;
 
 /**
  * Read side of the admin "add from catalog" picker.
  *
  * Loads one provider's slice of {@see PricingCatalog} (the same adapted,
- * reconciled candidates a refresh would write), caches it per provider as
- * plain arrays, and filters out models that already have a price row. The
- * existing-row filter runs after the cache read so a model disappears the
- * moment it is added. Failures are never cached.
+ * reconciled candidates a refresh would write), caches it per provider and
+ * per enabled-source combination as plain arrays, and filters out models that
+ * already have a price row. The existing-row filter runs after the cache read
+ * so a model disappears the moment it is added. Failures are never cached.
+ *
+ * A cold fetch downloads every enabled feed, so it runs under a per-provider
+ * lock: parallel requests for one provider share a single download.
  */
 final readonly class CatalogModelBrowser
 {
     public const int CACHE_TTL_SECONDS = 900;
+
+    /**
+     * How long a cold fetch may hold the per-provider lock.
+     */
+    public const int FETCH_LOCK_SECONDS = 120;
+
+    /**
+     * How long a request waits for another request's cold fetch to finish.
+     */
+    public const int FETCH_WAIT_SECONDS = 60;
+
+    /**
+     * Source statuses that do not mean a feed failed: a switched-off source,
+     * or one with no credentials configured (quiet by design).
+     *
+     * @var list<string>
+     */
+    private const array QUIET_STATUSES = [
+        PricingCatalogResult::STATUS_OK,
+        PricingCatalogResult::STATUS_DISABLED,
+        PricingTransportException::CATEGORY_NOT_CONFIGURED,
+    ];
 
     /**
      * Standard rate columns compared when deciding whether an Add-form
@@ -57,6 +85,7 @@ final readonly class CatalogModelBrowser
 
     public function __construct(
         private PricingCatalog $pricingCatalog,
+        private AiSettings $aiSettings,
     ) {}
 
     /**
@@ -100,7 +129,7 @@ final readonly class CatalogModelBrowser
         $existing = $this->existingModels($canonical);
         $options = [];
 
-        foreach ($this->entries($canonical) as $entry) {
+        foreach ($this->slice($canonical)['entries'] as $entry) {
             if (isset($existing[$entry['model']])) {
                 continue;
             }
@@ -118,6 +147,20 @@ final readonly class CatalogModelBrowser
     }
 
     /**
+     * Whether any enabled feed prices the provider. False when no enabled
+     * source lists it, so the picker can say so instead of implying every
+     * model is already added.
+     *
+     * @throws CatalogUnavailableException
+     */
+    public function covers(string $provider): bool
+    {
+        $canonical = RefreshScope::canonicalProvider($provider);
+
+        return $canonical !== null && $this->slice($canonical)['covered'];
+    }
+
+    /**
      * The writer-ready candidate for a model the admin may add, or null when
      * the catalog does not list it or it already has a price row.
      *
@@ -125,39 +168,53 @@ final readonly class CatalogModelBrowser
      */
     public function addableCandidate(string $provider, string $model): ?ModelPriceCandidate
     {
+        return $this->addableCandidates($provider, [$model])[$model] ?? null;
+    }
+
+    /**
+     * Writer-ready candidates, keyed by model id, for the requested models the
+     * admin may add: listed in the catalog and without a price row. Reads the
+     * existing rows and the catalog slice once for the whole batch.
+     *
+     * @param  list<string>  $models
+     * @return array<string, ModelPriceCandidate>
+     *
+     * @throws CatalogUnavailableException
+     */
+    public function addableCandidates(string $provider, array $models): array
+    {
         $canonical = RefreshScope::canonicalProvider($provider);
 
-        if ($canonical === null || isset($this->existingModels($canonical)[$model])) {
-            return null;
+        if ($canonical === null) {
+            return [];
         }
 
-        $entry = $this->entry($canonical, $model);
+        $existing = $this->existingModels($canonical);
+        $entries = [];
 
-        if ($entry === null) {
-            return null;
+        foreach ($this->slice($canonical)['entries'] as $entry) {
+            $entries[$entry['model']] = $entry;
         }
 
-        $fields = [];
+        $candidates = [];
 
-        foreach ($entry['prices'] as $column => $value) {
-            $fields[$column] = $value === null ? CandidatePriceField::missing() : CandidatePriceField::of($value);
+        foreach ($models as $model) {
+            if (isset($existing[$model]) || ! isset($entries[$model])) {
+                continue;
+            }
+
+            $candidates[$model] = $this->candidate($canonical, $entries[$model]);
         }
 
-        return new ModelPriceCandidate(
-            provider: $canonical,
-            model: $entry['model'],
-            fields: $fields,
-            source: PricingSource::from($entry['source']),
-            sourceUrl: $entry['source_url'],
-            sourceUpdatedAt: $entry['source_updated_at'],
-            tiered: $entry['tiered'],
-        );
+        return $candidates;
     }
 
     /**
      * Provenance, lock and batch attributes for an Add-form row picked from the
      * catalog, or null when any submitted standard rate differs from the
-     * catalog (the admin edited it) or the catalog cannot be read.
+     * catalog (the admin edited it) or the catalog is not cached. Reads the
+     * cache only, never the feeds: a cold cache falls back to a manual row
+     * rather than making the save wait on a download.
      *
      * @param  array<string, mixed>  $validated
      * @return array<string, mixed>|null
@@ -170,10 +227,14 @@ final readonly class CatalogModelBrowser
             return null;
         }
 
-        try {
-            $entry = $this->entry($canonical, $model);
-        } catch (CatalogUnavailableException) {
-            return null;
+        $entry = null;
+
+        foreach ($this->cachedSlice($canonical)['entries'] ?? [] as $cachedEntry) {
+            if ($cachedEntry['model'] === $model) {
+                $entry = $cachedEntry;
+
+                break;
+            }
         }
 
         if ($entry === null) {
@@ -205,44 +266,106 @@ final readonly class CatalogModelBrowser
     }
 
     /**
-     * @return array{model: string, source: string, source_url: string|null, source_updated_at: string|null, tiered: bool, prices: array<string, string|null>}|null
-     *
-     * @throws CatalogUnavailableException
+     * @param  array{model: string, source: string, source_url: string|null, source_updated_at: string|null, tiered: bool, prices: array<string, string|null>}  $entry
      */
-    private function entry(string $provider, string $model): ?array
+    private function candidate(string $provider, array $entry): ModelPriceCandidate
     {
-        foreach ($this->entries($provider) as $entry) {
-            if ($entry['model'] === $model) {
-                return $entry;
-            }
+        $fields = [];
+
+        foreach ($entry['prices'] as $column => $value) {
+            $fields[$column] = $value === null ? CandidatePriceField::missing() : CandidatePriceField::of($value);
         }
 
-        return null;
-    }
-
-    /**
-     * The provider's catalog slice as cacheable arrays, sorted by model id.
-     * Cache::remember stores nothing when the fetch throws.
-     *
-     * @return list<array{model: string, source: string, source_url: string|null, source_updated_at: string|null, tiered: bool, prices: array<string, string|null>}>
-     *
-     * @throws CatalogUnavailableException
-     */
-    private function entries(string $provider): array
-    {
-        return Cache::remember(
-            sprintf('ai-pricing:catalog:%s', $provider),
-            self::CACHE_TTL_SECONDS,
-            fn (): array => $this->fetchEntries($provider),
+        return new ModelPriceCandidate(
+            provider: $provider,
+            model: $entry['model'],
+            fields: $fields,
+            source: PricingSource::from($entry['source']),
+            sourceUrl: $entry['source_url'],
+            sourceUpdatedAt: $entry['source_updated_at'],
+            tiered: $entry['tiered'],
         );
     }
 
     /**
-     * @return list<array{model: string, source: string, source_url: string|null, source_updated_at: string|null, tiered: bool, prices: array<string, string|null>}>
+     * The provider's catalog slice, fetched on a cold cache. The fetch runs
+     * under a per-provider lock and re-checks the cache once it holds it, so
+     * requests that queued behind a download reuse its result.
+     *
+     * @return array{covered: bool, entries: list<array{model: string, source: string, source_url: string|null, source_updated_at: string|null, tiered: bool, prices: array<string, string|null>}>}
      *
      * @throws CatalogUnavailableException
      */
-    private function fetchEntries(string $provider): array
+    private function slice(string $provider): array
+    {
+        $cached = $this->cachedSlice($provider);
+
+        if ($cached !== null) {
+            return $cached;
+        }
+
+        try {
+            return Cache::lock(sprintf('ai-pricing:catalog-fetch:%s', $provider), self::FETCH_LOCK_SECONDS)
+                ->block(self::FETCH_WAIT_SECONDS, function () use ($provider): array {
+                    $cached = $this->cachedSlice($provider);
+
+                    if ($cached !== null) {
+                        return $cached;
+                    }
+
+                    $slice = $this->fetchSlice($provider);
+                    Cache::put($this->cacheKey($provider), $slice, self::CACHE_TTL_SECONDS);
+
+                    return $slice;
+                });
+        } catch (LockTimeoutException) {
+            throw new CatalogUnavailableException(__('The pricing catalog is still loading. Try again in a moment.'));
+        }
+    }
+
+    /**
+     * The cached slice, or null on a cold cache. Never fetches.
+     *
+     * @return array{covered: bool, entries: list<array{model: string, source: string, source_url: string|null, source_updated_at: string|null, tiered: bool, prices: array<string, string|null>}>}|null
+     */
+    private function cachedSlice(string $provider): ?array
+    {
+        /** @var array{covered: bool, entries: list<array{model: string, source: string, source_url: string|null, source_updated_at: string|null, tiered: bool, prices: array<string, string|null>}>}|null $cached */
+        $cached = Cache::get($this->cacheKey($provider));
+
+        return is_array($cached) ? $cached : null;
+    }
+
+    /**
+     * Keyed per provider and per enabled-source combination, so switching a
+     * feed on or off in AI settings never serves a slice built from the old set.
+     */
+    private function cacheKey(string $provider): string
+    {
+        $fingerprint = md5(json_encode([
+            'models_dev' => $this->aiSettings->modelsDevPricingEnabled(),
+            'litellm' => $this->aiSettings->liteLlmPricingEnabled(),
+            'openrouter' => $this->aiSettings->openRouterPricingEnabled(),
+            'xai' => $this->aiSettings->xaiPricingEnabled(),
+        ], JSON_THROW_ON_ERROR));
+
+        return sprintf('ai-pricing:catalog:%s:%s', $provider, $fingerprint);
+    }
+
+    /**
+     * Fetch the provider's slice as cacheable arrays, sorted by model id.
+     *
+     * A missing slice while any source failed is a partial outage: it throws,
+     * so it is never cached and Retry can recover. A missing slice while every
+     * source answered (or was quietly off) means no enabled feed prices the
+     * provider; that stays true until the source settings change, so it is
+     * cached as not covered, as is a slice with no usable candidates.
+     *
+     * @return array{covered: bool, entries: list<array{model: string, source: string, source_url: string|null, source_updated_at: string|null, tiered: bool, prices: array<string, string|null>}>}
+     *
+     * @throws CatalogUnavailableException
+     */
+    private function fetchSlice(string $provider): array
     {
         $pricingCatalogResult = $this->pricingCatalog->fetch(RefreshScope::forProviders([$provider]));
 
@@ -250,9 +373,15 @@ final readonly class CatalogModelBrowser
             throw CatalogUnavailableException::fromResult($pricingCatalogResult);
         }
 
+        $providerPricingResult = $pricingCatalogResult->providers[$provider] ?? null;
+
+        if ($providerPricingResult === null && $this->anySourceFailed($pricingCatalogResult)) {
+            throw CatalogUnavailableException::fromResult($pricingCatalogResult);
+        }
+
         $entries = [];
 
-        foreach ($pricingCatalogResult->providers[$provider]->candidates ?? [] as $candidate) {
+        foreach ($providerPricingResult->candidates ?? [] as $candidate) {
             $prices = [];
 
             foreach (CatalogModelOption::PRICE_COLUMNS as $column) {
@@ -274,7 +403,18 @@ final readonly class CatalogModelBrowser
 
         usort($entries, fn (array $a, array $b): int => strcmp($a['model'], $b['model']));
 
-        return $entries;
+        return ['covered' => $entries !== [], 'entries' => $entries];
+    }
+
+    private function anySourceFailed(PricingCatalogResult $pricingCatalogResult): bool
+    {
+        foreach ($pricingCatalogResult->sourceStatuses as $status) {
+            if (! in_array($status, self::QUIET_STATUSES, true)) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /**
