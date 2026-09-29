@@ -64,6 +64,7 @@ Route::middleware(['auth', 'verified', 'password.set', 'role:admin'])->prefix('a
     Route::middleware('ai.enabled')->group(function (): void {
         Route::get('ai-settings', [AiSettingsController::class, 'index'])->name('ai-settings.index');
         Route::put('ai-settings', [AiSettingsController::class, 'update'])->name('ai-settings.update');
+        Route::post('ai-settings/reembed', [AiSettingsController::class, 'reembed'])->name('ai-settings.reembed');
 
         Route::get('decision-agent', [DecisionAgentSettingsController::class, 'index'])->name('decision-agent.index');
         Route::put('decision-agent', [DecisionAgentSettingsController::class, 'update'])->name('decision-agent.update');

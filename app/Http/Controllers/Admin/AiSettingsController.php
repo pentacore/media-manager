@@ -11,6 +11,7 @@ use App\Enums\AiReasoningLevel;
 use App\Enums\OpenRouterSort;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Admin\UpdateAiSettingsRequest;
+use App\Jobs\ReembedLibrary;
 use App\Services\AiBudget\AiBudgetGuard;
 use App\Services\AiBudget\UnpricedModelDetector;
 use App\Settings\AiSettings;
@@ -59,6 +60,8 @@ class AiSettingsController extends Controller
                 'chat_routing_enabled' => $aiSettings->chatRoutingEnabled(),
                 'reranking_provider' => $aiSettings->rerankingProvider(),
                 'reranking_model' => $aiSettings->rerankingModel(),
+                'embeddings_provider' => $aiSettings->embeddingsProvider(),
+                'embeddings_model' => $aiSettings->embeddingsModel(),
                 'sub_agent_model' => $aiSettings->rawSubAgentModel(),
                 'price_updater_model' => $aiSettings->rawPriceUpdaterModel(),
                 'model_provider' => $aiSettings->modelProvider(),
@@ -110,6 +113,15 @@ class AiSettingsController extends Controller
                 ['value' => 'jina', 'label' => 'Jina'],
                 ['value' => 'openrouter', 'label' => 'OpenRouter'],
             ],
+            'embeddings' => [
+                'stale' => $aiSettings->embeddingsStale(),
+                'indexed_with' => $aiSettings->embeddingsIndexedWith(),
+                'signature' => $aiSettings->embeddingsSignature(),
+            ],
+            'embeddingsProviders' => array_map(
+                static fn (string $provider): array => ['value' => $provider, 'label' => ucfirst($provider)],
+                $modelCatalog->embeddingProviders(),
+            ),
             'providerKeys' => collect(['openrouter', 'typesafe', 'cohere', 'jina'])
                 ->mapWithKeys(fn (string $provider): array => [$provider => filled(config(sprintf('ai.providers.%s.key', $provider)))])
                 ->all(),
@@ -239,7 +251,24 @@ class AiSettingsController extends Controller
         $this->updateModelProviders($aiSettings, $validated);
         $this->updateOpenRouterSettings($openRouterSettings, $validated);
 
+        if (array_key_exists('embeddings_provider', $validated)) {
+            $aiSettings->setEmbeddingsProvider($validated['embeddings_provider']);
+        }
+
+        if (array_key_exists('embeddings_model', $validated)) {
+            $aiSettings->setEmbeddingsModel($validated['embeddings_model']);
+        }
+
         Inertia::flash('toast', ['type' => 'success', 'message' => __('AI settings updated.')]);
+
+        return to_route('admin.ai-settings.index');
+    }
+
+    public function reembed(): RedirectResponse
+    {
+        dispatch(new ReembedLibrary);
+
+        Inertia::flash('toast', ['type' => 'success', 'message' => __('Library re-embed queued. Semantic search improves as it completes.')]);
 
         return to_route('admin.ai-settings.index');
     }

@@ -35,6 +35,27 @@ final readonly class ModelCatalog
     }
 
     /**
+     * Configured providers laravel/ai can generate embeddings with.
+     *
+     * @return list<string>
+     */
+    public function embeddingProviders(): array
+    {
+        return array_values(array_filter(
+            $this->configuredProviders(),
+            static function (string $provider): bool {
+                try {
+                    Ai::embeddingProvider($provider);
+
+                    return true;
+                } catch (Throwable) {
+                    return false;
+                }
+            },
+        ));
+    }
+
+    /**
      * @return array<string, list<string>>
      */
     public function modelsByConfiguredProvider(): array

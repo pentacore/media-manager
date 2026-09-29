@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Http\Requests\Admin;
 
+use App\Ai\ModelCatalog;
 use App\Concerns\ModelSelectionValidationRules;
 use App\Enums\AiMode;
 use App\Enums\AiReasoningLevel;
@@ -53,6 +54,8 @@ class UpdateAiSettingsRequest extends FormRequest
             'chat_routing_enabled' => ['sometimes', 'boolean'],
             'reranking_provider' => ['sometimes', 'string', Rule::in(AiSettings::RERANKING_PROVIDERS)],
             'reranking_model' => ['nullable', 'string', 'max:100'],
+            'embeddings_provider' => ['sometimes', 'string', Rule::in(resolve(ModelCatalog::class)->embeddingProviders())],
+            'embeddings_model' => ['nullable', 'string', 'max:100'],
             'sub_agent_model' => ['nullable', 'string', 'max:100'],
             'price_updater_model' => ['nullable', 'string', 'max:100'],
             'model_provider' => ['sometimes', ...$this->modelProviderRules()],
@@ -90,7 +93,7 @@ class UpdateAiSettingsRequest extends FormRequest
 
         // A blank model field means "use the default", which the nullable rules
         // store as a cleared setting.
-        foreach (['classification_model', 'reranking_model', 'sub_agent_model', 'price_updater_model', 'sub_agent_model_provider', 'price_updater_model_provider', 'failover_model'] as $field) {
+        foreach (['classification_model', 'reranking_model', 'embeddings_model', 'sub_agent_model', 'price_updater_model', 'sub_agent_model_provider', 'price_updater_model_provider', 'failover_model'] as $field) {
             if ($this->has($field) && trim((string) $this->input($field)) === '') {
                 $this->merge([$field => null]);
             }

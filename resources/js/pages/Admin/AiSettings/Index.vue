@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Form, Head } from '@inertiajs/vue3';
+import { Form, Head, router } from '@inertiajs/vue3';
 import { computed, ref } from 'vue';
 import AiSettingsController from '@/actions/App/Http/Controllers/Admin/AiSettingsController';
 import ModelSelect from '@/components/ai/ModelSelect.vue';
@@ -56,6 +56,8 @@ interface AiSettingsState {
     chat_routing_enabled: boolean;
     reranking_provider: string;
     reranking_model: string | null;
+    embeddings_provider: string;
+    embeddings_model: string | null;
     sub_agent_model: string | null;
     price_updater_model: string | null;
     model_provider: string;
@@ -108,6 +110,8 @@ const props = defineProps<{
     providerKeys: Record<string, boolean>;
     advancedTools: AdvancedTools;
     openRouterSorts: ProviderOption[];
+    embeddings: { stale: boolean; indexed_with: string; signature: string };
+    embeddingsProviders: ProviderOption[];
 }>();
 
 defineOptions({
@@ -142,6 +146,15 @@ const subtitleTriageEnabled = ref(props.settings.subtitle_triage_enabled);
 const chatRoutingEnabled = ref(props.settings.chat_routing_enabled);
 const selectedRerankingProvider = ref(props.settings.reranking_provider);
 const rerankingModel = ref(props.settings.reranking_model ?? '');
+const selectedEmbeddingsProvider = ref(props.settings.embeddings_provider);
+
+function reembedLibrary(): void {
+    router.post(
+        AiSettingsController.reembed.url(),
+        {},
+        { preserveScroll: true },
+    );
+}
 
 const chatProvider = ref(props.settings.model_provider);
 const chatModel = ref(props.settings.model);
@@ -938,6 +951,118 @@ const budgetState = computed<{
                             />
                             <InputError
                                 :message="errors.reranking_model"
+                                class="mt-1"
+                            />
+                        </div>
+                    </div>
+                </div>
+
+                <Separator />
+
+                <!-- Embeddings -->
+                <div class="flex flex-col gap-5" data-embeddings-settings>
+                    <div>
+                        <h2
+                            class="text-[15px] leading-tight font-semibold tracking-tight"
+                        >
+                            Embeddings
+                        </h2>
+                        <p
+                            class="mt-0.5 max-w-[560px] text-[12px] text-muted-foreground"
+                        >
+                            Vectors behind semantic library search. Changing the
+                            provider or model requires re-embedding the whole
+                            library.
+                        </p>
+                    </div>
+
+                    <div
+                        v-if="embeddings.stale"
+                        class="flex items-center justify-between gap-4 rounded-md border border-border bg-bg-hover px-3 py-2 text-[13px]"
+                        data-embeddings-stale
+                    >
+                        <span class="text-warning">
+                            Library embeddings are stale — built with
+                            <span class="font-mono-tabular">{{
+                                embeddings.indexed_with
+                            }}</span
+                            >, search now uses
+                            <span class="font-mono-tabular">{{
+                                embeddings.signature
+                            }}</span
+                            >.
+                        </span>
+                        <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            class="h-7 text-xs"
+                            data-embeddings-reembed
+                            @click="reembedLibrary"
+                        >
+                            Re-embed library
+                        </Button>
+                    </div>
+
+                    <div
+                        class="grid items-start gap-6"
+                        style="grid-template-columns: 200px 1fr"
+                    >
+                        <Field
+                            label="Provider"
+                            hint="Provider library and query embeddings are generated on."
+                        >
+                            <span />
+                        </Field>
+                        <div>
+                            <Select
+                                name="embeddings_provider"
+                                v-model="selectedEmbeddingsProvider"
+                                :default-value="settings.embeddings_provider"
+                            >
+                                <SelectTrigger class="h-8 w-48 text-sm">
+                                    <SelectValue
+                                        placeholder="Select a provider"
+                                    />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem
+                                        v-for="provider in embeddingsProviders"
+                                        :key="provider.value"
+                                        :value="provider.value"
+                                    >
+                                        {{ provider.label }}
+                                    </SelectItem>
+                                </SelectContent>
+                            </Select>
+                            <InputError
+                                :message="errors.embeddings_provider"
+                                class="mt-1"
+                            />
+                        </div>
+                    </div>
+
+                    <div
+                        class="grid items-start gap-6"
+                        style="grid-template-columns: 200px 1fr"
+                    >
+                        <Field
+                            label="Model"
+                            hint="Embeddings model. Leave blank to use the provider's default. Must support 256 dimensions."
+                        >
+                            <span />
+                        </Field>
+                        <div>
+                            <Input
+                                id="embeddings_model"
+                                name="embeddings_model"
+                                type="text"
+                                class="h-8 max-w-[320px] text-sm"
+                                :default-value="settings.embeddings_model ?? ''"
+                                placeholder="text-embedding-3-small"
+                            />
+                            <InputError
+                                :message="errors.embeddings_model"
                                 class="mt-1"
                             />
                         </div>
