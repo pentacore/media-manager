@@ -14,12 +14,14 @@ const props = withDefaults(
     defineProps<{
         models: Record<string, string[]>;
         name?: string;
+        id?: string;
         inheritLabel?: string;
         allowAuto?: boolean;
         placeholder?: string;
     }>(),
     {
         name: undefined,
+        id: undefined,
         inheritLabel: undefined,
         allowAuto: false,
         placeholder: 'Select a model',
@@ -96,11 +98,15 @@ const groups = computed<Record<string, string[]>>(() => {
 <template>
     <div>
         <Select v-model="selected">
-            <SelectTrigger class="h-8 max-w-[320px] text-sm">
+            <SelectTrigger :id="id ?? name" class="h-8 max-w-[320px] text-sm">
                 <SelectValue :placeholder="placeholder" />
             </SelectTrigger>
             <SelectContent>
-                <SelectItem v-if="inheritLabel" :value="INHERIT">
+                <SelectItem
+                    v-if="inheritLabel"
+                    :value="INHERIT"
+                    :aria-label="inheritLabel"
+                >
                     {{ inheritLabel }}
                 </SelectItem>
                 <SelectGroup
@@ -113,6 +119,7 @@ const groups = computed<Record<string, string[]>>(() => {
                     <SelectItem
                         v-if="allowAuto"
                         :value="encode(String(providerKey), AUTO_MODEL)"
+                        aria-label="auto"
                     >
                         auto (cheapest)
                     </SelectItem>
@@ -120,6 +127,7 @@ const groups = computed<Record<string, string[]>>(() => {
                         v-for="modelId in modelList"
                         :key="modelId"
                         :value="encode(String(providerKey), modelId)"
+                        :aria-label="modelId"
                     >
                         {{ modelId }}
                     </SelectItem>
