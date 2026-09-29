@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use App\Ai\OpenRouterRequestOptions;
 use App\Enums\OpenRouterSort;
 use App\Models\AiModelPrice;
 use App\Models\User;
@@ -196,12 +197,32 @@ test('an unknown OpenRouter sort is rejected', function (): void {
         ->assertSessionHasErrors('openrouter_sort');
 });
 
-test('a default OpenRouter sort clears the saved sort', function (): void {
-    resolve(OpenRouterSettings::class)->setSort(OpenRouterSort::Price);
+test('a default OpenRouter sort clears the saved sort even when it must override a configured env default', function (): void {
+    config()->set('mediamanager.ai.openrouter.sort', 'price');
+    resolve(OpenRouterSettings::class)->setSort(OpenRouterSort::Latency);
 
     $this->actingAs(User::factory()->admin()->create())
         ->put(route('admin.ai-settings.update'), providerSelectionPayload(['openrouter_sort' => 'default']))
         ->assertRedirect();
+
+    expect(resolve(OpenRouterSettings::class)->sort())->toBeNull()
+        ->and(resolve(OpenRouterRequestOptions::class)->routing())->toBe([]);
+});
+
+test('setSort(null) still falls back to the configured env default, unlike choosing default explicitly', function (): void {
+    config()->set('mediamanager.ai.openrouter.sort', 'price');
+    $openRouterSettings = resolve(OpenRouterSettings::class);
+    $openRouterSettings->setSort(OpenRouterSort::Latency);
+
+    $openRouterSettings->setSort(null);
+
+    expect($openRouterSettings->sort())->toBe(OpenRouterSort::Price);
+});
+
+test('useDefaultSort persists a sentinel that overrides a configured env default', function (): void {
+    config()->set('mediamanager.ai.openrouter.sort', 'price');
+
+    resolve(OpenRouterSettings::class)->useDefaultSort();
 
     expect(resolve(OpenRouterSettings::class)->sort())->toBeNull();
 });

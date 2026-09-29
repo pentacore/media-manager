@@ -63,7 +63,11 @@ class UpdateAiSettingsRequest extends FormRequest
             'sub_agent_model_provider' => ['nullable', ...$this->modelProviderRules()],
             'price_updater_model_provider' => ['nullable', ...$this->modelProviderRules()],
             'failover_model' => ['nullable', 'string', 'max:100'],
-            'openrouter_sort' => ['nullable', OpenRouterSort::validationRule()],
+            // The select's "OpenRouter default" option posts the `default`
+            // sentinel alongside the enum values, so the controller can
+            // tell it apart from an absent field (leaves the setting
+            // untouched) and call `useDefaultSort()` instead of `setSort()`.
+            'openrouter_sort' => ['nullable', 'string', Rule::in([...OpenRouterSort::values(), 'default'])],
             'openrouter_deny_data_collection' => ['sometimes', 'boolean'],
             'openrouter_allow_fallbacks' => ['sometimes', 'boolean'],
             'openrouter_order' => ['nullable', 'string', 'max:500'],
@@ -97,12 +101,6 @@ class UpdateAiSettingsRequest extends FormRequest
             if ($this->has($field) && trim((string) $this->input($field)) === '') {
                 $this->merge([$field => null]);
             }
-        }
-
-        // The select's "OpenRouter default load balancing" option posts this
-        // sentinel; store it as null so `sort()` falls back to no preference.
-        if ($this->input('openrouter_sort') === 'default') {
-            $this->merge(['openrouter_sort' => null]);
         }
 
         // The form always posts one blank placeholder entry so an all-unchecked

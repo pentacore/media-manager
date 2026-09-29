@@ -388,7 +388,11 @@ class AiSettingsController extends Controller
     private function updateOpenRouterSettings(OpenRouterSettings $openRouterSettings, array $validated): void
     {
         if (array_key_exists('openrouter_sort', $validated)) {
-            $openRouterSettings->setSort(OpenRouterSort::tryFrom((string) $validated['openrouter_sort']));
+            if ($validated['openrouter_sort'] === 'default') {
+                $openRouterSettings->useDefaultSort();
+            } else {
+                $openRouterSettings->setSort(OpenRouterSort::tryFrom((string) $validated['openrouter_sort']));
+            }
         }
 
         if (array_key_exists('openrouter_deny_data_collection', $validated)) {

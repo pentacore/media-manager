@@ -15,6 +15,13 @@ class OpenRouterSettings
 {
     public const string SORT_KEY = 'ai.openrouter.sort';
 
+    /**
+     * Persisted in place of a sort value when the admin explicitly chose
+     * "OpenRouter default" — distinct from the key being absent, which
+     * falls back to the config default instead.
+     */
+    private const string DEFAULT_SORT_SENTINEL = 'default';
+
     public const string DENY_DATA_COLLECTION_KEY = 'ai.openrouter.deny_data_collection';
 
     public const string ALLOW_FALLBACKS_KEY = 'ai.openrouter.allow_fallbacks';
@@ -26,16 +33,35 @@ class OpenRouterSettings
     public function __construct(private readonly AppSettings $appSettings) {}
 
     /**
-     * How OpenRouter ranks upstreams, or null for its default load balancing.
+     * How OpenRouter ranks upstreams, or null for its default load
+     * balancing — either because the admin chose "OpenRouter default"
+     * (the sentinel is stored) or because nothing is stored and the config
+     * default resolves to nothing.
      */
     public function sort(): ?OpenRouterSort
     {
-        return OpenRouterSort::tryFrom((string) ($this->appSettings->get(self::SORT_KEY) ?? config('mediamanager.ai.openrouter.sort')));
+        $stored = $this->appSettings->get(self::SORT_KEY);
+
+        if ($stored === self::DEFAULT_SORT_SENTINEL) {
+            return null;
+        }
+
+        return OpenRouterSort::tryFrom((string) ($stored ?? config('mediamanager.ai.openrouter.sort')));
     }
 
     public function setSort(?OpenRouterSort $openRouterSort): void
     {
         $this->appSettings->set(self::SORT_KEY, $openRouterSort?->value);
+    }
+
+    /**
+     * Persists the admin's explicit choice of "OpenRouter default" load
+     * balancing, which — unlike `setSort(null)` — overrides a configured
+     * env sort instead of falling back to it.
+     */
+    public function useDefaultSort(): void
+    {
+        $this->appSettings->set(self::SORT_KEY, self::DEFAULT_SORT_SENTINEL);
     }
 
     /**
