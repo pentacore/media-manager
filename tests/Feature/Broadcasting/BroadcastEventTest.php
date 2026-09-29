@@ -82,6 +82,26 @@ test('ActionRequestCreated strips sensitive detail from broadcast payload', func
     ]);
 });
 
+test('ActionRequestCreated never broadcasts a grab release guid', function (): void {
+    $actionRequest = ActionRequest::factory()->create([
+        'type' => 'grab_release',
+        'payload' => [
+            'service' => 'radarr',
+            'movie_id' => 10,
+            'guid' => 'https://tracker.test/download?passkey=secret-passkey',
+            'indexer_id' => 4,
+            'release' => ['title' => 'Dune.2021.2160p', 'guid' => 'https://tracker.test/download?passkey=secret-passkey'],
+        ],
+    ]);
+
+    $payload = new ActionRequestCreated($actionRequest)->broadcastWith();
+
+    expect($payload['payload'])->not->toHaveKey('guid')
+        ->and($payload['payload']['release'])->toBe(['title' => 'Dune.2021.2160p'])
+        ->and($payload['payload']['indexer_id'])->toBe(4)
+        ->and(json_encode($payload, JSON_THROW_ON_ERROR))->not->toContain('secret-passkey');
+});
+
 test('ActionRequestCreated strips replacement target and candidate details from broadcasts', function (): void {
     $actionRequest = ActionRequest::factory()->create([
         'type' => 'replace_media_file',

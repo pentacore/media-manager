@@ -193,7 +193,7 @@ test('grab dispatches the remembered release and never trusts browser-sent relea
 
     $actionRequest = ActionRequest::query()->where('type', 'grab_release')->sole();
     expect($actionRequest->payload['release']['title'])->toBe('Dune.2021.2160p')
-        ->and($actionRequest->payload['release']['guid'])->toBe('guid-9')
+        ->and($actionRequest->payload['release'])->not->toHaveKey('guid')
         ->and($actionRequest->payload['release'])->not->toHaveKey('target')
         ->and($actionRequest->payload['guid'])->toBe('guid-9')
         ->and($actionRequest->payload['movie_id'])->toBe(10)

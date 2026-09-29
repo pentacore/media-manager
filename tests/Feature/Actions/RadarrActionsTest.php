@@ -146,5 +146,5 @@ test('grab_release completes even when busting the cache afterward fails', funct
         'payload' => ['service' => 'radarr', 'movie_id' => 10, 'guid' => 'g-2', 'indexer_id' => 4, 'release' => ['title' => 'x'], 'service_connection_id' => radarrActionsConnectionId()],
     ]));
 
-    expect($result)->toBe(['guid' => 'g-2', 'indexer_id' => 4, 'title' => 'x']);
+    expect($result)->toBe(['indexer_id' => 4, 'title' => 'x']);
 });

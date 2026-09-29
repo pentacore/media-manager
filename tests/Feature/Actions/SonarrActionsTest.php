@@ -302,7 +302,7 @@ test('grab_release posts only the guid and indexer id', function (): void {
         'payload' => ['service' => 'sonarr', 'series_id' => 7, 'guid' => 'g-1', 'indexer_id' => 3, 'release' => ['title' => 'Show.S01E01.1080p'], 'service_connection_id' => sonarrActionsConnectionId()],
     ]));
 
-    expect($result)->toBe(['guid' => 'g-1', 'indexer_id' => 3, 'title' => 'Show.S01E01.1080p']);
+    expect($result)->toBe(['indexer_id' => 3, 'title' => 'Show.S01E01.1080p']);
     Http::assertSent(fn (Request $request): bool => $request->method() === 'POST' && $request->data() === ['guid' => 'g-1', 'indexerId' => 3]);
 });
 
@@ -324,5 +324,5 @@ test('grab_release completes even when busting the cache afterward fails', funct
         'payload' => ['service' => 'sonarr', 'series_id' => 7, 'guid' => 'g-1', 'indexer_id' => 3, 'release' => ['title' => 'x'], 'service_connection_id' => sonarrActionsConnectionId()],
     ]));
 
-    expect($result)->toBe(['guid' => 'g-1', 'indexer_id' => 3, 'title' => 'x']);
+    expect($result)->toBe(['indexer_id' => 3, 'title' => 'x']);
 });

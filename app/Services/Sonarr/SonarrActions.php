@@ -235,7 +235,6 @@ class SonarrActions implements ActionExecutor
         }
 
         return [
-            'guid' => $guid,
             'indexer_id' => $indexerId,
             'title' => is_string($payload['release']['title'] ?? null) ? $payload['release']['title'] : null,
         ];

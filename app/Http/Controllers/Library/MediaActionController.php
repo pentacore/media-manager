@@ -175,7 +175,7 @@ class MediaActionController extends Controller
         abort_if($release === null || ($release['target']['item_id'] ?? null) !== $itemId, 422, 'That release is no longer available — run the search again.');
 
         $releaseFacts = $release;
-        unset($releaseFacts['target']);
+        unset($releaseFacts['target'], $releaseFacts['guid']);
 
         $manualActionOutcome = $manualActionDispatcher->dispatch('grab_release', $serviceType, [
             'service' => $serviceType->value,
