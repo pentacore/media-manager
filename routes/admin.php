@@ -101,6 +101,7 @@ Route::middleware(['auth', 'verified', 'password.set', 'role:admin'])->prefix('a
         Route::get('ai-prices/catalog/{provider}', [AiModelCatalogController::class, 'index'])
             ->whereIn('provider', array_values(array_unique(config('mediamanager.ai.pricing.providers', []))))
             ->name('ai-prices.catalog.index');
+        Route::post('ai-prices/catalog', [AiModelCatalogController::class, 'store'])->name('ai-prices.catalog.store');
 
         Route::post('ai-free-usage-pools', [AiFreeUsagePoolController::class, 'store'])->name('ai-free-usage-pools.store');
         Route::put('ai-free-usage-pools/{aiFreeUsagePool}', [AiFreeUsagePoolController::class, 'update'])->name('ai-free-usage-pools.update');

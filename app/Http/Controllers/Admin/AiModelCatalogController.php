@@ -5,10 +5,16 @@ declare(strict_types=1);
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Admin\StoreCatalogModelPricesRequest;
+use App\Services\AiUsage\Pricing\AiModelPriceWriter;
 use App\Services\AiUsage\Pricing\CatalogModelBrowser;
 use App\Services\AiUsage\Pricing\CatalogUnavailableException;
 use App\Services\AiUsage\Pricing\Data\CatalogModelOption;
+use App\Services\AiUsage\Pricing\Data\WriteOutcome;
+use App\Services\AiUsage\Pricing\RefreshScope;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\RedirectResponse;
+use Inertia\Inertia;
 
 class AiModelCatalogController extends Controller
 {
@@ -29,5 +35,51 @@ class AiModelCatalogController extends Controller
         return response()->json([
             'models' => array_map(fn (CatalogModelOption $catalogModelOption): array => $catalogModelOption->toArray(), $options),
         ]);
+    }
+
+    /**
+     * Add the admin's picked catalog models. Prices always come from the
+     * catalog, never the request, and each row is written through the pricing
+     * writer so it carries feed provenance and keeps syncing.
+     */
+    public function store(
+        StoreCatalogModelPricesRequest $storeCatalogModelPricesRequest,
+        CatalogModelBrowser $catalogModelBrowser,
+        AiModelPriceWriter $aiModelPriceWriter,
+    ): RedirectResponse {
+        $validated = $storeCatalogModelPricesRequest->validated();
+        /** @var string $provider */
+        $provider = $validated['provider'];
+        /** @var list<string> $models */
+        $models = $validated['models'];
+
+        $refreshScope = RefreshScope::forExplicitCreates($provider, $models);
+        $added = 0;
+
+        try {
+            foreach ($models as $model) {
+                $candidate = $catalogModelBrowser->addableCandidate($provider, $model);
+
+                if ($candidate !== null && $aiModelPriceWriter->write($candidate, $refreshScope, $candidate->source) === WriteOutcome::Created) {
+                    $added++;
+                }
+            }
+        } catch (CatalogUnavailableException $catalogUnavailableException) {
+            Inertia::flash('toast', ['type' => 'error', 'message' => __('Could not load the pricing catalog: :message', ['message' => $catalogUnavailableException->getMessage()])]);
+
+            return to_route('admin.ai-prices.index');
+        }
+
+        $total = count($models);
+        $skipped = $total - $added;
+
+        Inertia::flash('toast', [
+            'type' => $added > 0 ? 'success' : 'info',
+            'message' => $skipped === 0
+                ? trans_choice('Added :count model.|Added :count models.', $added)
+                : __('Added :added of :total models; :skipped were already added or are no longer in the catalog.', ['added' => $added, 'total' => $total, 'skipped' => $skipped]),
+        ]);
+
+        return to_route('admin.ai-prices.index');
     }
 }
