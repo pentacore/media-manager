@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use App\Models\ServiceConnection;
 use App\Models\User;
+use Illuminate\Http\Client\Request;
 use Illuminate\Support\Facades\Http;
 
 beforeEach(function (): void {
@@ -20,10 +21,13 @@ beforeEach(function (): void {
     ServiceConnection::factory()->sonarr()->create(['url' => 'http://sonarr.local:8989', 'api_key' => 'k']);
     ServiceConnection::factory()->radarr()->create(['url' => 'http://radarr.local:7878', 'api_key' => 'k']);
     ServiceConnection::factory()->seerr()->create(['url' => 'http://seerr.local:5055', 'api_key' => 'k']);
-    // monitoring.now-playing (an unrelated, pre-existing route in the "viewer
-    // read routes" dataset) redirects to the dashboard without an active
-    // Emby connection — give it one so that dataset row exercises the
-    // ability gate rather than an unrelated missing-connection redirect.
+
+    /**
+     * monitoring.now-playing (an unrelated, pre-existing route in the "viewer
+     * read routes" dataset) redirects to the dashboard without an active
+     * Emby connection — give it one so that dataset row exercises the
+     * ability gate rather than an unrelated missing-connection redirect.
+     */
     ServiceConnection::factory()->emby()->create(['url' => 'http://emby.local:8096', 'api_key' => 'k']);
 });
 
@@ -55,6 +59,8 @@ dataset('member-only routes', [
     'grab queue' => ['GET', 'media.library.activity.queue', []],
     'anime index' => ['GET', 'media.anime.index', []],
     'anime request' => ['POST', 'media.anime.request', []],
+    'anime find match' => ['POST', 'media.anime.find-match', []],
+    'anime confirm match' => ['POST', 'media.anime.confirm-match', []],
     'requests console' => ['GET', 'media.requests.index', []],
     'requests approve' => ['POST', 'media.requests.approve', ['id' => 1]],
     'requests decline' => ['POST', 'media.requests.decline', ['id' => 1]],
@@ -74,6 +80,12 @@ dataset('member write routes', [
     'requests console' => ['GET', 'media.requests.index', []],
     'requests approve' => ['POST', 'media.requests.approve', ['id' => 1]],
     'library search' => ['POST', 'media.library.actions.search', []],
+    'wanted' => ['GET', 'media.wanted.index', []],
+    'library releases' => ['GET', 'media.library.actions.releases', []],
+    'library grab' => ['POST', 'media.library.actions.grab', []],
+    'library monitor' => ['POST', 'media.library.actions.monitor', []],
+    'library monitor episodes' => ['POST', 'media.library.actions.monitor-episodes', []],
+    'library quality profile' => ['POST', 'media.library.actions.quality-profile', []],
 ]);
 
 test('viewer-level read routes open for viewers', function (string $routeName, array $parameters): void {
@@ -105,6 +117,29 @@ test('media.discover.title passes the ability gate for viewers (view-library)', 
 test('media.discover.request passes the ability gate for viewers (request-media)', function (): void {
     $response = $this->actingAs(User::factory()->create())
         ->post(route('media.discover.request'), ['tmdbId' => 1, 'mediaType' => 'movie']);
+
+    expect($response->getStatusCode())->not->toBe(403);
+});
+
+test('media.requests.mine.destroy passes the ability gate for viewers (request-media)', function (): void {
+    // Its own Seerr identity guards (no own match → 403, ownership mismatch
+    // → 403) would otherwise be indistinguishable from an ability-gate
+    // refusal, so this row moves to its own host and fakes a full,
+    // successful owner match — proving the 403 the other tests assert is the
+    // *ability* gate, not this route's own checks.
+    $seerrConnection = ServiceConnection::query()->where('type', 'seerr')->sole();
+    $seerrConnection->update(['url' => 'http://seerr-viewer-destroy.local:5055']);
+    $viewer = User::factory()->create(['email' => 'viewer-destroy@example.com']);
+    Http::fake([
+        'seerr-viewer-destroy.local:5055/api/v1/user*' => Http::response(['pageInfo' => ['pages' => 1, 'page' => 1], 'results' => [
+            ['id' => 7, 'email' => 'viewer-destroy@example.com'],
+        ]]),
+        'seerr-viewer-destroy.local:5055/api/v1/request/1' => fn (Request $request) => $request->method() === 'DELETE'
+            ? Http::response(null, 204)
+            : Http::response(['id' => 1, 'status' => 1, 'requestedBy' => ['id' => 7]]),
+    ]);
+
+    $response = $this->actingAs($viewer)->delete(route('media.requests.mine.destroy', ['id' => 1]));
 
     expect($response->getStatusCode())->not->toBe(403);
 });
