@@ -129,6 +129,7 @@ test('bulk add creates synced rows with catalog prices, ignoring prices in the r
 
     expect($aiModelPrice->input_per_mtok)->toBe('4.0000')
         ->and($aiModelPrice->output_per_mtok)->toBe('20.0000')
+        ->and($aiModelPrice->cache_read_per_mtok)->toBe('0.2000')
         ->and($aiModelPrice->pricing_source)->toBe(PricingSource::OpenRouter)
         ->and($aiModelPrice->is_price_locked)->toBeFalse()
         ->and($aiModelPrice->pricing_synced_at)->not->toBeNull()

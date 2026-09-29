@@ -118,7 +118,6 @@ const props = defineProps<{
     refresh_running: boolean;
     rate_limit_metrics: Array<{ value: string; label: string }>;
     rate_limit_periods: Array<{ value: string; label: string }>;
-    openrouter_pricing_enabled: boolean;
     catalog_providers: string[];
 }>();
 

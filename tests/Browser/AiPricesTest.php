@@ -7,6 +7,7 @@ use App\Jobs\RefreshAiPricesJob;
 use App\Models\AiModelPrice;
 use App\Models\User;
 use Illuminate\Support\Facades\Bus;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
 
 /*
@@ -448,6 +449,42 @@ test('admin bulk-adds openrouter models from the catalog', function (): void {
         ->assertVisible('[data-catalog-row="openai/gpt-6-luna"]')
         ->assertMissing('[data-catalog-row="anthropic/claude-opus-5.5"]')
         ->assertNoSmoke();
+});
+
+test('the bulk add dialog stays open with its picks when the catalog is down on submit', function (): void {
+    foreach (['models_dev', 'litellm', 'xai'] as $source) {
+        config()->set(sprintf('mediamanager.ai.pricing.%s.enabled', $source), false);
+    }
+
+    config()->set('mediamanager.ai.pricing.openrouter.enabled', true);
+    config()->set('mediamanager.ai.pricing.openrouter.retries', 0);
+
+    // Not catalogPickerBrowserFeeds(): the first Http::fake() registered for a
+    // host wins, so the fail-after-first order must come from this one
+    // sequence. The dialog's catalog GET gets the feed, and every fetch after
+    // it (the submit's re-fetch) fails.
+    Http::fake([
+        'openrouter.ai/*' => Http::sequence()
+            ->pushFile(base_path('tests/Fixtures/OpenRouter/models.json'))
+            ->whenEmpty(Http::response('down', 503)),
+    ]);
+
+    $webpage = visit('/admin/ai-prices')
+        ->assertNoSmoke()
+        ->click('[data-add-from-catalog]')
+        ->click('[data-catalog-row="anthropic/claude-opus-5.5"]');
+
+    // Drop the slice the GET cached so the submit genuinely re-fetches.
+    Cache::flush();
+
+    $webpage->click('[data-add-from-catalog-submit]')
+        ->assertSee('Could not load the pricing catalog')
+        ->assertVisible('[data-add-from-catalog-submit]')
+        ->assertSeeIn('[data-add-from-catalog-submit]', 'Add 1 model')
+        ->assertAttribute('[data-catalog-row="anthropic/claude-opus-5.5"]', 'aria-pressed', 'true')
+        ->assertNoSmoke();
+
+    expect(AiModelPrice::query()->where('provider', 'openrouter')->exists())->toBeFalse();
 });
 
 test('picking a catalog model fills the add form and saves a synced row', function (): void {
