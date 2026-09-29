@@ -24,6 +24,7 @@ test('member queues a movie delete for approval from the show page', function ()
     ServiceConnection::factory()->radarr()->create(['url' => 'http://radarr.local:7878']);
 
     Http::fake([
+        'radarr.local:7878/api/v3/qualityprofile*' => Http::response([['id' => 1, 'name' => 'HD-1080p']]),
         'radarr.local:7878/api/v3/movie/10' => Http::response([
             'id' => 10,
             'title' => 'A Movie',
@@ -114,6 +115,7 @@ test('a double-clicked movie delete confirm sends one request and stays disabled
     ServiceConnection::factory()->radarr()->create(['url' => 'http://radarr.local:7878']);
 
     Http::fake([
+        'radarr.local:7878/api/v3/qualityprofile*' => Http::response([['id' => 1, 'name' => 'HD-1080p']]),
         'radarr.local:7878/api/v3/movie/10' => Http::response([
             'id' => 10,
             'title' => 'A Movie',
@@ -157,6 +159,7 @@ test('a double-clicked series delete confirm sends one request and stays disable
     ServiceConnection::factory()->sonarr()->create(['url' => 'http://sonarr.local:8989']);
 
     Http::fake([
+        'sonarr.local:8989/api/v3/qualityprofile*' => Http::response([['id' => 1, 'name' => 'HD-1080p']]),
         'sonarr.local:8989/api/v3/series/20' => Http::response([
             'id' => 20,
             'title' => 'A Show',
