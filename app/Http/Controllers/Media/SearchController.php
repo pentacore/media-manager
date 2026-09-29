@@ -392,8 +392,13 @@ class SearchController extends Controller
                 }
             }
 
+            // Never pass Prowlarr's downloadUrl (it embeds the Prowlarr API key)
+            // or the raw guid (it can carry a tracker passkey) to the browser;
+            // the row key is a hash of the guid instead.
+            $guid = $hit['guid'] ?? null;
+
             return [
-                'guid' => $hit['guid'] ?? null,
+                'key' => is_string($guid) && $guid !== '' ? md5($guid) : null,
                 'title' => $hit['title'] ?? null,
                 'tracker' => $hit['indexer'] ?? null,
                 'category' => $hit['categories'][0]['name'] ?? null,
@@ -401,7 +406,6 @@ class SearchController extends Controller
                 'seeders' => $hit['seeders'] ?? null,
                 'leechers' => $hit['leechers'] ?? null,
                 'age' => $age,
-                'download_url' => $hit['downloadUrl'] ?? null,
                 'info_url' => $hit['infoUrl'] ?? null,
                 // Prowlarr returns a quality-style score in 0-100 only for
                 // some indexers; expose what's there but don't synthesise.
