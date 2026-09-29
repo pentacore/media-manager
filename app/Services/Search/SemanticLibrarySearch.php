@@ -9,7 +9,6 @@ use App\Models\IndexedSeries;
 use App\Services\AiUsage\AiUsageCaller;
 use App\Settings\AiSettings;
 use Illuminate\Support\Facades\Log;
-use Laravel\Ai\Embeddings;
 use Laravel\Ai\Reranking;
 use Laravel\Ai\Responses\RerankingResponse;
 use Laravel\Scout\EngineManager;
@@ -37,10 +36,8 @@ class SemanticLibrarySearch
         }
 
         try {
-            $vector = resolve(AiUsageCaller::class)->during(self::class, fn (): array => Embeddings::for([$query])
-                ->dimensions(LibraryEmbedder::DIMENSIONS)
-                ->cache()
-                ->generate()
+            $vector = resolve(AiUsageCaller::class)->during(self::class, fn (): array => $this->libraryEmbedder->pendingEmbeddings([$query])
+                ->generate(provider: $this->aiSettings->embeddingsProvider(), model: $this->aiSettings->embeddingsModel())
                 ->first());
         } catch (Throwable $throwable) {
             Log::warning('SemanticLibrarySearch: query embedding failed', [

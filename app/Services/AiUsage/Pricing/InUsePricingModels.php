@@ -111,6 +111,8 @@ final class InUsePricingModels
             $pairs[] = [$modelSelection->provider, $modelSelection->model];
         }
 
+        $pairs[] = [$this->aiSettings->embeddingsProvider(), $this->aiSettings->embeddingsModel()];
+
         $providerModels = [];
 
         foreach ($pairs as [$provider, $model]) {

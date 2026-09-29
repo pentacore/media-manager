@@ -9,6 +9,7 @@ use App\Enums\AiMode;
 use App\Enums\AiReasoningLevel;
 use Laravel\Ai\Ai;
 use Laravel\Ai\Enums\Lab;
+use Throwable;
 
 class AiSettings
 {
@@ -76,6 +77,12 @@ class AiSettings
     public const string RERANKING_PROVIDER_KEY = 'ai.reranking.provider';
 
     public const string RERANKING_MODEL_KEY = 'ai.reranking.model';
+
+    public const string EMBEDDINGS_PROVIDER_KEY = 'ai.embeddings.provider';
+
+    public const string EMBEDDINGS_MODEL_KEY = 'ai.embeddings.model';
+
+    public const string EMBEDDINGS_INDEXED_WITH_KEY = 'ai.embeddings.indexed_with';
 
     public const string SUB_AGENT_MODEL_KEY = 'ai.sub_agent_model';
 
@@ -646,6 +653,91 @@ class AiSettings
     public function setRerankingModel(?string $model): void
     {
         $this->appSettings->set(self::RERANKING_MODEL_KEY, $model);
+    }
+
+    /**
+     * The provider library embeddings are generated on. Nothing saved follows
+     * `ai.default_for_embeddings`.
+     */
+    public function embeddingsProvider(): string
+    {
+        return $this->optionalString($this->appSettings->get(self::EMBEDDINGS_PROVIDER_KEY))
+            ?? (string) config('ai.default_for_embeddings', 'openai');
+    }
+
+    /**
+     * Persist the embeddings provider; null falls back to the config default.
+     */
+    public function setEmbeddingsProvider(?string $provider): void
+    {
+        $this->appSettings->set(self::EMBEDDINGS_PROVIDER_KEY, $provider);
+    }
+
+    /**
+     * The embeddings model, or null for the provider's default model.
+     */
+    public function embeddingsModel(): ?string
+    {
+        return $this->optionalString($this->appSettings->get(self::EMBEDDINGS_MODEL_KEY));
+    }
+
+    /**
+     * Persist the embeddings model; null uses the provider default again.
+     */
+    public function setEmbeddingsModel(?string $model): void
+    {
+        $this->appSettings->set(self::EMBEDDINGS_MODEL_KEY, $model);
+    }
+
+    /**
+     * `provider|model` of the current embeddings selection, with the model
+     * resolved to the provider default when none is saved.
+     */
+    public function embeddingsSignature(): string
+    {
+        return $this->signatureFor($this->embeddingsProvider(), $this->embeddingsModel());
+    }
+
+    /**
+     * `provider|model` of the last completed full re-embed. Nothing saved
+     * means the library was built with the pre-setting default
+     * (`ai.default_for_embeddings` and its default model).
+     */
+    public function embeddingsIndexedWith(): string
+    {
+        return $this->optionalString($this->appSettings->get(self::EMBEDDINGS_INDEXED_WITH_KEY))
+            ?? $this->signatureFor((string) config('ai.default_for_embeddings', 'openai'), null);
+    }
+
+    /**
+     * Record that the whole library was just embedded with the current
+     * selection.
+     */
+    public function markEmbeddingsIndexed(): void
+    {
+        $this->appSettings->set(self::EMBEDDINGS_INDEXED_WITH_KEY, $this->embeddingsSignature());
+    }
+
+    /**
+     * Whether stored library vectors come from a different provider/model
+     * than the one queries are now embedded with.
+     */
+    public function embeddingsStale(): bool
+    {
+        return $this->embeddingsIndexedWith() !== $this->embeddingsSignature();
+    }
+
+    private function signatureFor(string $provider, ?string $model): string
+    {
+        if ($model === null) {
+            try {
+                $model = Ai::embeddingProvider($provider)->defaultEmbeddingsModel();
+            } catch (Throwable) {
+                $model = 'default';
+            }
+        }
+
+        return sprintf('%s|%s', $provider, $model);
     }
 
     /**

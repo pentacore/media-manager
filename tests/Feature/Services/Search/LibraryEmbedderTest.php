@@ -18,7 +18,7 @@ test('embeddingText folds title, year, genres, and overview', function (): void 
         'overview' => 'A man struggles with memories.',
     ]);
 
-    $text = (new LibraryEmbedder)->embeddingText($movie);
+    $text = resolve(LibraryEmbedder::class)->embeddingText($movie);
 
     expect($text)->toContain('Dark City')
         ->toContain('1998')
@@ -33,7 +33,7 @@ test('embed returns a vector of the configured dimensions when enabled', functio
 
     $series = IndexedSeries::factory()->make(['title' => 'Severance', 'overview' => 'Work-life split.']);
 
-    $vector = (new LibraryEmbedder)->embed($series);
+    $vector = resolve(LibraryEmbedder::class)->embed($series);
 
     expect($vector)->toBeArray()->toHaveCount(LibraryEmbedder::DIMENSIONS);
     Embeddings::assertGenerated(fn (): bool => true);
@@ -43,7 +43,7 @@ test('embeddings generated for library items are billed to the embedder', functi
     config()->set('mediamanager.ai.enabled', true);
     Embeddings::fake();
 
-    (new LibraryEmbedder)->embed(IndexedMovie::factory()->make(['title' => 'Dune']));
+    resolve(LibraryEmbedder::class)->embed(IndexedMovie::factory()->make(['title' => 'Dune']));
 
     expect(AiUsageRecord::where('kind', AiUsageKind::Embeddings)->sole()->agent_class)->toBe(LibraryEmbedder::class);
 });
@@ -52,7 +52,7 @@ test('embed returns null when ai is disabled', function (): void {
     config()->set('mediamanager.ai.enabled', false);
     Embeddings::fake();
 
-    $vector = (new LibraryEmbedder)->embed(IndexedMovie::factory()->make());
+    $vector = resolve(LibraryEmbedder::class)->embed(IndexedMovie::factory()->make());
 
     expect($vector)->toBeNull();
     Embeddings::assertNothingGenerated();
@@ -67,7 +67,7 @@ test('embedMany makes a single batched generation call and returns one vector pe
         IndexedSeries::factory()->make(['title' => 'Beta']),
     ]);
 
-    $vectors = (new LibraryEmbedder)->embedMany($items);
+    $vectors = resolve(LibraryEmbedder::class)->embedMany($items);
 
     expect($vectors)->toBeArray()->toHaveCount(2)
         ->and($vectors[0])->toHaveCount(LibraryEmbedder::DIMENSIONS)
@@ -87,7 +87,7 @@ test('embedMany returns nulls without generating when ai is disabled', function 
     config()->set('mediamanager.ai.enabled', false);
     Embeddings::fake();
 
-    $vectors = (new LibraryEmbedder)->embedMany(new Collection([
+    $vectors = resolve(LibraryEmbedder::class)->embedMany(new Collection([
         IndexedMovie::factory()->make(),
         IndexedMovie::factory()->make(),
     ]));
@@ -98,8 +98,8 @@ test('embedMany returns nulls without generating when ai is disabled', function 
 
 test('enabled reflects the mediamanager ai config flag', function (): void {
     config()->set('mediamanager.ai.enabled', true);
-    expect((new LibraryEmbedder)->enabled())->toBeTrue();
+    expect(resolve(LibraryEmbedder::class)->enabled())->toBeTrue();
 
     config()->set('mediamanager.ai.enabled', false);
-    expect((new LibraryEmbedder)->enabled())->toBeFalse();
+    expect(resolve(LibraryEmbedder::class)->enabled())->toBeFalse();
 });
