@@ -1,13 +1,6 @@
-export type PricingSourceKey =
-    | 'seed'
-    | 'models_dev'
-    | 'first_party'
-    | 'manual'
-    | 'legacy'
-    | 'openrouter'
-    | 'litellm'
-    | 'xai_api'
-    | 'feed_consensus';
+import type { PricingSource } from '@/typefinder';
+
+export type PricingSourceKey = PricingSource;
 
 export type CatalogPriceColumn =
     | 'input_per_mtok'

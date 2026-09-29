@@ -28,6 +28,9 @@ const emit = defineEmits<{
 }>();
 
 const options = ref<CatalogModelOption[]>([]);
+// False when no enabled pricing feed prices the provider at all, as opposed
+// to every catalog model already having a row.
+const covered = ref(true);
 const loading = ref(false);
 const error = ref<string | null>(null);
 const search = ref('');
@@ -41,15 +44,17 @@ async function load(): Promise<void> {
     loading.value = true;
     error.value = null;
     options.value = [];
+    covered.value = true;
 
     try {
-        const response = await jsonRequest<{ models: CatalogModelOption[] }>(
-            'GET',
-            AiModelCatalogController.index.url(props.provider),
-        );
+        const response = await jsonRequest<{
+            models: CatalogModelOption[];
+            covered: boolean;
+        }>('GET', AiModelCatalogController.index.url(props.provider));
 
         if (request === latestRequest) {
             options.value = response.models;
+            covered.value = response.covered;
         }
     } catch (caught) {
         if (request === latestRequest) {
@@ -135,6 +140,13 @@ function formatRate(value: string | null): string {
                 >Retry</Button
             >
         </div>
+        <p
+            v-else-if="!covered"
+            class="text-[13px] text-muted-foreground"
+            data-catalog-uncovered
+        >
+            No enabled pricing feed covers this provider.
+        </p>
         <p
             v-else-if="options.length === 0"
             class="text-[13px] text-muted-foreground"

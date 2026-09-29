@@ -450,7 +450,7 @@ const priciest = ref(
 
     <div class="flex flex-col gap-4 p-5">
         <!-- Hero -->
-        <div class="flex items-end justify-between gap-3">
+        <div class="flex flex-wrap items-end justify-between gap-3">
             <div>
                 <div class="mb-1.5 text-[13px] text-muted-foreground">
                     Admin <span class="text-fg-subtle">/</span> AI prices
@@ -466,7 +466,7 @@ const priciest = ref(
                     spend shows up.
                 </p>
             </div>
-            <div class="flex items-center gap-2">
+            <div class="flex flex-wrap items-center gap-2">
                 <Button
                     variant="outline"
                     size="sm"
@@ -745,7 +745,10 @@ const priciest = ref(
                 </div>
             </div>
             <div class="overflow-x-auto">
-                <table class="w-full border-collapse text-[13px]">
+                <table
+                    class="w-full border-collapse text-[13px]"
+                    data-prices-table
+                >
                     <thead>
                         <tr>
                             <th

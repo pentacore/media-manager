@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { Form } from '@inertiajs/vue3';
 import { Plus } from '@lucide/vue';
-import { computed, ref } from 'vue';
+import { computed, ref, watch } from 'vue';
 import AiModelPriceController from '@/actions/App/Http/Controllers/Admin/AiModelPriceController';
 import InputError from '@/components/InputError.vue';
 import { RateLimitEditor, Toggle } from '@/components/mm';
@@ -41,16 +41,6 @@ const createPoolId = ref('none');
 // OFF so a hand-entered price stays locked; edit mirrors the row's state.
 const createAutomaticUpdates = ref(false);
 
-const provider = ref('');
-const model = ref('');
-const rates = ref<Record<RateColumn, string>>({
-    input_per_mtok: '',
-    output_per_mtok: '',
-    cache_read_per_mtok: '',
-    cache_write_per_mtok: '',
-    reasoning_per_mtok: '',
-    search_unit_per_k: '',
-});
 type RateColumn =
     | 'input_per_mtok'
     | 'output_per_mtok'
@@ -58,13 +48,32 @@ type RateColumn =
     | 'cache_write_per_mtok'
     | 'reasoning_per_mtok'
     | 'search_unit_per_k';
+
+function blankRates(): Record<RateColumn, string> {
+    return {
+        input_per_mtok: '',
+        output_per_mtok: '',
+        cache_read_per_mtok: '',
+        cache_write_per_mtok: '',
+        reasoning_per_mtok: '',
+        search_unit_per_k: '',
+    };
+}
+
+const provider = ref('');
+const model = ref('');
+const rates = ref<Record<RateColumn, string>>(blankRates());
 const fromCatalog = ref(false);
 const showCatalogPicker = ref(false);
+
+// Catalog provider ids are lowercase, so "OpenRouter " still offers the picker.
+const normalizedProvider = computed(() => provider.value.trim().toLowerCase());
 const catalogAvailable = computed(() =>
-    props.catalogProviders.includes(provider.value.trim()),
+    props.catalogProviders.includes(normalizedProvider.value),
 );
 
 function applyCatalogPick(option: CatalogModelOption): void {
+    provider.value = normalizedProvider.value;
     model.value = option.model;
 
     for (const column of Object.keys(rates.value) as RateColumn[]) {
@@ -96,23 +105,28 @@ function onProviderOrModelInput(): void {
     }
 }
 
-function onCreateSuccess() {
-    showCreateDialog.value = false;
+function resetForm(): void {
     createRateLimits.value = [];
     createPoolId.value = 'none';
     createAutomaticUpdates.value = false;
     provider.value = '';
     model.value = '';
-    rates.value = {
-        input_per_mtok: '',
-        output_per_mtok: '',
-        cache_read_per_mtok: '',
-        cache_write_per_mtok: '',
-        reasoning_per_mtok: '',
-        search_unit_per_k: '',
-    };
+    rates.value = blankRates();
     fromCatalog.value = false;
     showCatalogPicker.value = false;
+}
+
+// The inputs are controlled, so closing the dialog must clear them or the next
+// open would show the abandoned values.
+watch(showCreateDialog, (isOpen) => {
+    if (!isOpen) {
+        resetForm();
+    }
+});
+
+function onCreateSuccess(): void {
+    showCreateDialog.value = false;
+    resetForm();
 }
 </script>
 
@@ -160,7 +174,7 @@ function onCreateSuccess() {
                     >
                     <CatalogModelList
                         v-if="showCatalogPicker"
-                        :provider="provider.trim()"
+                        :provider="normalizedProvider"
                         mode="single"
                         @select="applyCatalogPick"
                     />
