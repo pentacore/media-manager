@@ -101,6 +101,21 @@ test('importing never overwrites an existing row and ignores unknown ids', funct
         ->and(AiModelPrice::query()->where('provider', 'openrouter')->count())->toBe(1);
 });
 
+test('an unreachable OpenRouter API on import flashes an error toast and creates no rows', function (): void {
+    Http::fake(['openrouter.ai/api/v1/models' => Http::response('down', 503)]);
+
+    $this->actingAs(User::factory()->admin()->create())
+        ->post(route('admin.ai-prices.openrouter-models.store'), ['models' => ['anthropic/claude-opus-5.5']])
+        ->assertRedirect()
+        ->assertSessionHas('inertia.flash_data.toast.type', 'error')
+        ->assertSessionHas(
+            'inertia.flash_data.toast.message',
+            'OpenRouter is unreachable — no models were added.',
+        );
+
+    expect(AiModelPrice::query()->where('provider', 'openrouter')->count())->toBe(0);
+});
+
 test('importing requires at least one model', function (): void {
     $this->actingAs(User::factory()->admin()->create())
         ->post(route('admin.ai-prices.openrouter-models.store'), ['models' => []])
