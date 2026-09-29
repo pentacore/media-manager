@@ -104,6 +104,19 @@ test('one unreachable service still returns the other and names the failure', fu
         ->and($calendar['failures'])->toBe([['service' => 'Radarr', 'instance' => 'Movies box']]);
 });
 
+test('a failing service is asked once per instance, without the generic retry', function (): void {
+    ServiceConnection::factory()->sonarr()->create(['url' => 'http://sonarr.local:8989']);
+    ServiceConnection::factory()->radarr()->create(['url' => 'http://radarr.local:7878']);
+    Http::fake([
+        'sonarr.local:8989/api/v3/calendar*' => Http::response([], 503),
+        'radarr.local:7878/api/v3/calendar*' => Http::response([], 503),
+    ]);
+
+    resolve(LibraryCalendar::class)->between($this->start, $this->end);
+
+    Http::assertSentCount(2);
+});
+
 test('a second instance is labelled and never links to the primary instance library page', function (): void {
     $main = ServiceConnection::factory()->sonarr()->create(['url' => 'http://sonarr.local:8989', 'name' => 'Main']);
     $anime = ServiceConnection::factory()->sonarr()->create(['url' => 'http://sonarr-anime.local:8989', 'name' => 'Anime']);

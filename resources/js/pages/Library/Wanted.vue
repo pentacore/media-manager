@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { Deferred, Head, Link, router } from '@inertiajs/vue3';
-import { AlertCircle } from '@lucide/vue';
+import { AlertCircle, ChevronLeft, ChevronRight } from '@lucide/vue';
 import { computed, ref } from 'vue';
 import MediaActionController from '@/actions/App/Http/Controllers/Library/MediaActionController';
 import WantedController from '@/actions/App/Http/Controllers/Library/WantedController';
@@ -77,7 +77,7 @@ function section(service: Service): WantedSection | undefined {
     return service === 'sonarr' ? props.sonarr : props.radarr;
 }
 
-function visit(overrides: Record<string, string | number>): void {
+function visit(overrides: Record<string, string | number>, only?: Service[]): void {
     router.get(
         WantedController.url(),
         {
@@ -87,8 +87,14 @@ function visit(overrides: Record<string, string | number>): void {
             radarr_page: props.filters.radarr_page,
             ...overrides,
         },
-        { preserveScroll: true },
+        { preserveScroll: true, only },
     );
+}
+
+// Paging one section reloads only that section's deferred prop — the other
+// section's already-loaded list has no reason to refetch.
+function goToPage(service: Service, page: number): void {
+    visit({ [`${service}_page`]: page }, [service]);
 }
 
 function searchAll(): void {
@@ -156,7 +162,7 @@ function tabClass(active: boolean): string {
                     <span v-if="section(entry.service)" class="font-mono-tabular text-[12px] text-muted-foreground">{{ section(entry.service)?.meta.total }}</span>
                 </div>
                 <Button
-                    v-if="filters.monitored && section(entry.service)?.service_connection_id"
+                    v-if="filters.monitored && section(entry.service)?.service_connection_id && !section(entry.service)?.error"
                     variant="outline"
                     size="sm"
                     class="h-7 text-xs"
@@ -219,18 +225,26 @@ function tabClass(active: boolean): string {
                     </div>
                 </div>
 
-                <div v-if="(section(entry.service)?.meta.last_page ?? 1) > 1" class="flex items-center justify-between border-t border-border px-4 py-2 text-[12px]">
-                    <button
-                        type="button"
+                <div v-if="(section(entry.service)?.meta.last_page ?? 1) > 1" class="flex items-center justify-between border-t border-border px-4 py-2">
+                    <Button
+                        variant="outline"
+                        size="sm"
                         :disabled="section(entry.service)!.meta.current_page <= 1"
-                        @click="visit({ [`${entry.service}_page`]: section(entry.service)!.meta.current_page - 1 })"
-                    >Previous</button>
-                    <span class="text-muted-foreground">Page {{ section(entry.service)?.meta.current_page }} of {{ section(entry.service)?.meta.last_page }}</span>
-                    <button
-                        type="button"
+                        :data-wanted-prev="entry.service"
+                        @click="goToPage(entry.service, section(entry.service)!.meta.current_page - 1)"
+                    >
+                        <ChevronLeft class="size-4" /> Previous
+                    </Button>
+                    <span class="text-[12px] text-muted-foreground">Page {{ section(entry.service)?.meta.current_page }} of {{ section(entry.service)?.meta.last_page }}</span>
+                    <Button
+                        variant="outline"
+                        size="sm"
                         :disabled="section(entry.service)!.meta.current_page >= section(entry.service)!.meta.last_page"
-                        @click="visit({ [`${entry.service}_page`]: section(entry.service)!.meta.current_page + 1 })"
-                    >Next</button>
+                        :data-wanted-next="entry.service"
+                        @click="goToPage(entry.service, section(entry.service)!.meta.current_page + 1)"
+                    >
+                        Next <ChevronRight class="size-4" />
+                    </Button>
                 </div>
             </Deferred>
         </section>

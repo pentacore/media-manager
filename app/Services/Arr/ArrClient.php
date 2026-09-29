@@ -124,9 +124,9 @@ abstract class ArrClient
      *
      * @throws RequestException|ConnectionException
      */
-    public function getCalendar(CarbonImmutable $start, CarbonImmutable $end): array
+    public function getCalendar(CarbonImmutable $start, CarbonImmutable $end, bool $withRetry = true): array
     {
-        $body = $this->buildClient()->get(sprintf('/api/%s/calendar', $this->apiVersion), [
+        $body = $this->buildClient($withRetry)->get(sprintf('/api/%s/calendar', $this->apiVersion), [
             'start' => $start->toIso8601ZuluString(),
             'end' => $end->toIso8601ZuluString(),
             'unmonitored' => 'true',

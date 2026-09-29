@@ -63,7 +63,9 @@ const state = computed(() => STATES[props.item.state]);
                     <template v-if="item.episode_title">
                         · {{ item.episode_title }}</template
                     >
-                    · {{ formatTime(item.air_date_utc) }}
+                    <template v-if="item.service === 'sonarr'">
+                        · {{ formatTime(item.air_date_utc) }}</template
+                    >
                     <template v-if="item.instance">
                         · {{ item.instance }}</template
                     >

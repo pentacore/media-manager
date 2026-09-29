@@ -25,6 +25,43 @@ beforeEach(function (): void {
     ]);
 });
 
+test("paging one section reloads only that section's list, and Prev/Next disable at the ends", function (): void {
+    ServiceConnection::query()->where('type', 'sonarr')->update(['url' => 'http://sonarr-paging.local:8989']);
+    Http::fake([
+        'sonarr-paging.local:8989/api/v3/wanted/missing*' => Http::response(['page' => 1, 'totalRecords' => 21, 'records' => [
+            ['id' => 70, 'seriesId' => 7, 'seasonNumber' => 1, 'episodeNumber' => 2, 'title' => 'Half Loop', 'airDateUtc' => '2026-09-10T02:00:00Z', 'series' => ['title' => 'Severance']],
+        ]]),
+    ]);
+    $this->actingAs(User::factory()->member()->create());
+
+    visit(route('media.wanted.index', absolute: false))
+        ->assertNoSmoke()
+        ->assertSeeIn('[data-wanted-row="sonarr-70"]', 'Severance')
+        ->assertDisabled('[data-wanted-prev="sonarr"]')
+        ->assertEnabled('[data-wanted-next="sonarr"]')
+        ->click('[data-wanted-next="sonarr"]')
+        ->assertSeeIn('[data-wanted-section="sonarr"]', 'Page 2 of 2')
+        ->assertEnabled('[data-wanted-prev="sonarr"]')
+        ->assertDisabled('[data-wanted-next="sonarr"]');
+
+    $radarrWantedCalls = collect(Http::recorded())
+        ->filter(fn (array $pair): bool => str_contains($pair[0]->url(), 'radarr.local:7878/api/v3/wanted/missing'))
+        ->count();
+    expect($radarrWantedCalls)->toBe(1);
+});
+
+test('the Search-all button hides for a section that failed to load', function (): void {
+    ServiceConnection::query()->where('type', 'radarr')->update(['url' => 'http://radarr-down.local:7878']);
+    Http::fake(['radarr-down.local:7878/*' => Http::response([], 503)]);
+    $this->actingAs(User::factory()->member()->create());
+
+    visit(route('media.wanted.index', absolute: false))
+        ->assertNoSmoke()
+        ->assertSeeIn('[data-wanted-section="radarr"]', 'Radarr unavailable')
+        ->assertMissing('[data-wanted-section="radarr"] [data-wanted-search-all]')
+        ->assertPresent('[data-wanted-section="sonarr"] [data-wanted-search-all]');
+});
+
 test('a member searches one missing episode and then all missing movies', function (): void {
     $this->actingAs(User::factory()->member()->create());
 

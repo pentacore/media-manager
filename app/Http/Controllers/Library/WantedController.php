@@ -55,7 +55,7 @@ class WantedController extends Controller
         $client = $serviceType === ServiceType::Sonarr ? new SonarrClient($connection) : new RadarrClient($connection);
 
         try {
-            $payload = $client->getWanted($tab, $page, self::PER_PAGE, $monitored);
+            $payload = $client->getWanted($tab, $page, self::PER_PAGE, $monitored, withRetry: false);
         } catch (RequestException|ConnectionException) {
             return [
                 'connected' => true,
@@ -68,6 +68,7 @@ class WantedController extends Controller
 
         $records = array_values(array_filter(is_array($payload['records'] ?? null) ? $payload['records'] : [], is_array(...)));
         $total = (int) ($payload['totalRecords'] ?? count($records));
+        $lastPage = max(1, (int) ceil($total / self::PER_PAGE));
 
         return [
             'connected' => true,
@@ -77,8 +78,11 @@ class WantedController extends Controller
                 $records,
             ),
             'meta' => [
-                'current_page' => (int) ($payload['page'] ?? $page),
-                'last_page' => max(1, (int) ceil($total / self::PER_PAGE)),
+                // Clamp instead of echoing a requested page past the end
+                // (e.g. a stale bookmark after items clear) — "Page 12 of 3"
+                // reads as broken, not just empty.
+                'current_page' => min(max($page, 1), $lastPage),
+                'last_page' => $lastPage,
                 'total' => $total,
                 'per_page' => self::PER_PAGE,
             ],

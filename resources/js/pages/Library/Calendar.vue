@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Deferred, Head, Link } from '@inertiajs/vue3';
+import { Deferred, Head, router } from '@inertiajs/vue3';
 import { AlertCircle, ChevronLeft, ChevronRight } from '@lucide/vue';
 import { computed, onMounted, ref } from 'vue';
 import CalendarController from '@/actions/App/Http/Controllers/Library/CalendarController';
@@ -8,7 +8,7 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useDateTime } from '@/composables/useDateTime';
-import { dayKey, monthGrid, shiftMonth } from '@/lib/calendar';
+import { dayKey, monthGrid, shiftMonth, utcDateKey } from '@/lib/calendar';
 import { cn } from '@/lib/utils';
 import { dashboard } from '@/routes';
 import type { CalendarItem, CalendarPayload } from '@/types';
@@ -63,7 +63,12 @@ const itemsByDay = computed(() => {
     const grouped: Record<string, CalendarItem[]> = {};
 
     for (const item of visibleItems.value) {
-        (grouped[dayKey(item.air_date_utc, timezone.value)] ??= []).push(item);
+        const day =
+            item.service === 'radarr'
+                ? utcDateKey(item.air_date_utc)
+                : dayKey(item.air_date_utc, timezone.value);
+
+        (grouped[day] ??= []).push(item);
     }
 
     return grouped;
@@ -96,13 +101,19 @@ function toggleClass(active: boolean): string {
     <div class="flex flex-col gap-4 p-5">
         <div class="flex flex-wrap items-center justify-between gap-3">
             <div class="flex items-center gap-2">
-                <Link :href="CalendarController.url({ query: { month: shiftMonth(month, -1) } })" data-calendar-prev>
-                    <Button variant="ghost" size="icon-sm"><ChevronLeft class="size-4" /><span class="sr-only">Previous month</span></Button>
-                </Link>
-                <h1 class="text-[20px] leading-tight font-semibold tracking-tight">{{ monthLabel }}</h1>
-                <Link :href="CalendarController.url({ query: { month: shiftMonth(month, 1) } })" data-calendar-next>
-                    <Button variant="ghost" size="icon-sm"><ChevronRight class="size-4" /><span class="sr-only">Next month</span></Button>
-                </Link>
+                <Button
+                    variant="ghost"
+                    size="icon-sm"
+                    data-calendar-prev
+                    @click="router.get(CalendarController.url({ query: { month: shiftMonth(month, -1) } }))"
+                ><ChevronLeft class="size-4" /><span class="sr-only">Previous month</span></Button>
+                <h1 class="text-[20px] leading-tight font-semibold tracking-tight" data-calendar-month-label>{{ monthLabel }}</h1>
+                <Button
+                    variant="ghost"
+                    size="icon-sm"
+                    data-calendar-next
+                    @click="router.get(CalendarController.url({ query: { month: shiftMonth(month, 1) } }))"
+                ><ChevronRight class="size-4" /><span class="sr-only">Next month</span></Button>
             </div>
             <div class="flex flex-wrap items-center gap-1.5">
                 <button type="button" :class="toggleClass(view === 'month')" data-calendar-view="month" @click="view = 'month'">Month</button>

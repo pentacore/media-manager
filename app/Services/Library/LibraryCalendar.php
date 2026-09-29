@@ -41,8 +41,8 @@ final readonly class LibraryCalendar
             foreach ($connections as $connection) {
                 try {
                     $entries = $serviceType === ServiceType::Sonarr
-                        ? new SonarrClient($connection)->getCalendar($start, $end)
-                        : new RadarrClient($connection)->getCalendar($start, $end);
+                        ? new SonarrClient($connection)->getCalendar($start, $end, withRetry: false)
+                        : new RadarrClient($connection)->getCalendar($start, $end, withRetry: false);
                 } catch (RequestException|ConnectionException) {
                     $failures[] = ['service' => ucfirst($serviceType->value), 'instance' => $connection->name];
 

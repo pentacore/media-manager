@@ -175,11 +175,11 @@ class SonarrClient extends ArrClient implements Warmable
      * @throws RequestException|ConnectionException
      */
     #[Override]
-    public function getCalendar(CarbonImmutable $start, CarbonImmutable $end): array
+    public function getCalendar(CarbonImmutable $start, CarbonImmutable $end, bool $withRetry = true): array
     {
         return $this->cache()->rememberList(
             sprintf('calendar:%s:%s', $start->toDateString(), $end->toDateString()),
-            fn (): array => parent::getCalendar($start, $end),
+            fn (): array => parent::getCalendar($start, $end, $withRetry),
         );
     }
 

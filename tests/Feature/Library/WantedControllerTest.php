@@ -57,6 +57,19 @@ test('the cutoff tab, the unmonitored switch and a page are passed upstream', fu
     Http::assertSent(fn (Request $request): bool => str_contains($request->url(), 'sonarr.local:8989/api/v3/wanted/cutoff') && $request['monitored'] === 'false' && $request['page'] === 2);
 });
 
+test('a page requested past the end clamps to the last page instead of reading "Page 12 of 3"', function (): void {
+    Http::fake([
+        'sonarr.local:8989/api/v3/wanted/missing*' => Http::response(['page' => 12, 'totalRecords' => 41, 'records' => []]),
+        'radarr.local:7878/api/v3/wanted/missing*' => Http::response(['page' => 1, 'totalRecords' => 0, 'records' => []]),
+    ]);
+
+    $this->actingAs(User::factory()->member()->create())
+        ->get(route('media.wanted.index', ['sonarr_page' => 12]))
+        ->assertInertia(fn ($page) => $page->loadDeferredProps('sonarr', fn ($reload) => $reload
+            ->where('sonarr.meta.current_page', 3)
+            ->where('sonarr.meta.last_page', 3)));
+});
+
 test('an unreachable service is an error, not an empty list', function (): void {
     Http::fake([
         'sonarr.local:8989/*' => Http::response([], 503),
@@ -66,4 +79,19 @@ test('an unreachable service is an error, not an empty list', function (): void 
     $this->actingAs(User::factory()->member()->create())
         ->get(route('media.wanted.index'))
         ->assertInertia(fn ($page) => $page->loadDeferredProps('sonarr', fn ($reload) => $reload->where('sonarr.error', 'Sonarr is unreachable right now.')));
+});
+
+test('a failing service is asked once, without the generic retry', function (): void {
+    Http::fake([
+        'sonarr.local:8989/api/v3/wanted/missing*' => Http::response([], 503),
+        'radarr.local:7878/api/v3/wanted/missing*' => Http::response([], 503),
+    ]);
+
+    $this->actingAs(User::factory()->member()->create())
+        ->get(route('media.wanted.index'))
+        ->assertInertia(fn ($page) => $page->loadDeferredProps(['sonarr', 'radarr'], fn ($reload) => $reload
+            ->where('sonarr.error', 'Sonarr is unreachable right now.')
+            ->where('radarr.error', 'Radarr is unreachable right now.')));
+
+    Http::assertSentCount(2);
 });
