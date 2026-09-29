@@ -11,9 +11,12 @@ use App\Models\ActionRequest;
 use App\Models\ServiceConnection;
 use App\Services\Actions\ActionExecutor;
 use App\Services\Arr\ReleaseGrabber;
+use App\Services\Arr\SearchCommandRunner;
 use App\Services\MediaReplacement\PendingReplacementGuard;
 use App\Services\MediaReplacement\ReplacementInFlight;
+use Illuminate\Support\Facades\Log;
 use InvalidArgumentException;
+use Throwable;
 
 class RadarrActions implements ActionExecutor
 {
@@ -22,6 +25,7 @@ class RadarrActions implements ActionExecutor
     public function __construct(
         private readonly PendingReplacementGuard $pendingReplacementGuard = new PendingReplacementGuard,
         private readonly ReleaseGrabber $releaseGrabber = new ReleaseGrabber,
+        private readonly SearchCommandRunner $searchCommandRunner = new SearchCommandRunner,
     ) {}
 
     /**
@@ -161,8 +165,8 @@ class RadarrActions implements ActionExecutor
 
         throw_unless($command instanceof MediaSearchCommand && $command->service() === ServiceType::Radarr, InvalidArgumentException::class, 'command is not a Radarr search');
 
-        $serviceConnection = ServiceConnection::resolvePinned($payload, ServiceType::Radarr);
-        $response = new RadarrClient($serviceConnection)->runCommand($command->arrCommand(), $command->arrParameters($payload));
+        $serviceConnection = ServiceConnection::resolvePinnedStrict($payload, ServiceType::Radarr);
+        $response = $this->searchCommandRunner->run(new RadarrClient($serviceConnection), 'Radarr', $command, $command->arrParameters($payload));
 
         return [
             'command' => $command->value,
@@ -181,9 +185,22 @@ class RadarrActions implements ActionExecutor
 
         throw_if($guid === '' || $indexerId <= 0, InvalidArgumentException::class, 'guid and indexer_id are required');
 
-        $serviceConnection = ServiceConnection::resolvePinned($payload, ServiceType::Radarr);
+        $serviceConnection = ServiceConnection::resolvePinnedStrict($payload, ServiceType::Radarr);
         $this->releaseGrabber->grab(new RadarrClient($serviceConnection), 'Radarr', $guid, $indexerId);
-        new RadarrCache($serviceConnection)->bustAll();
+
+        try {
+            new RadarrCache($serviceConnection)->bustAll();
+        } catch (Throwable $throwable) {
+            // The grab already succeeded upstream — a stale cache is a
+            // read-freshness problem, not a reason to report the grab as
+            // failed (which would leave the member thinking nothing happened).
+            Log::warning('RadarrActions: failed to bust the Radarr cache after a successful grab', [
+                'service_connection_id' => $serviceConnection->id,
+                'guid' => $guid,
+                'exception' => $throwable::class,
+                'message' => $throwable->getMessage(),
+            ]);
+        }
 
         return [
             'guid' => $guid,

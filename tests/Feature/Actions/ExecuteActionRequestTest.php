@@ -306,12 +306,12 @@ test('a skipped claim writes no executing entry', function (): void {
 
 test('a grab whose release expired while waiting fails with a search-again message', function (): void {
     Http::preventStrayRequests();
-    ServiceConnection::factory()->sonarr()->create(['url' => 'http://sonarr.local:8989', 'api_key' => 'k']);
+    $connection = ServiceConnection::factory()->sonarr()->create(['url' => 'http://sonarr.local:8989', 'api_key' => 'k']);
     Http::fake(['sonarr.local:8989/api/v3/release' => Http::response(['message' => "Couldn't find requested release in cache, try searching again"], 404)]);
 
     $request = ActionRequest::factory()->autoExecute()->create([
         'type' => 'grab_release',
-        'payload' => ['service' => 'sonarr', 'series_id' => 7, 'guid' => 'g-1', 'indexer_id' => 3, 'release' => ['title' => 'x']],
+        'payload' => ['service' => 'sonarr', 'series_id' => 7, 'guid' => 'g-1', 'indexer_id' => 3, 'release' => ['title' => 'x'], 'service_connection_id' => $connection->id],
     ]);
 
     new ExecuteActionRequest($request)->handle();
@@ -324,12 +324,12 @@ test('a grab whose release expired while waiting fails with a search-again messa
 
 test('a grab whose response is lost fails once instead of retrying into a second download', function (): void {
     Http::preventStrayRequests();
-    ServiceConnection::factory()->sonarr()->create(['url' => 'http://sonarr.local:8989', 'api_key' => 'k']);
+    $connection = ServiceConnection::factory()->sonarr()->create(['url' => 'http://sonarr.local:8989', 'api_key' => 'k']);
     Http::fake(['sonarr.local:8989/api/v3/release' => fn (): never => throw new ConnectionException('reset')]);
 
     $request = ActionRequest::factory()->autoExecute()->create([
         'type' => 'grab_release',
-        'payload' => ['service' => 'sonarr', 'series_id' => 7, 'guid' => 'g-1', 'indexer_id' => 3, 'release' => ['title' => 'x']],
+        'payload' => ['service' => 'sonarr', 'series_id' => 7, 'guid' => 'g-1', 'indexer_id' => 3, 'release' => ['title' => 'x'], 'service_connection_id' => $connection->id],
     ]);
 
     new ExecuteActionRequest($request)->handle();

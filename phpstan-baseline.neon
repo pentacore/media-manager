@@ -943,12 +943,6 @@ parameters:
 			path: app/Services/Arr/ArrClient.php
 
 		-
-			message: '#^Method App\\Services\\Arr\\ArrClient\:\:runCommand\(\) has parameter \$params with no value type specified in iterable type array\.$#'
-			identifier: missingType.iterableValue
-			count: 1
-			path: app/Services/Arr/ArrClient.php
-
-		-
 			message: '#^Call to function is_int\(\) with int will always evaluate to true\.$#'
 			identifier: function.alreadyNarrowedType
 			count: 2

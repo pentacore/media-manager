@@ -11,9 +11,12 @@ use App\Models\ActionRequest;
 use App\Models\ServiceConnection;
 use App\Services\Actions\ActionExecutor;
 use App\Services\Arr\ReleaseGrabber;
+use App\Services\Arr\SearchCommandRunner;
 use App\Services\MediaReplacement\PendingReplacementGuard;
 use App\Services\MediaReplacement\ReplacementInFlight;
+use Illuminate\Support\Facades\Log;
 use InvalidArgumentException;
+use Throwable;
 
 class SonarrActions implements ActionExecutor
 {
@@ -22,6 +25,7 @@ class SonarrActions implements ActionExecutor
     public function __construct(
         private readonly PendingReplacementGuard $pendingReplacementGuard = new PendingReplacementGuard,
         private readonly ReleaseGrabber $releaseGrabber = new ReleaseGrabber,
+        private readonly SearchCommandRunner $searchCommandRunner = new SearchCommandRunner,
     ) {}
 
     /**
@@ -169,7 +173,7 @@ class SonarrActions implements ActionExecutor
         throw_if($episodeIds === [], InvalidArgumentException::class, 'episode_ids is required');
 
         $monitored = (bool) ($payload['monitored'] ?? true);
-        $serviceConnection = ServiceConnection::resolvePinned($payload, ServiceType::Sonarr);
+        $serviceConnection = ServiceConnection::resolvePinnedStrict($payload, ServiceType::Sonarr);
 
         throw_if($this->pendingReplacementGuard->inFlightForMedia($serviceConnection->id, seriesId: $seriesId), ReplacementInFlight::forTitle());
 
@@ -193,8 +197,8 @@ class SonarrActions implements ActionExecutor
 
         throw_unless($command instanceof MediaSearchCommand && $command->service() === ServiceType::Sonarr, InvalidArgumentException::class, 'command is not a Sonarr search');
 
-        $serviceConnection = ServiceConnection::resolvePinned($payload, ServiceType::Sonarr);
-        $response = new SonarrClient($serviceConnection)->runCommand($command->arrCommand(), $command->arrParameters($payload));
+        $serviceConnection = ServiceConnection::resolvePinnedStrict($payload, ServiceType::Sonarr);
+        $response = $this->searchCommandRunner->run(new SonarrClient($serviceConnection), 'Sonarr', $command, $command->arrParameters($payload));
 
         return [
             'command' => $command->value,
@@ -213,9 +217,22 @@ class SonarrActions implements ActionExecutor
 
         throw_if($guid === '' || $indexerId <= 0, InvalidArgumentException::class, 'guid and indexer_id are required');
 
-        $serviceConnection = ServiceConnection::resolvePinned($payload, ServiceType::Sonarr);
+        $serviceConnection = ServiceConnection::resolvePinnedStrict($payload, ServiceType::Sonarr);
         $this->releaseGrabber->grab(new SonarrClient($serviceConnection), 'Sonarr', $guid, $indexerId);
-        new SonarrCache($serviceConnection)->bustAll();
+
+        try {
+            new SonarrCache($serviceConnection)->bustAll();
+        } catch (Throwable $throwable) {
+            // The grab already succeeded upstream — a stale cache is a
+            // read-freshness problem, not a reason to report the grab as
+            // failed (which would leave the member thinking nothing happened).
+            Log::warning('SonarrActions: failed to bust the Sonarr cache after a successful grab', [
+                'service_connection_id' => $serviceConnection->id,
+                'guid' => $guid,
+                'exception' => $throwable::class,
+                'message' => $throwable->getMessage(),
+            ]);
+        }
 
         return [
             'guid' => $guid,

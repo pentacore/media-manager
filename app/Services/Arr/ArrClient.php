@@ -101,13 +101,14 @@ abstract class ArrClient
     }
 
     /**
+     * @param  array<string, mixed>  $params
      * @return array<string, mixed>
      *
      * @throws RequestException|ConnectionException
      */
-    public function runCommand(string $name, array $params = []): array
+    public function runCommand(string $name, array $params = [], bool $withRetry = true): array
     {
-        return $this->buildClient()->post(sprintf('/api/%s/command', $this->apiVersion), [
+        return $this->buildClient($withRetry)->post(sprintf('/api/%s/command', $this->apiVersion), [
             'name' => $name,
             ...$params,
         ])->throw()->json() ?? [];

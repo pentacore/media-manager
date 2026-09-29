@@ -5,8 +5,10 @@ declare(strict_types=1);
 use App\Enums\ActionRequestStatus;
 use App\Models\ActionRequest;
 use App\Models\ServiceConnection;
+use App\Services\Arr\SearchCommandFailed;
 use App\Services\MediaReplacement\ReplacementInFlight;
 use App\Services\Radarr\RadarrActions;
+use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\Request;
 use Illuminate\Support\Facades\Http;
 
@@ -17,6 +19,11 @@ beforeEach(function (): void {
         'api_key' => 'k',
     ]);
 });
+
+function radarrActionsConnectionId(): int
+{
+    return ServiceConnection::query()->where('type', 'radarr')->firstOrFail()->id;
+}
 
 test('deleteMovie sends DELETE to radarr with deleteFiles flag', function (): void {
     Http::fake(['radarr.local:7878/api/v3/movie/99*' => Http::response(null, 200)]);
@@ -62,12 +69,36 @@ test('monitor_movie is refused while a replacement for the movie is in flight', 
     Http::assertNothingSent();
 });
 
+test('the pinned-connection executors refuse to run without a pinned connection', function (string $type, array $payload): void {
+    expect(fn (): array => resolve(RadarrActions::class)->execute(ActionRequest::factory()->create(['type' => $type, 'payload' => $payload])))
+        ->toThrow(InvalidArgumentException::class, 'not pinned to a Radarr connection');
+
+    Http::assertNothingSent();
+})->with([
+    'search_media' => ['search_media', ['service' => 'radarr', 'command' => 'movies_search', 'movie_ids' => [10]]],
+    'grab_release' => ['grab_release', ['service' => 'radarr', 'movie_id' => 10, 'guid' => 'g-2', 'indexer_id' => 4, 'release' => ['title' => 'x']]],
+]);
+
+test('the pinned-connection executors refuse to run against a mismatched connection type', function (string $type, array $payload): void {
+    $sonarr = ServiceConnection::factory()->sonarr()->create(['url' => 'http://sonarr.local:8989']);
+
+    expect(fn (): array => resolve(RadarrActions::class)->execute(ActionRequest::factory()->create([
+        'type' => $type,
+        'payload' => [...$payload, 'service_connection_id' => $sonarr->id],
+    ])))->toThrow(InvalidArgumentException::class, 'not pinned to a Radarr connection');
+
+    Http::assertNothingSent();
+})->with([
+    'search_media' => ['search_media', ['service' => 'radarr', 'command' => 'movies_search', 'movie_ids' => [10]]],
+    'grab_release' => ['grab_release', ['service' => 'radarr', 'movie_id' => 10, 'guid' => 'g-2', 'indexer_id' => 4, 'release' => ['title' => 'x']]],
+]);
+
 test('search_media runs the matching Radarr command', function (string $command, array $payload, array $body): void {
     Http::fake(['radarr.local:7878/api/v3/command' => Http::response(['id' => 9], 201)]);
 
     (new RadarrActions)->execute(ActionRequest::factory()->create([
         'type' => 'search_media',
-        'payload' => ['service' => 'radarr', 'command' => $command, ...$payload],
+        'payload' => ['service' => 'radarr', 'command' => $command, ...$payload, 'service_connection_id' => radarrActionsConnectionId()],
     ]));
 
     Http::assertSent(fn (Request $request): bool => $request->data() === $body);
@@ -77,13 +108,43 @@ test('search_media runs the matching Radarr command', function (string $command,
     'all cutoff unmet' => ['cutoff_unmet_movies_search', [], ['name' => 'CutoffUnmetMoviesSearch']],
 ]);
 
+test('a library-wide movie search that never gets a confirmed response fails without HTTP-level retry', function (): void {
+    $attempts = 0;
+    Http::fake(['radarr.local:7878/api/v3/command' => function () use (&$attempts): never {
+        $attempts++;
+
+        throw new ConnectionException('reset');
+    }]);
+
+    expect(fn (): array => (new RadarrActions)->execute(ActionRequest::factory()->create([
+        'type' => 'search_media',
+        'payload' => ['service' => 'radarr', 'command' => 'missing_movies_search', 'service_connection_id' => radarrActionsConnectionId()],
+    ])))->toThrow(SearchCommandFailed::class, 'did not confirm this library-wide search');
+
+    // withRetry: false means exactly one attempt — the generic 3x HTTP retry
+    // must not have fired for a library-wide search.
+    expect($attempts)->toBe(1);
+});
+
 test('grab_release posts the release to Radarr', function (): void {
     Http::fake(['radarr.local:7878/api/v3/release' => Http::response([], 200)]);
 
     (new RadarrActions)->execute(ActionRequest::factory()->create([
         'type' => 'grab_release',
-        'payload' => ['service' => 'radarr', 'movie_id' => 10, 'guid' => 'g-2', 'indexer_id' => 4, 'release' => ['title' => 'Movie.2026.1080p']],
+        'payload' => ['service' => 'radarr', 'movie_id' => 10, 'guid' => 'g-2', 'indexer_id' => 4, 'release' => ['title' => 'Movie.2026.1080p'], 'service_connection_id' => radarrActionsConnectionId()],
     ]));
 
     Http::assertSent(fn (Request $request): bool => $request->data() === ['guid' => 'g-2', 'indexerId' => 4]);
+});
+
+test('grab_release completes even when busting the cache afterward fails', function (): void {
+    Http::fake(['radarr.local:7878/api/v3/release' => Http::response([], 200)]);
+    config()->set('mediamanager.cache.store', 'this-store-does-not-exist');
+
+    $result = (new RadarrActions)->execute(ActionRequest::factory()->create([
+        'type' => 'grab_release',
+        'payload' => ['service' => 'radarr', 'movie_id' => 10, 'guid' => 'g-2', 'indexer_id' => 4, 'release' => ['title' => 'x'], 'service_connection_id' => radarrActionsConnectionId()],
+    ]));
+
+    expect($result)->toBe(['guid' => 'g-2', 'indexer_id' => 4, 'title' => 'x']);
 });
