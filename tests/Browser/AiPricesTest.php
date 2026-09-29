@@ -439,7 +439,7 @@ test('admin bulk-adds openrouter models from the catalog', function (): void {
         ->assertSeeIn('[data-add-from-catalog-submit]', 'Add 2 models')
         ->click('[data-add-from-catalog-submit]')
         ->assertSee('Added 2 models.')
-        ->assertSee('anthropic/claude-opus-5.5');
+        ->assertSeeIn('[data-prices-table]', 'anthropic/claude-opus-5.5');
 
     expect(AiModelPrice::query()->where('provider', 'openrouter')->pluck('pricing_source')->all())
         ->toBe([PricingSource::OpenRouter, PricingSource::OpenRouter]);
@@ -465,7 +465,8 @@ test('picking a catalog model fills the add form and saves a synced row', functi
         ->assertSee('On — kept in sync online')
         ->click('[data-create-price-submit]')
         ->assertSee('Model price added.')
-        ->assertSee('OpenRouter');
+        ->assertSeeIn('[data-prices-table]', 'anthropic/claude-opus-5.5')
+        ->assertSeeIn('[data-prices-table]', 'OpenRouter');
 
     $aiModelPrice = AiModelPrice::query()->where('model', 'anthropic/claude-opus-5.5')->sole();
 
@@ -477,6 +478,7 @@ test('editing a picked price saves the row as manual and locked', function (): v
     catalogPickerBrowserFeeds();
 
     visit('/admin/ai-prices')
+        ->assertNoSmoke()
         ->click('[data-create-price]')
         ->fill('provider', 'openrouter')
         ->click('[data-catalog-pick-toggle]')
@@ -494,6 +496,7 @@ test('editing a picked price saves the row as manual and locked', function (): v
 
 test('a free-text provider outside the catalog keeps the form fully manual', function (): void {
     visit('/admin/ai-prices')
+        ->assertNoSmoke()
         ->click('[data-create-price]')
         ->fill('provider', 'my-local-llm')
         ->assertMissing('[data-catalog-pick-toggle]')
@@ -507,4 +510,56 @@ test('a free-text provider outside the catalog keeps the form fully manual', fun
         ->assertSee('Model price added.');
 
     expect(AiModelPrice::query()->where('model', 'llama-local')->sole()->pricing_source)->toBe(PricingSource::Manual);
+});
+
+test('the add form picker says when no enabled feed covers the provider', function (): void {
+    catalogPickerBrowserFeeds();
+
+    visit('/admin/ai-prices')
+        ->assertNoSmoke()
+        ->click('[data-create-price]')
+        ->fill('provider', 'anthropic')
+        ->click('[data-catalog-pick-toggle]')
+        ->assertSeeIn('[data-catalog-uncovered]', 'No enabled pricing feed covers this provider.')
+        ->assertMissing('[data-catalog-empty]');
+});
+
+test('a mixed-case provider still offers the picker and saves the canonical provider', function (): void {
+    catalogPickerBrowserFeeds();
+
+    visit('/admin/ai-prices')
+        ->assertNoSmoke()
+        ->click('[data-create-price]')
+        ->fill('provider', ' OpenRouter ')
+        ->click('[data-catalog-pick-toggle]')
+        ->click('[data-catalog-row="anthropic/claude-opus-5.5"]')
+        ->assertValue('provider', 'openrouter')
+        ->click('[data-create-price-submit]')
+        ->assertSee('Model price added.');
+
+    $aiModelPrice = AiModelPrice::query()->where('model', 'anthropic/claude-opus-5.5')->sole();
+
+    expect($aiModelPrice->provider)->toBe('openrouter')
+        ->and($aiModelPrice->pricing_source)->toBe(PricingSource::OpenRouter);
+});
+
+test('closing the add form clears what was entered', function (): void {
+    catalogPickerBrowserFeeds();
+
+    visit('/admin/ai-prices')
+        ->assertNoSmoke()
+        ->click('[data-create-price]')
+        ->fill('provider', 'openrouter')
+        ->click('[data-catalog-pick-toggle]')
+        ->click('[data-catalog-row="anthropic/claude-opus-5.5"]')
+        ->assertValue('model', 'anthropic/claude-opus-5.5')
+        ->keys('#model', 'Escape')
+        ->assertMissing('[data-create-price-submit]')
+        ->click('[data-create-price]')
+        ->assertValue('provider', '')
+        ->assertValue('model', '')
+        ->assertValue('input_per_mtok', '')
+        ->assertSee('Off — locked to manual price');
+
+    expect(AiModelPrice::query()->exists())->toBeFalse();
 });
