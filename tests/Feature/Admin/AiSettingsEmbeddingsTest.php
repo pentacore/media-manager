@@ -25,6 +25,18 @@ test('index exposes the embeddings selection and whether it is stale', function 
             ->where('embeddingsProviders', fn ($providers): bool => collect($providers)->pluck('value')->contains('openrouter')));
 });
 
+test('embeddings provider options use human-friendly labels, not ucfirst', function (): void {
+    $this->actingAs(User::factory()->admin()->create())
+        ->get(route('admin.ai-settings.index'))
+        ->assertInertia(fn ($page) => $page
+            ->where('embeddingsProviders', function ($providers): bool {
+                $labels = collect($providers)->pluck('label', 'value');
+
+                return $labels->get('openai') === 'OpenAI'
+                    && $labels->get('openrouter') === 'OpenRouter';
+            }));
+});
+
 test('admin can change the embeddings provider and model', function (): void {
     $this->actingAs(User::factory()->admin()->create())
         ->put(route('admin.ai-settings.update'), [

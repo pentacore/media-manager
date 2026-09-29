@@ -119,7 +119,7 @@ class AiSettingsController extends Controller
                 'signature' => $aiSettings->embeddingsSignature(),
             ],
             'embeddingsProviders' => array_map(
-                static fn (string $provider): array => ['value' => $provider, 'label' => ucfirst($provider)],
+                fn (string $provider): array => ['value' => $provider, 'label' => $this->providerLabel($provider)],
                 $modelCatalog->embeddingProviders(),
             ),
             'providerKeys' => collect(['openrouter', 'typesafe', 'cohere', 'jina'])
@@ -143,6 +143,23 @@ class AiSettingsController extends Controller
         /** @var array<string, string> $map */
         $map = config('mediamanager.ai.pricing.providers', []);
 
+        return collect(array_values($map))
+            ->unique()
+            ->values()
+            ->map(fn (string $provider): array => [
+                'value' => $provider,
+                'label' => $this->providerLabel($provider),
+            ])
+            ->all();
+    }
+
+    /**
+     * The human-friendly label for a provider id, matching the labels shown
+     * across every other provider list on this page; an unlisted provider
+     * falls back to `ucfirst()`.
+     */
+    private function providerLabel(string $provider): string
+    {
         $labels = [
             'openai' => 'OpenAI',
             'anthropic' => 'Anthropic',
@@ -155,14 +172,7 @@ class AiSettingsController extends Controller
             'openrouter' => 'OpenRouter',
         ];
 
-        return collect(array_values($map))
-            ->unique()
-            ->values()
-            ->map(fn (string $provider): array => [
-                'value' => $provider,
-                'label' => $labels[$provider] ?? ucfirst($provider),
-            ])
-            ->all();
+        return $labels[$provider] ?? ucfirst($provider);
     }
 
     /**
@@ -211,12 +221,21 @@ class AiSettingsController extends Controller
         $aiSettings->setChatTimeout(
             isset($validated['chat_timeout']) ? (int) $validated['chat_timeout'] : null,
         );
-        $aiSettings->setFailoverProvider(
-            empty($validated['failover_provider']) ? null : Lab::tryFrom($validated['failover_provider']),
-        );
+        $currentFailoverProvider = $aiSettings->failoverProvider();
+        $newFailoverProvider = empty($validated['failover_provider']) ? null : Lab::tryFrom($validated['failover_provider']);
 
-        if (array_key_exists('failover_model', $validated)) {
+        $aiSettings->setFailoverProvider($newFailoverProvider);
+
+        // A stale model id must never survive a failover provider change: it
+        // was validated against the old provider's catalog, not the new
+        // one's. Clear it unless the same request submits a fresh one, and
+        // always clear it when failover is turned off.
+        if ($newFailoverProvider === null) {
+            $aiSettings->setFailoverModel(null);
+        } elseif (array_key_exists('failover_model', $validated)) {
             $aiSettings->setFailoverModel($validated['failover_model']);
+        } elseif ($currentFailoverProvider?->value !== $newFailoverProvider->value) {
+            $aiSettings->setFailoverModel(null);
         }
 
         $aiSettings->setModelsDevPricingEnabled(

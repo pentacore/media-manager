@@ -9,6 +9,7 @@ use App\Settings\AiSettings;
 use App\Settings\DecisionAgentSettings;
 use App\Settings\OpenRouterSettings;
 use Illuminate\Support\Facades\Cache;
+use Laravel\Ai\Enums\Lab;
 
 beforeEach(function (): void {
     Cache::flush();
@@ -83,6 +84,48 @@ test('OpenRouter can be the failover provider', function (): void {
         ->assertRedirect();
 
     expect(resolve(AiSettings::class)->failoverProvider()?->value)->toBe('openrouter');
+});
+
+test('changing the failover provider without submitting a model clears the stale model id', function (): void {
+    $aiSettings = resolve(AiSettings::class);
+    $aiSettings->setFailoverProvider(Lab::Anthropic);
+    $aiSettings->setFailoverModel('claude-haiku-4-5');
+
+    $this->actingAs(User::factory()->admin()->create())
+        ->put(route('admin.ai-settings.update'), providerSelectionPayload(['failover_provider' => 'openrouter']))
+        ->assertRedirect();
+
+    expect($aiSettings->failoverProvider()?->value)->toBe('openrouter')
+        ->and($aiSettings->failoverModel())->toBeNull();
+});
+
+test('changing the failover provider with a submitted model keeps it', function (): void {
+    $aiSettings = resolve(AiSettings::class);
+    $aiSettings->setFailoverProvider(Lab::Anthropic);
+    $aiSettings->setFailoverModel('claude-haiku-4-5');
+
+    $this->actingAs(User::factory()->admin()->create())
+        ->put(route('admin.ai-settings.update'), providerSelectionPayload([
+            'failover_provider' => 'openrouter',
+            'failover_model' => 'anthropic/claude-sonnet-5',
+        ]))
+        ->assertRedirect();
+
+    expect($aiSettings->failoverProvider()?->value)->toBe('openrouter')
+        ->and($aiSettings->failoverModel())->toBe('anthropic/claude-sonnet-5');
+});
+
+test('setting the failover provider to none always clears the failover model', function (): void {
+    $aiSettings = resolve(AiSettings::class);
+    $aiSettings->setFailoverProvider(Lab::Anthropic);
+    $aiSettings->setFailoverModel('claude-haiku-4-5');
+
+    $this->actingAs(User::factory()->admin()->create())
+        ->put(route('admin.ai-settings.update'), providerSelectionPayload(['failover_provider' => 'none']))
+        ->assertRedirect();
+
+    expect($aiSettings->failoverProvider())->toBeNull()
+        ->and($aiSettings->failoverModel())->toBeNull();
 });
 
 test('omitting provider fields leaves the saved providers untouched', function (): void {
