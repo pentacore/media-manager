@@ -6,6 +6,7 @@ namespace App\Http\Requests\Admin;
 
 use App\Ai\ModelCatalog;
 use App\Concerns\ModelSelectionValidationRules;
+use App\Concerns\OpenRouterRoutingValidationRules;
 use App\Enums\AiMode;
 use App\Enums\AiReasoningLevel;
 use App\Enums\OpenRouterSort;
@@ -18,6 +19,7 @@ use Override;
 class UpdateAiSettingsRequest extends FormRequest
 {
     use ModelSelectionValidationRules;
+    use OpenRouterRoutingValidationRules;
 
     /**
      * @return array<string, ValidationRule|array<mixed>|string>
@@ -70,8 +72,8 @@ class UpdateAiSettingsRequest extends FormRequest
             'openrouter_sort' => ['nullable', 'string', Rule::in([...OpenRouterSort::values(), 'default'])],
             'openrouter_deny_data_collection' => ['sometimes', 'boolean'],
             'openrouter_allow_fallbacks' => ['sometimes', 'boolean'],
-            'openrouter_order' => ['nullable', 'string', 'max:500'],
-            'openrouter_ignore' => ['nullable', 'string', 'max:500'],
+            'openrouter_order' => $this->openRouterSlugListRules(),
+            'openrouter_ignore' => $this->openRouterSlugListRules(),
         ];
     }
 
@@ -138,6 +140,7 @@ class UpdateAiSettingsRequest extends FormRequest
     {
         return [
             'hard_budget_usd.gte' => 'The hard cap must be greater than or equal to the soft cap.',
+            ...self::openRouterSlugListMessages(),
         ];
     }
 }

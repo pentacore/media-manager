@@ -191,6 +191,39 @@ test('admin can save the OpenRouter routing preferences', function (): void {
         ->and($openRouterSettings->ignore())->toBe([]);
 });
 
+test('an invalid OpenRouter provider slug list is rejected', function (string $value): void {
+    $this->actingAs(User::factory()->admin()->create())
+        ->put(route('admin.ai-settings.update'), providerSelectionPayload([
+            'openrouter_order' => $value,
+        ]))
+        ->assertSessionHasErrors('openrouter_order');
+})->with([
+    'anthropic, bad slug!',
+    'amazon bedrock',
+    str_repeat('a', 65),
+]);
+
+test('a valid OpenRouter provider slug list is accepted', function (string $value): void {
+    $this->actingAs(User::factory()->admin()->create())
+        ->put(route('admin.ai-settings.update'), providerSelectionPayload([
+            'openrouter_order' => $value,
+        ]))
+        ->assertSessionDoesntHaveErrors('openrouter_order');
+})->with([
+    ' Anthropic ,, amazon-bedrock ,anthropic',
+    'deepinfra/turbo',
+    'google-vertex.eu',
+    '',
+]);
+
+test('the OpenRouter ignore list is validated the same way as the order list', function (): void {
+    $this->actingAs(User::factory()->admin()->create())
+        ->put(route('admin.ai-settings.update'), providerSelectionPayload([
+            'openrouter_ignore' => 'amazon bedrock',
+        ]))
+        ->assertSessionHasErrors('openrouter_ignore');
+});
+
 test('an unknown OpenRouter sort is rejected', function (): void {
     $this->actingAs(User::factory()->admin()->create())
         ->put(route('admin.ai-settings.update'), providerSelectionPayload(['openrouter_sort' => 'fastest']))
