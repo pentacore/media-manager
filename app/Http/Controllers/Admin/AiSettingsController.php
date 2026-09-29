@@ -18,6 +18,7 @@ use App\Settings\AiSettings;
 use App\Settings\OpenRouterSettings;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Str;
 use Inertia\Inertia;
 use Inertia\Response;
 use Laravel\Ai\Contracts\Providers\SupportsCodeExecution;
@@ -287,13 +288,15 @@ class AiSettingsController extends Controller
 
     public function reembed(): RedirectResponse
     {
-        if (! Cache::add(ReembedLibrary::RUNNING_CACHE_KEY, true, ReembedLibrary::RUNNING_CACHE_TTL)) {
+        $runToken = (string) Str::uuid7();
+
+        if (! Cache::add(ReembedLibrary::RUNNING_CACHE_KEY, $runToken, ReembedLibrary::RUNNING_CACHE_TTL)) {
             Inertia::flash('toast', ['type' => 'info', 'message' => __('A library re-embed is already running.')]);
 
             return to_route('admin.ai-settings.index');
         }
 
-        dispatch(new ReembedLibrary);
+        dispatch(new ReembedLibrary(runToken: $runToken));
 
         Inertia::flash('toast', ['type' => 'success', 'message' => __('Library re-embed queued. Semantic search improves as it completes.')]);
 

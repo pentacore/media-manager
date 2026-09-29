@@ -7,6 +7,7 @@ use App\Models\User;
 use App\Settings\AiSettings;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Queue;
+use Illuminate\Support\Str;
 
 beforeEach(function (): void {
     Cache::flush();
@@ -27,7 +28,7 @@ test('index exposes the embeddings selection and whether it is stale', function 
 });
 
 test('index reflects a re-embed chain that is currently running', function (): void {
-    Cache::put(ReembedLibrary::RUNNING_CACHE_KEY, true, ReembedLibrary::RUNNING_CACHE_TTL);
+    Cache::put(ReembedLibrary::RUNNING_CACHE_KEY, (string) Str::uuid7(), ReembedLibrary::RUNNING_CACHE_TTL);
 
     $this->actingAs(User::factory()->admin()->create())
         ->get(route('admin.ai-settings.index'))
@@ -86,9 +87,23 @@ test('admin can queue a library re-embed', function (): void {
     Queue::assertPushed(ReembedLibrary::class);
 });
 
+test('the claimed run token is passed to the dispatched job', function (): void {
+    Queue::fake();
+
+    $this->actingAs(User::factory()->admin()->create())
+        ->post(route('admin.ai-settings.reembed'))
+        ->assertRedirect(route('admin.ai-settings.index'));
+
+    $claimedToken = Cache::get(ReembedLibrary::RUNNING_CACHE_KEY);
+
+    expect($claimedToken)->not->toBeNull();
+
+    Queue::assertPushed(ReembedLibrary::class, fn (ReembedLibrary $job): bool => $job->runToken === $claimedToken);
+});
+
 test('a re-embed request while one is already running dispatches nothing and says so', function (): void {
     Queue::fake();
-    Cache::put(ReembedLibrary::RUNNING_CACHE_KEY, true, ReembedLibrary::RUNNING_CACHE_TTL);
+    Cache::put(ReembedLibrary::RUNNING_CACHE_KEY, (string) Str::uuid7(), ReembedLibrary::RUNNING_CACHE_TTL);
 
     $this->actingAs(User::factory()->admin()->create())
         ->post(route('admin.ai-settings.reembed'))

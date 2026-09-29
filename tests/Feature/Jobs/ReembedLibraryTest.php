@@ -10,6 +10,7 @@ use Illuminate\Contracts\Queue\ShouldBeUnique;
 use Illuminate\Queue\Attributes\UniqueFor;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Queue;
+use Illuminate\Support\Str;
 use Laravel\Ai\Embeddings;
 use Laravel\Ai\Responses\Data\Meta;
 use Laravel\Ai\Responses\Data\Usage;
@@ -96,22 +97,22 @@ test('the job timeout stays below the worker timeout', function (): void {
 });
 
 test('a run holds the running flag while it works and clears it once the whole chain finishes', function (): void {
-    Embeddings::fake();
     IndexedMovie::factory()->count(2)->create(['embedding' => [0.1]]);
     IndexedSeries::factory()->count(2)->create(['embedding' => [0.1]]);
     resolve(AiSettings::class)->setEmbeddingsModel('text-embedding-3-large');
-    Cache::put(ReembedLibrary::RUNNING_CACHE_KEY, true, ReembedLibrary::RUNNING_CACHE_TTL);
+    $runToken = (string) Str::uuid7();
+    Cache::put(ReembedLibrary::RUNNING_CACHE_KEY, $runToken, ReembedLibrary::RUNNING_CACHE_TTL);
 
-    $sawFlagDuringRun = false;
-    Embeddings::fake(function () use (&$sawFlagDuringRun): ?array {
-        $sawFlagDuringRun = $sawFlagDuringRun || Cache::has(ReembedLibrary::RUNNING_CACHE_KEY);
+    $sawOwnTokenDuringRun = false;
+    Embeddings::fake(function () use (&$sawOwnTokenDuringRun, $runToken): ?array {
+        $sawOwnTokenDuringRun = $sawOwnTokenDuringRun || Cache::get(ReembedLibrary::RUNNING_CACHE_KEY) === $runToken;
 
         return null;
     });
 
-    dispatch_sync(new ReembedLibrary);
+    dispatch_sync(new ReembedLibrary(runToken: $runToken));
 
-    expect($sawFlagDuringRun)->toBeTrue()
+    expect($sawOwnTokenDuringRun)->toBeTrue()
         ->and(Cache::has(ReembedLibrary::RUNNING_CACHE_KEY))->toBeFalse();
 });
 
@@ -129,12 +130,50 @@ test('a run sets the running flag itself even when nothing claimed it first', fu
     expect(Cache::has(ReembedLibrary::RUNNING_CACHE_KEY))->toBeFalse();
 });
 
-test('failed() clears the running flag so a thrown page unblocks the next click', function (): void {
-    Cache::put(ReembedLibrary::RUNNING_CACHE_KEY, true, ReembedLibrary::RUNNING_CACHE_TTL);
+test("a stale page from a superseded chain does no work and leaves the newer chain's flag alone", function (): void {
+    IndexedMovie::factory()->count(3)->create(['embedding' => [0.1]]);
+    resolve(AiSettings::class)->setEmbeddingsModel('text-embedding-3-large');
+    $newerToken = (string) Str::uuid7();
+    Cache::put(ReembedLibrary::RUNNING_CACHE_KEY, $newerToken, ReembedLibrary::RUNNING_CACHE_TTL);
 
-    (new ReembedLibrary)->failed(new RuntimeException('provider down'));
+    $embedCalls = 0;
+    Embeddings::fake(function () use (&$embedCalls): ?array {
+        $embedCalls++;
+
+        return null;
+    });
+
+    // dispatch_sync() would route a ShouldQueue job through Queue::fake()
+    // itself (it just records the push, never runs handle()), so call
+    // handle() directly to actually exercise it while still faking the
+    // queue connection any nested dispatch() inside it would use.
+    Queue::fake();
+    $staleToken = (string) Str::uuid7();
+    $job = new ReembedLibrary(runToken: $staleToken);
+    app()->call($job->handle(...));
+
+    expect($embedCalls)->toBe(0)
+        ->and(Cache::get(ReembedLibrary::RUNNING_CACHE_KEY))->toBe($newerToken);
+    Queue::assertNothingPushed();
+});
+
+test('failed() clears the running flag when it belongs to the same chain', function (): void {
+    $runToken = (string) Str::uuid7();
+    Cache::put(ReembedLibrary::RUNNING_CACHE_KEY, $runToken, ReembedLibrary::RUNNING_CACHE_TTL);
+
+    new ReembedLibrary(runToken: $runToken)->failed(new RuntimeException('provider down'));
 
     expect(Cache::has(ReembedLibrary::RUNNING_CACHE_KEY))->toBeFalse();
+});
+
+test("failed() with a foreign token leaves a newer chain's flag alone", function (): void {
+    $newerToken = (string) Str::uuid7();
+    Cache::put(ReembedLibrary::RUNNING_CACHE_KEY, $newerToken, ReembedLibrary::RUNNING_CACHE_TTL);
+    $staleToken = (string) Str::uuid7();
+
+    new ReembedLibrary(runToken: $staleToken)->failed(new RuntimeException('provider down'));
+
+    expect(Cache::get(ReembedLibrary::RUNNING_CACHE_KEY))->toBe($newerToken);
 });
 
 test('a second dispatch for the same page is deduped by the unique lock, but a different cursor is not', function (): void {

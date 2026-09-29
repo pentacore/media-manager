@@ -16,6 +16,7 @@ use Illuminate\Queue\Attributes\Queue;
 use Illuminate\Queue\Attributes\UniqueFor;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Str;
 use Throwable;
 
 /**
@@ -48,8 +49,10 @@ class ReembedLibrary implements ShouldBeUnique, ShouldQueue
 
     public int $tries = 1;
 
-    // Below the queue-ai worker's --timeout (300s) and the redis
-    // retry_after (330s), with headroom well above one 200-item page.
+    /**
+     * Below the queue-ai worker's --timeout (300s) and the redis
+     * retry_after (330s), with headroom well above one 200-item page.
+     */
     public int $timeout = 280;
 
     /**
@@ -58,12 +61,23 @@ class ReembedLibrary implements ShouldBeUnique, ShouldQueue
      *                                      when the very first page of this
      *                                      run was dispatched, or null on
      *                                      the first page, which captures it.
+     * @param  ?string  $runToken  Identifies this chain's claim on
+     *                             RUNNING_CACHE_KEY, carried from page to
+     *                             page like the starting signature. Null
+     *                             means nothing has claimed the flag yet
+     *                             for this chain (the job was dispatched
+     *                             outside the controller); `handle()` then
+     *                             mints and claims one itself. A page whose
+     *                             token no longer matches the stored value
+     *                             belongs to a chain a newer one has
+     *                             superseded, and does no work.
      */
     public function __construct(
         public string $modelClass = IndexedMovie::class,
         public int $afterId = 0,
         public bool $failed = false,
         public ?string $startingSignature = null,
+        public ?string $runToken = null,
     ) {}
 
     public function uniqueId(): string
@@ -73,15 +87,27 @@ class ReembedLibrary implements ShouldBeUnique, ShouldQueue
 
     public function handle(LibraryEmbedder $libraryEmbedder, AiSettings $aiSettings): void
     {
+        if ($this->runToken === null) {
+            $this->runToken = (string) Str::uuid7();
+            Cache::add(self::RUNNING_CACHE_KEY, $this->runToken, self::RUNNING_CACHE_TTL);
+        }
+
+        if (Cache::get(self::RUNNING_CACHE_KEY) !== $this->runToken) {
+            // A different chain (or none) holds the flag: a newer click
+            // superseded this one, so this stale page must not embed
+            // anything, dispatch a continuation, or touch the flag.
+            return;
+        }
+
         if (! $libraryEmbedder->enabled()) {
-            Cache::forget(self::RUNNING_CACHE_KEY);
+            $this->clearRunningFlag();
 
             return;
         }
 
         // Refresh the running flag's TTL before working, so a long chain of
         // pages keeps it held past any single page's TTL window.
-        Cache::put(self::RUNNING_CACHE_KEY, true, self::RUNNING_CACHE_TTL);
+        Cache::put(self::RUNNING_CACHE_KEY, $this->runToken, self::RUNNING_CACHE_TTL);
 
         $startingSignature = $this->startingSignature ?? $aiSettings->embeddingsSignature();
 
@@ -112,13 +138,13 @@ class ReembedLibrary implements ShouldBeUnique, ShouldQueue
         }
 
         if ($items->count() === self::PAGE_SIZE) {
-            dispatch(new self($this->modelClass, (int) $items->last()->id, $failed, $startingSignature));
+            dispatch(new self($this->modelClass, (int) $items->last()->id, $failed, $startingSignature, $this->runToken));
 
             return;
         }
 
         if ($this->modelClass === IndexedMovie::class) {
-            dispatch(new self(IndexedSeries::class, 0, $failed, $startingSignature));
+            dispatch(new self(IndexedSeries::class, 0, $failed, $startingSignature, $this->runToken));
 
             return;
         }
@@ -127,15 +153,28 @@ class ReembedLibrary implements ShouldBeUnique, ShouldQueue
             $aiSettings->markEmbeddingsIndexed();
         }
 
-        Cache::forget(self::RUNNING_CACHE_KEY);
+        $this->clearRunningFlag();
     }
 
     /**
      * Unblocks the next click: a page that throws (retries exhausted) must
-     * not leave the running flag held for the rest of its TTL.
+     * not leave the running flag held for the rest of its TTL. Only clears
+     * it when this page still owns it — a foreign token means a newer
+     * chain is running and must be left alone.
      */
     public function failed(?Throwable $throwable): void
     {
-        Cache::forget(self::RUNNING_CACHE_KEY);
+        $this->clearRunningFlag();
+    }
+
+    /**
+     * Forgets the running flag only if it still holds this chain's own
+     * token, never a different (newer) chain's claim.
+     */
+    private function clearRunningFlag(): void
+    {
+        if ($this->runToken !== null && Cache::get(self::RUNNING_CACHE_KEY) === $this->runToken) {
+            Cache::forget(self::RUNNING_CACHE_KEY);
+        }
     }
 }
