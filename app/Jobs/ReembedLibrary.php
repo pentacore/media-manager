@@ -20,7 +20,8 @@ use Illuminate\Support\Collection;
  * Re-embeds the whole library after the embeddings provider or model changed.
  * Each run embeds one page and dispatches the next, so a large library never
  * hits the job timeout; the signature is stamped only when every item got a
- * vector, otherwise the settings page keeps showing the stale banner.
+ * vector AND the selection has not changed again since the run started,
+ * otherwise the settings page keeps showing the stale banner.
  */
 #[Queue(QueueLane::Ai)]
 #[UniqueFor(600)]
@@ -38,11 +39,16 @@ class ReembedLibrary implements ShouldBeUnique, ShouldQueue
 
     /**
      * @param  class-string<IndexedMovie|IndexedSeries>  $modelClass
+     * @param  ?string  $startingSignature  The embeddings signature captured
+     *                                      when the very first page of this
+     *                                      run was dispatched, or null on
+     *                                      the first page, which captures it.
      */
     public function __construct(
         public string $modelClass = IndexedMovie::class,
         public int $afterId = 0,
         public bool $failed = false,
+        public ?string $startingSignature = null,
     ) {}
 
     public function uniqueId(): string
@@ -55,6 +61,8 @@ class ReembedLibrary implements ShouldBeUnique, ShouldQueue
         if (! $libraryEmbedder->enabled()) {
             return;
         }
+
+        $startingSignature = $this->startingSignature ?? $aiSettings->embeddingsSignature();
 
         $items = $this->modelClass::query()
             ->where('id', '>', $this->afterId)
@@ -83,18 +91,18 @@ class ReembedLibrary implements ShouldBeUnique, ShouldQueue
         }
 
         if ($items->count() === self::PAGE_SIZE) {
-            dispatch(new self($this->modelClass, (int) $items->last()->id, $failed));
+            dispatch(new self($this->modelClass, (int) $items->last()->id, $failed, $startingSignature));
 
             return;
         }
 
         if ($this->modelClass === IndexedMovie::class) {
-            dispatch(new self(IndexedSeries::class, 0, $failed));
+            dispatch(new self(IndexedSeries::class, 0, $failed, $startingSignature));
 
             return;
         }
 
-        if (! $failed) {
+        if (! $failed && $startingSignature === $aiSettings->embeddingsSignature()) {
             $aiSettings->markEmbeddingsIndexed();
         }
     }

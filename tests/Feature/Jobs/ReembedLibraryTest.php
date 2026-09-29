@@ -42,6 +42,29 @@ test('a re-embed with failures leaves the library marked stale', function (): vo
     expect($aiSettings->embeddingsStale())->toBeTrue();
 });
 
+test('changing the embeddings model mid-run leaves the library stale even though nothing failed', function (): void {
+    IndexedMovie::factory()->count(3)->create(['embedding' => [0.1]]);
+    IndexedSeries::factory()->count(2)->create(['embedding' => [0.1]]);
+    $aiSettings = resolve(AiSettings::class);
+    $aiSettings->setEmbeddingsModel('text-embedding-3-large');
+
+    $calls = 0;
+    Embeddings::fake(function () use (&$calls, $aiSettings): ?array {
+        $calls++;
+
+        // Switch models right after the movies page embeds, before series runs.
+        if ($calls === 1) {
+            $aiSettings->setEmbeddingsModel('text-embedding-mid-run-switch');
+        }
+
+        return null;
+    });
+
+    dispatch_sync(new ReembedLibrary);
+
+    expect($aiSettings->embeddingsStale())->toBeTrue();
+});
+
 test('each page of a re-embed is unique per model and cursor, with a lock that outlives its timeout', function (): void {
     $job = new ReembedLibrary;
     $reflection = new ReflectionClass($job);
