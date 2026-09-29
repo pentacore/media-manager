@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use App\Models\ActionTypeConfig;
 use App\Models\ServiceConnection;
 use App\Models\User;
 use Database\Seeders\ActionTypeConfigSeeder;
@@ -109,6 +110,51 @@ test('a viewer sees none of the library action controls', function (): void {
         ->assertCount('[data-search-now]', 0)
         ->assertCount('[data-interactive-search]', 0)
         ->assertCount('[data-quality-profile-trigger]', 0);
+});
+
+test('a season with no episodes yet hides the season monitor toggle', function (): void {
+    // A distinct series id (not 7) so this fixture doesn't collide with the
+    // beforeEach's series/7 fake — Http::fake() stubs are matched in
+    // registration order (first match wins), so a later fake for the same
+    // URL pattern would never be reached.
+    Http::fake([
+        'sonarr.local:8989/api/v3/series/99*' => Http::response([
+            'id' => 99, 'title' => 'Foundation', 'titleSlug' => 'foundation', 'year' => 2023, 'status' => 'upcoming',
+            'monitored' => true, 'qualityProfileId' => 1, 'images' => [],
+            'seasons' => [
+                ['seasonNumber' => 1, 'monitored' => true, 'statistics' => ['episodeCount' => 1, 'episodeFileCount' => 0, 'sizeOnDisk' => 0]],
+                ['seasonNumber' => 2, 'monitored' => true, 'statistics' => ['episodeCount' => 0, 'episodeFileCount' => 0, 'sizeOnDisk' => 0]],
+            ],
+            'statistics' => ['sizeOnDisk' => 0, 'episodeCount' => 1, 'episodeFileCount' => 0],
+        ]),
+    ]);
+    $this->actingAs(User::factory()->member()->create());
+
+    // The generic 'sonarr.local:8989/api/v3/episode*' fake from beforeEach
+    // still applies (registered first, no conflicting series/99 pattern):
+    // it returns episode 70 in season 1, so season 2 legitimately has none.
+    visit(route('media.series.show', ['id' => 99], absolute: false))
+        ->assertNoSmoke()
+        ->click('Season 2')
+        ->assertSeeIn('[data-season-actions="2"]', 'No episodes yet')
+        ->assertCount('[data-season-actions="2"] [data-monitor-toggle]', 0)
+        ->assertCount('[data-season-actions="2"] [data-search-now]', 0)
+        ->assertNoSmoke();
+});
+
+test('a queued grab shows the queued-for-approval message', function (): void {
+    ActionTypeConfig::query()->where('type', 'grab_release')->update(['requires_approval' => true]);
+    $this->actingAs(User::factory()->member()->create());
+    $releaseOneKey = hash('sha256', 'guid-1');
+
+    visit(route('media.series.show', ['id' => 7], absolute: false))
+        ->assertNoSmoke()
+        ->click('Season 1')
+        ->click('[data-season-actions="1"] [data-interactive-search]')
+        ->assertSeeIn("[data-release-row=\"{$releaseOneKey}\"]", 'Severance.S01.1080p.WEB')
+        ->click("[data-release-row=\"{$releaseOneKey}\"] [data-release-grab]")
+        ->assertSee('Queued for approval in the Action Queue.')
+        ->assertNoSmoke();
 });
 
 test('a member starts a movie search from the movie page', function (): void {

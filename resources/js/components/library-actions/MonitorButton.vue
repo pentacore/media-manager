@@ -26,6 +26,15 @@ function toggle(): void {
         return;
     }
 
+    const isEpisodeToggle = props.episodeIds.length > 0 && props.seriesId !== null;
+
+    // Never post the whole-title branch without an item id — a season with
+    // no episodes yet (announced, unaired) has neither episode ids nor an
+    // item id, and posting would silently 422.
+    if (!isEpisodeToggle && props.itemId === null) {
+        return;
+    }
+
     busy.value = true;
     const options = {
         preserveScroll: true,
@@ -34,7 +43,7 @@ function toggle(): void {
         },
     };
 
-    if (props.episodeIds.length > 0 && props.seriesId !== null) {
+    if (isEpisodeToggle) {
         router.post(
             MediaActionController.monitorEpisodes.url(),
             {

@@ -173,7 +173,8 @@ async function grab(row: ReleaseRow): Promise<void> {
             indexer_id: row.indexer_id,
         });
 
-        toast.success(
+        const notify = data.requires_approval ? toast.info : toast.success;
+        notify(
             data.message,
             data.requires_approval
                 ? {

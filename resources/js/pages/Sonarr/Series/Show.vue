@@ -568,23 +568,36 @@ function sonarrSeriesUrl(): string | null {
                                     class="mb-3 flex flex-wrap items-center gap-2"
                                     :data-season-actions="season.season_number"
                                 >
-                                    <MonitorButton
-                                        service="sonarr"
-                                        :connection-id="service_connection_id"
-                                        :series-id="series.id"
-                                        :episode-ids="episodeIdsForSeason(season.season_number)"
-                                        :season-number="season.season_number"
-                                        :monitored="season.monitored"
-                                        :label="season.monitored ? 'Season monitored' : 'Season unmonitored'"
-                                    />
-                                    <SearchButton
-                                        service="sonarr"
-                                        :connection-id="service_connection_id"
-                                        command="season_search"
-                                        :series-id="series.id"
-                                        :season-number="season.season_number"
-                                        label="Search season"
-                                    />
+                                    <template
+                                        v-if="
+                                            episodeIdsForSeason(season.season_number).length > 0
+                                        "
+                                    >
+                                        <MonitorButton
+                                            service="sonarr"
+                                            :connection-id="service_connection_id"
+                                            :series-id="series.id"
+                                            :episode-ids="episodeIdsForSeason(season.season_number)"
+                                            :season-number="season.season_number"
+                                            :monitored="season.monitored"
+                                            :label="season.monitored ? 'Season monitored' : 'Season unmonitored'"
+                                        />
+                                        <SearchButton
+                                            service="sonarr"
+                                            :connection-id="service_connection_id"
+                                            command="season_search"
+                                            :series-id="series.id"
+                                            :season-number="season.season_number"
+                                            label="Search season"
+                                        />
+                                    </template>
+                                    <span
+                                        v-else
+                                        class="text-[12px] text-muted-foreground"
+                                        data-season-no-episodes
+                                    >
+                                        No episodes yet
+                                    </span>
                                     <Button
                                         variant="outline"
                                         size="sm"
