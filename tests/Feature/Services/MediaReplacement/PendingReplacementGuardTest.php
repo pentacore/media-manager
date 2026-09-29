@@ -155,6 +155,17 @@ test('inFlightForMedia blocks a movie with a queued replacement request', functi
     expect(resolve(PendingReplacementGuard::class)->inFlightForMedia(1, movieId: 10))->toBeTrue();
 });
 
+test('inFlightForMedia only considers a queued replacement request pinned to the same connection', function (): void {
+    ActionRequest::factory()->create([
+        'type' => 'replace_media_file',
+        'status' => ActionRequestStatus::Approved,
+        'payload' => ['target' => [...replacementGuardTarget(), 'service_connection_id' => 2], 'service_connection_id' => 2],
+    ]);
+
+    expect(resolve(PendingReplacementGuard::class)->inFlightForMedia(1, movieId: 10))->toBeFalse()
+        ->and(resolve(PendingReplacementGuard::class)->inFlightForMedia(2, movieId: 10))->toBeTrue();
+});
+
 test('inFlightForMedia ignores finished replacements', function (): void {
     MediaReplacementAttempt::factory()->create(['status' => MediaReplacementStatus::Verified, 'target' => replacementGuardTarget()]);
 
