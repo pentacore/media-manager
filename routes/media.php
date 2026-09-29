@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use App\Http\Controllers\Library\ActivityController as LibraryActivityController;
+use App\Http\Controllers\Library\MediaActionController;
 use App\Http\Controllers\Media\AnimeController;
 use App\Http\Controllers\Media\DiscoverController;
 use App\Http\Controllers\Media\InstantSearchController;
@@ -66,6 +67,16 @@ Route::middleware(['auth', 'verified', 'password.set'])
             // Combined Sonarr + Radarr download queue
             Route::get('library/activity/queue', [LibraryActivityController::class, 'queue'])
                 ->name('library.activity.queue');
+
+            // Library actions from the series/movie/calendar/Wanted pages (Action Queue)
+            Route::prefix('library/actions')->name('library.actions.')->group(function (): void {
+                Route::post('monitor', [MediaActionController::class, 'monitor'])->name('monitor');
+                Route::post('monitor-episodes', [MediaActionController::class, 'monitorEpisodes'])->name('monitor-episodes');
+                Route::post('quality-profile', [MediaActionController::class, 'qualityProfile'])->name('quality-profile');
+                Route::post('search', [MediaActionController::class, 'search'])->name('search');
+                Route::get('releases', [MediaActionController::class, 'releases'])->name('releases');
+                Route::post('grab', [MediaActionController::class, 'grab'])->name('grab');
+            });
 
             Route::middleware('role:admin')->group(function (): void {
                 Route::post('library/activity/queue/{service}/{id}/remove', [LibraryActivityController::class, 'removeQueueItem'])

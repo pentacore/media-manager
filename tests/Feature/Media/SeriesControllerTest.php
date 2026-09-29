@@ -435,3 +435,17 @@ test('destroy follows the rule even when the chat AI is in advisory mode', funct
     expect($actionRequest->status)->toBe(ActionRequestStatus::Approved);
     Queue::assertPushed(ExecuteActionRequest::class, fn (ExecuteActionRequest $executeActionRequest): bool => $executeActionRequest->actionRequest->id === $actionRequest->id);
 });
+
+test('the series page defers the quality profiles for the profile dropdown', function (): void {
+    Http::fake([
+        'sonarr.local:8989/api/v3/series/1' => Http::response(['id' => 1, 'title' => 'Show', 'seasons' => [], 'images' => []]),
+        'sonarr.local:8989/api/v3/qualityprofile' => Http::response([['id' => 6, 'name' => 'Ultra-HD']]),
+        'sonarr.local:8989/api/v3/episode*' => Http::response([]),
+    ]);
+
+    $this->actingAs(User::factory()->member()->create())
+        ->get(route('media.series.show', ['id' => 1]))
+        ->assertInertia(fn ($page) => $page
+            ->missing('qualityProfiles')
+            ->loadDeferredProps(fn ($reload) => $reload->where('qualityProfiles', [['id' => 6, 'name' => 'Ultra-HD']])));
+});

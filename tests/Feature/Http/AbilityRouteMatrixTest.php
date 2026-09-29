@@ -57,6 +57,12 @@ dataset('member-only routes', [
     'requests console' => ['GET', 'media.requests.index', []],
     'requests approve' => ['POST', 'media.requests.approve', ['id' => 1]],
     'requests decline' => ['POST', 'media.requests.decline', ['id' => 1]],
+    'library monitor' => ['POST', 'media.library.actions.monitor', []],
+    'library monitor episodes' => ['POST', 'media.library.actions.monitor-episodes', []],
+    'library quality profile' => ['POST', 'media.library.actions.quality-profile', []],
+    'library search' => ['POST', 'media.library.actions.search', []],
+    'library releases' => ['GET', 'media.library.actions.releases', []],
+    'library grab' => ['POST', 'media.library.actions.grab', []],
 ]);
 
 dataset('member write routes', [
@@ -65,6 +71,7 @@ dataset('member write routes', [
     'series destroy' => ['DELETE', 'media.series.destroy', ['id' => 1]],
     'requests console' => ['GET', 'media.requests.index', []],
     'requests approve' => ['POST', 'media.requests.approve', ['id' => 1]],
+    'library search' => ['POST', 'media.library.actions.search', []],
 ]);
 
 test('viewer-level read routes open for viewers', function (string $routeName, array $parameters): void {

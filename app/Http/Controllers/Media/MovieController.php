@@ -65,6 +65,9 @@ class MovieController extends BaseArrController
             'connection' => $canManageLibrary ? $this->connectionUrl($connection) : ['url' => null],
             'service_connection_id' => $connection->id,
             'movie' => $this->mapMovie($movie, detailed: true, canManageLibrary: $canManageLibrary),
+            'qualityProfiles' => Inertia::defer(fn (): array => $this->mapQualityProfiles(
+                $this->tryClientCall($connection, fn (RadarrClient $radarrClient): array => $radarrClient->getQualityProfiles()),
+            )),
         ]);
     }
 

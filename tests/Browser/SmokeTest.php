@@ -412,6 +412,7 @@ function browserSmokeExcludedRouteNames(): array
         'media.search.instant',
         'media.replacement.inspect',
         'media.replacement.candidates',
+        'media.library.actions.releases',
         'bazarr.capabilities',
         'bazarr.search',
         'monitoring.watch-history.export',
