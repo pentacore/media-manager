@@ -5,7 +5,7 @@ import { onMounted, onUnmounted, ref } from 'vue';
 import { toast } from 'vue-sonner';
 import AiFreeUsagePoolController from '@/actions/App/Http/Controllers/Admin/AiFreeUsagePoolController';
 import AiModelPriceController from '@/actions/App/Http/Controllers/Admin/AiModelPriceController';
-import OpenRouterModelPicker from '@/components/ai/OpenRouterModelPicker.vue';
+import { AddFromCatalogDialog, SOURCE_LABELS } from '@/components/ai-prices';
 import InputError from '@/components/InputError.vue';
 import {
     Pill,
@@ -114,6 +114,7 @@ const props = defineProps<{
     rate_limit_metrics: Array<{ value: string; label: string }>;
     rate_limit_periods: Array<{ value: string; label: string }>;
     openrouter_pricing_enabled: boolean;
+    catalog_providers: string[];
 }>();
 
 defineOptions({
@@ -162,18 +163,6 @@ function onEditAutomaticUpdatesChange(value: boolean): void {
 }
 
 type PricingSource = NonNullable<PriceRow['pricing_source']>;
-
-const SOURCE_LABELS: Record<PricingSource, string> = {
-    seed: 'Seed data',
-    models_dev: 'Models.dev',
-    first_party: 'First-party source',
-    manual: 'Manual',
-    legacy: 'Legacy',
-    openrouter: 'OpenRouter',
-    litellm: 'LiteLLM',
-    xai_api: 'xAI API',
-    feed_consensus: 'Models.dev + LiteLLM',
-};
 
 const SOURCE_VARIANTS: Record<
     PricingSource,
@@ -502,9 +491,7 @@ const priciest = ref(
                         :class="{ 'animate-spin': refreshing }"
                     />Refresh online
                 </Button>
-                <OpenRouterModelPicker
-                    :pricing-enabled="openrouter_pricing_enabled"
-                />
+                <AddFromCatalogDialog :providers="catalog_providers" />
                 <Dialog v-model:open="showCreateDialog">
                     <DialogTrigger as-child>
                         <Button size="sm" class="h-7 gap-1.5 text-xs">

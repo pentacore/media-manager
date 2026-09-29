@@ -7,6 +7,7 @@ use App\Jobs\RefreshAiPricesJob;
 use App\Models\AiModelPrice;
 use App\Models\User;
 use Illuminate\Support\Facades\Bus;
+use Illuminate\Support\Facades\Http;
 
 /*
  * Functional browser coverage for the admin AI prices screen
@@ -409,3 +410,42 @@ test('structured pricing sources render their labels', function (PricingSource $
     'xai api' => [PricingSource::XaiApi, 'vendor/xai-model', 'xAI API'],
     'feed consensus' => [PricingSource::FeedConsensus, 'vendor/consensus-model', 'Models.dev + LiteLLM'],
 ]);
+
+function catalogPickerBrowserFeeds(): void
+{
+    foreach (['models_dev', 'litellm', 'xai'] as $source) {
+        config()->set(sprintf('mediamanager.ai.pricing.%s.enabled', $source), false);
+    }
+
+    config()->set('mediamanager.ai.pricing.openrouter.enabled', true);
+    config()->set('mediamanager.ai.pricing.openrouter.retries', 0);
+
+    Http::fake([
+        'openrouter.ai/*' => Http::response((string) file_get_contents(base_path('tests/Fixtures/OpenRouter/models.json'))),
+    ]);
+}
+
+test('admin bulk-adds openrouter models from the catalog', function (): void {
+    catalogPickerBrowserFeeds();
+
+    $webpage = visit('/admin/ai-prices')
+        ->assertNoSmoke()
+        ->click('[data-add-from-catalog]')
+        ->assertVisible('[data-catalog-row="anthropic/claude-opus-5.5"]')
+        ->fill('[data-catalog-search]', 'Claude')
+        ->assertDontSee('openai/gpt-6-luna')
+        ->click('[data-catalog-row="anthropic/claude-opus-5.5"]')
+        ->click('[data-catalog-row="anthropic/claude-haiku-6"]')
+        ->assertSeeIn('[data-add-from-catalog-submit]', 'Add 2 models')
+        ->click('[data-add-from-catalog-submit]')
+        ->assertSee('Added 2 models.')
+        ->assertSee('anthropic/claude-opus-5.5');
+
+    expect(AiModelPrice::query()->where('provider', 'openrouter')->pluck('pricing_source')->all())
+        ->toBe([PricingSource::OpenRouter, PricingSource::OpenRouter]);
+
+    $webpage->click('[data-add-from-catalog]')
+        ->assertVisible('[data-catalog-row="openai/gpt-6-luna"]')
+        ->assertMissing('[data-catalog-row="anthropic/claude-opus-5.5"]')
+        ->assertNoSmoke();
+});
