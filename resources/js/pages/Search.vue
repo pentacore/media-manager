@@ -10,13 +10,16 @@ import {
 } from '@lucide/vue';
 import { computed, onMounted, ref, useTemplateRef } from 'vue';
 import SearchController from '@/actions/App/Http/Controllers/Media/SearchController';
+import { TitleDetailSheet } from '@/components/discover';
 import { Pill, Poster, StatusPill, SvcChip } from '@/components/mm';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useCan } from '@/composables/useCan';
+import { titleStatusPill } from '@/lib/seerr';
 import { tmdbPosterUrl } from '@/lib/tmdb';
 import { cn } from '@/lib/utils';
 import { dashboard } from '@/routes';
+import type { DiscoverTitle, RequestingContext } from '@/types';
 
 interface SeriesResult {
     id: number | null;
@@ -41,17 +44,6 @@ interface MovieResult {
     monitored: boolean;
     has_file: boolean;
     remote_poster: string | null;
-}
-
-interface RequestResult {
-    id: number | null;
-    media_type: string | null;
-    title: string | null;
-    tmdb_id: number | null;
-    tvdb_id: number | null;
-    status: number | null;
-    overview: string | null;
-    poster_path: string | null;
 }
 
 interface ServiceResult<T> {
@@ -88,8 +80,9 @@ const props = defineProps<{
     connections: Connections;
     seriesResults?: ServiceResult<SeriesResult>;
     movieResults?: ServiceResult<MovieResult>;
-    requestResults?: ServiceResult<RequestResult>;
+    requestResults?: ServiceResult<DiscoverTitle>;
     indexerResults?: ServiceResult<IndexerResult>;
+    requesting?: RequestingContext | null;
 }>();
 
 defineOptions({
@@ -254,22 +247,13 @@ function formatSize(bytes: number | null): string {
     return `${value.toFixed(1)} ${units[i]}`;
 }
 
-const seerrStatusKey = (status: number | null): string => {
-    switch (status) {
-        case 1:
-            return 'pending';
-        case 2:
-            return 'approved';
-        case 3:
-            return 'declined';
-        case 4:
-            return 'failed';
-        case 5:
-            return 'available';
-        default:
-            return 'unknown';
-    }
-};
+const sheetOpen = ref(false);
+const selectedTitle = ref<DiscoverTitle | null>(null);
+
+function openTitle(item: DiscoverTitle): void {
+    selectedTitle.value = item;
+    sheetOpen.value = true;
+}
 </script>
 
 <template>
@@ -344,7 +328,7 @@ const seerrStatusKey = (status: number | null): string => {
                         <span class="font-mono-tabular">{{
                             requestCount
                         }}</span>
-                        requests
+                        titles
                     </template>
                     <template v-else>type to search</template>
                 </span>
@@ -562,7 +546,7 @@ const seerrStatusKey = (status: number | null): string => {
                     <span
                         class="text-[12px] font-semibold tracking-[0.06em] text-muted-foreground uppercase"
                     >
-                        Requests
+                        Seerr
                     </span>
                     <Pill>{{ requestCount }}</Pill>
                 </div>
@@ -587,36 +571,42 @@ const seerrStatusKey = (status: number | null): string => {
                 v-else-if="requestCount === 0"
                 class="px-4 py-6 text-sm text-fg-subtle"
             >
-                No matching requests.
+                No matching titles.
             </div>
             <div v-else>
-                <div
-                    v-for="(request, i) in props.requestResults.results"
-                    :key="`req-${request.id ?? i}`"
+                <button
+                    v-for="(item, i) in props.requestResults.results"
+                    :key="`${item.media_type}-${item.tmdb_id}`"
+                    type="button"
                     :class="[
-                        'flex items-center gap-3.5 px-4 py-3',
+                        'flex w-full cursor-pointer items-center gap-3.5 px-4 py-3 text-left hover:bg-bg-hover',
                         i > 0 && 'border-t border-border',
                     ]"
+                    :data-search-title="`${item.media_type}-${item.tmdb_id}`"
+                    @click="openTitle(item)"
                 >
                     <Poster
-                        :hint="
-                            (request.title ?? 'media')
-                                .toLowerCase()
-                                .slice(0, 12)
-                        "
-                        :src="tmdbPosterUrl(request.poster_path)"
+                        :hint="item.title.toLowerCase().slice(0, 12)"
+                        :src="tmdbPosterUrl(item.poster_path)"
                         size="sm"
                     />
                     <div class="min-w-0 flex-1">
                         <div class="text-[13px] font-medium">
-                            {{ request.title ?? 'Unknown' }}
+                            {{ item.title }}
                         </div>
                         <div class="text-[11.5px] text-muted-foreground">
-                            {{ request.media_type ?? 'unknown' }}
+                            {{ item.media_type === 'tv' ? 'TV' : 'Movie'
+                            }}<template v-if="item.year">
+                                · {{ item.year }}</template
+                            >
                         </div>
                     </div>
-                    <StatusPill :status="seerrStatusKey(request.status)" />
-                </div>
+                    <StatusPill
+                        v-if="titleStatusPill(item.status)"
+                        :status="titleStatusPill(item.status)!.status"
+                        :label="titleStatusPill(item.status)!.label"
+                    />
+                </button>
             </div>
         </section>
 
@@ -742,4 +732,10 @@ const seerrStatusKey = (status: number | null): string => {
             </div>
         </section>
     </div>
+
+    <TitleDetailSheet
+        v-model:open="sheetOpen"
+        :item="selectedTitle"
+        :requesting="props.requesting"
+    />
 </template>
