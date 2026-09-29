@@ -91,6 +91,52 @@ test('each page of a re-embed is unique per model and cursor, with a lock that o
         ->and($reflection->getAttributes(UniqueFor::class)[0]->newInstance()->uniqueFor)->toBe(600);
 });
 
+test('the job timeout stays below the worker timeout', function (): void {
+    expect((new ReembedLibrary)->timeout)->toBe(280);
+});
+
+test('a run holds the running flag while it works and clears it once the whole chain finishes', function (): void {
+    Embeddings::fake();
+    IndexedMovie::factory()->count(2)->create(['embedding' => [0.1]]);
+    IndexedSeries::factory()->count(2)->create(['embedding' => [0.1]]);
+    resolve(AiSettings::class)->setEmbeddingsModel('text-embedding-3-large');
+    Cache::put(ReembedLibrary::RUNNING_CACHE_KEY, true, ReembedLibrary::RUNNING_CACHE_TTL);
+
+    $sawFlagDuringRun = false;
+    Embeddings::fake(function () use (&$sawFlagDuringRun): ?array {
+        $sawFlagDuringRun = $sawFlagDuringRun || Cache::has(ReembedLibrary::RUNNING_CACHE_KEY);
+
+        return null;
+    });
+
+    dispatch_sync(new ReembedLibrary);
+
+    expect($sawFlagDuringRun)->toBeTrue()
+        ->and(Cache::has(ReembedLibrary::RUNNING_CACHE_KEY))->toBeFalse();
+});
+
+test('a run sets the running flag itself even when nothing claimed it first', function (): void {
+    Embeddings::fake();
+    IndexedMovie::factory()->create(['embedding' => [0.1]]);
+    resolve(AiSettings::class)->setEmbeddingsModel('text-embedding-3-large');
+
+    expect(Cache::has(ReembedLibrary::RUNNING_CACHE_KEY))->toBeFalse();
+
+    dispatch_sync(new ReembedLibrary);
+
+    // The chain completed within this single dispatch (small library), so
+    // the flag is clear again by the time control returns.
+    expect(Cache::has(ReembedLibrary::RUNNING_CACHE_KEY))->toBeFalse();
+});
+
+test('failed() clears the running flag so a thrown page unblocks the next click', function (): void {
+    Cache::put(ReembedLibrary::RUNNING_CACHE_KEY, true, ReembedLibrary::RUNNING_CACHE_TTL);
+
+    (new ReembedLibrary)->failed(new RuntimeException('provider down'));
+
+    expect(Cache::has(ReembedLibrary::RUNNING_CACHE_KEY))->toBeFalse();
+});
+
 test('a second dispatch for the same page is deduped by the unique lock, but a different cursor is not', function (): void {
     Queue::fake();
 

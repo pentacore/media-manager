@@ -17,6 +17,7 @@ use App\Services\AiBudget\UnpricedModelDetector;
 use App\Settings\AiSettings;
 use App\Settings\OpenRouterSettings;
 use Illuminate\Http\RedirectResponse;
+use Illuminate\Support\Facades\Cache;
 use Inertia\Inertia;
 use Inertia\Response;
 use Laravel\Ai\Contracts\Providers\SupportsCodeExecution;
@@ -117,6 +118,7 @@ class AiSettingsController extends Controller
                 'stale' => $aiSettings->embeddingsStale(),
                 'indexed_with' => $aiSettings->embeddingsIndexedWith(),
                 'signature' => $aiSettings->embeddingsSignature(),
+                'reembedding' => Cache::has(ReembedLibrary::RUNNING_CACHE_KEY),
             ],
             'embeddingsProviders' => array_map(
                 fn (string $provider): array => ['value' => $provider, 'label' => $this->providerLabel($provider)],
@@ -285,6 +287,12 @@ class AiSettingsController extends Controller
 
     public function reembed(): RedirectResponse
     {
+        if (! Cache::add(ReembedLibrary::RUNNING_CACHE_KEY, true, ReembedLibrary::RUNNING_CACHE_TTL)) {
+            Inertia::flash('toast', ['type' => 'info', 'message' => __('A library re-embed is already running.')]);
+
+            return to_route('admin.ai-settings.index');
+        }
+
         dispatch(new ReembedLibrary);
 
         Inertia::flash('toast', ['type' => 'success', 'message' => __('Library re-embed queued. Semantic search improves as it completes.')]);

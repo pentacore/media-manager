@@ -15,6 +15,8 @@ use Illuminate\Foundation\Queue\Queueable;
 use Illuminate\Queue\Attributes\Queue;
 use Illuminate\Queue\Attributes\UniqueFor;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Cache;
+use Throwable;
 
 /**
  * Re-embeds the whole library after the embeddings provider or model changed.
@@ -29,13 +31,26 @@ class ReembedLibrary implements ShouldBeUnique, ShouldQueue
 {
     use Queueable;
 
+    /**
+     * Whether a re-embed chain is currently running, across every page and
+     * both model classes; claimed by the controller before the first
+     * dispatch, refreshed by every page, and cleared when the chain ends or
+     * fails so a click after that never starts a second, parallel chain. A
+     * crashed worker simply lets it expire.
+     */
+    public const string RUNNING_CACHE_KEY = 'ai:embeddings:reembed-running';
+
+    public const int RUNNING_CACHE_TTL = 900;
+
     private const int PAGE_SIZE = 200;
 
     private const int CHUNK_SIZE = 50;
 
     public int $tries = 1;
 
-    public int $timeout = 300;
+    // Below the queue-ai worker's --timeout (300s) and the redis
+    // retry_after (330s), with headroom well above one 200-item page.
+    public int $timeout = 280;
 
     /**
      * @param  class-string<IndexedMovie|IndexedSeries>  $modelClass
@@ -59,8 +74,14 @@ class ReembedLibrary implements ShouldBeUnique, ShouldQueue
     public function handle(LibraryEmbedder $libraryEmbedder, AiSettings $aiSettings): void
     {
         if (! $libraryEmbedder->enabled()) {
+            Cache::forget(self::RUNNING_CACHE_KEY);
+
             return;
         }
+
+        // Refresh the running flag's TTL before working, so a long chain of
+        // pages keeps it held past any single page's TTL window.
+        Cache::put(self::RUNNING_CACHE_KEY, true, self::RUNNING_CACHE_TTL);
 
         $startingSignature = $this->startingSignature ?? $aiSettings->embeddingsSignature();
 
@@ -105,5 +126,16 @@ class ReembedLibrary implements ShouldBeUnique, ShouldQueue
         if (! $failed && $startingSignature === $aiSettings->embeddingsSignature()) {
             $aiSettings->markEmbeddingsIndexed();
         }
+
+        Cache::forget(self::RUNNING_CACHE_KEY);
+    }
+
+    /**
+     * Unblocks the next click: a page that throws (retries exhausted) must
+     * not leave the running flag held for the rest of its TTL.
+     */
+    public function failed(?Throwable $throwable): void
+    {
+        Cache::forget(self::RUNNING_CACHE_KEY);
     }
 }

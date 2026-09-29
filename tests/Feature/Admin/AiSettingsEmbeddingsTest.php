@@ -22,7 +22,16 @@ test('index exposes the embeddings selection and whether it is stale', function 
             ->where('settings.embeddings_provider', 'openai')
             ->where('settings.embeddings_model', 'text-embedding-3-large')
             ->where('embeddings.stale', true)
+            ->where('embeddings.reembedding', false)
             ->where('embeddingsProviders', fn ($providers): bool => collect($providers)->pluck('value')->contains('openrouter')));
+});
+
+test('index reflects a re-embed chain that is currently running', function (): void {
+    Cache::put(ReembedLibrary::RUNNING_CACHE_KEY, true, ReembedLibrary::RUNNING_CACHE_TTL);
+
+    $this->actingAs(User::factory()->admin()->create())
+        ->get(route('admin.ai-settings.index'))
+        ->assertInertia(fn ($page) => $page->where('embeddings.reembedding', true));
 });
 
 test('embeddings provider options use human-friendly labels, not ucfirst', function (): void {
@@ -75,6 +84,22 @@ test('admin can queue a library re-embed', function (): void {
         ->assertRedirect(route('admin.ai-settings.index'));
 
     Queue::assertPushed(ReembedLibrary::class);
+});
+
+test('a re-embed request while one is already running dispatches nothing and says so', function (): void {
+    Queue::fake();
+    Cache::put(ReembedLibrary::RUNNING_CACHE_KEY, true, ReembedLibrary::RUNNING_CACHE_TTL);
+
+    $this->actingAs(User::factory()->admin()->create())
+        ->post(route('admin.ai-settings.reembed'))
+        ->assertRedirect(route('admin.ai-settings.index'))
+        ->assertSessionHas('inertia.flash_data.toast.type', 'info')
+        ->assertSessionHas(
+            'inertia.flash_data.toast.message',
+            'A library re-embed is already running.',
+        );
+
+    Queue::assertNotPushed(ReembedLibrary::class);
 });
 
 test('members cannot queue a re-embed', function (): void {

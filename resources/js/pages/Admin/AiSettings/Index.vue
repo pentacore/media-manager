@@ -110,7 +110,12 @@ const props = defineProps<{
     providerKeys: Record<string, boolean>;
     advancedTools: AdvancedTools;
     openRouterSorts: ProviderOption[];
-    embeddings: { stale: boolean; indexed_with: string; signature: string };
+    embeddings: {
+        stale: boolean;
+        indexed_with: string;
+        signature: string;
+        reembedding: boolean;
+    };
     embeddingsProviders: ProviderOption[];
 }>();
 
@@ -981,7 +986,14 @@ const budgetState = computed<{
                         class="flex items-center justify-between gap-4 rounded-md border border-border bg-bg-hover px-3 py-2 text-[13px]"
                         data-embeddings-stale
                     >
-                        <span class="text-warning">
+                        <span
+                            v-if="embeddings.reembedding"
+                            class="text-muted-foreground"
+                            data-embeddings-reembedding
+                        >
+                            Re-embedding the library…
+                        </span>
+                        <span v-else class="text-warning">
                             Library embeddings are stale — built with
                             <span class="font-mono-tabular">{{
                                 embeddings.indexed_with
@@ -998,10 +1010,18 @@ const budgetState = computed<{
                             variant="outline"
                             class="h-7 text-xs"
                             data-embeddings-reembed
+                            :disabled="embeddings.reembedding"
                             @click="reembedLibrary"
                         >
                             Re-embed library
                         </Button>
+                    </div>
+                    <div
+                        v-else-if="embeddings.reembedding"
+                        class="rounded-md border border-border bg-bg-hover px-3 py-2 text-[13px] text-muted-foreground"
+                        data-embeddings-reembedding
+                    >
+                        Re-embedding the library…
                     </div>
 
                     <div
