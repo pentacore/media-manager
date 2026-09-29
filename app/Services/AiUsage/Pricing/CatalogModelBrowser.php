@@ -397,13 +397,7 @@ final readonly class CatalogModelBrowser
 
     private function anySourceFailed(PricingCatalogResult $pricingCatalogResult): bool
     {
-        foreach ($pricingCatalogResult->sourceStatuses as $status) {
-            if (! in_array($status, self::QUIET_STATUSES, true)) {
-                return true;
-            }
-        }
-
-        return false;
+        return array_any($pricingCatalogResult->sourceStatuses, fn (string $status): bool => ! in_array($status, self::QUIET_STATUSES, true));
     }
 
     /**
