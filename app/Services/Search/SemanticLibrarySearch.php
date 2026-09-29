@@ -4,11 +4,13 @@ declare(strict_types=1);
 
 namespace App\Services\Search;
 
+use App\Ai\OpenRouterRequestOptions;
 use App\Models\IndexedMovie;
 use App\Models\IndexedSeries;
 use App\Services\AiUsage\AiUsageCaller;
 use App\Settings\AiSettings;
 use Illuminate\Support\Facades\Log;
+use Laravel\Ai\Providers\Provider;
 use Laravel\Ai\Reranking;
 use Laravel\Ai\Responses\RerankingResponse;
 use Laravel\Scout\EngineManager;
@@ -24,6 +26,7 @@ class SemanticLibrarySearch
     public function __construct(
         private readonly LibraryEmbedder $libraryEmbedder,
         private readonly AiSettings $aiSettings,
+        private readonly OpenRouterRequestOptions $openRouterRequestOptions,
     ) {}
 
     /**
@@ -137,6 +140,7 @@ class SemanticLibrarySearch
             $response = resolve(AiUsageCaller::class)->during(self::class, fn (): RerankingResponse => Reranking::of($documents)
                 ->limit($limit)
                 ->timeout(15)
+                ->withProviderOptions(fn (Provider $resolvedProvider): array => $this->openRouterRequestOptions->for($resolvedProvider->driver()))
                 ->rerank($query, provider: $this->aiSettings->rerankingProvider(), model: $this->aiSettings->rerankingModel()));
 
             $reranked = [];
