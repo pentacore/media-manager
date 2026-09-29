@@ -174,7 +174,7 @@ test('the season toggle follows its episodes and flips both ways', function (): 
     $this->actingAs(User::factory()->member()->create());
     $seasonToggle = '[data-season-actions="1"] [data-monitor-toggle]';
 
-    $page = visit(route('media.series.show', ['id' => 55], absolute: false))
+    $webpage = visit(route('media.series.show', ['id' => 55], absolute: false))
         ->assertNoSmoke()
         ->click('Season 1')
         ->assertAttribute($seasonToggle, 'aria-pressed', 'true')
@@ -183,7 +183,7 @@ test('the season toggle follows its episodes and flips both ways', function (): 
 
     Http::assertSent(fn (Request $request): bool => str_ends_with($request->url(), '/api/v3/episode/monitor') && $request['episodeIds'] === [551, 552] && $request['monitored'] === false);
 
-    $page->assertSeeIn('[data-season-actions="1"]', 'Season unmonitored')
+    $webpage->assertSeeIn('[data-season-actions="1"]', 'Season unmonitored')
         ->assertAttribute($seasonToggle, 'aria-pressed', 'false')
         ->click($seasonToggle)
         ->assertSee('Monitoring updated.');
