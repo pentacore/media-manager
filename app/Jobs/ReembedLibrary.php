@@ -13,6 +13,7 @@ use Illuminate\Contracts\Queue\ShouldBeUnique;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
 use Illuminate\Queue\Attributes\Queue;
+use Illuminate\Queue\Attributes\UniqueFor;
 use Illuminate\Support\Collection;
 
 /**
@@ -22,6 +23,7 @@ use Illuminate\Support\Collection;
  * vector, otherwise the settings page keeps showing the stale banner.
  */
 #[Queue(QueueLane::Ai)]
+#[UniqueFor(600)]
 class ReembedLibrary implements ShouldBeUnique, ShouldQueue
 {
     use Queueable;

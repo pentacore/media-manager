@@ -6,7 +6,10 @@ use App\Jobs\ReembedLibrary;
 use App\Models\IndexedMovie;
 use App\Models\IndexedSeries;
 use App\Settings\AiSettings;
+use Illuminate\Contracts\Queue\ShouldBeUnique;
+use Illuminate\Queue\Attributes\UniqueFor;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Queue;
 use Laravel\Ai\Embeddings;
 
 beforeEach(function (): void {
@@ -39,7 +42,22 @@ test('a re-embed with failures leaves the library marked stale', function (): vo
     expect($aiSettings->embeddingsStale())->toBeTrue();
 });
 
-test('each page of a re-embed is unique per model and cursor', function (): void {
-    expect((new ReembedLibrary)->uniqueId())->toBe(IndexedMovie::class.':0')
-        ->and(new ReembedLibrary(IndexedSeries::class, 200)->uniqueId())->toBe(IndexedSeries::class.':200');
+test('each page of a re-embed is unique per model and cursor, with a lock that outlives its timeout', function (): void {
+    $job = new ReembedLibrary;
+    $reflection = new ReflectionClass($job);
+
+    expect($job)->toBeInstanceOf(ShouldBeUnique::class)
+        ->and($job->uniqueId())->toBe(IndexedMovie::class.':0')
+        ->and(new ReembedLibrary(IndexedSeries::class, 200)->uniqueId())->toBe(IndexedSeries::class.':200')
+        ->and($reflection->getAttributes(UniqueFor::class)[0]->newInstance()->uniqueFor)->toBe(600);
+});
+
+test('a second dispatch for the same page is deduped by the unique lock, but a different cursor is not', function (): void {
+    Queue::fake();
+
+    dispatch(new ReembedLibrary);
+    dispatch(new ReembedLibrary);
+    dispatch(new ReembedLibrary(IndexedMovie::class, 200));
+
+    Queue::assertPushed(ReembedLibrary::class, 2);
 });
