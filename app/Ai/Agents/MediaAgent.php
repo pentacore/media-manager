@@ -8,6 +8,7 @@ use App\Ai\Concerns\UsesFailoverChain;
 use App\Ai\Middleware\AnswerOnFinalStep;
 use App\Ai\Middleware\EnforceBudgetEachStep;
 use App\Ai\Middleware\StopWhenClientDisconnected;
+use App\Ai\ModelSelection;
 use App\Ai\Tools\Arr\AddMediaTool;
 use App\Ai\Tools\Arr\DeleteMediaTool;
 use App\Ai\Tools\Arr\GetMediaTool;
@@ -77,6 +78,11 @@ class MediaAgent implements Agent, Conversational, HasMiddleware, HasProviderOpt
     public function model(): string
     {
         return resolve(AiSettings::class)->model();
+    }
+
+    public function modelSelection(): ModelSelection
+    {
+        return resolve(AiSettings::class)->chatSelection();
     }
 
     /**

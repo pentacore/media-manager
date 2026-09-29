@@ -6,6 +6,7 @@ namespace App\Ai\Agents;
 
 use App\Ai\Concerns\ActsAsStructuredSubAgent;
 use App\Ai\Concerns\UsesFailoverChain;
+use App\Ai\ModelSelection;
 use App\Ai\Tools\Arr\GetDownloadHistoryTool;
 use App\Ai\Tools\Arr\GetDownloadQueueTool;
 use App\Ai\Tools\Decision\InspectStuckImportTool;
@@ -49,6 +50,11 @@ final class StuckDownloadInvestigatorAgent implements Agent, CanActAsTool, HasMi
     public function model(): string
     {
         return resolve(AiSettings::class)->subAgentModel();
+    }
+
+    public function modelSelection(): ModelSelection
+    {
+        return resolve(AiSettings::class)->subAgentSelection();
     }
 
     public function instructions(): string

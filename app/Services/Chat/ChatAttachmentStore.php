@@ -148,14 +148,16 @@ final readonly class ChatAttachmentStore
      */
     private function filesProvider(): ?string
     {
-        if ($this->aiSettings->providerChain() !== null) {
+        $chain = $this->aiSettings->providerChainFor($this->aiSettings->chatSelection());
+
+        if (count($chain) !== 1) {
             return null;
         }
 
-        $primary = $this->aiSettings->primaryProvider()->value;
+        $provider = array_key_first($chain);
 
         try {
-            return Ai::textProvider($primary) instanceof FileProvider ? $primary : null;
+            return Ai::textProvider($provider) instanceof FileProvider ? $provider : null;
         } catch (Throwable) {
             return null;
         }

@@ -7,6 +7,7 @@ namespace App\Ai\Agents;
 use App\Ai\Concerns\UsesFailoverChain;
 use App\Ai\Middleware\AnswerOnFinalStep;
 use App\Ai\Middleware\EnforceBudgetEachStep;
+use App\Ai\ModelSelection;
 use App\Ai\ProviderCapabilities;
 use App\Ai\Tools\PriceFetcher\UpsertModelPriceTool;
 use App\Ai\Tools\PriceFetcher\WebFetchTool;
@@ -125,6 +126,11 @@ class PriceFetcherAgent implements Agent, HasMiddleware, HasTools
         // A dedicated setting so verification can run on a cheaper (or more
         // capable) model than chat; it follows the chat model when unset.
         return resolve(AiSettings::class)->priceUpdaterModel();
+    }
+
+    public function modelSelection(): ModelSelection
+    {
+        return resolve(AiSettings::class)->priceUpdaterSelection();
     }
 
     public function instructions(): Stringable|string

@@ -6,6 +6,7 @@ namespace App\Ai\Agents;
 
 use App\Ai\Concerns\ActsAsStructuredSubAgent;
 use App\Ai\Concerns\UsesFailoverChain;
+use App\Ai\ModelSelection;
 use App\Ai\Tools\Arr\FindReplacementCandidatesTool;
 use App\Ai\Tools\Arr\GetMediaTool;
 use App\Ai\Tools\Arr\InspectMediaFileTool;
@@ -50,6 +51,11 @@ final class MediaFileInspectorAgent implements Agent, CanActAsTool, HasMiddlewar
     public function model(): string
     {
         return resolve(AiSettings::class)->subAgentModel();
+    }
+
+    public function modelSelection(): ModelSelection
+    {
+        return resolve(AiSettings::class)->subAgentSelection();
     }
 
     public function instructions(): string

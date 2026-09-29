@@ -262,13 +262,14 @@ class ChatController extends Controller
     private function enforceRateLimit(): ?JsonResponse
     {
         $aiSettings = resolve(AiSettings::class);
+        $modelSelection = $aiSettings->chatSelection();
 
-        if ($aiSettings->providerChain() !== null) {
+        if (count($aiSettings->providerChainFor($modelSelection)) > 1) {
             return null;
         }
 
         try {
-            resolve(AiRateLimitGuard::class)->enforce($aiSettings->primaryProvider()->value, $aiSettings->model());
+            resolve(AiRateLimitGuard::class)->enforce($modelSelection->provider, $modelSelection->model);
         } catch (AiModelRateLimitExceededException $aiModelRateLimitExceededException) {
             return $this->rateLimitedResponse($aiModelRateLimitExceededException);
         }
