@@ -6,6 +6,7 @@ use App\Models\AiModelPrice;
 use App\Models\User;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Sleep;
 
 beforeEach(function (): void {
     config()->set('mediamanager.ai.enabled', true);
@@ -56,15 +57,26 @@ test('the picker warns when OpenRouter pricing does not refresh', function (): v
 });
 
 test('the picker stays open and keeps the selection when the import fails', function (): void {
+    // PricingFeedFetcher retries transient failures (mediamanager.ai.pricing.
+    // openrouter.retries = 2, so up to 3 attempts, ~1s then ~2s between them).
+    // Fake Sleep so the test doesn't actually wait out those backoffs, same
+    // as tests/Feature/AI/Pricing/OpenRouterPricingClientTest.php.
+    Sleep::fake();
+
     // OpenRouterModelImporter caches the fetched feed for 10 minutes, so the
     // picker's GET and the submit's POST would otherwise share one cached
     // fetch and both succeed. A sequence gives the GET a success response and
     // the POST's re-fetch (once the cache is flushed below) a failure — and
     // it must be the only fake registered for this URL in this test, since a
     // later Http::fake() for the same URL never overrides an earlier one.
+    // whenEmpty(), not a second pushStatus(), because every retry attempt
+    // after the GET's single success must fail: a sequence with only one
+    // failure entry runs out after the POST's first attempt and throws
+    // OutOfBoundsException on the retry, which isn't a retryable/catchable
+    // PricingTransportException and would 500 the request instead.
     Http::fakeSequence('openrouter.ai/api/v1/models')
         ->pushFile(base_path('tests/Fixtures/OpenRouter/models.json'))
-        ->pushStatus(503);
+        ->whenEmpty(Http::response('down', 503));
 
     $this->actingAs(User::factory()->admin()->create());
 
