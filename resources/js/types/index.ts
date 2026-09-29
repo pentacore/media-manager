@@ -1,4 +1,5 @@
 export * from './auth';
+export * from './calendar';
 export * from './discover';
 export * from './library';
 export * from './navigation';

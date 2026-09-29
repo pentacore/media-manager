@@ -4,6 +4,7 @@ import {
     BellRing,
     Bot,
     Brain,
+    CalendarDays,
     Captions,
     ChartLine,
     Clock,
@@ -52,6 +53,7 @@ import BazarrOverviewController from '@/actions/App/Http/Controllers/Bazarr/Over
 import NowPlayingController from '@/actions/App/Http/Controllers/Emby/NowPlayingController';
 import WatchHistoryController from '@/actions/App/Http/Controllers/Emby/WatchHistoryController';
 import LibraryActivityController from '@/actions/App/Http/Controllers/Library/ActivityController';
+import CalendarController from '@/actions/App/Http/Controllers/Library/CalendarController';
 import AnimeController from '@/actions/App/Http/Controllers/Media/AnimeController';
 import DiscoverController from '@/actions/App/Http/Controllers/Media/DiscoverController';
 import MovieController from '@/actions/App/Http/Controllers/Media/MovieController';
@@ -155,6 +157,12 @@ export function useNavItems(counts?: NavCounts): ComputedRef<NavGroup[]> {
                         icon: Compass,
                         ability: 'request-media',
                         requiresSeerr: true,
+                    },
+                    {
+                        title: 'Calendar',
+                        href: CalendarController.url(),
+                        icon: CalendarDays,
+                        ability: 'view-library',
                     },
                     {
                         title: 'Requests',

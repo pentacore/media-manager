@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use App\Http\Controllers\Library\ActivityController as LibraryActivityController;
+use App\Http\Controllers\Library\CalendarController;
 use App\Http\Controllers\Library\MediaActionController;
 use App\Http\Controllers\Media\AnimeController;
 use App\Http\Controllers\Media\DiscoverController;
@@ -36,6 +37,9 @@ Route::middleware(['auth', 'verified', 'password.set'])
                 ->whereIn('mediaType', ['movie', 'tv'])
                 ->whereNumber('tmdbId')
                 ->name('discover.title');
+
+            // Merged Sonarr + Radarr calendar (month grid / agenda)
+            Route::get('calendar', CalendarController::class)->name('calendar.index');
         });
 
         // Filing Seerr requests as oneself — every role (Seerr's own approval and quotas apply).
