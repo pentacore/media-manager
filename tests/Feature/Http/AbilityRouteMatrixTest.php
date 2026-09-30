@@ -127,8 +127,9 @@ test('media.requests.mine.destroy passes the ability gate for viewers (request-m
     // refusal, so this row moves to its own host and fakes a full,
     // successful owner match — proving the 403 the other tests assert is the
     // *ability* gate, not this route's own checks.
-    $seerrConnection = ServiceConnection::query()->where('type', 'seerr')->sole();
-    $seerrConnection->update(['url' => 'http://seerr-viewer-destroy.local:5055']);
+    $serviceConnection = ServiceConnection::query()->where('type', 'seerr')->sole();
+    $serviceConnection->update(['url' => 'http://seerr-viewer-destroy.local:5055']);
+
     $viewer = User::factory()->create(['email' => 'viewer-destroy@example.com']);
     Http::fake([
         'seerr-viewer-destroy.local:5055/api/v1/user*' => Http::response(['pageInfo' => ['pages' => 1, 'page' => 1], 'results' => [
