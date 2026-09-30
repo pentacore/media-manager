@@ -85,10 +85,12 @@ class ActivityController extends Controller
             return $this->flashAndBack('error', __('Invalid removal verb.'));
         }
 
-        $client = $this->resolveClient($service);
-        if (! $client instanceof ArrClient) {
+        $connection = $this->resolveConnection($service);
+        if (! $connection instanceof ServiceConnection) {
             return $this->flashAndBack('error', __('Unknown service.'));
         }
+
+        $client = $this->clientFor($service, $connection);
 
         try {
             $client->removeQueueItem(
@@ -103,7 +105,7 @@ class ActivityController extends Controller
 
         $auditLogger->record(
             $verb === 'block' ? 'queue.blocklisted' : 'queue.removed',
-            null,
+            $connection,
             $verb === 'block'
                 ? sprintf('Removed %s queue item %d and blocklisted the release.', ucfirst($service), $id)
                 : sprintf('Removed %s queue item %d.', ucfirst($service), $id),
@@ -280,24 +282,27 @@ class ActivityController extends Controller
 
     private function resolveClient(string $service): ?ArrClient
     {
+        $connection = $this->resolveConnection($service);
+
+        return $connection instanceof ServiceConnection ? $this->clientFor($service, $connection) : null;
+    }
+
+    private function resolveConnection(string $service): ?ServiceConnection
+    {
         $type = match ($service) {
             'sonarr' => ServiceType::Sonarr,
             'radarr' => ServiceType::Radarr,
             default => null,
         };
 
-        if ($type === null) {
-            return null;
-        }
+        return $type === null ? null : $this->safeResolve($type);
+    }
 
-        $connection = $this->safeResolve($type);
-        if (! $connection instanceof ServiceConnection) {
-            return null;
-        }
-
+    private function clientFor(string $service, ServiceConnection $serviceConnection): ArrClient
+    {
         return $service === 'sonarr'
-            ? new SonarrClient($connection)
-            : new RadarrClient($connection);
+            ? new SonarrClient($serviceConnection)
+            : new RadarrClient($serviceConnection);
     }
 
     private function flashAndBack(string $type, string $message): RedirectResponse

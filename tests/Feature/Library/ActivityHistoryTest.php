@@ -207,6 +207,9 @@ test('queue removals are audited as removed or blocklisted', function (string $v
 
     expect($activityLog->isAudit())->toBeTrue()
         ->and($activityLog->user_id)->toBe($admin->id)
+        ->and($activityLog->service_connection_id)->toBe($this->sonarr->id)
+        ->and($activityLog->subject_type)->toBe($this->sonarr->getMorphClass())
+        ->and($activityLog->subject_id)->toBe($this->sonarr->id)
         ->and($activityLog->metadata['context'])->toBe(['service' => 'sonarr', 'queue_id' => 42]);
 })->with([
     'remove' => ['remove', 'queue.removed'],
