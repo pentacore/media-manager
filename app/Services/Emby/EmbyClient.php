@@ -47,13 +47,23 @@ class EmbyClient
     }
 
     /**
-     * @return array<int, array<string, mixed>>
+     * A 200 that is not a JSON list (an SSO or reverse-proxy login page, an
+     * error object) is a failed request, never an empty user list.
+     *
+     * @return list<mixed>
      *
      * @throws RequestException|ConnectionException
      */
     public function getUsers(): array
     {
-        return $this->buildClient()->get('/Users')->throw()->json() ?? [];
+        $response = $this->buildClient()->get('/Users')->throw();
+        $users = $response->json();
+
+        if (! is_array($users) || ! array_is_list($users)) {
+            throw new RequestException($response);
+        }
+
+        return $users;
     }
 
     /**

@@ -90,6 +90,39 @@ test('an Emby outage is an error, never an empty list, and is not cached', funct
             ->has('embyUsers.users', 1)));
 });
 
+test('an Emby answer that is not a user list is an error and is not cached', function (mixed $body): void {
+    Http::fake(['emby.local:8096/Users' => Http::sequence()->push($body)->push([['Id' => 'emby-1', 'Name' => 'Alice']])]);
+
+    $this->actingAs($this->admin)
+        ->get(route('emby.links.index'))
+        ->assertInertia(fn ($page) => $page->loadDeferredProps('emby-users', fn ($page) => $page
+            ->where('embyUsers.users', [])
+            ->where('embyUsers.error', 'Emby is unreachable right now — the user list could not be loaded.')));
+
+    $this->actingAs($this->admin)
+        ->get(route('emby.links.index'))
+        ->assertInertia(fn ($page) => $page->loadDeferredProps('emby-users', fn ($page) => $page
+            ->where('embyUsers.error', null)
+            ->has('embyUsers.users', 1)));
+})->with([
+    'an SSO login page' => ['<html><body>Sign in to continue</body></html>'],
+    'a JSON object' => [['Items' => [], 'TotalRecordCount' => 0]],
+]);
+
+test('a malformed last activity date shows as never instead of failing the list', function (): void {
+    Http::fake(['emby.local:8096/Users' => Http::response([
+        ['Id' => 'emby-1', 'Name' => 'Alice', 'LastActivityDate' => 'not-a-date'],
+        ['Id' => 'emby-2', 'Name' => 'bob', 'LastActivityDate' => '2026-09-28T20:15:00.0000000Z'],
+    ])]);
+
+    $this->actingAs($this->admin)
+        ->get(route('emby.links.index'))
+        ->assertInertia(fn ($page) => $page->loadDeferredProps('emby-users', fn ($page) => $page
+            ->where('embyUsers.error', null)
+            ->where('embyUsers.users.0.last_activity_at', null)
+            ->where('embyUsers.users.1.last_activity_at', '2026-09-28T20:15:00+00:00')));
+});
+
 test('without an active Emby connection the list says so', function (): void {
     $this->emby->update(['is_active' => false]);
 

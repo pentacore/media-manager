@@ -6,6 +6,7 @@ namespace App\Services\Emby;
 
 use App\Models\ServiceConnection;
 use Carbon\CarbonImmutable;
+use Carbon\Exceptions\InvalidFormatException;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\RequestException;
 use Illuminate\Support\Facades\Cache;
@@ -60,6 +61,10 @@ final readonly class EmbyUserDirectory
         $users = [];
 
         foreach (new EmbyClient($serviceConnection)->getUsers() as $embyUser) {
+            if (! is_array($embyUser)) {
+                continue;
+            }
+
             $id = $embyUser['Id'] ?? null;
             $name = $embyUser['Name'] ?? null;
 
@@ -68,20 +73,33 @@ final readonly class EmbyUserDirectory
             }
 
             $policy = is_array($embyUser['Policy'] ?? null) ? $embyUser['Policy'] : [];
-            $lastActivity = $embyUser['LastActivityDate'] ?? null;
 
             $users[] = [
                 'id' => $id,
                 'name' => $name,
                 'is_admin' => (bool) ($policy['IsAdministrator'] ?? false),
-                'last_activity_at' => is_string($lastActivity) && $lastActivity !== ''
-                    ? CarbonImmutable::parse($lastActivity)->utc()->toIso8601String()
-                    : null,
+                'last_activity_at' => $this->lastActivityAt($embyUser['LastActivityDate'] ?? null),
             ];
         }
 
         usort($users, static fn (array $a, array $b): int => strcasecmp($a['name'], $b['name']));
 
         return $users;
+    }
+
+    /**
+     * One unparseable date shows as "never" rather than failing the list.
+     */
+    private function lastActivityAt(mixed $lastActivity): ?string
+    {
+        if (! is_string($lastActivity) || $lastActivity === '') {
+            return null;
+        }
+
+        try {
+            return CarbonImmutable::parse($lastActivity)->utc()->toIso8601String();
+        } catch (InvalidFormatException) {
+            return null;
+        }
     }
 }
