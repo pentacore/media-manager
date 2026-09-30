@@ -257,6 +257,31 @@ test('the same failing xai source still blocks the provider it could have covere
         ->toThrow(CatalogUnavailableException::class);
 });
 
+test('the cache key changes when an xai key is configured after an uncovered result', function (): void {
+    config()->set('mediamanager.ai.pricing.openrouter.enabled', false);
+    config()->set('mediamanager.ai.pricing.models_dev.enabled', true);
+    config()->set('mediamanager.ai.pricing.models_dev.retries', 0);
+    config()->set('mediamanager.ai.pricing.xai.enabled', true);
+    config()->set('mediamanager.ai.pricing.xai.retries', 0);
+    config()->set('ai.providers.xai.key');
+
+    Http::fake([
+        'models.dev/*' => Http::response((string) file_get_contents(base_path('tests/Fixtures/ModelsDev/api.json'))),
+    ]);
+
+    $catalogModelBrowser = resolve(CatalogModelBrowser::class);
+
+    expect($catalogModelBrowser->covers('xai'))->toBeFalse();
+
+    config()->set('ai.providers.xai.key', 'xai-test-key');
+    Http::fake([
+        'api.x.ai/*' => Http::response((string) file_get_contents(base_path('tests/Fixtures/Xai/language-models.json'))),
+    ]);
+
+    expect($catalogModelBrowser->covers('xai'))->toBeTrue();
+    Http::assertSent(fn ($request): bool => str_contains((string) $request->url(), 'api.x.ai'));
+});
+
 test('providers lists canonical providers without ignored ones', function (): void {
     resolve(AiSettings::class)->setIgnoredPricingProviders(['groq']);
 

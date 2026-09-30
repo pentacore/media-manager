@@ -218,7 +218,7 @@ final readonly class CatalogModelBrowser
 
         $entry = null;
 
-        foreach ($this->cachedSlice($canonical)['entries'] ?? [] as $cachedEntry) {
+        foreach ($this->cachedSlice($this->cacheKey($canonical))['entries'] ?? [] as $cachedEntry) {
             if ($cachedEntry['model'] === $model) {
                 $entry = $cachedEntry;
 
@@ -287,7 +287,8 @@ final readonly class CatalogModelBrowser
      */
     private function slice(string $provider): array
     {
-        $cached = $this->cachedSlice($provider);
+        $cacheKey = $this->cacheKey($provider);
+        $cached = $this->cachedSlice($cacheKey);
 
         if ($cached !== null) {
             return $cached;
@@ -295,15 +296,15 @@ final readonly class CatalogModelBrowser
 
         try {
             return Cache::lock(sprintf('ai-pricing:catalog-fetch:%s', $provider), self::FETCH_LOCK_SECONDS)
-                ->block(self::FETCH_WAIT_SECONDS, function () use ($provider): array {
-                    $cached = $this->cachedSlice($provider);
+                ->block(self::FETCH_WAIT_SECONDS, function () use ($provider, $cacheKey): array {
+                    $cached = $this->cachedSlice($cacheKey);
 
                     if ($cached !== null) {
                         return $cached;
                     }
 
                     $slice = $this->fetchSlice($provider);
-                    Cache::put($this->cacheKey($provider), $slice, self::CACHE_TTL_SECONDS);
+                    Cache::put($cacheKey, $slice, self::CACHE_TTL_SECONDS);
 
                     return $slice;
                 });
@@ -313,21 +314,25 @@ final readonly class CatalogModelBrowser
     }
 
     /**
-     * The cached slice, or null on a cold cache. Never fetches.
+     * The cached slice under the given cache key, or null on a cold cache.
+     * Never fetches.
      *
      * @return array{covered: bool, entries: list<array{model: string, source: string, source_url: string|null, source_updated_at: string|null, tiered: bool, prices: array<string, string|null>}>}|null
      */
-    private function cachedSlice(string $provider): ?array
+    private function cachedSlice(string $cacheKey): ?array
     {
         /** @var array{covered: bool, entries: list<array{model: string, source: string, source_url: string|null, source_updated_at: string|null, tiered: bool, prices: array<string, string|null>}>}|null $cached */
-        $cached = Cache::get($this->cacheKey($provider));
+        $cached = Cache::get($cacheKey);
 
         return is_array($cached) ? $cached : null;
     }
 
     /**
      * Keyed per provider and per enabled-source combination, so switching a
-     * feed on or off in AI settings never serves a slice built from the old set.
+     * feed on or off in AI settings never serves a slice built from the old
+     * set. Also folds in whether an xAI key is configured: with xAI enabled
+     * but no key, xAI is quietly excluded from coverage, so adding the key
+     * later must not keep serving the pre-key cached result.
      */
     private function cacheKey(string $provider): string
     {
@@ -336,9 +341,21 @@ final readonly class CatalogModelBrowser
             'litellm' => $this->aiSettings->liteLlmPricingEnabled(),
             'openrouter' => $this->aiSettings->openRouterPricingEnabled(),
             'xai' => $this->aiSettings->xaiPricingEnabled(),
+            'xai_key' => $this->xaiKeyConfigured(),
         ], JSON_THROW_ON_ERROR));
 
         return sprintf('ai-pricing:catalog:%s:%s', $provider, $fingerprint);
+    }
+
+    /**
+     * Same check as {@see PricingCatalog::xaiKeyConfigured()} (private there),
+     * kept here rather than duplicated verbatim as a single expression.
+     */
+    private function xaiKeyConfigured(): bool
+    {
+        $key = config('ai.providers.xai.key');
+
+        return is_string($key) && $key !== '';
     }
 
     /**
