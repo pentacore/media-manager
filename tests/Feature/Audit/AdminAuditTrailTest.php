@@ -6,6 +6,7 @@ use App\Enums\UserRole;
 use App\Models\ActionRequest;
 use App\Models\ActionTypeConfig;
 use App\Models\ActivityLog;
+use App\Models\BazarrServiceLink;
 use App\Models\EmbyUserLink;
 use App\Models\ServiceConnection;
 use App\Models\User;
@@ -145,6 +146,22 @@ test('a connection update masks a credential URL and a rotated API key', functio
         ->not->toContain('hunter2')
         ->not->toContain('rotated-api-key')
         ->not->toContain('old-api-key');
+});
+
+test('a Bazarr save that only repoints its mapping is audited', function (): void {
+    $admin = User::factory()->admin()->create();
+    $bazarr = ServiceConnection::factory()->bazarr()->create(['name' => 'Bazarr', 'url' => 'http://bazarr.local:6767']);
+    $firstSonarr = ServiceConnection::factory()->sonarr()->create();
+    $secondSonarr = ServiceConnection::factory()->sonarr()->create();
+    BazarrServiceLink::factory()->sonarr()->create(['bazarr_connection_id' => $bazarr->id, 'related_connection_id' => $firstSonarr->id]);
+
+    $this->actingAs($admin)->put(route('admin.connections.update', $bazarr), [
+        'type' => 'bazarr', 'name' => 'Bazarr', 'url' => 'http://bazarr.local:6767', 'sonarr_connection_id' => $secondSonarr->id,
+    ])->assertRedirect(route('admin.connections.index'))->assertSessionHasNoErrors();
+
+    expect(adminAuditRow('connection.updated')->metadata['changes'])->toBe([
+        'sonarr_connection_id' => ['from' => $firstSonarr->id, 'to' => $secondSonarr->id],
+    ]);
 });
 
 test('an update that changes nothing writes no audit row', function (): void {

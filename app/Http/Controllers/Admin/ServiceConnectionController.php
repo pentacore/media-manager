@@ -759,13 +759,17 @@ class ServiceConnectionController extends Controller
     }
 
     /**
-     * The connection fields the audit diff covers. api_key and webhook_token
+     * The connection fields the audit diff covers, including a Bazarr
+     * connection's Sonarr/Radarr mapping. api_key and webhook_token
      * are masked by AuditLogger; URLs with credentials are masked too.
      *
      * @return array<string, mixed>
      */
     private function auditedAttributes(ServiceConnection $serviceConnection): array
     {
+        // Queried fresh: a mapping-only save changes these rows, not the model.
+        $mappedIds = $serviceConnection->bazarrServiceLinks()->pluck('related_connection_id', 'role');
+
         return [
             'type' => $serviceConnection->type->value,
             'name' => $serviceConnection->name,
@@ -775,6 +779,8 @@ class ServiceConnectionController extends Controller
             'webhook_token' => $serviceConnection->webhook_token,
             'is_active' => $serviceConnection->is_active,
             'settings' => $serviceConnection->settings ?? [],
+            'sonarr_connection_id' => $mappedIds->get(BazarrServiceRole::Sonarr->value),
+            'radarr_connection_id' => $mappedIds->get(BazarrServiceRole::Radarr->value),
         ];
     }
 }
