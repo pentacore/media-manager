@@ -936,25 +936,20 @@ const filteredRows = computed<QueueRow[]>(() => {
                                 </Pill>
                             </td>
                             <td class="px-3 py-2.5">
-                                <div class="font-medium">
+                                <div class="font-medium" data-history-title>
                                     {{ row.title ?? '—' }}
-                                    <div
-                                        v-if="row.subtitle"
-                                        class="text-[11.5px] font-normal text-muted-foreground"
-                                    >
-                                        {{ row.subtitle }}
-                                    </div>
-                                    <!-- Nested (not a sibling) so the source
-                                    title, which usually repeats the parsed
-                                    title as a substring, is the only element
-                                    Playwright's text locator resolves for
-                                    that title in browser tests. -->
-                                    <div
-                                        v-if="row.source_title"
-                                        class="font-mono-tabular mt-1 text-[11px] font-normal break-all text-fg-subtle"
-                                    >
-                                        {{ row.source_title }}
-                                    </div>
+                                </div>
+                                <div
+                                    v-if="row.subtitle"
+                                    class="text-[11.5px] text-muted-foreground"
+                                >
+                                    {{ row.subtitle }}
+                                </div>
+                                <div
+                                    v-if="row.source_title"
+                                    class="font-mono-tabular mt-1 text-[11px] break-all text-fg-subtle"
+                                >
+                                    {{ row.source_title }}
                                 </div>
                             </td>
                             <td class="px-3 py-2.5 text-[12px]">

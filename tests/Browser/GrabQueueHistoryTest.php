@@ -50,13 +50,13 @@ test('an admin pages Sonarr history and marks a grab as failed', function (): vo
     visit(route('media.library.activity.queue', absolute: false))
         ->assertNoSmoke()
         ->click('[data-activity-tab="history"]')
-        ->assertSeeIn('[data-history-row="sonarr-55"]', 'Severance')
+        ->assertSeeIn('[data-history-row="sonarr-55"] [data-history-title]', 'Severance')
         ->assertCount('[data-history-row="sonarr-56"] [data-history-mark-failed]', 0)
         ->assertSeeIn('[data-history-page]', 'Page 1 of 2')
         ->click('[data-history-row="sonarr-55"] [data-history-mark-failed]')
         ->assertSee("Marked as failed — Sonarr will blocklist the release and search again if 'Redownload failed' is on.")
         ->click('[data-history-next]')
-        ->assertSeeIn('[data-history-row="sonarr-99"]', 'Andor')
+        ->assertSeeIn('[data-history-row="sonarr-99"] [data-history-title]', 'Andor')
         ->assertSeeIn('[data-history-page]', 'Page 2 of 2')
         ->assertNoSmoke();
 
@@ -70,7 +70,7 @@ test('the Radarr tab shows Radarr history', function (): void {
         ->assertNoSmoke()
         ->click('[data-activity-tab="history"]')
         ->click('[data-history-service-tab="radarr"]')
-        ->assertSeeIn('[data-history-row="radarr-7"]', 'Dune')
+        ->assertSeeIn('[data-history-row="radarr-7"] [data-history-title]', 'Dune')
         ->assertMissing('[data-history-row="sonarr-55"]');
 });
 
@@ -79,6 +79,23 @@ test('members see history without the mark failed control', function (): void {
 
     visit(route('media.library.activity.queue', ['history_service' => 'sonarr'], absolute: false))
         ->assertNoSmoke()
-        ->assertSeeIn('[data-history-row="sonarr-55"]', 'Severance')
+        ->assertSeeIn('[data-history-row="sonarr-55"] [data-history-title]', 'Severance')
         ->assertMissing('[data-history-mark-failed]');
+});
+
+test('a Sonarr outage shows the history error instead of an empty table', function (): void {
+    // Point Sonarr at a distinct host so this fake wins outright instead of
+    // competing with the beforeEach's sonarr.local stub for the same URL
+    // (Http::fake matches the first-registered pattern, not the latest).
+    ServiceConnection::query()->where('type', 'sonarr')->update(['url' => 'http://sonarr-down.local:8989']);
+    Http::fake([
+        'sonarr-down.local:8989/api/v3/queue*' => Http::response(['records' => []]),
+        'sonarr-down.local:8989/api/v3/history*' => Http::response('Service Unavailable', 503),
+    ]);
+    $this->actingAs(User::factory()->member()->create());
+
+    visit(route('media.library.activity.queue', ['history_service' => 'sonarr'], absolute: false))
+        ->assertNoSmoke()
+        ->assertSeeIn('[data-history-error]', 'Sonarr is unreachable right now')
+        ->assertMissing('[data-history-empty]');
 });
