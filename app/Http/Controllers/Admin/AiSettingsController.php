@@ -9,11 +9,14 @@ use App\Ai\ProviderCapabilities;
 use App\Enums\AiMode;
 use App\Enums\AiReasoningLevel;
 use App\Enums\OpenRouterSort;
+use App\Enums\SettingsGroup;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Admin\UpdateAiSettingsRequest;
 use App\Jobs\ReembedLibrary;
 use App\Services\AiBudget\AiBudgetGuard;
 use App\Services\AiBudget\UnpricedModelDetector;
+use App\Services\Audit\AuditLogger;
+use App\Services\Audit\SettingsSnapshot;
 use App\Settings\AiSettings;
 use App\Settings\OpenRouterSettings;
 use Illuminate\Http\RedirectResponse;
@@ -208,7 +211,10 @@ class AiSettingsController extends Controller
         UpdateAiSettingsRequest $updateAiSettingsRequest,
         AiSettings $aiSettings,
         OpenRouterSettings $openRouterSettings,
+        SettingsSnapshot $settingsSnapshot,
+        AuditLogger $auditLogger,
     ): RedirectResponse {
+        $before = $settingsSnapshot->capture(SettingsGroup::Ai);
         $validated = $updateAiSettingsRequest->validated();
 
         $aiSettings->setMode(AiMode::from($validated['mode']));
@@ -280,6 +286,8 @@ class AiSettingsController extends Controller
         if (array_key_exists('embeddings_model', $validated)) {
             $aiSettings->setEmbeddingsModel($validated['embeddings_model']);
         }
+
+        $auditLogger->settingsUpdated(SettingsGroup::Ai, $before, $settingsSnapshot->capture(SettingsGroup::Ai));
 
         Inertia::flash('toast', ['type' => 'success', 'message' => __('AI settings updated.')]);
 

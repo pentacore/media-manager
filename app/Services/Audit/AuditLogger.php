@@ -7,6 +7,7 @@ namespace App\Services\Audit;
 use App\Enums\ActivityLogCategory;
 use App\Enums\SettingsGroup;
 use App\Models\ActivityLog;
+use App\Models\NotificationDestination;
 use App\Models\ServiceConnection;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Auth;
@@ -28,6 +29,7 @@ final readonly class AuditLogger
      */
     public const array SUBJECT_SECRET_FIELDS = [
         'notification_destinations' => ['config.url'],
+        NotificationDestination::class => ['config.url'],
     ];
 
     /**
