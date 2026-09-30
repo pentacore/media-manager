@@ -69,6 +69,14 @@ function submit(): void {
     );
 }
 
+// The same guid can come back from several indexers, so a row is identified
+// by indexer id and release key together.
+function releaseRowKey(release: IndexerRelease): string | null {
+    return release.key === null || release.indexer_id === null
+        ? null
+        : `${release.indexer_id}:${release.key}`;
+}
+
 async function grab(release: IndexerRelease): Promise<void> {
     if (
         release.key === null ||
@@ -78,7 +86,7 @@ async function grab(release: IndexerRelease): Promise<void> {
         return;
     }
 
-    grabbing.value = release.key;
+    grabbing.value = releaseRowKey(release);
 
     try {
         const data = await jsonRequest<{ message: string }>(
@@ -198,8 +206,8 @@ function formatAge(days: number): string {
             <TableBody>
                 <TableRow
                     v-for="(release, index) in results"
-                    :key="release.key ?? `${index}-${release.title}`"
-                    :data-prowlarr-release="release.key ?? undefined"
+                    :key="releaseRowKey(release) ?? `${index}-${release.title}`"
+                    :data-prowlarr-release="releaseRowKey(release) ?? undefined"
                 >
                     <TableCell class="font-medium">{{
                         release.title
@@ -229,7 +237,10 @@ function formatAge(days: number): string {
                             @click="grab(release)"
                         >
                             <Loader2
-                                v-if="grabbing === release.key"
+                                v-if="
+                                    grabbing !== null &&
+                                    grabbing === releaseRowKey(release)
+                                "
                                 class="size-3.5 animate-spin"
                             />
                             <Download v-else class="size-3.5" />Grab
