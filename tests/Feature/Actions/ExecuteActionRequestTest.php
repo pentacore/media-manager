@@ -7,6 +7,7 @@ use App\Events\ActionRequestStatusChanged;
 use App\Jobs\ExecuteActionRequest;
 use App\Models\ActionRequest;
 use App\Models\ActivityLog;
+use App\Models\ServiceConnection;
 use App\Services\Actions\ActionExecutor;
 use App\Services\Bazarr\BazarrActions;
 use App\Services\Bazarr\BazarrIndeterminateOutcomeException;
@@ -20,6 +21,7 @@ use Illuminate\Http\Client\Response;
 use Illuminate\Queue\Attributes\Timeout;
 use Illuminate\Queue\Attributes\UniqueFor;
 use Illuminate\Support\Facades\Event;
+use Illuminate\Support\Facades\Http;
 
 beforeEach(function (): void {
     Event::fake([ActionRequestStatusChanged::class]);
@@ -300,4 +302,38 @@ test('a skipped claim writes no executing entry', function (): void {
     new ExecuteActionRequest($request)->handle();
 
     expect(ActivityLog::query()->where('subject_id', $request->id)->where('action', 'action_request.executing')->exists())->toBeFalse();
+});
+
+test('a grab whose release expired while waiting fails with a search-again message', function (): void {
+    Http::preventStrayRequests();
+    $connection = ServiceConnection::factory()->sonarr()->create(['url' => 'http://sonarr.local:8989', 'api_key' => 'k']);
+    Http::fake(['sonarr.local:8989/api/v3/release' => Http::response(['message' => "Couldn't find requested release in cache, try searching again"], 404)]);
+
+    $request = ActionRequest::factory()->autoExecute()->create([
+        'type' => 'grab_release',
+        'payload' => ['service' => 'sonarr', 'series_id' => 7, 'guid' => 'g-1', 'indexer_id' => 3, 'release' => ['title' => 'x'], 'service_connection_id' => $connection->id],
+    ]);
+
+    new ExecuteActionRequest($request)->handle();
+
+    $fresh = $request->fresh();
+    expect($fresh->status)->toBe(ActionRequestStatus::Failed)
+        ->and($fresh->result['reason'])->toBe('execution_failed')
+        ->and($fresh->result['message'])->toContain('Run the interactive search again');
+});
+
+test('a grab whose response is lost fails once instead of retrying into a second download', function (): void {
+    Http::preventStrayRequests();
+    $connection = ServiceConnection::factory()->sonarr()->create(['url' => 'http://sonarr.local:8989', 'api_key' => 'k']);
+    Http::fake(['sonarr.local:8989/api/v3/release' => fn (): never => throw new ConnectionException('reset')]);
+
+    $request = ActionRequest::factory()->autoExecute()->create([
+        'type' => 'grab_release',
+        'payload' => ['service' => 'sonarr', 'series_id' => 7, 'guid' => 'g-1', 'indexer_id' => 3, 'release' => ['title' => 'x'], 'service_connection_id' => $connection->id],
+    ]);
+
+    new ExecuteActionRequest($request)->handle();
+
+    expect($request->fresh()->status)->toBe(ActionRequestStatus::Failed)
+        ->and($request->fresh()->result['message'])->toContain('did not confirm the grab');
 });

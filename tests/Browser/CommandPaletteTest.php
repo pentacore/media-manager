@@ -129,3 +129,14 @@ test('the palette never lists the mobile-only Search link', function (): void {
         ->assertSeeIn('[data-palette-sections]', 'Media')
         ->assertDontSeeIn('[data-palette-sections]', 'Search');
 });
+
+test('a viewer palette offers only viewer destinations', function (): void {
+    $this->actingAs(User::factory()->create());
+
+    visit('/dashboard')
+        ->assertNoSmoke()
+        ->keys(':root', 'Meta+k')
+        ->assertSeeIn('[data-palette-sections]', 'Now Playing')
+        ->assertDontSeeIn('[data-palette-sections]', 'Action Queue')
+        ->assertDontSeeIn('[data-palette-sections]', 'Grab queue');
+});

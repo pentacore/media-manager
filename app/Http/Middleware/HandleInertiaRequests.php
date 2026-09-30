@@ -5,14 +5,18 @@ declare(strict_types=1);
 namespace App\Http\Middleware;
 
 use App\Enums\ActionRequestStatus;
+use App\Enums\ServiceType;
 use App\Http\Resources\SharedUserResource;
 use App\Models\ActionRequest;
 use App\Models\EmbyActivity;
 use App\Models\MediaReplacementAttempt;
+use App\Models\ServiceConnection;
 use App\Models\User;
 use App\Providers\AIServiceProvider;
 use App\Services\Library\InterventionCounter;
+use App\Services\Library\WantedCounter;
 use App\Services\Sabnzbd\SabnzbdDownloadCounter;
+use App\Support\Abilities;
 use App\Support\AppVersion;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
@@ -60,11 +64,18 @@ class HandleInertiaRequests extends Middleware
             'name' => config('app.name'),
             'auth' => [
                 'user' => $user ? new SharedUserResource($user)->toArray($request) : null,
+                'can' => Abilities::for($user),
             ],
             'ai' => [
                 'enabled' => AIServiceProvider::enabled(),
             ],
-            'nav' => $user ? $this->navCounts($user) : ['pendingActions' => 0, 'activeSessions' => 0, 'unreadNotifications' => 0, 'libraryIntervention' => 0, 'sabnzbdDownloads' => ['queued' => 0, 'completed' => 0], 'replacementAttention' => 0],
+            'integrations' => [
+                'seerr' => $user !== null && ServiceConnection::query()
+                    ->where('type', ServiceType::Seerr)
+                    ->where('is_active', true)
+                    ->exists(),
+            ],
+            'nav' => $user ? $this->navCounts($user) : ['pendingActions' => 0, 'activeSessions' => 0, 'unreadNotifications' => 0, 'libraryIntervention' => 0, 'sabnzbdDownloads' => ['queued' => 0, 'completed' => 0], 'replacementAttention' => 0, 'wantedMissing' => 0],
             'version' => $user ? [
                 'current' => AppVersion::current(),
                 'latest' => AppVersion::latest(),
@@ -79,10 +90,15 @@ class HandleInertiaRequests extends Middleware
      * indexed columns and bound clauses. Live updates layer on top via
      * the sidebar's WS subscriptions.
      *
-     * @return array{pendingActions: int, activeSessions: int, unreadNotifications: int, libraryIntervention: int, sabnzbdDownloads: array{queued: int, completed: int}, replacementAttention: int}
+     * @return array{pendingActions: int, activeSessions: int, unreadNotifications: int, libraryIntervention: int, sabnzbdDownloads: array{queued: int, completed: int}, replacementAttention: int, wantedMissing: int}
      */
     private function navCounts(User $user): array
     {
+        // The library badges (intervention queue, SABnzbd, Wanted) sit on
+        // manage-library pages; viewers get constant zeros and never trigger
+        // a recompute or an upstream call.
+        $canManageLibrary = $user->can(Abilities::MANAGE_LIBRARY);
+
         return [
             'pendingActions' => ActionRequest::where('status', ActionRequestStatus::Pending)->count(),
             'activeSessions' => EmbyActivity::where('action', 'played')
@@ -95,11 +111,12 @@ class HandleInertiaRequests extends Middleware
             // boot (cache empty, scheduler not yet ticked) we recompute
             // inline once so the badge isn't silently zero for the first
             // five minutes after deploy.
-            'libraryIntervention' => $this->libraryInterventionCount(),
-            'sabnzbdDownloads' => $this->sabnzbdDownloadCounts(),
+            'libraryIntervention' => $canManageLibrary ? $this->libraryInterventionCount() : 0,
+            'sabnzbdDownloads' => $canManageLibrary ? $this->sabnzbdDownloadCounts() : ['queued' => 0, 'completed' => 0],
             // Admin-only surface (Admin → Media Replacement → Attempts); members
             // get a constant zero so the shared shape stays stable.
             'replacementAttention' => $user->isAdmin() ? MediaReplacementAttempt::unacknowledgedAttentionCount() : 0,
+            'wantedMissing' => $canManageLibrary ? $this->wantedMissingCount() : 0,
         ];
     }
 
@@ -138,6 +155,24 @@ class HandleInertiaRequests extends Middleware
             return $sabnzbdDownloadCounter->recompute();
         } catch (Throwable) {
             return ['queued' => 0, 'completed' => 0];
+        }
+    }
+
+    private function wantedMissingCount(): int
+    {
+        $wantedCounter = resolve(WantedCounter::class);
+
+        if (Cache::has(WantedCounter::CACHE_KEY)) {
+            return $wantedCounter->get();
+        }
+
+        // Cold cache only (the scheduled library:refresh-wanted-count keeps
+        // it warm): warm() lets one request recompute under a short lock with
+        // non-retrying calls, and never lets a flaky *arr 500 a page render.
+        try {
+            return $wantedCounter->warm();
+        } catch (Throwable) {
+            return 0;
         }
     }
 }

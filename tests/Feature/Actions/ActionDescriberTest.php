@@ -211,3 +211,200 @@ test('an unknown type is undescribable', function (): void {
 test('a missing target id is undescribable', function (): void {
     resolve(ActionDescriber::class)->describe('delete_series', ['delete_files' => true]);
 })->throws(UndescribableAction::class, 'sonarr_series_id');
+
+function describerMovie(): void
+{
+    $radarr = ServiceConnection::factory()->radarr()->create(['url' => 'http://radarr.local:7878', 'name' => 'Radarr']);
+    IndexedMovie::factory()->for($radarr, 'serviceConnection')->create(['radarr_id' => 10, 'title' => 'Dune', 'year' => 2021]);
+}
+
+test('monitor_episodes names the season or the episode count', function (array $payload, string $title, string $effect): void {
+    describerSeries();
+
+    $actionDescription = resolve(ActionDescriber::class)->describe('monitor_episodes', ['series_id' => 142, ...$payload]);
+
+    expect($actionDescription->title)->toBe($title)
+        ->and($actionDescription->description)->toBe($effect)
+        ->and($actionDescription->verified)->toBeTrue();
+})->with([
+    'season' => [['episode_ids' => [1, 2], 'season_number' => 2, 'monitored' => true], 'Monitor season 2 of series "Severance (2022)"', 'Sonarr will start monitoring every episode in the season.'],
+    'episodes' => [['episode_ids' => [1, 2, 3], 'monitored' => false], 'Unmonitor 3 episodes of series "Severance (2022)"', 'Sonarr will stop monitoring the selected episodes.'],
+    'one episode' => [['episode_ids' => [1], 'monitored' => true], 'Monitor 1 episode of series "Severance (2022)"', 'Sonarr will start monitoring the selected episodes.'],
+]);
+
+test('search_media words each targeted search', function (array $payload, string $title): void {
+    describerSeries();
+
+    expect(resolve(ActionDescriber::class)->describe('search_media', ['service' => 'sonarr', 'series_id' => 142, ...$payload])->title)->toBe($title);
+})->with([
+    'series' => [['command' => 'series_search'], 'Search for series "Severance (2022)"'],
+    'season' => [['command' => 'season_search', 'season_number' => 2], 'Search for season 2 of series "Severance (2022)"'],
+    'episode' => [['command' => 'episode_search', 'episode_ids' => [5]], 'Search for 1 episode of series "Severance (2022)"'],
+]);
+
+test('search_media names the movie', function (): void {
+    describerMovie();
+
+    expect(resolve(ActionDescriber::class)->describe('search_media', ['service' => 'radarr', 'command' => 'movies_search', 'movie_ids' => [10]])->title)
+        ->toBe('Search for movie "Dune (2021)"');
+});
+
+test('search_media describes a count instead of naming only the first movie when more than one is targeted', function (): void {
+    ServiceConnection::factory()->radarr()->create(['url' => 'http://radarr.local:7878', 'name' => 'Radarr']);
+
+    $actionDescription = resolve(ActionDescriber::class)->describe('search_media', ['service' => 'radarr', 'command' => 'movies_search', 'movie_ids' => [10, 11, 12]]);
+
+    expect($actionDescription->title)->toBe('Search for 3 movies')
+        ->and($actionDescription->description)->toBe('Radarr will search its indexers for the 3 movies.')
+        ->and($actionDescription->verified)->toBeTrue();
+});
+
+test('library-wide searches name the server', function (string $command, string $title): void {
+    describerSeries();
+    describerMovie();
+
+    $actionDescription = resolve(ActionDescriber::class)->describe('search_media', ['command' => $command]);
+
+    expect($actionDescription->title)->toBe($title)->and($actionDescription->verified)->toBeTrue();
+})->with([
+    'missing episodes' => ['missing_episode_search', 'Search for all missing episodes in Sonarr server "Sonarr"'],
+    'cutoff episodes' => ['cutoff_unmet_episode_search', 'Search for all episodes below their quality cutoff in Sonarr server "Sonarr"'],
+    'missing movies' => ['missing_movies_search', 'Search for all missing movies in Radarr server "Radarr"'],
+    'cutoff movies' => ['cutoff_unmet_movies_search', 'Search for all movies below their quality cutoff in Radarr server "Radarr"'],
+]);
+
+test('grab_release names the target and lists the release facts', function (): void {
+    describerSeries();
+
+    $actionDescription = resolve(ActionDescriber::class)->describe('grab_release', [
+        'service' => 'sonarr',
+        'series_id' => 142,
+        'guid' => 'g',
+        'indexer_id' => 3,
+        'release' => ['title' => 'Severance.S02E01.1080p', 'quality' => 'WEBDL-1080p', 'size' => 2_147_483_648, 'indexer' => 'NZBgeek', 'rejections' => ['Not an upgrade']],
+    ]);
+
+    expect($actionDescription->title)->toBe('Grab release for series "Severance (2022)"')
+        ->and($actionDescription->description)->toBe('Sonarr will send "Severance.S02E01.1080p" to its download client.')
+        ->and($actionDescription->details)->toContain(['label' => 'Quality', 'value' => 'WEBDL-1080p'])
+        ->and($actionDescription->details)->toContain(['label' => 'Size', 'value' => '2.0 GB'])
+        ->and($actionDescription->details)->toContain(['label' => 'Rejected by', 'value' => 'Not an upgrade']);
+});
+
+test('the new types are undescribable without their target', function (string $type, array $payload): void {
+    expect(fn () => resolve(ActionDescriber::class)->describe($type, $payload))->toThrow(UndescribableAction::class);
+})->with([
+    'episodes without series' => ['monitor_episodes', ['episode_ids' => [1]]],
+    'search without command' => ['search_media', ['service' => 'sonarr', 'series_id' => 1]],
+    'grab without release' => ['grab_release', ['service' => 'sonarr', 'series_id' => 1]],
+    'grab without service' => ['grab_release', ['release' => ['title' => 'x']]],
+]);
+
+function describerSecondSonarr(): ServiceConnection
+{
+    $second = ServiceConnection::factory()->sonarr()->create(['url' => 'http://sonarr2.local:8989', 'name' => 'Anime']);
+    IndexedSeries::factory()->for($second, 'serviceConnection')->create(['sonarr_id' => 142, 'title' => 'Severance (Anime Cut)', 'year' => 2022]);
+
+    return $second;
+}
+
+test("monitor_episodes describes the pinned connection's series, not the default one", function (): void {
+    describerSeries();
+    $serviceConnection = describerSecondSonarr();
+
+    $actionDescription = resolve(ActionDescriber::class)->describe('monitor_episodes', [
+        'series_id' => 142, 'episode_ids' => [1], 'monitored' => true, 'service_connection_id' => $serviceConnection->id,
+    ]);
+
+    expect($actionDescription->title)->toBe('Monitor 1 episode of series "Severance (Anime Cut) (2022)"')
+        ->and($actionDescription->verified)->toBeTrue();
+});
+
+test('search_media targets the series of the pinned connection', function (): void {
+    describerSeries();
+    $serviceConnection = describerSecondSonarr();
+
+    $actionDescription = resolve(ActionDescriber::class)->describe('search_media', [
+        'service' => 'sonarr', 'series_id' => 142, 'command' => 'series_search', 'service_connection_id' => $serviceConnection->id,
+    ]);
+
+    expect($actionDescription->title)->toBe('Search for series "Severance (Anime Cut) (2022)"');
+});
+
+test('grab_release names the series of the pinned connection', function (): void {
+    describerSeries();
+    $serviceConnection = describerSecondSonarr();
+
+    $actionDescription = resolve(ActionDescriber::class)->describe('grab_release', [
+        'service' => 'sonarr',
+        'series_id' => 142,
+        'guid' => 'g',
+        'indexer_id' => 3,
+        'service_connection_id' => $serviceConnection->id,
+        'release' => ['title' => 'Severance.S02E01.1080p'],
+    ]);
+
+    expect($actionDescription->title)->toBe('Grab release for series "Severance (Anime Cut) (2022)"');
+});
+
+test('a library-wide search honours a connection pin, naming that instance', function (): void {
+    describerSeries();
+    $serviceConnection = describerSecondSonarr();
+
+    $actionDescription = resolve(ActionDescriber::class)->describe('search_media', [
+        'command' => 'missing_episode_search', 'service_connection_id' => $serviceConnection->id,
+    ]);
+
+    expect($actionDescription->title)->toBe('Search for all missing episodes in Sonarr server "Anime"')
+        ->and($actionDescription->verified)->toBeTrue();
+});
+
+test('a library-wide search aborts when the pin names a connection of the wrong service', function (): void {
+    describerSeries();
+    $radarr = ServiceConnection::factory()->radarr()->create(['url' => 'http://radarr.local:7878']);
+
+    expect(fn () => resolve(ActionDescriber::class)->describe('search_media', [
+        'command' => 'missing_episode_search', 'service_connection_id' => $radarr->id,
+    ]))->toThrow(InvalidArgumentException::class);
+});
+
+test('monitor_episodes aborts when the pin names a connection of the wrong service', function (): void {
+    describerSeries();
+    $radarr = ServiceConnection::factory()->radarr()->create(['url' => 'http://radarr.local:7878']);
+
+    expect(fn () => resolve(ActionDescriber::class)->describe('monitor_episodes', [
+        'series_id' => 142, 'episode_ids' => [1], 'monitored' => true, 'service_connection_id' => $radarr->id,
+    ]))->toThrow(InvalidArgumentException::class);
+});
+
+test('a series-targeted search_media aborts when the pin names a connection of the wrong service', function (): void {
+    describerSeries();
+    $radarr = ServiceConnection::factory()->radarr()->create(['url' => 'http://radarr.local:7878']);
+
+    expect(fn () => resolve(ActionDescriber::class)->describe('search_media', [
+        'service' => 'sonarr', 'series_id' => 142, 'command' => 'series_search', 'service_connection_id' => $radarr->id,
+    ]))->toThrow(InvalidArgumentException::class);
+});
+
+test('a movie search_media aborts when the pin names a connection of the wrong service', function (): void {
+    describerMovie();
+    $sonarr = ServiceConnection::factory()->sonarr()->create(['url' => 'http://sonarr.local:8989']);
+
+    expect(fn () => resolve(ActionDescriber::class)->describe('search_media', [
+        'service' => 'radarr', 'command' => 'movies_search', 'movie_ids' => [10], 'service_connection_id' => $sonarr->id,
+    ]))->toThrow(InvalidArgumentException::class);
+});
+
+test('grab_release aborts when the pin names a connection of the wrong service', function (): void {
+    describerSeries();
+    $radarr = ServiceConnection::factory()->radarr()->create(['url' => 'http://radarr.local:7878']);
+
+    expect(fn () => resolve(ActionDescriber::class)->describe('grab_release', [
+        'service' => 'sonarr',
+        'series_id' => 142,
+        'guid' => 'g',
+        'indexer_id' => 3,
+        'service_connection_id' => $radarr->id,
+        'release' => ['title' => 'Severance.S02E01.1080p'],
+    ]))->toThrow(InvalidArgumentException::class);
+});

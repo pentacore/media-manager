@@ -20,6 +20,7 @@ import {
     SelectValue,
 } from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
+import { useCan } from '@/composables/useCan';
 import { useRealtimeReload } from '@/composables/useRealtimeReload';
 import { arrPosterUrl } from '@/lib/arr';
 import { cn } from '@/lib/utils';
@@ -52,10 +53,12 @@ interface Series {
 }
 
 const props = defineProps<{
-    connection: { url: string };
+    connection: { url: string | null };
     series?: Series[];
     qualityProfiles?: QualityProfile[];
 }>();
+
+const { can } = useCan();
 
 defineOptions({
     layout: {
@@ -186,7 +189,7 @@ function progressPct(item: Series): number {
 }
 
 function sonarrSeriesUrl(slug: string | null): string | null {
-    if (!slug) {
+    if (!slug || !props.connection.url) {
         return null;
     }
 
@@ -233,16 +236,25 @@ function sonarrSeriesUrl(slug: string | null): string | null {
                         :class="{ 'animate-spin': syncing }"
                     />Sync
                 </Button>
-                <OpenInServiceButton
-                    :href="`${props.connection.url}/activity/queue`"
-                    label="Activity"
-                />
-                <OpenInServiceButton
-                    :href="props.connection.url"
-                    label="Open Sonarr"
-                />
-                <Link :href="SeriesController.create.url()">
-                    <Button size="sm" class="h-7 gap-1.5 text-xs">
+                <template v-if="can('manage-library') && props.connection.url">
+                    <OpenInServiceButton
+                        :href="`${props.connection.url}/activity/queue`"
+                        label="Activity"
+                    />
+                    <OpenInServiceButton
+                        :href="props.connection.url"
+                        label="Open Sonarr"
+                    />
+                </template>
+                <Link
+                    v-if="can('manage-library')"
+                    :href="SeriesController.create.url()"
+                >
+                    <Button
+                        size="sm"
+                        class="h-7 gap-1.5 text-xs"
+                        data-add-series
+                    >
                         <Plus class="size-3.5" />Add series
                     </Button>
                 </Link>
@@ -480,7 +492,10 @@ function sonarrSeriesUrl(slug: string | null): string | null {
                             </td>
                             <td class="px-3 py-2.5 text-right">
                                 <a
-                                    v-if="sonarrSeriesUrl(item.title_slug)"
+                                    v-if="
+                                        can('manage-library') &&
+                                        sonarrSeriesUrl(item.title_slug)
+                                    "
                                     :href="
                                         sonarrSeriesUrl(item.title_slug) ??
                                         undefined

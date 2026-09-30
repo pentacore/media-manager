@@ -24,6 +24,7 @@ import {
     TableHeader,
     TableRow,
 } from '@/components/ui/table';
+import { useCan } from '@/composables/useCan';
 import { dashboard } from '@/routes';
 import type { EmbyUserLinkResource } from '@/typefinder/resources/EmbyUserLinkResource';
 
@@ -41,18 +42,9 @@ defineOptions({
 });
 
 const page = usePage();
+const { can } = useCan();
 
-const isAdmin = computed(() => {
-    const role = page.props.auth.user?.role;
-
-    if (!role) {
-        return false;
-    }
-
-    const value = typeof role === 'string' ? role : role.value;
-
-    return value === 'admin';
-});
+const isAdmin = computed(() => can('admin'));
 
 const currentUserId = computed(() => page.props.auth.user?.id ?? null);
 

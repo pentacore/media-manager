@@ -13,6 +13,10 @@ final readonly class ActionRequestBrowserPayload
      */
     public function for(ActionRequest $actionRequest): array
     {
+        if ($actionRequest->type === 'grab_release') {
+            return $this->withoutReleaseGuid($actionRequest->payload);
+        }
+
         if ($actionRequest->type !== 'replace_media_file') {
             return $actionRequest->payload;
         }
@@ -60,6 +64,25 @@ final readonly class ActionRequestBrowserPayload
             'description_verified' => $actionRequest->description_verified,
             'agent_rationale' => is_string($rationale) && $rationale !== '' ? mb_substr($rationale, 0, 1_000) : null,
         ];
+    }
+
+    /**
+     * A release guid can carry a private tracker passkey, so a grab request's
+     * payload reaches the browser without it — top level or inside the
+     * release facts. The executor still reads it from the stored payload.
+     *
+     * @param  array<string, mixed>  $payload
+     * @return array<string, mixed>
+     */
+    private function withoutReleaseGuid(array $payload): array
+    {
+        unset($payload['guid']);
+
+        if (is_array($payload['release'] ?? null)) {
+            unset($payload['release']['guid']);
+        }
+
+        return $payload;
     }
 
     private function boundedString(ActionRequest $actionRequest, string $key, int $length): ?string

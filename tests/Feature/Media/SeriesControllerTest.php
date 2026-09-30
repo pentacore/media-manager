@@ -27,9 +27,11 @@ test('guests are redirected to login from series index', function (): void {
     $this->get(route('media.series.index'))->assertRedirect(route('login'));
 });
 
-test('viewers cannot access series index', function (): void {
-    $viewer = User::factory()->create();
-    $this->actingAs($viewer)->get(route('media.series.index'))->assertForbidden();
+test('viewers can browse the series index', function (): void {
+    $this->actingAs(User::factory()->create())
+        ->get(route('media.series.index'))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page->component('Sonarr/Series/Index'));
 });
 
 test('series index shell renders with connection url before deferred data loads', function (): void {
@@ -363,6 +365,52 @@ test('series index prefers external_url for connection link', function (): void 
         );
 });
 
+test('viewers do not receive the connection url on the series index shell', function (): void {
+    $this->actingAs(User::factory()->create())
+        ->get(route('media.series.index'))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->component('Sonarr/Series/Index')
+            ->where('connection.url', null)
+        );
+});
+
+test('viewers do not receive the connection url or root folder path on the series show page', function (): void {
+    Http::fake([
+        'sonarr.local:8989/api/v3/series/42' => Http::response([
+            'id' => 42, 'title' => 'My Show', 'titleSlug' => 'my-show', 'year' => 2024, 'overview' => 'A show', 'status' => 'ended', 'monitored' => true, 'qualityProfileId' => 1, 'seasons' => [], 'statistics' => ['sizeOnDisk' => 0, 'episodeCount' => 0, 'episodeFileCount' => 0], 'images' => [], 'network' => 'HBO', 'runtime' => 60, 'rootFolderPath' => '/tv',
+        ]),
+        'sonarr.local:8989/api/v3/episode*' => Http::response([]),
+    ]);
+
+    $this->actingAs(User::factory()->create())
+        ->get(route('media.series.show', 42))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->component('Sonarr/Series/Show')
+            ->where('connection.url', null)
+            ->missing('series.root_folder_path')
+        );
+});
+
+test('members still receive the connection url and root folder path on the series show page', function (): void {
+    Http::fake([
+        'sonarr.local:8989/api/v3/series/42' => Http::response([
+            'id' => 42, 'title' => 'My Show', 'titleSlug' => 'my-show', 'year' => 2024, 'overview' => 'A show', 'status' => 'ended', 'monitored' => true, 'qualityProfileId' => 1, 'seasons' => [], 'statistics' => ['sizeOnDisk' => 0, 'episodeCount' => 0, 'episodeFileCount' => 0], 'images' => [], 'network' => 'HBO', 'runtime' => 60, 'rootFolderPath' => '/tv',
+        ]),
+        'sonarr.local:8989/api/v3/episode*' => Http::response([]),
+    ]);
+
+    $this->actingAs(User::factory()->member()->create())
+        ->get(route('media.series.show', 42))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->component('Sonarr/Series/Show')
+            ->where('connection.url', 'http://sonarr.local:8989')
+            ->where('series.root_folder_path', '/tv')
+        );
+});
+
 test('destroy follows the rule even when the chat AI is in advisory mode', function (): void {
     resolve(AiSettings::class)->setMode(AiMode::Advisory);
     $member = User::factory()->member()->create();
@@ -386,4 +434,35 @@ test('destroy follows the rule even when the chat AI is in advisory mode', funct
     $actionRequest = ActionRequest::query()->where('type', 'delete_series')->sole();
     expect($actionRequest->status)->toBe(ActionRequestStatus::Approved);
     Queue::assertPushed(ExecuteActionRequest::class, fn (ExecuteActionRequest $executeActionRequest): bool => $executeActionRequest->actionRequest->id === $actionRequest->id);
+});
+
+test('the series page defers the quality profiles for the profile dropdown', function (): void {
+    Http::fake([
+        'sonarr.local:8989/api/v3/series/1' => Http::response(['id' => 1, 'title' => 'Show', 'seasons' => [], 'images' => []]),
+        'sonarr.local:8989/api/v3/qualityprofile' => Http::response([['id' => 6, 'name' => 'Ultra-HD']]),
+        'sonarr.local:8989/api/v3/episode*' => Http::response([]),
+    ]);
+
+    $this->actingAs(User::factory()->member()->create())
+        ->get(route('media.series.show', ['id' => 1]))
+        ->assertInertia(fn ($page) => $page
+            ->missing('qualityProfiles')
+            ->loadDeferredProps('qualityProfiles', fn ($reload) => $reload->where('qualityProfiles', [['id' => 6, 'name' => 'Ultra-HD']])));
+});
+
+test('viewers never trigger the quality profile lookup on the series page', function (): void {
+    Http::fake([
+        'sonarr.local:8989/api/v3/series/1' => Http::response(['id' => 1, 'title' => 'Show', 'seasons' => [], 'images' => []]),
+        'sonarr.local:8989/api/v3/episode*' => Http::response([]),
+    ]);
+
+    $response = $this->actingAs(User::factory()->create())
+        ->get(route('media.series.show', ['id' => 1]))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->missing('qualityProfiles')
+            ->loadDeferredProps(fn ($reload) => $reload->where('episodes', [])->missing('qualityProfiles')));
+
+    expect($response->viewData('page')['deferredProps'] ?? [])->not->toHaveKey('qualityProfiles');
+    Http::assertNotSent(fn ($request): bool => str_contains($request->url(), '/qualityprofile'));
 });

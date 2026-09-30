@@ -5,10 +5,12 @@ declare(strict_types=1);
 namespace App\Services\Arr;
 
 use App\Models\ServiceConnection;
+use Carbon\CarbonImmutable;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\PendingRequest;
 use Illuminate\Http\Client\RequestException;
 use Illuminate\Support\Facades\Http;
+use InvalidArgumentException;
 use Throwable;
 
 abstract class ArrClient
@@ -101,16 +103,93 @@ abstract class ArrClient
     }
 
     /**
+     * @param  array<string, mixed>  $params
      * @return array<string, mixed>
      *
      * @throws RequestException|ConnectionException
      */
-    public function runCommand(string $name, array $params = []): array
+    public function runCommand(string $name, array $params = [], bool $withRetry = true): array
     {
-        return $this->buildClient()->post(sprintf('/api/%s/command', $this->apiVersion), [
+        return $this->buildClient($withRetry)->post(sprintf('/api/%s/command', $this->apiVersion), [
             'name' => $name,
             ...$params,
         ])->throw()->json() ?? [];
+    }
+
+    /**
+     * Episodes (Sonarr) or movies (Radarr) airing/releasing in the range,
+     * monitored or not — the calendar filters monitored-only client-side.
+     *
+     * @return list<array<string, mixed>>
+     *
+     * @throws RequestException|ConnectionException
+     */
+    public function getCalendar(CarbonImmutable $start, CarbonImmutable $end, bool $withRetry = true): array
+    {
+        $body = $this->buildClient($withRetry)->get(sprintf('/api/%s/calendar', $this->apiVersion), [
+            'start' => $start->toIso8601ZuluString(),
+            'end' => $end->toIso8601ZuluString(),
+            'unmonitored' => 'true',
+            ...$this->calendarQuery(),
+        ])->throw()->json();
+
+        // Upstream is expected to return a JSON array of episode/movie
+        // objects, but `json()` only decodes — it doesn't enforce the shape.
+        // A non-array body (e.g. an object-shaped error payload) or a
+        // non-array entry inside the list is dropped here, at the boundary,
+        // so callers can trust the declared list<array<...>> shape.
+        return is_array($body) ? array_values(array_filter($body, is_array(...))) : [];
+    }
+
+    /**
+     * One page of `wanted/missing` or `wanted/cutoff`, newest air date first.
+     * `$monitored` is the upstream switch: true lists monitored items, false
+     * lists unmonitored ones (there is no "both").
+     *
+     * @return array<string, mixed>
+     *
+     * @throws RequestException|ConnectionException
+     */
+    public function getWanted(string $list, int $page, int $pageSize, bool $monitored, bool $withRetry = true): array
+    {
+        throw_unless(in_array($list, ['missing', 'cutoff'], true), InvalidArgumentException::class, sprintf('Unknown wanted list "%s".', $list));
+
+        $body = $this->buildClient($withRetry)->get(sprintf('/api/%s/wanted/%s', $this->apiVersion, $list), [
+            'page' => $page,
+            'pageSize' => $pageSize,
+            'sortDirection' => 'descending',
+            'monitored' => $monitored ? 'true' : 'false',
+            ...$this->wantedQuery(),
+        ])->throw()->json();
+
+        if (! is_array($body)) {
+            return [];
+        }
+
+        // Same boundary sanitisation as getCalendar(): keep the pagination
+        // keys as-is, drop non-array records so callers can trust the
+        // declared list<array<...>> shape for `records`.
+        if (is_array($body['records'] ?? null)) {
+            $body['records'] = array_values(array_filter($body['records'], is_array(...)));
+        }
+
+        return $body;
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    protected function calendarQuery(): array
+    {
+        return [];
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    protected function wantedQuery(): array
+    {
+        return [];
     }
 
     /**

@@ -26,6 +26,7 @@ declare module '@inertiajs/core' {
             name: string;
             auth: Auth;
             ai: { enabled: boolean };
+            integrations: { seerr: boolean };
             nav: {
                 pendingActions: number;
                 activeSessions: number;
@@ -33,6 +34,7 @@ declare module '@inertiajs/core' {
                 libraryIntervention: number;
                 sabnzbdDownloads: { queued: number; completed: number };
                 replacementAttention: number;
+                wantedMissing: number;
             };
             sidebarOpen: boolean;
             version: {

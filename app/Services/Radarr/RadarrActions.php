@@ -5,14 +5,31 @@ declare(strict_types=1);
 namespace App\Services\Radarr;
 
 use App\Cache\Services\RadarrCache;
+use App\Enums\MediaSearchCommand;
 use App\Enums\ServiceType;
 use App\Models\ActionRequest;
 use App\Models\ServiceConnection;
 use App\Services\Actions\ActionExecutor;
+use App\Services\Arr\ReleaseGrabber;
+use App\Services\Arr\SearchCommandRunner;
+use App\Services\MediaReplacement\PendingReplacementGuard;
+use App\Services\MediaReplacement\ReplacementInFlight;
+use Illuminate\Support\Facades\Log;
 use InvalidArgumentException;
+use Throwable;
 
 class RadarrActions implements ActionExecutor
 {
+    /**
+     * Defaults keep `new RadarrActions` (used throughout the tests) working;
+     * the container still injects when resolving.
+     */
+    public function __construct(
+        private readonly PendingReplacementGuard $pendingReplacementGuard = new PendingReplacementGuard,
+        private readonly ReleaseGrabber $releaseGrabber = new ReleaseGrabber,
+        private readonly SearchCommandRunner $searchCommandRunner = new SearchCommandRunner,
+    ) {}
+
     /**
      * @return array<string, mixed>
      */
@@ -23,6 +40,8 @@ class RadarrActions implements ActionExecutor
             'add_movie' => $this->addMovie($actionRequest),
             'monitor_movie' => $this->monitorMovie($actionRequest),
             'set_movie_quality_profile' => $this->setMovieQualityProfile($actionRequest),
+            'search_media' => $this->searchMedia($actionRequest),
+            'grab_release' => $this->grabRelease($actionRequest),
             default => throw new InvalidArgumentException(sprintf('RadarrActions cannot execute type "%s"', $actionRequest->type)),
         };
     }
@@ -98,6 +117,9 @@ class RadarrActions implements ActionExecutor
         $monitored = (bool) ($payload['monitored'] ?? true);
 
         $serviceConnection = ServiceConnection::resolvePinned($payload, ServiceType::Radarr);
+
+        throw_if($this->pendingReplacementGuard->inFlightForMedia($serviceConnection->id, movieId: $movieId), ReplacementInFlight::forTitle());
+
         $radarrClient = new RadarrClient($serviceConnection);
         $movie = $radarrClient->getMovieById($movieId);
         $movie['monitored'] = $monitored;
@@ -132,6 +154,59 @@ class RadarrActions implements ActionExecutor
         return [
             'radarr_movie_id' => $movieId,
             'quality_profile_id' => $qualityProfileId,
+        ];
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function searchMedia(ActionRequest $actionRequest): array
+    {
+        $payload = $actionRequest->payload;
+        $command = MediaSearchCommand::tryFrom((string) ($payload['command'] ?? ''));
+
+        throw_unless($command instanceof MediaSearchCommand && $command->service() === ServiceType::Radarr, InvalidArgumentException::class, 'command is not a Radarr search');
+
+        $serviceConnection = ServiceConnection::resolvePinnedStrict($payload, ServiceType::Radarr);
+        $response = $this->searchCommandRunner->run(new RadarrClient($serviceConnection), 'Radarr', $command, $command->arrParameters($payload));
+
+        return [
+            'command' => $command->value,
+            'arr_command_id' => $response['id'] ?? null,
+        ];
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function grabRelease(ActionRequest $actionRequest): array
+    {
+        $payload = $actionRequest->payload;
+        $guid = (string) ($payload['guid'] ?? '');
+        $indexerId = (int) ($payload['indexer_id'] ?? 0);
+
+        throw_if($guid === '' || $indexerId <= 0, InvalidArgumentException::class, 'guid and indexer_id are required');
+
+        $serviceConnection = ServiceConnection::resolvePinnedStrict($payload, ServiceType::Radarr);
+        $this->releaseGrabber->grab(new RadarrClient($serviceConnection), 'Radarr', $guid, $indexerId);
+
+        try {
+            new RadarrCache($serviceConnection)->bustAll();
+        } catch (Throwable $throwable) {
+            // The grab already succeeded upstream — a stale cache is a
+            // read-freshness problem, not a reason to report the grab as
+            // failed (which would leave the member thinking nothing happened).
+            Log::warning('RadarrActions: failed to bust the Radarr cache after a successful grab', [
+                'service_connection_id' => $serviceConnection->id,
+                'guid' => $guid,
+                'exception' => $throwable::class,
+                'message' => $throwable->getMessage(),
+            ]);
+        }
+
+        return [
+            'indexer_id' => $indexerId,
+            'title' => is_string($payload['release']['title'] ?? null) ? $payload['release']['title'] : null,
         ];
     }
 }

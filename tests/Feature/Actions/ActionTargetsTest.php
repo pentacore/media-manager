@@ -7,6 +7,7 @@ use App\Models\IndexedMovie;
 use App\Models\IndexedSeries;
 use App\Models\ServiceConnection;
 use App\Services\Actions\ActionTargets;
+use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Support\Facades\Http;
 
 beforeEach(function (): void {
@@ -156,4 +157,34 @@ test('a quality profile id resolves to its name', function (): void {
 
     expect(resolve(ActionTargets::class)->qualityProfileName(ServiceType::Sonarr, 4))->toBe('HD-1080p')
         ->and(resolve(ActionTargets::class)->qualityProfileName(ServiceType::Sonarr, 99))->toBeNull();
+});
+
+test('arrConnection names the pinned Sonarr server', function (): void {
+    ServiceConnection::factory()->sonarr()->create(['name' => 'Main']);
+    $second = ServiceConnection::factory()->sonarr()->create(['name' => 'Anime']);
+
+    $actionTarget = resolve(ActionTargets::class)->arrConnection(ServiceType::Sonarr, ['service_connection_id' => $second->id]);
+
+    expect($actionTarget->label())->toBe('Sonarr server "Anime"')->and($actionTarget->verified)->toBeTrue();
+});
+
+test('arrConnection falls back to the active connection without a pin', function (): void {
+    ServiceConnection::factory()->sonarr()->create(['name' => 'Main']);
+
+    $actionTarget = resolve(ActionTargets::class)->arrConnection(ServiceType::Sonarr);
+
+    expect($actionTarget->label())->toBe('Sonarr server "Main"');
+});
+
+test('arrConnection aborts instead of falling back when the pin names the wrong service type', function (): void {
+    ServiceConnection::factory()->sonarr()->create(['name' => 'Main']);
+    $radarr = ServiceConnection::factory()->radarr()->create(['name' => 'Radarr']);
+
+    expect(fn () => resolve(ActionTargets::class)->arrConnection(ServiceType::Sonarr, ['service_connection_id' => $radarr->id]))
+        ->toThrow(InvalidArgumentException::class);
+});
+
+test('arrConnection aborts when the pinned connection no longer exists', function (): void {
+    expect(fn () => resolve(ActionTargets::class)->arrConnection(ServiceType::Sonarr, ['service_connection_id' => 999999]))
+        ->toThrow(ModelNotFoundException::class);
 });

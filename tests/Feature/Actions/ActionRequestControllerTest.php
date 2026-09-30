@@ -118,6 +118,33 @@ test('replacement request listings expose only bounded review fields', function 
         ->not->toContain('https://indexer.test/private-download');
 });
 
+test('grab release listings never expose the release guid', function (): void {
+    $member = User::factory()->member()->create();
+    ActionRequest::factory()->create([
+        'type' => 'grab_release',
+        'payload' => [
+            'service' => 'sonarr',
+            'series_id' => 7,
+            'guid' => 'https://tracker.test/download?passkey=secret-passkey',
+            'indexer_id' => 3,
+            'release' => ['title' => 'Show.S01E01.1080p', 'guid' => 'https://tracker.test/download?passkey=secret-passkey'],
+            'service_connection_id' => 12,
+        ],
+    ]);
+
+    $response = $this->actingAs($member)
+        ->get(route('actions.requests.index'))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->where('requests.data.0.payload.release.title', 'Show.S01E01.1080p')
+            ->where('requests.data.0.payload.indexer_id', 3)
+            ->missing('requests.data.0.payload.guid')
+            ->missing('requests.data.0.payload.release.guid')
+        );
+
+    expect(json_encode($response->viewData('page')['props'], JSON_THROW_ON_ERROR))->not->toContain('secret-passkey');
+});
+
 test('index exposes per-status counts independent of the active filter', function (): void {
     $member = User::factory()->member()->create();
     ActionRequest::factory()->count(2)->create(['status' => ActionRequestStatus::Pending]);

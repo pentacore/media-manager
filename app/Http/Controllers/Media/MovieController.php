@@ -13,6 +13,7 @@ use App\Services\Actions\ActionDescriber;
 use App\Services\Actions\ActionOrchestrator;
 use App\Services\Actions\UndescribableAction;
 use App\Services\Radarr\RadarrClient;
+use App\Support\Abilities;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\RequestException;
@@ -24,15 +25,17 @@ use Override;
 
 class MovieController extends BaseArrController
 {
-    public function index(): Response|RedirectResponse
+    public function index(Request $request): Response|RedirectResponse
     {
         $connection = $this->resolveConnection();
         if ($connection instanceof RedirectResponse) {
             return $connection;
         }
 
+        $canManageLibrary = $request->user()->can(Abilities::MANAGE_LIBRARY);
+
         return Inertia::render('Radarr/Movies/Index', [
-            'connection' => $this->connectionUrl($connection),
+            'connection' => $canManageLibrary ? $this->connectionUrl($connection) : ['url' => null],
             'movies' => Inertia::defer(fn (): array => array_map(
                 fn (array $item): array => $this->mapMovie($item),
                 $this->tryClientCall($connection, fn (RadarrClient $radarrClient): array => $radarrClient->getMovies()),
@@ -43,7 +46,7 @@ class MovieController extends BaseArrController
         ]);
     }
 
-    public function show(int $id): Response|RedirectResponse
+    public function show(int $id, Request $request): Response|RedirectResponse
     {
         $connection = $this->resolveConnection();
         if ($connection instanceof RedirectResponse) {
@@ -56,10 +59,19 @@ class MovieController extends BaseArrController
             return $this->connectionFailedRedirect();
         }
 
+        $canManageLibrary = $request->user()->can(Abilities::MANAGE_LIBRARY);
+
         return Inertia::render('Radarr/Movies/Show', [
-            'connection' => $this->connectionUrl($connection),
+            'connection' => $canManageLibrary ? $this->connectionUrl($connection) : ['url' => null],
             'service_connection_id' => $connection->id,
-            'movie' => $this->mapMovie($movie, detailed: true),
+            'movie' => $this->mapMovie($movie, detailed: true, canManageLibrary: $canManageLibrary),
+            // Only the profile dropdown needs these, and only manage-library
+            // users get the dropdown — viewers trigger no upstream lookup.
+            ...$canManageLibrary ? [
+                'qualityProfiles' => Inertia::defer(fn (): array => $this->mapQualityProfiles(
+                    $this->tryClientCall($connection, fn (RadarrClient $radarrClient): array => $radarrClient->getQualityProfiles()),
+                ), 'qualityProfiles'),
+            ] : [],
         ]);
     }
 
@@ -192,7 +204,7 @@ class MovieController extends BaseArrController
      * @param  array<string, mixed>  $item
      * @return array<string, mixed>
      */
-    private function mapMovie(array $item, bool $detailed = false): array
+    private function mapMovie(array $item, bool $detailed = false, bool $canManageLibrary = true): array
     {
         $base = [
             'id' => $item['id'] ?? null,
@@ -211,12 +223,25 @@ class MovieController extends BaseArrController
             $base['overview'] = $item['overview'] ?? null;
             $base['runtime'] = $item['runtime'] ?? null;
             $base['studio'] = $item['studio'] ?? null;
-            $base['root_folder_path'] = $item['rootFolderPath'] ?? null;
-            $base['movie_file'] = isset($item['movieFile']) ? [
-                'quality' => $item['movieFile']['quality']['quality']['name'] ?? null,
-                'size' => $item['movieFile']['size'] ?? 0,
-                'relative_path' => $item['movieFile']['relativePath'] ?? null,
-            ] : null;
+
+            if ($canManageLibrary) {
+                $base['root_folder_path'] = $item['rootFolderPath'] ?? null;
+            }
+
+            if (isset($item['movieFile'])) {
+                $movieFile = [
+                    'quality' => $item['movieFile']['quality']['quality']['name'] ?? null,
+                    'size' => $item['movieFile']['size'] ?? 0,
+                ];
+
+                if ($canManageLibrary) {
+                    $movieFile['relative_path'] = $item['movieFile']['relativePath'] ?? null;
+                }
+
+                $base['movie_file'] = $movieFile;
+            } else {
+                $base['movie_file'] = null;
+            }
         }
 
         return $base;

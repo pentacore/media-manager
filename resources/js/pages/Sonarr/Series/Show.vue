@@ -12,6 +12,12 @@ import {
 } from '@lucide/vue';
 import { ref } from 'vue';
 import SeriesController from '@/actions/App/Http/Controllers/Media/SeriesController';
+import {
+    InteractiveSearchDialog,
+    MonitorButton,
+    QualityProfileSelect,
+    SearchButton,
+} from '@/components/library-actions';
 import ReplaceFileDialog from '@/components/media-replacement/ReplaceFileDialog.vue';
 import { Pill, Poster, StatusPill } from '@/components/mm';
 import { Button } from '@/components/ui/button';
@@ -38,6 +44,7 @@ import {
     TooltipProvider,
     TooltipTrigger,
 } from '@/components/ui/tooltip';
+import { useCan } from '@/composables/useCan';
 import { dashboard } from '@/routes';
 
 interface QualityProfile {
@@ -86,17 +93,19 @@ interface SeriesDetail {
     overview: string | null;
     network: string | null;
     runtime: number | null;
-    root_folder_path: string | null;
+    root_folder_path?: string | null;
     seasons: Season[];
 }
 
 const props = defineProps<{
-    connection: { url: string };
+    connection: { url: string | null };
     service_connection_id: number;
     series: SeriesDetail;
     episodes?: Episode[];
     qualityProfiles?: QualityProfile[];
 }>();
+
+const { can } = useCan();
 
 defineOptions({
     layout: {
@@ -149,22 +158,51 @@ function formatSize(bytes: number): string {
     return `${mb.toFixed(0)} MB`;
 }
 
-function qualityName(): string {
-    if (!props.series.quality_profile_id || !props.qualityProfiles) {
-        return '-';
-    }
-
-    return (
-        props.qualityProfiles.find(
-            (profile) => profile.id === props.series.quality_profile_id,
-        )?.name ?? '-'
-    );
-}
-
 function episodesForSeason(seasonNumber: number): Episode[] {
     return (props.episodes ?? [])
         .filter((episode) => episode.season_number === seasonNumber)
         .sort((a, b) => a.episode_number - b.episode_number);
+}
+
+const interactiveOpen = ref(false);
+const interactive = ref<{
+    heading: string;
+    seasonNumber: number | null;
+    episodeId: number | null;
+} | null>(null);
+
+function openInteractive(
+    heading: string,
+    seasonNumber: number | null,
+    episodeId: number | null,
+): void {
+    interactive.value = { heading, seasonNumber, episodeId };
+    interactiveOpen.value = true;
+}
+
+function episodeIdsForSeason(seasonNumber: number): number[] {
+    return episodesForSeason(seasonNumber)
+        .map((episode) => episode.id)
+        .filter((id): id is number => id !== null);
+}
+
+/**
+ * Both the season header pill and the season toggle read their monitored
+ * state from this — not Sonarr's own season flag: toggling posts episode
+ * monitoring, which leaves that flag untouched, so a pill reading it
+ * directly would drift out of sync with the toggle it sits beside. Monitored
+ * only when every episode is.
+ */
+function seasonEpisodesMonitored(seasonNumber: number): boolean {
+    const episodes = episodesForSeason(seasonNumber);
+
+    return (
+        episodes.length > 0 && episodes.every((episode) => episode.monitored)
+    );
+}
+
+function episodeCode(episode: Episode): string {
+    return `S${String(episode.season_number).padStart(2, '0')}E${String(episode.episode_number).padStart(2, '0')}`;
 }
 
 function toggleSeason(seasonNumber: number) {
@@ -188,7 +226,7 @@ function confirmDelete() {
 }
 
 function sonarrSeriesUrl(): string | null {
-    if (!props.series.title_slug) {
+    if (!props.series.title_slug || !props.connection.url) {
         return null;
     }
 
@@ -208,8 +246,31 @@ function sonarrSeriesUrl(): string | null {
                 </Button>
             </Link>
             <div class="flex items-center gap-2">
+                <div
+                    v-if="can('manage-library')"
+                    class="flex items-center gap-2"
+                    data-series-actions
+                >
+                    <MonitorButton
+                        service="sonarr"
+                        :connection-id="service_connection_id"
+                        :item-id="series.id"
+                        :monitored="series.monitored"
+                    />
+                    <SearchButton
+                        service="sonarr"
+                        :connection-id="service_connection_id"
+                        command="series_search"
+                        :series-id="series.id"
+                        label="Search series"
+                    />
+                </div>
                 <a
-                    v-if="series.title_slug"
+                    v-if="
+                        series.title_slug &&
+                        can('manage-library') &&
+                        connection.url
+                    "
                     :href="sonarrSeriesUrl() ?? undefined"
                     target="_blank"
                     rel="noopener noreferrer"
@@ -219,53 +280,58 @@ function sonarrSeriesUrl(): string | null {
                         Open in Sonarr
                     </Button>
                 </a>
-                <Dialog v-model:open="deleteDialogOpen">
-                    <DialogTrigger as-child>
-                        <Button
-                            variant="destructive"
-                            size="sm"
-                            class="h-8 text-xs"
-                            data-delete-trigger
-                        >
-                            <Trash2 class="size-3.5" />
-                            Delete
-                        </Button>
-                    </DialogTrigger>
-                    <DialogContent>
-                        <DialogHeader>
-                            <DialogTitle>
-                                Delete {{ series.title }}?
-                            </DialogTitle>
-                            <DialogDescription data-delete-description>
-                                Removes the series from Sonarr. Cannot be
-                                undone. Deletion may require approval in the
-                                Action Queue.
-                            </DialogDescription>
-                        </DialogHeader>
-                        <div class="flex items-center gap-2 py-2">
-                            <Checkbox id="delete_files" v-model="deleteFiles" />
-                            <Label for="delete_files"
-                                >Also delete files on disk</Label
-                            >
-                        </div>
-                        <DialogFooter>
-                            <Button
-                                variant="outline"
-                                @click="deleteDialogOpen = false"
-                            >
-                                Cancel
-                            </Button>
+                <template v-if="can('manage-library')">
+                    <Dialog v-model:open="deleteDialogOpen">
+                        <DialogTrigger as-child>
                             <Button
                                 variant="destructive"
-                                data-delete-confirm
-                                :disabled="deleting"
-                                @click="confirmDelete"
+                                size="sm"
+                                class="h-8 text-xs"
+                                data-delete-trigger
                             >
+                                <Trash2 class="size-3.5" />
                                 Delete
                             </Button>
-                        </DialogFooter>
-                    </DialogContent>
-                </Dialog>
+                        </DialogTrigger>
+                        <DialogContent>
+                            <DialogHeader>
+                                <DialogTitle>
+                                    Delete {{ series.title }}?
+                                </DialogTitle>
+                                <DialogDescription data-delete-description>
+                                    Removes the series from Sonarr. Cannot be
+                                    undone. Deletion may require approval in the
+                                    Action Queue.
+                                </DialogDescription>
+                            </DialogHeader>
+                            <div class="flex items-center gap-2 py-2">
+                                <Checkbox
+                                    id="delete_files"
+                                    v-model="deleteFiles"
+                                />
+                                <Label for="delete_files"
+                                    >Also delete files on disk</Label
+                                >
+                            </div>
+                            <DialogFooter>
+                                <Button
+                                    variant="outline"
+                                    @click="deleteDialogOpen = false"
+                                >
+                                    Cancel
+                                </Button>
+                                <Button
+                                    variant="destructive"
+                                    data-delete-confirm
+                                    :disabled="deleting"
+                                    @click="confirmDelete"
+                                >
+                                    Delete
+                                </Button>
+                            </DialogFooter>
+                        </DialogContent>
+                    </Dialog>
+                </template>
             </div>
         </div>
 
@@ -349,14 +415,20 @@ function sonarrSeriesUrl(): string | null {
                                 }}
                             </div>
                         </div>
-                        <div>
+                        <div v-if="can('manage-library')">
                             <div
                                 class="text-[11.5px] font-semibold tracking-[0.05em] text-muted-foreground uppercase"
                             >
                                 Quality profile
                             </div>
                             <div class="mt-0.5 text-[13px]">
-                                {{ qualityName() }}
+                                <QualityProfileSelect
+                                    service="sonarr"
+                                    :connection-id="service_connection_id"
+                                    :item-id="series.id"
+                                    :profiles="qualityProfiles"
+                                    :current-id="series.quality_profile_id"
+                                />
                             </div>
                         </div>
                         <div>
@@ -474,13 +546,24 @@ function sonarrSeriesUrl(): string | null {
                                         }}
                                     </span>
                                     <Pill
+                                        :data-season-pill="season.season_number"
                                         :variant="
-                                            season.monitored ? 'ok' : 'default'
+                                            seasonEpisodesMonitored(
+                                                season.season_number,
+                                            )
+                                                ? 'ok'
+                                                : 'default'
                                         "
-                                        :dot="season.monitored"
+                                        :dot="
+                                            seasonEpisodesMonitored(
+                                                season.season_number,
+                                            )
+                                        "
                                     >
                                         {{
-                                            season.monitored
+                                            seasonEpisodesMonitored(
+                                                season.season_number,
+                                            )
                                                 ? 'Monitored'
                                                 : 'Unmonitored'
                                         }}
@@ -509,6 +592,83 @@ function sonarrSeriesUrl(): string | null {
                         </CollapsibleTrigger>
                         <CollapsibleContent>
                             <div class="border-t border-border px-4 py-3">
+                                <div
+                                    v-if="can('manage-library')"
+                                    class="mb-3 flex flex-wrap items-center gap-2"
+                                    :data-season-actions="season.season_number"
+                                >
+                                    <template
+                                        v-if="
+                                            episodeIdsForSeason(
+                                                season.season_number,
+                                            ).length > 0
+                                        "
+                                    >
+                                        <MonitorButton
+                                            service="sonarr"
+                                            :connection-id="
+                                                service_connection_id
+                                            "
+                                            :series-id="series.id"
+                                            :episode-ids="
+                                                episodeIdsForSeason(
+                                                    season.season_number,
+                                                )
+                                            "
+                                            :season-number="
+                                                season.season_number
+                                            "
+                                            :monitored="
+                                                seasonEpisodesMonitored(
+                                                    season.season_number,
+                                                )
+                                            "
+                                            :label="
+                                                seasonEpisodesMonitored(
+                                                    season.season_number,
+                                                )
+                                                    ? 'Season monitored'
+                                                    : 'Season unmonitored'
+                                            "
+                                        />
+                                        <SearchButton
+                                            service="sonarr"
+                                            :connection-id="
+                                                service_connection_id
+                                            "
+                                            command="season_search"
+                                            :series-id="series.id"
+                                            :season-number="
+                                                season.season_number
+                                            "
+                                            label="Search season"
+                                        />
+                                    </template>
+                                    <span
+                                        v-else
+                                        class="text-[12px] text-muted-foreground"
+                                        data-season-no-episodes
+                                    >
+                                        No episodes yet
+                                    </span>
+                                    <Button
+                                        variant="outline"
+                                        size="sm"
+                                        class="h-7 text-xs"
+                                        data-interactive-search
+                                        @click="
+                                            openInteractive(
+                                                season.season_number === 0
+                                                    ? 'Specials'
+                                                    : `Season ${season.season_number}`,
+                                                season.season_number,
+                                                null,
+                                            )
+                                        "
+                                    >
+                                        Interactive search
+                                    </Button>
+                                </div>
                                 <div class="space-y-2">
                                     <div
                                         v-for="episode in episodesForSeason(
@@ -556,8 +716,57 @@ function sonarrSeriesUrl(): string | null {
                                                         : 'Missing'
                                                 }}
                                             </Pill>
+                                            <div
+                                                v-if="
+                                                    can('manage-library') &&
+                                                    episode.id !== null
+                                                "
+                                                class="flex items-center gap-1.5"
+                                                :data-episode-actions="
+                                                    episode.id
+                                                "
+                                            >
+                                                <MonitorButton
+                                                    service="sonarr"
+                                                    :connection-id="
+                                                        service_connection_id
+                                                    "
+                                                    :series-id="series.id"
+                                                    :episode-ids="[episode.id]"
+                                                    :monitored="
+                                                        episode.monitored
+                                                    "
+                                                />
+                                                <SearchButton
+                                                    service="sonarr"
+                                                    :connection-id="
+                                                        service_connection_id
+                                                    "
+                                                    command="episode_search"
+                                                    :series-id="series.id"
+                                                    :episode-ids="[episode.id]"
+                                                />
+                                                <Button
+                                                    variant="ghost"
+                                                    size="sm"
+                                                    class="h-7 text-xs"
+                                                    data-interactive-search
+                                                    @click="
+                                                        openInteractive(
+                                                            `${episodeCode(episode)} ${episode.title ?? ''}`.trim(),
+                                                            null,
+                                                            episode.id,
+                                                        )
+                                                    "
+                                                >
+                                                    Interactive
+                                                </Button>
+                                            </div>
                                             <TooltipProvider
-                                                v-if="episode.has_file"
+                                                v-if="
+                                                    episode.has_file &&
+                                                    can('manage-library')
+                                                "
                                                 :delay-duration="200"
                                             >
                                                 <Tooltip>
@@ -623,5 +832,16 @@ function sonarrSeriesUrl(): string | null {
         :item-id="series.id"
         :season-number="replaceTarget.seasonNumber"
         :episode-number="replaceTarget.episodeNumber"
+    />
+
+    <InteractiveSearchDialog
+        v-if="interactive"
+        v-model:open="interactiveOpen"
+        service="sonarr"
+        :connection-id="service_connection_id"
+        :item-id="series.id"
+        :season-number="interactive.seasonNumber"
+        :episode-id="interactive.episodeId"
+        :heading="interactive.heading"
     />
 </template>

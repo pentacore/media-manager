@@ -19,6 +19,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use InvalidArgumentException;
 use Override;
 
 /**
@@ -183,36 +184,84 @@ class ServiceConnection extends Model
         $connectionId = (int) ($payload['service_connection_id'] ?? 0);
 
         if ($connectionId > 0) {
-            $connection = self::query()->find($connectionId);
-
-            if ($connection === null) {
-                throw new ModelNotFoundException(sprintf(
-                    'Service connection %d pinned to this action no longer exists; aborting instead of acting on a different instance.',
-                    $connectionId,
-                ))->setModel(self::class, [$connectionId]);
-            }
+            $connection = self::findPinnedConnection($connectionId);
 
             if ($connection->type === $serviceType) {
-                // An admin deactivated this instance after the action was
-                // queued (or approved): never act on it, and never silently
-                // redirect the action to another instance either.
-                if (! $connection->is_active) {
-                    // Note: deliberately not chaining ->setModel() here — it
-                    // overwrites the constructor message with a generic
-                    // "No query results for model [...]" string, and nothing
-                    // in this codebase reads getModel()/getIds() on this
-                    // exception.
-                    throw new ModelNotFoundException(sprintf(
-                        'Service connection %d pinned to this action was deactivated; aborting instead of acting on a server an admin disabled.',
-                        $connectionId,
-                    ));
-                }
+                self::assertPinnedConnectionActive($connection);
 
                 return $connection;
             }
         }
 
         return self::resolveActive($serviceType);
+    }
+
+    /**
+     * Strict variant of {@see resolvePinned()} for action types that must
+     * never silently redirect to a different instance than the one named in
+     * the payload: monitor_episodes/search_media/grab_release act on ids
+     * (episode/release guids) that are meaningless against the wrong
+     * instance, unlike monitor_series/monitor_movie's cross-service
+     * resolveActive() fallback, which exists for actions that can
+     * legitimately run against "the active one" when no pin was stamped.
+     * A missing pin, a deleted or deactivated pinned connection, or a pin
+     * naming a connection of a different service type are all a hard abort.
+     *
+     * @param  array<string, mixed>  $payload
+     *
+     * @throws ModelNotFoundException|InvalidArgumentException
+     */
+    public static function resolvePinnedStrict(array $payload, ServiceType $serviceType): self
+    {
+        $connectionId = (int) ($payload['service_connection_id'] ?? 0);
+
+        throw_if($connectionId <= 0, InvalidArgumentException::class, sprintf('The action is not pinned to a %s connection.', $serviceType->label()));
+
+        $serviceConnection = self::findPinnedConnection($connectionId);
+
+        throw_if($serviceConnection->type !== $serviceType, InvalidArgumentException::class, sprintf('The action is not pinned to a %s connection.', $serviceType->label()));
+
+        self::assertPinnedConnectionActive($serviceConnection);
+
+        return $serviceConnection;
+    }
+
+    /**
+     * @throws ModelNotFoundException
+     */
+    private static function findPinnedConnection(int $connectionId): self
+    {
+        $connection = self::query()->find($connectionId);
+
+        if ($connection === null) {
+            throw new ModelNotFoundException(sprintf(
+                'Service connection %d pinned to this action no longer exists; aborting instead of acting on a different instance.',
+                $connectionId,
+            ))->setModel(self::class, [$connectionId]);
+        }
+
+        return $connection;
+    }
+
+    /**
+     * An admin deactivated this instance after the action was queued (or
+     * approved): never act on it, and never silently redirect the action to
+     * another instance either.
+     *
+     * @throws ModelNotFoundException
+     */
+    private static function assertPinnedConnectionActive(self $connection): void
+    {
+        if (! $connection->is_active) {
+            // Note: deliberately not chaining ->setModel() here — it
+            // overwrites the constructor message with a generic "No query
+            // results for model [...]" string, and nothing in this codebase
+            // reads getModel()/getIds() on this exception.
+            throw new ModelNotFoundException(sprintf(
+                'Service connection %d pinned to this action was deactivated; aborting instead of acting on a server an admin disabled.',
+                $connection->id,
+            ));
+        }
     }
 
     /**

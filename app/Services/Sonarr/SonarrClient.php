@@ -7,6 +7,7 @@ namespace App\Services\Sonarr;
 use App\Cache\Services\SonarrCache;
 use App\Services\Arr\ArrClient;
 use App\Support\Cache\Warmable;
+use Carbon\CarbonImmutable;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\RequestException;
 use Override;
@@ -166,6 +167,38 @@ class SonarrClient extends ArrClient implements Warmable
             'tags',
             fn (): array => parent::getTags(),
         );
+    }
+
+    /**
+     * @return list<array<string, mixed>>
+     *
+     * @throws RequestException|ConnectionException
+     */
+    #[Override]
+    public function getCalendar(CarbonImmutable $start, CarbonImmutable $end, bool $withRetry = true): array
+    {
+        return $this->cache()->rememberList(
+            sprintf('calendar:%s:%s', $start->toDateString(), $end->toDateString()),
+            fn (): array => parent::getCalendar($start, $end, $withRetry),
+        );
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    #[Override]
+    protected function calendarQuery(): array
+    {
+        return ['includeSeries' => 'true'];
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    #[Override]
+    protected function wantedQuery(): array
+    {
+        return ['sortKey' => 'episodes.airDateUtc', 'includeSeries' => 'true'];
     }
 
     public function warm(): void

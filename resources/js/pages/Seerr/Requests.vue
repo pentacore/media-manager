@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Head, router, usePage } from '@inertiajs/vue3';
+import { Head, router } from '@inertiajs/vue3';
 import {
     Check,
     ChevronLeft,
@@ -50,6 +50,7 @@ import {
     SelectValue,
 } from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
+import { useCan } from '@/composables/useCan';
 import { useRealtimeReload } from '@/composables/useRealtimeReload';
 import { tmdbPosterUrl } from '@/lib/tmdb';
 import { cn } from '@/lib/utils';
@@ -112,19 +113,9 @@ const { subscribe: subscribeReload } = useRealtimeReload<{
 
 onMounted(subscribeReload);
 
-const page = usePage();
+const { can } = useCan();
 
-const isAdmin = computed(() => {
-    const role = page.props.auth.user?.role;
-
-    if (!role) {
-        return false;
-    }
-
-    const value = typeof role === 'string' ? role : role.value;
-
-    return value === 'admin';
-});
+const isAdmin = computed(() => can('admin'));
 
 type FilterId =
     | 'pending'
