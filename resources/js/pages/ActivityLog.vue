@@ -186,6 +186,11 @@ function applyFilters(next: {
         query.category = merged.category;
     }
 
+    // The fresh payload covers any audit rows that arrived meanwhile, so
+    // their "N new" count must not outlive the filter change.
+    auditFeed.resume();
+    auditFeed.pause();
+
     router.get(ActivityLogController.index.url(), query, {
         preserveScroll: true,
         replace: true,
@@ -578,6 +583,7 @@ function formatAuditValue(value: unknown): string {
                 <span
                     v-if="newCount > 0"
                     class="flex items-center gap-1.5 text-xs text-accent"
+                    data-activity-new-count
                 >
                     <Sparkles class="size-3.5" />
                     {{ newCount }} new
