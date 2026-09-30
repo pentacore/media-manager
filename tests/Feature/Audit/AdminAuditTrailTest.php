@@ -101,6 +101,29 @@ test('connection create, toggle and delete are audited with the connection as su
         ->and($deleted->description)->toBe('Deleted Sonarr connection "Main Sonarr".');
 });
 
+test('an audit row keeps its actor name after that admin account is deleted', function (): void {
+    $ada = User::factory()->admin()->create(['name' => 'Ada Admin']);
+    $otherAdmin = User::factory()->admin()->create();
+
+    $this->actingAs($ada)->post(route('admin.connections.store'), [
+        'type' => 'sonarr', 'name' => 'Main Sonarr', 'url' => 'http://sonarr.local:8989', 'api_key' => 'created-api-key', 'webhook_token' => 'created-webhook-token',
+    ])->assertRedirect(route('admin.connections.index'));
+    $this->actingAs($otherAdmin)->delete(route('admin.users.destroy', $ada))->assertRedirect();
+
+    $activityLog = adminAuditRow('connection.created');
+
+    expect($activityLog->user_id)->toBeNull()
+        ->and($activityLog->metadata['actor'])->toBe(['id' => $ada->id, 'name' => 'Ada Admin']);
+
+    $this->actingAs($otherAdmin)
+        ->get(route('activity-log', ['category' => 'audit']))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page->where(
+            'logs.data',
+            fn ($rows): bool => collect($rows)->firstWhere('action', 'connection.created')['user_name'] === 'Ada Admin',
+        ));
+});
+
 test('a connection update masks a credential URL and a rotated API key', function (): void {
     $admin = User::factory()->admin()->create();
     $connection = ServiceConnection::factory()->sonarr()->create(['name' => 'Sonarr', 'url' => 'http://sonarr.local:8989', 'api_key' => 'old-api-key']);

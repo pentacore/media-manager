@@ -9,6 +9,7 @@ use App\Enums\SettingsGroup;
 use App\Models\ActivityLog;
 use App\Models\NotificationDestination;
 use App\Models\ServiceConnection;
+use App\Models\User;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Auth;
 
@@ -16,7 +17,9 @@ use Illuminate\Support\Facades\Auth;
  * The only writer of `audit` activity rows. Callers pass the raw diff
  * (AuditChanges::between()) and context; masking happens here so a caller
  * cannot forget it. Audit rows are admin-only (the model's visibleTo scope)
- * and broadcast on `activity.audit` only (ActivityLogCreated).
+ * and broadcast on `activity.audit` only (ActivityLogCreated). The acting
+ * user's id and name are also kept in `metadata.actor`, so a row still
+ * names its actor after that account is deleted.
  */
 final readonly class AuditLogger
 {
@@ -46,6 +49,13 @@ final readonly class AuditLogger
             'changes' => AuditChanges::mask($changes, $secretFields),
             'context' => AuditChanges::scrub($context),
         ], static fn (array $section): bool => $section !== []);
+
+        // user_id is nulled when the account is deleted; the trail keeps who.
+        $actor = Auth::user();
+
+        if ($actor instanceof User) {
+            $metadata['actor'] = ['id' => $actor->id, 'name' => $actor->name];
+        }
 
         return ActivityLog::create([
             'category' => ActivityLogCategory::Audit,

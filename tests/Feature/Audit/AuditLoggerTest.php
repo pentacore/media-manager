@@ -28,11 +28,13 @@ test('record writes an audit row for the acting user with its subject', function
         ->and($activityLog->metadata)->toBe([
             'changes' => ['name' => ['from' => 'Sonarr', 'to' => 'Main']],
             'context' => ['source' => 'admin page'],
+            'actor' => ['id' => $admin->id, 'name' => $admin->name],
         ]);
 });
 
 test('a deleted connection subject keeps its id but no foreign key', function (): void {
-    $this->actingAs(User::factory()->admin()->create());
+    $admin = User::factory()->admin()->create();
+    $this->actingAs($admin);
     $connection = ServiceConnection::factory()->sonarr()->create();
     $connection->delete();
 
@@ -40,6 +42,13 @@ test('a deleted connection subject keeps its id but no foreign key', function ()
 
     expect($activityLog->service_connection_id)->toBeNull()
         ->and($activityLog->subject_id)->toBe($connection->id)
+        ->and($activityLog->metadata)->toBe(['actor' => ['id' => $admin->id, 'name' => $admin->name]]);
+});
+
+test('a row written without a signed-in user records no actor', function (): void {
+    $activityLog = resolve(AuditLogger::class)->record('queue.removed', null, 'Removed a queue item.');
+
+    expect($activityLog->user_id)->toBeNull()
         ->and($activityLog->metadata)->toBeNull();
 });
 
