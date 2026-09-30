@@ -103,19 +103,17 @@ final readonly class ActionTargets
 
     /**
      * @param  array<string, mixed>  $pinContext
+     * @param  bool  $strictPin  See {@see sonarrSeries()} — `whisparr_search` resolves strictly like its executor.
      */
-    public function whisparrItem(int $itemId, array $pinContext = [], ?string $fallbackName = null): ActionTarget
+    public function whisparrItem(int $itemId, array $pinContext = [], ?string $fallbackName = null, bool $strictPin = false): ActionTarget
     {
-        return $this->attempt('item', $itemId, $fallbackName, false, function () use ($itemId, $pinContext): ?ActionTarget {
-            $serviceConnection = ServiceConnection::resolvePinned($pinContext, ServiceType::Whisparr);
-            $name = $this->nameFrom(new WhisparrClient($serviceConnection)->getItemById($itemId));
+        if ($strictPin) {
+            $serviceConnection = $this->resolvePinnedConnection(ServiceType::Whisparr, $pinContext);
 
-            return $name === null ? null : new ActionTarget('item', $name, [
-                ['label' => 'Item', 'value' => $name],
-                ['label' => 'Whisparr ID', 'value' => (string) $itemId],
-                ['label' => 'Connection', 'value' => $serviceConnection->name],
-            ]);
-        });
+            return $this->attempt('item', $itemId, $fallbackName, false, fn (): ?ActionTarget => $this->whisparrItemTarget($itemId, $serviceConnection));
+        }
+
+        return $this->attempt('item', $itemId, $fallbackName, false, fn (): ?ActionTarget => $this->whisparrItemTarget($itemId, ServiceConnection::resolvePinned($pinContext, ServiceType::Whisparr)));
     }
 
     /**
@@ -294,6 +292,17 @@ final readonly class ActionTargets
         return $name === null ? null : new ActionTarget('movie', $name, [
             ['label' => 'Movie', 'value' => $name],
             ['label' => 'Radarr ID', 'value' => (string) $radarrId],
+            ['label' => 'Connection', 'value' => $serviceConnection->name],
+        ]);
+    }
+
+    private function whisparrItemTarget(int $itemId, ServiceConnection $serviceConnection): ?ActionTarget
+    {
+        $name = $this->nameFrom(new WhisparrClient($serviceConnection)->getItemById($itemId));
+
+        return $name === null ? null : new ActionTarget('item', $name, [
+            ['label' => 'Item', 'value' => $name],
+            ['label' => 'Whisparr ID', 'value' => (string) $itemId],
             ['label' => 'Connection', 'value' => $serviceConnection->name],
         ]);
     }

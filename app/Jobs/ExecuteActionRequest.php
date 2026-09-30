@@ -82,6 +82,7 @@ class ExecuteActionRequest implements ShouldBeUnique, ShouldQueue
         'whisparr_delete_item' => WhisparrActions::class,
         'whisparr_monitor_item' => WhisparrActions::class,
         'whisparr_set_quality_profile' => WhisparrActions::class,
+        'whisparr_search' => WhisparrActions::class,
         'cleanup_seerr_request' => SeerrActions::class,
         'approve_seerr_request' => SeerrActions::class,
         'decline_seerr_request' => SeerrActions::class,

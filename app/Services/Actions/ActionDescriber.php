@@ -56,6 +56,7 @@ final readonly class ActionDescriber
             'monitor_episodes' => $this->monitorEpisodes($this->actionTargets->sonarrSeries($this->id($type, $payload, 'series_id'), $payload, $fallbackName, strictPin: true), $payload),
             'search_media' => $this->searchMedia($type, $payload, $fallbackName),
             'grab_release' => $this->grabRelease($type, $payload, $fallbackName),
+            'whisparr_search' => $this->whisparrSearch($this->actionTargets->whisparrItem($this->id($type, $payload, 'whisparr_item_id'), $payload, $fallbackName, strictPin: true)),
             default => throw UndescribableAction::unsupportedType($type),
         };
     }
@@ -294,6 +295,14 @@ final readonly class ActionDescriber
             ->withDetail('Size', is_numeric($release['size'] ?? null) && (int) $release['size'] > 0 ? $this->humanSize((int) $release['size']) : null)
             ->withDetail('Indexer', is_string($release['indexer'] ?? null) ? $release['indexer'] : null)
             ->withDetail('Rejected by', $rejections === [] ? null : implode('; ', $rejections));
+    }
+
+    private function whisparrSearch(ActionTarget $target): ActionDescription
+    {
+        return $target->describe(
+            sprintf('Search for %s', $target->label()),
+            sprintf('Whisparr will search its indexers for the %s.', $target->noun),
+        );
     }
 
     private function humanSize(int $bytes): string

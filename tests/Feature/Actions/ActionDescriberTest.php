@@ -408,3 +408,21 @@ test('grab_release aborts when the pin names a connection of the wrong service',
         'release' => ['title' => 'Severance.S02E01.1080p'],
     ]))->toThrow(InvalidArgumentException::class);
 });
+
+test('whisparr_search names the Whisparr item of the pinned connection', function (): void {
+    $whisparr = ServiceConnection::factory()->whisparr()->create(['url' => 'http://whisparr.local:6969', 'name' => 'Whisparr']);
+    Http::fake(['whisparr.local:6969/api/v3/movie/11' => Http::response(['id' => 11, 'title' => 'Aurora Scene', 'year' => 2024])]);
+
+    $actionDescription = resolve(ActionDescriber::class)->describe('whisparr_search', ['whisparr_item_id' => 11, 'service_connection_id' => $whisparr->id]);
+
+    expect($actionDescription->title)->toBe('Search for item "Aurora Scene (2024)"')
+        ->and($actionDescription->description)->toBe('Whisparr will search its indexers for the item.')
+        ->and($actionDescription->verified)->toBeTrue();
+});
+
+test('whisparr_search aborts when the pin names a connection of another service', function (): void {
+    $sonarr = ServiceConnection::factory()->sonarr()->create(['url' => 'http://sonarr.local:8989']);
+
+    expect(fn () => resolve(ActionDescriber::class)->describe('whisparr_search', ['whisparr_item_id' => 11, 'service_connection_id' => $sonarr->id]))
+        ->toThrow(InvalidArgumentException::class);
+});

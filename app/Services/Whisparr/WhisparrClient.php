@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Services\Whisparr;
 
 use App\Cache\Services\WhisparrCache;
+use App\Enums\WhisparrVersion;
 use App\Services\Arr\ArrClient;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\RequestException;
@@ -111,6 +112,23 @@ class WhisparrClient extends ArrClient
     public function getRootFolders(): array
     {
         return $this->cache()->rememberMetadata('root-folders', fn (): array => parent::getRootFolders());
+    }
+
+    /**
+     * Start an automatic indexer search for one item: `SeriesSearch` on v2
+     * (series-shaped), `MoviesSearch` on v3 (movie-shaped). Like
+     * `search_media`, the command opts out of the transparent retry — a lost
+     * response must not fire the search three times.
+     *
+     * @return array<string, mixed>
+     *
+     * @throws RequestException|ConnectionException
+     */
+    public function searchItem(int $id): array
+    {
+        return $this->connection->whisparrVersion() === WhisparrVersion::V2
+            ? $this->runCommand('SeriesSearch', ['seriesId' => $id], withRetry: false)
+            : $this->runCommand('MoviesSearch', ['movieIds' => [$id]], withRetry: false);
     }
 
     /**
