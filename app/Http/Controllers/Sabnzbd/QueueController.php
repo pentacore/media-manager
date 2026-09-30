@@ -56,6 +56,8 @@ class QueueController extends Controller
                 'queue' => $this->presentQueue($queue),
                 'history' => $this->presentHistory($history, $historyPage),
                 'paused' => (bool) ($queue['paused'] ?? false),
+                // Polls reload `error` too, so a recovered poll must clear it.
+                'error' => null,
             ]);
         } catch (ModelNotFoundException) {
             return Inertia::render('Sabnzbd/Queue/Index', [
@@ -64,6 +66,7 @@ class QueueController extends Controller
                 'queue' => [],
                 'history' => $this->presentHistory([], $historyPage),
                 'paused' => false,
+                'error' => null,
             ]);
         } catch (RequestException|ConnectionException) {
             return Inertia::render('Sabnzbd/Queue/Index', [

@@ -90,12 +90,27 @@ const PRIORITY_LABELS: Record<string, string> = {
 const { can } = useCan();
 const isAdmin = computed(() => can('admin'));
 
+// Every prop the index can change: a poll that hits an outage must also
+// bring `error` (and the connection) along, and a recovered one clears it.
+const POLLED_PROPS = [
+    'queue',
+    'history',
+    'paused',
+    'error',
+    'connection',
+    'configured',
+];
+
 let pollHandle: ReturnType<typeof setInterval> | null = null;
+const pagingHistory = ref(false);
 
 onMounted(() => {
     // reload() keeps the current URL, so ?history_page survives polling.
+    // A poll fired mid-paging would still carry the old page and revert it.
     pollHandle = setInterval(() => {
-        router.reload({ only: ['queue', 'history', 'paused'] });
+        if (!pagingHistory.value) {
+            router.reload({ only: POLLED_PROPS });
+        }
     }, 5000);
 });
 
@@ -106,7 +121,7 @@ onUnmounted(() => {
 });
 
 function refresh(): void {
-    router.reload({ only: ['queue', 'history', 'paused'] });
+    router.reload({ only: POLLED_PROPS });
 }
 
 function toggleQueue(): void {
@@ -158,16 +173,47 @@ function goToHistoryPage(page: number): void {
             ? QueueController.index.url({ query: { history_page: page } })
             : QueueController.index.url();
 
+    // An in-flight poll was issued for the old page; its late response
+    // would otherwise land after this visit and put the old page back.
+    router.cancelAll();
+    pagingHistory.value = true;
+
     router.get(
         url,
         {},
-        { preserveScroll: true, preserveState: true, only: ['history'] },
+        {
+            preserveScroll: true,
+            preserveState: true,
+            only: ['history'],
+            onFinish: () => {
+                pagingHistory.value = false;
+            },
+        },
     );
 }
 
+// Past the last page (history shrank, or a stale link) Previous leads
+// straight back to the last page instead of stepping through empty ones.
+function goToPreviousHistoryPage(): void {
+    goToHistoryPage(Math.min(historyPage.value - 1, historyLastPage.value));
+}
+
+const retrying = ref<string | null>(null);
+
 function retryHistory(nzoId: string): void {
+    if (retrying.value !== null) {
+        return;
+    }
+
+    retrying.value = nzoId;
     const action = QueueController.retryHistory(nzoId);
-    router.visit(action.url, { method: action.method, preserveScroll: true });
+    router.visit(action.url, {
+        method: action.method,
+        preserveScroll: true,
+        onFinish: () => {
+            retrying.value = null;
+        },
+    });
 }
 
 const deletingSlot = ref<HistorySlot | null>(null);
@@ -274,6 +320,7 @@ function statusVariant(status: string | null): 'ok' | 'danger' | 'default' {
         <div
             v-else-if="error"
             class="rounded-xl border border-destructive/40 bg-destructive/10 p-4 text-sm text-destructive"
+            data-sabnzbd-error
         >
             {{ error }}
         </div>
@@ -507,6 +554,7 @@ function statusVariant(status: string | null): 'ok' | 'danger' | 'default' {
                                             variant="ghost"
                                             size="sm"
                                             class="h-7 gap-1 px-2 text-xs"
+                                            :disabled="retrying !== null"
                                             data-history-retry
                                             @click="retryHistory(slot.nzo_id)"
                                         >
@@ -541,7 +589,7 @@ function statusVariant(status: string | null): 'ok' | 'danger' | 'default' {
                     </table>
                 </div>
                 <div
-                    v-if="historyLastPage > 1"
+                    v-if="historyLastPage > 1 || historyPage > historyLastPage"
                     class="flex items-center justify-between gap-2 border-t border-border px-4 py-2.5"
                 >
                     <span
@@ -556,7 +604,7 @@ function statusVariant(status: string | null): 'ok' | 'danger' | 'default' {
                             class="h-7 text-xs"
                             :disabled="historyPage <= 1"
                             data-history-prev
-                            @click="goToHistoryPage(historyPage - 1)"
+                            @click="goToPreviousHistoryPage"
                         >
                             Previous
                         </Button>

@@ -99,3 +99,23 @@ test('a Sonarr outage shows the history error instead of an empty table', functi
         ->assertSeeIn('[data-history-error]', 'Sonarr is unreachable right now')
         ->assertMissing('[data-history-empty]');
 });
+
+test('a history page past the end still shows the pager and leads back to the last page', function (): void {
+    // A distinct host so these fakes win outright over the beforeEach's
+    // sonarr.local stubs (Http::fake matches the first-registered pattern).
+    ServiceConnection::query()->where('type', 'sonarr')->update(['url' => 'http://sonarr-paged.local:8989']);
+    Http::fake([
+        'sonarr-paged.local:8989/api/v3/queue*' => Http::response(['records' => []]),
+        'sonarr-paged.local:8989/api/v3/history*' => fn (Request $request) => Http::response(str_contains($request->url(), 'page=1&')
+            ? ['totalRecords' => 40, 'records' => [grabQueueHistoryRecord(99, 'downloadFolderImported', 'Andor')]]
+            : ['totalRecords' => 40, 'records' => []]),
+    ]);
+    $this->actingAs(User::factory()->member()->create());
+
+    visit(route('media.library.activity.queue', ['history_service' => 'sonarr', 'history_page' => 5], absolute: false))
+        ->assertNoSmoke()
+        ->assertSeeIn('[data-history-page]', 'Page 5 of 1')
+        ->click('[data-history-prev]')
+        ->assertSeeIn('[data-history-row="sonarr-99"] [data-history-title]', 'Andor')
+        ->assertMissing('[data-history-page]');
+});

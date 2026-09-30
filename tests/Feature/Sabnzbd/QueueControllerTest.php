@@ -56,6 +56,28 @@ test('queue index pulls live queue + history when configured', function (): void
         );
 });
 
+test('a successful queue load clears the error a failed poll left behind', function (): void {
+    ServiceConnection::factory()->sabnzbd()->create(['url' => 'http://sab.local:8080', 'api_key' => 'k']);
+    Http::fake(['sab.local:8080/api*' => Http::sequence()
+        ->push(['queue' => ['paused' => false, 'slots' => []]])
+        ->push(['history' => ['slots' => []]])]);
+
+    $this->actingAs($this->user)
+        ->get(route('sabnzbd.queue.index'))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->where('configured', true)
+            ->where('connection.name', fn (string $name): bool => $name !== '')
+            ->where('error', null));
+});
+
+test('without a connection the queue page carries no error', function (): void {
+    $this->actingAs($this->user)
+        ->get(route('sabnzbd.queue.index'))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page->where('configured', false)->where('error', null));
+});
+
 test('hidden_categories filters out matching slots from queue and history', function (): void {
     ServiceConnection::factory()->sabnzbd()->create([
         'url' => 'http://sab.local:8080',

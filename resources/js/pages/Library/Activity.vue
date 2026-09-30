@@ -986,7 +986,7 @@ const filteredRows = computed<QueueRow[]>(() => {
                     history &&
                     history.configured &&
                     !history.error &&
-                    historyLastPage > 1
+                    (historyLastPage > 1 || history.page > historyLastPage)
                 "
                 class="flex items-center justify-between gap-2"
             >
@@ -1001,7 +1001,12 @@ const filteredRows = computed<QueueRow[]>(() => {
                         class="h-7 text-xs"
                         :disabled="history.page <= 1"
                         data-history-prev
-                        @click="showHistory(history.service, history.page - 1)"
+                        @click="
+                            showHistory(
+                                history.service,
+                                Math.min(history.page - 1, historyLastPage),
+                            )
+                        "
                     >
                         Previous
                     </Button>
