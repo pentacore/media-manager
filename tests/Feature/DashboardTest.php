@@ -240,8 +240,7 @@ test('a viewer dashboard carries no approvals, webhook events or service version
             ->component('Dashboard')
             ->where('pendingApprovals', [])
             ->where('recentWebhookEvents', [])
-            ->where('services.0.version', null)
-            ->where('services.0.latest_version', null));
+            ->where('services', fn ($services): bool => collect($services)->every(fn (array $service): bool => $service['version'] === null && $service['latest_version'] === null)));
 });
 
 test('a member dashboard keeps approvals, webhook events and service versions', function (): void {
@@ -255,6 +254,6 @@ test('a member dashboard keeps approvals, webhook events and service versions', 
         ->assertInertia(fn ($page) => $page
             ->has('pendingApprovals', 1)
             ->has('recentWebhookEvents.0.event_type')
-            ->where('services.0.version', '4.0.1')
-            ->where('services.0.latest_version', '4.0.2'));
+            ->where('services', fn ($services): bool => collect($services)->firstWhere('id', $connection->id)['version'] === '4.0.1'
+                && collect($services)->firstWhere('id', $connection->id)['latest_version'] === '4.0.2'));
 });
