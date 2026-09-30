@@ -70,31 +70,50 @@ test('prev/next navigation changes the month and its items', function (): void {
 });
 
 test('the monitored-only filter hides unmonitored items', function (): void {
+    // Moving Sonarr to its own host replaces the beforeEach calendar stub
+    // entirely, so Severance has to be included here alongside the new
+    // unmonitored item.
     $this->sonarr->update(['url' => 'http://sonarr-monitored-filter.local:8989']);
     Http::fake([
-        'sonarr-monitored-filter.local:8989/api/v3/calendar*' => Http::response([[
-            'id' => 90, 'seriesId' => 9, 'seasonNumber' => 1, 'episodeNumber' => 1, 'title' => 'Pilot',
-            'airDateUtc' => '2026-09-11T02:00:00Z', 'hasFile' => false, 'monitored' => false,
-            'series' => [
-                'title' => 'Unmonitored Show', 'monitored' => false,
-                'images' => [['coverType' => 'poster', 'remoteUrl' => 'https://img.test/unmonitored.jpg']],
+        'sonarr-monitored-filter.local:8989/api/v3/calendar*' => Http::response([
+            [
+                'id' => 70, 'seriesId' => 7, 'seasonNumber' => 1, 'episodeNumber' => 2, 'title' => 'Half Loop',
+                'airDateUtc' => '2026-09-10T02:00:00Z', 'hasFile' => false, 'monitored' => true,
+                'series' => [
+                    'title' => 'Severance', 'monitored' => true,
+                    'images' => [['coverType' => 'poster', 'remoteUrl' => 'https://img.test/severance.jpg']],
+                ],
             ],
-        ]]),
+            [
+                'id' => 90, 'seriesId' => 9, 'seasonNumber' => 1, 'episodeNumber' => 1, 'title' => 'Pilot',
+                'airDateUtc' => '2026-09-11T02:00:00Z', 'hasFile' => false, 'monitored' => false,
+                'series' => [
+                    'title' => 'Unmonitored Show', 'monitored' => false,
+                    'images' => [['coverType' => 'poster', 'remoteUrl' => 'https://img.test/unmonitored.jpg']],
+                ],
+            ],
+        ]),
     ]);
     $this->actingAs(User::factory()->create());
+    // Scoped to the title link, not the whole agenda row: the fake poster
+    // URL fails to load in a real browser, and once it does the Poster
+    // component falls back to a second "Severance" text node (its hint
+    // span) — an unscoped text match then trips Playwright's strict mode.
+    $severanceTitle = sprintf('[data-calendar-item="sonarr:%d:70"] a', $this->sonarr->id);
 
     visit(route('media.calendar.index', ['month' => '2026-09'], absolute: false))
         ->assertNoSmoke()
         ->click('[data-calendar-view="agenda"]')
-        ->assertSeeIn('[data-calendar-agenda]', 'Severance')
+        ->assertSeeIn($severanceTitle, 'Severance')
         ->assertSeeIn('[data-calendar-agenda]', 'Unmonitored Show')
         ->click('[data-calendar-filter="monitored"]')
-        ->assertSeeIn('[data-calendar-agenda]', 'Severance')
+        ->assertSeeIn($severanceTitle, 'Severance')
         ->assertDontSeeIn('[data-calendar-agenda]', 'Unmonitored Show');
 });
 
 test("a movie item's Search and Monitor controls post the movie path", function (): void {
     Http::fake([
+        'radarr.local:7878/api/v3/command' => Http::response(['id' => 2], 201),
         'radarr.local:7878/api/v3/movie/10' => Http::sequence()
             ->push(['id' => 10, 'title' => 'Dune', 'monitored' => true])
             ->push(['id' => 10, 'title' => 'Dune', 'monitored' => false]),
