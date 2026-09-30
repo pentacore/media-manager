@@ -168,16 +168,21 @@ function submit(): void {
     );
 }
 
-// Tracks the requesting context's own default id, so a later reload of the
-// (page-level, shared-across-titles) `requesting` prop with the *same*
-// default doesn't clobber a chooser's manual pick — only a genuine change of
-// the context's default, or opening the sheet for a different title, resets
-// the selection.
-let lastContextUserId: number | null = null;
+// Once a chooser picks a Seerr user by hand, later reloads of the
+// page-level (shared-across-titles) `requesting` prop — e.g. the deferred
+// refetch after submitting a request — must never overwrite that pick.
+// Only opening the sheet for a (possibly different) title clears the flag
+// and re-applies the context's own default.
+const userPickedManually = ref(false);
 
 function syncChosenUserFromContext(): void {
-    lastContextUserId = props.requesting?.userId ?? null;
-    chosenUserId.value = lastContextUserId !== null ? String(lastContextUserId) : null;
+    const userId = props.requesting?.userId ?? null;
+    chosenUserId.value = userId !== null ? String(userId) : null;
+}
+
+function chooseUser(next: unknown): void {
+    chosenUserId.value = typeof next === 'string' ? next : null;
+    userPickedManually.value = true;
 }
 
 watch(
@@ -185,6 +190,7 @@ watch(
     ([isOpen, item]) => {
         if (isOpen && item) {
             void load(item);
+            userPickedManually.value = false;
             syncChosenUserFromContext();
         }
     },
@@ -192,9 +198,9 @@ watch(
 );
 
 watch(
-    () => props.requesting?.userId ?? null,
-    (userId) => {
-        if (userId === lastContextUserId) {
+    () => props.requesting?.userId,
+    () => {
+        if (userPickedManually.value) {
             return;
         }
 
@@ -309,7 +315,7 @@ onBeforeUnmount(() => {
 
                     <div v-if="requesting?.canChooseUser" class="flex items-center gap-2">
                         <span class="text-xs text-muted-foreground">Requesting as</span>
-                        <Select v-model="chosenUserId">
+                        <Select :model-value="chosenUserId" @update:model-value="chooseUser">
                             <SelectTrigger class="h-8 w-48 text-xs">
                                 <SelectValue placeholder="Select user" />
                             </SelectTrigger>
