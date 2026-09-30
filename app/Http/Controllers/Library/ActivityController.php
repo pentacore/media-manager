@@ -6,11 +6,15 @@ namespace App\Http\Controllers\Library;
 
 use App\Enums\ServiceType;
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Library\MarkHistoryFailedRequest;
+use App\Models\ActivityLog;
 use App\Models\ServiceConnection;
 use App\Services\Arr\ArrClient;
 use App\Services\Arr\ManualImportResolver;
+use App\Services\Audit\AuditLogger;
 use App\Services\Radarr\RadarrClient;
 use App\Services\Sonarr\SonarrClient;
+use App\Support\UpstreamErrorText;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\RequestException;
@@ -19,20 +23,29 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
+use InvalidArgumentException;
 
 class ActivityController extends Controller
 {
     /**
-     * Combined Sonarr + Radarr activity view. Both the live download queue
-     * and the recent grab/import/failure history are deferred so the
-     * shell renders before the *arr round-trips finish; the Vue side
-     * pivots between them with a tab toggle.
+     * Sonarr + Radarr activity. The live queue (both services, merged) and
+     * one service's history page are deferred separately so the shell
+     * renders first; history is per service because two independently
+     * paged feeds cannot be merged into one correct page.
      */
-    public function queue(): Response
+    public function queue(Request $request): Response
     {
+        $historyService = $request->query('history_service') === 'radarr' ? 'radarr' : 'sonarr';
+        $historyPage = min(10_000, max(1, $request->integer('history_page', 1)));
+
         return Inertia::render('Library/Activity', [
             'queue' => Inertia::defer(fn (): array => $this->loadCombinedQueue()),
-            'history' => Inertia::defer(fn (): array => $this->loadCombinedHistory()),
+            'historyFilters' => [
+                'service' => $historyService,
+                'page' => $historyPage,
+                'active' => $request->has('history_service') || $request->has('history_page'),
+            ],
+            'history' => Inertia::defer(fn (): array => $this->loadHistory($historyService, $historyPage), 'history'),
         ]);
     }
 
@@ -64,7 +77,7 @@ class ActivityController extends Controller
      * action; `block` additionally blocklists the release and triggers a
      * re-search so the next better match downloads instead.
      */
-    public function removeQueueItem(Request $request, string $service, int $id): RedirectResponse
+    public function removeQueueItem(Request $request, string $service, int $id, AuditLogger $auditLogger): RedirectResponse
     {
         $verb = (string) $request->input('verb', 'remove');
 
@@ -85,8 +98,17 @@ class ActivityController extends Controller
                 skipRedownload: $verb === 'remove',
             );
         } catch (RequestException|ConnectionException $throwable) {
-            return $this->flashAndBack('error', __('Queue removal failed: :msg', ['msg' => $throwable->getMessage()]));
+            return $this->flashAndBack('error', __('Queue removal failed: :msg', ['msg' => UpstreamErrorText::sanitize($throwable->getMessage())]));
         }
+
+        $auditLogger->record(
+            $verb === 'block' ? 'queue.blocklisted' : 'queue.removed',
+            null,
+            $verb === 'block'
+                ? sprintf('Removed %s queue item %d and blocklisted the release.', ucfirst($service), $id)
+                : sprintf('Removed %s queue item %d.', ucfirst($service), $id),
+            context: ['service' => $service, 'queue_id' => $id],
+        );
 
         return $this->flashAndBack(
             'success',
@@ -94,6 +116,49 @@ class ActivityController extends Controller
                 ? __('Removed and blocklisted; a fresh search will run.')
                 : __('Removed from queue.'),
         );
+    }
+
+    /**
+     * Mark a grabbed history row failed: Sonarr/Radarr blocklist the release
+     * and, with "Redownload failed" on, search again. History ids overlap
+     * between instances, so the call is pinned to the connection the tab
+     * was rendered from and refuses anything else.
+     */
+    public function markHistoryFailed(MarkHistoryFailedRequest $markHistoryFailedRequest, string $service, int $id): RedirectResponse
+    {
+        $validated = $markHistoryFailedRequest->validated();
+        $serviceType = $service === 'radarr' ? ServiceType::Radarr : ServiceType::Sonarr;
+        $label = $serviceType->label();
+
+        try {
+            $connection = ServiceConnection::resolvePinnedStrict(['service_connection_id' => (int) $validated['service_connection_id']], $serviceType);
+        } catch (InvalidArgumentException|ModelNotFoundException) {
+            return $this->flashAndBack('error', __('That :service connection is unavailable — refresh and try again.', ['service' => $label]));
+        }
+
+        $client = $serviceType === ServiceType::Sonarr ? new SonarrClient($connection) : new RadarrClient($connection);
+
+        try {
+            $client->markHistoryFailed($id);
+        } catch (ConnectionException) {
+            return $this->flashAndBack('error', __(':service is unreachable right now.', ['service' => $label]));
+        } catch (RequestException $requestException) {
+            return $this->flashAndBack('error', match (true) {
+                $requestException->response->serverError() => __(':service is unreachable right now.', ['service' => $label]),
+                $requestException->response->status() === 404 => __('That history entry no longer exists in :service.', ['service' => $label]),
+                default => __(':service refused to mark it as failed.', ['service' => $label]),
+            });
+        }
+
+        ActivityLog::create([
+            'user_id' => $markHistoryFailedRequest->user()->id,
+            'service_connection_id' => $connection->id,
+            'action' => 'library.history.marked_failed',
+            'description' => sprintf('Marked %s history item %d as failed.', $label, $id),
+            'metadata' => ['history_id' => $id],
+        ]);
+
+        return $this->flashAndBack('success', __("Marked as failed — :service will blocklist the release and search again if 'Redownload failed' is on.", ['service' => $label]));
     }
 
     /**
@@ -268,93 +333,65 @@ class ActivityController extends Controller
         return ['rows' => $rows, 'errors' => $errors, 'services' => $services];
     }
 
-    /** Page size per service for the merged history table. */
+    /** Page size per service for the history table. */
     private const int HISTORY_PAGE_SIZE = 50;
 
     /**
-     * @return array{rows: array<int, array<string, mixed>>, errors: array<int, string>, services: array<string, bool>}
+     * @return array{service: string, configured: bool, connection_id: int|null, rows: list<array<string, mixed>>, page: int, page_size: int, total: int, error: string|null}
      */
-    private function loadCombinedHistory(): array
+    private function loadHistory(string $service, int $page): array
     {
-        $rows = [];
-        $errors = [];
-        $services = [];
+        $serviceType = $service === 'radarr' ? ServiceType::Radarr : ServiceType::Sonarr;
+        $connection = $this->safeResolve($serviceType);
 
-        $sonarr = $this->safeResolve(ServiceType::Sonarr);
-        $services['sonarr'] = $sonarr instanceof ServiceConnection;
-        if ($sonarr instanceof ServiceConnection) {
-            $rows = [...$rows, ...$this->fetchSonarrHistory($sonarr, $errors)];
+        $result = [
+            'service' => $service,
+            'configured' => $connection instanceof ServiceConnection,
+            'connection_id' => $connection?->id,
+            'rows' => [],
+            'page' => $page,
+            'page_size' => self::HISTORY_PAGE_SIZE,
+            'total' => 0,
+            'error' => null,
+        ];
+
+        if (! $connection instanceof ServiceConnection) {
+            return $result;
         }
 
-        $radarr = $this->safeResolve(ServiceType::Radarr);
-        $services['radarr'] = $radarr instanceof ServiceConnection;
-        if ($radarr instanceof ServiceConnection) {
-            $rows = [...$rows, ...$this->fetchRadarrHistory($radarr, $errors)];
-        }
+        $params = [
+            'page' => $page,
+            'pageSize' => self::HISTORY_PAGE_SIZE,
+            'sortKey' => 'date',
+            'sortDirection' => 'descending',
+        ];
 
-        usort($rows, fn (array $a, array $b): int => strcmp((string) ($b['date'] ?? ''), (string) ($a['date'] ?? '')));
-
-        return ['rows' => $rows, 'errors' => $errors, 'services' => $services];
-    }
-
-    /**
-     * @param  array<int, string>  $errors
-     * @return array<int, array<string, mixed>>
-     */
-    private function fetchSonarrHistory(ServiceConnection $serviceConnection, array &$errors): array
-    {
         try {
-            $payload = new SonarrClient($serviceConnection)->getHistory([
-                'page' => 1,
-                'pageSize' => self::HISTORY_PAGE_SIZE,
-                'sortKey' => 'date',
-                'sortDirection' => 'descending',
-                'includeSeries' => 'true',
-                'includeEpisode' => 'true',
-            ]);
-        } catch (RequestException|ConnectionException $throwable) {
-            $errors[] = 'Sonarr: '.$throwable->getMessage();
-
-            return [];
+            $payload = $serviceType === ServiceType::Sonarr
+                ? new SonarrClient($connection)->getHistory([...$params, 'includeSeries' => 'true', 'includeEpisode' => 'true'])
+                : new RadarrClient($connection)->getHistory([...$params, 'includeMovie' => 'true']);
+        } catch (RequestException|ConnectionException) {
+            return [...$result, 'error' => sprintf('%s is unreachable right now — its history could not be loaded.', $serviceType->label())];
         }
 
-        $records = is_array($payload['records'] ?? null) ? $payload['records'] : [];
+        $records = is_array($payload['records'] ?? null) ? array_values(array_filter($payload['records'], is_array(...))) : [];
 
-        return array_map(
-            fn (array $record): array => $this->mapSonarrHistory($record, $serviceConnection),
-            $records,
-        );
+        return [
+            ...$result,
+            'rows' => array_map(
+                fn (array $record): array => $serviceType === ServiceType::Sonarr
+                    ? $this->mapSonarrHistory($record, $connection)
+                    : $this->mapRadarrHistory($record, $connection),
+                $records,
+            ),
+            'total' => (int) ($payload['totalRecords'] ?? count($records)),
+        ];
     }
 
     /**
-     * @param  array<int, string>  $errors
-     * @return array<int, array<string, mixed>>
-     */
-    private function fetchRadarrHistory(ServiceConnection $serviceConnection, array &$errors): array
-    {
-        try {
-            $payload = new RadarrClient($serviceConnection)->getHistory([
-                'page' => 1,
-                'pageSize' => self::HISTORY_PAGE_SIZE,
-                'sortKey' => 'date',
-                'sortDirection' => 'descending',
-                'includeMovie' => 'true',
-            ]);
-        } catch (RequestException|ConnectionException $throwable) {
-            $errors[] = 'Radarr: '.$throwable->getMessage();
-
-            return [];
-        }
-
-        $records = is_array($payload['records'] ?? null) ? $payload['records'] : [];
-
-        return array_map(
-            fn (array $record): array => $this->mapRadarrHistory($record, $serviceConnection),
-            $records,
-        );
-    }
-
-    /**
+     * Never pass the record's `data` map on: grabbed rows carry the indexer
+     * downloadUrl (with its API key) and the release guid.
+     *
      * @param  array<string, mixed>  $record
      * @return array<string, mixed>
      */
@@ -379,11 +416,13 @@ class ActivityController extends Controller
             'quality' => $record['quality']['quality']['name'] ?? null,
             'download_client' => $record['downloadClient'] ?? null,
             'date' => $record['date'] ?? null,
-            'data' => $record['data'] ?? null,
         ];
     }
 
     /**
+     * Never pass the record's `data` map on: grabbed rows carry the indexer
+     * downloadUrl (with its API key) and the release guid.
+     *
      * @param  array<string, mixed>  $record
      * @return array<string, mixed>
      */
@@ -404,7 +443,6 @@ class ActivityController extends Controller
             'quality' => $record['quality']['quality']['name'] ?? null,
             'download_client' => $record['downloadClient'] ?? null,
             'date' => $record['date'] ?? null,
-            'data' => $record['data'] ?? null,
         ];
     }
 
