@@ -79,19 +79,33 @@ class AiModelPriceController extends Controller
         $validated['is_price_locked'] = $automaticUpdatesEnabled !== true;
 
         // A price picked from the catalog and saved unedited with automatic
-        // updates on keeps the feed's provenance, so it reads as synced.
+        // updates on keeps the feed's provenance, so it reads as synced. When
+        // it stays manual instead, tell a cold cache (the pick sat past the
+        // catalog TTL, so nothing was cached to compare against) apart from a
+        // genuine mismatch (cached, but the submitted rates differ or the
+        // model is gone): only the cold-cache case needs an explanation, the
+        // mismatch keeps the ordinary toast.
+        $catalogExpired = false;
+
         if ($fromCatalog === true && $automaticUpdatesEnabled === true) {
             $catalogAttributes = $catalogModelBrowser->catalogAttributes($validated['provider'], $validated['model'], $validated);
 
             if ($catalogAttributes !== null) {
                 $validated = [...$validated, ...$catalogAttributes];
+            } elseif (! $catalogModelBrowser->isCached($validated['provider'])) {
+                $catalogExpired = true;
             }
         }
 
         $aiModelPrice = AiModelPrice::create($validated);
         $aiModelPrice->rateLimits()->createMany($rateLimits);
 
-        Inertia::flash('toast', ['type' => 'success', 'message' => __('Model price added.')]);
+        Inertia::flash('toast', [
+            'type' => 'success',
+            'message' => $catalogExpired
+                ? __("Model price added as a manual price — the catalog had expired, so its feed source wasn't recorded. The next price refresh will sync it.")
+                : __('Model price added.'),
+        ]);
 
         return to_route('admin.ai-prices.index');
     }

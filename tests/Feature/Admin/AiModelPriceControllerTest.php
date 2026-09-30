@@ -754,7 +754,8 @@ test('a catalog pick with an edited price is saved as manual', function (bool $a
             'input_per_mtok' => '9.99',
             'automatic_updates_enabled' => $automaticUpdates ? '1' : '0',
         ]))
-        ->assertRedirect(route('admin.ai-prices.index'));
+        ->assertRedirect(route('admin.ai-prices.index'))
+        ->assertSessionHas('inertia.flash_data.toast.message', 'Model price added.');
 
     $aiModelPrice = AiModelPrice::query()->where('model', 'anthropic/claude-opus-5.5')->sole();
 
@@ -795,10 +796,17 @@ test('a catalog pick falls back to manual without calling a feed when the catalo
             'from_catalog' => '1',
             'automatic_updates_enabled' => '1',
         ])
-        ->assertRedirect(route('admin.ai-prices.index'));
+        ->assertRedirect(route('admin.ai-prices.index'))
+        ->assertSessionHas('inertia.flash_data.toast.type', 'success')
+        ->assertSessionHas(
+            'inertia.flash_data.toast.message',
+            "Model price added as a manual price — the catalog had expired, so its feed source wasn't recorded. The next price refresh will sync it.",
+        );
 
-    expect(AiModelPrice::query()->where('model', 'anthropic/claude-opus-5.5')->sole()->pricing_source)
-        ->toBe(PricingSource::Manual);
+    $aiModelPrice = AiModelPrice::query()->where('model', 'anthropic/claude-opus-5.5')->sole();
+
+    expect($aiModelPrice->pricing_source)->toBe(PricingSource::Manual)
+        ->and($aiModelPrice->is_price_locked)->toBeFalse();
 
     Http::assertNothingSent();
 });

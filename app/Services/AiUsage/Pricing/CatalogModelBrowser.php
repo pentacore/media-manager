@@ -255,6 +255,18 @@ final readonly class CatalogModelBrowser
     }
 
     /**
+     * Whether the provider's catalog slice is currently warm in cache, so a
+     * caller can tell a cold cache apart from a genuine mismatch when
+     * {@see self::catalogAttributes()} returns null.
+     */
+    public function isCached(string $provider): bool
+    {
+        $canonical = RefreshScope::canonicalProvider($provider);
+
+        return $canonical !== null && $this->cachedSlice($this->cacheKey($canonical)) !== null;
+    }
+
+    /**
      * @param  array{model: string, source: string, source_url: string|null, source_updated_at: string|null, tiered: bool, prices: array<string, string|null>}  $entry
      */
     private function candidate(string $provider, array $entry): ModelPriceCandidate
