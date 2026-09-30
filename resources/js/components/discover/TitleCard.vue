@@ -27,7 +27,9 @@ const pill = computed(() => titleStatusPill(props.item.status));
         <span class="line-clamp-2 text-[13px] leading-snug font-medium">
             {{ item.title }}
         </span>
-        <span class="flex flex-wrap items-center gap-1.5 text-[11.5px] text-muted-foreground">
+        <span
+            class="flex flex-wrap items-center gap-1.5 text-[11.5px] text-muted-foreground"
+        >
             <span class="font-mono-tabular">{{ item.year ?? '—' }}</span>
             <StatusPill v-if="pill" :status="pill.status" :label="pill.label" />
         </span>

@@ -17,7 +17,10 @@ const emit = defineEmits<{ open: [item: DiscoverTitle] }>();
             <AlertTitle>{{ heading }} is unavailable</AlertTitle>
             <AlertDescription>{{ row.error }}</AlertDescription>
         </Alert>
-        <p v-else-if="row.results.length === 0" class="text-[13px] text-muted-foreground">
+        <p
+            v-else-if="row.results.length === 0"
+            class="text-[13px] text-muted-foreground"
+        >
             Nothing here right now.
         </p>
         <div v-else class="flex gap-3 overflow-x-auto pb-2">

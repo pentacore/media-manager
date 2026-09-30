@@ -1,9 +1,5 @@
 export type TitleStatus =
-    | 'available'
-    | 'partially_available'
-    | 'requested'
-    | 'pending'
-    | 'none';
+    'available' | 'partially_available' | 'requested' | 'pending' | 'none';
 
 export type DiscoverMediaType = 'movie' | 'tv';
 

@@ -546,9 +546,7 @@ function sonarrSeriesUrl(): string | null {
                                         }}
                                     </span>
                                     <Pill
-                                        :data-season-pill="
-                                            season.season_number
-                                        "
+                                        :data-season-pill="season.season_number"
                                         :variant="
                                             seasonEpisodesMonitored(
                                                 season.season_number,

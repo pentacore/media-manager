@@ -103,7 +103,10 @@ export function useNavItems(counts?: NavCounts): ComputedRef<NavGroup[]> {
                     .filter(visible)
                     .map((item) =>
                         item.children
-                            ? { ...item, children: item.children.filter(visible) }
+                            ? {
+                                  ...item,
+                                  children: item.children.filter(visible),
+                              }
                             : item,
                     )
                     .filter(
@@ -171,7 +174,9 @@ export function useNavItems(counts?: NavCounts): ComputedRef<NavGroup[]> {
                         href: WantedController.url(),
                         icon: Radar,
                         ability: 'manage-library',
-                        badge: counts ? () => counts.wantedMissing.value : undefined,
+                        badge: counts
+                            ? () => counts.wantedMissing.value
+                            : undefined,
                     },
                     {
                         title: 'Requests',

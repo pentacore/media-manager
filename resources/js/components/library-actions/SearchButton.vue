@@ -17,7 +17,13 @@ const props = withDefaults(
         movieIds?: number[];
         label?: string;
     }>(),
-    { seriesId: null, seasonNumber: null, episodeIds: () => [], movieIds: () => [], label: 'Search' },
+    {
+        seriesId: null,
+        seasonNumber: null,
+        episodeIds: () => [],
+        movieIds: () => [],
+        label: 'Search',
+    },
 );
 
 const busy = ref(false);
@@ -50,7 +56,14 @@ function start(): void {
 </script>
 
 <template>
-    <Button variant="outline" size="sm" class="h-7 gap-1.5 text-xs" :disabled="busy" data-search-now @click.stop="start">
+    <Button
+        variant="outline"
+        size="sm"
+        class="h-7 gap-1.5 text-xs"
+        :disabled="busy"
+        data-search-now
+        @click.stop="start"
+    >
         <Search class="size-3.5" />
         {{ label }}
     </Button>

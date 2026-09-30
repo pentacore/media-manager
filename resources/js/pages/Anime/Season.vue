@@ -143,7 +143,9 @@ const requestingReady = computed(() => Boolean(props.requestingUsers));
 // legitimate "zero Seerr users" state — so treat it the same way the other
 // choosers (Discover/Search) treat a picker outage.
 const seerrPickerUnreachable = computed(
-    () => requestingReady.value && (props.requestingUsers?.users.length ?? 0) === 0,
+    () =>
+        requestingReady.value &&
+        (props.requestingUsers?.users.length ?? 0) === 0,
 );
 
 // Once the deferred users arrive, default to the email-matched id.

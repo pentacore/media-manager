@@ -19,7 +19,9 @@ const props = defineProps<{
     currentId: number | null;
 }>();
 
-const value = ref<string | undefined>(props.currentId ? String(props.currentId) : undefined);
+const value = ref<string | undefined>(
+    props.currentId ? String(props.currentId) : undefined,
+);
 
 watch(
     () => props.currentId,

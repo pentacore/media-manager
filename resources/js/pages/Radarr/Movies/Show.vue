@@ -10,7 +10,12 @@ import {
 } from '@lucide/vue';
 import { ref } from 'vue';
 import MovieController from '@/actions/App/Http/Controllers/Media/MovieController';
-import { InteractiveSearchDialog, MonitorButton, QualityProfileSelect, SearchButton } from '@/components/library-actions';
+import {
+    InteractiveSearchDialog,
+    MonitorButton,
+    QualityProfileSelect,
+    SearchButton,
+} from '@/components/library-actions';
 import ReplaceFileDialog from '@/components/media-replacement/ReplaceFileDialog.vue';
 import { Pill, Poster, StatusPill } from '@/components/mm';
 import { Button } from '@/components/ui/button';
@@ -140,7 +145,11 @@ function confirmDelete() {
                 </Button>
             </Link>
             <div class="flex items-center gap-2">
-                <div v-if="can('manage-library')" class="flex items-center gap-2" data-movie-actions>
+                <div
+                    v-if="can('manage-library')"
+                    class="flex items-center gap-2"
+                    data-movie-actions
+                >
                     <MonitorButton
                         service="radarr"
                         :connection-id="service_connection_id"
@@ -172,7 +181,11 @@ function confirmDelete() {
                     />
                 </div>
                 <a
-                    v-if="movie.title_slug && can('manage-library') && connection.url"
+                    v-if="
+                        movie.title_slug &&
+                        can('manage-library') &&
+                        connection.url
+                    "
                     :href="`${connection.url}/movie/${movie.title_slug}`"
                     target="_blank"
                     rel="noopener noreferrer"
@@ -213,8 +226,8 @@ function confirmDelete() {
                                 >
                                 <DialogDescription data-delete-description>
                                     Removes the movie from Radarr. Cannot be
-                                    undone. Deletion may require approval in
-                                    the Action Queue.
+                                    undone. Deletion may require approval in the
+                                    Action Queue.
                                 </DialogDescription>
                             </DialogHeader>
                             <div class="flex items-center gap-2 py-2">

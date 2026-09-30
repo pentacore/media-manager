@@ -24,7 +24,13 @@ interface MyRequest {
     media_type: string;
     title: string;
     poster_path: string | null;
-    status: 'pending' | 'approved' | 'declined' | 'failed' | 'completed' | 'available';
+    status:
+        | 'pending'
+        | 'approved'
+        | 'declined'
+        | 'failed'
+        | 'completed'
+        | 'available';
     requested_at: string | null;
     can_cancel: boolean;
 }
@@ -35,7 +41,12 @@ const props = defineProps<{
     requests?: {
         linked: boolean;
         results: MyRequest[];
-        meta: { current_page: number; last_page: number; total: number; per_page: number };
+        meta: {
+            current_page: number;
+            last_page: number;
+            total: number;
+            per_page: number;
+        };
         error: string | null;
     };
 }>();
@@ -74,18 +85,29 @@ function confirmCancel(): void {
 
     <div class="flex flex-col gap-4 p-5">
         <div>
-            <h1 class="text-[22px] leading-tight font-semibold tracking-tight">My requests</h1>
-            <p class="mt-1 text-[13px] text-muted-foreground">What you asked for, and where it is.</p>
+            <h1 class="text-[22px] leading-tight font-semibold tracking-tight">
+                My requests
+            </h1>
+            <p class="mt-1 text-[13px] text-muted-foreground">
+                What you asked for, and where it is.
+            </p>
         </div>
 
-        <div v-if="!props.seerr.connected" class="rounded-xl border border-border bg-card p-6 text-[13px] text-muted-foreground">
+        <div
+            v-if="!props.seerr.connected"
+            class="rounded-xl border border-border bg-card p-6 text-[13px] text-muted-foreground"
+        >
             No Seerr connection is configured.
         </div>
 
         <Deferred v-else data="requests">
             <template #fallback>
                 <div class="space-y-2">
-                    <Skeleton v-for="n in 4" :key="n" class="h-16 w-full rounded-xl" />
+                    <Skeleton
+                        v-for="n in 4"
+                        :key="n"
+                        class="h-16 w-full rounded-xl"
+                    />
                 </div>
             </template>
 
@@ -102,23 +124,41 @@ function confirmCancel(): void {
                 No Seerr account is linked to you — ask an admin.
             </div>
             <div
-                v-else-if="props.requests && props.requests.results.length === 0"
+                v-else-if="
+                    props.requests && props.requests.results.length === 0
+                "
                 class="rounded-xl border border-border bg-card p-6 text-[13px] text-muted-foreground"
             >
                 You have not requested anything yet.
             </div>
-            <div v-else-if="props.requests" class="overflow-hidden rounded-xl border border-border bg-card">
+            <div
+                v-else-if="props.requests"
+                class="overflow-hidden rounded-xl border border-border bg-card"
+            >
                 <div
                     v-for="(request, i) in props.requests.results"
                     :key="request.id"
-                    :class="['flex items-center gap-3.5 px-4 py-3', i > 0 && 'border-t border-border']"
+                    :class="[
+                        'flex items-center gap-3.5 px-4 py-3',
+                        i > 0 && 'border-t border-border',
+                    ]"
                     :data-my-request="request.id"
                 >
-                    <Poster :hint="request.title" size="sm" :src="tmdbPosterUrl(request.poster_path)" />
+                    <Poster
+                        :hint="request.title"
+                        size="sm"
+                        :src="tmdbPosterUrl(request.poster_path)"
+                    />
                     <div class="min-w-0 flex-1">
-                        <div class="text-[13px] font-medium">{{ request.title }}</div>
+                        <div class="text-[13px] font-medium">
+                            {{ request.title }}
+                        </div>
                         <div class="text-[11.5px] text-muted-foreground">
-                            {{ request.media_type === 'tv' ? 'TV' : 'Movie' }}<template v-if="request.requested_at"> · {{ formatDate(request.requested_at) }}</template>
+                            {{ request.media_type === 'tv' ? 'TV' : 'Movie'
+                            }}<template v-if="request.requested_at">
+                                ·
+                                {{ formatDate(request.requested_at) }}</template
+                            >
                         </div>
                     </div>
                     <StatusPill :status="request.status" />
@@ -135,31 +175,74 @@ function confirmCancel(): void {
                 </div>
             </div>
 
-            <div v-if="props.requests && props.requests.meta.last_page > 1" class="flex items-center justify-between text-[12px]">
+            <div
+                v-if="props.requests && props.requests.meta.last_page > 1"
+                class="flex items-center justify-between text-[12px]"
+            >
                 <Link
                     v-if="props.requests.meta.current_page > 1"
-                    :href="MyRequestController.index.url({ query: { page: props.requests.meta.current_page - 1 } })"
+                    :href="
+                        MyRequestController.index.url({
+                            query: {
+                                page: props.requests.meta.current_page - 1,
+                            },
+                        })
+                    "
                     preserve-scroll
-                >Previous</Link>
-                <span class="text-muted-foreground">Page {{ props.requests.meta.current_page }} of {{ props.requests.meta.last_page }}</span>
+                    >Previous</Link
+                >
+                <span class="text-muted-foreground"
+                    >Page {{ props.requests.meta.current_page }} of
+                    {{ props.requests.meta.last_page }}</span
+                >
                 <Link
-                    v-if="props.requests.meta.current_page < props.requests.meta.last_page"
-                    :href="MyRequestController.index.url({ query: { page: props.requests.meta.current_page + 1 } })"
+                    v-if="
+                        props.requests.meta.current_page <
+                        props.requests.meta.last_page
+                    "
+                    :href="
+                        MyRequestController.index.url({
+                            query: {
+                                page: props.requests.meta.current_page + 1,
+                            },
+                        })
+                    "
                     preserve-scroll
-                >Next</Link>
+                    >Next</Link
+                >
             </div>
         </Deferred>
     </div>
 
-    <Dialog :open="cancelling !== null" @update:open="(open) => { if (!open) cancelling = null; }">
+    <Dialog
+        :open="cancelling !== null"
+        @update:open="
+            (open) => {
+                if (!open) cancelling = null;
+            }
+        "
+    >
         <DialogContent>
             <DialogHeader>
-                <DialogTitle>Cancel your request for {{ cancelling?.title }}?</DialogTitle>
-                <DialogDescription>It is still waiting for approval, so nothing has been downloaded yet.</DialogDescription>
+                <DialogTitle
+                    >Cancel your request for
+                    {{ cancelling?.title }}?</DialogTitle
+                >
+                <DialogDescription
+                    >It is still waiting for approval, so nothing has been
+                    downloaded yet.</DialogDescription
+                >
             </DialogHeader>
             <DialogFooter>
-                <Button variant="outline" @click="cancelling = null">Keep it</Button>
-                <Button variant="destructive" :disabled="submitting" data-cancel-confirm @click="confirmCancel">
+                <Button variant="outline" @click="cancelling = null"
+                    >Keep it</Button
+                >
+                <Button
+                    variant="destructive"
+                    :disabled="submitting"
+                    data-cancel-confirm
+                    @click="confirmCancel"
+                >
                     Cancel request
                 </Button>
             </DialogFooter>

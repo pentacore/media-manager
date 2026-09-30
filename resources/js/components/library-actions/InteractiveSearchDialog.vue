@@ -113,7 +113,8 @@ function sortBy(key: SortKey): void {
     }
 
     sortKey.value = key;
-    sortDescending.value = key !== 'title' && key !== 'indexer' && key !== 'quality';
+    sortDescending.value =
+        key !== 'title' && key !== 'indexer' && key !== 'quality';
 }
 
 function stopSlowTimer(): void {
@@ -146,7 +147,9 @@ async function search(): Promise<void> {
     } catch (error) {
         if (seq === requestSeq) {
             errorMessage.value =
-                error instanceof Error ? error.message : 'Could not search for releases.';
+                error instanceof Error
+                    ? error.message
+                    : 'Could not search for releases.';
         }
     } finally {
         if (seq === requestSeq) {
@@ -165,13 +168,17 @@ async function grab(row: ReleaseRow): Promise<void> {
     errorMessage.value = null;
 
     try {
-        const data = await jsonRequest<GrabResponse>('post', MediaActionController.grab.url(), {
-            service: props.service,
-            service_connection_id: props.connectionId,
-            item_id: props.itemId,
-            release_key: row.key,
-            indexer_id: row.indexer_id,
-        });
+        const data = await jsonRequest<GrabResponse>(
+            'post',
+            MediaActionController.grab.url(),
+            {
+                service: props.service,
+                service_connection_id: props.connectionId,
+                item_id: props.itemId,
+                release_key: row.key,
+                indexer_id: row.indexer_id,
+            },
+        );
 
         const notify = data.requires_approval ? toast.info : toast.success;
         notify(
@@ -180,7 +187,8 @@ async function grab(row: ReleaseRow): Promise<void> {
                 ? {
                       action: {
                           label: 'Action Queue',
-                          onClick: () => router.visit(ActionRequestController.index.url()),
+                          onClick: () =>
+                              router.visit(ActionRequestController.index.url()),
                       },
                   }
                 : undefined,
@@ -188,7 +196,9 @@ async function grab(row: ReleaseRow): Promise<void> {
         emit('update:open', false);
     } catch (error) {
         errorMessage.value =
-            error instanceof Error ? error.message : 'Could not grab this release.';
+            error instanceof Error
+                ? error.message
+                : 'Could not grab this release.';
     } finally {
         grabbing.value = null;
     }
@@ -201,7 +211,9 @@ function formatSize(bytes: number): string {
 
     const gb = bytes / 1024 ** 3;
 
-    return gb >= 1 ? `${gb.toFixed(1)} GB` : `${(bytes / 1024 ** 2).toFixed(0)} MB`;
+    return gb >= 1
+        ? `${gb.toFixed(1)} GB`
+        : `${(bytes / 1024 ** 2).toFixed(0)} MB`;
 }
 
 function formatAge(hours: number | null): string {
@@ -235,30 +247,50 @@ watch(
 
 <template>
     <Dialog :open="open" @update:open="(value) => emit('update:open', value)">
-        <DialogContent class="max-h-[85vh] overflow-y-auto sm:max-w-5xl" data-interactive-search-dialog>
+        <DialogContent
+            class="max-h-[85vh] overflow-y-auto sm:max-w-5xl"
+            data-interactive-search-dialog
+        >
             <DialogHeader>
                 <DialogTitle>Interactive search — {{ heading }}</DialogTitle>
                 <DialogDescription>
-                    Pick a release to send to the download client. Rejected releases are dimmed; you can still grab them.
+                    Pick a release to send to the download client. Rejected
+                    releases are dimmed; you can still grab them.
                 </DialogDescription>
             </DialogHeader>
 
-            <div v-if="loading" class="flex flex-col items-center gap-2 py-10 text-[13px] text-muted-foreground">
+            <div
+                v-if="loading"
+                class="flex flex-col items-center gap-2 py-10 text-[13px] text-muted-foreground"
+            >
                 <Loader2 class="size-5 animate-spin" />
                 Searching indexers…
-                <span v-if="slowHint">Indexer searches can take up to two minutes.</span>
+                <span v-if="slowHint"
+                    >Indexer searches can take up to two minutes.</span
+                >
             </div>
 
-            <p v-else-if="errorMessage" class="text-[13px] text-destructive">{{ errorMessage }}</p>
+            <p v-else-if="errorMessage" class="text-[13px] text-destructive">
+                {{ errorMessage }}
+            </p>
 
-            <p v-else-if="releases.length === 0" class="py-6 text-center text-[13px] text-muted-foreground">
+            <p
+                v-else-if="releases.length === 0"
+                class="py-6 text-center text-[13px] text-muted-foreground"
+            >
                 No releases found.
             </p>
 
             <table v-else class="w-full text-left text-[12.5px]">
-                <thead class="text-[11px] tracking-[0.05em] text-muted-foreground uppercase">
+                <thead
+                    class="text-[11px] tracking-[0.05em] text-muted-foreground uppercase"
+                >
                     <tr>
-                        <th v-for="column in COLUMNS" :key="column.key" class="px-2 py-1.5">
+                        <th
+                            v-for="column in COLUMNS"
+                            :key="column.key"
+                            class="px-2 py-1.5"
+                        >
                             <button
                                 type="button"
                                 class="inline-flex items-center gap-1"
@@ -267,7 +299,10 @@ watch(
                             >
                                 {{ column.label }}
                                 <template v-if="sortKey === column.key">
-                                    <ArrowDown v-if="sortDescending" class="size-3" />
+                                    <ArrowDown
+                                        v-if="sortDescending"
+                                        class="size-3"
+                                    />
                                     <ArrowUp v-else class="size-3" />
                                 </template>
                             </button>
@@ -279,22 +314,44 @@ watch(
                     <tr
                         v-for="row in sorted"
                         :key="row.key"
-                        :class="cn('border-t border-border align-top', row.rejected && 'opacity-60')"
+                        :class="
+                            cn(
+                                'border-t border-border align-top',
+                                row.rejected && 'opacity-60',
+                            )
+                        "
                         :data-release-row="row.key"
                     >
                         <td class="max-w-[360px] px-2 py-2">
-                            <div class="font-medium break-words">{{ row.title }}</div>
-                            <ul v-if="row.rejections.length > 0" class="mt-1 space-y-0.5 text-[11.5px] text-warning">
-                                <li v-for="reason in row.rejections" :key="reason" class="flex items-start gap-1">
-                                    <AlertTriangle class="mt-0.5 size-3 shrink-0" />
+                            <div class="font-medium break-words">
+                                {{ row.title }}
+                            </div>
+                            <ul
+                                v-if="row.rejections.length > 0"
+                                class="mt-1 space-y-0.5 text-[11.5px] text-warning"
+                            >
+                                <li
+                                    v-for="reason in row.rejections"
+                                    :key="reason"
+                                    class="flex items-start gap-1"
+                                >
+                                    <AlertTriangle
+                                        class="mt-0.5 size-3 shrink-0"
+                                    />
                                     {{ reason }}
                                 </li>
                             </ul>
                         </td>
                         <td class="px-2 py-2">{{ row.quality ?? '—' }}</td>
-                        <td class="font-mono-tabular px-2 py-2">{{ formatSize(row.size) }}</td>
-                        <td class="font-mono-tabular px-2 py-2">{{ formatAge(row.age_hours) }}</td>
-                        <td class="font-mono-tabular px-2 py-2">{{ row.peers ?? '—' }}</td>
+                        <td class="font-mono-tabular px-2 py-2">
+                            {{ formatSize(row.size) }}
+                        </td>
+                        <td class="font-mono-tabular px-2 py-2">
+                            {{ formatAge(row.age_hours) }}
+                        </td>
+                        <td class="font-mono-tabular px-2 py-2">
+                            {{ row.peers ?? '—' }}
+                        </td>
                         <td class="px-2 py-2">{{ row.indexer ?? '—' }}</td>
                         <td class="px-2 py-2 text-right">
                             <Button
@@ -305,7 +362,10 @@ watch(
                                 data-release-grab
                                 @click="grab(row)"
                             >
-                                <Loader2 v-if="grabbing === row.key" class="size-3.5 animate-spin" />
+                                <Loader2
+                                    v-if="grabbing === row.key"
+                                    class="size-3.5 animate-spin"
+                                />
                                 {{ row.rejected ? 'Grab anyway' : 'Grab' }}
                             </Button>
                         </td>

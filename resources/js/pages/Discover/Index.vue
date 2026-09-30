@@ -8,7 +8,11 @@ import {
     TitleDetailSheet,
 } from '@/components/discover';
 import { dashboard } from '@/routes';
-import type { DiscoverRowPayload, DiscoverTitle, RequestingContext } from '@/types';
+import type {
+    DiscoverRowPayload,
+    DiscoverTitle,
+    RequestingContext,
+} from '@/types';
 
 type RowProp = 'trending' | 'popularMovies' | 'popularTv' | 'upcoming';
 
@@ -51,7 +55,9 @@ function openTitle(item: DiscoverTitle): void {
 
     <div class="flex flex-col gap-6 p-5">
         <div>
-            <h1 class="text-[22px] leading-tight font-semibold tracking-tight">Discover</h1>
+            <h1 class="text-[22px] leading-tight font-semibold tracking-tight">
+                Discover
+            </h1>
             <p class="mt-1 text-[13px] text-muted-foreground">
                 Find something to watch and request it.
             </p>
@@ -64,7 +70,8 @@ function openTitle(item: DiscoverTitle): void {
         >
             <p class="text-[14px] font-semibold">Discover needs Seerr</p>
             <p class="mt-1 text-[13px] text-muted-foreground">
-                No Seerr connection is configured, so there is nothing to browse or request yet. Ask an admin to connect Seerr.
+                No Seerr connection is configured, so there is nothing to browse
+                or request yet. Ask an admin to connect Seerr.
             </p>
         </div>
 
@@ -83,5 +90,9 @@ function openTitle(item: DiscoverTitle): void {
         </template>
     </div>
 
-    <TitleDetailSheet v-model:open="sheetOpen" :item="selected" :requesting="props.requesting" />
+    <TitleDetailSheet
+        v-model:open="sheetOpen"
+        :item="selected"
+        :requesting="props.requesting"
+    />
 </template>

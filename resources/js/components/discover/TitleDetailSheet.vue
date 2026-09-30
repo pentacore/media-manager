@@ -71,10 +71,16 @@ const noAccount = computed(
 // chooser actually picks someone — mirrors Anime/Season.vue's
 // `resolvedUserId === null` guard.
 const chosenUserMissing = computed(
-    () => props.requesting?.canChooseUser === true && chosenUserId.value === null,
+    () =>
+        props.requesting?.canChooseUser === true && chosenUserId.value === null,
 );
 const canRequest = computed(() => {
-    if (!detail.value || !props.requesting || submitting.value || chosenUserMissing.value) {
+    if (
+        !detail.value ||
+        !props.requesting ||
+        submitting.value ||
+        chosenUserMissing.value
+    ) {
         return false;
     }
 
@@ -126,7 +132,9 @@ async function load(item: DiscoverTitle): Promise<void> {
     } catch (error) {
         if (seq === requestSeq) {
             loadError.value =
-                error instanceof Error ? error.message : 'Could not load this title.';
+                error instanceof Error
+                    ? error.message
+                    : 'Could not load this title.';
         }
     } finally {
         if (seq === requestSeq) {
@@ -152,7 +160,8 @@ function submit(): void {
         {
             tmdbId: detail.value.tmdb_id,
             mediaType: detail.value.media_type,
-            seasons: detail.value.media_type === 'tv' ? selectedSeasons.value : [],
+            seasons:
+                detail.value.media_type === 'tv' ? selectedSeasons.value : [],
             userId:
                 props.requesting?.canChooseUser && chosenUserId.value
                     ? Number(chosenUserId.value)
@@ -215,8 +224,7 @@ let stopFlashListener: (() => void) | null = null;
 onMounted(() => {
     stopFlashListener = router.on('flash', (event) => {
         const outcome = (event as CustomEvent).detail?.flash?.requestOutcome as
-            | RequestOutcome
-            | undefined;
+            RequestOutcome | undefined;
         const current = detail.value;
 
         if (
@@ -249,10 +257,18 @@ onBeforeUnmount(() => {
 
 <template>
     <Sheet :open="open" @update:open="(value) => emit('update:open', value)">
-        <SheetContent side="right" class="w-full overflow-y-auto sm:max-w-lg" data-title-sheet>
+        <SheetContent
+            side="right"
+            class="w-full overflow-y-auto sm:max-w-lg"
+            data-title-sheet
+        >
             <SheetHeader>
-                <SheetTitle>{{ detail?.title ?? item?.title ?? 'Title' }}</SheetTitle>
-                <SheetDescription>{{ facts.join(' · ') || ' ' }}</SheetDescription>
+                <SheetTitle>{{
+                    detail?.title ?? item?.title ?? 'Title'
+                }}</SheetTitle>
+                <SheetDescription>{{
+                    facts.join(' · ') || ' '
+                }}</SheetDescription>
             </SheetHeader>
 
             <div class="space-y-4 px-4 pb-6">
@@ -274,17 +290,33 @@ onBeforeUnmount(() => {
                         class="aspect-video w-full rounded-md border border-border object-cover"
                     />
                     <div class="flex gap-4">
-                        <Poster :hint="detail.title" size="lg" :src="tmdbPosterUrl(detail.poster_path)" />
+                        <Poster
+                            :hint="detail.title"
+                            size="lg"
+                            :src="tmdbPosterUrl(detail.poster_path)"
+                        />
                         <div class="min-w-0 space-y-2">
-                            <StatusPill v-if="pill" :status="pill.status" :label="pill.label" />
-                            <p v-if="detail.overview" class="text-[13px] leading-relaxed text-muted-foreground">
+                            <StatusPill
+                                v-if="pill"
+                                :status="pill.status"
+                                :label="pill.label"
+                            />
+                            <p
+                                v-if="detail.overview"
+                                class="text-[13px] leading-relaxed text-muted-foreground"
+                            >
                                 {{ detail.overview }}
                             </p>
                         </div>
                     </div>
 
-                    <fieldset v-if="detail.media_type === 'tv'" class="space-y-2">
-                        <legend class="text-[11.5px] font-semibold tracking-[0.05em] text-muted-foreground uppercase">
+                    <fieldset
+                        v-if="detail.media_type === 'tv'"
+                        class="space-y-2"
+                    >
+                        <legend
+                            class="text-[11.5px] font-semibold tracking-[0.05em] text-muted-foreground uppercase"
+                        >
                             Seasons
                         </legend>
                         <div
@@ -297,12 +329,26 @@ onBeforeUnmount(() => {
                                 <Checkbox
                                     :id="`season-${season.season_number}`"
                                     :disabled="!season.requestable"
-                                    :model-value="selectedSeasons.includes(season.season_number)"
-                                    @update:model-value="(value) => toggleSeason(season.season_number, value === true)"
+                                    :model-value="
+                                        selectedSeasons.includes(
+                                            season.season_number,
+                                        )
+                                    "
+                                    @update:model-value="
+                                        (value) =>
+                                            toggleSeason(
+                                                season.season_number,
+                                                value === true,
+                                            )
+                                    "
                                 />
                                 <Label :for="`season-${season.season_number}`">
                                     {{ season.name }}
-                                    <span class="text-muted-foreground">· {{ season.episode_count }} episodes</span>
+                                    <span class="text-muted-foreground"
+                                        >·
+                                        {{ season.episode_count }}
+                                        episodes</span
+                                    >
                                 </Label>
                             </div>
                             <StatusPill
@@ -313,14 +359,26 @@ onBeforeUnmount(() => {
                         </div>
                     </fieldset>
 
-                    <div v-if="requesting?.canChooseUser" class="flex items-center gap-2">
-                        <span class="text-xs text-muted-foreground">Requesting as</span>
-                        <Select :model-value="chosenUserId" @update:model-value="chooseUser">
+                    <div
+                        v-if="requesting?.canChooseUser"
+                        class="flex items-center gap-2"
+                    >
+                        <span class="text-xs text-muted-foreground"
+                            >Requesting as</span
+                        >
+                        <Select
+                            :model-value="chosenUserId"
+                            @update:model-value="chooseUser"
+                        >
                             <SelectTrigger class="h-8 w-48 text-xs">
                                 <SelectValue placeholder="Select user" />
                             </SelectTrigger>
                             <SelectContent>
-                                <SelectItem v-for="user in requesting.users" :key="user.id" :value="String(user.id)">
+                                <SelectItem
+                                    v-for="user in requesting.users"
+                                    :key="user.id"
+                                    :value="String(user.id)"
+                                >
                                     {{ user.label }}
                                 </SelectItem>
                             </SelectContent>
@@ -335,11 +393,18 @@ onBeforeUnmount(() => {
                         Choose which Seerr user to request as.
                     </p>
 
-                    <p v-if="requesting?.error" class="text-[13px] text-destructive">
+                    <p
+                        v-if="requesting?.error"
+                        class="text-[13px] text-destructive"
+                    >
                         {{ requesting.error }}
                     </p>
 
-                    <p v-if="noAccount" class="text-[13px] text-muted-foreground" data-no-seerr-account>
+                    <p
+                        v-if="noAccount"
+                        class="text-[13px] text-muted-foreground"
+                        data-no-seerr-account
+                    >
                         No Seerr account is linked to you — ask an admin.
                     </p>
                     <Button
@@ -349,7 +414,10 @@ onBeforeUnmount(() => {
                         data-request-submit
                         @click="submit"
                     >
-                        <Loader2 v-if="submitting" class="size-4 animate-spin" />
+                        <Loader2
+                            v-if="submitting"
+                            class="size-4 animate-spin"
+                        />
                         Request
                     </Button>
                 </template>

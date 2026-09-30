@@ -16,7 +16,13 @@ const props = withDefaults(
         seasonNumber?: number | null;
         label?: string | null;
     }>(),
-    { itemId: null, seriesId: null, episodeIds: () => [], seasonNumber: null, label: null },
+    {
+        itemId: null,
+        seriesId: null,
+        episodeIds: () => [],
+        seasonNumber: null,
+        label: null,
+    },
 );
 
 const busy = ref(false);
@@ -26,7 +32,8 @@ function toggle(): void {
         return;
     }
 
-    const isEpisodeToggle = props.episodeIds.length > 0 && props.seriesId !== null;
+    const isEpisodeToggle =
+        props.episodeIds.length > 0 && props.seriesId !== null;
 
     // Never post the whole-title branch without an item id — a season with
     // no episodes yet (announced, unaired) has neither episode ids nor an
