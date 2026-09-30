@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use App\Enums\UserRole;
 use App\Models\User;
+use App\Support\Abilities;
 use Illuminate\Support\Facades\Broadcast;
 use Laravel\Ai\Contracts\ConversationStore;
 use Laravel\Ai\Contracts\VerifiesConversationOwnership;
@@ -27,6 +28,10 @@ Broadcast::channel('members.sabnzbd', fn (User $user): bool => $user->role->isAt
 Broadcast::channel('emby.activity', fn (User $user): bool => true);
 Broadcast::channel('dashboard', fn (User $user): bool => true);
 Broadcast::channel('activity', fn (User $user): bool => true);
+
+// Audit rows (admin changes with masked diffs) — admins only. ActivityLogCreated
+// routes every audit row here and never onto `activity`.
+Broadcast::channel('activity.audit', fn (User $user): bool => $user->can(Abilities::ADMIN));
 
 // AI price refresh job lifecycle. Admin-only — the AI Prices page is gated
 // the same way and the payload exposes refresh internals (summary text,

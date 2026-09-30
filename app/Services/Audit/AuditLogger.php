@@ -14,7 +14,7 @@ use Illuminate\Support\Facades\Auth;
 /**
  * The only writer of `audit` activity rows. Callers pass the raw diff
  * (AuditChanges::between()) and context; masking happens here so a caller
- * cannot forget it. Audit rows are admin-only (ActivityLog::scopeVisibleTo())
+ * cannot forget it. Audit rows are admin-only (the model's visibleTo scope)
  * and broadcast on `activity.audit` only (ActivityLogCreated).
  */
 final readonly class AuditLogger

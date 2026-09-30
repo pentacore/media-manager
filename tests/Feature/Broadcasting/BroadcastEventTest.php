@@ -251,6 +251,12 @@ test('ActivityLogCreated broadcasts on activity channel with full payload', func
     expect($payload['service_name'])->toBe($connection->name);
 });
 
+test('ActivityLogCreated carries the row category in its payload', function (): void {
+    $log = ActivityLog::factory()->create();
+
+    expect(new ActivityLogCreated($log)->broadcastWith())->toHaveKey('category', 'activity');
+});
+
 test('ServiceLatestVersionFetched broadcasts on services channel', function (): void {
     $connection = ServiceConnection::factory()->sonarr()->create([
         'version' => '4.0.4',

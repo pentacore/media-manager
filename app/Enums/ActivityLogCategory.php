@@ -9,7 +9,7 @@ use App\Concerns\EnumUtils;
 /**
  * Which feed an activity_logs row belongs to. `audit` rows record admin
  * changes (users, connections, removals, settings) with masked diffs and are
- * visible to admins only — see ActivityLog::scopeVisibleTo().
+ * visible to admins only — see the ActivityLog model's visibleTo scope.
  */
 enum ActivityLogCategory: string
 {
