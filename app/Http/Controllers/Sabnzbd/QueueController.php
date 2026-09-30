@@ -292,7 +292,7 @@ class QueueController extends Controller
     /**
      * One history page. Raw slots also carry the job's source URL, storage
      * paths and stage logs; none of that reaches the browser, and failure
-     * text loses URL query strings (it can quote the source link).
+     * text loses URL query strings and filesystem paths (see redactFailMessage()).
      *
      * @param  array<string, mixed>  $history
      * @return array{slots: list<array<string, mixed>>, total: int, page: int, page_size: int}
@@ -309,7 +309,7 @@ class QueueController extends Controller
                 'size' => $slot['size'] ?? null,
                 'status' => $slot['status'] ?? null,
                 'fail_message' => is_string($slot['fail_message'] ?? null) && $slot['fail_message'] !== ''
-                    ? UrlQueryRedactor::redact($slot['fail_message'])
+                    ? self::redactFailMessage($slot['fail_message'])
                     : null,
                 'completed' => isset($slot['completed']) ? (int) $slot['completed'] : null,
             ], $slots)),
@@ -317,6 +317,24 @@ class QueueController extends Controller
             'page' => $page,
             'page_size' => self::HISTORY_PAGE_SIZE,
         ];
+    }
+
+    /**
+     * Failure text is shown to members: it can quote the source link (with
+     * the indexer API key in its query string) and absolute POSIX, Windows
+     * or UNC paths from the SABnzbd host, so both are replaced.
+     */
+    private static function redactFailMessage(string $failMessage): string
+    {
+        return preg_replace(
+            [
+                '~(?<=^|[\s"\'(\[=,;])/[^\s"\'<>/]+(?:/[^\s"\'<>]*)?~',
+                '~(?<![\w\\\\])[A-Za-z]:\\\\[^\s"\'<>]*~',
+                '~(?<![\w\\\\])\\\\\\\\[^\s"\'<>]+~',
+            ],
+            '[path]',
+            UrlQueryRedactor::redact($failMessage),
+        ) ?? UrlQueryRedactor::redact($failMessage);
     }
 
     /**

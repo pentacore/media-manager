@@ -223,3 +223,23 @@ test('queue and history payloads never carry job source urls, paths or other raw
         ->not->toContain('/downloads/')
         ->not->toContain('sab-api-key');
 });
+
+test('history failure text loses absolute filesystem paths before it reaches the page', function (string $failMessage, string $shown): void {
+    Http::fake(['sab.local:8080/api*' => fn (Request $request) => sabnzbdAdminQuery($request)['mode'] === 'queue'
+        ? Http::response(['queue' => ['paused' => false, 'slots' => []]])
+        : Http::response(['history' => ['noofslots' => 1, 'slots' => [
+            ['nzo_id' => 'SABnzbd_nzo_h1', 'name' => 'Failed.Job', 'status' => 'Failed', 'fail_message' => $failMessage],
+        ]]])]);
+
+    $this->actingAs(User::factory()->member()->create())
+        ->get(route('sabnzbd.queue.index'))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page->where('history.slots.0.fail_message', $shown));
+})->with([
+    'posix folder' => ['Cannot create final folder /data/complete/Show', 'Cannot create final folder [path]'],
+    'quoted posix file' => ['Unpacking failed, "/downloads/incomplete/Job.1/job.rar" is corrupt', 'Unpacking failed, "[path]" is corrupt'],
+    'windows folder' => ['Cannot create final folder C:\Downloads\complete\Show', 'Cannot create final folder [path]'],
+    'unc share' => ['Disk full on \\\\nas\media\complete', 'Disk full on [path]'],
+    'url keeps its path' => ['URL Fetching failed; https://indexer.example/getnzb?id=9&apikey=x', 'URL Fetching failed; https://indexer.example/getnzb?[redacted]'],
+    'plain text untouched' => ['Repair failed, not enough repair blocks (5 short) / aborted', 'Repair failed, not enough repair blocks (5 short) / aborted'],
+]);
