@@ -16,7 +16,6 @@ use App\Services\Seerr\SeerrTitlePresenter;
 use App\Services\Seerr\SeerrUserResolver;
 use App\Services\Sonarr\SonarrClient;
 use App\Support\Abilities;
-use App\Support\UrlQueryRedactor;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Http\Request;
@@ -28,6 +27,14 @@ use Throwable;
 class SearchController extends Controller
 {
     private const int MAX_RESULTS = 20;
+
+    /**
+     * Query parameter names (lower-cased) that carry tracker or indexer
+     * credentials in a Prowlarr infoUrl.
+     *
+     * @var list<string>
+     */
+    private const array INFO_URL_SECRET_PARAMETERS = ['passkey', 'apikey', 'api_key', 'token', 'auth', 'rsskey', 'torrent_pass', 'key', 'sig'];
 
     private function maxResults(): int
     {
@@ -400,9 +407,11 @@ class SearchController extends Controller
     /**
      * Prowlarr's infoUrl can carry a tracker passkey either in the query
      * string (e.g. `?passkey=...`) or, more rarely, in the URL's userinfo
-     * part (`https://user:pass@host/...`). The query string is redacted so
-     * the details link stays usable; a userinfo credential can't be dropped
-     * piecemeal, so the whole URL is discarded instead.
+     * part (`https://user:pass@host/...`). Only secret-looking query
+     * parameters are dropped, so query-identified details pages
+     * (`details.php?id=123`) keep working; a userinfo credential can't be
+     * dropped piecemeal, so the whole URL is discarded instead, as is
+     * anything but an http(s) link (it becomes an href).
      */
     private static function sanitizeInfoUrl(mixed $infoUrl): ?string
     {
@@ -410,11 +419,37 @@ class SearchController extends Controller
             return null;
         }
 
-        if (parse_url($infoUrl, PHP_URL_USER) !== null) {
+        $parts = parse_url($infoUrl);
+
+        if (
+            $parts === false
+            || ! in_array(strtolower($parts['scheme'] ?? ''), ['http', 'https'], true)
+            || ($parts['host'] ?? '') === ''
+            || isset($parts['user'])
+            || isset($parts['pass'])
+        ) {
             return null;
         }
 
-        return UrlQueryRedactor::redact($infoUrl);
+        if (! isset($parts['query'])) {
+            return $infoUrl;
+        }
+
+        $keptPairs = array_filter(
+            explode('&', $parts['query']),
+            static fn (string $pair): bool => ! in_array(
+                strtolower(urldecode(explode('=', $pair, 2)[0])),
+                self::INFO_URL_SECRET_PARAMETERS,
+                true,
+            ),
+        );
+
+        return sprintf(
+            '%s%s%s',
+            strstr($infoUrl, '?', true),
+            $keptPairs === [] ? '' : sprintf('?%s', implode('&', $keptPairs)),
+            isset($parts['fragment']) ? sprintf('#%s', $parts['fragment']) : '',
+        );
     }
 
     /**
