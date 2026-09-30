@@ -84,6 +84,8 @@ test('an AI settings save audits a setting only written after the brief-document
     // run after updateClassificationSettings() inside update(); the audit
     // must still be recorded after every one of them so this change lands in
     // the diff (controller ruling A).
+    config()->set('ai.providers.openrouter.key', 'sk-or-test');
+
     $this->actingAs(User::factory()->admin()->create())->put(route('admin.ai-settings.update'), [
         'mode' => 'executive',
         'model' => 'gpt-5-mini',
