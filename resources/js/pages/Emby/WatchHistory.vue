@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { Head, router } from '@inertiajs/vue3';
 import { Download, Sparkles } from '@lucide/vue';
-import { computed, onMounted, watch } from 'vue';
+import { computed, onMounted, ref, watch } from 'vue';
 import WatchHistoryController from '@/actions/App/Http/Controllers/Emby/WatchHistoryController';
 import {
     InitialsAvatar,
@@ -125,6 +125,29 @@ function refresh(): void {
     // The prop watcher reseeds; pause state stays governed by the merge
     // watcher so a refresh in a filtered view does not un-pause the list.
     router.reload({ only: ['activities'] });
+}
+
+const togglingPlayed = ref<number | null>(null);
+
+// Emby's played flag isn't stored, so both actions are offered; the
+// server decides who may use them (can_toggle_played) and re-checks.
+function setPlayed(activity: Activity, played: boolean): void {
+    if (togglingPlayed.value !== null) {
+        return;
+    }
+
+    togglingPlayed.value = activity.id;
+    router.post(
+        WatchHistoryController.togglePlayed.url(activity.id),
+        { played },
+        {
+            preserveScroll: true,
+            preserveState: true,
+            onFinish: () => {
+                togglingPlayed.value = null;
+            },
+        },
+    );
 }
 
 function ticksToHours(ticks: number | null): number {
@@ -371,6 +394,7 @@ function currentFilter(): string {
                                     'Watched',
                                     'Completion',
                                     'Type',
+                                    '',
                                 ]"
                                 :key="h"
                                 class="border-b border-border bg-card px-3 py-2 text-left text-[11.5px] font-medium tracking-[0.05em] text-muted-foreground uppercase"
@@ -383,6 +407,7 @@ function currentFilter(): string {
                         <tr
                             v-for="activity in visibleActivities"
                             :key="activity.id"
+                            :data-watch-row="activity.id"
                             class="border-b border-border last:border-b-0 hover:bg-bg-hover"
                         >
                             <td
@@ -448,10 +473,41 @@ function currentFilter(): string {
                                 }}</Pill>
                                 <span v-else class="text-fg-subtle">—</span>
                             </td>
+                            <td class="px-3 py-2.5 text-right">
+                                <div
+                                    v-if="activity.can_toggle_played === true"
+                                    class="flex justify-end gap-1"
+                                >
+                                    <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        class="h-7 px-2 text-xs"
+                                        :disabled="
+                                            togglingPlayed === activity.id
+                                        "
+                                        :data-mark-played="activity.id"
+                                        @click="setPlayed(activity, true)"
+                                    >
+                                        Mark played
+                                    </Button>
+                                    <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        class="h-7 px-2 text-xs"
+                                        :disabled="
+                                            togglingPlayed === activity.id
+                                        "
+                                        :data-mark-unplayed="activity.id"
+                                        @click="setPlayed(activity, false)"
+                                    >
+                                        Mark unplayed
+                                    </Button>
+                                </div>
+                            </td>
                         </tr>
                         <tr v-if="visibleActivities.length === 0">
                             <td
-                                colspan="6"
+                                colspan="7"
                                 class="px-3 py-8 text-center text-sm text-fg-subtle"
                             >
                                 No activity yet.
