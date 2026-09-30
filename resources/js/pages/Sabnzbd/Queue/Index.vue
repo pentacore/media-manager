@@ -1,9 +1,10 @@
 <script setup lang="ts">
 import { Head, router } from '@inertiajs/vue3';
-import { Pause, Play, RefreshCw, Trash2 } from '@lucide/vue';
-import { onMounted, onUnmounted } from 'vue';
+import { Pause, Play, RefreshCw, RotateCcw, Trash2 } from '@lucide/vue';
+import { computed, onMounted, onUnmounted, ref } from 'vue';
 import QueueController from '@/actions/App/Http/Controllers/Sabnzbd/QueueController';
 import { OpenInServiceButton, Pill, StatCard } from '@/components/mm';
+import { HistoryDeleteDialog, SpeedLimitControl } from '@/components/sabnzbd';
 import { Button } from '@/components/ui/button';
 import {
     Select,
@@ -12,38 +13,40 @@ import {
     SelectTrigger,
     SelectValue,
 } from '@/components/ui/select';
+import { useCan } from '@/composables/useCan';
 import { dashboard } from '@/routes';
 
 interface QueueSlot {
     nzo_id: string;
-    filename: string;
+    filename: string | null;
     cat: string | null;
-    size: string;
-    sizeleft: string;
-    percentage: string;
-    timeleft: string;
-    status: string;
-    priority: number | string;
+    size: string | null;
+    sizeleft: string | null;
+    percentage: string | null;
+    timeleft: string | null;
+    status: string | null;
+    priority: number | string | null;
 }
 
 interface HistorySlot {
     nzo_id: string;
-    name: string;
+    name: string | null;
     category: string | null;
-    size: number | string;
-    status: string;
+    size: number | string | null;
+    status: string | null;
     fail_message: string | null;
     completed: number | null;
 }
 
 interface Queue {
     paused?: boolean;
-    speed?: string;
-    sizeleft?: string;
-    timeleft?: string;
+    speed?: string | null;
+    sizeleft?: string | null;
+    timeleft?: string | null;
+    speedlimit?: string | null;
+    speedlimit_abs?: string | null;
+    noofslots?: number;
     slots?: QueueSlot[];
-    diskspace1?: string;
-    diskspace2?: string;
 }
 
 interface SabnzbdConnection {
@@ -53,10 +56,10 @@ interface SabnzbdConnection {
 }
 
 interface History {
-    slots?: HistorySlot[];
-    total_size?: string;
-    month_size?: string;
-    week_size?: string;
+    slots: HistorySlot[];
+    total: number;
+    page: number;
+    page_size: number;
 }
 
 const props = defineProps<{
@@ -84,9 +87,13 @@ const PRIORITY_LABELS: Record<string, string> = {
     '2': 'Force',
 };
 
+const { can } = useCan();
+const isAdmin = computed(() => can('admin'));
+
 let pollHandle: ReturnType<typeof setInterval> | null = null;
 
 onMounted(() => {
+    // reload() keeps the current URL, so ?history_page survives polling.
     pollHandle = setInterval(() => {
         router.reload({ only: ['queue', 'history', 'paused'] });
     }, 5000);
@@ -119,8 +126,8 @@ function resumeSlot(nzoId: string): void {
     router.visit(action.url, { method: action.method, preserveScroll: true });
 }
 
-function deleteSlot(nzoId: string, filename: string): void {
-    if (!confirm(`Remove "${filename}" from the queue?`)) {
+function deleteSlot(nzoId: string, filename: string | null): void {
+    if (!confirm(`Remove "${filename ?? nzoId}" from the queue?`)) {
         return;
     }
 
@@ -137,8 +144,57 @@ function changePriority(nzoId: string, priority: string): void {
     });
 }
 
-function statusVariant(status: string): 'ok' | 'danger' | 'default' {
-    const lower = status.toLowerCase();
+const historyPage = computed(() => props.history.page ?? 1);
+const historyLastPage = computed(() =>
+    Math.max(
+        1,
+        Math.ceil((props.history.total ?? 0) / (props.history.page_size || 50)),
+    ),
+);
+
+function goToHistoryPage(page: number): void {
+    const url =
+        page > 1
+            ? QueueController.index.url({ query: { history_page: page } })
+            : QueueController.index.url();
+
+    router.get(
+        url,
+        {},
+        { preserveScroll: true, preserveState: true, only: ['history'] },
+    );
+}
+
+function retryHistory(nzoId: string): void {
+    const action = QueueController.retryHistory(nzoId);
+    router.visit(action.url, { method: action.method, preserveScroll: true });
+}
+
+const deletingSlot = ref<HistorySlot | null>(null);
+const deleteProcessing = ref(false);
+
+function confirmDeleteHistory(withFiles: boolean): void {
+    const slot = deletingSlot.value;
+
+    if (slot === null) {
+        return;
+    }
+
+    deleteProcessing.value = true;
+    const action = QueueController.deleteHistory(slot.nzo_id);
+    router.visit(action.url, {
+        method: action.method,
+        data: { with_files: withFiles },
+        preserveScroll: true,
+        onFinish: () => {
+            deleteProcessing.value = false;
+            deletingSlot.value = null;
+        },
+    });
+}
+
+function statusVariant(status: string | null): 'ok' | 'danger' | 'default' {
+    const lower = (status ?? '').toLowerCase();
 
     if (lower === 'completed' || lower === 'ok') {
         return 'ok';
@@ -168,7 +224,7 @@ function statusVariant(status: string): 'ok' | 'danger' | 'default' {
                     Downloads
                 </h1>
                 <p class="mt-1 max-w-[640px] text-[13px] text-muted-foreground">
-                    Live SABnzbd queue and recent history.
+                    Live SABnzbd queue and history.
                     {{
                         connection?.name
                             ? `Connected to ${connection.name}.`
@@ -177,6 +233,11 @@ function statusVariant(status: string): 'ok' | 'danger' | 'default' {
                 </p>
             </div>
             <div class="flex gap-2" v-if="configured">
+                <SpeedLimitControl
+                    v-if="isAdmin && !error"
+                    :percent="queue.speedlimit ?? null"
+                    :absolute="queue.speedlimit_abs ?? null"
+                />
                 <OpenInServiceButton
                     :href="props.connection?.url"
                     label="Open SABnzbd"
@@ -373,14 +434,22 @@ function statusVariant(status: string): 'ok' | 'danger' | 'default' {
                 </div>
             </div>
 
-            <!-- History table -->
+            <!-- History (paged) -->
             <div
                 class="overflow-hidden rounded-xl border border-border bg-card"
+                data-sabnzbd-history
             >
                 <div
-                    class="border-b border-border px-4 py-3 text-[12px] font-semibold tracking-[0.06em] text-muted-foreground uppercase"
+                    class="flex items-center justify-between border-b border-border px-4 py-3"
                 >
-                    Recent history
+                    <span
+                        class="text-[12px] font-semibold tracking-[0.06em] text-muted-foreground uppercase"
+                        >History</span
+                    >
+                    <span
+                        class="font-mono-tabular text-[11.5px] text-muted-foreground"
+                        >{{ history.total }} jobs</span
+                    >
                 </div>
                 <div class="overflow-x-auto">
                     <table class="w-full border-collapse text-[13px]">
@@ -392,6 +461,7 @@ function statusVariant(status: string): 'ok' | 'danger' | 'default' {
                                         'Category',
                                         'Status',
                                         'Note',
+                                        ...(isAdmin ? [''] : []),
                                     ]"
                                     :key="h"
                                     class="border-b border-border bg-card px-3 py-2 text-left text-[11.5px] font-medium tracking-[0.05em] text-muted-foreground uppercase"
@@ -402,8 +472,9 @@ function statusVariant(status: string): 'ok' | 'danger' | 'default' {
                         </thead>
                         <tbody>
                             <tr
-                                v-for="slot in history.slots ?? []"
+                                v-for="slot in history.slots"
                                 :key="slot.nzo_id"
+                                :data-history-row="slot.nzo_id"
                                 class="border-b border-border last:border-b-0 hover:bg-bg-hover"
                             >
                                 <td class="px-3 py-2.5">
@@ -420,25 +491,96 @@ function statusVariant(status: string): 'ok' | 'danger' | 'default' {
                                 </td>
                                 <td class="px-3 py-2.5">
                                     <Pill :variant="statusVariant(slot.status)">
-                                        {{ slot.status }}
+                                        {{ slot.status ?? '—' }}
                                     </Pill>
                                 </td>
                                 <td class="px-3 py-2.5 text-xs text-fg-subtle">
                                     {{ slot.fail_message || '—' }}
                                 </td>
-                            </tr>
-                            <tr v-if="(history.slots ?? []).length === 0">
                                 <td
-                                    colspan="4"
+                                    v-if="isAdmin"
+                                    class="px-3 py-2.5 text-right"
+                                >
+                                    <div class="flex justify-end gap-1">
+                                        <Button
+                                            v-if="slot.status === 'Failed'"
+                                            variant="ghost"
+                                            size="sm"
+                                            class="h-7 gap-1 px-2 text-xs"
+                                            data-history-retry
+                                            @click="retryHistory(slot.nzo_id)"
+                                        >
+                                            <RotateCcw class="size-3.5" />Retry
+                                        </Button>
+                                        <Button
+                                            variant="ghost"
+                                            size="sm"
+                                            class="size-7 p-0 text-destructive hover:text-destructive"
+                                            :aria-label="`Remove ${slot.name ?? slot.nzo_id} from history`"
+                                            data-history-delete
+                                            @click="deletingSlot = slot"
+                                        >
+                                            <Trash2 class="size-3.5" />
+                                        </Button>
+                                    </div>
+                                </td>
+                            </tr>
+                            <tr v-if="history.slots.length === 0">
+                                <td
+                                    :colspan="isAdmin ? 5 : 4"
                                     class="px-3 py-8 text-center text-sm text-fg-subtle"
                                 >
-                                    No recent downloads.
+                                    {{
+                                        history.total > 0
+                                            ? 'No downloads on this page.'
+                                            : 'No recent downloads.'
+                                    }}
                                 </td>
                             </tr>
                         </tbody>
                     </table>
                 </div>
+                <div
+                    v-if="historyLastPage > 1"
+                    class="flex items-center justify-between gap-2 border-t border-border px-4 py-2.5"
+                >
+                    <span
+                        class="text-[12px] text-muted-foreground"
+                        data-history-page
+                        >Page {{ historyPage }} of {{ historyLastPage }}</span
+                    >
+                    <div class="flex gap-1">
+                        <Button
+                            variant="outline"
+                            size="sm"
+                            class="h-7 text-xs"
+                            :disabled="historyPage <= 1"
+                            data-history-prev
+                            @click="goToHistoryPage(historyPage - 1)"
+                        >
+                            Previous
+                        </Button>
+                        <Button
+                            variant="outline"
+                            size="sm"
+                            class="h-7 text-xs"
+                            :disabled="historyPage >= historyLastPage"
+                            data-history-next
+                            @click="goToHistoryPage(historyPage + 1)"
+                        >
+                            Next
+                        </Button>
+                    </div>
+                </div>
             </div>
         </template>
+
+        <HistoryDeleteDialog
+            :open="deletingSlot !== null"
+            :name="deletingSlot?.name ?? null"
+            :processing="deleteProcessing"
+            @update:open="(value) => !value && (deletingSlot = null)"
+            @confirm="confirmDeleteHistory"
+        />
     </div>
 </template>
