@@ -252,6 +252,25 @@ test('unknown service returns tool_failed for every write tool', function (): vo
     expect(ActionRequest::count())->toBe(0);
 });
 
+test('a Whisparr write tool with no active Whisparr connection returns tool_failed', function (): void {
+    $cases = [
+        fn (): string => (new AddMediaTool)->handle(new Request([
+            'service' => 'whisparr', 'remote_id' => 1, 'quality_profile_id' => 1, 'root_folder_path' => '/data', 'monitored' => true, 'season_folder' => null,
+        ])),
+        fn (): string => (new DeleteMediaTool)->handle(new Request(['service' => 'whisparr', 'item_id' => 9, 'delete_files' => false])),
+        fn (): string => (new MonitorMediaTool)->handle(new Request(['service' => 'whisparr', 'item_id' => 9, 'monitored' => true])),
+        fn (): string => (new SetMediaQualityProfileTool)->handle(new Request(['service' => 'whisparr', 'item_id' => 9, 'quality_profile_id' => 7])),
+    ];
+
+    foreach ($cases as $case) {
+        $result = json_decode($case(), true);
+
+        expect($result['error'])->toBe('tool_failed');
+    }
+
+    expect(ActionRequest::count())->toBe(0);
+});
+
 test('all write tools are Destructive', function (): void {
     expect((new AddMediaTool)->risk())->toBe(Risk::Destructive);
     expect((new DeleteMediaTool)->risk())->toBe(Risk::Destructive);

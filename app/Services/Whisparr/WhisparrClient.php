@@ -6,7 +6,9 @@ namespace App\Services\Whisparr;
 
 use App\Cache\Services\WhisparrCache;
 use App\Enums\WhisparrVersion;
+use App\Jobs\ExecuteActionRequest;
 use App\Services\Arr\ArrClient;
+use App\Services\Arr\SearchCommandRunner;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\RequestException;
 use Override;
@@ -116,9 +118,14 @@ class WhisparrClient extends ArrClient
 
     /**
      * Start an automatic indexer search for one item: `SeriesSearch` on v2
-     * (series-shaped), `MoviesSearch` on v3 (movie-shaped). Like
-     * `search_media`, the command opts out of the transparent retry — a lost
-     * response must not fire the search three times.
+     * (series-shaped), `MoviesSearch` on v3 (movie-shaped). Like a targeted
+     * (non-library-wide) `search_media` command, this opts out only of the
+     * generic HTTP-level retry (`runCommand(..., withRetry: false)`), so one
+     * call never sends the search more than once over the wire. A
+     * ConnectionException/5xx is still transient at the job level —
+     * {@see ExecuteActionRequest} may retry the whole ActionRequest per its
+     * `$tries` — because re-searching one item is harmless, unlike the
+     * library-wide sweeps {@see SearchCommandRunner} makes permanent instead.
      *
      * @return array<string, mixed>
      *

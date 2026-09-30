@@ -7,6 +7,7 @@ use App\Models\IndexedSeries;
 use App\Models\ServiceConnection;
 use App\Services\Actions\ActionDescriber;
 use App\Services\Actions\UndescribableAction;
+use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Support\Facades\Http;
 
 beforeEach(function (): void {
@@ -426,3 +427,30 @@ test('whisparr_search aborts when the pin names a connection of another service'
     expect(fn () => resolve(ActionDescriber::class)->describe('whisparr_search', ['whisparr_item_id' => 11, 'service_connection_id' => $sonarr->id]))
         ->toThrow(InvalidArgumentException::class);
 });
+
+// R12 follow-up: whisparr_delete_item / whisparr_add_item / whisparr_monitor_item /
+// whisparr_set_quality_profile now describe via a strict pin too (whisparrItem()/
+// whisparrLookup() with strictPin: true), matching their executors. A present pin
+// naming a connection of another service must abort rather than silently
+// describing another instance's item as verified.
+test('the Whisparr describer arms abort when no Whisparr connection exists to fall back to', function (string $type, array $payload): void {
+    expect(fn () => resolve(ActionDescriber::class)->describe($type, $payload))
+        ->toThrow(ModelNotFoundException::class);
+})->with([
+    'whisparr_delete_item' => ['whisparr_delete_item', ['whisparr_item_id' => 11]],
+    'whisparr_add_item' => ['whisparr_add_item', ['tmdb_id' => 1]],
+    'whisparr_monitor_item' => ['whisparr_monitor_item', ['whisparr_item_id' => 11]],
+    'whisparr_set_quality_profile' => ['whisparr_set_quality_profile', ['whisparr_item_id' => 11, 'quality_profile_id' => 2]],
+]);
+
+test('the Whisparr describer arms abort when the pin names a connection of another service', function (string $type, array $payload): void {
+    $sonarr = ServiceConnection::factory()->sonarr()->create(['url' => 'http://sonarr.local:8989']);
+
+    expect(fn () => resolve(ActionDescriber::class)->describe($type, [...$payload, 'service_connection_id' => $sonarr->id]))
+        ->toThrow(InvalidArgumentException::class);
+})->with([
+    'whisparr_delete_item' => ['whisparr_delete_item', ['whisparr_item_id' => 11]],
+    'whisparr_add_item' => ['whisparr_add_item', ['tmdb_id' => 1]],
+    'whisparr_monitor_item' => ['whisparr_monitor_item', ['whisparr_item_id' => 11]],
+    'whisparr_set_quality_profile' => ['whisparr_set_quality_profile', ['whisparr_item_id' => 11, 'quality_profile_id' => 2]],
+]);

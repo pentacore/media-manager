@@ -118,19 +118,18 @@ final readonly class ActionTargets
 
     /**
      * @param  array<string, mixed>  $pinContext
+     * @param  bool  $strictPin  See {@see sonarrSeries()} — the whisparr_add_item
+     *                           executor resolves strictly, so its describer arm does too.
      */
-    public function whisparrLookup(int $tmdbId, array $pinContext = [], ?string $fallbackName = null): ActionTarget
+    public function whisparrLookup(int $tmdbId, array $pinContext = [], ?string $fallbackName = null, bool $strictPin = false): ActionTarget
     {
-        return $this->attempt('item', $tmdbId, $fallbackName, false, function () use ($tmdbId, $pinContext): ?ActionTarget {
-            $serviceConnection = ServiceConnection::resolvePinned($pinContext, ServiceType::Whisparr);
-            $name = $this->nameFrom(new WhisparrClient($serviceConnection)->searchItems(sprintf('tmdb:%d', $tmdbId))[0] ?? []);
+        if ($strictPin) {
+            $serviceConnection = $this->resolvePinnedConnection(ServiceType::Whisparr, $pinContext);
 
-            return $name === null ? null : new ActionTarget('item', $name, [
-                ['label' => 'Item', 'value' => $name],
-                ['label' => 'TMDB ID', 'value' => (string) $tmdbId],
-                ['label' => 'Connection', 'value' => $serviceConnection->name],
-            ]);
-        });
+            return $this->attempt('item', $tmdbId, $fallbackName, false, fn (): ?ActionTarget => $this->whisparrLookupTarget($tmdbId, $serviceConnection));
+        }
+
+        return $this->attempt('item', $tmdbId, $fallbackName, false, fn (): ?ActionTarget => $this->whisparrLookupTarget($tmdbId, ServiceConnection::resolvePinned($pinContext, ServiceType::Whisparr)));
     }
 
     /**
@@ -303,6 +302,17 @@ final readonly class ActionTargets
         return $name === null ? null : new ActionTarget('item', $name, [
             ['label' => 'Item', 'value' => $name],
             ['label' => 'Whisparr ID', 'value' => (string) $itemId],
+            ['label' => 'Connection', 'value' => $serviceConnection->name],
+        ]);
+    }
+
+    private function whisparrLookupTarget(int $tmdbId, ServiceConnection $serviceConnection): ?ActionTarget
+    {
+        $name = $this->nameFrom(new WhisparrClient($serviceConnection)->searchItems(sprintf('tmdb:%d', $tmdbId))[0] ?? []);
+
+        return $name === null ? null : new ActionTarget('item', $name, [
+            ['label' => 'Item', 'value' => $name],
+            ['label' => 'TMDB ID', 'value' => (string) $tmdbId],
             ['label' => 'Connection', 'value' => $serviceConnection->name],
         ]);
     }
