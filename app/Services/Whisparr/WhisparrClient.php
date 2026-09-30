@@ -49,6 +49,29 @@ class WhisparrClient extends ArrClient
     }
 
     /**
+     * The scenes (episodes) of one v2 site, cached per series. v3 has no
+     * episode resource.
+     *
+     * @return list<array<string, mixed>>
+     *
+     * @throws RequestException|ConnectionException
+     */
+    public function getEpisodes(int $seriesId): array
+    {
+        return $this->cache()->rememberList(
+            'episodes:'.$seriesId,
+            function () use ($seriesId): array {
+                $body = $this->buildClient()->get(sprintf('/api/%s/episode', $this->apiVersion), ['seriesId' => $seriesId])->throw()->json();
+
+                // Same boundary sanitisation as ArrClient::getCalendar(): a
+                // non-array body or non-array entry is dropped here so
+                // callers can trust the declared list<array<...>> shape.
+                return is_array($body) ? array_values(array_filter($body, is_array(...))) : [];
+            },
+        );
+    }
+
+    /**
      * @param  array<string, mixed>  $data
      * @return array<string, mixed>
      *
