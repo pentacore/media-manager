@@ -23,37 +23,53 @@ final readonly class IndexerReleaseCache
     public const int TTL_SECONDS = 1800;
 
     /**
-     * @param  array<string, mixed>  $release
-     * @return array{key: string|null, indexer_id: int|null, title: mixed, indexer: mixed, size: mixed, seeders: mixed, age: mixed, publishDate: mixed}
+     * Remembers every release from one search in a single `Cache::putMany()`
+     * call rather than one round-trip per row.
+     *
+     * @param  list<array<string, mixed>>  $releases
+     * @return list<array{key: string|null, indexer_id: int|null, title: mixed, indexer: mixed, size: mixed, seeders: mixed, age: mixed, publishDate: mixed}>
      */
-    public function remember(ServiceConnection $serviceConnection, array $release): array
+    public function remember(ServiceConnection $serviceConnection, array $releases): array
     {
-        $row = [
-            'title' => $release['title'] ?? null,
-            'indexer' => $release['indexer'] ?? null,
-            'size' => $release['size'] ?? null,
-            'seeders' => $release['seeders'] ?? null,
-            'age' => $release['age'] ?? null,
-            'publishDate' => $release['publishDate'] ?? null,
-        ];
+        $rows = [];
+        $cacheEntries = [];
 
-        $guid = $release['guid'] ?? null;
-        $indexerId = (int) ($release['indexerId'] ?? 0);
+        foreach ($releases as $release) {
+            $row = [
+                'title' => $release['title'] ?? null,
+                'indexer' => $release['indexer'] ?? null,
+                'size' => $release['size'] ?? null,
+                'seeders' => $release['seeders'] ?? null,
+                'age' => $release['age'] ?? null,
+                'publishDate' => $release['publishDate'] ?? null,
+            ];
 
-        if (! is_string($guid) || $guid === '' || $indexerId <= 0) {
-            return ['key' => null, 'indexer_id' => null, ...$row];
+            $guid = $release['guid'] ?? null;
+            $indexerId = (int) ($release['indexerId'] ?? 0);
+
+            if (! is_string($guid) || $guid === '' || $indexerId <= 0) {
+                $rows[] = ['key' => null, 'indexer_id' => null, ...$row];
+
+                continue;
+            }
+
+            $releaseKey = hash('sha256', $guid);
+
+            $cacheEntries[$this->cacheKey($serviceConnection->id, $indexerId, $releaseKey)] = [
+                'guid' => $guid,
+                'indexer_id' => $indexerId,
+                'title' => is_string($row['title']) ? $row['title'] : null,
+                'indexer' => is_string($row['indexer']) ? $row['indexer'] : null,
+            ];
+
+            $rows[] = ['key' => $releaseKey, 'indexer_id' => $indexerId, ...$row];
         }
 
-        $releaseKey = hash('sha256', $guid);
+        if ($cacheEntries !== []) {
+            Cache::putMany($cacheEntries, self::TTL_SECONDS);
+        }
 
-        Cache::put($this->cacheKey($serviceConnection->id, $indexerId, $releaseKey), [
-            'guid' => $guid,
-            'indexer_id' => $indexerId,
-            'title' => is_string($row['title']) ? $row['title'] : null,
-            'indexer' => is_string($row['indexer']) ? $row['indexer'] : null,
-        ], self::TTL_SECONDS);
-
-        return ['key' => $releaseKey, 'indexer_id' => $indexerId, ...$row];
+        return $rows;
     }
 
     /**

@@ -66,10 +66,7 @@ class SearchIndexersController extends Controller
         // display allowlist plus the release key and indexer id.
         return Inertia::render('Prowlarr/Search', [
             'query' => $query,
-            'results' => array_values(array_map(
-                fn (array $release): array => $indexerReleaseCache->remember($connection, $release),
-                array_filter($results, is_array(...)),
-            )),
+            'results' => $indexerReleaseCache->remember($connection, array_values(array_filter($results, is_array(...)))),
             'hasConnection' => true,
             'error' => null,
         ]);

@@ -6,6 +6,7 @@ use App\Models\ActivityLog;
 use App\Models\ServiceConnection;
 use App\Models\User;
 use App\Services\Prowlarr\IndexerReleaseCache;
+use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\Request;
 use Illuminate\Support\Facades\Http;
 
@@ -42,7 +43,7 @@ function prowlarrGrabRelease(): array
  */
 function prowlarrGrabRemembered(ServiceConnection $serviceConnection): array
 {
-    $row = resolve(IndexerReleaseCache::class)->remember($serviceConnection, prowlarrGrabRelease());
+    $row = resolve(IndexerReleaseCache::class)->remember($serviceConnection, [prowlarrGrabRelease()])[0];
 
     return ['key' => $row['key'], 'indexer_id' => $row['indexer_id']];
 }
@@ -118,6 +119,27 @@ test('Prowlarr refusals are sanitized and never retried', function (int $status,
     'bare server error' => [503, 'Service Unavailable', 502, 'Prowlarr is unreachable right now.'],
     'bare refusal' => [400, '', 422, 'Prowlarr refused the grab.'],
 ]);
+
+test('a lost connection is reported as an unknown outcome, not a plain outage', function (): void {
+    $attempts = 0;
+    // A fake that throws never reaches recordRequestResponsePair(), so
+    // Http::assertSentCount() would see 0 — count invocations directly
+    // instead (same pattern as SonarrActionsTest's ConnectionException case).
+    Http::fake(['prowlarr.local:9696/api/v1/search' => function () use (&$attempts): never {
+        $attempts++;
+
+        throw new ConnectionException('reset');
+    }]);
+    $row = prowlarrGrabRemembered($this->prowlarr);
+
+    $this->actingAs($this->admin)
+        ->postJson(route('prowlarr.grab'), ['release_key' => $row['key'], 'indexer_id' => $row['indexer_id']])
+        ->assertStatus(502)
+        ->assertJsonPath('message', 'No answer from Prowlarr — check the download client before grabbing again.');
+
+    expect($attempts)->toBe(1)
+        ->and(ActivityLog::query()->where('action', 'prowlarr.release.grabbed')->exists())->toBeFalse();
+});
 
 test('grab is admin-only and validates the key shape', function (): void {
     $row = prowlarrGrabRemembered($this->prowlarr);

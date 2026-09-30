@@ -42,7 +42,11 @@ class GrabReleaseController extends Controller
         try {
             new ProwlarrClient($connection)->grabIndexerRelease($release['guid'], $release['indexer_id']);
         } catch (ConnectionException) {
-            return response()->json(['message' => __('Prowlarr is unreachable right now.')], 502);
+            // Non-retrying by design (see ProwlarrClient::grabIndexerRelease):
+            // a dropped connection here may mean Prowlarr already accepted
+            // the grab before the response was lost, so this must not read
+            // as "nothing happened."
+            return response()->json(['message' => __('No answer from Prowlarr — check the download client before grabbing again.')], 502);
         } catch (RequestException $requestException) {
             return $this->refusal($requestException);
         }

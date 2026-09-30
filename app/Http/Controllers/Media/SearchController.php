@@ -16,6 +16,7 @@ use App\Services\Seerr\SeerrTitlePresenter;
 use App\Services\Seerr\SeerrUserResolver;
 use App\Services\Sonarr\SonarrClient;
 use App\Support\Abilities;
+use App\Support\UrlQueryRedactor;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Http\Request;
@@ -383,7 +384,7 @@ class SearchController extends Controller
                 'seeders' => $hit['seeders'] ?? null,
                 'leechers' => $hit['leechers'] ?? null,
                 'age' => $age,
-                'info_url' => $hit['infoUrl'] ?? null,
+                'info_url' => self::sanitizeInfoUrl($hit['infoUrl'] ?? null),
                 // Prowlarr returns a quality-style score in 0-100 only for
                 // some indexers; expose what's there but don't synthesise.
                 'score' => $hit['qualityWeight'] ?? null,
@@ -394,6 +395,26 @@ class SearchController extends Controller
             'results' => array_slice($rows, 0, self::MAX_RESULTS),
             'error' => null,
         ];
+    }
+
+    /**
+     * Prowlarr's infoUrl can carry a tracker passkey either in the query
+     * string (e.g. `?passkey=...`) or, more rarely, in the URL's userinfo
+     * part (`https://user:pass@host/...`). The query string is redacted so
+     * the details link stays usable; a userinfo credential can't be dropped
+     * piecemeal, so the whole URL is discarded instead.
+     */
+    private static function sanitizeInfoUrl(mixed $infoUrl): ?string
+    {
+        if (! is_string($infoUrl) || $infoUrl === '') {
+            return null;
+        }
+
+        if (parse_url($infoUrl, PHP_URL_USER) !== null) {
+            return null;
+        }
+
+        return UrlQueryRedactor::redact($infoUrl);
     }
 
     /**
