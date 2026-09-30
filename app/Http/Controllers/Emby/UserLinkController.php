@@ -11,6 +11,7 @@ use App\Http\Requests\Emby\StoreUserLinkRequest;
 use App\Http\Resources\EmbyUserLinkResource;
 use App\Models\EmbyUserLink;
 use App\Models\ServiceConnection;
+use App\Services\Audit\AuditLogger;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Database\QueryException;
 use Illuminate\Http\Client\ConnectionException;
@@ -102,7 +103,7 @@ class UserLinkController extends Controller
         return back();
     }
 
-    public function destroy(EmbyUserLink $embyUserLink): RedirectResponse
+    public function destroy(EmbyUserLink $embyUserLink, AuditLogger $auditLogger): RedirectResponse
     {
         $user = request()->user();
 
@@ -111,7 +112,15 @@ class UserLinkController extends Controller
             403
         );
 
+        $embyUserLink->loadMissing('user:id,name');
         $embyUserLink->delete();
+
+        $auditLogger->record(
+            'emby.user_unlinked',
+            $embyUserLink,
+            sprintf('Unlinked Emby user "%s" from %s.', $embyUserLink->emby_username, $embyUserLink->user->name),
+            context: ['emby_user_id' => $embyUserLink->emby_user_id, 'user_id' => $embyUserLink->user_id],
+        );
 
         if ($user->role === UserRole::Admin) {
             Inertia::flash('toast', ['type' => 'success', 'message' => __('Link removed.')]);
