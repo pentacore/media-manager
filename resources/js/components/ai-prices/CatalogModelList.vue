@@ -111,8 +111,13 @@ function choose(option: CatalogModelOption): void {
     );
 }
 
+const rateFormatter = new Intl.NumberFormat('en-US', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 4,
+});
+
 function formatRate(value: string | null): string {
-    return value === null ? '—' : `$${Number(value)}`;
+    return value === null ? '—' : `$${rateFormatter.format(Number(value))}`;
 }
 </script>
 

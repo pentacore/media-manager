@@ -53,36 +53,6 @@ final readonly class CatalogModelBrowser
         PricingTransportException::CATEGORY_NOT_CONFIGURED,
     ];
 
-    /**
-     * Standard rate columns compared when deciding whether an Add-form
-     * submission still matches the catalog; a missing value counts as zero,
-     * mirroring how the writer creates a row.
-     *
-     * @var list<string>
-     */
-    private const array STANDARD_COLUMNS = [
-        'input_per_mtok',
-        'output_per_mtok',
-        'cache_read_per_mtok',
-        'cache_write_per_mtok',
-        'reasoning_per_mtok',
-        'search_unit_per_k',
-    ];
-
-    /**
-     * Batch rate columns copied from the catalog onto an Add-form row.
-     *
-     * @var list<string>
-     */
-    private const array BATCH_COLUMNS = [
-        'batch_input_per_mtok',
-        'batch_output_per_mtok',
-        'batch_cache_read_per_mtok',
-        'batch_cache_write_per_mtok',
-        'batch_reasoning_per_mtok',
-        'batch_search_unit_per_k',
-    ];
-
     public function __construct(
         private PricingCatalog $pricingCatalog,
         private AiSettings $aiSettings,
@@ -230,7 +200,7 @@ final readonly class CatalogModelBrowser
             return null;
         }
 
-        foreach (self::STANDARD_COLUMNS as $column) {
+        foreach (CatalogModelOption::standardColumns() as $column) {
             $submitted = $this->columnScale($validated[$column] ?? null) ?? '0.0000';
             $catalog = $entry['prices'][$column] ?? '0.0000';
 
@@ -247,7 +217,7 @@ final readonly class CatalogModelBrowser
             'is_price_locked' => false,
         ];
 
-        foreach (self::BATCH_COLUMNS as $column) {
+        foreach (CatalogModelOption::BATCH_COLUMNS as $column) {
             $attributes[$column] = $entry['prices'][$column] ?? null;
         }
 

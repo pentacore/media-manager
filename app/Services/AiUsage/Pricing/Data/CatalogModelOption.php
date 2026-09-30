@@ -34,6 +34,32 @@ final readonly class CatalogModelOption
     ];
 
     /**
+     * The batch rate columns within {@see self::PRICE_COLUMNS}.
+     *
+     * @var list<string>
+     */
+    public const array BATCH_COLUMNS = [
+        'batch_input_per_mtok',
+        'batch_output_per_mtok',
+        'batch_cache_read_per_mtok',
+        'batch_cache_write_per_mtok',
+        'batch_reasoning_per_mtok',
+        'batch_search_unit_per_k',
+    ];
+
+    /**
+     * The standard (non-batch) rate columns within {@see self::PRICE_COLUMNS}.
+     * A method rather than a derived const: PHP const expressions cannot call
+     * `array_diff()`.
+     *
+     * @return list<string>
+     */
+    public static function standardColumns(): array
+    {
+        return array_values(array_diff(self::PRICE_COLUMNS, self::BATCH_COLUMNS));
+    }
+
+    /**
      * @param  array<string, string|null>  $prices  Column => four-decimal rate, or null when the feed supplied none.
      */
     public function __construct(
