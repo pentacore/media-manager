@@ -243,3 +243,21 @@ test('history failure text loses absolute filesystem paths before it reaches the
     'url keeps its path' => ['URL Fetching failed; https://indexer.example/getnzb?id=9&apikey=x', 'URL Fetching failed; https://indexer.example/getnzb?[redacted]'],
     'plain text untouched' => ['Repair failed, not enough repair blocks (5 short) / aborted', 'Repair failed, not enough repair blocks (5 short) / aborted'],
 ]);
+
+test('a queue action SABnzbd answers with status false is refused and writes nothing', function (string $method, string $routeName, array $parameters): void {
+    Http::fake(['sab.local:8080/api*' => Http::response(['status' => false])]);
+
+    $this->actingAs(User::factory()->member()->create())
+        ->from(route('sabnzbd.queue.index'))
+        ->call($method, route($routeName, $parameters))
+        ->assertRedirect(route('sabnzbd.queue.index'))
+        ->assertSessionHas('inertia.flash_data.toast', ['type' => 'error', 'message' => 'SABnzbd refused the change.']);
+
+    expect(ActivityLog::query()->count())->toBe(0);
+})->with([
+    'queue pause' => ['POST', 'sabnzbd.queue.pause', []],
+    'queue resume' => ['POST', 'sabnzbd.queue.resume', []],
+    'slot pause' => ['POST', 'sabnzbd.queue.slot.pause', ['nzoId' => 'SABnzbd_nzo_abc123']],
+    'slot resume' => ['POST', 'sabnzbd.queue.slot.resume', ['nzoId' => 'SABnzbd_nzo_abc123']],
+    'slot delete' => ['DELETE', 'sabnzbd.queue.slot.delete', ['nzoId' => 'SABnzbd_nzo_abc123']],
+]);
