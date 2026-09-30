@@ -1,10 +1,11 @@
 <script setup lang="ts">
 import { Head, router } from '@inertiajs/vue3';
-import { Calendar, Cpu, Download, Sparkles } from '@lucide/vue';
+import { Calendar, ChevronDown, Cpu, Download, Sparkles } from '@lucide/vue';
 import { computed, onMounted, ref, watch } from 'vue';
 import ActivityLogController from '@/actions/App/Http/Controllers/ActivityLogController';
 import { InitialsAvatar, Pill, SvcChip, TimeStamp } from '@/components/mm';
 import { Button } from '@/components/ui/button';
+import { useCan } from '@/composables/useCan';
 import { useRealtimeList } from '@/composables/useRealtimeList';
 import { cn } from '@/lib/utils';
 import { dashboard } from '@/routes';
@@ -39,12 +40,14 @@ const props = defineProps<{
         action: string;
         service_id: number | null;
         since: number | 'today';
+        category: 'activity' | 'audit' | null;
     };
     filterOptions: {
         actions: string[];
         services: ServiceOption[];
         rangeHours: number[];
         todayValue: 'today';
+        categories: Array<'activity' | 'audit'>;
     };
 }>();
 
@@ -57,8 +60,16 @@ defineOptions({
     },
 });
 
+const { can } = useCan();
+const isAdmin = computed(() => can('admin'));
+
+type AuditChange = { from?: unknown; to?: unknown; changed?: boolean };
+
 const hasFilter = computed(
-    () => props.filters.action !== '' || props.filters.service_id !== null,
+    () =>
+        props.filters.action !== '' ||
+        props.filters.service_id !== null ||
+        props.filters.category !== null,
 );
 const onFirstPage = computed(() => props.logs.meta.current_page === 1);
 const merge = computed(() => !hasFilter.value && onFirstPage.value);
@@ -76,6 +87,28 @@ const {
     keyField: 'id',
     initial: props.logs.data,
     cap: props.logs.meta.per_page,
+});
+
+// Audit rows arrive on their own admin-only channel. They are never merged
+// live (they would bypass the category filter); they only bump the
+// "N new" counter that offers a refresh.
+const auditFeed = useRealtimeList<ActivityLogResource>({
+    channel: 'activity.audit',
+    event: 'ActivityLogCreated',
+    keyField: 'id',
+});
+auditFeed.pause();
+
+const newCount = computed(() => {
+    if (props.filters.category === 'audit') {
+        return auditFeed.staleCount.value;
+    }
+
+    if (props.filters.category === 'activity') {
+        return staleCount.value;
+    }
+
+    return staleCount.value + auditFeed.staleCount.value;
 });
 
 watch(
@@ -98,7 +131,13 @@ watch(
     (rows) => reseed(rows),
 );
 
-onMounted(subscribe);
+onMounted(() => {
+    subscribe();
+
+    if (isAdmin.value) {
+        auditFeed.subscribe();
+    }
+});
 
 const visibleLogs = computed(() =>
     merge.value ? liveLogs.value : props.logs.data,
@@ -108,12 +147,15 @@ function refresh(): void {
     // The prop watcher reseeds; pause state stays governed by the merge
     // watcher so a refresh in a filtered view does not un-pause the list.
     router.reload({ only: ['logs'] });
+    auditFeed.resume();
+    auditFeed.pause();
 }
 
 function applyFilters(next: {
     action?: string;
     service_id?: number | null;
     since?: number | 'today';
+    category?: 'activity' | 'audit' | null;
 }) {
     // ?? would treat an explicit null (intent: clear the filter) as
     // "fall through to the current value", so distinguish "key present"
@@ -123,6 +165,7 @@ function applyFilters(next: {
         service_id:
             'service_id' in next ? next.service_id : props.filters.service_id,
         since: 'since' in next ? (next.since ?? 24) : props.filters.since,
+        category: 'category' in next ? next.category : props.filters.category,
     };
 
     const query: Record<string, string | number> = {};
@@ -139,10 +182,18 @@ function applyFilters(next: {
         query.since = merged.since;
     }
 
+    if (merged.category) {
+        query.category = merged.category;
+    }
+
     router.get(ActivityLogController.index.url(), query, {
         preserveScroll: true,
         replace: true,
     });
+}
+
+function setCategory(value: 'all' | 'activity' | 'audit'): void {
+    applyFilters({ category: value === 'all' ? null : value });
 }
 
 function setRange(value: number | 'today'): void {
@@ -338,10 +389,50 @@ function exportUrl(): string {
         params.set('since', String(props.filters.since));
     }
 
+    if (props.filters.category) {
+        params.set('category', props.filters.category);
+    }
+
     const qs = params.toString();
     const base = ActivityLogController.exportMethod.url();
 
     return qs ? `${base}?${qs}` : base;
+}
+
+const expanded = ref<Set<number>>(new Set());
+
+function toggleExpanded(id: number): void {
+    const next = new Set(expanded.value);
+
+    if (next.has(id)) {
+        next.delete(id);
+    } else {
+        next.add(id);
+    }
+
+    expanded.value = next;
+}
+
+function auditChanges(
+    log: ActivityLogResource,
+): Array<{ field: string; change: AuditChange }> {
+    const changes = (log.metadata?.changes ?? {}) as Record<
+        string,
+        AuditChange
+    >;
+
+    return Object.entries(changes).map(([field, change]) => ({
+        field,
+        change,
+    }));
+}
+
+function formatAuditValue(value: unknown): string {
+    if (value === null || value === undefined || value === '') {
+        return '—';
+    }
+
+    return typeof value === 'string' ? value : JSON.stringify(value);
 }
 </script>
 
@@ -356,8 +447,9 @@ function exportUrl(): string {
                     Activity log
                 </h1>
                 <p class="mt-1 max-w-[640px] text-[13px] text-muted-foreground">
-                    Append-only audit feed. Every webhook, tool call, and admin
-                    write — same source as the dashboard.
+                    Every webhook, tool call and write — same source as the
+                    dashboard. Admins also see the Audit category: who changed
+                    users, connections, removals and settings.
                 </p>
             </div>
             <div class="flex items-center gap-2">
@@ -456,16 +548,42 @@ function exportUrl(): string {
                     {{ service.type }}
                 </button>
             </div>
+            <template v-if="filterOptions.categories.length > 0">
+                <span class="h-4 w-px bg-border" />
+                <div class="flex items-center gap-1" data-category-filter>
+                    <span class="text-xs text-muted-foreground">Category</span>
+                    <button
+                        v-for="value in [
+                            'all',
+                            ...filterOptions.categories,
+                        ] as const"
+                        :key="value"
+                        type="button"
+                        :data-category-option="value"
+                        :class="
+                            cn(
+                                'inline-flex h-6 items-center rounded-md px-2 text-[11.5px] font-medium capitalize transition-colors',
+                                (filters.category ?? 'all') === value
+                                    ? 'bg-accent text-accent-foreground'
+                                    : 'text-muted-foreground hover:bg-bg-hover hover:text-foreground',
+                            )
+                        "
+                        @click="setCategory(value)"
+                    >
+                        {{ value }}
+                    </button>
+                </div>
+            </template>
             <div class="ml-auto flex items-center gap-2">
                 <span
-                    v-if="staleCount > 0"
+                    v-if="newCount > 0"
                     class="flex items-center gap-1.5 text-xs text-accent"
                 >
                     <Sparkles class="size-3.5" />
-                    {{ staleCount }} new
+                    {{ newCount }} new
                 </span>
                 <Button
-                    v-if="staleCount > 0"
+                    v-if="newCount > 0"
                     variant="ghost"
                     size="sm"
                     class="h-6 px-2 text-xs"
@@ -482,53 +600,137 @@ function exportUrl(): string {
         </div>
 
         <!-- Log timeline -->
-        <div class="overflow-hidden rounded-xl border border-border bg-card">
+        <div
+            class="overflow-hidden rounded-xl border border-border bg-card"
+            data-activity-feed
+        >
             <div
                 v-for="(log, i) in filteredLogs"
                 :key="log.id"
-                :class="[
-                    'flex items-center gap-3 px-4 py-2.5 text-[13px]',
-                    i < filteredLogs.length - 1 && 'border-b border-border',
-                ]"
+                :data-activity-row="log.id"
+                :data-audit-row="log.category === 'audit' ? log.id : undefined"
+                :class="
+                    i < filteredLogs.length - 1 ? 'border-b border-border' : ''
+                "
             >
-                <TimeStamp
-                    :iso="log.created_at"
-                    mode="datetime"
-                    class="font-mono-tabular w-36 shrink-0 text-[11.5px] text-fg-subtle"
-                />
-                <span
-                    v-if="!log.user_name"
-                    class="inline-flex h-5 items-center gap-1 rounded-full border border-border bg-bg-elev px-2 text-[11px] text-muted-foreground"
+                <div class="flex items-center gap-3 px-4 py-2.5 text-[13px]">
+                    <TimeStamp
+                        :iso="log.created_at"
+                        mode="datetime"
+                        class="font-mono-tabular w-36 shrink-0 text-[11.5px] text-fg-subtle"
+                    />
+                    <span
+                        v-if="!log.user_name"
+                        class="inline-flex h-5 items-center gap-1 rounded-full border border-border bg-bg-elev px-2 text-[11px] text-muted-foreground"
+                    >
+                        <Cpu class="size-3" />system
+                    </span>
+                    <span v-else class="flex w-32 items-center gap-2 truncate">
+                        <InitialsAvatar :name="log.user_name" :size="20" />
+                        <span class="truncate text-[12.5px]">{{
+                            log.user_name
+                        }}</span>
+                    </span>
+                    <SvcChip
+                        v-if="log.service_name"
+                        :id="svcId(log.service_name)"
+                        :label="log.service_name"
+                    />
+                    <span v-else class="text-[12px] text-fg-subtle">—</span>
+                    <span
+                        class="min-w-[160px] text-[12px] text-foreground"
+                        :title="log.action"
+                    >
+                        {{ humanizeAction(log.action) }}
+                    </span>
+                    <span
+                        class="min-w-0 flex-1 truncate text-[12.5px] text-muted-foreground"
+                    >
+                        {{ log.description }}
+                    </span>
+                    <Pill
+                        v-if="log.category === 'audit'"
+                        variant="warn"
+                        class="text-[10.5px]"
+                        >audit</Pill
+                    >
+                    <Pill v-else class="text-[10.5px]">{{
+                        channelLabel(log.action)
+                    }}</Pill>
+                    <Pill :variant="statusVariant(log.action)" dot>ok</Pill>
+                    <Button
+                        v-if="
+                            log.category === 'audit' &&
+                            auditChanges(log).length > 0
+                        "
+                        variant="ghost"
+                        size="sm"
+                        class="size-6 p-0"
+                        :aria-label="
+                            expanded.has(log.id)
+                                ? 'Hide changes'
+                                : 'Show changes'
+                        "
+                        data-audit-expand
+                        @click="toggleExpanded(log.id)"
+                    >
+                        <ChevronDown
+                            class="size-3.5 transition-transform"
+                            :class="{ 'rotate-180': expanded.has(log.id) }"
+                        />
+                    </Button>
+                </div>
+                <div
+                    v-if="expanded.has(log.id)"
+                    class="border-t border-border bg-bg-elev px-4 py-2.5"
+                    data-audit-changes
                 >
-                    <Cpu class="size-3" />system
-                </span>
-                <span v-else class="flex w-32 items-center gap-2 truncate">
-                    <InitialsAvatar :name="log.user_name" :size="20" />
-                    <span class="truncate text-[12.5px]">{{
-                        log.user_name
-                    }}</span>
-                </span>
-                <SvcChip
-                    v-if="log.service_name"
-                    :id="svcId(log.service_name)"
-                    :label="log.service_name"
-                />
-                <span v-else class="text-[12px] text-fg-subtle">—</span>
-                <span
-                    class="min-w-[160px] text-[12px] text-foreground"
-                    :title="log.action"
-                >
-                    {{ humanizeAction(log.action) }}
-                </span>
-                <span
-                    class="min-w-0 flex-1 truncate text-[12.5px] text-muted-foreground"
-                >
-                    {{ log.description }}
-                </span>
-                <Pill class="text-[10.5px]">{{
-                    channelLabel(log.action)
-                }}</Pill>
-                <Pill :variant="statusVariant(log.action)" dot>ok</Pill>
+                    <table class="w-full text-[12px]">
+                        <thead>
+                            <tr
+                                class="text-left text-[11px] tracking-[0.05em] text-muted-foreground uppercase"
+                            >
+                                <th class="py-1 pr-3 font-medium">Field</th>
+                                <th class="py-1 pr-3 font-medium">From</th>
+                                <th class="py-1 font-medium">To</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr
+                                v-for="entry in auditChanges(log)"
+                                :key="entry.field"
+                                :data-audit-change="entry.field"
+                            >
+                                <td
+                                    class="font-mono-tabular py-1 pr-3 text-muted-foreground"
+                                >
+                                    {{ entry.field }}
+                                </td>
+                                <td
+                                    v-if="entry.change.changed === true"
+                                    colspan="2"
+                                    class="py-1 text-fg-subtle italic"
+                                >
+                                    changed (value not recorded)
+                                </td>
+                                <template v-else>
+                                    <td
+                                        class="font-mono-tabular py-1 pr-3 break-all"
+                                    >
+                                        {{
+                                            formatAuditValue(entry.change.from)
+                                        }}
+                                    </td>
+                                    <td
+                                        class="font-mono-tabular py-1 break-all"
+                                    >
+                                        {{ formatAuditValue(entry.change.to) }}
+                                    </td>
+                                </template>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
             </div>
             <div
                 v-if="filteredLogs.length === 0"
