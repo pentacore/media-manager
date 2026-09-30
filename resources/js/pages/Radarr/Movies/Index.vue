@@ -13,6 +13,7 @@ import {
     SelectValue,
 } from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
+import { useCan } from '@/composables/useCan';
 import { useRealtimeReload } from '@/composables/useRealtimeReload';
 import { arrPosterUrl } from '@/lib/arr';
 import { dashboard } from '@/routes';
@@ -42,10 +43,12 @@ interface Movie {
 }
 
 const props = defineProps<{
-    connection: { url: string };
+    connection: { url: string | null };
     movies?: Movie[];
     qualityProfiles?: QualityProfile[];
 }>();
+
+const { can } = useCan();
 
 defineOptions({
     layout: {
@@ -236,16 +239,25 @@ function is4k(movie: Movie): boolean {
                         :class="{ 'animate-spin': syncing }"
                     />Sync
                 </Button>
-                <OpenInServiceButton
-                    :href="`${props.connection.url}/activity/queue`"
-                    label="Activity"
-                />
-                <OpenInServiceButton
-                    :href="props.connection.url"
-                    label="Open Radarr"
-                />
-                <Link :href="MovieController.create.url()">
-                    <Button size="sm" class="h-7 gap-1.5 text-xs">
+                <template v-if="can('manage-library') && props.connection.url">
+                    <OpenInServiceButton
+                        :href="`${props.connection.url}/activity/queue`"
+                        label="Activity"
+                    />
+                    <OpenInServiceButton
+                        :href="props.connection.url"
+                        label="Open Radarr"
+                    />
+                </template>
+                <Link
+                    v-if="can('manage-library')"
+                    :href="MovieController.create.url()"
+                >
+                    <Button
+                        size="sm"
+                        class="h-7 gap-1.5 text-xs"
+                        data-add-movie
+                    >
                         <Plus class="size-3.5" />Add movie
                     </Button>
                 </Link>
@@ -344,7 +356,11 @@ function is4k(movie: Movie): boolean {
                         missing
                     </Pill>
                     <a
-                        v-if="movie.title_slug"
+                        v-if="
+                            can('manage-library') &&
+                            movie.title_slug &&
+                            connection.url
+                        "
                         :href="`${connection.url}/movie/${movie.title_slug}`"
                         target="_blank"
                         rel="noopener noreferrer"

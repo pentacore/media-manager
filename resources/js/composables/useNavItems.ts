@@ -4,9 +4,11 @@ import {
     BellRing,
     Bot,
     Brain,
+    CalendarDays,
     Captions,
     ChartLine,
     Clock,
+    Compass,
     DollarSign,
     Download,
     Film,
@@ -15,9 +17,11 @@ import {
     Inbox,
     LayoutGrid,
     Link as LinkIcon,
+    ListChecks,
     ListTodo,
     MessageSquare,
     Play,
+    Radar,
     Replace,
     ScrollText,
     Search,
@@ -50,17 +54,22 @@ import BazarrOverviewController from '@/actions/App/Http/Controllers/Bazarr/Over
 import NowPlayingController from '@/actions/App/Http/Controllers/Emby/NowPlayingController';
 import WatchHistoryController from '@/actions/App/Http/Controllers/Emby/WatchHistoryController';
 import LibraryActivityController from '@/actions/App/Http/Controllers/Library/ActivityController';
+import CalendarController from '@/actions/App/Http/Controllers/Library/CalendarController';
+import WantedController from '@/actions/App/Http/Controllers/Library/WantedController';
 import AnimeController from '@/actions/App/Http/Controllers/Media/AnimeController';
+import DiscoverController from '@/actions/App/Http/Controllers/Media/DiscoverController';
 import MovieController from '@/actions/App/Http/Controllers/Media/MovieController';
+import MyRequestController from '@/actions/App/Http/Controllers/Media/MyRequestController';
 import RequestController from '@/actions/App/Http/Controllers/Media/RequestController';
 import SearchController from '@/actions/App/Http/Controllers/Media/SearchController';
 import SeriesController from '@/actions/App/Http/Controllers/Media/SeriesController';
 import ServiceHealthController from '@/actions/App/Http/Controllers/Monitoring/ServiceHealthController';
 import SabnzbdQueueController from '@/actions/App/Http/Controllers/Sabnzbd/QueueController';
 import StatisticsController from '@/actions/App/Http/Controllers/StatisticsController';
+import { useCan } from '@/composables/useCan';
 import type { NavCounts } from '@/composables/useNavCounts';
 import { dashboard } from '@/routes';
-import type { NavGroup } from '@/types';
+import type { NavGroup, NavItem } from '@/types';
 
 /**
  * Sidebar navigation structure. Counts are injected rather than imported so
@@ -69,18 +78,7 @@ import type { NavGroup } from '@/types';
  */
 export function useNavItems(counts?: NavCounts): ComputedRef<NavGroup[]> {
     const page = usePage();
-
-    const isAdmin = computed(() => {
-        const role = page.props.auth.user?.role;
-
-        if (!role) {
-            return false;
-        }
-
-        const value = typeof role === 'string' ? role : role.value;
-
-        return value === 'admin';
-    });
+    const { can } = useCan();
 
     const aiEnabled = computed(() =>
         Boolean(
@@ -88,6 +86,37 @@ export function useNavItems(counts?: NavCounts): ComputedRef<NavGroup[]> {
                 ?.enabled,
         ),
     );
+
+    function visible(item: NavItem): boolean {
+        if (item.requiresSeerr === true && !page.props.integrations?.seerr) {
+            return false;
+        }
+
+        return item.ability === undefined || can(item.ability);
+    }
+
+    function prune(groups: NavGroup[]): NavGroup[] {
+        return groups
+            .map((group) => ({
+                ...group,
+                items: group.items
+                    .filter(visible)
+                    .map((item) =>
+                        item.children
+                            ? {
+                                  ...item,
+                                  children: item.children.filter(visible),
+                              }
+                            : item,
+                    )
+                    .filter(
+                        (item) =>
+                            item.children === undefined ||
+                            item.children.length > 0,
+                    ),
+            }))
+            .filter((group) => group.items.length > 0);
+    }
 
     return computed<NavGroup[]>(() => {
         const groups: NavGroup[] = [
@@ -102,11 +131,13 @@ export function useNavItems(counts?: NavCounts): ComputedRef<NavGroup[]> {
                         badge: counts
                             ? () => counts.pendingActions.value
                             : undefined,
+                        ability: 'manage-library',
                     },
                     {
                         title: 'Watch stats',
                         href: StatisticsController().url,
                         icon: ChartLine,
+                        ability: 'manage-library',
                     },
                 ],
             },
@@ -117,32 +148,67 @@ export function useNavItems(counts?: NavCounts): ComputedRef<NavGroup[]> {
                         title: 'TV Series',
                         href: SeriesController.index.url(),
                         icon: Tv,
+                        ability: 'view-library',
                     },
                     {
                         title: 'Movies',
                         href: MovieController.index.url(),
                         icon: Film,
+                        ability: 'view-library',
+                    },
+                    {
+                        title: 'Discover',
+                        href: DiscoverController.index.url(),
+                        icon: Compass,
+                        ability: 'request-media',
+                        requiresSeerr: true,
+                    },
+                    {
+                        title: 'Calendar',
+                        href: CalendarController.url(),
+                        icon: CalendarDays,
+                        ability: 'view-library',
+                    },
+                    {
+                        title: 'Wanted',
+                        href: WantedController.url(),
+                        icon: Radar,
+                        ability: 'manage-library',
+                        badge: counts
+                            ? () => counts.wantedMissing.value
+                            : undefined,
                     },
                     {
                         title: 'Requests',
                         href: RequestController.index.url(),
                         icon: Heart,
+                        ability: 'manage-requests',
+                    },
+                    {
+                        title: 'My requests',
+                        href: MyRequestController.index.url(),
+                        icon: ListChecks,
+                        ability: 'request-media',
+                        requiresSeerr: true,
                     },
                     {
                         title: 'Seasonal Anime',
                         href: AnimeController.index.url(),
                         icon: Sprout,
+                        ability: 'manage-requests',
                     },
                     {
                         title: 'Subtitles',
                         href: BazarrOverviewController.url(),
                         icon: Captions,
+                        ability: 'manage-library',
                     },
                     {
                         title: 'Search',
                         href: SearchController.index.url(),
                         icon: Search,
                         mobileOnly: true,
+                        ability: 'view-library',
                     },
                 ],
             },
@@ -170,6 +236,7 @@ export function useNavItems(counts?: NavCounts): ComputedRef<NavGroup[]> {
                                   counts.sabnzbdQueued.value +
                                   counts.sabnzbdCompleted.value
                             : undefined,
+                        ability: 'manage-library',
                     },
                     {
                         title: 'Grab queue',
@@ -178,6 +245,7 @@ export function useNavItems(counts?: NavCounts): ComputedRef<NavGroup[]> {
                         badge: counts
                             ? () => counts.libraryIntervention.value
                             : undefined,
+                        ability: 'manage-library',
                     },
                     {
                         title: 'Watch history',
@@ -188,24 +256,23 @@ export function useNavItems(counts?: NavCounts): ComputedRef<NavGroup[]> {
                         title: 'Service Health',
                         href: ServiceHealthController.index.url(),
                         icon: HeartPulse,
+                        ability: 'manage-library',
                     },
                     {
                         title: 'Activity log',
                         href: ActivityLogController.index.url(),
                         icon: ScrollText,
+                        ability: 'manage-library',
                     },
                 ],
             },
         ];
 
-        if (!isAdmin.value) {
-            return groups;
-        }
-
         const adminItems: NavGroup['items'] = [
             {
                 title: 'Configuration',
                 icon: Settings2,
+                ability: 'admin',
                 children: [
                     {
                         title: 'Connections',
@@ -243,6 +310,7 @@ export function useNavItems(counts?: NavCounts): ComputedRef<NavGroup[]> {
             adminItems.push({
                 title: 'AI',
                 icon: Brain,
+                ability: 'admin',
                 children: [
                     {
                         title: 'AI Settings',
@@ -276,6 +344,7 @@ export function useNavItems(counts?: NavCounts): ComputedRef<NavGroup[]> {
         adminItems.push({
             title: 'Diagnostics',
             icon: Stethoscope,
+            ability: 'admin',
             children: [
                 {
                     title: 'System stats',
@@ -297,6 +366,6 @@ export function useNavItems(counts?: NavCounts): ComputedRef<NavGroup[]> {
 
         groups.push({ label: 'Admin', items: adminItems });
 
-        return groups;
+        return prune(groups);
     });
 }

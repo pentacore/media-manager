@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Head, router, usePage } from '@inertiajs/vue3';
+import { Head, router } from '@inertiajs/vue3';
 import { Download, Sparkles } from '@lucide/vue';
 import { computed, onMounted, watch } from 'vue';
 import WatchHistoryController from '@/actions/App/Http/Controllers/Emby/WatchHistoryController';
@@ -20,6 +20,7 @@ import {
     SelectTrigger,
     SelectValue,
 } from '@/components/ui/select';
+import { useCan } from '@/composables/useCan';
 import { useRealtimeList } from '@/composables/useRealtimeList';
 import { dashboard } from '@/routes';
 import type { EmbyActivityResource } from '@/typefinder/resources/EmbyActivityResource';
@@ -70,18 +71,8 @@ defineOptions({
     },
 });
 
-const page = usePage();
-const isViewer = computed(() => {
-    const role = page.props.auth.user?.role;
-
-    if (!role) {
-        return false;
-    }
-
-    const value = typeof role === 'string' ? role : role.value;
-
-    return value === 'viewer';
-});
+const { can } = useCan();
+const isViewer = computed(() => !can('manage-library'));
 
 const hasFilter = computed(() => props.filters.media_type !== '');
 const onFirstPage = computed(() => props.activities.meta.current_page === 1);

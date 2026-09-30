@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Head, router, usePage } from '@inertiajs/vue3';
+import { Head, router } from '@inertiajs/vue3';
 import {
     AlertTriangle,
     ExternalLink,
@@ -27,6 +27,7 @@ import {
     DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Skeleton } from '@/components/ui/skeleton';
+import { useCan } from '@/composables/useCan';
 import { dashboard } from '@/routes';
 
 interface QueueRow {
@@ -120,18 +121,8 @@ defineOptions({
     },
 });
 
-const page = usePage();
-const isAdmin = computed(() => {
-    const role = page.props.auth.user?.role;
-
-    if (!role) {
-        return false;
-    }
-
-    const value = typeof role === 'string' ? role : role.value;
-
-    return value === 'admin';
-});
+const { can } = useCan();
+const isAdmin = computed(() => can('admin'));
 
 const refreshing = ref(false);
 const serviceFilter = ref<'all' | 'sonarr' | 'radarr'>('all');

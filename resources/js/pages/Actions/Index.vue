@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Head, Link, router, usePage } from '@inertiajs/vue3';
+import { Head, Link, router } from '@inertiajs/vue3';
 import {
     AlertTriangle,
     Inbox,
@@ -20,6 +20,7 @@ import {
     TimeStamp,
 } from '@/components/mm';
 import { Button } from '@/components/ui/button';
+import { useCan } from '@/composables/useCan';
 import { useRealtimeList } from '@/composables/useRealtimeList';
 import { useWebSocket } from '@/composables/useWebSocket';
 import type { ChannelLease } from '@/composables/useWebSocket';
@@ -65,19 +66,9 @@ defineOptions({
     },
 });
 
-const page = usePage();
+const { can } = useCan();
 
-const isAdmin = computed(() => {
-    const role = page.props.auth.user?.role;
-
-    if (!role) {
-        return false;
-    }
-
-    const value = typeof role === 'string' ? role : role.value;
-
-    return value === 'admin';
-});
+const isAdmin = computed(() => can('admin'));
 
 const hasFilter = computed(() => props.filters.status !== '');
 const onFirstPage = computed(() => props.requests.meta.current_page === 1);

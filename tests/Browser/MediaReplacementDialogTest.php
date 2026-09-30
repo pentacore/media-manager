@@ -42,6 +42,7 @@ test('member replaces a movie file end to end from the show page', function (): 
     $connection = ServiceConnection::factory()->radarr()->create(['url' => 'http://radarr.local:7878']);
 
     Http::fake([
+        'radarr.local:7878/api/v3/qualityprofile*' => Http::response([['id' => 1, 'name' => 'HD-1080p']]),
         'radarr.local:7878/api/v3/movie/10' => Http::response([
             'id' => 10,
             'title' => 'A Movie',
