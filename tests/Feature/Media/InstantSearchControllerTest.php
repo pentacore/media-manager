@@ -16,11 +16,13 @@ test('guests are redirected to login from instant search', function (): void {
     $this->get(route('media.search.instant', ['q' => 'foo']))->assertRedirect(route('login'));
 });
 
-test('viewers cannot access instant search', function (): void {
-    $viewer = User::factory()->create();
-    $this->actingAs($viewer)
-        ->get(route('media.search.instant', ['q' => 'foo']))
-        ->assertForbidden();
+test('viewers can use instant search', function (): void {
+    config()->set('mediamanager.search.driver', 'fallback');
+
+    $this->actingAs(User::factory()->create())
+        ->getJson(route('media.search.instant', ['q' => 'foo']))
+        ->assertOk()
+        ->assertExactJson(['series' => [], 'movies' => []]);
 });
 
 test('q is required', function (): void {

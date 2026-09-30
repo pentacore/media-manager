@@ -1,6 +1,7 @@
 import { usePage } from '@inertiajs/vue3';
 import type { Ref } from 'vue';
 import { onMounted, onUnmounted, ref, watchEffect } from 'vue';
+import { useCan } from '@/composables/useCan';
 import type { ChannelLease } from '@/composables/useWebSocket';
 import { useWebSocket } from '@/composables/useWebSocket';
 
@@ -11,6 +12,7 @@ export type NavCounts = {
     sabnzbdQueued: Ref<number>;
     sabnzbdCompleted: Ref<number>;
     replacementAttention: Ref<number>;
+    wantedMissing: Ref<number>;
 };
 
 type NavCountsPayload = {
@@ -19,6 +21,7 @@ type NavCountsPayload = {
     libraryIntervention?: number;
     sabnzbdDownloads?: { queued: number; completed: number };
     replacementAttention?: number;
+    wantedMissing?: number;
 };
 
 type PlaybackPayload = {
@@ -59,8 +62,8 @@ export function useNavCounts(): NavCounts {
     const sabnzbdQueued = ref(initialNav?.sabnzbdDownloads?.queued ?? 0);
     const sabnzbdCompleted = ref(initialNav?.sabnzbdDownloads?.completed ?? 0);
     const replacementAttention = ref(initialNav?.replacementAttention ?? 0);
-    const role = page.props.auth.user?.role;
-    const isAdmin = (typeof role === 'string' ? role : role?.value) === 'admin';
+    const wantedMissing = ref(initialNav?.wantedMissing ?? 0);
+    const { can } = useCan();
 
     const recentSessionIds = new Set<number>();
     const sessionTimestamps = new Map<number, number>();
@@ -109,6 +112,7 @@ export function useNavCounts(): NavCounts {
             sabnzbdQueued.value = nav.sabnzbdDownloads?.queued ?? 0;
             sabnzbdCompleted.value = nav.sabnzbdDownloads?.completed ?? 0;
             replacementAttention.value = nav.replacementAttention ?? 0;
+            wantedMissing.value = nav.wantedMissing ?? 0;
             recentSessionIds.clear();
             sessionTimestamps.clear();
             pendingIds.clear();
@@ -141,39 +145,41 @@ export function useNavCounts(): NavCounts {
             ),
         );
 
-        channelLeases.push(
-            acquirePrivateChannel('members.actions')
-                .listen(
-                    '.ActionRequestCreated',
-                    (event: ActionRequestCreatedPayload) => {
-                        if (
-                            event.status === 'pending' &&
-                            !pendingIds.has(event.id)
-                        ) {
-                            pendingIds.add(event.id);
-                            pendingActions.value += 1;
-                        }
-                    },
-                )
-                .listen(
-                    '.ActionRequestStatusChanged',
-                    (event: ActionRequestStatusPayload) => {
-                        if (
-                            TERMINAL_STATUSES.has(event.status) ||
-                            event.status === 'approved' ||
-                            event.status === 'executing'
-                        ) {
-                            if (pendingIds.has(event.id)) {
-                                pendingIds.delete(event.id);
-                                pendingActions.value = Math.max(
-                                    0,
-                                    pendingActions.value - 1,
-                                );
+        if (can('manage-library')) {
+            channelLeases.push(
+                acquirePrivateChannel('members.actions')
+                    .listen(
+                        '.ActionRequestCreated',
+                        (event: ActionRequestCreatedPayload) => {
+                            if (
+                                event.status === 'pending' &&
+                                !pendingIds.has(event.id)
+                            ) {
+                                pendingIds.add(event.id);
+                                pendingActions.value += 1;
                             }
-                        }
-                    },
-                ),
-        );
+                        },
+                    )
+                    .listen(
+                        '.ActionRequestStatusChanged',
+                        (event: ActionRequestStatusPayload) => {
+                            if (
+                                TERMINAL_STATUSES.has(event.status) ||
+                                event.status === 'approved' ||
+                                event.status === 'executing'
+                            ) {
+                                if (pendingIds.has(event.id)) {
+                                    pendingIds.delete(event.id);
+                                    pendingActions.value = Math.max(
+                                        0,
+                                        pendingActions.value - 1,
+                                    );
+                                }
+                            }
+                        },
+                    ),
+            );
+        }
 
         channelLeases.push(
             acquirePrivateChannel('dashboard')
@@ -194,7 +200,7 @@ export function useNavCounts(): NavCounts {
 
         // Admin-only channel: subscribing as a member would 403 on auth and
         // spam the console, and members never see this badge anyway.
-        if (isAdmin) {
+        if (can('admin')) {
             channelLeases.push(
                 acquirePrivateChannel('admin.media-replacement').listen(
                     '.MediaReplacementAttemptChanged',
@@ -225,5 +231,6 @@ export function useNavCounts(): NavCounts {
         sabnzbdQueued,
         sabnzbdCompleted,
         replacementAttention,
+        wantedMissing,
     };
 }

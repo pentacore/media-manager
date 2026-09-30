@@ -5,8 +5,8 @@ paths:
 
 # App
 
-## Authorize with the role middleware, not Gates or Policies
-Do not create Policy classes or `Gate::define` definitions. Authorization is the `UserRole` enum hierarchy enforced by the `role:admin|member|viewer` middleware on route groups; use `User::isAdmin()`/`isMember()` or `UserRole::isAtLeast()` for in-code checks, and `abort_if`/`abort_unless` with a bare status code for per-record ownership or state guards.
+## Authorize with the five abilities, never Policies
+Do not create Policy classes, and never call `Gate::define` outside `App\Support\Abilities` — the one exception is Telescope's `viewTelescope` gate in `TelescopeServiceProvider::gate()`, which Telescope requires. Capabilities are its five abilities (`view-library`, `request-media`, `manage-library`, `manage-requests`, `admin`), each granted from a minimum `UserRole` through `isAtLeast()`; `Abilities::define()` registers them as Gates in `AppServiceProvider::boot()` and `Abilities::for()` shares them as the `auth.can` Inertia prop. New routes use `can:<ability>` middleware on route groups (existing `role:` groups on admin areas may stay). In code use `$user->can(Abilities::X)` or `UserRole::isAtLeast()`, and `abort_if`/`abort_unless` with a bare status code for per-record ownership or state guards. On the frontend read `useCan().can('<ability>')`, never the raw role.
 
 ## Dependency acquisition
 Inject collaborators through the constructor as `private readonly` promoted properties; fall back to `resolve()` only where the framework constructs the class for you (AI tools/agents, `Notification::via()`, static helpers, dynamic `match` tables). Construct `ServiceConnection`-scoped `*Client` and `*Cache` objects with `new` — they are never container-resolved.

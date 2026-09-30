@@ -12,7 +12,10 @@ use App\Models\ServiceConnection;
 use App\Services\Prowlarr\ProwlarrClient;
 use App\Services\Radarr\RadarrClient;
 use App\Services\Seerr\SeerrClient;
+use App\Services\Seerr\SeerrTitlePresenter;
+use App\Services\Seerr\SeerrUserResolver;
 use App\Services\Sonarr\SonarrClient;
+use App\Support\Abilities;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Http\Request;
@@ -37,7 +40,7 @@ class SearchController extends Controller
         return is_string($driver) ? $driver : 'typesense';
     }
 
-    public function index(Request $request): Response
+    public function index(Request $request, SeerrTitlePresenter $seerrTitlePresenter, SeerrUserResolver $seerrUserResolver): Response
     {
         $request->validate([
             'q' => ['nullable', 'string', 'max:500'],
@@ -47,34 +50,67 @@ class SearchController extends Controller
         $term = trim((string) $request->query('q', ''));
         $scope = (string) $request->query('scope', 'all');
 
+        // Viewers browse the library read-only through its own pages; Search is
+        // their way into Seerr only, so the library and indexer fan-outs stay
+        // member+ (spec: "Viewers get only the Seerr scope").
+        $seerrOnly = ! $request->user()->can(Abilities::MANAGE_LIBRARY);
+
+        if ($seerrOnly) {
+            $scope = 'requests';
+        }
+
+        $empty = ['results' => [], 'error' => null];
+
         // Indexers are heavy and noisy, so they are opt-in: only fire the
         // Prowlarr fan-out when the user explicitly switches to that scope.
-        $includeIndexers = $term !== '' && $scope === 'indexers';
+        $includeIndexers = ! $seerrOnly && $term !== '' && $scope === 'indexers';
+
+        $seerrConnection = $term === '' ? null : $this->activeConnection(ServiceType::Seerr);
 
         return Inertia::render('Search', [
             'query' => $term,
             'scope' => $scope,
-            'connections' => $this->resolveConnectionUrls(),
-            'seriesResults' => $term === ''
-                ? ['results' => [], 'error' => null]
+            'connections' => $this->resolveConnectionUrls($seerrOnly),
+            'seriesResults' => $term === '' || $seerrOnly
+                ? $empty
                 : Inertia::defer(fn (): array => $this->searchSonarr($term)),
-            'movieResults' => $term === ''
-                ? ['results' => [], 'error' => null]
+            'movieResults' => $term === '' || $seerrOnly
+                ? $empty
                 : Inertia::defer(fn (): array => $this->searchRadarr($term)),
             'requestResults' => $term === ''
-                ? ['results' => [], 'error' => null]
-                : Inertia::defer(fn (): array => $this->searchSeerr($term)),
+                ? $empty
+                : Inertia::defer(fn (): array => $this->searchSeerr($term, $seerrTitlePresenter)),
+            'requesting' => $seerrConnection instanceof ServiceConnection
+                ? Inertia::defer(fn (): array => $seerrUserResolver->requestingContext($seerrConnection, $request->user()), 'requesting')
+                : null,
             'indexerResults' => $includeIndexers
                 ? Inertia::defer(fn (): array => $this->searchIndexers($term))
-                : ['results' => [], 'error' => null],
+                : $empty,
         ]);
+    }
+
+    private function activeConnection(ServiceType $serviceType): ?ServiceConnection
+    {
+        try {
+            return ServiceConnection::resolveActive($serviceType);
+        } catch (ModelNotFoundException) {
+            return null;
+        }
     }
 
     /**
      * @return array{sonarr: ?array{url: string}, radarr: ?array{url: string}, seerr: ?array{url: string}}
      */
-    private function resolveConnectionUrls(): array
+    private function resolveConnectionUrls(bool $seerrOnly): array
     {
+        if ($seerrOnly) {
+            return [
+                'sonarr' => null,
+                'radarr' => null,
+                'seerr' => $this->externalConnectionUrlFor(ServiceType::Seerr),
+            ];
+        }
+
         return [
             'sonarr' => $this->connectionUrlFor(ServiceType::Sonarr),
             'radarr' => $this->connectionUrlFor(ServiceType::Radarr),
@@ -83,17 +119,26 @@ class SearchController extends Controller
     }
 
     /**
+     * A viewer only ever gets the connection's public external URL — never the
+     * internal URL linkUrl() would fall back to.
+     *
+     * @return ?array{url: string}
+     */
+    private function externalConnectionUrlFor(ServiceType $serviceType): ?array
+    {
+        $externalUrl = $this->activeConnection($serviceType)?->external_url;
+
+        return is_string($externalUrl) && $externalUrl !== '' ? ['url' => rtrim($externalUrl, '/')] : null;
+    }
+
+    /**
      * @return ?array{url: string}
      */
     private function connectionUrlFor(ServiceType $serviceType): ?array
     {
-        try {
-            $connection = ServiceConnection::resolveActive($serviceType);
-        } catch (ModelNotFoundException) {
-            return null;
-        }
+        $connection = $this->activeConnection($serviceType);
 
-        return ['url' => $connection->linkUrl()];
+        return $connection instanceof ServiceConnection ? ['url' => $connection->linkUrl()] : null;
     }
 
     /**
@@ -265,98 +310,30 @@ class SearchController extends Controller
     }
 
     /**
-     * Find existing Seerr requests matching the search term.
+     * Seerr's TMDB-backed multi-search, one row per movie/TV title whatever its
+     * request state — unrequested titles included, so the detail sheet can
+     * request them. Status comes from the hit's own `mediaInfo`.
      *
-     * Two-step: hit Seerr's TMDB-backed `/search` to get title matches, then
-     * for any hit already tracked in Seerr (`mediaInfo` present) fetch the
-     * movie/tv detail to read its `mediaInfo.requests` array. The /search
-     * endpoint sets `mediaInfo` as a presence flag but does not include the
-     * full requests collection. Returns one row per request, regardless of
-     * status.
-     *
-     * @return array{results: array<int, array<string, mixed>>, error: ?string}
+     * @return array{results: list<array<string, mixed>>, error: ?string}
      */
-    private function searchSeerr(string $term): array
+    private function searchSeerr(string $term, SeerrTitlePresenter $seerrTitlePresenter): array
     {
-        try {
-            $connection = ServiceConnection::resolveActive(ServiceType::Seerr);
-        } catch (ModelNotFoundException) {
+        $connection = $this->activeConnection(ServiceType::Seerr);
+
+        if (! $connection instanceof ServiceConnection) {
             return ['results' => [], 'error' => 'No active Seerr connection configured.'];
         }
 
-        $seerrClient = new SeerrClient($connection);
-
         try {
-            $response = $seerrClient->search($term);
+            $response = new SeerrClient($connection)->search($term);
         } catch (Throwable $throwable) {
             return $this->serviceFailure('seerr', $throwable);
         }
 
-        $hits = is_array($response['results'] ?? null) ? $response['results'] : [];
-        $rows = [];
-
-        foreach ($hits as $hit) {
-            $mediaType = (string) ($hit['mediaType'] ?? '');
-            if (! in_array($mediaType, ['movie', 'tv'], true)) {
-                continue;
-            }
-
-            // mediaInfo is only emitted on /search hits that have an entry in
-            // Seerr's local DB — i.e. items that have ever been requested.
-            if (! is_array($hit['mediaInfo'] ?? null)) {
-                continue;
-            }
-
-            $tmdbId = (int) ($hit['id'] ?? $hit['mediaInfo']['tmdbId'] ?? 0);
-            if ($tmdbId <= 0) {
-                continue;
-            }
-
-            try {
-                $detail = $mediaType === 'movie'
-                    ? $seerrClient->getMovieDetails($tmdbId)
-                    : $seerrClient->getTvDetails($tmdbId);
-            } catch (Throwable $throwable) {
-                Log::warning('Seerr detail lookup failed during search.', [
-                    'media_type' => $mediaType,
-                    'tmdb_id' => $tmdbId,
-                    'exception' => $throwable::class,
-                    'message' => $throwable->getMessage(),
-                ]);
-
-                continue;
-            }
-
-            $mediaInfo = is_array($detail['mediaInfo'] ?? null) ? $detail['mediaInfo'] : [];
-            $requests = is_array($mediaInfo['requests'] ?? null) ? $mediaInfo['requests'] : [];
-            if ($requests === []) {
-                continue;
-            }
-
-            $title = $detail['title'] ?? $detail['name'] ?? $hit['title'] ?? $hit['name'] ?? null;
-            $overview = $detail['overview'] ?? $hit['overview'] ?? null;
-            $posterPath = $detail['posterPath'] ?? $hit['posterPath'] ?? null;
-            $tvdbId = $mediaInfo['tvdbId'] ?? $hit['mediaInfo']['tvdbId'] ?? null;
-
-            foreach ($requests as $request) {
-                $rows[] = [
-                    'id' => $request['id'] ?? null,
-                    'media_type' => $mediaType,
-                    'title' => is_string($title) ? $title : null,
-                    'tmdb_id' => $tmdbId,
-                    'tvdb_id' => $tvdbId,
-                    'status' => $request['status'] ?? null,
-                    'overview' => is_string($overview) ? $overview : null,
-                    'poster_path' => is_string($posterPath) ? $posterPath : null,
-                ];
-
-                if (count($rows) >= self::MAX_RESULTS) {
-                    break 2;
-                }
-            }
-        }
-
-        return ['results' => $rows, 'error' => null];
+        return [
+            'results' => array_slice($seerrTitlePresenter->results($response), 0, self::MAX_RESULTS),
+            'error' => null,
+        ];
     }
 
     /**

@@ -13,6 +13,7 @@ use App\Services\Actions\ActionDescriber;
 use App\Services\Actions\ActionOrchestrator;
 use App\Services\Actions\UndescribableAction;
 use App\Services\Sonarr\SonarrClient;
+use App\Support\Abilities;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\RequestException;
@@ -24,15 +25,17 @@ use Override;
 
 class SeriesController extends BaseArrController
 {
-    public function index(): Response|RedirectResponse
+    public function index(Request $request): Response|RedirectResponse
     {
         $connection = $this->resolveConnection();
         if ($connection instanceof RedirectResponse) {
             return $connection;
         }
 
+        $canManageLibrary = $request->user()->can(Abilities::MANAGE_LIBRARY);
+
         return Inertia::render('Sonarr/Series/Index', [
-            'connection' => $this->connectionUrl($connection),
+            'connection' => $canManageLibrary ? $this->connectionUrl($connection) : ['url' => null],
             'series' => Inertia::defer(fn (): array => array_map(
                 fn (array $item): array => $this->mapSeries($item),
                 $this->tryClientCall($connection, fn (SonarrClient $sonarrClient): array => $sonarrClient->getSeries()),
@@ -43,7 +46,7 @@ class SeriesController extends BaseArrController
         ]);
     }
 
-    public function show(int $id): Response|RedirectResponse
+    public function show(int $id, Request $request): Response|RedirectResponse
     {
         $connection = $this->resolveConnection();
         if ($connection instanceof RedirectResponse) {
@@ -56,10 +59,12 @@ class SeriesController extends BaseArrController
             return $this->connectionFailedRedirect();
         }
 
+        $canManageLibrary = $request->user()->can(Abilities::MANAGE_LIBRARY);
+
         return Inertia::render('Sonarr/Series/Show', [
-            'connection' => $this->connectionUrl($connection),
+            'connection' => $canManageLibrary ? $this->connectionUrl($connection) : ['url' => null],
             'service_connection_id' => $connection->id,
-            'series' => $this->mapSeries($series, detailed: true),
+            'series' => $this->mapSeries($series, detailed: true, canManageLibrary: $canManageLibrary),
             'episodes' => Inertia::defer(fn (): array => array_map(fn (array $ep): array => [
                 'id' => $ep['id'] ?? null,
                 'season_number' => $ep['seasonNumber'] ?? 0,
@@ -70,6 +75,13 @@ class SeriesController extends BaseArrController
                 'monitored' => $ep['monitored'] ?? false,
                 'overview' => $ep['overview'] ?? null,
             ], $this->tryClientCall($connection, fn (SonarrClient $sonarrClient): array => $sonarrClient->getEpisodesBySeries($id)))),
+            // Only the profile dropdown needs these, and only manage-library
+            // users get the dropdown — viewers trigger no upstream lookup.
+            ...$canManageLibrary ? [
+                'qualityProfiles' => Inertia::defer(fn (): array => $this->mapQualityProfiles(
+                    $this->tryClientCall($connection, fn (SonarrClient $sonarrClient): array => $sonarrClient->getQualityProfiles()),
+                ), 'qualityProfiles'),
+            ] : [],
         ]);
     }
 
@@ -202,7 +214,7 @@ class SeriesController extends BaseArrController
      * @param  array<string, mixed>  $item
      * @return array<string, mixed>
      */
-    private function mapSeries(array $item, bool $detailed = false): array
+    private function mapSeries(array $item, bool $detailed = false, bool $canManageLibrary = true): array
     {
         $base = [
             'id' => $item['id'] ?? null,
@@ -223,7 +235,11 @@ class SeriesController extends BaseArrController
             $base['overview'] = $item['overview'] ?? null;
             $base['network'] = $item['network'] ?? null;
             $base['runtime'] = $item['runtime'] ?? null;
-            $base['root_folder_path'] = $item['rootFolderPath'] ?? null;
+
+            if ($canManageLibrary) {
+                $base['root_folder_path'] = $item['rootFolderPath'] ?? null;
+            }
+
             $base['seasons'] = array_map(fn (array $s): array => [
                 'season_number' => $s['seasonNumber'] ?? 0,
                 'monitored' => $s['monitored'] ?? false,

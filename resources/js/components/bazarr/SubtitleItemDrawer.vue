@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { useHttp, usePage } from '@inertiajs/vue3';
+import { useHttp } from '@inertiajs/vue3';
 import { Download, Search, Sparkles, Upload } from '@lucide/vue';
 import { computed, ref, watch } from 'vue';
 import { toast } from 'vue-sonner';
@@ -20,6 +20,7 @@ import {
     SheetHeader,
     SheetTitle,
 } from '@/components/ui/sheet';
+import { useCan } from '@/composables/useCan';
 import type { SubtitleCandidateResource } from '@/typefinder/resources/SubtitleCandidateResource';
 import type { SubtitleItemResource } from '@/typefinder/resources/SubtitleItemResource';
 
@@ -91,13 +92,8 @@ const emit = defineEmits<{
     'update:open': [open: boolean];
 }>();
 
-const page = usePage();
-const canOperate = computed(() => {
-    const role = page.props.auth.user?.role;
-    const value = typeof role === 'string' ? role : role?.value;
-
-    return value === 'member' || value === 'admin';
-});
+const { can } = useCan();
+const canOperate = computed(() => can('manage-library'));
 
 const inspectedItem = ref<SubtitleItemResource | null>(null);
 const candidates = ref<SubtitleCandidateResource[]>([]);

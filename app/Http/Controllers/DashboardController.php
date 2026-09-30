@@ -15,6 +15,7 @@ use App\Models\WebhookEvent;
 use App\Services\DashboardMetrics\DashboardMetricsRepository;
 use App\Services\Emby\EmbyClient;
 use App\Services\ServiceMetrics\ServiceMetricsRepository;
+use App\Support\Abilities;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\RequestException;
@@ -38,6 +39,7 @@ class DashboardController extends Controller
         )->count();
 
         $pendingActions = ActionRequest::where('status', ActionRequestStatus::Pending)->count();
+        $canManageLibrary = $request->user()?->can(Abilities::MANAGE_LIBRARY) === true;
 
         return Inertia::render('Dashboard', [
             'stats' => [
@@ -55,8 +57,8 @@ class DashboardController extends Controller
                 'type' => $serviceConnection->type->value,
                 'name' => $serviceConnection->name,
                 'health' => $serviceConnection->health_status?->value ?? 'unknown',
-                'version' => $serviceConnection->version,
-                'latest_version' => $serviceConnection->latest_version,
+                'version' => $canManageLibrary ? $serviceConnection->version : null,
+                'latest_version' => $canManageLibrary ? $serviceConnection->latest_version : null,
                 'last_seen_at' => $serviceConnection->last_seen_at?->toISOString(),
                 'is_active' => $serviceConnection->is_active,
                 'latency_spark' => $serviceMetricsRepository->recentLatencySamples($serviceConnection->id),
@@ -68,42 +70,8 @@ class DashboardController extends Controller
                     ->take(10)
                     ->get()
             )->toArray($request),
-            'recentWebhookEvents' => WebhookEvent::with('serviceConnection:id,name,type')
-                ->latest()
-                ->take(5)
-                ->get()
-                ->map(fn (WebhookEvent $webhookEvent): array => [
-                    'id' => $webhookEvent->id,
-                    'event_type' => $webhookEvent->event_type,
-                    'service_name' => $webhookEvent->serviceConnection?->name,
-                    'service_type' => $webhookEvent->serviceConnection?->type->value,
-                    'processed' => $webhookEvent->processed_at !== null,
-                    'created_at' => $webhookEvent->created_at?->toISOString(),
-                ]),
-            'pendingApprovals' => ActionRequest::with([
-                'webhookEvent.serviceConnection:id,name,type',
-                'approvedByUser:id,name',
-            ])
-                ->where('status', ActionRequestStatus::Pending)
-                ->latest()
-                ->take(3)
-                ->get()
-                ->map(fn (ActionRequest $actionRequest): array => [
-                    'id' => $actionRequest->id,
-                    'type' => $actionRequest->type,
-                    'target_service' => $actionRequest->target_service,
-                    'subject_label' => $actionRequest->title
-                        ?? (is_string($actionRequest->payload['title'] ?? null)
-                            ? $actionRequest->payload['title']
-                            : ($actionRequest->payload['name'] ?? '—')),
-                    'description' => $actionRequest->description,
-                    'requested_by' => $actionRequest->approvedByUser?->name
-                        ?? $actionRequest->webhookEvent?->serviceConnection?->name
-                        ?? 'system',
-                    'trigger' => $actionRequest->webhookEvent?->event_type
-                        ?? 'manual',
-                    'created_at' => $actionRequest->created_at?->toISOString(),
-                ]),
+            'recentWebhookEvents' => $canManageLibrary ? $this->recentWebhookEvents() : [],
+            'pendingApprovals' => $canManageLibrary ? $this->pendingApprovals() : [],
             'sparklines' => [
                 'webhooks' => $dashboardMetricsRepository->webhookSparkline(),
                 'actions' => $dashboardMetricsRepository->actionSparkline(),
@@ -112,6 +80,65 @@ class DashboardController extends Controller
             ],
             'nowPlaying' => Inertia::defer(fn (): array => $this->loadNowPlaying()),
         ]);
+    }
+
+    /**
+     * Member-only: viewers cannot open the webhook log, so they get none.
+     *
+     * @return list<array{id: int, event_type: string, service_name: string|null, service_type: string|null, processed: bool, created_at: string|null}>
+     */
+    private function recentWebhookEvents(): array
+    {
+        return WebhookEvent::with('serviceConnection:id,name,type')
+            ->latest()
+            ->take(5)
+            ->get()
+            ->map(fn (WebhookEvent $webhookEvent): array => [
+                'id' => $webhookEvent->id,
+                'event_type' => $webhookEvent->event_type,
+                'service_name' => $webhookEvent->serviceConnection?->name,
+                'service_type' => $webhookEvent->serviceConnection?->type->value,
+                'processed' => $webhookEvent->processed_at !== null,
+                'created_at' => $webhookEvent->created_at?->toISOString(),
+            ])
+            ->values()
+            ->all();
+    }
+
+    /**
+     * Member-only: viewers cannot review the action queue, so they never see
+     * pending approvals' descriptions or requester names.
+     *
+     * @return list<array{id: int, type: string, target_service: string, subject_label: mixed, description: string|null, requested_by: string, trigger: string, created_at: string|null}>
+     */
+    private function pendingApprovals(): array
+    {
+        return ActionRequest::with([
+            'webhookEvent.serviceConnection:id,name,type',
+            'approvedByUser:id,name',
+        ])
+            ->where('status', ActionRequestStatus::Pending)
+            ->latest()
+            ->take(3)
+            ->get()
+            ->map(fn (ActionRequest $actionRequest): array => [
+                'id' => $actionRequest->id,
+                'type' => $actionRequest->type,
+                'target_service' => $actionRequest->target_service,
+                'subject_label' => $actionRequest->title
+                    ?? (is_string($actionRequest->payload['title'] ?? null)
+                        ? $actionRequest->payload['title']
+                        : ($actionRequest->payload['name'] ?? '—')),
+                'description' => $actionRequest->description,
+                'requested_by' => $actionRequest->approvedByUser?->name
+                    ?? $actionRequest->webhookEvent?->serviceConnection?->name
+                    ?? 'system',
+                'trigger' => $actionRequest->webhookEvent?->event_type
+                    ?? 'manual',
+                'created_at' => $actionRequest->created_at?->toISOString(),
+            ])
+            ->values()
+            ->all();
     }
 
     /**

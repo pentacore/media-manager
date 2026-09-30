@@ -95,7 +95,7 @@ test('dashboard includes recent activity', function (): void {
 });
 
 test('dashboard includes recent webhook events', function (): void {
-    $user = User::factory()->create();
+    $user = User::factory()->member()->create();
     $connection = ServiceConnection::factory()->create();
     WebhookEvent::factory()->count(3)->create(['service_connection_id' => $connection->id]);
 
@@ -226,4 +226,34 @@ test('pending approvals use the action title and description', function (): void
         ->assertInertia(fn ($page) => $page
             ->where('pendingApprovals.0.subject_label', 'Delete series "Severance (2022)"')
             ->where('pendingApprovals.0.description', 'Emby reported "Severance" was removed from the library. Sonarr will delete the series and its files from disk.'));
+});
+
+test('a viewer dashboard carries no approvals, webhook events or service versions', function (): void {
+    $connection = ServiceConnection::factory()->create(['version' => '4.0.1', 'latest_version' => '4.0.2']);
+    WebhookEvent::factory()->count(2)->create(['service_connection_id' => $connection->id]);
+    ActionRequest::factory()->described()->create();
+
+    $this->actingAs(User::factory()->create())
+        ->get(route('dashboard'))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->component('Dashboard')
+            ->where('pendingApprovals', [])
+            ->where('recentWebhookEvents', [])
+            ->where('services', fn ($services): bool => collect($services)->every(fn (array $service): bool => $service['version'] === null && $service['latest_version'] === null)));
+});
+
+test('a member dashboard keeps approvals, webhook events and service versions', function (): void {
+    $connection = ServiceConnection::factory()->create(['version' => '4.0.1', 'latest_version' => '4.0.2']);
+    WebhookEvent::factory()->create(['service_connection_id' => $connection->id]);
+    ActionRequest::factory()->described()->create();
+
+    $this->actingAs(User::factory()->member()->create())
+        ->get(route('dashboard'))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->has('pendingApprovals', 1)
+            ->has('recentWebhookEvents.0.event_type')
+            ->where('services', fn ($services): bool => collect($services)->firstWhere('id', $connection->id)['version'] === '4.0.1'
+                && collect($services)->firstWhere('id', $connection->id)['latest_version'] === '4.0.2'));
 });

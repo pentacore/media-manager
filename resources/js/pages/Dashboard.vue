@@ -21,8 +21,10 @@ import {
     TimeStamp,
 } from '@/components/mm';
 import { Skeleton } from '@/components/ui/skeleton';
+import { useCan } from '@/composables/useCan';
 import { useDashboardStats } from '@/composables/useDashboardStats';
 import { useRealtimeList } from '@/composables/useRealtimeList';
+import { cn } from '@/lib/utils';
 import { dashboard } from '@/routes';
 import type { ActivityLogResource } from '@/typefinder/resources/ActivityLogResource';
 
@@ -94,6 +96,8 @@ defineOptions({
 });
 
 const page = usePage();
+const { can } = useCan();
+const canManageLibrary = computed(() => can('manage-library'));
 const userName = computed(() => page.props.auth.user?.name ?? 'there');
 
 const greeting = computed(() => {
@@ -294,7 +298,9 @@ onMounted(() => {
                     />Refresh
                 </button>
                 <Link
+                    v-if="canManageLibrary"
                     :href="ActionRequestController.index.url()"
+                    data-dashboard-review-queue
                     class="inline-flex h-7 items-center gap-1.5 rounded-md bg-accent px-2 text-xs font-medium text-accent-foreground transition-colors hover:bg-accent/90"
                 >
                     <Inbox class="size-3.5" />Review queue
@@ -311,6 +317,8 @@ onMounted(() => {
                 :spark="servicesSpark"
             />
             <StatCard
+                v-if="canManageLibrary"
+                data-dashboard-webhooks-card
                 label="Webhooks · 24h"
                 :value="recentWebhooks.toString()"
                 hint="ingest stream"
@@ -500,7 +508,7 @@ onMounted(() => {
         </div>
 
         <!-- Service health + pending approvals -->
-        <div class="grid gap-4 lg:grid-cols-2">
+        <div :class="cn('grid gap-4', canManageLibrary && 'lg:grid-cols-2')">
             <!-- Service health mini -->
             <div
                 class="overflow-hidden rounded-xl border border-border bg-card"
@@ -574,7 +582,9 @@ onMounted(() => {
 
             <!-- Pending approvals -->
             <div
+                v-if="canManageLibrary"
                 class="overflow-hidden rounded-xl border border-border bg-card"
+                data-dashboard-pending-approvals
             >
                 <div
                     class="flex items-center justify-between border-b border-border px-4 py-3"

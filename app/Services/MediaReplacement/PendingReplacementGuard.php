@@ -8,6 +8,7 @@ use App\Enums\ActionRequestStatus;
 use App\Enums\MediaReplacementStatus;
 use App\Models\ActionRequest;
 use App\Models\MediaReplacementAttempt;
+use InvalidArgumentException;
 
 /**
  * Queue-time duplicate check for manual replacements: one in-flight
@@ -53,6 +54,35 @@ final readonly class PendingReplacementGuard
                 // Episode identity too — otherwise one queued replacement blocks
                 // every other episode in the same season.
                 ->where('payload->target->episode_numbers', json_encode(array_values((array) ($target['episode_numbers'] ?? [])))))
+            ->exists();
+    }
+
+    /**
+     * Any in-flight replacement for a whole series (any episode) or a movie.
+     * Monitoring changes check this: a replacement suspends and later restores
+     * monitoring, so a concurrent member toggle would be silently undone.
+     */
+    public function inFlightForMedia(int $connectionId, ?int $seriesId = null, ?int $movieId = null): bool
+    {
+        throw_if(($seriesId === null) === ($movieId === null), InvalidArgumentException::class, 'Pass exactly one of seriesId or movieId.');
+
+        $attempt = MediaReplacementAttempt::query()
+            ->whereNotIn('status', MediaReplacementStatus::terminalValues())
+            ->where('target->service_connection_id', $connectionId)
+            ->when($movieId !== null, fn ($query) => $query->where('target->movie_id', $movieId))
+            ->when($seriesId !== null, fn ($query) => $query->where('target->series_id', $seriesId))
+            ->exists();
+
+        if ($attempt) {
+            return true;
+        }
+
+        return ActionRequest::query()
+            ->where('type', 'replace_media_file')
+            ->whereIn('status', [ActionRequestStatus::Pending, ActionRequestStatus::Approved, ActionRequestStatus::Executing])
+            ->where('payload->target->service_connection_id', $connectionId)
+            ->when($movieId !== null, fn ($query) => $query->where('payload->target->movie_id', $movieId))
+            ->when($seriesId !== null, fn ($query) => $query->where('payload->target->series_id', $seriesId))
             ->exists();
     }
 }

@@ -8,6 +8,7 @@ import Breadcrumbs from '@/components/Breadcrumbs.vue';
 import ConnectionStatusIndicator from '@/components/ConnectionStatusIndicator.vue';
 import { Button } from '@/components/ui/button';
 import { SidebarTrigger } from '@/components/ui/sidebar';
+import { useCan } from '@/composables/useCan';
 import { useCommandPalette } from '@/composables/useCommandPalette';
 import type { BreadcrumbItem } from '@/types';
 
@@ -22,6 +23,7 @@ withDefaults(
 
 const palette = useCommandPalette();
 const page = usePage();
+const { can } = useCan();
 
 const unreadNotifications = computed<number>(
     () =>
@@ -38,17 +40,7 @@ const aiEnabled = computed(() =>
     ),
 );
 
-const isAdmin = computed(() => {
-    const role = page.props.auth.user?.role;
-
-    if (!role) {
-        return false;
-    }
-
-    const value = typeof role === 'string' ? role : role.value;
-
-    return value === 'admin';
-});
+const isAdmin = computed(() => can('admin'));
 </script>
 
 <template>

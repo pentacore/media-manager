@@ -1,3 +1,50 @@
+# [1.27.0](https://github.com/pentacore/media-manager/compare/v1.26.0...v1.27.0) (2026-09-30)
+
+
+### Bug Fixes
+
+* **actions:** describe the new arr actions only on their pinned connection ([68daa05](https://github.com/pentacore/media-manager/commit/68daa053b26cc2ff68881278c1a1f90bf8d1ba58))
+* **actions:** keep the grab release guid out of the browser and the executor result ([a02d9ab](https://github.com/pentacore/media-manager/commit/a02d9ab98ba5d091fcce3b39368b8cdd32482c01))
+* **actions:** refuse unpinned or mismatched connections for the new arr executors ([f99be69](https://github.com/pentacore/media-manager/commit/f99be69fd8d7af900378226558da4fd7da838dda))
+* **anime:** file anime requests only as a validated Seerr user ([6610de0](https://github.com/pentacore/media-manager/commit/6610de0ed52a84dea2f3b8f09f37f16169d96680))
+* **calendar:** drop malformed calendar and wanted entries at the client ([bb85a0f](https://github.com/pentacore/media-manager/commit/bb85a0ffe5e12975c7e7be56bb6b7cf599361fc8))
+* **calendar:** toggle an episode's monitoring by its own flag ([6a9c733](https://github.com/pentacore/media-manager/commit/6a9c733c6413c472c9331991a26162baca17f364))
+* **calendar:** UTC-bucket movie dates, non-retrying reads, wanted paging ([38fc664](https://github.com/pentacore/media-manager/commit/38fc664ddd99d01373912b78441af5160be8bb2f))
+* **dashboard:** hide the Webhooks · 24h card from viewers ([11a3247](https://github.com/pentacore/media-manager/commit/11a32470807a187fa8d9d5d69f8719b74ab457d7))
+* **dashboard:** keep approvals, webhook events and service versions from viewers ([1adcb8e](https://github.com/pentacore/media-manager/commit/1adcb8e4ab81ce22fabb76be21f137b09b73010d))
+* **discover:** stop defaulting an unmatched chooser to the first Seerr user ([806415f](https://github.com/pentacore/media-manager/commit/806415fb15dfcc0a060b96c7eca4c929a19839bf))
+* **library-actions:** rate-limit release search and close test gaps ([42c15b1](https://github.com/pentacore/media-manager/commit/42c15b13f1a174fd3fac7b304a3f9ab8531d8033))
+* **library:** hide empty-season controls and show queued grabs as info ([dcbce11](https://github.com/pentacore/media-manager/commit/dcbce1112d8fbca1120399a3910f1955e14183ec))
+* **library:** keep release guids server-side and bind grabs to the searched title ([5d1262f](https://github.com/pentacore/media-manager/commit/5d1262f5cc8e7362c098045c9030d51ee3273952))
+* **library:** stop viewers triggering quality profile and badge upstream calls ([cdfca13](https://github.com/pentacore/media-manager/commit/cdfca13e90ecc145dc71c7dcb2b4d26e45937ac1))
+* **search:** send viewers only the Seerr external url ([35fcc5a](https://github.com/pentacore/media-manager/commit/35fcc5aadf8d11ec5d4a239f2879bf0df5e6753e))
+* **seerr:** keep a partial match on a failed page walk and add cache/edge tests ([70f0759](https://github.com/pentacore/media-manager/commit/70f07592797b438904c6cebd1d32882011c617a6))
+* **seerr:** make TitleDetailSheet's manual user pick reset deterministic ([e56f66f](https://github.com/pentacore/media-manager/commit/e56f66f499e4f68be42e5391d794c466b2c02a3d))
+* **seerr:** tighten Seerr identity resolution, caching and UX ([2e3940f](https://github.com/pentacore/media-manager/commit/2e3940f3cb1f39ea24ccf5e3426c8bfe2a5771de))
+* **series:** derive the season monitor toggle from its episodes ([b0d89a6](https://github.com/pentacore/media-manager/commit/b0d89a67d1d465feb245709a620898cca46a7cad))
+* **tests:** split viewer/member visit into separate browser tests ([26edeb8](https://github.com/pentacore/media-manager/commit/26edeb8d603f3bfe17058e21d3676d42b26a554a))
+* **wanted:** refresh the wanted badge on a schedule and recompute inline once under a lock ([73a7003](https://github.com/pentacore/media-manager/commit/73a70034648475806746f3bde15cbe780b0ab414))
+
+
+### Features
+
+* **actions:** add episode monitoring, indexer search and release grab executors ([0a361ce](https://github.com/pentacore/media-manager/commit/0a361ce9537f80cf66dafe28d2dc993867fd23a9))
+* **actions:** describe episode monitoring, searches and release grabs ([5beae45](https://github.com/pentacore/media-manager/commit/5beae451bd5e3029a48b845ff5707a92329bf2fd))
+* **auth:** define role-derived abilities and share them as auth.can ([b506f14](https://github.com/pentacore/media-manager/commit/b506f1439b905147a4525f801a1e00a5dea249d5))
+* **auth:** open library reads and Seerr search to viewers via abilities ([c82e09e](https://github.com/pentacore/media-manager/commit/c82e09e3e7c9088b7bbf7b2c8498cd00866a76d6))
+* **calendar:** add the household calendar with month and agenda views ([7dd9042](https://github.com/pentacore/media-manager/commit/7dd9042bbe72c6f0d0666dabfc725a587d75f06b))
+* **calendar:** read Sonarr/Radarr calendars and wanted lists and merge the calendar ([e3bbbfe](https://github.com/pentacore/media-manager/commit/e3bbbfe60444fcbec5821023cb2c426e080cf1cb))
+* **discover:** add the Discover page with a title detail sheet and season picker ([de939ac](https://github.com/pentacore/media-manager/commit/de939acf32935d6a0185989424b1127edbc81ec8))
+* **discover:** serve Seerr discover rows and file requests as the resolved user ([abd3840](https://github.com/pentacore/media-manager/commit/abd38404efef608c6aff6df720ededc8c200bc85))
+* **library:** add monitor, quality profile, search and interactive grab controls ([0fe4eb1](https://github.com/pentacore/media-manager/commit/0fe4eb1977b4033aec86f3d190c04b8bdb65d080))
+* **library:** route member library actions through the Action Queue ([1bbebc1](https://github.com/pentacore/media-manager/commit/1bbebc1de1adecc9aa2da2b7a49af111577a14df))
+* **nav:** filter navigation and library controls by ability ([e7cb95b](https://github.com/pentacore/media-manager/commit/e7cb95bda9f1cc1b86e22c43aad8d5ac3dd4b216))
+* **requests:** add My requests with cancel for your own pending requests ([a86b63c](https://github.com/pentacore/media-manager/commit/a86b63c8252f665255c302dae6e04a7222029d0d))
+* **search:** list every Seerr title and request it from the detail sheet ([857ed05](https://github.com/pentacore/media-manager/commit/857ed05945b771d44d9ce7579be1e6a34cbca63c))
+* **seerr:** add trending, upcoming and by-user reads plus a title presenter ([f22d314](https://github.com/pentacore/media-manager/commit/f22d3141d22bfe35b4e71139f075fb313a9d683d))
+* **seerr:** resolve a user's Seerr account from their Emby link or email ([42ff6f8](https://github.com/pentacore/media-manager/commit/42ff6f8326bcc45a6d96b4d324da0ac41182111f))
+* **wanted:** add the Wanted page with per-item and bulk searches and a missing badge ([3a87a42](https://github.com/pentacore/media-manager/commit/3a87a42546684f118620ec1980fb0bb06289f9ab))
+
 # [1.26.0](https://github.com/pentacore/media-manager/compare/v1.25.0...v1.26.0) (2026-09-29)
 
 

@@ -7,6 +7,8 @@ use App\Models\MediaReplacementAttempt;
 use App\Models\ServiceConnection;
 use App\Models\User;
 use App\Services\Library\InterventionCounter;
+use App\Services\Library\WantedCounter;
+use App\Services\Sabnzbd\SabnzbdDownloadCounter;
 use App\Support\AppVersion;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
@@ -130,6 +132,38 @@ test('version is not shared with guests', function (): void {
         ->assertInertia(fn ($page) => $page->where('version', null));
 });
 
+test('shared auth.can carries the viewer abilities', function (): void {
+    $this->actingAs(User::factory()->create())
+        ->get(route('dashboard'))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->where('auth.can.view-library', true)
+            ->where('auth.can.request-media', true)
+            ->where('auth.can.manage-library', false)
+            ->where('auth.can.manage-requests', false)
+            ->where('auth.can.admin', false));
+});
+
+test('shared auth.can is all false for guests', function (): void {
+    $this->get(route('home'))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->where('auth.can.view-library', false)
+            ->where('auth.can.admin', false));
+});
+
+test('integrations.seerr reports whether an active Seerr connection exists', function (): void {
+    $user = User::factory()->create();
+
+    $this->actingAs($user)->get(route('dashboard'))
+        ->assertInertia(fn ($page) => $page->where('integrations.seerr', false));
+
+    ServiceConnection::factory()->seerr()->create(['url' => 'http://seerr.local:5055']);
+
+    $this->actingAs($user)->get(route('dashboard'))
+        ->assertInertia(fn ($page) => $page->where('integrations.seerr', true));
+});
+
 test('nav.replacementAttention counts unacknowledged needs_attention attempts for admins only', function (): void {
     MediaReplacementAttempt::factory()->needsAttention()->create();
     MediaReplacementAttempt::factory()->needsAttention()->acknowledged()->create();
@@ -144,4 +178,98 @@ test('nav.replacementAttention counts unacknowledged needs_attention attempts fo
         ->get(route('dashboard'))
         ->assertOk()
         ->assertInertia(fn ($page) => $page->where('nav.replacementAttention', 0));
+});
+
+test('nav.wantedMissing is the cached missing count for members and zero for viewers', function (): void {
+    Cache::put(WantedCounter::CACHE_KEY, 7, 600);
+
+    $this->actingAs(User::factory()->member()->create())->get(route('dashboard'))
+        ->assertInertia(fn ($page) => $page->where('nav.wantedMissing', 7));
+
+    $this->actingAs(User::factory()->create())->get(route('dashboard'))
+        ->assertInertia(fn ($page) => $page->where('nav.wantedMissing', 0));
+});
+
+test('a cold wanted cache with a failing upstream caches the member badge for sixty seconds', function (): void {
+    config()->set('inertia.ssr.enabled', false);
+    Http::preventStrayRequests();
+    Cache::forget(WantedCounter::CACHE_KEY);
+    Cache::put(InterventionCounter::CACHE_KEY, 0, 600);
+    Cache::put(SabnzbdDownloadCounter::CACHE_KEY, ['queued' => 0, 'completed' => 0], 600);
+    ServiceConnection::factory()->sonarr()->create(['url' => 'http://sonarr.local:8989', 'api_key' => 'k']);
+    Http::fake(['sonarr.local:8989/api/v3/wanted/missing*' => Http::response([], 503)]);
+
+    $this->actingAs(User::factory()->member()->create())->get(route('dashboard'))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page->where('nav.wantedMissing', 0));
+
+    Http::assertSentCount(1);
+    expect(Cache::get(WantedCounter::CACHE_KEY))->toBe(0);
+
+    $this->travel(WantedCounter::FAILURE_CACHE_TTL - 1)->seconds();
+    expect(Cache::has(WantedCounter::CACHE_KEY))->toBeTrue();
+
+    $this->travel(2)->seconds();
+    expect(Cache::has(WantedCounter::CACHE_KEY))->toBeFalse();
+});
+
+test('a viewer on a cold wanted cache triggers no upstream call', function (): void {
+    config()->set('inertia.ssr.enabled', false);
+    Http::preventStrayRequests();
+    Cache::forget(WantedCounter::CACHE_KEY);
+    Cache::put(InterventionCounter::CACHE_KEY, 0, 600);
+    Cache::put(SabnzbdDownloadCounter::CACHE_KEY, ['queued' => 0, 'completed' => 0], 600);
+    ServiceConnection::factory()->sonarr()->create(['url' => 'http://sonarr.local:8989', 'api_key' => 'k']);
+
+    $this->actingAs(User::factory()->create())->get(route('dashboard'))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page->where('nav.wantedMissing', 0));
+
+    Http::assertNothingSent();
+    expect(Cache::has(WantedCounter::CACHE_KEY))->toBeFalse();
+});
+
+test('a member request on a cold wanted cache skips the recompute while another request holds the lock', function (): void {
+    config()->set('inertia.ssr.enabled', false);
+    Http::preventStrayRequests();
+    Cache::forget(WantedCounter::CACHE_KEY);
+    Cache::put(InterventionCounter::CACHE_KEY, 0, 600);
+    Cache::put(SabnzbdDownloadCounter::CACHE_KEY, ['queued' => 0, 'completed' => 0], 600);
+    ServiceConnection::factory()->sonarr()->create(['url' => 'http://sonarr.local:8989', 'api_key' => 'k']);
+    $lock = Cache::lock(WantedCounter::RECOMPUTE_LOCK_KEY, 10);
+    $lock->get();
+
+    $this->actingAs(User::factory()->member()->create())->get(route('dashboard'))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page->where('nav.wantedMissing', 0));
+
+    Http::assertNothingSent();
+    $lock->release();
+});
+
+test('viewers get zero library badges without any recompute or upstream call', function (): void {
+    config()->set('inertia.ssr.enabled', false);
+    Http::preventStrayRequests();
+    Cache::forget(InterventionCounter::CACHE_KEY);
+    Cache::forget(SabnzbdDownloadCounter::CACHE_KEY);
+    Cache::forget(WantedCounter::CACHE_KEY);
+    ServiceConnection::factory()->sonarr()->create(['url' => 'http://sonarr.local:8989', 'api_key' => 'k']);
+    ServiceConnection::factory()->sabnzbd()->create(['url' => 'http://sabnzbd.local:8080', 'api_key' => 'k']);
+    Http::fake([
+        'sonarr.local:8989/api/v3/queue*' => Http::response(['records' => []]),
+        'sonarr.local:8989/api/v3/wanted/missing*' => Http::response(['totalRecords' => 3, 'records' => []]),
+        'sabnzbd.local:8080/*' => Http::response(['queue' => ['slots' => []], 'history' => ['slots' => []]]),
+    ]);
+
+    $this->actingAs(User::factory()->create())->get(route('dashboard'))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->where('nav.libraryIntervention', 0)
+            ->where('nav.sabnzbdDownloads', ['queued' => 0, 'completed' => 0])
+            ->where('nav.wantedMissing', 0));
+
+    Http::assertNothingSent();
+    expect(Cache::has(InterventionCounter::CACHE_KEY))->toBeFalse()
+        ->and(Cache::has(SabnzbdDownloadCounter::CACHE_KEY))->toBeFalse()
+        ->and(Cache::has(WantedCounter::CACHE_KEY))->toBeFalse();
 });

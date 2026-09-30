@@ -10,6 +10,7 @@ use App\Events\ActionRequestStatusChanged;
 use App\Models\ActionRequest;
 use App\Services\Actions\ActionExecutor;
 use App\Services\Actions\ActionRequestActivityLogger;
+use App\Services\Arr\ArrActions;
 use App\Services\Arr\ManualImportActions;
 use App\Services\Arr\RemoveStuckDownloadActions;
 use App\Services\Bazarr\BazarrActions;
@@ -70,6 +71,9 @@ class ExecuteActionRequest implements ShouldBeUnique, ShouldQueue
         'add_series' => SonarrActions::class,
         'monitor_series' => SonarrActions::class,
         'set_series_quality_profile' => SonarrActions::class,
+        'monitor_episodes' => SonarrActions::class,
+        'search_media' => ArrActions::class,
+        'grab_release' => ArrActions::class,
         'delete_movie' => RadarrActions::class,
         'add_movie' => RadarrActions::class,
         'monitor_movie' => RadarrActions::class,

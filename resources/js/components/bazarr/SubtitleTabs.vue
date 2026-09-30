@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Link, router, usePage } from '@inertiajs/vue3';
+import { Link, router } from '@inertiajs/vue3';
 import {
     AlertTriangle,
     History,
@@ -15,6 +15,7 @@ import HistoryController from '@/actions/App/Http/Controllers/Bazarr/HistoryCont
 import LibraryController from '@/actions/App/Http/Controllers/Bazarr/LibraryController';
 import MissingController from '@/actions/App/Http/Controllers/Bazarr/MissingController';
 import OverviewController from '@/actions/App/Http/Controllers/Bazarr/OverviewController';
+import { useCan } from '@/composables/useCan';
 
 type TabName =
     'overview' | 'missing' | 'library' | 'history' | 'escalations' | 'admin';
@@ -25,13 +26,8 @@ const props = defineProps<{
     selectedConnectionId: number | null;
 }>();
 
-const page = usePage();
-const isAdmin = computed(() => {
-    const role = page.props.auth.user?.role;
-    const value = typeof role === 'string' ? role : role?.value;
-
-    return value === 'admin';
-});
+const { can } = useCan();
+const isAdmin = computed(() => can('admin'));
 
 const tabs = computed(() => [
     {

@@ -13,8 +13,16 @@ export type User = {
     [key: string]: unknown;
 };
 
+export type Ability =
+    | 'view-library'
+    | 'request-media'
+    | 'manage-library'
+    | 'manage-requests'
+    | 'admin';
+
 export type Auth = {
     user: User;
+    can: Record<Ability, boolean>;
 };
 
 export type TwoFactorConfigContent = {

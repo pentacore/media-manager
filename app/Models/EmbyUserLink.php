@@ -4,9 +4,11 @@ declare(strict_types=1);
 
 namespace App\Models;
 
+use App\Observers\EmbyUserLinkObserver;
 use Carbon\CarbonImmutable;
 use Database\Factories\EmbyUserLinkFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
+use Illuminate\Database\Eloquent\Attributes\ObservedBy;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -39,6 +41,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
  * @mixin \Eloquent
  */
 #[Fillable(['user_id', 'emby_user_id', 'emby_username'])]
+#[ObservedBy(EmbyUserLinkObserver::class)]
 class EmbyUserLink extends Model
 {
     /** @use HasFactory<EmbyUserLinkFactory> */
