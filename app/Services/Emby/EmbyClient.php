@@ -59,9 +59,7 @@ class EmbyClient
         $response = $this->buildClient()->get('/Users')->throw();
         $users = $response->json();
 
-        if (! is_array($users) || ! array_is_list($users)) {
-            throw new RequestException($response);
-        }
+        throw_if(! is_array($users) || ! array_is_list($users), RequestException::class, $response);
 
         return $users;
     }

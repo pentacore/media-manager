@@ -140,31 +140,31 @@ test('a poll that hits a SABnzbd outage shows the error and a recovered poll cle
     ]);
     $this->actingAs(User::factory()->member()->create());
 
-    $page = visit(route('sabnzbd.queue.index', absolute: false))
+    $webpage = visit(route('sabnzbd.queue.index', absolute: false))
         ->assertNoSmoke()
         ->assertSeeIn('[data-history-row="SABnzbd_nzo_flaky"]', 'Slow.Horses.S04E01');
 
     $sabnzbdDown = true;
 
-    $page->assertSeeIn('[data-sabnzbd-error]', 'Could not reach SABnzbd.')
+    $webpage->assertSeeIn('[data-sabnzbd-error]', 'Could not reach SABnzbd.')
         ->assertMissing('[data-sabnzbd-history]');
 
     $sabnzbdDown = false;
 
-    $page->assertSeeIn('[data-history-row="SABnzbd_nzo_flaky"]', 'Slow.Horses.S04E01')
+    $webpage->assertSeeIn('[data-history-row="SABnzbd_nzo_flaky"]', 'Slow.Horses.S04E01')
         ->assertMissing('[data-sabnzbd-error]');
 });
 
 test('a double-clicked retry posts once', function (): void {
     $this->actingAs(User::factory()->admin()->create());
 
-    $page = visit(route('sabnzbd.queue.index', absolute: false))
+    $webpage = visit(route('sabnzbd.queue.index', absolute: false))
         ->assertNoSmoke()
         ->assertSeeIn('[data-history-row="SABnzbd_nzo_failed1"]', 'Severance.S02E07.1080p');
 
     // Two synchronous clicks land before Vue re-renders the button disabled,
     // so only the handler's own in-flight guard can stop the second post.
-    $page->script(<<<'JS'
+    $webpage->script(<<<'JS'
         (() => {
             const retry = document.querySelector('[data-history-row="SABnzbd_nzo_failed1"] [data-history-retry]');
             retry.click();
@@ -172,7 +172,7 @@ test('a double-clicked retry posts once', function (): void {
         })()
         JS);
 
-    $page->assertSee('Retry queued.')->assertNoSmoke();
+    $webpage->assertSee('Retry queued.')->assertNoSmoke();
 
     expect(collect(Http::recorded())->filter(fn (array $pair): bool => (sabnzbdDownloadsQuery($pair[0])['mode'] ?? null) === 'retry'))->toHaveCount(1);
 });

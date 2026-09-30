@@ -90,10 +90,10 @@ class ActivityController extends Controller
             return $this->flashAndBack('error', __('Unknown service.'));
         }
 
-        $client = $this->clientFor($service, $connection);
+        $arrClient = $this->clientFor($service, $connection);
 
         try {
-            $client->removeQueueItem(
+            $arrClient->removeQueueItem(
                 id: $id,
                 removeFromClient: true,
                 blocklist: $verb === 'block',

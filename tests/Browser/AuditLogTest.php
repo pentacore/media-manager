@@ -75,13 +75,13 @@ test('changing a filter clears the pending new audit rows counter', function ():
     $this->actingAs(User::factory()->admin()->create());
     ActivityLog::factory()->create(['description' => 'Paused the SABnzbd queue.']);
 
-    $page = visit(route('activity-log', absolute: false))
+    $webpage = visit(route('activity-log', absolute: false))
         ->assertNoSmoke()
         ->assertSeeIn('[data-activity-feed]', 'Paused the SABnzbd queue.');
 
-    expect($page->script(emitAuditRowCreated()))->toBe('EMITTED');
+    expect($webpage->script(emitAuditRowCreated()))->toBe('EMITTED');
 
-    $page->assertSeeIn('[data-activity-new-count]', '1 new')
+    $webpage->assertSeeIn('[data-activity-new-count]', '1 new')
         ->click('[data-category-option="audit"]')
         ->assertQueryStringHas('category', 'audit')
         ->assertMissing('[data-activity-new-count]')
