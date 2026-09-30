@@ -418,6 +418,7 @@ function browserSmokeExcludedRouteNames(): array
         'bazarr.search',
         'monitoring.watch-history.export',
         'security.edit',
+        'prowlarr.grab',
     ];
 }
 

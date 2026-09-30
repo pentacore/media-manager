@@ -29,6 +29,8 @@ export type NavItem = {
     ability?: Ability;
     /** Hidden unless an active Seerr connection exists (shared `integrations.seerr`). */
     requiresSeerr?: boolean;
+    /** Hidden unless an active Prowlarr connection exists (shared `integrations.prowlarr`). */
+    requiresProwlarr?: boolean;
 };
 
 /**

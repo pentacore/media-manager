@@ -1,8 +1,10 @@
 <script setup lang="ts">
 import { Head, Link, router } from '@inertiajs/vue3';
-import { Antenna, Search } from '@lucide/vue';
-import { ref } from 'vue';
+import { Antenna, Download, Loader2, Search } from '@lucide/vue';
+import { computed, ref } from 'vue';
+import { toast } from 'vue-sonner';
 import ServiceConnectionController from '@/actions/App/Http/Controllers/Admin/ServiceConnectionController';
+import GrabReleaseController from '@/actions/App/Http/Controllers/Prowlarr/GrabReleaseController';
 import SearchIndexersController from '@/actions/App/Http/Controllers/Prowlarr/SearchIndexersController';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -15,9 +17,14 @@ import {
     TableHeader,
     TableRow,
 } from '@/components/ui/table';
+import { jsonRequest } from '@/composables/useAiChat';
+import { useCan } from '@/composables/useCan';
 import { dashboard } from '@/routes';
 
 interface IndexerRelease {
+    /** sha256 of the release guid; null when Prowlarr gave no guid. */
+    key: string | null;
+    indexer_id: number | null;
     title: string;
     indexer: string;
     size: number;
@@ -42,7 +49,11 @@ defineOptions({
     },
 });
 
+const { can } = useCan();
+const isAdmin = computed(() => can('admin'));
+
 const queryInput = ref(props.query);
+const grabbing = ref<string | null>(null);
 
 function submit(): void {
     const trimmed = queryInput.value.trim();
@@ -56,6 +67,35 @@ function submit(): void {
         { q: trimmed },
         { preserveState: false },
     );
+}
+
+async function grab(release: IndexerRelease): Promise<void> {
+    if (
+        release.key === null ||
+        release.indexer_id === null ||
+        grabbing.value !== null
+    ) {
+        return;
+    }
+
+    grabbing.value = release.key;
+
+    try {
+        const data = await jsonRequest<{ message: string }>(
+            'post',
+            GrabReleaseController.url(),
+            { release_key: release.key, indexer_id: release.indexer_id },
+        );
+        toast.success(data.message);
+    } catch (error) {
+        toast.error(
+            error instanceof Error
+                ? error.message
+                : 'Could not grab this release.',
+        );
+    } finally {
+        grabbing.value = null;
+    }
 }
 
 function formatBytes(bytes: number): string {
@@ -105,7 +145,7 @@ function formatAge(days: number): string {
 
         <div
             v-if="!hasConnection"
-            class="rounded-md border border-amber-300/50 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-500/40 dark:bg-amber-950 dark:text-amber-100"
+            class="rounded-md border border-warning/40 bg-warning/10 px-4 py-3 text-sm text-warning"
         >
             No active Prowlarr connection. Add one from
             <Link
@@ -152,12 +192,14 @@ function formatAge(days: number): string {
                     <TableHead class="text-right">Size</TableHead>
                     <TableHead class="text-right">Seeders</TableHead>
                     <TableHead class="text-right">Age</TableHead>
+                    <TableHead v-if="isAdmin" class="text-right" />
                 </TableRow>
             </TableHeader>
             <TableBody>
                 <TableRow
-                    v-for="release in results"
-                    :key="`${release.indexer}-${release.title}-${release.size}`"
+                    v-for="(release, index) in results"
+                    :key="release.key ?? `${index}-${release.title}`"
+                    :data-prowlarr-release="release.key ?? undefined"
                 >
                     <TableCell class="font-medium">{{
                         release.title
@@ -176,6 +218,23 @@ function formatAge(days: number): string {
                     <TableCell class="text-right text-muted-foreground">{{
                         formatAge(release.age)
                     }}</TableCell>
+                    <TableCell v-if="isAdmin" class="text-right">
+                        <Button
+                            v-if="release.key !== null"
+                            size="sm"
+                            variant="outline"
+                            class="h-7 gap-1.5 text-xs"
+                            :disabled="grabbing !== null"
+                            data-prowlarr-grab
+                            @click="grab(release)"
+                        >
+                            <Loader2
+                                v-if="grabbing === release.key"
+                                class="size-3.5 animate-spin"
+                            />
+                            <Download v-else class="size-3.5" />Grab
+                        </Button>
+                    </TableCell>
                 </TableRow>
             </TableBody>
         </Table>

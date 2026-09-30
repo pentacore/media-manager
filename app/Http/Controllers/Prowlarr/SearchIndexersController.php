@@ -7,16 +7,18 @@ namespace App\Http\Controllers\Prowlarr;
 use App\Enums\ServiceType;
 use App\Http\Controllers\Controller;
 use App\Models\ServiceConnection;
+use App\Services\Prowlarr\IndexerReleaseCache;
 use App\Services\Prowlarr\ProwlarrClient;
+use Illuminate\Http\Client\ConnectionException;
+use Illuminate\Http\Client\RequestException;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 use Inertia\Inertia;
 use Inertia\Response;
-use Throwable;
 
 class SearchIndexersController extends Controller
 {
-    public function __invoke(Request $request): Response
+    public function __invoke(Request $request, IndexerReleaseCache $indexerReleaseCache): Response
     {
         $query = trim((string) $request->query('q', ''));
 
@@ -46,11 +48,10 @@ class SearchIndexersController extends Controller
 
         try {
             $results = new ProwlarrClient($connection)->searchIndexers($query);
-        } catch (Throwable $throwable) {
+        } catch (RequestException|ConnectionException $exception) {
             Log::warning('Prowlarr indexer search failed', [
                 'connection_id' => $connection->id,
-                'exception' => $throwable::class,
-                'message' => $throwable->getMessage(),
+                'exception' => $exception::class,
             ]);
 
             return Inertia::render('Prowlarr/Search', [
@@ -61,31 +62,16 @@ class SearchIndexersController extends Controller
             ]);
         }
 
+        // IndexerReleaseCache keeps the guid server-side and returns only the
+        // display allowlist plus the release key and indexer id.
         return Inertia::render('Prowlarr/Search', [
             'query' => $query,
-            'results' => array_map($this->presentRelease(...), $results),
+            'results' => array_values(array_map(
+                fn (array $release): array => $indexerReleaseCache->remember($connection, $release),
+                array_filter($results, is_array(...)),
+            )),
             'hasConnection' => true,
             'error' => null,
         ]);
-    }
-
-    /**
-     * Keep only the display fields. Prowlarr's downloadUrl embeds its own
-     * API key, and guid/magnetUrl can carry a tracker passkey, so the raw
-     * release must never reach the browser.
-     *
-     * @param  array<string, mixed>  $release
-     * @return array{title: mixed, indexer: mixed, size: mixed, seeders: mixed, age: mixed, publishDate: mixed}
-     */
-    private function presentRelease(array $release): array
-    {
-        return [
-            'title' => $release['title'] ?? null,
-            'indexer' => $release['indexer'] ?? null,
-            'size' => $release['size'] ?? null,
-            'seeders' => $release['seeders'] ?? null,
-            'age' => $release['age'] ?? null,
-            'publishDate' => $release['publishDate'] ?? null,
-        ];
     }
 }
