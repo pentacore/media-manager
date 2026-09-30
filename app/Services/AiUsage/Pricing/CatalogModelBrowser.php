@@ -364,7 +364,7 @@ final readonly class CatalogModelBrowser
 
         $providerPricingResult = $pricingCatalogResult->providers[$provider] ?? null;
 
-        if ($providerPricingResult === null && $this->anySourceFailed($pricingCatalogResult)) {
+        if ($providerPricingResult === null && $this->anySourceFailed($provider, $pricingCatalogResult)) {
             throw CatalogUnavailableException::fromResult($pricingCatalogResult);
         }
 
@@ -395,9 +395,30 @@ final readonly class CatalogModelBrowser
         return ['covered' => $entries !== [], 'entries' => $entries];
     }
 
-    private function anySourceFailed(PricingCatalogResult $pricingCatalogResult): bool
+    /**
+     * Whether a source that could actually have priced the requested provider
+     * failed. A failed source that could never have covered this provider
+     * (e.g. OpenRouter for a non-`openrouter` provider) is not an outage for
+     * it: an unrelated bad credential must not turn every uncovered provider
+     * into an uncached 503 on every open.
+     */
+    private function anySourceFailed(string $provider, PricingCatalogResult $pricingCatalogResult): bool
     {
-        return array_any($pricingCatalogResult->sourceStatuses, fn (string $status): bool => ! in_array($status, self::QUIET_STATUSES, true));
+        return array_any($pricingCatalogResult->sourceStatuses, fn (string $status, string $source): bool => $this->sourceCouldCover($source, $provider) && ! in_array($status, self::QUIET_STATUSES, true));
+    }
+
+    /**
+     * Whether the given source could ever have produced candidates for the
+     * given provider. models.dev and LiteLLM are reconciled across every
+     * provider; OpenRouter and xAI each price only their own provider.
+     */
+    private function sourceCouldCover(string $source, string $provider): bool
+    {
+        return match ($source) {
+            PricingCatalog::SOURCE_OPENROUTER => $provider === PricingCatalog::SOURCE_OPENROUTER,
+            PricingCatalog::SOURCE_XAI => $provider === PricingCatalog::SOURCE_XAI,
+            default => true,
+        };
     }
 
     /**

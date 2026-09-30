@@ -213,6 +213,50 @@ test('catalogAttributes on a cold cache returns null without calling a feed', fu
     Http::assertNothingSent();
 });
 
+test('an xai source failing does not block a provider only xai could never have covered', function (): void {
+    config()->set('mediamanager.ai.pricing.openrouter.enabled', false);
+    config()->set('mediamanager.ai.pricing.models_dev.enabled', true);
+    config()->set('mediamanager.ai.pricing.models_dev.retries', 0);
+    config()->set('mediamanager.ai.pricing.xai.enabled', true);
+    config()->set('mediamanager.ai.pricing.xai.retries', 0);
+    config()->set('ai.providers.xai.key', 'xai-test-key');
+
+    /** @var array<string, mixed> $modelsDev */
+    $modelsDev = json_decode((string) file_get_contents(base_path('tests/Fixtures/ModelsDev/api.json')), true, flags: JSON_THROW_ON_ERROR);
+    unset($modelsDev['anthropic']);
+
+    Http::fake([
+        'api.x.ai/*' => Http::response('failure', 401),
+        'models.dev/*' => Http::response(json_encode($modelsDev, JSON_THROW_ON_ERROR)),
+    ]);
+
+    $catalogModelBrowser = resolve(CatalogModelBrowser::class);
+
+    expect($catalogModelBrowser->covers('anthropic'))->toBeFalse();
+
+    // Cached as not covered rather than thrown, so a second read makes no
+    // further request.
+    expect($catalogModelBrowser->covers('anthropic'))->toBeFalse();
+    Http::assertSentCount(2);
+});
+
+test('the same failing xai source still blocks the provider it could have covered', function (): void {
+    config()->set('mediamanager.ai.pricing.openrouter.enabled', false);
+    config()->set('mediamanager.ai.pricing.models_dev.enabled', true);
+    config()->set('mediamanager.ai.pricing.models_dev.retries', 0);
+    config()->set('mediamanager.ai.pricing.xai.enabled', true);
+    config()->set('mediamanager.ai.pricing.xai.retries', 0);
+    config()->set('ai.providers.xai.key', 'xai-test-key');
+
+    Http::fake([
+        'api.x.ai/*' => Http::response('failure', 401),
+        'models.dev/*' => Http::response((string) file_get_contents(base_path('tests/Fixtures/ModelsDev/api.json'))),
+    ]);
+
+    expect(fn (): bool => resolve(CatalogModelBrowser::class)->covers('xai'))
+        ->toThrow(CatalogUnavailableException::class);
+});
+
 test('providers lists canonical providers without ignored ones', function (): void {
     resolve(AiSettings::class)->setIgnoredPricingProviders(['groq']);
 
