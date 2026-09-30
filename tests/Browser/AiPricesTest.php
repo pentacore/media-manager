@@ -558,6 +558,8 @@ test('the add form picker says when no enabled feed covers the provider', functi
         ->fill('provider', 'anthropic')
         ->click('[data-catalog-pick-toggle]')
         ->assertSeeIn('[data-catalog-uncovered]', 'No enabled pricing feed covers this provider.')
+        ->assertSeeIn('[data-catalog-uncovered-settings-link]', 'AI settings')
+        ->assertVisible('[data-catalog-uncovered-settings-link]')
         ->assertMissing('[data-catalog-empty]');
 });
 

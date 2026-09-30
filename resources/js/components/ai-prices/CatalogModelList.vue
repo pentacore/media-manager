@@ -1,8 +1,10 @@
 <script setup lang="ts">
+import { Link } from '@inertiajs/vue3';
 import { Check } from '@lucide/vue';
 import { computed, onMounted, ref, watch } from 'vue';
 import type { HTMLAttributes } from 'vue';
 import AiModelCatalogController from '@/actions/App/Http/Controllers/Admin/AiModelCatalogController';
+import AiSettingsController from '@/actions/App/Http/Controllers/Admin/AiSettingsController';
 import { Pill } from '@/components/mm';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -145,7 +147,14 @@ function formatRate(value: string | null): string {
             class="text-[13px] text-muted-foreground"
             data-catalog-uncovered
         >
-            No enabled pricing feed covers this provider.
+            No enabled pricing feed covers this provider. Turn on a pricing
+            source in
+            <Link
+                :href="AiSettingsController.index.url()"
+                class="text-primary underline underline-offset-2"
+                data-catalog-uncovered-settings-link
+                >AI settings</Link
+            >.
         </p>
         <p
             v-else-if="options.length === 0"
