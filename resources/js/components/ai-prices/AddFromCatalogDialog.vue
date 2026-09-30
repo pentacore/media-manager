@@ -103,8 +103,10 @@ function submit(): void {
                         </SelectContent>
                     </Select>
                 </div>
+                <!-- Mounted only while open so every open refetches (dropping
+                     models just added) and starts with an empty search. -->
                 <CatalogModelList
-                    v-if="provider"
+                    v-if="open && provider"
                     v-model:selected="selected"
                     :provider="provider"
                     mode="multi"
