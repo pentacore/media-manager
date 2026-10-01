@@ -312,6 +312,17 @@ jobs:
       - name: Run Pest (browser with SSR)
         run: composer test:browser
 
+      # A browser failure saves a screenshot of the page; keep it so a flake
+      # shows what was on screen instead of only "Timeout 30000ms exceeded".
+      - name: Upload browser failure screenshots
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: browser-screenshots
+          path: tests/Browser/Screenshots
+          if-no-files-found: ignore
+          retention-days: 14
+
   octane-smoke:
     name: Octane smoke test
     runs-on: ubuntu-latest
