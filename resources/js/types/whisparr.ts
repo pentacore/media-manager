@@ -1,3 +1,5 @@
+import type { QualityProfileOption } from './library';
+
 export type WhisparrKind = 'site' | 'movie';
 
 export interface WhisparrItem {
@@ -7,6 +9,8 @@ export interface WhisparrItem {
     year: number | null;
     monitored: boolean;
     has_file: boolean;
+    /** Monitored and short of files: v3 has no file, v2 has fewer scene files than scenes. */
+    missing: boolean;
     size_bytes: number;
     poster_url: string | null;
     quality_profile_id: number | null;
@@ -39,6 +43,11 @@ export interface WhisparrConnection {
 
 export interface WhisparrLibrary {
     items: WhisparrItem[];
+    error: string | null;
+}
+
+export interface WhisparrQualityProfiles {
+    items: QualityProfileOption[];
     error: string | null;
 }
 

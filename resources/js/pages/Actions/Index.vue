@@ -34,7 +34,7 @@ import { useCan } from '@/composables/useCan';
 import { useRealtimeList } from '@/composables/useRealtimeList';
 import { useWebSocket } from '@/composables/useWebSocket';
 import type { ChannelLease } from '@/composables/useWebSocket';
-import { submitBulk } from '@/lib/bulk';
+import { focusAfterBulk, submitBulk } from '@/lib/bulk';
 import { cn } from '@/lib/utils';
 import { dashboard } from '@/routes';
 import type { ActionRequestResource } from '@/typefinder/resources/ActionRequestResource';
@@ -179,6 +179,14 @@ const bulkBusy = ref(false);
 const rejectDialogOpen = ref(false);
 const rejectReason = ref('');
 
+// A live status event can empty the selection while the reject dialog is
+// open: close it rather than leave a "Reject 0 requests" confirm.
+watch(bulkCount, (count) => {
+    if (count === 0) {
+        rejectDialogOpen.value = false;
+    }
+});
+
 async function bulkReview(action: 'approve' | 'reject'): Promise<void> {
     if (bulkBusy.value || bulkIds.value.length === 0) {
         return;
@@ -195,6 +203,7 @@ async function bulkReview(action: 'approve' | 'reject'): Promise<void> {
 
     if (summary) {
         clearBulk();
+        focusAfterBulk();
         rejectDialogOpen.value = false;
         rejectReason.value = '';
         router.reload({ only: ['requests', 'statusCounts'] });
@@ -402,6 +411,13 @@ function goToPage(url: string | null): void {
     }
 
     router.get(url, {}, { preserveState: true, preserveScroll: true });
+}
+
+/** The reviewer's shared reason, stored in full on a rejected request. */
+function rejectionReason(row: ActionRequestRow): string | null {
+    const reason = row.result?.rejection_reason;
+
+    return typeof reason === 'string' && reason !== '' ? reason : null;
 }
 
 function payloadTitle(row: ActionRequestRow): string {
@@ -653,6 +669,7 @@ function pipelineState(
                                         hide-label
                                         :selected-count="bulkSelectedOnPage"
                                         :page-count="pendingOnPage.length"
+                                        :disabled="bulkBusy"
                                         @toggle="
                                             (value) =>
                                                 setAllBulk(pendingOnPage, value)
@@ -709,6 +726,7 @@ function pipelineState(
                                     <BulkCheckbox
                                         v-if="row.status === 'pending'"
                                         :checked="isBulkSelected(row.id)"
+                                        :disabled="bulkBusy"
                                         :label="`Select ${payloadTitle(row)}`"
                                         :data-bulk-select="row.id"
                                         @update:checked="
@@ -852,6 +870,19 @@ function pipelineState(
                         </Field>
                         <Field label="Created">
                             <TimeStamp :iso="selected.created_at" />
+                        </Field>
+                        <Field
+                            v-if="
+                                selected.status === 'rejected' &&
+                                rejectionReason(selected)
+                            "
+                            label="Rejection reason"
+                        >
+                            <span
+                                class="text-[13px] whitespace-pre-line"
+                                data-action-rejection-reason
+                                >{{ rejectionReason(selected) }}</span
+                            >
                         </Field>
                         <p
                             v-if="payloadDetail(selected)"

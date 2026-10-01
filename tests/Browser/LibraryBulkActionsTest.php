@@ -43,6 +43,47 @@ function fakeBulkSonarrLibrary(ServiceConnection $sonarr, int $count): void
     ]);
 }
 
+/**
+ * Holds the next bulk POST inside the page until `window.__releaseBulk()`
+ * is called, so a test can look at the page while the run is in flight
+ * without any server-side sleeping.
+ */
+function holdBulkRequestScript(): string
+{
+    return <<<'JS'
+        (() => {
+            const originalFetch = window.fetch;
+            window.fetch = (...args) => {
+                if (String(args[0]).includes('/bulk')) {
+                    return new Promise((resolve) => {
+                        window.__releaseBulk = () => resolve(originalFetch(...args));
+                    });
+                }
+
+                return originalFetch(...args);
+            };
+        })()
+    JS;
+}
+
+/**
+ * Polls inside the page until the JavaScript condition holds (or ~5 s pass),
+ * so evaluate() returns only once an async UI change has landed.
+ */
+function bulkBrowserWaitUntil(string $condition): string
+{
+    return <<<JS
+        (async () => {
+            for (let attempt = 0; attempt < 250; attempt++) {
+                if ({$condition}) {
+                    return;
+                }
+                await new Promise((resolve) => setTimeout(resolve, 20));
+            }
+        })()
+    JS;
+}
+
 beforeEach(function (): void {
     $this->seed(ActionTypeConfigSeeder::class);
     Queue::fake([ExecuteActionRequest::class]);
@@ -280,4 +321,130 @@ test('a movie that drops out of the library during a reload drops out of the bul
         ['movie_id' => 10, 'monitored' => true, 'service_connection_id' => $radarr->id],
     ]);
     expect($state->calls)->toBe(2);
+});
+
+test('a running bulk action freezes Clear and the checkboxes, then hands focus to select all', function (): void {
+    fakeBulkSonarrLibrary($this->sonarr, 3);
+    $this->actingAs(User::factory()->member()->create());
+
+    $webpage = visit(route('media.series.index', absolute: false))
+        ->assertNoSmoke()
+        ->assertSeeIn('[data-series-card="1"]', 'Series 001')
+        ->click('[data-bulk-select="1"]')
+        ->click('[data-bulk-select="3"]')
+        ->assertSeeIn('[data-bulk-count]', '2 selected');
+
+    $webpage->script(holdBulkRequestScript());
+    $webpage->click('[data-bulk-action="monitor"]');
+
+    $webpage->assertScript("document.querySelector('[data-bulk-clear]').disabled === true")
+        ->assertScript("document.querySelector('[data-bulk-select=\"2\"] button').disabled === true")
+        ->assertScript("document.querySelector('[data-bulk-select-all] button').disabled === true")
+        ->assertScript("document.querySelector('[data-bulk-bar]').getAttribute('role') === 'region'")
+        ->assertScript("document.querySelector('[data-bulk-count]').getAttribute('aria-live') === 'polite'");
+
+    $webpage->script('window.__releaseBulk()');
+    $webpage->assertSee('2 started')
+        ->assertCount('[data-bulk-bar]', 0);
+
+    $webpage->script(bulkBrowserWaitUntil("document.activeElement && document.activeElement.closest('[data-bulk-select-all]')"));
+    $webpage->assertScript("document.activeElement !== null && document.activeElement.closest('[data-bulk-select-all]') !== null")
+        ->assertNoSmoke();
+});
+
+test('the over-limit message describes the disabled actions', function (): void {
+    fakeBulkSonarrLibrary($this->sonarr, 101);
+    $this->actingAs(User::factory()->member()->create());
+
+    visit(route('media.series.index', absolute: false))
+        ->assertNoSmoke()
+        ->assertSeeIn('[data-series-card="1"]', 'Series 001')
+        ->click('[data-bulk-select-all]')
+        ->assertPresent('[data-bulk-over-limit]')
+        ->assertScript("document.querySelector('[data-bulk-actions]').getAttribute('aria-describedby') === document.querySelector('[data-bulk-over-limit]').id");
+});
+
+test('exactly 25 selected searches without asking first', function (): void {
+    fakeBulkSonarrLibrary($this->sonarr, 25);
+    $this->actingAs(User::factory()->member()->create());
+
+    visit(route('media.series.index', absolute: false))
+        ->assertNoSmoke()
+        ->assertSeeIn('[data-series-card="1"]', 'Series 001')
+        ->click('[data-bulk-select-all]')
+        ->assertSeeIn('[data-bulk-count]', '25 selected')
+        ->click('[data-bulk-action="search"]')
+        ->assertSee('25 started')
+        ->assertCount('[data-bulk-search-warning]', 0);
+
+    expect(ActionRequest::query()->where('type', 'search_media')->count())->toBe(25);
+});
+
+test('cancelling the bulk delete files nothing, and reopening starts with delete-files unticked', function (): void {
+    fakeBulkSonarrLibrary($this->sonarr, 3);
+    $this->actingAs(User::factory()->member()->create());
+
+    visit(route('media.series.index', absolute: false))
+        ->assertNoSmoke()
+        ->assertSeeIn('[data-series-card="1"]', 'Series 001')
+        ->click('[data-bulk-select="1"]')
+        ->click('[data-bulk-select="2"]')
+        ->click('[data-bulk-action="delete"]')
+        ->assertSeeIn('[data-bulk-delete-description]', '2 series')
+        ->click('[data-bulk-delete-files]')
+        ->assertAttribute('[data-bulk-delete-files]', 'data-state', 'checked')
+        ->click('[data-bulk-delete-cancel]')
+        ->assertSeeIn('[data-bulk-count]', '2 selected')
+        ->click('[data-bulk-action="delete"]')
+        ->assertSeeIn('[data-bulk-delete-description]', '2 series')
+        ->assertAttribute('[data-bulk-delete-files]', 'data-state', 'unchecked')
+        ->assertNoSmoke();
+
+    expect(ActionRequest::query()->count())->toBe(0);
+});
+
+test('a selected series that leaves the active filter on reload drops out of the selection', function (): void {
+    $series = static fn (int $id, bool $monitored): array => [
+        'id' => $id, 'title' => sprintf('Series %03d', $id), 'titleSlug' => sprintf('series-%d', $id), 'year' => 2020, 'status' => 'continuing',
+        'monitored' => $monitored, 'qualityProfileId' => 1, 'images' => bulkBrowserPoster(), 'seasons' => [],
+        'statistics' => ['sizeOnDisk' => 0, 'episodeCount' => 0, 'episodeFileCount' => 0],
+    ];
+    $state = new class
+    {
+        public int $calls = 0;
+    };
+    // Series 003 is monitored in Sonarr by the next reload, so it leaves the
+    // "Unmonitored" filter the user is looking at.
+    Http::fake([
+        'sonarr.local:8989/api/v3/series' => function () use ($state, $series) {
+            $state->calls++;
+
+            return Http::response([$series(1, false), $series(2, true), $series(3, $state->calls > 1)]);
+        },
+        'sonarr.local:8989/api/v3/qualityprofile' => Http::response([['id' => 1, 'name' => 'HD-1080p']]),
+    ]);
+    foreach ([1, 2, 3] as $id) {
+        IndexedSeries::factory()->for($this->sonarr, 'serviceConnection')->create(['sonarr_id' => $id, 'title' => sprintf('Series %03d', $id), 'year' => 2020]);
+    }
+
+    $this->actingAs(User::factory()->member()->create());
+
+    $webpage = visit(route('media.series.index', absolute: false))
+        ->assertNoSmoke()
+        ->assertSeeIn('[data-series-card="1"]', 'Series 001')
+        ->click('[data-monitored-filter="unmonitored"]')
+        ->click('[data-bulk-select="1"]')
+        ->click('[data-bulk-select="3"]')
+        ->assertSeeIn('[data-bulk-count]', '2 selected');
+
+    new SonarrCache($this->sonarr)->bustAll();
+
+    $webpage->click('Sync')
+        ->assertSeeIn('[data-bulk-count]', '1 selected')
+        ->assertCount('[data-series-card="3"]', 0);
+
+    $webpage->click('[data-bulk-action="monitor"]')
+        ->assertSee('1 started');
+
+    expect(ActionRequest::query()->where('type', 'monitor_series')->get()->pluck('payload.series_id')->all())->toBe([1]);
 });

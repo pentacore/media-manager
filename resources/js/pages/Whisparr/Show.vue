@@ -36,9 +36,9 @@ import { useWhisparrBlur } from '@/composables/useWhisparrBlur';
 import { formatSize } from '@/lib/arr';
 import { dashboard } from '@/routes';
 import type {
-    QualityProfileOption,
     WhisparrConnection,
     WhisparrItemDetail,
+    WhisparrQualityProfiles,
     WhisparrScenes,
 } from '@/types';
 
@@ -46,7 +46,7 @@ const props = defineProps<{
     connection: WhisparrConnection;
     item: WhisparrItemDetail;
     scenes?: WhisparrScenes;
-    qualityProfiles?: QualityProfileOption[];
+    qualityProfiles?: WhisparrQualityProfiles;
 }>();
 
 defineOptions({
@@ -95,6 +95,12 @@ function post(url: string, data: Record<string, unknown>): void {
             onFinish: () => {
                 busy.value = false;
                 deleteDialogOpen.value = false;
+                // The prop is the truth until the executor runs: a change
+                // that was queued for approval, disabled or refused must not
+                // leave the select showing a profile Whisparr doesn't have.
+                profileValue.value = props.item.quality_profile_id
+                    ? String(props.item.quality_profile_id)
+                    : undefined;
             },
         },
     );
@@ -135,7 +141,7 @@ const profileName = computed(() => {
     }
 
     return (
-        props.qualityProfiles.find(
+        props.qualityProfiles.items.find(
             (profile) => profile.id === props.item.quality_profile_id,
         )?.name ?? '—'
     );
@@ -174,6 +180,12 @@ const profileName = computed(() => {
                     v-if="qualityProfiles === undefined"
                     class="h-7 w-44"
                 />
+                <span
+                    v-else-if="qualityProfiles.error"
+                    class="text-[12px] text-destructive"
+                    data-quality-profile-error
+                    >{{ qualityProfiles.error }}</span
+                >
                 <Select
                     v-else
                     :model-value="profileValue"
@@ -187,7 +199,7 @@ const profileName = computed(() => {
                     </SelectTrigger>
                     <SelectContent>
                         <SelectItem
-                            v-for="profile in qualityProfiles"
+                            v-for="profile in qualityProfiles.items"
                             :key="profile.id"
                             :value="String(profile.id)"
                             :data-quality-profile-option="profile.id"
@@ -288,7 +300,7 @@ const profileName = computed(() => {
                                 item.kind === 'site' ? 'Site' : 'Movie'
                             }}</Pill>
                             <Pill v-if="!item.monitored">Unmonitored</Pill>
-                            <Pill v-else-if="!item.has_file" variant="warn"
+                            <Pill v-else-if="item.missing" variant="warn"
                                 >Missing</Pill
                             >
                         </div>

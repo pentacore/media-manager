@@ -24,7 +24,7 @@ import {
 } from '@/components/ui/select';
 import { useBulkSelection } from '@/composables/useBulkSelection';
 import { useCan } from '@/composables/useCan';
-import { submitBulk } from '@/lib/bulk';
+import { focusAfterBulk, submitBulk } from '@/lib/bulk';
 import { dashboard } from '@/routes';
 
 interface QueueSlot {
@@ -116,8 +116,14 @@ const {
 } = useBulkSelection<string>();
 
 // The 5-second poll replaces the queue: a finished or removed slot drops out
-// of the selection, so a bulk request never names it.
-watch(slotIds, (ids) => retainSlots(ids));
+// of the selection, so a bulk request never names it. A failed poll renders
+// an empty queue with `error` set; an outage is not a vanished slot, so it
+// never clears the selection.
+watch(slotIds, (ids) => {
+    if (props.configured && !props.error) {
+        retainSlots(ids);
+    }
+});
 
 const selectedSlotsOnPage = computed(
     () => slotIds.value.filter((id) => isSlotSelected(id)).length,
@@ -125,6 +131,14 @@ const selectedSlotsOnPage = computed(
 
 const slotBulkBusy = ref(false);
 const slotDeleteOpen = ref(false);
+
+// A poll can empty the selection while the confirm is open: close it rather
+// than leave a "Delete 0 jobs" dialog whose button does nothing.
+watch(selectedSlotCount, (count) => {
+    if (count === 0) {
+        slotDeleteOpen.value = false;
+    }
+});
 
 async function runSlotBulk(
     action: 'pause' | 'resume' | 'delete',
@@ -143,6 +157,7 @@ async function runSlotBulk(
 
     if (summary) {
         clearSlots();
+        focusAfterBulk();
         refresh();
     }
 }
@@ -428,6 +443,7 @@ function statusVariant(status: string | null): 'ok' | 'danger' | 'default' {
                                         hide-label
                                         :selected-count="selectedSlotsOnPage"
                                         :page-count="slotIds.length"
+                                        :disabled="slotBulkBusy"
                                         @toggle="
                                             (value) =>
                                                 setAllSlots(slotIds, value)
@@ -461,6 +477,7 @@ function statusVariant(status: string | null): 'ok' | 'danger' | 'default' {
                                 <td v-if="isAdmin" class="px-3 py-2.5">
                                     <BulkCheckbox
                                         :checked="isSlotSelected(slot.nzo_id)"
+                                        :disabled="slotBulkBusy"
                                         :label="`Select ${slot.filename ?? slot.nzo_id}`"
                                         :data-bulk-select="slot.nzo_id"
                                         @update:checked="

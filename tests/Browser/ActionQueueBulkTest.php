@@ -70,3 +70,47 @@ test('a member sees no bulk selection', function (): void {
         ->assertPresent("[data-action-row=\"{$pending->id}\"]")
         ->assertCount('[data-bulk-select]', 0);
 });
+
+test('a member reads the reviewer rejection reason on a rejected request', function (): void {
+    $rejected = ActionRequest::factory()->create([
+        'status' => ActionRequestStatus::Rejected,
+        'title' => 'Delete series "Severance"',
+        'result' => ['rejection_reason' => 'Still watching this one.'],
+    ]);
+    $this->actingAs(User::factory()->member()->create());
+
+    visit(route('actions.requests.index', ['status' => 'rejected'], absolute: false))
+        ->assertNoSmoke()
+        ->assertSeeIn("[data-action-row=\"{$rejected->id}\"]", 'Severance')
+        ->click("[data-action-row=\"{$rejected->id}\"]")
+        ->assertSeeIn('[data-action-rejection-reason]', 'Still watching this one.');
+});
+
+test('the reject dialog closes when the selection empties under it', function (): void {
+    $pending = ActionRequest::factory()->create(['status' => ActionRequestStatus::Pending, 'title' => 'Monitor series "Andor"']);
+    $this->actingAs(User::factory()->admin()->create());
+
+    $webpage = visit(route('actions.requests.index', absolute: false))
+        ->assertNoSmoke()
+        ->click("[data-bulk-select=\"{$pending->id}\"]")
+        ->click('[data-bulk-reject]')
+        ->assertVisible('[data-bulk-reject-confirm]');
+
+    // Unticking the only row behind the dialog (what a live status event
+    // does) empties the selection.
+    $webpage->script("document.querySelector('[data-bulk-select=\"{$pending->id}\"]').click()");
+    // The dialog's exit animation keeps it in the DOM briefly.
+    $webpage->script(<<<'JS'
+        (async () => {
+            for (let attempt = 0; attempt < 250; attempt++) {
+                if (!document.querySelector('[data-bulk-reject-confirm]')) {
+                    return;
+                }
+                await new Promise((resolve) => setTimeout(resolve, 20));
+            }
+        })()
+    JS);
+    $webpage->assertCount('[data-bulk-reject-confirm]', 0);
+
+    expect($pending->fresh()->status)->toBe(ActionRequestStatus::Pending);
+});

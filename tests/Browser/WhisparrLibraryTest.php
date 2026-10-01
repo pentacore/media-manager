@@ -5,6 +5,7 @@ declare(strict_types=1);
 use App\Enums\WhisparrVersion;
 use App\Jobs\ExecuteActionRequest;
 use App\Models\ActionRequest;
+use App\Models\ActionTypeConfig;
 use App\Models\ServiceConnection;
 use App\Models\User;
 use Database\Seeders\ActionTypeConfigSeeder;
@@ -118,19 +119,101 @@ test('an admin who turned the blur off sees sharp posters', function (): void {
         ->assertCount('[data-poster][data-blurred="true"]', 0);
 });
 
-test('a blurred poster reveals on keyboard focus and re-blurs on blur', function (): void {
+test('focusing a card link reveals its poster, which adds no tab stop of its own', function (): void {
     fakeWhisparrBrowserLibrary();
     $this->actingAs(User::factory()->admin()->create());
 
     $webpage = visit(route('media.whisparr.index', absolute: false))
         ->assertNoSmoke()
-        ->assertPresent('[data-whisparr-card="11"] [data-poster][data-blurred="true"]');
+        ->assertPresent('[data-whisparr-card="11"] [data-poster][data-blurred="true"]')
+        ->assertAttributeMissing('[data-whisparr-card="11"] [data-poster]', 'tabindex');
 
-    $webpage->script("document.querySelector('[data-whisparr-card=\"11\"] [data-poster]').focus()");
-    $webpage->assertPresent('[data-whisparr-card="11"] [data-poster][data-blurred="false"]');
+    $webpage->script("document.querySelector('[data-whisparr-card=\"11\"]').focus()");
+    $webpage->assertPresent('[data-whisparr-card="11"] [data-poster][data-blurred="false"]')
+        ->assertPresent('[data-whisparr-card="12"] [data-poster][data-blurred="true"]');
 
-    $webpage->script("document.querySelector('[data-whisparr-card=\"11\"] [data-poster]').blur()");
+    $webpage->script("document.querySelector('[data-whisparr-card=\"11\"]').blur()");
     $webpage->assertPresent('[data-whisparr-card="11"] [data-poster][data-blurred="true"]');
+});
+
+test('hovering the checkbox over a revealed poster keeps it revealed', function (): void {
+    fakeWhisparrBrowserLibrary();
+    $this->actingAs(User::factory()->admin()->create());
+
+    visit(route('media.whisparr.index', absolute: false))
+        ->assertNoSmoke()
+        ->assertPresent('[data-whisparr-card="11"] [data-poster][data-blurred="true"]')
+        ->hover('[data-whisparr-card="11"] [data-poster]')
+        ->assertPresent('[data-whisparr-card="11"] [data-poster][data-blurred="false"]')
+        ->hover('[data-bulk-select="11"]')
+        ->assertPresent('[data-whisparr-card="11"] [data-poster][data-blurred="false"]');
+});
+
+test('the show page poster stays its own tab stop', function (): void {
+    fakeWhisparrBrowserLibrary();
+    $this->actingAs(User::factory()->admin()->create());
+
+    visit(route('media.whisparr.show', ['id' => 11], absolute: false))
+        ->assertNoSmoke()
+        ->assertSeeIn('[data-whisparr-show-title]', 'Aurora Scene')
+        ->assertAttribute('[data-poster]', 'tabindex', '0');
+});
+
+/**
+ * Whisparr answers the profile list with a refusal; the library and item
+ * reads still work.
+ */
+function fakeWhisparrBrowserProfileOutage(): void
+{
+    $movies = whisparrBrowserMovies();
+
+    Http::fake([
+        'whisparr.local:6969/api/v3/movie/11*' => Http::response($movies[0]),
+        'whisparr.local:6969/api/v3/movie' => Http::response($movies),
+        'whisparr.local:6969/api/v3/qualityprofile' => Http::response(['message' => 'Unauthorized'], 401),
+    ]);
+}
+
+test('a quality-profile outage is shown in the bulk menu', function (): void {
+    fakeWhisparrBrowserProfileOutage();
+    $this->actingAs(User::factory()->admin()->create());
+
+    visit(route('media.whisparr.index', absolute: false))
+        ->assertNoSmoke()
+        ->assertSeeIn('[data-whisparr-card="11"] [data-whisparr-title]', 'Aurora Scene')
+        ->click('[data-bulk-select="11"]')
+        ->assertSeeIn('[data-bulk-quality-profile-error]', 'Whisparr refused the request — check the connection settings.')
+        ->assertCount('[data-bulk-quality-profile-trigger]', 0);
+});
+
+test('a quality-profile outage is shown next to the select on the title page', function (): void {
+    fakeWhisparrBrowserProfileOutage();
+    $this->actingAs(User::factory()->admin()->create());
+
+    visit(route('media.whisparr.show', ['id' => 11], absolute: false))
+        ->assertNoSmoke()
+        ->assertSeeIn('[data-whisparr-show-title]', 'Aurora Scene')
+        ->assertSeeIn('[data-quality-profile-error]', 'Whisparr refused the request — check the connection settings.')
+        ->assertCount('[data-quality-profile-trigger]', 0);
+});
+
+test('a profile change that waits for approval leaves the select on the current profile', function (): void {
+    $this->seed(ActionTypeConfigSeeder::class);
+    ActionTypeConfig::query()->where('type', 'whisparr_set_quality_profile')->update(['requires_approval' => true]);
+    Queue::fake([ExecuteActionRequest::class]);
+    fakeWhisparrBrowserLibrary();
+    $this->actingAs(User::factory()->admin()->create());
+
+    visit(route('media.whisparr.show', ['id' => 11], absolute: false))
+        ->assertNoSmoke()
+        ->assertSeeIn('[data-quality-profile-trigger]', 'Any')
+        ->click('[data-quality-profile-trigger]')
+        ->click('[data-quality-profile-option="2"]')
+        ->assertSee('Queued for approval in the Action Queue.')
+        ->assertSeeIn('[data-quality-profile-trigger]', 'Any')
+        ->assertDontSeeIn('[data-quality-profile-trigger]', 'HD');
+
+    expect(ActionRequest::query()->where('type', 'whisparr_set_quality_profile')->sole()->status->value)->toBe('pending');
 });
 
 test('a first tap on a blurred poster reveals it without navigating, a second tap navigates', function (): void {

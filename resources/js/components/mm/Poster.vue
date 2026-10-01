@@ -8,11 +8,25 @@ const props = withDefaults(
         src?: string | null;
         /** Blur the image until hover, keyboard focus or a first tap (Whisparr). */
         blurred?: boolean;
+        /**
+         * Revealed by the parent: a card link that has focus, or a pointer
+         * over the card's overlays (checkbox, pills), which are siblings of
+         * the poster rather than descendants.
+         */
+        revealed?: boolean;
+        /**
+         * Whether a blurred poster is its own tab stop. False inside a link:
+         * the link is the focus target (and reveals via `revealed`), so the
+         * poster adds no inert tab stop nested in the anchor.
+         */
+        focusable?: boolean;
     }>(),
     {
         size: 'md',
         src: null,
         blurred: false,
+        revealed: false,
+        focusable: true,
     },
 );
 
@@ -56,6 +70,7 @@ const concealable = computed(() => props.blurred && showImage.value);
 const concealed = computed(
     () =>
         concealable.value &&
+        !props.revealed &&
         !hovered.value &&
         !focused.value &&
         !tapRevealed.value,
@@ -104,12 +119,12 @@ const styleVars = computed(() => ({
         :class="[
             'relative flex aspect-[2/3] items-end overflow-hidden rounded-md border border-border p-2 font-mono text-[10px]',
             widthClass,
-            concealable
+            concealable && focusable
                 ? 'outline-none focus-visible:ring-2 focus-visible:ring-ring'
                 : '',
         ]"
         :style="styleVars"
-        :tabindex="concealable ? 0 : undefined"
+        :tabindex="concealable && focusable ? 0 : undefined"
         data-poster
         :data-blurred="concealed ? 'true' : 'false'"
         @pointerenter="onPointerEnter"

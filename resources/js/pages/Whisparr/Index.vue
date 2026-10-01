@@ -23,14 +23,15 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { useBulkSelection } from '@/composables/useBulkSelection';
 import { useWhisparrBlur } from '@/composables/useWhisparrBlur';
 import { formatSize } from '@/lib/arr';
+import { focusAfterBulk } from '@/lib/bulk';
 import { cn } from '@/lib/utils';
 import { dashboard } from '@/routes';
 import type {
     BulkSummary,
-    QualityProfileOption,
     WhisparrConnection,
     WhisparrItem,
     WhisparrLibrary,
+    WhisparrQualityProfiles,
 } from '@/types';
 
 type LibraryFilter = 'all' | 'monitored' | 'unmonitored' | 'missing';
@@ -39,7 +40,7 @@ type LibrarySort = 'title' | 'year' | 'size';
 const props = defineProps<{
     connection: WhisparrConnection | null;
     library?: WhisparrLibrary;
-    qualityProfiles?: QualityProfileOption[];
+    qualityProfiles?: WhisparrQualityProfiles;
 }>();
 
 defineOptions({
@@ -60,15 +61,11 @@ const syncing = ref(false);
 
 const items = computed<WhisparrItem[]>(() => props.library?.items ?? []);
 
-function isMissing(item: WhisparrItem): boolean {
-    return item.monitored && !item.has_file;
-}
-
 const counts = computed(() => ({
     all: items.value.length,
     monitored: items.value.filter((item) => item.monitored).length,
     unmonitored: items.value.filter((item) => !item.monitored).length,
-    missing: items.value.filter((item) => isMissing(item)).length,
+    missing: items.value.filter((item) => item.missing).length,
 }));
 
 const FILTERS: { id: LibraryFilter; label: string }[] = [
@@ -96,7 +93,7 @@ const visible = computed<WhisparrItem[]>(() => {
             return false;
         }
 
-        if (filter.value === 'missing' && !isMissing(item)) {
+        if (filter.value === 'missing' && !item.missing) {
             return false;
         }
 
@@ -138,10 +135,28 @@ const selectedOnPage = computed(
     () => visibleIds.value.filter((id) => isSelected(id)).length,
 );
 
-watch(items, (rows) => retainSelection(rows.map((row) => row.id)));
+const bulkBusy = ref(false);
+
+// Retain against the rows on screen, not every loaded row: a reload that
+// moves a selected title out of the active filter drops it, so a bulk
+// request never names a title the user can no longer see.
+watch(visibleIds, (ids) => retainSelection(ids));
+
+// A blurred poster sits inside the card link with overlays (checkbox, pill)
+// as its siblings: the card reveals it while the link has focus or the
+// pointer is anywhere over the poster area, overlays included.
+const focusedCard = ref<number | null>(null);
+const hoveredCard = ref<number | null>(null);
+
+function onCardPointerEnter(event: PointerEvent, id: number): void {
+    if (event.pointerType !== 'touch') {
+        hoveredCard.value = id;
+    }
+}
 
 function bulkDone(summary: BulkSummary): void {
     clearSelection();
+    focusAfterBulk();
 
     if (summary.started + summary.queued > 0) {
         router.reload({ only: ['library'] });
@@ -288,6 +303,7 @@ function sync(): void {
                     v-if="library && !library.error"
                     :selected-count="selectedOnPage"
                     :page-count="visibleIds.length"
+                    :disabled="bulkBusy"
                     @toggle="(value) => setAllSelected(visibleIds, value)"
                 />
             </div>
@@ -317,12 +333,25 @@ function sync(): void {
                     :href="WhisparrController.show.url(item.id)"
                     class="group flex flex-col gap-2"
                     :data-whisparr-card="item.id"
+                    @focusin="focusedCard = item.id"
+                    @focusout="focusedCard = null"
                 >
-                    <div class="relative">
+                    <div
+                        class="relative"
+                        @pointerenter="
+                            (event) => onCardPointerEnter(event, item.id)
+                        "
+                        @pointerleave="hoveredCard = null"
+                    >
                         <Poster
                             :hint="item.title.toLowerCase().slice(0, 12)"
                             :src="item.poster_url"
                             :blurred="blurPosters"
+                            :focusable="false"
+                            :revealed="
+                                focusedCard === item.id ||
+                                hoveredCard === item.id
+                            "
                             size="full"
                         />
                         <Pill
@@ -332,7 +361,7 @@ function sync(): void {
                             Unmonitored
                         </Pill>
                         <Pill
-                            v-else-if="!item.has_file"
+                            v-else-if="item.missing"
                             class="absolute bottom-2 left-2 border-transparent bg-black/55 text-white/70"
                         >
                             missing
@@ -340,6 +369,7 @@ function sync(): void {
                         <BulkCheckbox
                             class="absolute right-2 bottom-2 rounded bg-black/55 p-1"
                             :checked="isSelected(item.id)"
+                            :disabled="bulkBusy"
                             :label="`Select ${item.title}`"
                             :data-bulk-select="item.id"
                             @update:checked="
@@ -396,14 +426,20 @@ function sync(): void {
                 </div>
             </div>
 
-            <BulkActionBar :count="selectedCount" @clear="clearSelection()">
+            <BulkActionBar
+                :count="selectedCount"
+                :busy="bulkBusy"
+                @clear="clearSelection()"
+            >
                 <template #default="{ disabled }">
                     <LibraryBulkActions
+                        v-model:busy="bulkBusy"
                         :endpoint="WhisparrActionController.bulk.url()"
                         :target="{ service_connection_id: connection.id }"
                         :ids="selectedIds"
                         :disabled="disabled"
-                        :quality-profiles="qualityProfiles"
+                        :quality-profiles="qualityProfiles?.items"
+                        :quality-profiles-error="qualityProfiles?.error"
                         noun="titles"
                         @done="bulkDone"
                     />

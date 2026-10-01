@@ -31,6 +31,7 @@ import { useBulkSelection } from '@/composables/useBulkSelection';
 import { useCan } from '@/composables/useCan';
 import { useRealtimeReload } from '@/composables/useRealtimeReload';
 import { arrPosterUrl } from '@/lib/arr';
+import { focusAfterBulk } from '@/lib/bulk';
 import { cn } from '@/lib/utils';
 import { dashboard } from '@/routes';
 import type { BulkSummary } from '@/types';
@@ -164,13 +165,16 @@ const selectedOnPage = computed(
     () => visibleIds.value.filter((id) => isSelected(id)).length,
 );
 
-watch(
-    () => props.series,
-    (rows) => retainSelection((rows ?? []).map((row) => row.id)),
-);
+const bulkBusy = ref(false);
+
+// Retain against the rows on screen, not every loaded row: a realtime reload
+// that moves a selected title out of the active filter drops it, so a bulk
+// request never names a title the user can no longer see.
+watch(visibleIds, (ids) => retainSelection(ids));
 
 function bulkDone(summary: BulkSummary): void {
     clearSelection();
+    focusAfterBulk();
 
     if (summary.started + summary.queued > 0) {
         router.reload({ only: ['series'] });
@@ -408,6 +412,7 @@ function sonarrSeriesUrl(slug: string | null): string | null {
                 v-if="canBulk"
                 :selected-count="selectedOnPage"
                 :page-count="visibleIds.length"
+                :disabled="bulkBusy"
                 @toggle="(value) => setAllSelected(visibleIds, value)"
             />
         </div>
@@ -441,6 +446,7 @@ function sonarrSeriesUrl(slug: string | null): string | null {
                         v-if="canBulk"
                         class="absolute right-2 bottom-2 rounded bg-black/55 p-1"
                         :checked="isSelected(item.id)"
+                        :disabled="bulkBusy"
                         :label="`Select ${item.title}`"
                         :data-bulk-select="item.id"
                         @update:checked="
@@ -520,6 +526,7 @@ function sonarrSeriesUrl(slug: string | null): string | null {
                             <td v-if="canBulk" class="px-3 py-2.5">
                                 <BulkCheckbox
                                     :checked="isSelected(item.id)"
+                                    :disabled="bulkBusy"
                                     :label="`Select ${item.title}`"
                                     :data-bulk-select="item.id"
                                     @update:checked="
@@ -616,10 +623,12 @@ function sonarrSeriesUrl(slug: string | null): string | null {
         <BulkActionBar
             v-if="canBulk"
             :count="selectedCount"
+            :busy="bulkBusy"
             @clear="clearSelection()"
         >
             <template #default="{ disabled }">
                 <LibraryBulkActions
+                    v-model:busy="bulkBusy"
                     :endpoint="MediaActionController.bulk.url()"
                     :target="{
                         service: 'sonarr',

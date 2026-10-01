@@ -8,8 +8,10 @@ const props = withDefaults(
         pageCount: number;
         label?: string;
         hideLabel?: boolean;
+        /** While a bulk run is in flight the selection is frozen. */
+        disabled?: boolean;
     }>(),
-    { label: 'Select all on this page', hideLabel: false },
+    { label: 'Select all on this page', hideLabel: false, disabled: false },
 );
 
 const emit = defineEmits<{
@@ -33,7 +35,7 @@ const state = computed<boolean | 'indeterminate'>(() => {
     >
         <Checkbox
             :model-value="state"
-            :disabled="pageCount === 0"
+            :disabled="disabled || pageCount === 0"
             :aria-label="label"
             @update:model-value="(value) => emit('toggle', value === true)"
         />

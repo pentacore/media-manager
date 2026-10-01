@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { Bookmark, BookmarkX, Search, Trash2 } from '@lucide/vue';
-import { ref } from 'vue';
+import { ref, watch } from 'vue';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import {
@@ -32,6 +32,8 @@ const props = defineProps<{
     ids: number[];
     disabled: boolean;
     qualityProfiles?: QualityProfileOption[];
+    /** Why the profiles could not be loaded; shown in place of the menu. */
+    qualityProfilesError?: string | null;
     /** Plural noun for the dialogs: "series", "movies", "titles". */
     noun: string;
 }>();
@@ -40,11 +42,22 @@ const emit = defineEmits<{
     done: [summary: BulkSummary];
 }>();
 
-const busy = ref(false);
+/**
+ * True while a request is in flight. Bound by the page (v-model:busy) so it
+ * can freeze Clear and the row checkboxes too.
+ */
+const busy = defineModel<boolean>('busy', { default: false });
 const profileValue = ref<string | undefined>(undefined);
 const searchConfirmOpen = ref(false);
 const deleteConfirmOpen = ref(false);
 const deleteFiles = ref(false);
+
+// A destructive choice never carries over: every opening starts unticked.
+watch(deleteConfirmOpen, (open) => {
+    if (open) {
+        deleteFiles.value = false;
+    }
+});
 
 async function run(
     action: string,
@@ -125,8 +138,14 @@ async function confirmDelete(): Promise<void> {
         >
             <BookmarkX class="size-3.5" />Unmonitor
         </Button>
+        <span
+            v-if="qualityProfilesError"
+            class="text-[12px] text-destructive"
+            data-bulk-quality-profile-error
+            >{{ qualityProfilesError }}</span
+        >
         <Select
-            v-if="qualityProfiles && qualityProfiles.length > 0"
+            v-else-if="qualityProfiles && qualityProfiles.length > 0"
             :model-value="profileValue"
             :disabled="disabled || busy"
             @update:model-value="changeProfile"
@@ -214,7 +233,10 @@ async function confirmDelete(): Promise<void> {
                     >
                 </div>
                 <DialogFooter>
-                    <Button variant="outline" @click="deleteConfirmOpen = false"
+                    <Button
+                        variant="outline"
+                        data-bulk-delete-cancel
+                        @click="deleteConfirmOpen = false"
                         >Cancel</Button
                     >
                     <Button

@@ -123,3 +123,34 @@ test('the selection clears when switching to the history tab and back', function
         ->click('[data-service-filter="sonarr"]')
         ->assertDontSee('1 selected');
 });
+
+test('the remove confirm closes when the selection empties under it, and nothing is sent', function (): void {
+    fakeGrabQueueBrowser();
+    $this->actingAs(User::factory()->admin()->create());
+
+    $webpage = visit(route('media.library.activity.queue', absolute: false))
+        ->assertNoSmoke()
+        ->assertSeeIn('[data-queue-row="sonarr-41"]', 'Severance')
+        ->click('[data-service-filter="sonarr"]')
+        ->click('[data-bulk-select="41"]')
+        ->click('[data-bulk-queue-action="remove"]')
+        ->assertSeeIn('[data-bulk-queue-confirm]', 'Confirm');
+
+    // Unticking the only row behind the dialog (what a refresh that drops
+    // the row does) empties the selection.
+    $webpage->script("document.querySelector('[data-bulk-select=\"41\"]').click()");
+    // The dialog's exit animation keeps it in the DOM briefly.
+    $webpage->script(<<<'JS'
+        (async () => {
+            for (let attempt = 0; attempt < 250; attempt++) {
+                if (!document.querySelector('[data-bulk-queue-confirm]')) {
+                    return;
+                }
+                await new Promise((resolve) => setTimeout(resolve, 20));
+            }
+        })()
+    JS);
+    $webpage->assertCount('[data-bulk-queue-confirm]', 0);
+
+    Http::assertNotSent(fn (Request $request): bool => $request->method() === 'DELETE');
+});

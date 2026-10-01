@@ -31,7 +31,7 @@ import {
 import { Skeleton } from '@/components/ui/skeleton';
 import { useBulkSelection } from '@/composables/useBulkSelection';
 import { useCan } from '@/composables/useCan';
-import { submitBulk } from '@/lib/bulk';
+import { focusAfterBulk, submitBulk } from '@/lib/bulk';
 import { dashboard } from '@/routes';
 
 interface QueueRow {
@@ -587,6 +587,14 @@ const selectedQueueOnPage = computed(
 const queueBulkBusy = ref(false);
 const queueBulkConfirm = ref<'remove' | 'blocklist' | null>(null);
 
+// A refresh can empty the selection while the confirm is open: close it
+// rather than let Confirm send an empty id list.
+watch(selectedQueueCount, (count) => {
+    if (count === 0) {
+        queueBulkConfirm.value = null;
+    }
+});
+
 async function runQueueBulk(): Promise<void> {
     const action = queueBulkConfirm.value;
 
@@ -608,6 +616,7 @@ async function runQueueBulk(): Promise<void> {
 
     if (summary) {
         clearQueueSelection();
+        focusAfterBulk();
         router.reload({ only: ['queue'] });
     }
 }
@@ -759,6 +768,7 @@ async function runQueueBulk(): Promise<void> {
                                                 selectedQueueOnPage
                                             "
                                             :page-count="queuePageIds.length"
+                                            :disabled="queueBulkBusy"
                                             @toggle="
                                                 (value) =>
                                                     setAllQueue(
@@ -798,6 +808,7 @@ async function runQueueBulk(): Promise<void> {
                                     >
                                         <BulkCheckbox
                                             :checked="isQueueSelected(row.id)"
+                                            :disabled="queueBulkBusy"
                                             :label="`Select ${row.title ?? 'queue item'}`"
                                             :data-bulk-select="row.id"
                                             @update:checked="

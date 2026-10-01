@@ -151,3 +151,77 @@ test('a member sees no slot selection', function (): void {
         ->assertSeeIn('[data-sab-slot="SABnzbd_nzo_aaa"]', 'Show.S01E01.mkv')
         ->assertCount('[data-bulk-select]', 0);
 });
+
+test('the delete confirm closes when a poll empties the selection', function (): void {
+    fakeSabnzbdBrowser(fn (int $read): array => $read === 1
+        ? [sabnzbdBrowserSlot('SABnzbd_nzo_aaa', 'Show.S01E01.mkv')]
+        : []);
+    $this->actingAs(User::factory()->admin()->create());
+
+    $webpage = visit(route('sabnzbd.queue.index', absolute: false))
+        ->assertNoSmoke()
+        ->assertSeeIn('[data-sab-slot="SABnzbd_nzo_aaa"]', 'Show.S01E01.mkv')
+        ->click('[data-bulk-select="SABnzbd_nzo_aaa"]')
+        ->click('[data-bulk-sab-action="delete"]')
+        ->assertVisible('[data-bulk-sab-delete-confirm]');
+
+    // The 5-second poll returns an empty queue: the job finished.
+    $webpage->script(<<<'JS'
+        (async () => {
+            for (let attempt = 0; attempt < 500; attempt++) {
+                if (!document.querySelector('[data-bulk-sab-delete-confirm]')) {
+                    return;
+                }
+                await new Promise((resolve) => setTimeout(resolve, 20));
+            }
+        })()
+    JS);
+
+    $webpage->assertCount('[data-bulk-sab-delete-confirm]', 0)
+        ->assertCount('[data-bulk-bar]', 0);
+
+    Http::assertNotSent(fn (Request $request): bool => (sabnzbdBrowserQuery($request)['name'] ?? null) === 'delete');
+});
+
+test('a failed poll keeps the selection; the next good poll still has it', function (): void {
+    $queueReads = 0;
+
+    Http::fake(['sabnzbd.local:8080/api*' => function (Request $request) use (&$queueReads) {
+        $query = sabnzbdBrowserQuery($request);
+
+        if (($query['mode'] ?? null) === 'queue' && isset($query['name'])) {
+            return Http::response(['status' => true]);
+        }
+
+        if (($query['mode'] ?? null) === 'queue') {
+            $queueReads++;
+
+            // The second page load (the first poll) hits a SABnzbd restart.
+            if ($queueReads === 2) {
+                return Http::response(['error' => 'restarting'], 401);
+            }
+
+            return Http::response(['queue' => ['paused' => false, 'speed' => '10 M', 'speedlimit' => '', 'speedlimit_abs' => '', 'slots' => [
+                sabnzbdBrowserSlot('SABnzbd_nzo_aaa', 'Show.S01E01.mkv'),
+                sabnzbdBrowserSlot('SABnzbd_nzo_bbb', 'Show.S01E02.mkv'),
+            ]]]);
+        }
+
+        return Http::response(['history' => ['slots' => [], 'noofslots' => 0]]);
+    }]);
+    $this->actingAs(User::factory()->admin()->create());
+
+    visit(route('sabnzbd.queue.index', absolute: false))
+        ->assertNoSmoke()
+        ->assertSeeIn('[data-sab-slot="SABnzbd_nzo_aaa"]', 'Show.S01E01.mkv')
+        ->click('[data-bulk-select="SABnzbd_nzo_aaa"]')
+        ->click('[data-bulk-select="SABnzbd_nzo_bbb"]')
+        ->assertSeeIn('[data-bulk-count]', '2 selected')
+        // The bar is hidden while the error shows; the selection is not.
+        ->assertSeeIn('[data-sabnzbd-error]', 'Could not reach SABnzbd.')
+        // The next poll recovers, and both slots are still selected.
+        ->assertSeeIn('[data-sab-slot="SABnzbd_nzo_bbb"]', 'Show.S01E02.mkv')
+        ->assertSeeIn('[data-bulk-count]', '2 selected')
+        ->click('[data-bulk-sab-action="pause"]')
+        ->assertSee('2 paused');
+});

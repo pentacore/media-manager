@@ -1,3 +1,4 @@
+import { nextTick } from 'vue';
 import { toast } from 'vue-sonner';
 import { jsonRequest } from '@/composables/useAiChat';
 import type { BulkSummary } from '@/types';
@@ -31,4 +32,36 @@ export async function submitBulk(
 
         return null;
     }
+}
+
+/**
+ * After a successful run the selection clears and the bulk bar (holding the
+ * focused button, or a dialog's return-focus target) unmounts, dropping
+ * focus to <body>. Hand it to the page's select-all control, or to the page
+ * heading when there is none, so keyboard and screen-reader users keep
+ * their place. Focus the user already moved elsewhere is left alone.
+ */
+export function focusAfterBulk(): void {
+    void nextTick(() => {
+        const active = document.activeElement;
+
+        if (active !== null && active !== document.body) {
+            return;
+        }
+
+        const target =
+            document.querySelector<HTMLElement>(
+                '[data-bulk-select-all] button:not([disabled])',
+            ) ?? document.querySelector<HTMLElement>('h1');
+
+        if (target === null) {
+            return;
+        }
+
+        if (target.tagName === 'H1' && !target.hasAttribute('tabindex')) {
+            target.setAttribute('tabindex', '-1');
+        }
+
+        target.focus();
+    });
 }
