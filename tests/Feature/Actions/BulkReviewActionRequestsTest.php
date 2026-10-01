@@ -90,6 +90,29 @@ test('a request that no longer exists is reported as failed', function (): void 
         ->assertJsonPath('failed', [['id' => 999, 'title' => '#999', 'reason' => 'That request no longer exists.']]);
 });
 
+test('a request deleted after the preload but before its row lock fails alone, and nothing is dispatched for it', function (): void {
+    [$first, $deletedMeanwhile, $third] = ActionRequest::factory()->count(3)->create(['status' => ActionRequestStatus::Pending])->all();
+
+    // Approving the first request deletes the second one, which the bulk
+    // endpoint has already preloaded: its row lock then finds nothing.
+    ActionRequest::updated(function (ActionRequest $actionRequest) use ($first, $deletedMeanwhile): void {
+        if ($actionRequest->id === $first->id) {
+            ActionRequest::query()->whereKey($deletedMeanwhile->id)->delete();
+        }
+    });
+
+    $this->actingAs($this->admin)
+        ->postJson(route('actions.requests.bulk'), ['ids' => [$first->id, $deletedMeanwhile->id, $third->id], 'action' => 'approve'])
+        ->assertOk()
+        ->assertJsonPath('started', 2)
+        ->assertJsonPath('failed.0.id', $deletedMeanwhile->id)
+        ->assertJsonPath('failed.0.reason', 'That request no longer exists.');
+
+    expect($third->fresh()->status)->toBe(ActionRequestStatus::Approved);
+    Queue::assertPushed(ExecuteActionRequest::class, 2);
+    Queue::assertNotPushed(ExecuteActionRequest::class, fn (ExecuteActionRequest $job): bool => $job->actionRequest->id === $deletedMeanwhile->id);
+});
+
 test('a reason longer than 500 characters or more than 100 ids is refused', function (): void {
     $pending = ActionRequest::factory()->create(['status' => ActionRequestStatus::Pending]);
 

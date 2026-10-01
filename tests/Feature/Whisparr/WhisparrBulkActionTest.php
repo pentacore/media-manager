@@ -79,6 +79,31 @@ test('a bulk search uses whisparr_search for every title', function (): void {
     expect(ActionRequest::query()->where('type', 'whisparr_search')->count())->toBe(3);
 });
 
+test('a bulk quality profile change applies the one profile to every title, each pinned', function (): void {
+    $this->actingAs($this->admin)
+        ->postJson(route('media.whisparr.bulk'), bulkWhisparrPayload($this->whisparr, ['action' => 'quality_profile', 'quality_profile_id' => 2]))
+        ->assertOk()
+        ->assertJsonPath('started', 3)
+        ->assertJsonPath('failed', []);
+
+    expect(ActionRequest::query()->where('type', 'whisparr_set_quality_profile')->orderBy('id')->pluck('payload')->all())->toEqual([
+        ['whisparr_item_id' => 11, 'quality_profile_id' => 2, 'service_connection_id' => $this->whisparr->id],
+        ['whisparr_item_id' => 12, 'quality_profile_id' => 2, 'service_connection_id' => $this->whisparr->id],
+        ['whisparr_item_id' => 13, 'quality_profile_id' => 2, 'service_connection_id' => $this->whisparr->id],
+    ])->and(ActionRequest::query()->where('type', 'whisparr_set_quality_profile')->pluck('description')->every(
+        fn (?string $description): bool => str_contains((string) $description, '"HD"'),
+    ))->toBeTrue();
+});
+
+test('a bulk quality profile change without a profile is refused before anything is filed', function (): void {
+    $this->actingAs($this->admin)
+        ->postJson(route('media.whisparr.bulk'), bulkWhisparrPayload($this->whisparr, ['action' => 'quality_profile']))
+        ->assertUnprocessable()
+        ->assertJsonValidationErrors('quality_profile_id');
+
+    expect(ActionRequest::query()->count())->toBe(0);
+});
+
 test('a refused item is named from the Whisparr library, not from the request', function (): void {
     ActionTypeConfig::query()->where('type', 'whisparr_search')->update(['is_enabled' => false]);
 
@@ -99,6 +124,14 @@ test('a Sonarr connection id is refused and nothing is filed', function (): void
 
 test('members cannot run Whisparr bulk actions', function (): void {
     $this->actingAs(User::factory()->member()->create())
+        ->postJson(route('media.whisparr.bulk'), bulkWhisparrPayload($this->whisparr))
+        ->assertForbidden();
+
+    expect(ActionRequest::query()->count())->toBe(0);
+});
+
+test('viewers cannot run Whisparr bulk actions', function (): void {
+    $this->actingAs(User::factory()->create())
         ->postJson(route('media.whisparr.bulk'), bulkWhisparrPayload($this->whisparr))
         ->assertForbidden();
 
