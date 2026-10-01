@@ -1,3 +1,40 @@
+# [1.30.0](https://github.com/pentacore/media-manager/compare/v1.29.0...v1.30.0) (2026-10-01)
+
+
+### Bug Fixes
+
+* **activity-log:** clear the new audit rows counter when a filter changes ([3f0eedc](https://github.com/pentacore/media-manager/commit/3f0eedcf6e182f0d166d94caab49a001125f3cfa))
+* **ai-prices:** audit price rows created by a catalog bulk add ([03896fd](https://github.com/pentacore/media-manager/commit/03896fde0a86035875e7185ae12f6ea69fa7eb35))
+* **audit:** audit Bazarr connection saves that only change the mapping ([36a1ee0](https://github.com/pentacore/media-manager/commit/36a1ee070fc32155b1c9d08bb189857aec8a7e0d))
+* **audit:** record queue removals against their Sonarr or Radarr connection ([6a0b0c6](https://github.com/pentacore/media-manager/commit/6a0b0c6984236da49855895c125d9240c0db6318))
+* **downloads:** surface poll outages, guard history paging and retry double-posts ([470fea9](https://github.com/pentacore/media-manager/commit/470fea9d49834f4c9ef918390aff2e8824f2ec58))
+* **emby:** treat a non-list user answer as an error and tolerate bad dates ([9c2d8be](https://github.com/pentacore/media-manager/commit/9c2d8bea5abdae0b9bb95ae5ac75f465bda55142))
+* **library:** scope the history title assertion instead of reshaping the row ([089c9e3](https://github.com/pentacore/media-manager/commit/089c9e3d7be3a1f4c10842076b7ff69920579b9a))
+* **prowlarr:** key indexer search rows by indexer and release ([89161bf](https://github.com/pentacore/media-manager/commit/89161bf8bb388fa7d586e2f01a91b4c892afbc3c))
+* **prowlarr:** redact indexer info urls and flag lost grab responses ([f809adb](https://github.com/pentacore/media-manager/commit/f809adbecff6609e57bc5c1b542e6de5674cb296))
+* **sabnzbd:** honour status false on queue pause, resume and delete ([0d4120d](https://github.com/pentacore/media-manager/commit/0d4120dd8eba4e4f29f3caaca2a3ff31821ed48f))
+* **sabnzbd:** strip filesystem paths from history failure text ([f214e3f](https://github.com/pentacore/media-manager/commit/f214e3fb9ace9c10005b6f22f94501e39266a4b3))
+* **search:** drop only secret query parameters from Prowlarr info links ([5b7d95b](https://github.com/pentacore/media-manager/commit/5b7d95b064b066c841f9d74faa3ea1ac564ea2ba))
+
+
+### Features
+
+* **audit:** add an admin-only audit category to activity logs with its own retention ([f968641](https://github.com/pentacore/media-manager/commit/f968641d58117bda3859fa68f9568a4227cc90d2))
+* **audit:** add the Audit category filter and masked change details to the Activity log ([a1aa484](https://github.com/pentacore/media-manager/commit/a1aa48458f1fd10d95d6181989900be45ae31e05))
+* **audit:** add the AuditLogger with secret masking and settings snapshots ([68f471e](https://github.com/pentacore/media-manager/commit/68f471e9da6d32a3f6919ea84100cf67b40e9974))
+* **audit:** keep the actor's name on audit rows after account deletion ([fe84774](https://github.com/pentacore/media-manager/commit/fe84774a99fb3f10fef49f02b5971d3c89d6c974))
+* **audit:** record admin settings saves and AI pricing changes with masked diffs ([910ff52](https://github.com/pentacore/media-manager/commit/910ff522c07b96246a44e0ef6315648cfc98e0fd))
+* **audit:** record user, invite, connection, Emby unlink and requested delete changes ([b5b554d](https://github.com/pentacore/media-manager/commit/b5b554dbd81e126f1622e1fa94f534685adaa628))
+* **audit:** show audit rows to admins only across the log, export, dashboard, AI tools and broadcasts ([86a36a2](https://github.com/pentacore/media-manager/commit/86a36a250d1606b57026d8ed3aabe985a2d1ed44))
+* **emby:** add an admin library refresh and owner-checked played state toggles ([d74387e](https://github.com/pentacore/media-manager/commit/d74387e2d4206d167f2fa1af60e9b88e96dccb5a))
+* **emby:** add library refresh, played toggles and the Emby users list to the Emby pages ([85a2fd4](https://github.com/pentacore/media-manager/commit/85a2fd43a9019d0ced17f1c06563672095e4bc35))
+* **emby:** list Emby users on User Links and let admins link from the list ([038f6ec](https://github.com/pentacore/media-manager/commit/038f6ec1d985f6e345d0fa01606e79ef4069508e))
+* **library:** add Sonarr and Radarr history tabs with paging and mark failed ([6d68fcb](https://github.com/pentacore/media-manager/commit/6d68fcb8be00bf27faa86a2d9e57f4c981024e56))
+* **library:** page Sonarr and Radarr history per service and let admins mark grabs failed ([3efc4aa](https://github.com/pentacore/media-manager/commit/3efc4aac5bca4f9ae6b6e4880aa9581d3cfd9fe4))
+* **prowlarr:** link the indexer search in the nav and let admins grab releases ([0a168ff](https://github.com/pentacore/media-manager/commit/0a168ff641e663ec19fd79e66c20c49743624300))
+* **sabnzbd:** add speed limit, paged history, retry and delete for admins ([74feeae](https://github.com/pentacore/media-manager/commit/74feeaeb52414fa9bc7ed5d990e456c120a159be))
+* **sabnzbd:** add the speed limit control and a paged history with retry and delete ([1ff5f01](https://github.com/pentacore/media-manager/commit/1ff5f01d73abb51193b6c2548a1f1e671c268afe))
+
 # [1.29.0](https://github.com/pentacore/media-manager/compare/v1.28.0...v1.29.0) (2026-10-01)
 
 
