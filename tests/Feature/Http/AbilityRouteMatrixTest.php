@@ -88,6 +88,11 @@ dataset('member write routes', [
     'library quality profile' => ['POST', 'media.library.actions.quality-profile', []],
 ]);
 
+dataset('admin-only routes', [
+    'whisparr index' => ['GET', 'media.whisparr.index', []],
+    'whisparr show' => ['GET', 'media.whisparr.show', ['id' => 1]],
+]);
+
 test('viewer-level read routes open for viewers', function (string $routeName, array $parameters): void {
     $this->actingAs(User::factory()->create())
         ->get(route($routeName, $parameters))
@@ -106,6 +111,12 @@ test('member-level routes pass the ability gate for members', function (string $
 
     expect($response->getStatusCode())->not->toBe(403);
 })->with('member write routes');
+
+test('admin-only routes are forbidden to members', function (string $method, string $routeName, array $parameters): void {
+    $this->actingAs(User::factory()->member()->create())
+        ->call($method, route($routeName, $parameters))
+        ->assertForbidden();
+})->with('admin-only routes');
 
 test('media.discover.title passes the ability gate for viewers (view-library)', function (): void {
     $response = $this->actingAs(User::factory()->create())

@@ -8,6 +8,7 @@ import {
     CalendarDays,
     Captions,
     ChartLine,
+    Clapperboard,
     Clock,
     Compass,
     DollarSign,
@@ -68,6 +69,7 @@ import ServiceHealthController from '@/actions/App/Http/Controllers/Monitoring/S
 import SearchIndexersController from '@/actions/App/Http/Controllers/Prowlarr/SearchIndexersController';
 import SabnzbdQueueController from '@/actions/App/Http/Controllers/Sabnzbd/QueueController';
 import StatisticsController from '@/actions/App/Http/Controllers/StatisticsController';
+import WhisparrController from '@/actions/App/Http/Controllers/Whisparr/WhisparrController';
 import { useCan } from '@/composables/useCan';
 import type { NavCounts } from '@/composables/useNavCounts';
 import { dashboard } from '@/routes';
@@ -97,6 +99,13 @@ export function useNavItems(counts?: NavCounts): ComputedRef<NavGroup[]> {
         if (
             item.requiresProwlarr === true &&
             !page.props.integrations?.prowlarr
+        ) {
+            return false;
+        }
+
+        if (
+            item.requiresWhisparr === true &&
+            !page.props.integrations?.whisparr
         ) {
             return false;
         }
@@ -164,6 +173,13 @@ export function useNavItems(counts?: NavCounts): ComputedRef<NavGroup[]> {
                         href: MovieController.index.url(),
                         icon: Film,
                         ability: 'view-library',
+                    },
+                    {
+                        title: 'Whisparr',
+                        href: WhisparrController.index.url(),
+                        icon: Clapperboard,
+                        ability: 'admin',
+                        requiresWhisparr: true,
                     },
                     {
                         title: 'Discover',

@@ -78,6 +78,12 @@ class HandleInertiaRequests extends Middleware
                     ->where('type', ServiceType::Prowlarr)
                     ->where('is_active', true)
                     ->exists(),
+                'whisparr' => $user !== null
+                    && $user->can(Abilities::ADMIN)
+                    && ServiceConnection::query()
+                        ->where('type', ServiceType::Whisparr)
+                        ->where('is_active', true)
+                        ->exists(),
             ],
             'nav' => $user ? $this->navCounts($user) : ['pendingActions' => 0, 'activeSessions' => 0, 'unreadNotifications' => 0, 'libraryIntervention' => 0, 'sabnzbdDownloads' => ['queued' => 0, 'completed' => 0], 'replacementAttention' => 0, 'wantedMissing' => 0],
             'version' => $user ? [

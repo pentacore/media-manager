@@ -5,6 +5,7 @@ export * from './library';
 export * from './navigation';
 export * from './preferences';
 export * from './ui';
+export * from './whisparr';
 
 export type SelectOption<TValue = string, LabelKey extends string = 'label'> = {
     [K in LabelKey]: string;

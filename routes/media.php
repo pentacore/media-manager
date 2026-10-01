@@ -15,6 +15,7 @@ use App\Http\Controllers\Media\MyRequestController;
 use App\Http\Controllers\Media\RequestController;
 use App\Http\Controllers\Media\SearchController;
 use App\Http\Controllers\Media\SeriesController;
+use App\Http\Controllers\Whisparr\WhisparrController;
 use Illuminate\Support\Facades\Route;
 
 Route::middleware(['auth', 'verified', 'password.set'])
@@ -134,5 +135,11 @@ Route::middleware(['auth', 'verified', 'password.set'])
                 Route::get('requests/{id}/edit-options', [RequestController::class, 'editOptions'])->whereNumber('id')->name('requests.edit-options');
                 Route::put('requests/{id}', [RequestController::class, 'update'])->whereNumber('id')->name('requests.update');
             });
+        });
+
+        // Whisparr browse and manage — admins only.
+        Route::middleware('can:admin')->prefix('whisparr')->name('whisparr.')->group(function (): void {
+            Route::get('/', [WhisparrController::class, 'index'])->name('index');
+            Route::get('{id}', [WhisparrController::class, 'show'])->whereNumber('id')->name('show');
         });
     });
