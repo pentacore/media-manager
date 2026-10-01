@@ -357,11 +357,14 @@ test('member searches and requests an exact subtitle from the item drawer', func
 });
 
 /**
+ * The first $failedCapabilityReads swagger reads throw, which surfaces as a 500
+ * from the capabilities endpoint (Bazarr HTTP errors would fall back instead).
+ *
  * @param  list<array<string, mixed>>  $subtitles
  * @param  list<array{0: string, 1: string}>  $extraPaths
  * @return array<string, mixed>
  */
-function fakeBazarrLibraryMovie(array $subtitles, array $extraPaths): array
+function fakeBazarrLibraryMovie(array $subtitles, array $extraPaths, int $failedCapabilityReads = 0): array
 {
     $movie = [
         'radarrId' => 801,
@@ -378,16 +381,22 @@ function fakeBazarrLibraryMovie(array $subtitles, array $extraPaths): array
         $paths[$path][$method] = ['responses' => ['200' => ['description' => 'OK']]];
     }
 
-    fakeServiceHttp(fn (Request $request) => match (parse_url($request->url(), PHP_URL_PATH)) {
-        '/api/movies' => Http::response(['data' => [$movie], 'total' => 1]),
-        '/api/providers/movies' => Http::response(['data' => []]),
-        '/api/swagger.json' => Http::response([
-            'swagger' => '2.0',
-            'basePath' => '/api',
-            'info' => ['title' => 'Bazarr', 'version' => '1.6.0'],
-            'paths' => $paths,
-        ]),
-        default => Http::response(['data' => [], 'total' => 0]),
+    fakeServiceHttp(function (Request $request) use ($movie, $paths, &$failedCapabilityReads) {
+        $path = parse_url($request->url(), PHP_URL_PATH);
+
+        throw_if($path === '/api/swagger.json' && $failedCapabilityReads-- > 0, RuntimeException::class, 'Bazarr is briefly unavailable.');
+
+        return match ($path) {
+            '/api/movies' => Http::response(['data' => [$movie], 'total' => 1]),
+            '/api/providers/movies' => Http::response(['data' => []]),
+            '/api/swagger.json' => Http::response([
+                'swagger' => '2.0',
+                'basePath' => '/api',
+                'info' => ['title' => 'Bazarr', 'version' => '1.6.0'],
+                'paths' => $paths,
+            ]),
+            default => Http::response(['data' => [], 'total' => 0]),
+        };
     });
 
     return $movie;
@@ -528,16 +537,93 @@ test('member syncs an existing subtitle track from the item drawer', function ()
         ->click('@subtitle-item-movie-801')
         ->assertSee('Current tracks')
         ->assertSee('Example.Movie.2024.swe.srt')
-        // Wait for the operation controls themselves: the drawer renders its
-        // track list before the buttons settle, and clicking too early times out
-        // on a loaded machine.
-        ->assertSee('Remove HI tags')
         ->click('@subtitle-track-0-sync')
         ->click('@confirm-subtitle-operation')
         ->assertSee('Subtitle operation added to the Action Queue.')
         ->assertNoSmoke();
 
     expect(ActionRequest::query()->where('type', 'bazarr_sync_subtitle')->count())->toBe(1);
+});
+
+/**
+ * A member on the Bazarr library with one linked Radarr movie that has a
+ * Swedish track, whose Bazarr supports sync.
+ */
+function bazarrSyncableLibrary(int $failedCapabilityReads): ServiceConnection
+{
+    test()->seed(ActionTypeConfigSeeder::class);
+    $bazarr = ServiceConnection::factory()->bazarr()->create([
+        'name' => 'Primary Bazarr',
+        'url' => 'http://bazarr.test',
+        'api_key' => 'bazarr-secret',
+    ]);
+    $radarr = ServiceConnection::factory()->radarr()->create();
+    BazarrServiceLink::factory()->create([
+        'bazarr_connection_id' => $bazarr->id,
+        'related_connection_id' => $radarr->id,
+        'role' => BazarrServiceRole::Radarr,
+    ]);
+    fakeBazarrLibraryMovie(
+        [[
+            'code3' => 'swe',
+            'path' => '/media/movies/Example Movie (2024)/Example.Movie.2024.swe.srt',
+            'forced' => false,
+            'hi' => false,
+        ]],
+        [['/subtitles', 'patch'], ['/providers/movies', 'get']],
+        $failedCapabilityReads,
+    );
+    test()->actingAs(User::factory()->member()->create());
+
+    return $bazarr;
+}
+
+test('the drawer retries capability discovery after a failed request', function (): void {
+    $serviceConnection = bazarrSyncableLibrary(failedCapabilityReads: 1);
+
+    visit(route('bazarr.library', ['connection' => $serviceConnection->id], false))
+        ->click('@subtitle-item-movie-801')
+        ->assertSee('Current tracks')
+        ->click('@subtitle-track-0-sync')
+        ->click('@confirm-subtitle-operation')
+        ->assertSee('Subtitle operation added to the Action Queue.')
+        ->assertMissing('@subtitle-capabilities-error')
+        ->assertNoSmoke();
+
+    expect(ActionRequest::query()->where('type', 'bazarr_sync_subtitle')->count())->toBe(1);
+});
+
+test('the drawer offers a retry once capability discovery keeps failing', function (): void {
+    $serviceConnection = bazarrSyncableLibrary(failedCapabilityReads: 3);
+
+    visit(route('bazarr.library', ['connection' => $serviceConnection->id], false))
+        ->click('@subtitle-item-movie-801')
+        ->assertSeeIn('@subtitle-capabilities-error', 'Could not read what this Bazarr supports')
+        ->assertScript('document.querySelector(\'[data-test="subtitle-track-0-sync"]\').disabled === true')
+        ->click('@subtitle-capabilities-retry')
+        ->assertMissing('@subtitle-capabilities-error')
+        ->click('@subtitle-track-0-sync')
+        ->click('@confirm-subtitle-operation')
+        ->assertSee('Subtitle operation added to the Action Queue.')
+        ->assertNoSmoke();
+
+    expect(ActionRequest::query()->where('type', 'bazarr_sync_subtitle')->count())->toBe(1);
+});
+
+test('a viewer inspects an item without asking for capabilities', function (): void {
+    $serviceConnection = bazarrSyncableLibrary(failedCapabilityReads: 0);
+    $this->actingAs(User::factory()->create());
+
+    // The capabilities endpoint is member-only: a viewer's request would be
+    // refused, retried, and end in an error that does not apply to them. Wait
+    // out both retries (1s + 2s) so that error would have appeared.
+    visit(route('bazarr.library', ['connection' => $serviceConnection->id], false))
+        ->click('@subtitle-item-movie-801')
+        ->assertSee('Example.Movie.2024.swe.srt')
+        ->assertMissing('@subtitle-track-0-sync')
+        ->wait(4)
+        ->assertMissing('@subtitle-capabilities-error')
+        ->assertNoSmoke();
 });
 
 test('track operations Bazarr cannot perform are disabled once capabilities load', function (): void {

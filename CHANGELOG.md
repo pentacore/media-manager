@@ -1,3 +1,10 @@
+## [1.31.1](https://github.com/pentacore/media-manager/compare/v1.31.0...v1.31.1) (2026-10-01)
+
+
+### Bug Fixes
+
+* **bazarr:** retry capability discovery instead of disabling every operation ([453430c](https://github.com/pentacore/media-manager/commit/453430c869fe1ffec79b3b15968aa856030adab7))
+
 # [1.31.0](https://github.com/pentacore/media-manager/compare/v1.30.1...v1.31.0) (2026-10-01)
 
 
