@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { useHttp } from '@inertiajs/vue3';
-import { Download, Search, Sparkles, Upload } from '@lucide/vue';
-import { computed, ref, watch } from 'vue';
+import { AlertCircle, Download, Search, Sparkles, Upload } from '@lucide/vue';
+import { computed, onBeforeUnmount, ref, watch } from 'vue';
 import { toast } from 'vue-sonner';
 import CapabilityController from '@/actions/App/Http/Controllers/Bazarr/CapabilityController';
 import OperationController from '@/actions/App/Http/Controllers/Bazarr/OperationController';
@@ -11,6 +11,7 @@ import CandidateTable from '@/components/bazarr/CandidateTable.vue';
 import OperationDialog from '@/components/bazarr/OperationDialog.vue';
 import SubtitleTrackList from '@/components/bazarr/SubtitleTrackList.vue';
 import type { SubtitleTrack } from '@/components/bazarr/SubtitleTrackList.vue';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import {
@@ -99,6 +100,11 @@ const inspectedItem = ref<SubtitleItemResource | null>(null);
 const candidates = ref<SubtitleCandidateResource[]>([]);
 const history = ref<SearchResponse['history']>([]);
 const capabilities = ref<Record<string, boolean> | null>(null);
+const capabilityLoadFailed = ref(false);
+// Bumped whenever the drawer resets, so a late response or pending retry from
+// the previous item is dropped instead of touching the new one.
+let capabilityGeneration = 0;
+let capabilityRetryTimer: ReturnType<typeof setTimeout> | null = null;
 const selectedOperation = ref<{
     operation: OperationName;
     track?: SubtitleTrack;
@@ -179,6 +185,9 @@ watch(
         candidates.value = [];
         history.value = [];
         capabilities.value = null;
+        capabilityLoadFailed.value = false;
+        cancelCapabilityRetry();
+        capabilityGeneration++;
         selectedOperation.value = null;
         uploadOpen.value = false;
         selectedUpload.value = null;
@@ -190,23 +199,72 @@ watch(
     },
 );
 
+onBeforeUnmount(cancelCapabilityRetry);
+
+const CAPABILITY_RETRY_DELAYS_MS = [1000, 2000];
+
 /**
  * Capabilities are discovered as soon as the drawer opens, independently of the
  * manual search: an operation stays disabled until its own flag is known to be
  * true, so a Bazarr version lacking a feature can never be handed work for it.
+ * A failed read (a 500 or a dropped connection) is retried twice before the
+ * drawer says so and offers a manual retry; otherwise every operation would
+ * stay disabled with no explanation. Only members can operate, and only they
+ * may read capabilities.
  */
-function loadCapabilities(): void {
-    if (!props.connectionId) {
+function loadCapabilities(attempt = 0): void {
+    if (!props.connectionId || !canOperate.value) {
         return;
     }
 
+    const generation = capabilityGeneration;
+    const giveUp = (): void => {
+        if (generation === capabilityGeneration) {
+            capabilityLoadFailed.value = true;
+        }
+    };
+    const retryOrGiveUp = (): void => {
+        const delay = CAPABILITY_RETRY_DELAYS_MS[attempt];
+
+        if (generation !== capabilityGeneration) {
+            return;
+        }
+
+        if (delay === undefined) {
+            giveUp();
+
+            return;
+        }
+
+        capabilityRetryTimer = setTimeout(
+            () => loadCapabilities(attempt + 1),
+            delay,
+        );
+    };
+
+    capabilityLoadFailed.value = false;
     capabilityHttp.connection = props.connectionId;
-    capabilityHttp.get(CapabilityController.url(), {
-        onSuccess: (response) => {
-            capabilities.value = response.capabilities;
-        },
-        onError: () => toast.error('Could not read Bazarr capabilities.'),
-    });
+    capabilityHttp
+        .get(CapabilityController.url(), {
+            onSuccess: (response) => {
+                if (generation === capabilityGeneration) {
+                    capabilities.value = response.capabilities;
+                }
+            },
+            // A 422 means the connection itself is invalid; retrying cannot help.
+            onError: giveUp,
+            onHttpException: retryOrGiveUp,
+            onNetworkError: retryOrGiveUp,
+        })
+        // The callbacks above handle every failure; the rejection is expected.
+        .catch(() => undefined);
+}
+
+function cancelCapabilityRetry(): void {
+    if (capabilityRetryTimer !== null) {
+        clearTimeout(capabilityRetryTimer);
+        capabilityRetryTimer = null;
+    }
 }
 
 function supports(capability: string): boolean {
@@ -399,6 +457,32 @@ const dialogDescription = computed(
                             · {{ currentItem.scope ?? 'movie' }}
                         </span>
                     </div>
+                    <Alert
+                        v-if="capabilityLoadFailed"
+                        variant="destructive"
+                        data-test="subtitle-capabilities-error"
+                    >
+                        <AlertCircle class="size-4" />
+                        <AlertTitle
+                            >Could not read what this Bazarr
+                            supports</AlertTitle
+                        >
+                        <AlertDescription class="space-y-2">
+                            <p>
+                                Subtitle operations stay disabled until Bazarr
+                                answers.
+                            </p>
+                            <Button
+                                size="sm"
+                                variant="outline"
+                                data-test="subtitle-capabilities-retry"
+                                :disabled="capabilityHttp.processing"
+                                @click="loadCapabilities()"
+                            >
+                                Retry
+                            </Button>
+                        </AlertDescription>
+                    </Alert>
                     <SubtitleTrackList
                         :tracks="currentTracks"
                         :capabilities="capabilities"
