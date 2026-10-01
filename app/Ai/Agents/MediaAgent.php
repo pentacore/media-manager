@@ -12,11 +12,13 @@ use App\Ai\ModelSelection;
 use App\Ai\OpenRouterRequestOptions;
 use App\Ai\Tools\Arr\AddMediaTool;
 use App\Ai\Tools\Arr\DeleteMediaTool;
+use App\Ai\Tools\Arr\GetMediaAddOptionsTool;
 use App\Ai\Tools\Arr\GetMediaTool;
 use App\Ai\Tools\Arr\MonitorMediaTool;
 use App\Ai\Tools\Arr\RemoveStuckDownloadChatTool;
 use App\Ai\Tools\Arr\ReplaceMediaFileTool;
 use App\Ai\Tools\Arr\ResolveManualImportChatTool;
+use App\Ai\Tools\Arr\SearchMediaReleasesTool;
 use App\Ai\Tools\Arr\SearchMediaTool;
 use App\Ai\Tools\Arr\SetMediaQualityProfileTool;
 use App\Ai\Tools\Bazarr\InspectSubtitleTool;
@@ -118,7 +120,7 @@ class MediaAgent implements Agent, Conversational, HasMiddleware, HasProviderOpt
         return <<<'PROMPT'
 You are MediaAgent, the assistant for a self-hosted media stack (Sonarr, Radarr, Emby, Seerr, Prowlarr, Whisparr).
 
-The media library tools (SearchMediaTool, GetMediaTool, AddMediaTool, DeleteMediaTool, MonitorMediaTool, SetMediaQualityProfileTool) take a `service` parameter: sonarr = TV series, radarr = movies, whisparr = adult content. If a tool fails because a service is not configured, say so plainly.
+The media library tools (SearchMediaTool, GetMediaTool, GetMediaAddOptionsTool, AddMediaTool, DeleteMediaTool, MonitorMediaTool, SetMediaQualityProfileTool, SearchMediaReleasesTool) take a `service` parameter: sonarr = TV series, radarr = movies, whisparr = adult content. If a tool fails because a service is not configured, say so plainly.
 
 **Answering questions:** use the read tools. For similarity / vibe-based library questions ("something like Dark but lighter", "cozy detective shows"), prefer SemanticLibrarySearchTool over keyword filters. It returns library items only; if it reports `available: false`, fall back to GetMediaTool/SearchMediaTool.
 
@@ -126,7 +128,7 @@ The media library tools (SearchMediaTool, GetMediaTool, AddMediaTool, DeleteMedi
 
 **Actions:**
 - SafeWrite (executes immediately, no approval queue): MarkAsWatchedTool / MarkAsUnwatchedTool.
-- Destructive (always queues an ActionRequest — auto-executes or pending approval per admin rules): the add/delete/monitor/quality-profile media tools, Seerr ApproveRequestTool / DeclineRequestTool / CleanupRequestTool, and LibraryScanTool. After calling one you get back `{queued: true, status: 'pending'|'approved', requires_approval: bool}`. Tell the user the outcome plainly: "I've queued a deletion of X — it's pending approval" or "…and it'll auto-execute."
+- Destructive (always queues an ActionRequest — auto-executes or pending approval per admin rules): the add/delete/monitor/quality-profile media tools, SearchMediaReleasesTool, Seerr ApproveRequestTool / DeclineRequestTool / CleanupRequestTool, and LibraryScanTool. After calling one you get back `{queued: true, status: 'pending'|'approved', requires_approval: bool}`. Tell the user the outcome plainly: "I've queued a deletion of X — it's pending approval" or "…and it'll auto-execute."
 
 **Stuck downloads (manual intervention required):**
 - Call InvestigateStuckDownload with the service and download (download_id if known, otherwise the title). It is read-only and runs the queue, history and stuck-import inspection for you. Summarise its rejection reasons and recommendation for the user in plain language.
@@ -188,9 +190,11 @@ PROMPT;
             // Media library (Sonarr/Radarr/Whisparr via `service` param)
             resolve(SearchMediaTool::class),
             resolve(GetMediaTool::class),
+            resolve(GetMediaAddOptionsTool::class),
             resolve(AddMediaTool::class),
             resolve(MonitorMediaTool::class),
             resolve(SetMediaQualityProfileTool::class),
+            resolve(SearchMediaReleasesTool::class),
             resolve(DeleteMediaTool::class),
             // Replacement — read-only inspection runs in a sub-agent
             resolve(MediaFileInspectorAgent::class),

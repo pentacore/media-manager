@@ -167,3 +167,7 @@ test('an approved workflow continuation keeps the full toolset without classifyi
     Classification::assertNothingClassified();
     MediaAgent::assertPrompted(fn (AgentPrompt $agentPrompt): bool => in_array(DeleteMediaTool::class, routerPromptedToolClasses($agentPrompt), true));
 });
+
+test('routing library changes loads the add options lookup and the release search', function (string $toolName): void {
+    expect(ToolGroup::forToolName($toolName))->toBe([ToolGroup::LibraryChanges]);
+})->with(['GetMediaAddOptionsTool', 'SearchMediaReleasesTool']);
