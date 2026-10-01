@@ -989,3 +989,21 @@ test('an invalid new-model candidate is still rejected for an update-only provid
 
     expect($writeOutcome)->toBe(WriteOutcome::Rejected);
 });
+
+test('an explicit-create scope creates an openrouter model the auto-create list excludes', function (): void {
+    resolve(AiSettings::class)->setAutoCreatePricingProviders(['openai']);
+
+    $writeOutcome = priceWriter()->write(
+        priceCandidate('openrouter', 'anthropic/claude-opus-5.5', ['input_per_mtok' => '4', 'output_per_mtok' => '20'], ['source' => PricingSource::OpenRouter]),
+        RefreshScope::forExplicitCreates('openrouter', ['anthropic/claude-opus-5.5']),
+        PricingSource::OpenRouter,
+    );
+
+    expect($writeOutcome)->toBe(WriteOutcome::Created);
+
+    $aiModelPrice = AiModelPrice::query()->where('provider', 'openrouter')->where('model', 'anthropic/claude-opus-5.5')->sole();
+
+    expect($aiModelPrice->pricing_source)->toBe(PricingSource::OpenRouter)
+        ->and($aiModelPrice->is_price_locked)->toBeFalse()
+        ->and($aiModelPrice->input_per_mtok)->toBe('4.0000');
+});

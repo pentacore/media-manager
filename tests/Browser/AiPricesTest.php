@@ -7,6 +7,8 @@ use App\Jobs\RefreshAiPricesJob;
 use App\Models\AiModelPrice;
 use App\Models\User;
 use Illuminate\Support\Facades\Bus;
+use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Http;
 
 /*
  * Functional browser coverage for the admin AI prices screen
@@ -409,3 +411,194 @@ test('structured pricing sources render their labels', function (PricingSource $
     'xai api' => [PricingSource::XaiApi, 'vendor/xai-model', 'xAI API'],
     'feed consensus' => [PricingSource::FeedConsensus, 'vendor/consensus-model', 'Models.dev + LiteLLM'],
 ]);
+
+function catalogPickerBrowserFeeds(): void
+{
+    foreach (['models_dev', 'litellm', 'xai'] as $source) {
+        config()->set(sprintf('mediamanager.ai.pricing.%s.enabled', $source), false);
+    }
+
+    config()->set('mediamanager.ai.pricing.openrouter.enabled', true);
+    config()->set('mediamanager.ai.pricing.openrouter.retries', 0);
+
+    Http::fake([
+        'openrouter.ai/*' => Http::response((string) file_get_contents(base_path('tests/Fixtures/OpenRouter/models.json'))),
+    ]);
+}
+
+test('admin bulk-adds openrouter models from the catalog', function (): void {
+    catalogPickerBrowserFeeds();
+
+    $webpage = visit('/admin/ai-prices')
+        ->assertNoSmoke()
+        ->click('[data-add-from-catalog]')
+        ->assertVisible('[data-catalog-row="anthropic/claude-opus-5.5"]')
+        ->fill('[data-catalog-search]', 'Claude')
+        ->assertDontSee('openai/gpt-6-luna')
+        ->click('[data-catalog-row="anthropic/claude-opus-5.5"]')
+        ->click('[data-catalog-row="anthropic/claude-haiku-6"]')
+        ->assertSeeIn('[data-add-from-catalog-submit]', 'Add 2 models')
+        ->click('[data-add-from-catalog-submit]')
+        ->assertSee('Added 2 models.')
+        ->assertSeeIn('[data-prices-table]', 'anthropic/claude-opus-5.5');
+
+    expect(AiModelPrice::query()->where('provider', 'openrouter')->pluck('pricing_source')->all())
+        ->toBe([PricingSource::OpenRouter, PricingSource::OpenRouter]);
+
+    $webpage->click('[data-add-from-catalog]')
+        ->assertVisible('[data-catalog-row="openai/gpt-6-luna"]')
+        ->assertMissing('[data-catalog-row="anthropic/claude-opus-5.5"]')
+        ->assertNoSmoke();
+});
+
+test('the bulk add dialog stays open with its picks when the catalog is down on submit', function (): void {
+    foreach (['models_dev', 'litellm', 'xai'] as $source) {
+        config()->set(sprintf('mediamanager.ai.pricing.%s.enabled', $source), false);
+    }
+
+    config()->set('mediamanager.ai.pricing.openrouter.enabled', true);
+    config()->set('mediamanager.ai.pricing.openrouter.retries', 0);
+
+    // Not catalogPickerBrowserFeeds(): the first Http::fake() registered for a
+    // host wins, so the fail-after-first order must come from this one
+    // sequence. The dialog's catalog GET gets the feed, and every fetch after
+    // it (the submit's re-fetch) fails.
+    Http::fake([
+        'openrouter.ai/*' => Http::sequence()
+            ->pushFile(base_path('tests/Fixtures/OpenRouter/models.json'))
+            ->whenEmpty(Http::response('down', 503)),
+    ]);
+
+    $webpage = visit('/admin/ai-prices')
+        ->assertNoSmoke()
+        ->click('[data-add-from-catalog]')
+        ->click('[data-catalog-row="anthropic/claude-opus-5.5"]');
+
+    // Drop the slice the GET cached so the submit genuinely re-fetches.
+    Cache::flush();
+
+    $webpage->click('[data-add-from-catalog-submit]')
+        ->assertSee('Could not load the pricing catalog')
+        ->assertVisible('[data-add-from-catalog-submit]')
+        ->assertSeeIn('[data-add-from-catalog-submit]', 'Add 1 model')
+        ->assertAttribute('[data-catalog-row="anthropic/claude-opus-5.5"]', 'aria-pressed', 'true')
+        ->assertNoSmoke();
+
+    expect(AiModelPrice::query()->where('provider', 'openrouter')->exists())->toBeFalse();
+});
+
+test('picking a catalog model fills the add form and saves a synced row', function (): void {
+    catalogPickerBrowserFeeds();
+
+    visit('/admin/ai-prices')
+        ->assertNoSmoke()
+        ->click('[data-create-price]')
+        ->fill('provider', 'openrouter')
+        ->click('[data-catalog-pick-toggle]')
+        ->click('[data-catalog-row="anthropic/claude-opus-5.5"]')
+        ->assertValue('model', 'anthropic/claude-opus-5.5')
+        ->assertValue('input_per_mtok', '4')
+        ->assertValue('output_per_mtok', '20')
+        ->assertSee('On — kept in sync online')
+        ->click('[data-create-price-submit]')
+        ->assertSee('Model price added.')
+        ->assertSeeIn('[data-prices-table]', 'anthropic/claude-opus-5.5')
+        ->assertSeeIn('[data-prices-table] [data-price-source]', 'OpenRouter');
+
+    $aiModelPrice = AiModelPrice::query()->where('model', 'anthropic/claude-opus-5.5')->sole();
+
+    expect($aiModelPrice->pricing_source)->toBe(PricingSource::OpenRouter)
+        ->and($aiModelPrice->is_price_locked)->toBeFalse();
+});
+
+test('editing a picked price saves the row as manual and locked', function (): void {
+    catalogPickerBrowserFeeds();
+
+    visit('/admin/ai-prices')
+        ->assertNoSmoke()
+        ->click('[data-create-price]')
+        ->fill('provider', 'openrouter')
+        ->click('[data-catalog-pick-toggle]')
+        ->click('[data-catalog-row="anthropic/claude-opus-5.5"]')
+        ->fill('input_per_mtok', '5')
+        ->assertSee('Off — locked to manual price')
+        ->click('[data-create-price-submit]')
+        ->assertSee('Model price added.');
+
+    $aiModelPrice = AiModelPrice::query()->where('model', 'anthropic/claude-opus-5.5')->sole();
+
+    expect($aiModelPrice->pricing_source)->toBe(PricingSource::Manual)
+        ->and($aiModelPrice->is_price_locked)->toBeTrue();
+});
+
+test('a free-text provider outside the catalog keeps the form fully manual', function (): void {
+    visit('/admin/ai-prices')
+        ->assertNoSmoke()
+        ->click('[data-create-price]')
+        ->fill('provider', 'my-local-llm')
+        ->assertMissing('[data-catalog-pick-toggle]')
+        ->fill('model', 'llama-local')
+        ->fill('input_per_mtok', '0')
+        ->fill('output_per_mtok', '0')
+        ->fill('cache_read_per_mtok', '0')
+        ->fill('cache_write_per_mtok', '0')
+        ->fill('reasoning_per_mtok', '0')
+        ->click('[data-create-price-submit]')
+        ->assertSee('Model price added.');
+
+    expect(AiModelPrice::query()->where('model', 'llama-local')->sole()->pricing_source)->toBe(PricingSource::Manual);
+});
+
+test('the add form picker says when no enabled feed covers the provider', function (): void {
+    catalogPickerBrowserFeeds();
+
+    visit('/admin/ai-prices')
+        ->assertNoSmoke()
+        ->click('[data-create-price]')
+        ->fill('provider', 'anthropic')
+        ->click('[data-catalog-pick-toggle]')
+        ->assertSeeIn('[data-catalog-uncovered]', 'No enabled pricing feed covers this provider.')
+        ->assertSeeIn('[data-catalog-uncovered-settings-link]', 'AI settings')
+        ->assertVisible('[data-catalog-uncovered-settings-link]')
+        ->assertMissing('[data-catalog-empty]');
+});
+
+test('a mixed-case provider still offers the picker and saves the canonical provider', function (): void {
+    catalogPickerBrowserFeeds();
+
+    visit('/admin/ai-prices')
+        ->assertNoSmoke()
+        ->click('[data-create-price]')
+        ->fill('provider', ' OpenRouter ')
+        ->click('[data-catalog-pick-toggle]')
+        ->click('[data-catalog-row="anthropic/claude-opus-5.5"]')
+        ->assertValue('provider', 'openrouter')
+        ->click('[data-create-price-submit]')
+        ->assertSee('Model price added.');
+
+    $aiModelPrice = AiModelPrice::query()->where('model', 'anthropic/claude-opus-5.5')->sole();
+
+    expect($aiModelPrice->provider)->toBe('openrouter')
+        ->and($aiModelPrice->pricing_source)->toBe(PricingSource::OpenRouter);
+});
+
+test('closing the add form clears what was entered', function (): void {
+    catalogPickerBrowserFeeds();
+
+    visit('/admin/ai-prices')
+        ->assertNoSmoke()
+        ->click('[data-create-price]')
+        ->fill('provider', 'openrouter')
+        ->click('[data-catalog-pick-toggle]')
+        ->click('[data-catalog-row="anthropic/claude-opus-5.5"]')
+        ->assertValue('model', 'anthropic/claude-opus-5.5')
+        ->keys('#model', 'Escape')
+        ->assertMissing('[data-create-price-submit]')
+        ->click('[data-create-price]')
+        ->assertValue('provider', '')
+        ->assertValue('model', '')
+        ->assertValue('input_per_mtok', '')
+        ->assertSee('Off — locked to manual price');
+
+    expect(AiModelPrice::query()->exists())->toBeFalse();
+});
