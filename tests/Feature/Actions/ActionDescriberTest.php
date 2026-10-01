@@ -458,13 +458,13 @@ test('a Whisparr item is named from the cached library list without a by-id look
         ['id' => 12, 'title' => 'Borealis Scene', 'year' => 2023],
     ])]);
 
-    $describer = resolve(ActionDescriber::class);
-    $first = $describer->describe('whisparr_monitor_item', ['whisparr_item_id' => 11, 'monitored' => true, 'service_connection_id' => $whisparr->id]);
-    $second = $describer->describe('whisparr_search', ['whisparr_item_id' => 12, 'service_connection_id' => $whisparr->id]);
+    $actionDescriber = resolve(ActionDescriber::class);
+    $actionDescription = $actionDescriber->describe('whisparr_monitor_item', ['whisparr_item_id' => 11, 'monitored' => true, 'service_connection_id' => $whisparr->id]);
 
-    expect($first->title)->toContain('Aurora Scene (2024)')
-        ->and($first->verified)->toBeTrue()
-        ->and($second->title)->toBe('Search for item "Borealis Scene (2023)"');
+    expect($actionDescription->title)->toContain('Aurora Scene (2024)')
+        ->and($actionDescription->verified)->toBeTrue()
+        ->and($actionDescriber->describe('whisparr_search', ['whisparr_item_id' => 12, 'service_connection_id' => $whisparr->id])->title)
+        ->toBe('Search for item "Borealis Scene (2023)"');
 
     // One list read serves both items; no per-item lookup is sent.
     Http::assertSentCount(1);

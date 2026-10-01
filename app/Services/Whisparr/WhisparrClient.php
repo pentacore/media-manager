@@ -178,9 +178,7 @@ class WhisparrClient extends ArrClient
     {
         $body = $response->json();
 
-        if (! is_array($body)) {
-            throw new WhisparrUnexpectedResponse('Whisparr answered with a body that is not JSON data.');
-        }
+        throw_unless(is_array($body), WhisparrUnexpectedResponse::class, 'Whisparr answered with a body that is not JSON data.');
 
         return $body;
     }
