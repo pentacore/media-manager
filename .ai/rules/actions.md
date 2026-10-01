@@ -10,3 +10,6 @@ ActionOrchestrator::dispatch()/dispatchFromAgent() require an ActionDescription.
 
 ## Conditional ActionRequest transitions log themselves
 Query-builder status updates on ActionRequest (the Approved→Executing claim in ExecuteActionRequest, actions:reconcile-stuck) bypass ActionRequestObserver. After such an update succeeds, refresh the model and call ActionRequestActivityLogger::statusChanged() so the audit trail is complete. resolvePinned() aborts on a deactivated pinned connection of the requested type.
+
+## Bulk endpoints reuse the single-item path
+Every `POST …/bulk` endpoint validates `ids` (1–100, distinct) and loops them through `BulkRunner::run()`, whose closure calls the SAME service method the single button calls (`LibraryActionRequester`, `ActionRequestReviewer`, `SabnzbdSlotOperator`, `QueueItemRemover`). Never add a bulk-only shortcut around permissions, pinning, approval rules, activity rows or audit rows — put new single-item behaviour in the shared service so bulk inherits it. Failure titles come from server data, never from the request. Also applies to app/Http/Controllers/**.
