@@ -4,15 +4,11 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers\Media;
 
-use App\Enums\ActionRequestStatus;
 use App\Enums\ServiceType;
 use App\Http\Requests\Media\StoreMovieRequest;
-use App\Models\ActionRequest;
 use App\Models\ServiceConnection;
-use App\Services\Actions\ActionDescriber;
-use App\Services\Actions\ActionOrchestrator;
-use App\Services\Actions\UndescribableAction;
-use App\Services\Audit\AuditLogger;
+use App\Services\Actions\ManualActionOutcome;
+use App\Services\Library\LibraryActionRequester;
 use App\Services\Radarr\RadarrClient;
 use App\Support\Abilities;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
@@ -126,61 +122,26 @@ class MovieController extends BaseArrController
         return to_route('media.movies.index');
     }
 
-    public function destroy(int $id, Request $request, ActionOrchestrator $actionOrchestrator, ActionDescriber $actionDescriber, AuditLogger $auditLogger): RedirectResponse
+    public function destroy(int $id, Request $request, LibraryActionRequester $libraryActionRequester): RedirectResponse
     {
         $connection = $this->resolveConnection();
         if ($connection instanceof RedirectResponse) {
             return $connection;
         }
 
-        $payload = [
-            'radarr_movie_id' => $id,
-            'delete_files' => $request->boolean('delete_files'),
-            'service_connection_id' => $connection->id,
-        ];
-
-        try {
-            $description = $actionDescriber
-                ->describe('delete_movie', $payload)
-                ->because(sprintf('Requested from the movie page by %s.', $request->user()->name));
-        } catch (UndescribableAction) {
-            Inertia::flash('toast', ['type' => 'error', 'message' => __('Failed to delete movie.')]);
-
-            return back();
-        }
-
-        $actionRequest = $actionOrchestrator->dispatch(
-            type: 'delete_movie',
-            sourceService: 'radarr',
-            targetService: 'radarr',
-            payload: $payload,
-            description: $description,
-            origin: 'manual',
+        $manualActionOutcome = $libraryActionRequester->delete(
+            $connection,
+            $id,
+            $request->boolean('delete_files'),
+            sprintf('Requested from the movie page by %s.', $request->user()->name),
         );
 
-        if (! $actionRequest instanceof ActionRequest) {
-            Inertia::flash('toast', ['type' => 'error', 'message' => __('Deleting movies is disabled in Action Rules.')]);
-
-            return back();
-        }
-
-        // A person asked for this delete (the agent never uses this page), so it
-        // is audited on top of the action request's own activity rows.
-        $auditLogger->record('movie.delete_requested', $actionRequest, $description->title, context: [
-            'radarr_movie_id' => $id,
-            'delete_files' => $payload['delete_files'],
-            'service_connection_id' => $connection->id,
-        ]);
-
-        if ($actionRequest->status === ActionRequestStatus::Pending) {
-            Inertia::flash('toast', ['type' => 'info', 'message' => __('Deletion queued for approval in the Action Queue.')]);
-
-            return back();
-        }
-
-        Inertia::flash('toast', ['type' => 'success', 'message' => __('Movie deletion queued.')]);
-
-        return to_route('media.movies.index');
+        return match ($manualActionOutcome->state) {
+            ManualActionOutcome::STARTED => $this->flashAnd('success', __('Movie deletion queued.'), to_route('media.movies.index')),
+            ManualActionOutcome::QUEUED => $this->flashAnd('info', __('Deletion queued for approval in the Action Queue.'), back()),
+            ManualActionOutcome::DISABLED => $this->flashAnd('error', __('Deleting movies is disabled in Action Rules.'), back()),
+            default => $this->flashAnd('error', __('Failed to delete movie.'), back()),
+        };
     }
 
     protected function serviceType(): ServiceType

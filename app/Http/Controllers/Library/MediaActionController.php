@@ -17,6 +17,7 @@ use App\Models\ServiceConnection;
 use App\Services\Actions\ManualActionDispatcher;
 use App\Services\Actions\ManualActionOutcome;
 use App\Services\Arr\ReleaseSelectionCache;
+use App\Services\Library\LibraryActionRequester;
 use App\Services\MediaReplacement\PendingReplacementGuard;
 use App\Services\Radarr\RadarrClient;
 use App\Services\Sonarr\SonarrClient;
@@ -34,22 +35,14 @@ use Inertia\Inertia;
  */
 class MediaActionController extends Controller
 {
-    public function monitor(MonitorMediaRequest $monitorMediaRequest, ManualActionDispatcher $manualActionDispatcher, PendingReplacementGuard $pendingReplacementGuard): RedirectResponse
+    public function monitor(MonitorMediaRequest $monitorMediaRequest, LibraryActionRequester $libraryActionRequester): RedirectResponse
     {
         $validated = $monitorMediaRequest->validated();
-        $connection = $monitorMediaRequest->connection();
-        $serviceType = $monitorMediaRequest->serviceType();
-        $itemId = (int) $validated['item_id'];
-        $isSonarr = $serviceType === ServiceType::Sonarr;
 
-        if ($this->replacementInFlight($pendingReplacementGuard, $connection, $isSonarr ? $itemId : null, $isSonarr ? null : $itemId)) {
-            return $this->refuseDuringReplacement();
-        }
-
-        return $this->answer($manualActionDispatcher->dispatch(
-            $isSonarr ? 'monitor_series' : 'monitor_movie',
-            $serviceType,
-            [$isSonarr ? 'series_id' : 'movie_id' => $itemId, 'monitored' => (bool) $validated['monitored'], 'service_connection_id' => $connection->id],
+        return $this->answer($libraryActionRequester->monitor(
+            $monitorMediaRequest->connection(),
+            (int) $validated['item_id'],
+            (bool) $validated['monitored'],
             $this->because($monitorMediaRequest),
         ), __('Monitoring updated.'));
     }
@@ -81,30 +74,43 @@ class MediaActionController extends Controller
         ), __('Monitoring updated.'));
     }
 
-    public function qualityProfile(SetQualityProfileRequest $setQualityProfileRequest, ManualActionDispatcher $manualActionDispatcher): RedirectResponse
+    public function qualityProfile(SetQualityProfileRequest $setQualityProfileRequest, LibraryActionRequester $libraryActionRequester): RedirectResponse
     {
         $validated = $setQualityProfileRequest->validated();
-        $connection = $setQualityProfileRequest->connection();
-        $serviceType = $setQualityProfileRequest->serviceType();
-        $isSonarr = $serviceType === ServiceType::Sonarr;
 
-        return $this->answer($manualActionDispatcher->dispatch(
-            $isSonarr ? 'set_series_quality_profile' : 'set_movie_quality_profile',
-            $serviceType,
-            [
-                $isSonarr ? 'series_id' : 'movie_id' => (int) $validated['item_id'],
-                'quality_profile_id' => (int) $validated['quality_profile_id'],
-                'service_connection_id' => $connection->id,
-            ],
+        return $this->answer($libraryActionRequester->setQualityProfile(
+            $setQualityProfileRequest->connection(),
+            (int) $validated['item_id'],
+            (int) $validated['quality_profile_id'],
             $this->because($setQualityProfileRequest),
         ), __('Quality profile updated.'));
     }
 
-    public function search(SearchMediaRequest $searchMediaRequest, ManualActionDispatcher $manualActionDispatcher): RedirectResponse
+    public function search(SearchMediaRequest $searchMediaRequest, ManualActionDispatcher $manualActionDispatcher, LibraryActionRequester $libraryActionRequester): RedirectResponse
     {
         $validated = $searchMediaRequest->validated();
         $connection = $searchMediaRequest->connection();
         $mediaSearchCommand = MediaSearchCommand::from((string) $validated['command']);
+
+        // The whole-series / whole-movie "Search" button on the title page is
+        // the single-title action: route it through LibraryActionRequester,
+        // same as monitor() and qualityProfile(), so the title page and the
+        // bulk endpoints share one code path. Season, episode and the
+        // missing/cutoff-unmet sweeps are not single-title and keep the
+        // generic search_media dispatch below.
+        $singleTitleItemId = match (true) {
+            $mediaSearchCommand === MediaSearchCommand::SeriesSearch => (int) $validated['series_id'],
+            $mediaSearchCommand === MediaSearchCommand::MoviesSearch && count($validated['movie_ids'] ?? []) === 1 => (int) $validated['movie_ids'][0],
+            default => null,
+        };
+
+        if ($singleTitleItemId !== null) {
+            return $this->answer($libraryActionRequester->search(
+                $connection,
+                $singleTitleItemId,
+                $this->because($searchMediaRequest),
+            ), __('Search started.'));
+        }
 
         $payload = ['service' => $mediaSearchCommand->service()->value, 'command' => $mediaSearchCommand->value];
 

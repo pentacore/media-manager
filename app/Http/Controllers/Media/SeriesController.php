@@ -4,15 +4,11 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers\Media;
 
-use App\Enums\ActionRequestStatus;
 use App\Enums\ServiceType;
 use App\Http\Requests\Media\StoreSeriesRequest;
-use App\Models\ActionRequest;
 use App\Models\ServiceConnection;
-use App\Services\Actions\ActionDescriber;
-use App\Services\Actions\ActionOrchestrator;
-use App\Services\Actions\UndescribableAction;
-use App\Services\Audit\AuditLogger;
+use App\Services\Actions\ManualActionOutcome;
+use App\Services\Library\LibraryActionRequester;
 use App\Services\Sonarr\SonarrClient;
 use App\Support\Abilities;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
@@ -136,61 +132,26 @@ class SeriesController extends BaseArrController
         return to_route('media.series.index');
     }
 
-    public function destroy(int $id, Request $request, ActionOrchestrator $actionOrchestrator, ActionDescriber $actionDescriber, AuditLogger $auditLogger): RedirectResponse
+    public function destroy(int $id, Request $request, LibraryActionRequester $libraryActionRequester): RedirectResponse
     {
         $connection = $this->resolveConnection();
         if ($connection instanceof RedirectResponse) {
             return $connection;
         }
 
-        $payload = [
-            'sonarr_series_id' => $id,
-            'delete_files' => $request->boolean('delete_files'),
-            'service_connection_id' => $connection->id,
-        ];
-
-        try {
-            $description = $actionDescriber
-                ->describe('delete_series', $payload)
-                ->because(sprintf('Requested from the series page by %s.', $request->user()->name));
-        } catch (UndescribableAction) {
-            Inertia::flash('toast', ['type' => 'error', 'message' => __('Failed to delete series.')]);
-
-            return back();
-        }
-
-        $actionRequest = $actionOrchestrator->dispatch(
-            type: 'delete_series',
-            sourceService: 'sonarr',
-            targetService: 'sonarr',
-            payload: $payload,
-            description: $description,
-            origin: 'manual',
+        $manualActionOutcome = $libraryActionRequester->delete(
+            $connection,
+            $id,
+            $request->boolean('delete_files'),
+            sprintf('Requested from the series page by %s.', $request->user()->name),
         );
 
-        if (! $actionRequest instanceof ActionRequest) {
-            Inertia::flash('toast', ['type' => 'error', 'message' => __('Deleting series is disabled in Action Rules.')]);
-
-            return back();
-        }
-
-        // A person asked for this delete (the agent never uses this page), so it
-        // is audited on top of the action request's own activity rows.
-        $auditLogger->record('series.delete_requested', $actionRequest, $description->title, context: [
-            'sonarr_series_id' => $id,
-            'delete_files' => $payload['delete_files'],
-            'service_connection_id' => $connection->id,
-        ]);
-
-        if ($actionRequest->status === ActionRequestStatus::Pending) {
-            Inertia::flash('toast', ['type' => 'info', 'message' => __('Deletion queued for approval in the Action Queue.')]);
-
-            return back();
-        }
-
-        Inertia::flash('toast', ['type' => 'success', 'message' => __('Series deletion queued.')]);
-
-        return to_route('media.series.index');
+        return match ($manualActionOutcome->state) {
+            ManualActionOutcome::STARTED => $this->flashAnd('success', __('Series deletion queued.'), to_route('media.series.index')),
+            ManualActionOutcome::QUEUED => $this->flashAnd('info', __('Deletion queued for approval in the Action Queue.'), back()),
+            ManualActionOutcome::DISABLED => $this->flashAnd('error', __('Deleting series is disabled in Action Rules.'), back()),
+            default => $this->flashAnd('error', __('Failed to delete series.'), back()),
+        };
     }
 
     protected function serviceType(): ServiceType
