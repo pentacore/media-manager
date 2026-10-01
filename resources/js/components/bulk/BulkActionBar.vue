@@ -52,6 +52,7 @@ const disabled = computed(
         </span>
         <div
             class="flex flex-wrap items-center gap-2"
+            role="group"
             :aria-describedby="overLimit ? overLimitId : undefined"
             data-bulk-actions
         >

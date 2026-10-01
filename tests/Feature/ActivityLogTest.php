@@ -146,6 +146,31 @@ test('a multibyte description is cut on character boundaries', function (): void
         ->and(mb_check_encoding($stored, 'UTF-8'))->toBeTrue();
 });
 
+test('a wide-character description keeps the full column width', function (): void {
+    $activityLog = ActivityLog::create([
+        'category' => 'activity',
+        'action' => 'test.long_description',
+        'description' => str_repeat('漢', 600),
+    ]);
+
+    $stored = (string) ActivityLog::query()->whereKey($activityLog->id)->value('description');
+
+    expect(mb_strlen($stored))->toBe(255)
+        ->and($stored)->toEndWith('...');
+});
+
+test('a description exactly the column width is stored unchanged', function (): void {
+    $description = str_repeat('a', 255);
+
+    $activityLog = ActivityLog::create([
+        'category' => 'activity',
+        'action' => 'test.exact_description',
+        'description' => $description,
+    ]);
+
+    expect($activityLog->fresh()->description)->toBe($description);
+});
+
 test('a short description is stored unchanged', function (): void {
     $activityLog = ActivityLog::create([
         'category' => 'activity',

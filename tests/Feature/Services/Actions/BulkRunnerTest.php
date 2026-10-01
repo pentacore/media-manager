@@ -94,8 +94,9 @@ test('a repeated id is refused before anything runs', function (array $ids): voi
     'an integer and its numeric string' => [[7, '7']],
 ]);
 
-test('once the time budget is spent the remaining ids fail without being attempted', function (): void {
+test('once the time budget is spent the remaining ids fail without being attempted or looked up', function (): void {
     $attempted = [];
+    $lookedUp = [];
 
     $bulkSummary = new BulkRunner(budgetSeconds: 100)->run([1, 2, 3, 4], function (int $id) use (&$attempted): BulkItemOutcome {
         $attempted[] = $id;
@@ -103,13 +104,18 @@ test('once the time budget is spent the remaining ids fail without being attempt
         $this->travel(60)->seconds();
 
         return BulkItemOutcome::started();
-    }, fn (int $id): string => sprintf('Title %d', $id));
+    }, function (int $id) use (&$lookedUp): string {
+        $lookedUp[] = $id;
+
+        return sprintf('Title %d', $id);
+    });
 
     expect($attempted)->toBe([1, 2])
+        ->and($lookedUp)->toBe([])
         ->and($bulkSummary->started)->toBe(2)
         ->and($bulkSummary->failed)->toBe([
-            ['id' => 3, 'title' => 'Title 3', 'reason' => 'Not attempted — the batch ran out of time.'],
-            ['id' => 4, 'title' => 'Title 4', 'reason' => 'Not attempted — the batch ran out of time.'],
+            ['id' => 3, 'title' => '#3', 'reason' => 'Not attempted — the batch ran out of time.'],
+            ['id' => 4, 'title' => '#4', 'reason' => 'Not attempted — the batch ran out of time.'],
         ]);
 });
 

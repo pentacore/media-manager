@@ -197,7 +197,7 @@ test('two consecutive server errors trip the outage short-circuit', function ():
     Http::assertNotSent(fn (Request $request): bool => (sabnzbdQuery($request)['value'] ?? null) === 'SABnzbd_nzo_ccc');
 });
 
-test('a batch that runs out of time names the slots it never attempted', function (): void {
+test('a batch that runs out of time names the slots it never attempted without reading the queue again', function (): void {
     $sent = [];
 
     Http::fake(['sabnzbd.local:8080/api*' => function (Request $request) use (&$sent) {
@@ -221,10 +221,11 @@ test('a batch that runs out of time names the slots it never attempted', functio
         ->assertOk()
         ->assertJsonPath('started', 2)
         ->assertJsonPath('failed', [
-            ['id' => 'SABnzbd_nzo_ccc', 'title' => 'Movie.2021.mkv', 'reason' => 'Not attempted — the batch ran out of time.'],
+            ['id' => 'SABnzbd_nzo_ccc', 'title' => 'SABnzbd_nzo_ccc', 'reason' => 'Not attempted — the batch ran out of time.'],
         ]);
 
     expect($sent)->toBe(['SABnzbd_nzo_aaa', 'SABnzbd_nzo_bbb']);
+    Http::assertNotSent(fn (Request $request): bool => (sabnzbdQuery($request)['mode'] ?? null) === 'queue' && ! isset(sabnzbdQuery($request)['name']));
 });
 
 test('one unreachable slot fails with a clean reason and the others still run', function (): void {

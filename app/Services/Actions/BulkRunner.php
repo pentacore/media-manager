@@ -57,7 +57,10 @@ final readonly class BulkRunner
                 : $this->attempt($action, $id);
 
             if ($bulkItemOutcome->state === BulkItemOutcome::FAILED) {
-                $failed[] = ['id' => $id, 'title' => $this->title($titleFor, $id), 'reason' => (string) $bulkItemOutcome->reason];
+                // Past the deadline even the title lookup (a live upstream
+                // read on some surfaces) is skipped, so the budget holds.
+                $title = $this->outOfTime($deadline) ? $this->fallbackTitle($id) : $this->title($titleFor, $id);
+                $failed[] = ['id' => $id, 'title' => $title, 'reason' => (string) $bulkItemOutcome->reason];
 
                 continue;
             }
@@ -116,7 +119,12 @@ final readonly class BulkRunner
         } catch (Throwable $throwable) {
             report($throwable);
 
-            return is_int($id) ? sprintf('#%d', $id) : $id;
+            return $this->fallbackTitle($id);
         }
+    }
+
+    private function fallbackTitle(int|string $id): string
+    {
+        return is_int($id) ? sprintf('#%d', $id) : $id;
     }
 }

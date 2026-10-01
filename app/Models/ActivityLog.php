@@ -18,7 +18,6 @@ use Illuminate\Database\Eloquent\MassPrunable;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\MorphTo;
-use Illuminate\Support\Str;
 use Override;
 use Pentacore\Typefinder\Attributes\TypefinderOverrides;
 
@@ -85,14 +84,15 @@ class ActivityLog extends Model
      * `description` is varchar(255). Every writer (controllers, jobs,
      * webhook handlers, the ActionRequest logger, AuditLogger) goes through
      * this, so a long title or reason is cut here instead of failing the
-     * insert. Str::limit measures display width, never less than one per
-     * character, so 252 plus the ellipsis always fits.
+     * insert. Postgres counts varchar length in characters, so the cut is
+     * by character (mb_substr), not by display width: a CJK or emoji
+     * description keeps its full 255 characters.
      *
      * @return Attribute<string, string|null>
      */
     protected function description(): Attribute
     {
-        return Attribute::make(set: static fn (?string $value): ?string => $value === null ? null : Str::limit($value, 252));
+        return Attribute::make(set: static fn (?string $value): ?string => $value === null || mb_strlen($value) <= 255 ? $value : mb_substr($value, 0, 252).'...');
     }
 
     /**
