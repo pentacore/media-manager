@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use App\Http\Requests\Sabnzbd\BulkSabnzbdSlotsRequest;
 use App\Models\ActivityLog;
 use App\Models\ServiceConnection;
 use App\Models\User;
@@ -10,6 +11,7 @@ use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\Request;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Sleep;
 
 beforeEach(function (): void {
@@ -165,14 +167,64 @@ test('an outage short-circuits the rest of the batch after the first unreachable
         ->postJson(route('sabnzbd.queue.bulk'), ['ids' => ['SABnzbd_nzo_aaa', 'SABnzbd_nzo_bbb', 'SABnzbd_nzo_ccc'], 'action' => 'pause'])
         ->assertJsonPath('started', 0)
         ->assertJsonPath('failed', [
-            ['id' => 'SABnzbd_nzo_aaa', 'title' => 'Show.S01E01.mkv', 'reason' => 'SABnzbd is unreachable right now.'],
-            ['id' => 'SABnzbd_nzo_bbb', 'title' => 'Show.S01E02.mkv', 'reason' => 'SABnzbd is unreachable right now.'],
-            ['id' => 'SABnzbd_nzo_ccc', 'title' => 'Movie.2021.mkv', 'reason' => 'SABnzbd is unreachable right now.'],
+            ['id' => 'SABnzbd_nzo_aaa', 'title' => 'SABnzbd_nzo_aaa', 'reason' => 'SABnzbd is unreachable right now.'],
+            ['id' => 'SABnzbd_nzo_bbb', 'title' => 'SABnzbd_nzo_bbb', 'reason' => 'SABnzbd is unreachable right now.'],
+            ['id' => 'SABnzbd_nzo_ccc', 'title' => 'SABnzbd_nzo_ccc', 'reason' => 'SABnzbd is unreachable right now.'],
         ]);
 
     // Only the first id's pause command (and its internal HTTP-client
     // retries) reaches SABnzbd; the rest are failed locally.
     expect($slotAttempts)->toBe(3);
+
+    // The failure titles never go back to the unreachable host for the queue.
+    Http::assertNotSent(fn (Request $request): bool => (sabnzbdQuery($request)['mode'] ?? null) === 'queue'
+        && ! isset(sabnzbdQuery($request)['name']));
+});
+
+test('two consecutive server errors trip the outage short-circuit', function (): void {
+    Sleep::fake();
+    fakeSabnzbdBulk(failingIds: ['SABnzbd_nzo_aaa', 'SABnzbd_nzo_bbb']);
+
+    $this->actingAs($this->admin)
+        ->postJson(route('sabnzbd.queue.bulk'), ['ids' => ['SABnzbd_nzo_aaa', 'SABnzbd_nzo_bbb', 'SABnzbd_nzo_ccc'], 'action' => 'pause'])
+        ->assertJsonPath('started', 0)
+        ->assertJsonPath('failed', [
+            ['id' => 'SABnzbd_nzo_aaa', 'title' => 'Show.S01E01.mkv', 'reason' => 'SABnzbd is unreachable right now.'],
+            ['id' => 'SABnzbd_nzo_bbb', 'title' => 'Show.S01E02.mkv', 'reason' => 'SABnzbd is unreachable right now.'],
+            ['id' => 'SABnzbd_nzo_ccc', 'title' => 'Movie.2021.mkv', 'reason' => 'SABnzbd is unreachable right now.'],
+        ]);
+
+    Http::assertNotSent(fn (Request $request): bool => (sabnzbdQuery($request)['value'] ?? null) === 'SABnzbd_nzo_ccc');
+});
+
+test('a batch that runs out of time names the slots it never attempted', function (): void {
+    $sent = [];
+
+    Http::fake(['sabnzbd.local:8080/api*' => function (Request $request) use (&$sent) {
+        $query = sabnzbdQuery($request);
+
+        if (($query['mode'] ?? null) === 'queue' && isset($query['name'])) {
+            $sent[] = $query['value'] ?? null;
+            // Each pause takes 60 seconds of (faked) wall-clock time.
+            $this->travel(60)->seconds();
+
+            return Http::response(['status' => true]);
+        }
+
+        return Http::response(['queue' => ['paused' => false, 'slots' => [
+            ['nzo_id' => 'SABnzbd_nzo_ccc', 'filename' => 'Movie.2021.mkv'],
+        ]]]);
+    }]);
+
+    $this->actingAs($this->admin)
+        ->postJson(route('sabnzbd.queue.bulk'), ['ids' => ['SABnzbd_nzo_aaa', 'SABnzbd_nzo_bbb', 'SABnzbd_nzo_ccc'], 'action' => 'pause'])
+        ->assertOk()
+        ->assertJsonPath('started', 2)
+        ->assertJsonPath('failed', [
+            ['id' => 'SABnzbd_nzo_ccc', 'title' => 'Movie.2021.mkv', 'reason' => 'Not attempted — the batch ran out of time.'],
+        ]);
+
+    expect($sent)->toBe(['SABnzbd_nzo_aaa', 'SABnzbd_nzo_bbb']);
 });
 
 test('one unreachable slot fails with a clean reason and the others still run', function (): void {
@@ -201,6 +253,18 @@ test('a malformed nzo_id is refused and nothing reaches SABnzbd', function (stri
     'parameter smuggling' => ['SABnzbd_nzo_aaa&mode=shutdown'],
     'not an nzo id' => ['../../etc'],
     'empty' => [''],
+]);
+
+// TrimStrings strips a trailing newline before an HTTP request reaches the
+// FormRequest, so the anchored rule is exercised directly: PCRE's `$` also
+// matches before a final "\n" unless the pattern carries the `D` modifier.
+test('the nzo_id rule refuses a trailing newline on its own', function (string $nzoId, bool $passes): void {
+    $rules = new BulkSabnzbdSlotsRequest()->rules();
+
+    expect(Validator::make(['ids' => [$nzoId], 'action' => 'pause'], $rules)->passes())->toBe($passes);
+})->with([
+    'a plain nzo_id' => ['SABnzbd_nzo_aaa', true],
+    'a trailing newline' => ["SABnzbd_nzo_aaa\n", false],
 ]);
 
 test('an invalid bulk payload is refused before SABnzbd is called', function (array $ids, string $action): void {

@@ -154,13 +154,16 @@ class QueueController extends Controller
         $user = $bulkSabnzbdSlotsRequest->user();
 
         // A connect-level outage costs ~10s per item (3 retries). Once SABnzbd
-        // has dropped one connection, the rest of the batch is failed locally
-        // instead of repeating that cost for every remaining id.
+        // has dropped one connection, or answered two server errors in a
+        // row, the rest of the batch is failed locally instead of repeating
+        // that cost for every remaining id. A single 5xx can be specific to
+        // one slot, so it never trips this on its own.
         $unreachable = false;
+        $consecutiveServerErrors = 0;
 
         $bulkSummary = $bulkRunner->run(
             $bulkSabnzbdSlotsRequest->nzoIds(),
-            function (string $nzoId) use ($sabnzbdSlotOperator, $sabnzbdBulkAction, $connection, $user, &$unreachable): BulkItemOutcome {
+            function (string $nzoId) use ($sabnzbdSlotOperator, $sabnzbdBulkAction, $connection, $user, &$unreachable, &$consecutiveServerErrors): BulkItemOutcome {
                 if ($unreachable) {
                     return BulkItemOutcome::failed(__('SABnzbd is unreachable right now.'));
                 }
@@ -168,18 +171,25 @@ class QueueController extends Controller
                 try {
                     $sabnzbdSlotOperator->apply($sabnzbdBulkAction, $connection, $nzoId, $user);
                 } catch (SabnzbdSlotRefused) {
+                    $consecutiveServerErrors = 0;
+
                     return BulkItemOutcome::failed(__('SABnzbd refused the change.'));
                 } catch (ConnectionException $connectionException) {
                     $unreachable = true;
 
                     return BulkItemOutcome::fromUpstreamFailure($connectionException, 'SABnzbd');
                 } catch (RequestException $requestException) {
+                    $consecutiveServerErrors = $requestException->response->serverError() ? $consecutiveServerErrors + 1 : 0;
+                    $unreachable = $consecutiveServerErrors >= 2;
+
                     return BulkItemOutcome::fromUpstreamFailure($requestException, 'SABnzbd');
                 }
 
+                $consecutiveServerErrors = 0;
+
                 return BulkItemOutcome::started();
             },
-            $this->slotTitles($connection),
+            $this->slotTitles($connection, $unreachable),
         );
 
         return response()->json($bulkSummary->withToast($sabnzbdBulkAction->pastTense()));
@@ -211,16 +221,21 @@ class QueueController extends Controller
 
     /**
      * Failure-line names: the slot filenames from SABnzbd's own queue,
-     * fetched once and only when a slot failed.
+     * fetched once and only when a slot failed. Once the batch has marked
+     * SABnzbd unreachable, no queue read is sent: the nzo_id stands in.
      *
      * @return Closure(string): string
      */
-    private function slotTitles(ServiceConnection $serviceConnection): Closure
+    private function slotTitles(ServiceConnection $serviceConnection, bool &$unreachable): Closure
     {
         /** @var array<string, string>|null $titles */
         $titles = null;
 
-        return function (string $nzoId) use (&$titles, $serviceConnection): string {
+        return function (string $nzoId) use (&$titles, &$unreachable, $serviceConnection): string {
+            if ($titles === null && $unreachable) {
+                return $nzoId;
+            }
+
             if ($titles === null) {
                 $titles = [];
 

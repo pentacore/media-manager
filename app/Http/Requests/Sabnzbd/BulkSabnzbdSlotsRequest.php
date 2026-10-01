@@ -22,7 +22,9 @@ class BulkSabnzbdSlotsRequest extends FormRequest
             ...$this->bulkIdRules(),
             // nzo_ids are strings; anchored so nothing else can ride into
             // SABnzbd's API query string (smuggled params, path traversal).
-            'ids.*' => ['required', 'string', 'distinct', sprintf('regex:/^%s$/', SabnzbdClient::NZO_ID_PATTERN)],
+            // `D` stops `$` from also matching before a trailing newline,
+            // matching the compiled route regex the single routes use.
+            'ids.*' => ['required', 'string', 'distinct', sprintf('regex:/^%s$/D', SabnzbdClient::NZO_ID_PATTERN)],
             'action' => ['required', SabnzbdBulkAction::validationRule()],
         ];
     }

@@ -30,6 +30,8 @@ beforeEach(function (): void {
         'radarr.local:7878/api/v3/qualityprofile' => Http::response([['id' => 4, 'name' => 'HD']]),
         'whisparr.local:6969/api/v3/qualityprofile' => Http::response([['id' => 4, 'name' => 'HD']]),
         'whisparr.local:6969/api/v3/movie/11' => Http::response(['id' => 11, 'title' => 'Aurora Scene', 'year' => 2024]),
+        // An empty cached list: the describer falls back to the by-id read.
+        'whisparr.local:6969/api/v3/movie' => Http::response([]),
     ]);
 
     // AuditLogger records the authenticated user as the actor.

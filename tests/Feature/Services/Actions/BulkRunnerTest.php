@@ -78,6 +78,61 @@ test('more than 100 ids are refused before anything runs', function (): void {
     expect($ran)->toBeFalse();
 });
 
+test('a repeated id is refused before anything runs', function (array $ids): void {
+    $ran = false;
+
+    expect(fn (): BulkSummary => new BulkRunner()->run($ids, function () use (&$ran): BulkItemOutcome {
+        $ran = true;
+
+        return BulkItemOutcome::started();
+    }, fn (): string => ''))->toThrow(InvalidArgumentException::class, 'A bulk action takes each id once.');
+
+    expect($ran)->toBeFalse();
+})->with([
+    'integers' => [[1, 2, 1]],
+    'strings' => [['a', 'b', 'a']],
+    'an integer and its numeric string' => [[7, '7']],
+]);
+
+test('once the time budget is spent the remaining ids fail without being attempted', function (): void {
+    $attempted = [];
+
+    $bulkSummary = new BulkRunner(budgetSeconds: 100)->run([1, 2, 3, 4], function (int $id) use (&$attempted): BulkItemOutcome {
+        $attempted[] = $id;
+        // Each item takes 60 seconds of (faked) wall-clock time.
+        $this->travel(60)->seconds();
+
+        return BulkItemOutcome::started();
+    }, fn (int $id): string => sprintf('Title %d', $id));
+
+    expect($attempted)->toBe([1, 2])
+        ->and($bulkSummary->started)->toBe(2)
+        ->and($bulkSummary->failed)->toBe([
+            ['id' => 3, 'title' => 'Title 3', 'reason' => 'Not attempted — the batch ran out of time.'],
+            ['id' => 4, 'title' => 'Title 4', 'reason' => 'Not attempted — the batch ran out of time.'],
+        ]);
+});
+
+test('a failing title lookup is reported and falls back to the id instead of failing the batch', function (): void {
+    Exceptions::fake();
+
+    $bulkSummary = new BulkRunner()->run(
+        [1, 'b', 3],
+        fn (int|string $id): BulkItemOutcome => $id === 3 ? BulkItemOutcome::started() : BulkItemOutcome::failed('No.'),
+        function (): string {
+            throw new TypeError('malformed upstream payload');
+        },
+    );
+
+    expect($bulkSummary->started)->toBe(1)
+        ->and($bulkSummary->failed)->toBe([
+            ['id' => 1, 'title' => '#1', 'reason' => 'No.'],
+            ['id' => 'b', 'title' => 'b', 'reason' => 'No.'],
+        ]);
+
+    Exceptions::assertReported(TypeError::class);
+});
+
 test('manual action outcomes map onto bulk outcomes with the single action wording', function (string $state, string $bulkState, ?string $reason): void {
     $bulkItemOutcome = BulkItemOutcome::fromManualAction(new ManualActionOutcome(state: $state));
 

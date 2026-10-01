@@ -180,17 +180,50 @@ test('an outage short-circuits the rest of the batch after the first unreachable
         ->postJson(route('media.library.activity.queue.bulk'), bulkQueuePayload(['ids' => [41, 42, 43]]))
         ->assertJsonPath('started', 0)
         ->assertJsonPath('failed', [
-            ['id' => 41, 'title' => 'Severance', 'reason' => 'Sonarr is unreachable right now.'],
-            ['id' => 42, 'title' => 'Andor', 'reason' => 'Sonarr is unreachable right now.'],
-            ['id' => 43, 'title' => 'The Bear', 'reason' => 'Sonarr is unreachable right now.'],
+            ['id' => 41, 'title' => '#41', 'reason' => 'Sonarr is unreachable right now.'],
+            ['id' => 42, 'title' => '#42', 'reason' => 'Sonarr is unreachable right now.'],
+            ['id' => 43, 'title' => '#43', 'reason' => 'Sonarr is unreachable right now.'],
         ]);
 
     // Only the first id's DELETE (and its internal HTTP-client retries)
     // reaches Sonarr; ids 42 and 43 are failed locally without a request.
     expect($deleteAttempts)->toBe(3);
+
+    // The failure titles never go back to the unreachable host for the queue.
+    Http::assertNotSent(fn (Request $request): bool => $request->method() === 'GET'
+        && str_contains($request->url(), '/api/v3/queue'));
 });
 
-test('a server error (RequestException) never trips the outage short-circuit', function (): void {
+test('two consecutive server errors trip the outage short-circuit', function (): void {
+    Sleep::fake();
+    fakeBulkSonarrQueue(failingIds: [41, 42]);
+
+    $this->actingAs($this->admin)
+        ->postJson(route('media.library.activity.queue.bulk'), bulkQueuePayload(['ids' => [41, 42, 43]]))
+        ->assertJsonPath('started', 0)
+        ->assertJsonPath('failed', [
+            ['id' => 41, 'title' => 'Severance', 'reason' => 'Sonarr is unreachable right now.'],
+            ['id' => 42, 'title' => 'Andor', 'reason' => 'Sonarr is unreachable right now.'],
+            ['id' => 43, 'title' => '#43', 'reason' => 'Sonarr is unreachable right now.'],
+        ]);
+
+    Http::assertNotSent(fn (Request $request): bool => $request->method() === 'DELETE'
+        && str_contains($request->url(), '/api/v3/queue/43?'));
+});
+
+test('a success between two server errors resets the outage count', function (): void {
+    Sleep::fake();
+    fakeBulkSonarrQueue(failingIds: [41, 43]);
+
+    $this->actingAs($this->admin)
+        ->postJson(route('media.library.activity.queue.bulk'), bulkQueuePayload(['ids' => [41, 42, 43, 44]]))
+        ->assertJsonPath('started', 2);
+
+    Http::assertSent(fn (Request $request): bool => $request->method() === 'DELETE'
+        && str_contains($request->url(), '/api/v3/queue/44?'));
+});
+
+test('a single server error (RequestException) never trips the outage short-circuit', function (): void {
     Sleep::fake();
     fakeBulkSonarrQueue(failingIds: [41]);
 

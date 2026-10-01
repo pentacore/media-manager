@@ -129,15 +129,17 @@ class ActivityController extends Controller
         $label = $connection->type->label();
 
         // A connect-level outage costs one retried round-trip per item. Once
-        // the service has dropped one connection, the rest of the batch is
-        // failed locally instead of repeating that cost for every remaining
-        // id. A 4xx (RequestException) never trips this — only a transport
-        // failure means the rest will fail too.
+        // the service has dropped one connection, or answered two server
+        // errors in a row (a proxy's 502 for a stopped container), the rest
+        // of the batch is failed locally instead of repeating that cost for
+        // every remaining id. A 4xx never trips this, and neither does a
+        // single 5xx, which can be specific to one item.
         $unreachable = false;
+        $consecutiveServerErrors = 0;
 
         $bulkSummary = $bulkRunner->run(
             $bulkQueueItemsRequest->bulkIds(),
-            function (int $queueId) use ($queueItemRemover, $connection, $queueBulkAction, $label, &$unreachable): BulkItemOutcome {
+            function (int $queueId) use ($queueItemRemover, $connection, $queueBulkAction, $label, &$unreachable, &$consecutiveServerErrors): BulkItemOutcome {
                 if ($unreachable) {
                     return BulkItemOutcome::failed(__(':service is unreachable right now.', ['service' => $label]));
                 }
@@ -149,12 +151,17 @@ class ActivityController extends Controller
 
                     return BulkItemOutcome::fromUpstreamFailure($connectionException, $label);
                 } catch (RequestException $requestException) {
+                    $consecutiveServerErrors = $requestException->response->serverError() ? $consecutiveServerErrors + 1 : 0;
+                    $unreachable = $consecutiveServerErrors >= 2;
+
                     return BulkItemOutcome::fromUpstreamFailure($requestException, $label);
                 }
 
+                $consecutiveServerErrors = 0;
+
                 return BulkItemOutcome::started();
             },
-            $this->queueTitles($connection),
+            $this->queueTitles($connection, $unreachable),
         );
 
         return response()->json($bulkSummary->withToast($queueBulkAction->pastTense()));
@@ -162,16 +169,21 @@ class ActivityController extends Controller
 
     /**
      * Failure-line names from the service's own queue, fetched once and
-     * only when an item failed.
+     * only when an item failed. Once the batch has marked the service
+     * unreachable, no queue read is sent: the queue id stands in.
      *
      * @return Closure(int): string
      */
-    private function queueTitles(ServiceConnection $serviceConnection): Closure
+    private function queueTitles(ServiceConnection $serviceConnection, bool &$unreachable): Closure
     {
         /** @var array<int, string>|null $titles */
         $titles = null;
 
-        return function (int $queueId) use (&$titles, $serviceConnection): string {
+        return function (int $queueId) use (&$titles, &$unreachable, $serviceConnection): string {
+            if ($titles === null && $unreachable) {
+                return sprintf('#%d', $queueId);
+            }
+
             if ($titles === null) {
                 $errors = [];
                 $rows = $serviceConnection->type === ServiceType::Sonarr

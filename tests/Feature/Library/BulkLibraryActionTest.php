@@ -142,6 +142,18 @@ test('a bulk quality profile change needs a profile and applies the same one to 
     expect(ActionRequest::query()->where('type', 'set_series_quality_profile')->get()->pluck('payload.quality_profile_id')->unique()->values()->all())->toBe([6]);
 });
 
+test('a bulk quality profile change names the profile from the cached profile list, not one live read per title', function (string $service): void {
+    $serviceConnection = $service === 'sonarr' ? $this->sonarr : $this->radarr;
+    $ids = $service === 'sonarr' ? [7, 8, 9] : [10];
+
+    $this->actingAs($this->member)
+        ->postJson(route('media.library.actions.bulk'), bulkLibraryPayload($serviceConnection, ['ids' => $ids, 'action' => 'quality_profile', 'quality_profile_id' => 6]))
+        ->assertJsonPath('started', count($ids));
+
+    expect(ActionRequest::query()->pluck('description')->every(fn (?string $description): bool => str_contains((string) $description, 'Ultra-HD')))->toBeTrue();
+    Http::assertSentCount(1);
+})->with(['sonarr', 'radarr']);
+
 test('a bulk search sends one search per movie', function (): void {
     $this->actingAs($this->member)
         ->postJson(route('media.library.actions.bulk'), bulkLibraryPayload($this->radarr, ['ids' => [10], 'action' => 'search']))

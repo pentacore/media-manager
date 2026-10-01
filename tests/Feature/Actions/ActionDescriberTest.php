@@ -7,7 +7,7 @@ use App\Models\IndexedSeries;
 use App\Models\ServiceConnection;
 use App\Services\Actions\ActionDescriber;
 use App\Services\Actions\UndescribableAction;
-use Illuminate\Database\Eloquent\ModelNotFoundException;
+use Illuminate\Http\Client\Request;
 use Illuminate\Support\Facades\Http;
 
 beforeEach(function (): void {
@@ -412,7 +412,7 @@ test('grab_release aborts when the pin names a connection of the wrong service',
 
 test('whisparr_search names the Whisparr item of the pinned connection', function (): void {
     $whisparr = ServiceConnection::factory()->whisparr()->create(['url' => 'http://whisparr.local:6969', 'name' => 'Whisparr']);
-    Http::fake(['whisparr.local:6969/api/v3/movie/11' => Http::response(['id' => 11, 'title' => 'Aurora Scene', 'year' => 2024])]);
+    Http::fake(['whisparr.local:6969/api/v3/movie' => Http::response([['id' => 11, 'title' => 'Aurora Scene', 'year' => 2024]])]);
 
     $actionDescription = resolve(ActionDescriber::class)->describe('whisparr_search', ['whisparr_item_id' => 11, 'service_connection_id' => $whisparr->id]);
 
@@ -433,15 +433,55 @@ test('whisparr_search aborts when the pin names a connection of another service'
 // whisparrLookup() with strictPin: true), matching their executors. A present pin
 // naming a connection of another service must abort rather than silently
 // describing another instance's item as verified.
-test('the Whisparr describer arms abort when no Whisparr connection exists to fall back to', function (string $type, array $payload): void {
+// A missing pin is refused too, even with an active Whisparr connection to
+// fall back to: the executors resolve strictly, so a verified card for an
+// unpinned request would describe an action that can never run.
+test('the Whisparr describer arms abort when the request carries no pin, even with an active Whisparr connection', function (string $type, array $payload): void {
+    ServiceConnection::factory()->whisparr()->create(['url' => 'http://whisparr.local:6969']);
+
     expect(fn () => resolve(ActionDescriber::class)->describe($type, $payload))
-        ->toThrow(ModelNotFoundException::class);
+        ->toThrow(InvalidArgumentException::class);
+
+    Http::assertNothingSent();
 })->with([
     'whisparr_delete_item' => ['whisparr_delete_item', ['whisparr_item_id' => 11]],
     'whisparr_add_item' => ['whisparr_add_item', ['tmdb_id' => 1]],
     'whisparr_monitor_item' => ['whisparr_monitor_item', ['whisparr_item_id' => 11]],
     'whisparr_set_quality_profile' => ['whisparr_set_quality_profile', ['whisparr_item_id' => 11, 'quality_profile_id' => 2]],
+    'whisparr_search' => ['whisparr_search', ['whisparr_item_id' => 11]],
 ]);
+
+test('a Whisparr item is named from the cached library list without a by-id lookup', function (): void {
+    $whisparr = ServiceConnection::factory()->whisparr()->create(['url' => 'http://whisparr.local:6969', 'name' => 'Whisparr']);
+    Http::fake(['whisparr.local:6969/api/v3/movie' => Http::response([
+        ['id' => 11, 'title' => 'Aurora Scene', 'year' => 2024],
+        ['id' => 12, 'title' => 'Borealis Scene', 'year' => 2023],
+    ])]);
+
+    $describer = resolve(ActionDescriber::class);
+    $first = $describer->describe('whisparr_monitor_item', ['whisparr_item_id' => 11, 'monitored' => true, 'service_connection_id' => $whisparr->id]);
+    $second = $describer->describe('whisparr_search', ['whisparr_item_id' => 12, 'service_connection_id' => $whisparr->id]);
+
+    expect($first->title)->toContain('Aurora Scene (2024)')
+        ->and($first->verified)->toBeTrue()
+        ->and($second->title)->toBe('Search for item "Borealis Scene (2023)"');
+
+    // One list read serves both items; no per-item lookup is sent.
+    Http::assertSentCount(1);
+});
+
+test('a Whisparr item missing from the cached list falls back to the by-id lookup', function (): void {
+    $whisparr = ServiceConnection::factory()->whisparr()->create(['url' => 'http://whisparr.local:6969', 'name' => 'Whisparr']);
+    Http::fake([
+        'whisparr.local:6969/api/v3/movie/13' => Http::response(['id' => 13, 'title' => 'Cirrus Scene', 'year' => 2022]),
+        'whisparr.local:6969/api/v3/movie' => Http::response([['id' => 11, 'title' => 'Aurora Scene', 'year' => 2024]]),
+    ]);
+
+    $actionDescription = resolve(ActionDescriber::class)->describe('whisparr_search', ['whisparr_item_id' => 13, 'service_connection_id' => $whisparr->id]);
+
+    expect($actionDescription->title)->toBe('Search for item "Cirrus Scene (2022)"');
+    Http::assertSent(fn (Request $request): bool => str_ends_with($request->url(), '/api/v3/movie/13'));
+});
 
 test('the Whisparr describer arms abort when the pin names a connection of another service', function (string $type, array $payload): void {
     $sonarr = ServiceConnection::factory()->sonarr()->create(['url' => 'http://sonarr.local:8989']);

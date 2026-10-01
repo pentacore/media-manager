@@ -20,6 +20,8 @@ beforeEach(function (): void {
     $this->whisparr = ServiceConnection::factory()->whisparr()->create(['url' => 'http://whisparr.local:6969', 'api_key' => 'k', 'name' => 'Whisparr']);
     Http::fake([
         'whisparr.local:6969/api/v3/movie/11' => Http::response(['id' => 11, 'title' => 'Aurora Scene', 'year' => 2024]),
+        // An empty cached list: the describer falls back to the by-id read.
+        'whisparr.local:6969/api/v3/movie' => Http::response([]),
         'whisparr.local:6969/api/v3/qualityprofile' => Http::response([['id' => 2, 'name' => 'HD']]),
     ]);
     $this->admin = User::factory()->admin()->create(['name' => 'Ada']);
