@@ -8,13 +8,19 @@ use App\Enums\ServiceType;
 use App\Enums\TimeWindow;
 use App\Enums\UserRole;
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Emby\SetPlayedStateRequest;
 use App\Http\Resources\EmbyActivityResource;
+use App\Models\ActivityLog;
 use App\Models\EmbyActivity;
 use App\Models\EmbyUserLink;
 use App\Models\ServiceConnection;
+use App\Services\Emby\EmbyClient;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
+use Illuminate\Http\Client\ConnectionException;
+use Illuminate\Http\Client\RequestException;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Inertia\Inertia;
@@ -28,7 +34,7 @@ class WatchHistoryController extends Controller
         $timeWindow = TimeWindow::fromRequest($request->string('since')->value() ?: null);
 
         $builder = $this->buildBuilder($request, $timeWindow)
-            ->with('embyUserLink:id,emby_username,user_id');
+            ->with('embyUserLink:id,emby_username,user_id,emby_user_id');
 
         $lengthAwarePaginator = $builder->paginate(25)->withQueryString();
 
@@ -67,6 +73,68 @@ class WatchHistoryController extends Controller
         }
 
         return ['url' => $connection->linkUrl()];
+    }
+
+    /**
+     * Mark a watched item played or unplayed in Emby for the row's own Emby
+     * user. The ownership check is the whole authorization: admins may
+     * change any row, everyone else only their own.
+     */
+    public function togglePlayed(SetPlayedStateRequest $setPlayedStateRequest, EmbyActivity $embyActivity): RedirectResponse
+    {
+        $user = $setPlayedStateRequest->user();
+        $embyActivity->loadMissing('embyUserLink:id,user_id,emby_user_id,emby_username');
+
+        abort_unless($embyActivity->playedStateEditableBy($user), 403);
+
+        $embyUserId = $embyActivity->embyUserLink->emby_user_id;
+        $embyItemId = $embyActivity->emby_item_id;
+
+        // Both ids travel in the Emby URL path; anything but an Emby id is refused.
+        abort_unless(preg_match('/^[A-Za-z0-9-]{1,64}$/', $embyUserId) === 1 && preg_match('/^[A-Za-z0-9-]{1,64}$/', $embyItemId) === 1, 422);
+
+        $validated = $setPlayedStateRequest->validated();
+        $played = (bool) $validated['played'];
+
+        try {
+            $connection = ServiceConnection::resolveActive(ServiceType::Emby);
+        } catch (ModelNotFoundException) {
+            Inertia::flash('toast', ['type' => 'error', 'message' => __('No active Emby connection configured.')]);
+
+            return back();
+        }
+
+        $embyClient = new EmbyClient($connection);
+
+        try {
+            $played
+                ? $embyClient->markItemPlayed($embyUserId, $embyItemId)
+                : $embyClient->markItemUnplayed($embyUserId, $embyItemId);
+        } catch (ConnectionException) {
+            Inertia::flash('toast', ['type' => 'error', 'message' => __('Emby is unreachable right now.')]);
+
+            return back();
+        } catch (RequestException $requestException) {
+            Inertia::flash('toast', ['type' => 'error', 'message' => $requestException->response->serverError()
+                ? __('Emby is unreachable right now.')
+                : __('Emby refused the change.')]);
+
+            return back();
+        }
+
+        ActivityLog::create([
+            'user_id' => $user->id,
+            'service_connection_id' => $connection->id,
+            'action' => $played ? 'emby.item.marked_played' : 'emby.item.marked_unplayed',
+            'subject_type' => $embyActivity->getMorphClass(),
+            'subject_id' => $embyActivity->id,
+            'description' => sprintf('Marked "%s" as %s for %s.', $embyActivity->media_title, $played ? 'played' : 'unplayed', $embyActivity->embyUserLink->emby_username),
+            'metadata' => ['emby_item_id' => $embyItemId, 'played' => $played],
+        ]);
+
+        Inertia::flash('toast', ['type' => 'success', 'message' => $played ? __('Marked as played.') : __('Marked as unplayed.')]);
+
+        return back();
     }
 
     public function export(Request $request): StreamedResponse

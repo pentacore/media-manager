@@ -164,6 +164,18 @@ test('integrations.seerr reports whether an active Seerr connection exists', fun
         ->assertInertia(fn ($page) => $page->where('integrations.seerr', true));
 });
 
+test('integrations.prowlarr reports whether an active Prowlarr connection exists', function (): void {
+    $user = User::factory()->member()->create();
+
+    $this->actingAs($user)->get(route('dashboard'))
+        ->assertInertia(fn ($page) => $page->where('integrations.prowlarr', false));
+
+    ServiceConnection::factory()->prowlarr()->create(['url' => 'http://prowlarr.local:9696']);
+
+    $this->actingAs($user)->get(route('dashboard'))
+        ->assertInertia(fn ($page) => $page->where('integrations.prowlarr', true));
+});
+
 test('nav.replacementAttention counts unacknowledged needs_attention attempts for admins only', function (): void {
     MediaReplacementAttempt::factory()->needsAttention()->create();
     MediaReplacementAttempt::factory()->needsAttention()->acknowledged()->create();

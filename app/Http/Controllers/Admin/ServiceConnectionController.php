@@ -14,6 +14,8 @@ use App\Jobs\FetchLatestServiceVersion;
 use App\Jobs\PingServiceHealth;
 use App\Models\ServiceConnection;
 use App\Services\Arr\ArrClient;
+use App\Services\Audit\AuditChanges;
+use App\Services\Audit\AuditLogger;
 use App\Services\Bazarr\SubtitleCaseSupersession;
 use App\Services\MediaReplacement\SonarrLibraryTypeSettings;
 use App\Services\MediaReplacement\SonarrRootFolderCatalog;
@@ -53,7 +55,7 @@ class ServiceConnectionController extends Controller
         ]);
     }
 
-    public function store(ServiceConnectionStoreRequest $serviceConnectionStoreRequest): RedirectResponse
+    public function store(ServiceConnectionStoreRequest $serviceConnectionStoreRequest, AuditLogger $auditLogger): RedirectResponse
     {
         $validated = $serviceConnectionStoreRequest->validated();
         $mappingIds = [
@@ -67,11 +69,20 @@ class ServiceConnectionController extends Controller
         unset($validated['sonarr_connection_id'], $validated['radarr_connection_id']);
         $validated = $this->mergeWhisparrVersion($validated);
 
-        DB::transaction(function () use ($validated, $mappingIds): void {
+        $serviceConnection = DB::transaction(function () use ($validated, $mappingIds): ServiceConnection {
             $serviceConnection = ServiceConnection::create($validated);
 
             $this->syncBazarrLinks($serviceConnection, $mappingIds);
+
+            return $serviceConnection;
         });
+
+        $auditLogger->record(
+            'connection.created',
+            $serviceConnection,
+            sprintf('Added %s connection "%s".', $serviceConnection->type->label(), $serviceConnection->name),
+            AuditChanges::between([], $this->auditedAttributes($serviceConnection)),
+        );
 
         Inertia::flash('toast', ['type' => 'success', 'message' => __('Connection created.')]);
 
@@ -401,7 +412,10 @@ class ServiceConnectionController extends Controller
         SonarrLibraryTypeSettings $sonarrLibraryTypeSettings,
         SubtitleCheckTagSettings $subtitleCheckTagSettings,
         SubtitleCaseSupersession $subtitleCaseSupersession,
+        AuditLogger $auditLogger,
     ): RedirectResponse {
+        $before = $this->auditedAttributes($serviceConnection);
+
         $validated = $serviceConnectionUpdateRequest->validated();
         $mappingIds = [
             BazarrServiceRole::Sonarr->value => isset($validated['sonarr_connection_id'])
@@ -516,6 +530,17 @@ class ServiceConnectionController extends Controller
             }
         });
 
+        $changes = AuditChanges::between($before, $this->auditedAttributes($serviceConnection->refresh()));
+
+        if ($changes !== []) {
+            $auditLogger->record(
+                'connection.updated',
+                $serviceConnection,
+                sprintf('Updated %s connection "%s".', $serviceConnection->type->label(), $serviceConnection->name),
+                $changes,
+            );
+        }
+
         Inertia::flash('toast', ['type' => 'success', 'message' => __('Connection updated.')]);
 
         return to_route('admin.connections.index');
@@ -548,7 +573,7 @@ class ServiceConnectionController extends Controller
         }
     }
 
-    public function destroy(ServiceConnection $serviceConnection): RedirectResponse
+    public function destroy(ServiceConnection $serviceConnection, AuditLogger $auditLogger): RedirectResponse
     {
         if ($serviceConnection->bazarrSubtitleCases()->exists()
             || $serviceConnection->managedSubtitleCases()->exists()) {
@@ -562,6 +587,12 @@ class ServiceConnectionController extends Controller
 
             return $this->subtitleHistoryDeletionConflict();
         }
+
+        $auditLogger->record(
+            'connection.deleted',
+            $serviceConnection,
+            sprintf('Deleted %s connection "%s".', $serviceConnection->type->label(), $serviceConnection->name),
+        );
 
         Inertia::flash('toast', ['type' => 'success', 'message' => __('Connection deleted.')]);
 
@@ -591,6 +622,7 @@ class ServiceConnectionController extends Controller
     public function toggle(
         ServiceConnection $serviceConnection,
         SubtitleCaseSupersession $subtitleCaseSupersession,
+        AuditLogger $auditLogger,
     ): RedirectResponse {
         DB::transaction(function () use ($serviceConnection, $subtitleCaseSupersession): void {
             $wasActive = $serviceConnection->is_active;
@@ -602,6 +634,13 @@ class ServiceConnectionController extends Controller
                 $subtitleCaseSupersession->forConnection($serviceConnection);
             }
         });
+
+        $auditLogger->record(
+            $serviceConnection->is_active ? 'connection.activated' : 'connection.deactivated',
+            $serviceConnection,
+            sprintf('%s %s connection "%s".', $serviceConnection->is_active ? 'Activated' : 'Deactivated', $serviceConnection->type->label(), $serviceConnection->name),
+            ['is_active' => ['from' => ! $serviceConnection->is_active, 'to' => $serviceConnection->is_active]],
+        );
 
         $status = $serviceConnection->is_active ? 'enabled' : 'disabled';
         Inertia::flash('toast', ['type' => 'success', 'message' => __(sprintf('Connection %s.', $status))]);
@@ -717,5 +756,31 @@ class ServiceConnectionController extends Controller
         ]);
 
         return back()->with('success', true);
+    }
+
+    /**
+     * The connection fields the audit diff covers, including a Bazarr
+     * connection's Sonarr/Radarr mapping. api_key and webhook_token
+     * are masked by AuditLogger; URLs with credentials are masked too.
+     *
+     * @return array<string, mixed>
+     */
+    private function auditedAttributes(ServiceConnection $serviceConnection): array
+    {
+        // Queried fresh: a mapping-only save changes these rows, not the model.
+        $mappedIds = $serviceConnection->bazarrServiceLinks()->pluck('related_connection_id', 'role');
+
+        return [
+            'type' => $serviceConnection->type->value,
+            'name' => $serviceConnection->name,
+            'url' => $serviceConnection->url,
+            'external_url' => $serviceConnection->external_url,
+            'api_key' => $serviceConnection->api_key,
+            'webhook_token' => $serviceConnection->webhook_token,
+            'is_active' => $serviceConnection->is_active,
+            'settings' => $serviceConnection->settings ?? [],
+            'sonarr_connection_id' => $mappedIds->get(BazarrServiceRole::Sonarr->value),
+            'radarr_connection_id' => $mappedIds->get(BazarrServiceRole::Radarr->value),
+        ];
     }
 }

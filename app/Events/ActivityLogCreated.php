@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Events;
 
+use App\Enums\ActivityLogCategory;
 use App\Models\ActivityLog;
 use Illuminate\Broadcasting\InteractsWithSockets;
 use Illuminate\Broadcasting\PrivateChannel;
@@ -19,9 +20,13 @@ class ActivityLogCreated implements ShouldBroadcast
 
     public function __construct(public ActivityLog $activityLog) {}
 
+    /**
+     * Audit rows are admin-only: they go out on `activity.audit` and never on
+     * the `activity` channel every signed-in user may join.
+     */
     public function broadcastOn(): PrivateChannel
     {
-        return new PrivateChannel('activity');
+        return new PrivateChannel($this->activityLog->isAudit() ? 'activity.audit' : 'activity');
     }
 
     public function broadcastAs(): string
@@ -39,6 +44,7 @@ class ActivityLogCreated implements ShouldBroadcast
         return [
             'id' => $this->activityLog->id,
             'action' => $this->activityLog->action,
+            'category' => $this->activityLog->isAudit() ? ActivityLogCategory::Audit->value : ActivityLogCategory::Activity->value,
             'description' => $this->activityLog->description,
             'user_name' => $this->activityLog->user?->name,
             'service_id' => $this->activityLog->service_connection_id,

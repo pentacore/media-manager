@@ -1,12 +1,14 @@
 <script setup lang="ts">
 import { Form, Head, router } from '@inertiajs/vue3';
-import { Plus, RefreshCcw, Trash2 } from '@lucide/vue';
-import { onMounted, onUnmounted, ref } from 'vue';
+import { Check, Minus, Plus, RefreshCcw, Trash2 } from '@lucide/vue';
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import { toast } from 'vue-sonner';
 import AiFreeUsagePoolController from '@/actions/App/Http/Controllers/Admin/AiFreeUsagePoolController';
 import AiModelPriceController from '@/actions/App/Http/Controllers/Admin/AiModelPriceController';
 import {
     AddFromCatalogDialog,
+    BulkDeletePricesDialog,
+    BulkEditPricesDialog,
     CreatePriceDialog,
     SOURCE_LABELS,
 } from '@/components/ai-prices';
@@ -21,6 +23,7 @@ import {
     Toggle,
 } from '@/components/mm';
 import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/checkbox';
 import {
     Dialog,
     DialogContent,
@@ -408,6 +411,70 @@ function fmt(rate: string | null | undefined): string {
 
 const showBatch = ref(false);
 
+const ALL_PROVIDERS = 'all';
+
+const providerFilter = ref(ALL_PROVIDERS);
+const modelSearch = ref('');
+
+const providerOptions = computed(() =>
+    [...new Set(props.prices.map((price) => price.provider))].sort(),
+);
+
+const visiblePrices = computed(() => {
+    const needle = modelSearch.value.trim().toLowerCase();
+
+    return props.prices.filter(
+        (price) =>
+            (providerFilter.value === ALL_PROVIDERS ||
+                price.provider === providerFilter.value) &&
+            (needle === '' || price.model.toLowerCase().includes(needle)),
+    );
+});
+
+const selectedIds = ref<number[]>([]);
+
+// A bulk action must never reach a row the admin can't see, so narrowing the
+// filter (or a reload dropping rows) prunes the selection to visible rows.
+watch(visiblePrices, (visible) => {
+    const visibleIds = new Set(visible.map((price) => price.id));
+    selectedIds.value = selectedIds.value.filter((id) => visibleIds.has(id));
+});
+
+const selectedPrices = computed(() =>
+    visiblePrices.value.filter((price) => selectedIds.value.includes(price.id)),
+);
+
+const selectAllState = computed<boolean | 'indeterminate'>(() => {
+    if (selectedPrices.value.length === 0) {
+        return false;
+    }
+
+    return selectedPrices.value.length === visiblePrices.value.length
+        ? true
+        : 'indeterminate';
+});
+
+function toggleAllVisible(): void {
+    selectedIds.value =
+        selectAllState.value === true
+            ? []
+            : visiblePrices.value.map((price) => price.id);
+}
+
+function toggleRow(id: number, selected: boolean | 'indeterminate'): void {
+    selectedIds.value =
+        selected === true
+            ? [...selectedIds.value, id]
+            : selectedIds.value.filter((selectedId) => selectedId !== id);
+}
+
+function clearSelection(): void {
+    selectedIds.value = [];
+}
+
+const showBulkEditDialog = ref(false);
+const showBulkDeleteDialog = ref(false);
+
 function rateFor(price: PriceRow, field: RateField): string | null {
     if (showBatch.value) {
         const value = price[BATCH_FIELD[field]];
@@ -701,13 +768,48 @@ const priciest = ref(
         <!-- Models table -->
         <div class="overflow-hidden rounded-xl border border-border bg-card">
             <div
-                class="flex items-center justify-between gap-3 border-b border-border px-4 py-3"
+                class="flex flex-wrap items-center justify-between gap-3 border-b border-border px-4 py-3"
             >
                 <span
                     class="text-[12px] font-semibold tracking-[0.06em] text-muted-foreground uppercase"
                 >
                     Configured models
                 </span>
+                <div class="flex flex-wrap items-center gap-2">
+                    <Select v-model="providerFilter">
+                        <SelectTrigger
+                            class="h-8 w-40 text-[12.5px]"
+                            aria-label="Filter by provider"
+                            data-price-filter-provider
+                        >
+                            <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem
+                                :value="ALL_PROVIDERS"
+                                aria-label="All providers"
+                            >
+                                All providers
+                            </SelectItem>
+                            <SelectItem
+                                v-for="provider in providerOptions"
+                                :key="provider"
+                                :value="provider"
+                                :aria-label="provider"
+                            >
+                                {{ provider }}
+                            </SelectItem>
+                        </SelectContent>
+                    </Select>
+                    <Input
+                        v-model="modelSearch"
+                        type="search"
+                        placeholder="Search models"
+                        aria-label="Search models"
+                        class="h-8 w-48 text-[12.5px]"
+                        data-price-filter-search
+                    />
+                </div>
                 <div
                     class="inline-flex items-center rounded-md border border-border bg-bg-elev p-0.5 text-[12px]"
                     role="tablist"
@@ -743,6 +845,43 @@ const priciest = ref(
                     </button>
                 </div>
             </div>
+            <div
+                v-if="selectedPrices.length > 0"
+                class="flex flex-wrap items-center gap-2 border-b border-border bg-bg-elev px-4 py-2 text-[12.5px]"
+                data-bulk-bar
+            >
+                <span class="font-medium" data-bulk-count>
+                    {{ selectedPrices.length }} selected
+                </span>
+                <Button
+                    variant="outline"
+                    size="sm"
+                    class="h-7 px-2.5 text-xs"
+                    data-bulk-edit
+                    @click="showBulkEditDialog = true"
+                >
+                    Edit selected
+                </Button>
+                <Button
+                    variant="outline"
+                    size="sm"
+                    class="h-7 px-2.5 text-xs text-destructive hover:text-destructive"
+                    data-bulk-delete
+                    @click="showBulkDeleteDialog = true"
+                >
+                    <Trash2 class="size-3.5" />
+                    Delete selected
+                </Button>
+                <Button
+                    variant="ghost"
+                    size="sm"
+                    class="h-7 px-2.5 text-xs"
+                    data-bulk-clear
+                    @click="clearSelection"
+                >
+                    Clear
+                </Button>
+            </div>
             <div class="overflow-x-auto">
                 <table
                     class="w-full border-collapse text-[13px]"
@@ -750,6 +889,25 @@ const priciest = ref(
                 >
                     <thead>
                         <tr>
+                            <th
+                                class="w-8 border-b border-border bg-card py-2 pr-1 pl-3 text-left"
+                            >
+                                <Checkbox
+                                    :model-value="selectAllState"
+                                    :disabled="visiblePrices.length === 0"
+                                    aria-label="Select all shown models"
+                                    data-select-all
+                                    @update:model-value="toggleAllVisible"
+                                >
+                                    <Minus
+                                        v-if="
+                                            selectAllState === 'indeterminate'
+                                        "
+                                        class="size-3.5"
+                                    />
+                                    <Check v-else class="size-3.5" />
+                                </Checkbox>
+                            </th>
                             <th
                                 v-for="h in [
                                     'Model',
@@ -773,7 +931,7 @@ const priciest = ref(
                     </thead>
                     <tbody>
                         <tr
-                            v-for="price in prices"
+                            v-for="price in visiblePrices"
                             :key="price.id"
                             class="border-b border-border last:border-b-0 hover:bg-bg-hover"
                             :class="
@@ -781,7 +939,21 @@ const priciest = ref(
                                     ? 'opacity-50'
                                     : ''
                             "
+                            :data-price-row="price.model"
                         >
+                            <td class="py-2.5 pr-1 pl-3">
+                                <Checkbox
+                                    :model-value="
+                                        selectedIds.includes(price.id)
+                                    "
+                                    :aria-label="`Select ${price.provider} / ${price.model}`"
+                                    data-select-row
+                                    @update:model-value="
+                                        (selected) =>
+                                            toggleRow(price.id, selected)
+                                    "
+                                />
+                            </td>
                             <td class="px-3 py-2.5">
                                 <div
                                     class="font-mono-tabular text-[12.5px] font-medium"
@@ -944,16 +1116,38 @@ const priciest = ref(
                         </tr>
                         <tr v-if="prices.length === 0">
                             <td
-                                colspan="11"
+                                colspan="12"
                                 class="px-3 py-8 text-center text-sm text-fg-subtle"
                             >
                                 No models priced yet. Click "Add model price".
+                            </td>
+                        </tr>
+                        <tr v-else-if="visiblePrices.length === 0">
+                            <td
+                                colspan="12"
+                                class="px-3 py-8 text-center text-sm text-fg-subtle"
+                            >
+                                No models match the filter.
                             </td>
                         </tr>
                     </tbody>
                 </table>
             </div>
         </div>
+
+        <BulkEditPricesDialog
+            v-model:open="showBulkEditDialog"
+            :ids="selectedPrices.map((price) => price.id)"
+            :pools="pools"
+            :rate-limit-metrics="rate_limit_metrics"
+            :rate-limit-periods="rate_limit_periods"
+            @saved="clearSelection"
+        />
+        <BulkDeletePricesDialog
+            v-model:open="showBulkDeleteDialog"
+            :prices="selectedPrices"
+            @deleted="clearSelection"
+        />
 
         <!-- Edit dialog -->
         <Dialog

@@ -368,6 +368,9 @@ return [
     'retention' => [
         'webhook_events_days' => (int) env('MEDIAMANAGER_RETENTION_WEBHOOK_EVENTS_DAYS', 90),
         'activity_logs_days' => (int) env('MEDIAMANAGER_RETENTION_ACTIVITY_LOGS_DAYS', 180),
+        // Audit rows (admin changes in the Activity log's Audit category) are
+        // kept on their own, longer window. 0 keeps them forever.
+        'audit_logs_days' => (int) env('MEDIAMANAGER_RETENTION_AUDIT_LOGS_DAYS', 365),
         'emby_activities_days' => (int) env('MEDIAMANAGER_RETENTION_EMBY_ACTIVITIES_DAYS', 365),
         'notifications_days' => (int) env('MEDIAMANAGER_RETENTION_NOTIFICATIONS_DAYS', 90),
         'ai_usage_records_days' => (int) env('MEDIAMANAGER_RETENTION_AI_USAGE_RECORDS_DAYS', 400),

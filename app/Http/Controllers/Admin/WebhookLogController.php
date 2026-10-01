@@ -4,12 +4,15 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers\Admin;
 
+use App\Enums\SettingsGroup;
 use App\Enums\WebhookHandlingStatus;
 use App\Http\Controllers\Controller;
 use App\Models\ActionRequest;
 use App\Models\ActivityLog;
 use App\Models\ServiceConnection;
 use App\Models\WebhookEvent;
+use App\Services\Audit\AuditLogger;
+use App\Services\Audit\SettingsSnapshot;
 use App\Settings\WebhookSettings;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\RedirectResponse;
@@ -94,13 +97,17 @@ class WebhookLogController extends Controller
         ]);
     }
 
-    public function updateSettings(Request $request, WebhookSettings $webhookSettings): RedirectResponse
+    public function updateSettings(Request $request, WebhookSettings $webhookSettings, SettingsSnapshot $settingsSnapshot, AuditLogger $auditLogger): RedirectResponse
     {
+        $before = $settingsSnapshot->capture(SettingsGroup::Webhooks);
+
         $validated = $request->validate([
             'capture_enabled' => ['required', 'boolean'],
         ]);
 
         $webhookSettings->setCaptureEnabled((bool) $validated['capture_enabled']);
+
+        $auditLogger->settingsUpdated(SettingsGroup::Webhooks, $before, $settingsSnapshot->capture(SettingsGroup::Webhooks));
 
         Inertia::flash('toast', [
             'type' => 'success',

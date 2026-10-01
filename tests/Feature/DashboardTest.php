@@ -81,6 +81,7 @@ test('dashboard includes recent activity', function (): void {
         ->has('recentActivity.0', fn ($activity) => $activity
             ->has('id')
             ->has('action')
+            ->has('category')
             ->has('description')
             ->has('user_name')
             ->has('service_id')

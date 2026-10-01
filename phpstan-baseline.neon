@@ -469,18 +469,6 @@ parameters:
 			path: app/Http/Controllers/Monitoring/ServiceHealthController.php
 
 		-
-			message: '#^Dead catch \- Illuminate\\Http\\Client\\ConnectionException is never thrown in the try block\.$#'
-			identifier: catch.neverThrown
-			count: 1
-			path: app/Http/Controllers/Sabnzbd/QueueController.php
-
-		-
-			message: '#^Dead catch \- Illuminate\\Http\\Client\\RequestException is never thrown in the try block\.$#'
-			identifier: catch.neverThrown
-			count: 1
-			path: app/Http/Controllers/Sabnzbd/QueueController.php
-
-		-
 			message: '#^Using nullsafe property access "\?\-\>\(Expression\)" on left side of \?\? is unnecessary\. Use \-\> instead\.$#'
 			identifier: nullsafe.neverNull
 			count: 1

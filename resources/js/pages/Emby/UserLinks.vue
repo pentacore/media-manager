@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { Form, Head, router, usePage } from '@inertiajs/vue3';
 import { Link2, Trash2 } from '@lucide/vue';
-import { computed } from 'vue';
+import { computed, ref } from 'vue';
 import UserLinkController from '@/actions/App/Http/Controllers/Emby/UserLinkController';
 import InputError from '@/components/InputError.vue';
 import PasswordInput from '@/components/PasswordInput.vue';
@@ -17,6 +17,14 @@ import {
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from '@/components/ui/select';
+import { Skeleton } from '@/components/ui/skeleton';
+import {
     Table,
     TableBody,
     TableCell,
@@ -30,7 +38,25 @@ import type { EmbyUserLinkResource } from '@/typefinder/resources/EmbyUserLinkRe
 
 type UserLink = EmbyUserLinkResource;
 
-const props = defineProps<{ links?: UserLink[] }>();
+interface AppUser {
+    id: number;
+    name: string;
+    email: string;
+}
+
+interface EmbyDirectoryUser {
+    id: string;
+    name: string;
+    is_admin: boolean;
+    last_activity_at: string | null;
+    link: { id: number; user: { id: number; name: string } } | null;
+}
+
+const props = defineProps<{
+    links?: UserLink[];
+    appUsers?: AppUser[];
+    embyUsers?: { users: EmbyDirectoryUser[]; error: string | null };
+}>();
 
 defineOptions({
     layout: {
@@ -71,6 +97,29 @@ function revoke(link: UserLink) {
     router.delete(UserLinkController.destroy.url(link.id), {
         preserveScroll: true,
     });
+}
+
+const linkSelection = ref<Record<string, string>>({});
+const linking = ref<string | null>(null);
+
+function linkEmbyUser(embyUser: EmbyDirectoryUser): void {
+    const userId = Number(linkSelection.value[embyUser.id]);
+
+    if (!userId || linking.value !== null) {
+        return;
+    }
+
+    linking.value = embyUser.id;
+    router.post(
+        UserLinkController.storeFromDirectory.url(),
+        { user_id: userId, emby_user_id: embyUser.id },
+        {
+            preserveScroll: true,
+            onFinish: () => {
+                linking.value = null;
+            },
+        },
+    );
 }
 </script>
 
@@ -217,6 +266,118 @@ function revoke(link: UserLink) {
                                 class="py-8 text-center text-muted-foreground"
                             >
                                 No linked accounts yet.
+                            </TableCell>
+                        </TableRow>
+                    </TableBody>
+                </Table>
+            </CardContent>
+        </Card>
+
+        <Card v-if="isAdmin" data-emby-users>
+            <CardHeader>
+                <CardTitle>Emby users</CardTitle>
+                <CardDescription>
+                    Everyone on the Emby server. Link an account to an app user
+                    without needing their Emby password.
+                </CardDescription>
+            </CardHeader>
+            <CardContent>
+                <div v-if="props.embyUsers === undefined" class="space-y-2">
+                    <Skeleton v-for="n in 3" :key="n" class="h-10 w-full" />
+                </div>
+                <div
+                    v-else-if="props.embyUsers.error"
+                    class="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive"
+                    data-emby-users-error
+                >
+                    {{ props.embyUsers.error }}
+                </div>
+                <Table v-else>
+                    <TableHeader>
+                        <TableRow>
+                            <TableHead>Emby user</TableHead>
+                            <TableHead>Last activity</TableHead>
+                            <TableHead>App user</TableHead>
+                        </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                        <TableRow
+                            v-for="embyUser in props.embyUsers.users"
+                            :key="embyUser.id"
+                            :data-emby-user="embyUser.id"
+                        >
+                            <TableCell class="font-medium">
+                                {{ embyUser.name }}
+                                <Badge
+                                    v-if="embyUser.is_admin"
+                                    variant="outline"
+                                    class="ml-2"
+                                    >Emby admin</Badge
+                                >
+                            </TableCell>
+                            <TableCell class="text-muted-foreground">{{
+                                formatDate(embyUser.last_activity_at)
+                            }}</TableCell>
+                            <TableCell>
+                                <span v-if="embyUser.link">{{
+                                    embyUser.link.user.name
+                                }}</span>
+                                <div v-else class="flex items-center gap-2">
+                                    <Select
+                                        :model-value="
+                                            linkSelection[embyUser.id]
+                                        "
+                                        @update:model-value="
+                                            (value) =>
+                                                (linkSelection[embyUser.id] =
+                                                    String(value))
+                                        "
+                                    >
+                                        <SelectTrigger
+                                            class="h-8 w-48 text-xs"
+                                            :data-emby-link-trigger="
+                                                embyUser.id
+                                            "
+                                        >
+                                            <SelectValue
+                                                placeholder="Choose an app user"
+                                            />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem
+                                                v-for="appUser in props.appUsers ??
+                                                []"
+                                                :key="appUser.id"
+                                                :value="String(appUser.id)"
+                                                :data-emby-link-option="
+                                                    appUser.id
+                                                "
+                                            >
+                                                {{ appUser.name }}
+                                            </SelectItem>
+                                        </SelectContent>
+                                    </Select>
+                                    <Button
+                                        size="sm"
+                                        variant="outline"
+                                        :disabled="
+                                            !linkSelection[embyUser.id] ||
+                                            linking !== null
+                                        "
+                                        :data-emby-link-submit="embyUser.id"
+                                        @click="linkEmbyUser(embyUser)"
+                                    >
+                                        <Link2 class="mr-1 size-4" />Link
+                                    </Button>
+                                </div>
+                            </TableCell>
+                        </TableRow>
+                        <TableRow v-if="props.embyUsers.users.length === 0">
+                            <TableCell
+                                :colspan="3"
+                                class="py-8 text-center text-muted-foreground"
+                            >
+                                Emby reports no users.
                             </TableCell>
                         </TableRow>
                     </TableBody>

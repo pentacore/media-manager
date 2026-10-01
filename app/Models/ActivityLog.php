@@ -4,7 +4,9 @@ declare(strict_types=1);
 
 namespace App\Models;
 
+use App\Enums\ActivityLogCategory;
 use App\Observers\ActivityLogObserver;
+use App\Support\Abilities;
 use Carbon\CarbonImmutable;
 use Database\Factories\ActivityLogFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
@@ -23,6 +25,7 @@ use Pentacore\Typefinder\Attributes\TypefinderOverrides;
  * @property int|null $user_id
  * @property int|null $service_connection_id
  * @property int|null $webhook_event_id
+ * @property ActivityLogCategory $category
  * @property string $action
  * @property string|null $subject_type
  * @property int|null $subject_id
@@ -39,7 +42,9 @@ use Pentacore\Typefinder\Attributes\TypefinderOverrides;
  * @method static Builder<static>|ActivityLog newModelQuery()
  * @method static Builder<static>|ActivityLog newQuery()
  * @method static Builder<static>|ActivityLog query()
+ * @method static Builder<static>|ActivityLog visibleTo(?User $user)
  * @method static Builder<static>|ActivityLog whereAction($value)
+ * @method static Builder<static>|ActivityLog whereCategory($value)
  * @method static Builder<static>|ActivityLog whereCreatedAt($value)
  * @method static Builder<static>|ActivityLog whereDescription($value)
  * @method static Builder<static>|ActivityLog whereId($value)
@@ -53,7 +58,7 @@ use Pentacore\Typefinder\Attributes\TypefinderOverrides;
  * @mixin \Eloquent
  */
 #[ObservedBy(ActivityLogObserver::class)]
-#[Fillable(['user_id', 'service_connection_id', 'webhook_event_id', 'action', 'subject_type', 'subject_id', 'description', 'metadata'])]
+#[Fillable(['user_id', 'service_connection_id', 'webhook_event_id', 'category', 'action', 'subject_type', 'subject_id', 'description', 'metadata'])]
 #[TypefinderOverrides(['metadata' => 'Record<string|number, any> | null'])]
 class ActivityLog extends Model
 {
@@ -69,6 +74,7 @@ class ActivityLog extends Model
     protected function casts(): array
     {
         return [
+            'category' => ActivityLogCategory::class,
             'metadata' => 'array',
         ];
     }
@@ -102,17 +108,51 @@ class ActivityLog extends Model
         return $this->morphTo();
     }
 
+    public function isAudit(): bool
+    {
+        return $this->category === ActivityLogCategory::Audit;
+    }
+
     /**
-     * Retention window from mediamanager.retention (0 disables pruning).
+     * Audit rows are admin-only. Every reader that shows activity to a person
+     * or a model (the Activity log page and its export, the dashboard, AI
+     * tools) goes through this scope; a null user (AI tools, jobs) never sees
+     * audit rows. tests/Unit/Architecture/ActivityLogVisibilityArchTest.php
+     * fails on a new reader that skips it.
+     *
+     * @param  Builder<static>  $query
+     * @return Builder<static>
+     */
+    protected function scopeVisibleTo(Builder $query, ?User $user): Builder
+    {
+        if ($user instanceof User && $user->can(Abilities::ADMIN)) {
+            return $query;
+        }
+
+        return $query->where('category', ActivityLogCategory::Activity->value);
+    }
+
+    /**
+     * Activity and audit rows age out on separate windows from
+     * mediamanager.retention (0 keeps that category forever).
      */
     public function prunable(): Builder
     {
-        $days = (int) config('mediamanager.retention.activity_logs_days');
+        $windows = array_filter([
+            ActivityLogCategory::Activity->value => (int) config('mediamanager.retention.activity_logs_days'),
+            ActivityLogCategory::Audit->value => (int) config('mediamanager.retention.audit_logs_days'),
+        ], static fn (int $days): bool => $days > 0);
 
-        return static::query()->when(
-            $days > 0,
-            fn (Builder $builder): Builder => $builder->where('created_at', '<', now()->subDays($days)),
-            fn (Builder $builder): Builder => $builder->whereRaw('1 = 0'),
-        );
+        if ($windows === []) {
+            return static::query()->whereRaw('1 = 0');
+        }
+
+        return static::query()->where(function (Builder $builder) use ($windows): void {
+            foreach ($windows as $category => $days) {
+                $builder->orWhere(fn (Builder $window): Builder => $window
+                    ->where('category', $category)
+                    ->where('created_at', '<', now()->subDays($days)));
+            }
+        });
     }
 }

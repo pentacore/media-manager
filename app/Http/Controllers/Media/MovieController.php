@@ -12,6 +12,7 @@ use App\Models\ServiceConnection;
 use App\Services\Actions\ActionDescriber;
 use App\Services\Actions\ActionOrchestrator;
 use App\Services\Actions\UndescribableAction;
+use App\Services\Audit\AuditLogger;
 use App\Services\Radarr\RadarrClient;
 use App\Support\Abilities;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
@@ -125,7 +126,7 @@ class MovieController extends BaseArrController
         return to_route('media.movies.index');
     }
 
-    public function destroy(int $id, Request $request, ActionOrchestrator $actionOrchestrator, ActionDescriber $actionDescriber): RedirectResponse
+    public function destroy(int $id, Request $request, ActionOrchestrator $actionOrchestrator, ActionDescriber $actionDescriber, AuditLogger $auditLogger): RedirectResponse
     {
         $connection = $this->resolveConnection();
         if ($connection instanceof RedirectResponse) {
@@ -162,6 +163,14 @@ class MovieController extends BaseArrController
 
             return back();
         }
+
+        // A person asked for this delete (the agent never uses this page), so it
+        // is audited on top of the action request's own activity rows.
+        $auditLogger->record('movie.delete_requested', $actionRequest, $description->title, context: [
+            'radarr_movie_id' => $id,
+            'delete_files' => $payload['delete_files'],
+            'service_connection_id' => $connection->id,
+        ]);
 
         if ($actionRequest->status === ActionRequestStatus::Pending) {
             Inertia::flash('toast', ['type' => 'info', 'message' => __('Deletion queued for approval in the Action Queue.')]);
