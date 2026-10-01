@@ -153,15 +153,28 @@ class QueueController extends Controller
 
         $user = $bulkSabnzbdSlotsRequest->user();
 
+        // A connect-level outage costs ~10s per item (3 retries). Once SABnzbd
+        // has dropped one connection, the rest of the batch is failed locally
+        // instead of repeating that cost for every remaining id.
+        $unreachable = false;
+
         $bulkSummary = $bulkRunner->run(
             $bulkSabnzbdSlotsRequest->nzoIds(),
-            function (string $nzoId) use ($sabnzbdSlotOperator, $sabnzbdBulkAction, $connection, $user): BulkItemOutcome {
+            function (string $nzoId) use ($sabnzbdSlotOperator, $sabnzbdBulkAction, $connection, $user, &$unreachable): BulkItemOutcome {
+                if ($unreachable) {
+                    return BulkItemOutcome::failed(__('SABnzbd is unreachable right now.'));
+                }
+
                 try {
                     $sabnzbdSlotOperator->apply($sabnzbdBulkAction, $connection, $nzoId, $user);
                 } catch (SabnzbdSlotRefused) {
                     return BulkItemOutcome::failed(__('SABnzbd refused the change.'));
-                } catch (RequestException|ConnectionException $exception) {
-                    return BulkItemOutcome::fromUpstreamFailure($exception, 'SABnzbd');
+                } catch (ConnectionException $connectionException) {
+                    $unreachable = true;
+
+                    return BulkItemOutcome::fromUpstreamFailure($connectionException, 'SABnzbd');
+                } catch (RequestException $requestException) {
+                    return BulkItemOutcome::fromUpstreamFailure($requestException, 'SABnzbd');
                 }
 
                 return BulkItemOutcome::started();
@@ -173,6 +186,11 @@ class QueueController extends Controller
     }
 
     /**
+     * Unlike 7a's withClient() (catch (Throwable)), this only catches the
+     * exceptions SabnzbdSlotOperator documents throwing. An unexpected error
+     * (e.g. a DB failure writing the activity row) surfaces as a 500 rather
+     * than a generic toast — deliberate, per .ai/rules/controllers.md.
+     *
      * @param  Closure(ServiceConnection): void  $action
      */
     private function runSlot(Closure $action, string $success, string $failure): RedirectResponse

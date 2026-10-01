@@ -79,6 +79,7 @@ test('an admin pauses two downloads in bulk', function (): void {
         ->assertSeeIn('[data-bulk-count]', '2 selected')
         ->click('[data-bulk-sab-action="pause"]')
         ->assertSee('2 paused')
+        ->assertCount('[data-bulk-bar]', 0)
         ->assertNoSmoke();
 
     Http::assertSent(fn (Request $request): bool => (sabnzbdBrowserQuery($request)['name'] ?? null) === 'pause' && (sabnzbdBrowserQuery($request)['value'] ?? null) === 'SABnzbd_nzo_bbb');
@@ -93,10 +94,32 @@ test('a bulk delete asks first', function (): void {
         ->assertSeeIn('[data-sab-slot="SABnzbd_nzo_aaa"]', 'Show.S01E01.mkv')
         ->click('[data-bulk-select="SABnzbd_nzo_aaa"]')
         ->click('[data-bulk-sab-action="delete"]')
+        ->assertVisible('[data-bulk-sab-delete-confirm]')
+        ->assertSee('Delete 1')
         ->click('[data-bulk-sab-delete-confirm]')
         ->assertSee('1 deleted');
 
     Http::assertSent(fn (Request $request): bool => (sabnzbdBrowserQuery($request)['name'] ?? null) === 'delete');
+});
+
+test('the selection clears after navigating away and back', function (): void {
+    fakeSabnzbdBrowser(fn (int $read): array => [
+        sabnzbdBrowserSlot('SABnzbd_nzo_aaa', 'Show.S01E01.mkv'),
+        sabnzbdBrowserSlot('SABnzbd_nzo_bbb', 'Show.S01E02.mkv'),
+    ]);
+    $this->actingAs(User::factory()->admin()->create());
+
+    $pendingAwaitablePage = visit(route('sabnzbd.queue.index', absolute: false));
+
+    $pendingAwaitablePage->assertNoSmoke()
+        ->click('[data-bulk-select="SABnzbd_nzo_aaa"]')
+        ->assertSeeIn('[data-bulk-count]', '1 selected');
+
+    $pendingAwaitablePage->navigate(route('dashboard', absolute: false))->assertNoSmoke();
+
+    $pendingAwaitablePage->navigate(route('sabnzbd.queue.index', absolute: false))
+        ->assertNoSmoke()
+        ->assertCount('[data-bulk-bar]', 0);
 });
 
 test('a selected slot that finishes during the poll drops out of the selection', function (): void {

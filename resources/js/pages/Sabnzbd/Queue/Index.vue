@@ -461,7 +461,7 @@ function statusVariant(status: string | null): 'ok' | 'danger' | 'default' {
                                 <td v-if="isAdmin" class="px-3 py-2.5">
                                     <BulkCheckbox
                                         :checked="isSlotSelected(slot.nzo_id)"
-                                        :label="`Select ${slot.filename}`"
+                                        :label="`Select ${slot.filename ?? slot.nzo_id}`"
                                         :data-bulk-select="slot.nzo_id"
                                         @update:checked="
                                             (value) =>
@@ -608,8 +608,9 @@ function statusVariant(status: string | null): 'ok' | 'danger' | 'default' {
                 <DialogContent>
                     <DialogHeader>
                         <DialogTitle
-                            >Delete {{ selectedSlotCount }} jobs from the
-                            queue?</DialogTitle
+                            >Delete {{ selectedSlotCount }}
+                            {{ selectedSlotCount === 1 ? 'job' : 'jobs' }}
+                            from the queue?</DialogTitle
                         >
                         <DialogDescription>
                             SABnzbd stops and removes each job. This cannot be
