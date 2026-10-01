@@ -65,17 +65,17 @@ test('each library action files its type with a pinned payload', function (strin
 test('a delete files the pinned delete type and exactly one audit row', function (string $service, int $itemId, string $type, string $idKey, string $auditAction): void {
     $connection = $this->{$service};
 
-    $outcome = resolve(LibraryActionRequester::class)->delete($connection, $itemId, true, 'Requested by a test.');
+    $manualActionOutcome = resolve(LibraryActionRequester::class)->delete($connection, $itemId, true, 'Requested by a test.');
 
-    expect($outcome->state)->toBe(ManualActionOutcome::QUEUED);
+    expect($manualActionOutcome->state)->toBe(ManualActionOutcome::QUEUED);
 
     $actionRequest = ActionRequest::query()->where('type', $type)->sole();
     expect($actionRequest->payload)->toEqual([$idKey => $itemId, 'delete_files' => true, 'service_connection_id' => $connection->id])
         ->and($actionRequest->status)->toBe(ActionRequestStatus::Pending);
 
-    $audit = ActivityLog::query()->where('category', 'audit')->where('action', $auditAction)->sole();
-    expect($audit->subject_type)->toBe(ActionRequest::class)
-        ->and($audit->subject_id)->toBe($actionRequest->id);
+    $activityLog = ActivityLog::query()->where('category', 'audit')->where('action', $auditAction)->sole();
+    expect($activityLog->subject_type)->toBe(ActionRequest::class)
+        ->and($activityLog->subject_id)->toBe($actionRequest->id);
 })->with([
     'series' => ['sonarr', 7, 'delete_series', 'sonarr_series_id', 'series.delete_requested'],
     'movie' => ['radarr', 10, 'delete_movie', 'radarr_movie_id', 'movie.delete_requested'],
@@ -85,9 +85,9 @@ test('a delete files the pinned delete type and exactly one audit row', function
 test('a delete that Action Rules disabled files nothing and audits nothing', function (): void {
     ActionTypeConfig::query()->where('type', 'whisparr_delete_item')->update(['is_enabled' => false]);
 
-    $outcome = resolve(LibraryActionRequester::class)->delete($this->whisparr, 11, false, 'Requested by a test.');
+    $manualActionOutcome = resolve(LibraryActionRequester::class)->delete($this->whisparr, 11, false, 'Requested by a test.');
 
-    expect($outcome->state)->toBe(ManualActionOutcome::DISABLED)
+    expect($manualActionOutcome->state)->toBe(ManualActionOutcome::DISABLED)
         ->and(ActionRequest::query()->count())->toBe(0)
         ->and(ActivityLog::query()->where('category', 'audit')->count())->toBe(0);
 });
@@ -99,11 +99,11 @@ test('monitoring is blocked while a replacement is in flight for the title', fun
         'payload' => ['target' => ['service' => 'sonarr', 'service_connection_id' => $this->sonarr->id, 'series_id' => 7, 'season_number' => 1, 'episode_numbers' => [1]]],
     ]);
 
-    $outcome = resolve(LibraryActionRequester::class)->monitor($this->sonarr, 7, false, 'Requested by a test.');
+    $manualActionOutcome = resolve(LibraryActionRequester::class)->monitor($this->sonarr, 7, false, 'Requested by a test.');
 
-    expect($outcome->state)->toBe(ManualActionOutcome::BLOCKED)
-        ->and($outcome->dispatched())->toBeFalse()
-        ->and($outcome->toast('Monitoring updated.'))->toBe(['type' => 'error', 'message' => 'A file replacement is in progress for this title — try again when it finishes.'])
+    expect($manualActionOutcome->state)->toBe(ManualActionOutcome::BLOCKED)
+        ->and($manualActionOutcome->dispatched())->toBeFalse()
+        ->and($manualActionOutcome->toast('Monitoring updated.'))->toBe(['type' => 'error', 'message' => 'A file replacement is in progress for this title — try again when it finishes.'])
         ->and(ActionRequest::query()->where('type', 'monitor_series')->exists())->toBeFalse();
 });
 
