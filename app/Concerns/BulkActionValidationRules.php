@@ -36,6 +36,10 @@ trait BulkActionValidationRules
     }
 
     /**
+     * The validated ids as integers. Integer-id surfaces only: a surface
+     * that overrides `ids.*` to strings (SABnzbd nzo_ids) must read its own
+     * ids, because every string id would cast to 0 here.
+     *
      * @return list<int>
      */
     public function bulkIds(): array

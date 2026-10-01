@@ -18,6 +18,7 @@ use App\Services\Actions\ManualActionOutcome;
 use App\Services\Library\LibraryActionRequester;
 use App\Services\Whisparr\WhisparrClient;
 use App\Services\Whisparr\WhisparrItemPresenter;
+use App\Services\Whisparr\WhisparrUnexpectedResponse;
 use Closure;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\RequestException;
@@ -122,7 +123,7 @@ class WhisparrActionController extends Controller
                 try {
                     $rows = $whisparrItemPresenter->rows($serviceConnection->whisparrVersion(), new WhisparrClient($serviceConnection)->getItems());
                     $titles = array_column($rows, 'title', 'id');
-                } catch (RequestException|ConnectionException) {
+                } catch (RequestException|ConnectionException|WhisparrUnexpectedResponse) {
                     $titles = [];
                 }
             }

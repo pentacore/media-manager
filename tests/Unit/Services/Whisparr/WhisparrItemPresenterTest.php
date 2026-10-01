@@ -12,7 +12,7 @@ function neutralWhisparrRow(int $id, string $kind): array
 {
     return [
         'id' => $id, 'kind' => $kind, 'title' => sprintf('#%d', $id), 'year' => null, 'monitored' => false,
-        'has_file' => false, 'size_bytes' => 0, 'poster_url' => null, 'quality_profile_id' => null,
+        'has_file' => false, 'missing' => false, 'size_bytes' => 0, 'poster_url' => null, 'quality_profile_id' => null,
     ];
 }
 
@@ -28,7 +28,7 @@ test('a v3 movie becomes a movie row with its remote poster', function (): void 
 
     expect($row)->toBe([
         'id' => 11, 'kind' => 'movie', 'title' => 'Aurora Scene', 'year' => 2024, 'monitored' => true,
-        'has_file' => true, 'size_bytes' => 2_000_000_000, 'poster_url' => 'https://img.example/poster.jpg', 'quality_profile_id' => 3,
+        'has_file' => true, 'missing' => false, 'size_bytes' => 2_000_000_000, 'poster_url' => 'https://img.example/poster.jpg', 'quality_profile_id' => 3,
     ]);
 });
 
@@ -40,14 +40,28 @@ test('a v2 series becomes a site row with statistics-derived file state', functi
 
     expect($row)->toBe([
         'id' => 5, 'kind' => 'site', 'title' => 'Site Five', 'year' => 2019, 'monitored' => false,
-        'has_file' => true, 'size_bytes' => 9_000, 'poster_url' => null, 'quality_profile_id' => 2,
+        'has_file' => true, 'missing' => false, 'size_bytes' => 9_000, 'poster_url' => null, 'quality_profile_id' => 2,
     ]);
 });
+
+test('missing means monitored and short of files: v2 counts scene files against scenes, v3 needs its file', function (WhisparrVersion $whisparrVersion, array $item, bool $missing): void {
+    expect(new WhisparrItemPresenter()->row($whisparrVersion, ['id' => 1, ...$item])['missing'] ?? null)->toBe($missing);
+})->with([
+    'v2 monitored, 3 of 400 scenes on disk' => [WhisparrVersion::V2, ['monitored' => true, 'statistics' => ['episodeFileCount' => 3, 'episodeCount' => 400]], true],
+    'v2 monitored, no scene files' => [WhisparrVersion::V2, ['monitored' => true, 'statistics' => ['episodeFileCount' => 0, 'episodeCount' => 12]], true],
+    'v2 monitored, every scene on disk' => [WhisparrVersion::V2, ['monitored' => true, 'statistics' => ['episodeFileCount' => 12, 'episodeCount' => 12]], false],
+    'v2 unmonitored, short of files' => [WhisparrVersion::V2, ['monitored' => false, 'statistics' => ['episodeFileCount' => 3, 'episodeCount' => 400]], false],
+    'v2 monitored, no statistics' => [WhisparrVersion::V2, ['monitored' => true], false],
+    'v2 monitored, mistyped counts' => [WhisparrVersion::V2, ['monitored' => true, 'statistics' => ['episodeFileCount' => '3', 'episodeCount' => '400']], false],
+    'v3 monitored without a file' => [WhisparrVersion::V3, ['monitored' => true, 'hasFile' => false], true],
+    'v3 monitored with its file' => [WhisparrVersion::V3, ['monitored' => true, 'hasFile' => true], false],
+    'v3 unmonitored without a file' => [WhisparrVersion::V3, ['monitored' => false, 'hasFile' => false], false],
+]);
 
 test('every key is present with a neutral value when upstream omits the optional fields', function (WhisparrVersion $whisparrVersion, string $kind): void {
     $row = new WhisparrItemPresenter()->row($whisparrVersion, ['id' => 9]);
 
-    expect(array_keys($row ?? []))->toBe(['id', 'kind', 'title', 'year', 'monitored', 'has_file', 'size_bytes', 'poster_url', 'quality_profile_id'])
+    expect(array_keys($row ?? []))->toBe(['id', 'kind', 'title', 'year', 'monitored', 'has_file', 'missing', 'size_bytes', 'poster_url', 'quality_profile_id'])
         ->and($row)->toBe(neutralWhisparrRow(9, $kind));
 })->with([
     'v2' => [WhisparrVersion::V2, 'site'],
@@ -72,7 +86,7 @@ test('a numeric string id is coerced to int, a non-numeric or non-positive one i
     expect($whisparrItemPresenter->row($whisparrVersion, ['id' => '12', 'title' => 'String Id']))
         ->toBe([
             'id' => 12, 'kind' => $kind, 'title' => 'String Id', 'year' => null, 'monitored' => false,
-            'has_file' => false, 'size_bytes' => 0, 'poster_url' => null, 'quality_profile_id' => null,
+            'has_file' => false, 'missing' => false, 'size_bytes' => 0, 'poster_url' => null, 'quality_profile_id' => null,
         ])
         ->and($whisparrItemPresenter->row($whisparrVersion, ['id' => 'abc']))->toBeNull()
         ->and($whisparrItemPresenter->row($whisparrVersion, ['id' => '-1']))->toBeNull()

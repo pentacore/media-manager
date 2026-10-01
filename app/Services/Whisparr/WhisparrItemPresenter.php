@@ -15,8 +15,12 @@ use Illuminate\Support\Str;
  * upstream omits or mistypes it), and only whitelisted fields are copied, so
  * nothing credential-bearing can reach the browser.
  *
- * @phpstan-type WhisparrRow array{id: int, kind: 'site'|'movie', title: string, year: int|null, monitored: bool, has_file: bool, size_bytes: int, poster_url: string|null, quality_profile_id: int|null}
- * @phpstan-type WhisparrDetail array{id: int, kind: 'site'|'movie', title: string, year: int|null, monitored: bool, has_file: bool, size_bytes: int, poster_url: string|null, quality_profile_id: int|null, path: string|null, overview: string|null}
+ * `missing` is what the Index "Missing" filter means: a monitored v3 movie
+ * without its file, or a monitored v2 site with fewer scene files than
+ * scenes (a site with 3 of 400 scenes on disk is still missing scenes).
+ *
+ * @phpstan-type WhisparrRow array{id: int, kind: 'site'|'movie', title: string, year: int|null, monitored: bool, has_file: bool, missing: bool, size_bytes: int, poster_url: string|null, quality_profile_id: int|null}
+ * @phpstan-type WhisparrDetail array{id: int, kind: 'site'|'movie', title: string, year: int|null, monitored: bool, has_file: bool, missing: bool, size_bytes: int, poster_url: string|null, quality_profile_id: int|null, path: string|null, overview: string|null}
  * @phpstan-type WhisparrScene array{id: int, title: string|null, air_date: string|null, has_file: bool, monitored: bool}
  * @phpstan-type WhisparrSceneGroup array{year: int, scenes: list<WhisparrScene>}
  */
@@ -61,16 +65,19 @@ final readonly class WhisparrItemPresenter
         $statistics = is_array($item['statistics'] ?? null) ? $item['statistics'] : [];
         $title = $item['title'] ?? null;
         $size = $isV2 ? ($statistics['sizeOnDisk'] ?? 0) : ($item['sizeOnDisk'] ?? $statistics['sizeOnDisk'] ?? 0);
+        $monitored = ($item['monitored'] ?? false) === true;
+        $episodeFileCount = is_int($statistics['episodeFileCount'] ?? null) ? $statistics['episodeFileCount'] : 0;
+        $episodeCount = is_int($statistics['episodeCount'] ?? null) ? $statistics['episodeCount'] : 0;
+        $hasFile = $isV2 ? $episodeFileCount > 0 : ($item['hasFile'] ?? false) === true;
 
         return [
             'id' => $id,
             'kind' => $isV2 ? 'site' : 'movie',
             'title' => is_string($title) && $title !== '' ? $title : sprintf('#%d', $id),
             'year' => $this->positiveInt($item['year'] ?? null),
-            'monitored' => ($item['monitored'] ?? false) === true,
-            'has_file' => $isV2
-                ? is_int($statistics['episodeFileCount'] ?? null) && $statistics['episodeFileCount'] > 0
-                : ($item['hasFile'] ?? false) === true,
+            'monitored' => $monitored,
+            'has_file' => $hasFile,
+            'missing' => $monitored && ($isV2 ? $episodeFileCount < $episodeCount : ! $hasFile),
             'size_bytes' => is_int($size) && $size > 0 ? $size : 0,
             'poster_url' => $this->posterUrl($item['images'] ?? null),
             'quality_profile_id' => $this->positiveInt($item['qualityProfileId'] ?? null),

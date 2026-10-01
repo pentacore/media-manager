@@ -12,11 +12,13 @@ use Database\Factories\ActivityLogFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\ObservedBy;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\MassPrunable;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\MorphTo;
+use Illuminate\Support\Str;
 use Override;
 use Pentacore\Typefinder\Attributes\TypefinderOverrides;
 
@@ -77,6 +79,20 @@ class ActivityLog extends Model
             'category' => ActivityLogCategory::class,
             'metadata' => 'array',
         ];
+    }
+
+    /**
+     * `description` is varchar(255). Every writer (controllers, jobs,
+     * webhook handlers, the ActionRequest logger, AuditLogger) goes through
+     * this, so a long title or reason is cut here instead of failing the
+     * insert. Str::limit measures display width, never less than one per
+     * character, so 252 plus the ellipsis always fits.
+     *
+     * @return Attribute<string, string|null>
+     */
+    protected function description(): Attribute
+    {
+        return Attribute::make(set: static fn (?string $value): ?string => $value === null ? null : Str::limit($value, 252));
     }
 
     /**

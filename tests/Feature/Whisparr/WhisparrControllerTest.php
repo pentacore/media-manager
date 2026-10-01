@@ -53,10 +53,10 @@ test('the index lists v3 movies through the presenter, with profiles in their ow
                 ->where('library.error', null)
                 ->where('library.items.0', [
                     'id' => 11, 'kind' => 'movie', 'title' => 'Aurora Scene', 'year' => 2024, 'monitored' => true,
-                    'has_file' => false, 'size_bytes' => 0, 'poster_url' => null, 'quality_profile_id' => 1,
+                    'has_file' => false, 'missing' => true, 'size_bytes' => 0, 'poster_url' => null, 'quality_profile_id' => 1,
                 ]))
             ->loadDeferredProps('qualityProfiles', fn ($reload) => $reload
-                ->where('qualityProfiles', [['id' => 1, 'name' => 'Any']])));
+                ->where('qualityProfiles', ['items' => [['id' => 1, 'name' => 'Any']], 'error' => null])));
 });
 
 test('the index reads v2 sites from the series resource', function (): void {
@@ -93,6 +93,64 @@ test('a Whisparr outage renders as an error, never as an empty library', functio
     'refusal' => [401, 'Whisparr refused the request — check the connection settings.'],
 ]);
 
+test('a 200 that is not JSON data reads as an outage and is never cached as an empty library', function (string $body, string $contentType): void {
+    whisparrPageConnection();
+    Http::fake(['whisparr.local:6969/api/v3/movie' => Http::sequence()
+        ->push($body, 200, ['Content-Type' => $contentType])
+        ->push([['id' => 11, 'title' => 'Aurora Scene', 'monitored' => true]], 200)]);
+
+    $this->actingAs($this->admin)
+        ->get(route('media.whisparr.index'))
+        ->assertInertia(fn ($page) => $page
+            ->loadDeferredProps('default', fn ($reload) => $reload
+                ->where('library.items', [])
+                ->where('library.error', 'Whisparr is unreachable right now.')));
+
+    // The failed read was not cached: the next load asks Whisparr again.
+    $this->actingAs($this->admin)
+        ->get(route('media.whisparr.index'))
+        ->assertInertia(fn ($page) => $page
+            ->loadDeferredProps('default', fn ($reload) => $reload
+                ->where('library.error', null)
+                ->where('library.items.0.title', 'Aurora Scene')));
+})->with([
+    'an SSO login page' => ['<html><body>Sign in</body></html>', 'text/html'],
+    'a JSON scalar' => ['42', 'application/json'],
+]);
+
+test('a quality-profile outage is an error next to the select, never a silently empty list', function (int $status, string $message): void {
+    Sleep::fake();
+    whisparrPageConnection();
+    Http::fake([
+        'whisparr.local:6969/api/v3/movie' => Http::response([]),
+        'whisparr.local:6969/api/v3/qualityprofile' => Http::response(['message' => 'upstream body /data/secret'], $status),
+    ]);
+
+    $this->actingAs($this->admin)
+        ->get(route('media.whisparr.index'))
+        ->assertInertia(fn ($page) => $page
+            ->loadDeferredProps('qualityProfiles', fn ($reload) => $reload
+                ->where('qualityProfiles', ['items' => [], 'error' => $message])));
+})->with([
+    'server error' => [503, 'Whisparr is unreachable right now.'],
+    'refusal' => [401, 'Whisparr refused the request — check the connection settings.'],
+]);
+
+test('the show page carries a quality-profile outage too', function (): void {
+    Sleep::fake();
+    whisparrPageConnection();
+    Http::fake([
+        'whisparr.local:6969/api/v3/movie/11' => Http::response(['id' => 11, 'title' => 'Aurora Scene']),
+        'whisparr.local:6969/api/v3/qualityprofile' => fn () => throw new ConnectionException('Connection refused'),
+    ]);
+
+    $this->actingAs($this->admin)
+        ->get(route('media.whisparr.show', ['id' => 11]))
+        ->assertInertia(fn ($page) => $page
+            ->loadDeferredProps('qualityProfiles', fn ($reload) => $reload
+                ->where('qualityProfiles.error', 'Whisparr is unreachable right now.')));
+});
+
 test('a dropped connection to Whisparr reads as an outage', function (): void {
     Sleep::fake();
     whisparrPageConnection();
@@ -124,7 +182,7 @@ test('the show page renders a v3 movie with no scenes and deferred profiles', fu
             ->where('item.overview', 'First.')
             ->where('scenes', ['groups' => [], 'error' => null])
             ->missing('qualityProfiles')
-            ->loadDeferredProps('qualityProfiles', fn ($reload) => $reload->where('qualityProfiles.0.name', 'Any')));
+            ->loadDeferredProps('qualityProfiles', fn ($reload) => $reload->where('qualityProfiles.items.0.name', 'Any')));
 });
 
 test('a v2 site loads its scenes grouped by year in the scenes group', function (): void {

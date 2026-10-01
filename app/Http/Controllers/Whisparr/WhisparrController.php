@@ -10,6 +10,7 @@ use App\Http\Controllers\Controller;
 use App\Models\ServiceConnection;
 use App\Services\Whisparr\WhisparrClient;
 use App\Services\Whisparr\WhisparrItemPresenter;
+use App\Services\Whisparr\WhisparrUnexpectedResponse;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\RequestException;
@@ -52,7 +53,7 @@ class WhisparrController extends Controller
 
         try {
             $item = $whisparrItemPresenter->detail($whisparrVersion, $whisparrClient->getItemById($id));
-        } catch (RequestException|ConnectionException $exception) {
+        } catch (RequestException|ConnectionException|WhisparrUnexpectedResponse $exception) {
             return $this->backToLibrary($this->failureMessage($exception, __('That title is no longer in Whisparr.')));
         }
 
@@ -99,7 +100,7 @@ class WhisparrController extends Controller
     {
         try {
             $items = new WhisparrClient($serviceConnection)->getItems();
-        } catch (RequestException|ConnectionException $exception) {
+        } catch (RequestException|ConnectionException|WhisparrUnexpectedResponse $exception) {
             return ['items' => [], 'error' => $this->failureMessage($exception)];
         }
 
@@ -113,7 +114,7 @@ class WhisparrController extends Controller
     {
         try {
             $episodes = $whisparrClient->getEpisodes($id);
-        } catch (RequestException|ConnectionException $exception) {
+        } catch (RequestException|ConnectionException|WhisparrUnexpectedResponse $exception) {
             return ['groups' => [], 'error' => $this->failureMessage($exception)];
         }
 
@@ -121,14 +122,17 @@ class WhisparrController extends Controller
     }
 
     /**
-     * @return list<array{id: int, name: string}>
+     * Like library(), an outage is an error the pages show next to the
+     * profile select, never a silently empty list.
+     *
+     * @return array{items: list<array{id: int, name: string}>, error: string|null}
      */
     private function qualityProfiles(ServiceConnection $serviceConnection): array
     {
         try {
             $profiles = new WhisparrClient($serviceConnection)->getQualityProfiles();
-        } catch (RequestException|ConnectionException) {
-            return [];
+        } catch (RequestException|ConnectionException|WhisparrUnexpectedResponse $exception) {
+            return ['items' => [], 'error' => $this->failureMessage($exception)];
         }
 
         $rows = [];
@@ -139,14 +143,14 @@ class WhisparrController extends Controller
             }
         }
 
-        return $rows;
+        return ['items' => $rows, 'error' => null];
     }
 
     /**
-     * Transport errors and 5xx read as an outage, 4xx as a refusal; the
-     * upstream body is never echoed.
+     * Transport errors, 5xx and a 200 that is not JSON data read as an
+     * outage, 4xx as a refusal; the upstream body is never echoed.
      */
-    private function failureMessage(RequestException|ConnectionException $exception, ?string $notFoundMessage = null): string
+    private function failureMessage(RequestException|ConnectionException|WhisparrUnexpectedResponse $exception, ?string $notFoundMessage = null): string
     {
         if ($notFoundMessage !== null && $exception instanceof RequestException && $exception->response->notFound()) {
             return $notFoundMessage;
