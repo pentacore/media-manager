@@ -810,3 +810,200 @@ test('a catalog pick falls back to manual without calling a feed when the catalo
 
     Http::assertNothingSent();
 });
+
+test('non-admin cannot bulk update or bulk delete prices', function (): void {
+    $member = User::factory()->member()->create();
+    $aiModelPrice = AiModelPrice::factory()->create();
+
+    $this->actingAs($member)
+        ->put(route('admin.ai-prices.bulk-update'), ['ids' => [$aiModelPrice->id], 'automatic_updates_enabled' => true])
+        ->assertForbidden();
+
+    $this->actingAs($member)
+        ->delete(route('admin.ai-prices.bulk-destroy'), ['ids' => [$aiModelPrice->id]])
+        ->assertForbidden();
+
+    expect($aiModelPrice->fresh())->not->toBeNull();
+});
+
+test('bulk update toggles automatic updates on the selected rows without touching their source', function (bool $enabled, bool $locked): void {
+    $admin = User::factory()->admin()->create();
+    $selected = AiModelPrice::factory()->count(2)->create([
+        'pricing_source' => PricingSource::ModelsDev,
+        'is_price_locked' => ! $locked,
+    ]);
+    $untouched = AiModelPrice::factory()->create([
+        'pricing_source' => PricingSource::ModelsDev,
+        'is_price_locked' => ! $locked,
+    ]);
+
+    $this->actingAs($admin)
+        ->put(route('admin.ai-prices.bulk-update'), [
+            'ids' => $selected->pluck('id')->all(),
+            'automatic_updates_enabled' => $enabled,
+        ])
+        ->assertRedirect(route('admin.ai-prices.index'))
+        ->assertSessionHas('inertia.flash_data.toast.message', '2 model prices updated.');
+
+    foreach ($selected as $aiModelPrice) {
+        $fresh = $aiModelPrice->fresh();
+        expect($fresh->is_price_locked)->toBe($locked);
+        expect($fresh->pricing_source)->toBe(PricingSource::ModelsDev);
+    }
+
+    expect($untouched->fresh()->is_price_locked)->toBe(! $locked);
+})->with([
+    'enable' => [true, false],
+    'disable' => [false, true],
+]);
+
+test('bulk update assigns and clears the free usage pool on the selected rows only', function (): void {
+    $admin = User::factory()->admin()->create();
+    $pool = AiFreeUsagePool::factory()->create();
+    $otherPool = AiFreeUsagePool::factory()->create();
+    $selected = AiModelPrice::factory()->count(2)->create(['free_usage_pool_id' => $otherPool->id]);
+    $untouched = AiModelPrice::factory()->create(['free_usage_pool_id' => $otherPool->id]);
+
+    $this->actingAs($admin)
+        ->put(route('admin.ai-prices.bulk-update'), [
+            'ids' => $selected->pluck('id')->all(),
+            'free_usage_pool_id' => $pool->id,
+        ])
+        ->assertRedirect(route('admin.ai-prices.index'));
+
+    expect($selected->map(fn (AiModelPrice $aiModelPrice): ?int => $aiModelPrice->fresh()->free_usage_pool_id)->all())
+        ->toBe([$pool->id, $pool->id]);
+    expect($untouched->fresh()->free_usage_pool_id)->toBe($otherPool->id);
+
+    $this->actingAs($admin)
+        ->put(route('admin.ai-prices.bulk-update'), [
+            'ids' => $selected->pluck('id')->all(),
+            'free_usage_pool_id' => null,
+        ])
+        ->assertRedirect(route('admin.ai-prices.index'));
+
+    expect($selected->map(fn (AiModelPrice $aiModelPrice): ?int => $aiModelPrice->fresh()->free_usage_pool_id)->all())
+        ->toBe([null, null]);
+    expect($untouched->fresh()->free_usage_pool_id)->toBe($otherPool->id);
+});
+
+test('bulk update replaces rate limits on the selected rows only', function (): void {
+    $admin = User::factory()->admin()->create();
+    $selected = AiModelPrice::factory()->count(2)->create();
+    $untouched = AiModelPrice::factory()->create();
+
+    foreach ([...$selected, $untouched] as $aiModelPrice) {
+        $aiModelPrice->rateLimits()->create(['metric' => 'tokens', 'period' => 'day', 'limit_value' => 1000]);
+    }
+
+    $this->actingAs($admin)
+        ->put(route('admin.ai-prices.bulk-update'), [
+            'ids' => $selected->pluck('id')->all(),
+            'rate_limits' => [
+                ['metric' => 'requests', 'period' => 'minute', 'limit_value' => 60],
+                ['metric' => 'tokens', 'period' => 'hour', 'limit_value' => 5000],
+            ],
+        ])
+        ->assertRedirect(route('admin.ai-prices.index'));
+
+    foreach ($selected as $aiModelPrice) {
+        expect($aiModelPrice->rateLimits()->orderBy('metric')->get(['metric', 'period', 'limit_value'])->toArray())->toBe([
+            ['metric' => 'requests', 'period' => 'minute', 'limit_value' => 60],
+            ['metric' => 'tokens', 'period' => 'hour', 'limit_value' => 5000],
+        ]);
+    }
+
+    expect($untouched->rateLimits()->get(['metric', 'period', 'limit_value'])->toArray())->toBe([
+        ['metric' => 'tokens', 'period' => 'day', 'limit_value' => 1000],
+    ]);
+});
+
+test('bulk update with an empty rate limit list clears the selected rows limits', function (): void {
+    $admin = User::factory()->admin()->create();
+    $aiModelPrice = AiModelPrice::factory()->create();
+    $aiModelPrice->rateLimits()->create(['metric' => 'tokens', 'period' => 'day', 'limit_value' => 1000]);
+
+    $this->actingAs($admin)
+        ->put(route('admin.ai-prices.bulk-update'), [
+            'ids' => [$aiModelPrice->id],
+            'rate_limits' => [],
+        ])
+        ->assertRedirect(route('admin.ai-prices.index'));
+
+    expect($aiModelPrice->rateLimits()->count())->toBe(0);
+});
+
+test('bulk update leaves fields that were not sent unchanged', function (): void {
+    $admin = User::factory()->admin()->create();
+    $pool = AiFreeUsagePool::factory()->create();
+    $aiModelPrice = AiModelPrice::factory()->create([
+        'free_usage_pool_id' => $pool->id,
+        'is_price_locked' => true,
+        'pricing_source' => PricingSource::Manual,
+    ]);
+    $aiModelPrice->rateLimits()->create(['metric' => 'tokens', 'period' => 'day', 'limit_value' => 1000]);
+
+    $this->actingAs($admin)
+        ->put(route('admin.ai-prices.bulk-update'), [
+            'ids' => [$aiModelPrice->id],
+            'automatic_updates_enabled' => true,
+        ])
+        ->assertRedirect(route('admin.ai-prices.index'));
+
+    $fresh = $aiModelPrice->fresh();
+    expect($fresh->is_price_locked)->toBeFalse();
+    expect($fresh->free_usage_pool_id)->toBe($pool->id);
+    expect($fresh->pricing_source)->toBe(PricingSource::Manual);
+    expect($fresh->rateLimits()->count())->toBe(1);
+});
+
+test('bulk update rejects an invalid selection or a request that changes nothing', function (array $payload, string $errorKey): void {
+    $admin = User::factory()->admin()->create();
+    $aiModelPrice = AiModelPrice::factory()->create();
+
+    $payload = array_map(
+        static fn (mixed $value): mixed => $value === 'EXISTING' ? [$aiModelPrice->id] : $value,
+        $payload,
+    );
+
+    $this->actingAs($admin)
+        ->put(route('admin.ai-prices.bulk-update'), $payload)
+        ->assertSessionHasErrors($errorKey);
+})->with([
+    'missing ids' => [['automatic_updates_enabled' => true], 'ids'],
+    'empty ids' => [['ids' => [], 'automatic_updates_enabled' => true], 'ids'],
+    'unknown id' => [['ids' => [999999], 'automatic_updates_enabled' => true], 'ids.0'],
+    'nothing to change' => [['ids' => 'EXISTING'], 'ids'],
+    'unknown pool' => [['ids' => 'EXISTING', 'free_usage_pool_id' => 999999], 'free_usage_pool_id'],
+    'duplicate rate limits' => [['ids' => 'EXISTING', 'rate_limits' => [
+        ['metric' => 'requests', 'period' => 'minute', 'limit_value' => 1],
+        ['metric' => 'requests', 'period' => 'minute', 'limit_value' => 2],
+    ]], 'rate_limits.1.metric'],
+]);
+
+test('bulk delete removes only the selected rows and their rate limits', function (): void {
+    $admin = User::factory()->admin()->create();
+    $selected = AiModelPrice::factory()->count(2)->create();
+    $untouched = AiModelPrice::factory()->create();
+    $selected->first()->rateLimits()->create(['metric' => 'tokens', 'period' => 'day', 'limit_value' => 1000]);
+
+    $this->actingAs($admin)
+        ->delete(route('admin.ai-prices.bulk-destroy'), ['ids' => $selected->pluck('id')->all()])
+        ->assertRedirect(route('admin.ai-prices.index'))
+        ->assertSessionHas('inertia.flash_data.toast.message', '2 model prices removed.');
+
+    expect(AiModelPrice::query()->whereKey($selected->pluck('id'))->exists())->toBeFalse();
+    $this->assertDatabaseMissing('ai_model_rate_limits', ['ai_model_price_id' => $selected->first()->id]);
+    expect($untouched->fresh())->not->toBeNull();
+});
+
+test('bulk delete rejects an empty or unknown selection', function (array $ids, string $errorKey): void {
+    $admin = User::factory()->admin()->create();
+
+    $this->actingAs($admin)
+        ->delete(route('admin.ai-prices.bulk-destroy'), ['ids' => $ids])
+        ->assertSessionHasErrors($errorKey);
+})->with([
+    'empty' => [[], 'ids'],
+    'unknown' => [[999999], 'ids.0'],
+]);
