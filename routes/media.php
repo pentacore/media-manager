@@ -147,5 +147,6 @@ Route::middleware(['auth', 'verified', 'password.set'])
             Route::post('actions/quality-profile', [WhisparrActionController::class, 'qualityProfile'])->name('actions.quality-profile');
             Route::post('actions/search', [WhisparrActionController::class, 'search'])->name('actions.search');
             Route::post('actions/delete', [WhisparrActionController::class, 'delete'])->name('actions.delete');
+            Route::post('bulk', [WhisparrActionController::class, 'bulk'])->name('bulk');
         });
     });

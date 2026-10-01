@@ -1,8 +1,15 @@
 <script setup lang="ts">
 import { Head, Link, router } from '@inertiajs/vue3';
 import { RefreshCcw, Search } from '@lucide/vue';
-import { computed, ref } from 'vue';
+import { computed, ref, watch } from 'vue';
+import WhisparrActionController from '@/actions/App/Http/Controllers/Whisparr/WhisparrActionController';
 import WhisparrController from '@/actions/App/Http/Controllers/Whisparr/WhisparrController';
+import {
+    BulkActionBar,
+    BulkCheckbox,
+    BulkSelectAll,
+    LibraryBulkActions,
+} from '@/components/bulk';
 import { OpenInServiceButton, Pill, Poster, SvcChip } from '@/components/mm';
 import { Button } from '@/components/ui/button';
 import {
@@ -13,11 +20,13 @@ import {
     SelectValue,
 } from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
+import { useBulkSelection } from '@/composables/useBulkSelection';
 import { useWhisparrBlur } from '@/composables/useWhisparrBlur';
 import { formatSize } from '@/lib/arr';
 import { cn } from '@/lib/utils';
 import { dashboard } from '@/routes';
 import type {
+    BulkSummary,
     QualityProfileOption,
     WhisparrConnection,
     WhisparrItem,
@@ -110,6 +119,34 @@ const visible = computed<WhisparrItem[]>(() => {
         return a.title.localeCompare(b.title);
     });
 });
+
+const {
+    ids: selectedIds,
+    count: selectedCount,
+    isSelected,
+    toggle: toggleSelected,
+    setAll: setAllSelected,
+    clear: clearSelection,
+    retain: retainSelection,
+} = useBulkSelection<number>([filter, query]);
+
+const visibleIds = computed<number[]>(() =>
+    visible.value.map((item) => item.id),
+);
+
+const selectedOnPage = computed(
+    () => visibleIds.value.filter((id) => isSelected(id)).length,
+);
+
+watch(items, (rows) => retainSelection(rows.map((row) => row.id)));
+
+function bulkDone(summary: BulkSummary): void {
+    clearSelection();
+
+    if (summary.started + summary.queued > 0) {
+        router.reload({ only: ['library'] });
+    }
+}
 
 function sync(): void {
     if (syncing.value) {
@@ -246,6 +283,13 @@ function sync(): void {
                         </SelectItem>
                     </SelectContent>
                 </Select>
+
+                <BulkSelectAll
+                    v-if="library && !library.error"
+                    :selected-count="selectedOnPage"
+                    :page-count="visibleIds.length"
+                    @toggle="(value) => setAllSelected(visibleIds, value)"
+                />
             </div>
 
             <div
@@ -293,6 +337,15 @@ function sync(): void {
                         >
                             missing
                         </Pill>
+                        <BulkCheckbox
+                            class="absolute right-2 bottom-2 rounded bg-black/55 p-1"
+                            :checked="isSelected(item.id)"
+                            :label="`Select ${item.title}`"
+                            :data-bulk-select="item.id"
+                            @update:checked="
+                                (value) => toggleSelected(item.id, value)
+                            "
+                        />
                     </div>
                     <div>
                         <div
@@ -342,6 +395,20 @@ function sync(): void {
                     <Skeleton class="h-2 w-1/2" />
                 </div>
             </div>
+
+            <BulkActionBar :count="selectedCount" @clear="clearSelection()">
+                <template #default="{ disabled }">
+                    <LibraryBulkActions
+                        :endpoint="WhisparrActionController.bulk.url()"
+                        :target="{ service_connection_id: connection.id }"
+                        :ids="selectedIds"
+                        :disabled="disabled"
+                        :quality-profiles="qualityProfiles"
+                        noun="titles"
+                        @done="bulkDone"
+                    />
+                </template>
+            </BulkActionBar>
         </template>
     </div>
 </template>

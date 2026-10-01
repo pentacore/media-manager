@@ -230,3 +230,34 @@ test('an admin changes the quality profile from the title page', function (): vo
 
     expect(ActionRequest::query()->where('type', 'whisparr_set_quality_profile')->sole()->payload['quality_profile_id'])->toBe(2);
 });
+
+test('an admin monitors several Whisparr titles in bulk', function (): void {
+    $this->seed(ActionTypeConfigSeeder::class);
+    Queue::fake([ExecuteActionRequest::class]);
+    fakeWhisparrBrowserLibrary();
+    $this->actingAs(User::factory()->admin()->create());
+
+    visit(route('media.whisparr.index', absolute: false))
+        ->assertNoSmoke()
+        ->assertSeeIn('[data-whisparr-card="11"] [data-whisparr-title]', 'Aurora Scene')
+        ->click('[data-bulk-select="12"]')
+        ->click('[data-bulk-select="13"]')
+        ->assertSeeIn('[data-bulk-count]', '2 selected')
+        ->click('[data-bulk-action="monitor"]')
+        ->assertSee('2 started')
+        ->assertNoSmoke();
+
+    expect(ActionRequest::query()->where('type', 'whisparr_monitor_item')->orderBy('id')->get()->pluck('payload.whisparr_item_id')->all())->toBe([12, 13]);
+});
+
+test('ticking a blurred poster card selects it without opening the title', function (): void {
+    fakeWhisparrBrowserLibrary();
+    $this->actingAs(User::factory()->admin()->create());
+
+    visit(route('media.whisparr.index', absolute: false))
+        ->assertNoSmoke()
+        ->assertSeeIn('[data-whisparr-card="11"] [data-whisparr-title]', 'Aurora Scene')
+        ->click('[data-bulk-select="11"]')
+        ->assertSeeIn('[data-bulk-count]', '1 selected')
+        ->assertPathIs(route('media.whisparr.index', absolute: false));
+});
