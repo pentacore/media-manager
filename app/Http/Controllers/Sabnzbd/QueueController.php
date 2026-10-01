@@ -4,21 +4,28 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers\Sabnzbd;
 
+use App\Enums\SabnzbdBulkAction;
 use App\Enums\ServiceType;
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Sabnzbd\BulkSabnzbdSlotsRequest;
 use App\Http\Requests\Sabnzbd\ChangePriorityRequest;
 use App\Http\Requests\Sabnzbd\DeleteHistoryRequest;
 use App\Http\Requests\Sabnzbd\SetSpeedLimitRequest;
 use App\Models\ActivityLog;
 use App\Models\ServiceConnection;
+use App\Services\Actions\BulkItemOutcome;
+use App\Services\Actions\BulkRunner;
 use App\Services\Audit\AuditLogger;
 use App\Services\Sabnzbd\SabnzbdClient;
+use App\Services\Sabnzbd\SabnzbdSlotOperator;
+use App\Services\Sabnzbd\SabnzbdSlotRefused;
 use App\Services\ServiceClientFactory;
 use App\Support\UrlQueryRedactor;
 use Closure;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\RequestException;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -106,44 +113,114 @@ class QueueController extends Controller
         }, success: 'Queue resumed.', failure: 'Failed to resume queue.');
     }
 
-    public function pauseSlot(string $nzoId): RedirectResponse
+    public function pauseSlot(Request $request, string $nzoId, SabnzbdSlotOperator $sabnzbdSlotOperator): RedirectResponse
     {
-        return $this->withClient(function (SabnzbdClient $sabnzbdClient, ServiceConnection $serviceConnection) use ($nzoId): bool {
-            if (! $sabnzbdClient->pauseSlot($nzoId)) {
-                return false;
-            }
-
-            $this->log($serviceConnection, 'sabnzbd.slot.paused', sprintf('Paused slot %s.', $nzoId), ['nzo_id' => $nzoId]);
-
-            return true;
-        }, success: 'Job paused.', failure: 'Failed to pause job.');
+        return $this->runSlot(
+            fn (ServiceConnection $serviceConnection) => $sabnzbdSlotOperator->pause($serviceConnection, $nzoId, $request->user()),
+            success: 'Job paused.',
+            failure: 'Failed to pause job.',
+        );
     }
 
-    public function resumeSlot(string $nzoId): RedirectResponse
+    public function resumeSlot(Request $request, string $nzoId, SabnzbdSlotOperator $sabnzbdSlotOperator): RedirectResponse
     {
-        return $this->withClient(function (SabnzbdClient $sabnzbdClient, ServiceConnection $serviceConnection) use ($nzoId): bool {
-            if (! $sabnzbdClient->resumeSlot($nzoId)) {
-                return false;
-            }
-
-            $this->log($serviceConnection, 'sabnzbd.slot.resumed', sprintf('Resumed slot %s.', $nzoId), ['nzo_id' => $nzoId]);
-
-            return true;
-        }, success: 'Job resumed.', failure: 'Failed to resume job.');
+        return $this->runSlot(
+            fn (ServiceConnection $serviceConnection) => $sabnzbdSlotOperator->resume($serviceConnection, $nzoId, $request->user()),
+            success: 'Job resumed.',
+            failure: 'Failed to resume job.',
+        );
     }
 
-    public function deleteSlot(string $nzoId, AuditLogger $auditLogger): RedirectResponse
+    public function deleteSlot(Request $request, string $nzoId, SabnzbdSlotOperator $sabnzbdSlotOperator): RedirectResponse
     {
-        return $this->withClient(function (SabnzbdClient $sabnzbdClient, ServiceConnection $serviceConnection) use ($nzoId, $auditLogger): bool {
-            if (! $sabnzbdClient->deleteSlot($nzoId)) {
-                return false;
+        return $this->runSlot(
+            fn (ServiceConnection $serviceConnection) => $sabnzbdSlotOperator->delete($serviceConnection, $nzoId, $request->user()),
+            success: 'Job deleted.',
+            failure: 'Failed to delete job.',
+        );
+    }
+
+    public function bulk(BulkSabnzbdSlotsRequest $bulkSabnzbdSlotsRequest, SabnzbdSlotOperator $sabnzbdSlotOperator, BulkRunner $bulkRunner): JsonResponse
+    {
+        $validated = $bulkSabnzbdSlotsRequest->validated();
+        $sabnzbdBulkAction = SabnzbdBulkAction::from((string) $validated['action']);
+
+        try {
+            $connection = ServiceConnection::resolveActive(ServiceType::SABnzbd);
+        } catch (ModelNotFoundException) {
+            return response()->json(['message' => __('No SABnzbd connection configured.')], 422);
+        }
+
+        $user = $bulkSabnzbdSlotsRequest->user();
+
+        $bulkSummary = $bulkRunner->run(
+            $bulkSabnzbdSlotsRequest->nzoIds(),
+            function (string $nzoId) use ($sabnzbdSlotOperator, $sabnzbdBulkAction, $connection, $user): BulkItemOutcome {
+                try {
+                    $sabnzbdSlotOperator->apply($sabnzbdBulkAction, $connection, $nzoId, $user);
+                } catch (SabnzbdSlotRefused) {
+                    return BulkItemOutcome::failed(__('SABnzbd refused the change.'));
+                } catch (RequestException|ConnectionException $exception) {
+                    return BulkItemOutcome::fromUpstreamFailure($exception, 'SABnzbd');
+                }
+
+                return BulkItemOutcome::started();
+            },
+            $this->slotTitles($connection),
+        );
+
+        return response()->json($bulkSummary->withToast($sabnzbdBulkAction->pastTense()));
+    }
+
+    /**
+     * @param  Closure(ServiceConnection): void  $action
+     */
+    private function runSlot(Closure $action, string $success, string $failure): RedirectResponse
+    {
+        try {
+            $action(ServiceConnection::resolveActive(ServiceType::SABnzbd));
+            Inertia::flash('toast', ['type' => 'success', 'message' => __($success)]);
+        } catch (ModelNotFoundException) {
+            Inertia::flash('toast', ['type' => 'error', 'message' => __('No SABnzbd connection configured.')]);
+        } catch (SabnzbdSlotRefused) {
+            Inertia::flash('toast', ['type' => 'error', 'message' => __('SABnzbd refused the change.')]);
+        } catch (RequestException|ConnectionException) {
+            Inertia::flash('toast', ['type' => 'error', 'message' => __($failure)]);
+        }
+
+        return back();
+    }
+
+    /**
+     * Failure-line names: the slot filenames from SABnzbd's own queue,
+     * fetched once and only when a slot failed.
+     *
+     * @return Closure(string): string
+     */
+    private function slotTitles(ServiceConnection $serviceConnection): Closure
+    {
+        /** @var array<string, string>|null $titles */
+        $titles = null;
+
+        return function (string $nzoId) use (&$titles, $serviceConnection): string {
+            if ($titles === null) {
+                $titles = [];
+
+                try {
+                    $slots = $this->client($serviceConnection)->getQueue(0, BulkRunner::MAX_ITEMS)['slots'] ?? [];
+                } catch (RequestException|ConnectionException) {
+                    $slots = [];
+                }
+
+                foreach (is_array($slots) ? $slots : [] as $slot) {
+                    if (is_array($slot) && is_string($slot['nzo_id'] ?? null) && is_string($slot['filename'] ?? null)) {
+                        $titles[$slot['nzo_id']] = $slot['filename'];
+                    }
+                }
             }
 
-            $this->log($serviceConnection, 'sabnzbd.slot.deleted', sprintf('Deleted slot %s.', $nzoId), ['nzo_id' => $nzoId]);
-            $auditLogger->record('sabnzbd.slot_deleted', $serviceConnection, sprintf('Deleted SABnzbd queue job %s.', $nzoId), context: ['nzo_id' => $nzoId]);
-
-            return true;
-        }, success: 'Job deleted.', failure: 'Failed to delete job.');
+            return $titles[$nzoId] ?? $nzoId;
+        };
     }
 
     public function reprioritize(ChangePriorityRequest $changePriorityRequest, string $nzoId): RedirectResponse

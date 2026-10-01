@@ -99,6 +99,7 @@ dataset('admin-only routes', [
     'whisparr search' => ['POST', 'media.whisparr.actions.search', []],
     'whisparr delete' => ['POST', 'media.whisparr.actions.delete', []],
     'whisparr bulk' => ['POST', 'media.whisparr.bulk', []],
+    'sabnzbd bulk' => ['POST', 'sabnzbd.queue.bulk', []],
 ]);
 
 test('viewer-level read routes open for viewers', function (string $routeName, array $parameters): void {

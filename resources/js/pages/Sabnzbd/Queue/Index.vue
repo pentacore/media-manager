@@ -1,11 +1,20 @@
 <script setup lang="ts">
 import { Head, router } from '@inertiajs/vue3';
 import { Pause, Play, RefreshCw, RotateCcw, Trash2 } from '@lucide/vue';
-import { computed, onMounted, onUnmounted, ref } from 'vue';
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import QueueController from '@/actions/App/Http/Controllers/Sabnzbd/QueueController';
+import { BulkActionBar, BulkCheckbox, BulkSelectAll } from '@/components/bulk';
 import { OpenInServiceButton, Pill, StatCard } from '@/components/mm';
 import { HistoryDeleteDialog, SpeedLimitControl } from '@/components/sabnzbd';
 import { Button } from '@/components/ui/button';
+import {
+    Dialog,
+    DialogContent,
+    DialogDescription,
+    DialogFooter,
+    DialogHeader,
+    DialogTitle,
+} from '@/components/ui/dialog';
 import {
     Select,
     SelectContent,
@@ -13,7 +22,9 @@ import {
     SelectTrigger,
     SelectValue,
 } from '@/components/ui/select';
+import { useBulkSelection } from '@/composables/useBulkSelection';
 import { useCan } from '@/composables/useCan';
+import { submitBulk } from '@/lib/bulk';
 import { dashboard } from '@/routes';
 
 interface QueueSlot {
@@ -89,6 +100,52 @@ const PRIORITY_LABELS: Record<string, string> = {
 
 const { can } = useCan();
 const isAdmin = computed(() => can('admin'));
+
+const slotIds = computed<string[]>(() =>
+    (props.queue.slots ?? []).map((slot) => slot.nzo_id),
+);
+
+const {
+    ids: selectedSlotIds,
+    count: selectedSlotCount,
+    isSelected: isSlotSelected,
+    toggle: toggleSlot,
+    setAll: setAllSlots,
+    clear: clearSlots,
+    retain: retainSlots,
+} = useBulkSelection<string>();
+
+// The 5-second poll replaces the queue: a finished or removed slot drops out
+// of the selection, so a bulk request never names it.
+watch(slotIds, (ids) => retainSlots(ids));
+
+const selectedSlotsOnPage = computed(
+    () => slotIds.value.filter((id) => isSlotSelected(id)).length,
+);
+
+const slotBulkBusy = ref(false);
+const slotDeleteOpen = ref(false);
+
+async function runSlotBulk(
+    action: 'pause' | 'resume' | 'delete',
+): Promise<void> {
+    if (slotBulkBusy.value || selectedSlotIds.value.length === 0) {
+        return;
+    }
+
+    slotBulkBusy.value = true;
+    const summary = await submitBulk(QueueController.bulk.url(), {
+        ids: selectedSlotIds.value,
+        action,
+    });
+    slotBulkBusy.value = false;
+    slotDeleteOpen.value = false;
+
+    if (summary) {
+        clearSlots();
+        refresh();
+    }
+}
 
 // Every prop the index can change: a poll that hits an outage must also
 // bring `error` (and the connection) along, and a recovered one clears it.
@@ -364,6 +421,20 @@ function statusVariant(status: string | null): 'ok' | 'danger' | 'default' {
                         <thead>
                             <tr>
                                 <th
+                                    v-if="isAdmin"
+                                    class="w-8 border-b border-border bg-card px-3 py-2"
+                                >
+                                    <BulkSelectAll
+                                        hide-label
+                                        :selected-count="selectedSlotsOnPage"
+                                        :page-count="slotIds.length"
+                                        @toggle="
+                                            (value) =>
+                                                setAllSlots(slotIds, value)
+                                        "
+                                    />
+                                </th>
+                                <th
                                     v-for="h in [
                                         'Name',
                                         'Category',
@@ -384,8 +455,20 @@ function statusVariant(status: string | null): 'ok' | 'danger' | 'default' {
                             <tr
                                 v-for="slot in queue.slots ?? []"
                                 :key="slot.nzo_id"
+                                :data-sab-slot="slot.nzo_id"
                                 class="border-b border-border last:border-b-0 hover:bg-bg-hover"
                             >
+                                <td v-if="isAdmin" class="px-3 py-2.5">
+                                    <BulkCheckbox
+                                        :checked="isSlotSelected(slot.nzo_id)"
+                                        :label="`Select ${slot.filename}`"
+                                        :data-bulk-select="slot.nzo_id"
+                                        @update:checked="
+                                            (value) =>
+                                                toggleSlot(slot.nzo_id, value)
+                                        "
+                                    />
+                                </td>
                                 <td class="px-3 py-2.5">
                                     <div
                                         class="font-mono-tabular text-[12.5px] font-medium"
@@ -470,7 +553,7 @@ function statusVariant(status: string | null): 'ok' | 'danger' | 'default' {
                             </tr>
                             <tr v-if="(queue.slots ?? []).length === 0">
                                 <td
-                                    colspan="7"
+                                    :colspan="isAdmin ? 8 : 7"
                                     class="px-3 py-8 text-center text-sm text-fg-subtle"
                                 >
                                     Queue is empty.
@@ -480,6 +563,75 @@ function statusVariant(status: string | null): 'ok' | 'danger' | 'default' {
                     </table>
                 </div>
             </div>
+
+            <BulkActionBar
+                v-if="isAdmin"
+                :count="selectedSlotCount"
+                :busy="slotBulkBusy"
+                @clear="clearSlots()"
+            >
+                <template #default="{ disabled }">
+                    <Button
+                        variant="outline"
+                        size="sm"
+                        class="h-7 gap-1.5 text-xs"
+                        :disabled="disabled"
+                        data-bulk-sab-action="pause"
+                        @click="runSlotBulk('pause')"
+                    >
+                        <Pause class="size-3.5" />Pause
+                    </Button>
+                    <Button
+                        variant="outline"
+                        size="sm"
+                        class="h-7 gap-1.5 text-xs"
+                        :disabled="disabled"
+                        data-bulk-sab-action="resume"
+                        @click="runSlotBulk('resume')"
+                    >
+                        <Play class="size-3.5" />Resume
+                    </Button>
+                    <Button
+                        variant="destructive"
+                        size="sm"
+                        class="h-7 gap-1.5 text-xs"
+                        :disabled="disabled"
+                        data-bulk-sab-action="delete"
+                        @click="slotDeleteOpen = true"
+                    >
+                        <Trash2 class="size-3.5" />Delete…
+                    </Button>
+                </template>
+            </BulkActionBar>
+
+            <Dialog v-model:open="slotDeleteOpen">
+                <DialogContent>
+                    <DialogHeader>
+                        <DialogTitle
+                            >Delete {{ selectedSlotCount }} jobs from the
+                            queue?</DialogTitle
+                        >
+                        <DialogDescription>
+                            SABnzbd stops and removes each job. This cannot be
+                            undone.
+                        </DialogDescription>
+                    </DialogHeader>
+                    <DialogFooter>
+                        <Button
+                            variant="outline"
+                            @click="slotDeleteOpen = false"
+                            >Cancel</Button
+                        >
+                        <Button
+                            variant="destructive"
+                            :disabled="slotBulkBusy"
+                            data-bulk-sab-delete-confirm
+                            @click="runSlotBulk('delete')"
+                            >Delete {{ selectedSlotCount }}</Button
+                        >
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
 
             <!-- History (paged) -->
             <div
