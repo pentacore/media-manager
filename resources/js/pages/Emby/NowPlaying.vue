@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { Head, router } from '@inertiajs/vue3';
-import { RefreshCcw } from '@lucide/vue';
+import { FolderSync, RefreshCcw } from '@lucide/vue';
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import LibraryRefreshController from '@/actions/App/Http/Controllers/Emby/LibraryRefreshController';
 import NowPlayingController from '@/actions/App/Http/Controllers/Emby/NowPlayingController';
 import {
     InitialsAvatar,
@@ -13,6 +14,7 @@ import {
 } from '@/components/mm';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
+import { useCan } from '@/composables/useCan';
 import { useConnectionState } from '@/composables/useConnectionState';
 import { useEmbyActivity } from '@/composables/useEmbyActivity';
 import { dashboard } from '@/routes';
@@ -67,6 +69,28 @@ function manualRefresh(): void {
             refreshing.value = false;
         },
     });
+}
+
+const { can } = useCan();
+const isAdmin = computed(() => can('admin'));
+const refreshingLibrary = ref(false);
+
+function refreshLibrary(): void {
+    if (refreshingLibrary.value) {
+        return;
+    }
+
+    refreshingLibrary.value = true;
+    router.post(
+        LibraryRefreshController.url(),
+        {},
+        {
+            preserveScroll: true,
+            onFinish: () => {
+                refreshingLibrary.value = false;
+            },
+        },
+    );
 }
 
 const { subscribe, nowPlaying } = useEmbyActivity();
@@ -192,6 +216,17 @@ function remainingTicks(session: Session): number {
                     :href="props.connection.url"
                     label="Open Emby"
                 />
+                <Button
+                    v-if="isAdmin"
+                    variant="outline"
+                    size="sm"
+                    class="h-7 gap-1.5 text-xs"
+                    :disabled="refreshingLibrary"
+                    data-emby-refresh-library
+                    @click="refreshLibrary"
+                >
+                    <FolderSync class="size-3.5" />Refresh library
+                </Button>
                 <Button
                     variant="outline"
                     size="sm"

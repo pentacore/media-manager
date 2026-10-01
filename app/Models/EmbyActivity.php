@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Models;
 
+use App\Support\Abilities;
 use Carbon\CarbonImmutable;
 use Database\Factories\EmbyActivityFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
@@ -61,6 +62,15 @@ class EmbyActivity extends Model
     public function embyUserLink(): BelongsTo
     {
         return $this->belongsTo(EmbyUserLink::class);
+    }
+
+    /**
+     * Admins may change any row; everyone else (viewers included) only rows
+     * recorded for their own linked Emby user. Load embyUserLink first.
+     */
+    public function playedStateEditableBy(User $user): bool
+    {
+        return $user->can(Abilities::ADMIN) || $this->embyUserLink->user_id === $user->id;
     }
 
     /**

@@ -65,7 +65,9 @@ class DashboardController extends Controller
                 'avg_latency_ms' => $serviceMetricsRepository->averageLatencyMs($serviceConnection->id),
             ])->values(),
             'recentActivity' => ActivityLogResource::collection(
-                ActivityLog::with(['user:id,name', 'serviceConnection:id,name,type'])
+                ActivityLog::query()
+                    ->visibleTo($request->user())
+                    ->with(['user:id,name', 'serviceConnection:id,name,type'])
                     ->latest()
                     ->take(10)
                     ->get()

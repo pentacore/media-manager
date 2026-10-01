@@ -58,9 +58,11 @@ interface QueuePayload {
     services: { sonarr?: boolean; radarr?: boolean };
 }
 
+type ArrService = 'sonarr' | 'radarr';
+
 interface HistoryRow {
     id: number;
-    service: 'sonarr' | 'radarr';
+    service: ArrService;
     service_url: string;
     event_type: string | null;
     title: string | null;
@@ -69,13 +71,23 @@ interface HistoryRow {
     quality: string | null;
     download_client: string | null;
     date: string | null;
-    data: Record<string, unknown> | null;
 }
 
 interface HistoryPayload {
+    service: ArrService;
+    configured: boolean;
+    connection_id: number | null;
     rows: HistoryRow[];
-    errors: string[];
-    services: { sonarr?: boolean; radarr?: boolean };
+    page: number;
+    page_size: number;
+    total: number;
+    error: string | null;
+}
+
+interface HistoryFilters {
+    service: ArrService;
+    page: number;
+    active: boolean;
 }
 
 interface ManualImportEpisode {
@@ -107,6 +119,7 @@ interface ManualImportCandidate {
 const props = defineProps<{
     queue?: QueuePayload;
     history?: HistoryPayload;
+    historyFilters: HistoryFilters;
 }>();
 
 defineOptions({
@@ -126,17 +139,60 @@ const isAdmin = computed(() => can('admin'));
 
 const refreshing = ref(false);
 const serviceFilter = ref<'all' | 'sonarr' | 'radarr'>('all');
-const activeTab = ref<'queue' | 'history'>('queue');
+const activeTab = ref<'queue' | 'history'>(
+    props.historyFilters.active ? 'history' : 'queue',
+);
 
-const filteredHistoryRows = computed<HistoryRow[]>(() => {
-    const all = props.history?.rows ?? [];
+const historyLastPage = computed(() =>
+    Math.max(
+        1,
+        Math.ceil(
+            (props.history?.total ?? 0) / (props.history?.page_size || 50),
+        ),
+    ),
+);
 
-    if (serviceFilter.value === 'all') {
-        return all;
+function showHistory(service: ArrService, page = 1): void {
+    router.get(
+        LibraryActivityController.queue.url({
+            query: { history_service: service, history_page: page },
+        }),
+        {},
+        {
+            preserveState: true,
+            preserveScroll: true,
+            only: ['history', 'historyFilters'],
+        },
+    );
+}
+
+const markingFailed = ref<number | null>(null);
+
+function markFailed(row: HistoryRow): void {
+    const connectionId = props.history?.connection_id ?? null;
+
+    if (connectionId === null || markingFailed.value !== null) {
+        return;
     }
 
-    return all.filter((row) => row.service === serviceFilter.value);
-});
+    markingFailed.value = row.id;
+    router.post(
+        LibraryActivityController.markHistoryFailed.url({
+            service: row.service,
+            id: row.id,
+        }),
+        { service_connection_id: connectionId },
+        {
+            // Keep the History tab open; the redirect back reloads the
+            // deferred history page on its own.
+            preserveState: true,
+            preserveScroll: true,
+            onFinish: () => {
+                markingFailed.value = null;
+            },
+        },
+    );
+}
 
 function eventVariant(
     eventType: string | null,
@@ -519,8 +575,8 @@ const filteredRows = computed<QueueRow[]>(() => {
                     v-else
                     class="mt-1 max-w-[640px] text-[13px] text-muted-foreground"
                 >
-                    Recent grabs, imports, deletions, and failures from both
-                    services — newest first.
+                    Grabs, imports, deletions and failures, newest first — one
+                    service at a time.
                 </p>
             </div>
             <div class="flex items-center gap-2">
@@ -533,6 +589,7 @@ const filteredRows = computed<QueueRow[]>(() => {
                         v-for="tab in ['queue', 'history'] as const"
                         :key="tab"
                         type="button"
+                        :data-activity-tab="tab"
                         :class="[
                             'inline-flex h-6 items-center rounded-[4px] px-2.5 text-[11.5px] font-medium capitalize transition-colors',
                             activeTab === tab
@@ -545,6 +602,7 @@ const filteredRows = computed<QueueRow[]>(() => {
                     </button>
                 </div>
                 <div
+                    v-if="activeTab === 'queue'"
                     class="inline-flex h-7 items-center rounded-md border border-border bg-card p-0.5"
                     role="tablist"
                 >
@@ -794,12 +852,25 @@ const filteredRows = computed<QueueRow[]>(() => {
         <!-- History tab -->
         <template v-if="activeTab === 'history'">
             <div
-                v-if="history && history.errors.length > 0"
-                class="border-warn/30 bg-warn/10 text-warn rounded-md border px-3 py-2 text-[12px]"
+                class="inline-flex h-7 w-fit items-center rounded-md border border-border bg-card p-0.5"
+                role="tablist"
+                aria-label="History service"
             >
-                <div v-for="(error, index) in history.errors" :key="index">
-                    {{ error }}
-                </div>
+                <button
+                    v-for="service in ['sonarr', 'radarr'] as const"
+                    :key="service"
+                    type="button"
+                    :data-history-service-tab="service"
+                    :class="[
+                        'inline-flex h-6 items-center rounded-[4px] px-2.5 text-[11.5px] font-medium transition-colors',
+                        historyFilters.service === service
+                            ? 'bg-accent text-accent-foreground'
+                            : 'text-muted-foreground hover:bg-bg-hover hover:text-foreground',
+                    ]"
+                    @click="showHistory(service)"
+                >
+                    {{ service === 'sonarr' ? 'Sonarr' : 'Radarr' }}
+                </button>
             </div>
 
             <div v-if="!history" class="space-y-2">
@@ -807,84 +878,148 @@ const filteredRows = computed<QueueRow[]>(() => {
             </div>
 
             <div
-                v-else-if="filteredHistoryRows.length === 0"
-                class="rounded-xl border border-border bg-card px-4 py-10 text-center text-sm text-muted-foreground"
+                v-else-if="history.error"
+                class="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-[12px] text-destructive"
+                data-history-error
             >
-                <template
-                    v-if="!history.services.sonarr && !history.services.radarr"
-                >
-                    No active Sonarr or Radarr connection configured.
+                {{ history.error }}
+            </div>
+
+            <div
+                v-else-if="!history.configured || history.rows.length === 0"
+                class="rounded-xl border border-border bg-card px-4 py-10 text-center text-sm text-muted-foreground"
+                data-history-empty
+            >
+                <template v-if="!history.configured">
+                    No active
+                    {{ history.service === 'sonarr' ? 'Sonarr' : 'Radarr' }}
+                    connection configured.
                 </template>
-                <template v-else> No recent history yet. </template>
+                <template v-else-if="history.total > 0">
+                    No history on this page.
+                </template>
+                <template v-else> No history yet. </template>
             </div>
 
             <div
                 v-else
                 class="overflow-x-auto rounded-xl border border-border bg-card"
             >
-                <div class="overflow-x-auto">
-                    <table class="w-full border-collapse text-[13px]">
-                        <thead>
-                            <tr>
-                                <th
-                                    v-for="header in [
-                                        'Service',
-                                        'Event',
-                                        'Title',
-                                        'Quality',
-                                        'When',
-                                    ]"
-                                    :key="header"
-                                    class="border-b border-border bg-card px-3 py-2 text-left text-[11.5px] font-medium tracking-[0.05em] text-muted-foreground uppercase"
-                                >
-                                    {{ header }}
-                                </th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            <tr
-                                v-for="row in filteredHistoryRows"
-                                :key="`${row.service}-${row.id}`"
-                                class="border-b border-border last:border-b-0 hover:bg-bg-hover"
+                <table class="w-full border-collapse text-[13px]">
+                    <thead>
+                        <tr>
+                            <th
+                                v-for="header in [
+                                    'Event',
+                                    'Title',
+                                    'Quality',
+                                    'When',
+                                    ...(isAdmin ? [''] : []),
+                                ]"
+                                :key="header"
+                                class="border-b border-border bg-card px-3 py-2 text-left text-[11.5px] font-medium tracking-[0.05em] text-muted-foreground uppercase"
                             >
-                                <td class="px-3 py-2.5">
-                                    <SvcChip :id="row.service" />
-                                </td>
-                                <td class="px-3 py-2.5">
-                                    <Pill
-                                        :variant="eventVariant(row.event_type)"
-                                    >
-                                        {{ eventLabel(row.event_type) }}
-                                    </Pill>
-                                </td>
-                                <td class="px-3 py-2.5">
-                                    <div class="font-medium">
-                                        {{ row.title ?? '—' }}
-                                    </div>
-                                    <div
-                                        v-if="row.subtitle"
-                                        class="text-[11.5px] text-muted-foreground"
-                                    >
-                                        {{ row.subtitle }}
-                                    </div>
-                                    <div
-                                        v-if="row.source_title"
-                                        class="font-mono-tabular mt-1 text-[11px] break-all text-fg-subtle"
-                                    >
-                                        {{ row.source_title }}
-                                    </div>
-                                </td>
-                                <td class="px-3 py-2.5 text-[12px]">
-                                    {{ row.quality ?? '—' }}
-                                </td>
-                                <td
-                                    class="font-mono-tabular px-3 py-2.5 text-[12px] text-muted-foreground"
+                                {{ header }}
+                            </th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr
+                            v-for="row in history.rows"
+                            :key="`${row.service}-${row.id}`"
+                            :data-history-row="`${row.service}-${row.id}`"
+                            class="border-b border-border last:border-b-0 hover:bg-bg-hover"
+                        >
+                            <td class="px-3 py-2.5">
+                                <Pill :variant="eventVariant(row.event_type)">
+                                    {{ eventLabel(row.event_type) }}
+                                </Pill>
+                            </td>
+                            <td class="px-3 py-2.5">
+                                <div class="font-medium" data-history-title>
+                                    {{ row.title ?? '—' }}
+                                </div>
+                                <div
+                                    v-if="row.subtitle"
+                                    class="text-[11.5px] text-muted-foreground"
                                 >
-                                    {{ formatDate(row.date) }}
-                                </td>
-                            </tr>
-                        </tbody>
-                    </table>
+                                    {{ row.subtitle }}
+                                </div>
+                                <div
+                                    v-if="row.source_title"
+                                    class="font-mono-tabular mt-1 text-[11px] break-all text-fg-subtle"
+                                >
+                                    {{ row.source_title }}
+                                </div>
+                            </td>
+                            <td class="px-3 py-2.5 text-[12px]">
+                                {{ row.quality ?? '—' }}
+                            </td>
+                            <td
+                                class="font-mono-tabular px-3 py-2.5 text-[12px] text-muted-foreground"
+                            >
+                                {{ formatDate(row.date) }}
+                            </td>
+                            <td v-if="isAdmin" class="px-3 py-2.5 text-right">
+                                <Button
+                                    v-if="row.event_type === 'grabbed'"
+                                    variant="ghost"
+                                    size="sm"
+                                    class="h-7 px-2 text-xs text-destructive hover:text-destructive"
+                                    :disabled="markingFailed !== null"
+                                    data-history-mark-failed
+                                    @click="markFailed(row)"
+                                >
+                                    <Loader2
+                                        v-if="markingFailed === row.id"
+                                        class="mr-1 size-3.5 animate-spin"
+                                    />Mark failed
+                                </Button>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <div
+                v-if="
+                    history &&
+                    history.configured &&
+                    !history.error &&
+                    (historyLastPage > 1 || history.page > historyLastPage)
+                "
+                class="flex items-center justify-between gap-2"
+            >
+                <p class="text-[12px] text-muted-foreground" data-history-page>
+                    Page {{ history.page }} of {{ historyLastPage }} ·
+                    {{ history.total }} entries
+                </p>
+                <div class="flex gap-1">
+                    <Button
+                        variant="outline"
+                        size="sm"
+                        class="h-7 text-xs"
+                        :disabled="history.page <= 1"
+                        data-history-prev
+                        @click="
+                            showHistory(
+                                history.service,
+                                Math.min(history.page - 1, historyLastPage),
+                            )
+                        "
+                    >
+                        Previous
+                    </Button>
+                    <Button
+                        variant="outline"
+                        size="sm"
+                        class="h-7 text-xs"
+                        :disabled="history.page >= historyLastPage"
+                        data-history-next
+                        @click="showHistory(history.service, history.page + 1)"
+                    >
+                        Next
+                    </Button>
                 </div>
             </div>
         </template>

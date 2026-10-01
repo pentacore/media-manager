@@ -6,10 +6,13 @@ namespace App\Http\Controllers\Admin;
 
 use App\Enums\NotificationSeverity;
 use App\Enums\PushChannelType;
+use App\Enums\SettingsGroup;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Admin\StoreNotificationDestinationRequest;
 use App\Http\Requests\Admin\UpdateNotificationDestinationRequest;
 use App\Models\NotificationDestination;
+use App\Services\Audit\AuditChanges;
+use App\Services\Audit\AuditLogger;
 use App\Services\Notifications\PushFailureMessage;
 use App\Services\Notifications\PushMessage;
 use Illuminate\Http\RedirectResponse;
@@ -46,11 +49,11 @@ class NotificationDestinationController extends Controller
         ]);
     }
 
-    public function store(StoreNotificationDestinationRequest $storeNotificationDestinationRequest): RedirectResponse
+    public function store(StoreNotificationDestinationRequest $storeNotificationDestinationRequest, AuditLogger $auditLogger): RedirectResponse
     {
         $validated = $storeNotificationDestinationRequest->validated();
 
-        NotificationDestination::create([
+        $notificationDestination = NotificationDestination::create([
             'channel' => $validated['channel'],
             'label' => $validated['label'],
             'is_enabled' => (bool) ($validated['is_enabled'] ?? true),
@@ -58,13 +61,22 @@ class NotificationDestinationController extends Controller
             'config' => $this->cleanConfig(PushChannelType::from($validated['channel']), $validated['config']),
         ]);
 
+        $auditLogger->settingsUpdated(
+            SettingsGroup::NotificationDestinations,
+            [],
+            $this->auditSnapshot($notificationDestination),
+            ['operation' => 'created', 'record_id' => $notificationDestination->id],
+            sprintf('Added notification destination "%s".', $notificationDestination->label),
+        );
+
         Inertia::flash('toast', ['type' => 'success', 'message' => __('Notification destination added.')]);
 
         return to_route('admin.notification-destinations.index');
     }
 
-    public function update(UpdateNotificationDestinationRequest $updateNotificationDestinationRequest, NotificationDestination $notificationDestination): RedirectResponse
+    public function update(UpdateNotificationDestinationRequest $updateNotificationDestinationRequest, NotificationDestination $notificationDestination, AuditLogger $auditLogger): RedirectResponse
     {
+        $before = $this->auditSnapshot($notificationDestination);
         $validated = $updateNotificationDestinationRequest->validated();
         $pushChannelType = PushChannelType::from($validated['channel']);
         $config = $this->cleanConfig($pushChannelType, $validated['config']);
@@ -95,18 +107,47 @@ class NotificationDestinationController extends Controller
             'config' => $config,
         ]);
 
+        $auditLogger->settingsUpdated(
+            SettingsGroup::NotificationDestinations,
+            $before,
+            $this->auditSnapshot($notificationDestination),
+            ['operation' => 'updated', 'record_id' => $notificationDestination->id],
+            sprintf('Updated notification destination "%s".', $notificationDestination->label),
+        );
+
         Inertia::flash('toast', ['type' => 'success', 'message' => __('Notification destination updated.')]);
 
         return to_route('admin.notification-destinations.index');
     }
 
-    public function destroy(NotificationDestination $notificationDestination): RedirectResponse
+    public function destroy(NotificationDestination $notificationDestination, AuditLogger $auditLogger): RedirectResponse
     {
+        $before = $this->auditSnapshot($notificationDestination);
+
         $notificationDestination->delete();
+
+        $auditLogger->settingsUpdated(
+            SettingsGroup::NotificationDestinations,
+            $before,
+            [],
+            ['operation' => 'deleted', 'record_id' => $notificationDestination->id],
+            sprintf('Removed notification destination "%s".', $notificationDestination->label),
+        );
 
         Inertia::flash('toast', ['type' => 'success', 'message' => __('Notification destination removed.')]);
 
         return to_route('admin.notification-destinations.index');
+    }
+
+    /**
+     * `config` is #[Hidden], but the audit still diffs it: AuditLogger masks
+     * `config.url` (Discord/webhook URLs) and `config.secret`.
+     *
+     * @return array<string, mixed>
+     */
+    private function auditSnapshot(NotificationDestination $notificationDestination): array
+    {
+        return [...AuditChanges::snapshot($notificationDestination), 'config' => $notificationDestination->config ?? []];
     }
 
     /**

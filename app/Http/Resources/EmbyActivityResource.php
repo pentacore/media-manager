@@ -23,6 +23,7 @@ use Pentacore\Typefinder\Attributes\TypefinderResource;
     'duration_ticks' => 'number | null',
     'emby_username' => 'string | null',
     'created_at' => 'string | null',
+    'can_toggle_played' => 'boolean',
 ])]
 class EmbyActivityResource extends JsonResource
 {
@@ -44,6 +45,9 @@ class EmbyActivityResource extends JsonResource
             'duration_ticks' => $this->duration_ticks,
             'emby_username' => $this->whenLoaded('embyUserLink', fn () => $this->embyUserLink?->emby_username),
             'created_at' => $this->created_at?->toISOString(),
+            'can_toggle_played' => $this->relationLoaded('embyUserLink')
+                && $request->user() !== null
+                && $this->playedStateEditableBy($request->user()),
         ];
     }
 }

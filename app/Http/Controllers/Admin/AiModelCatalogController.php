@@ -4,14 +4,18 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers\Admin;
 
+use App\Enums\SettingsGroup;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Admin\StoreCatalogModelPricesRequest;
+use App\Models\AiModelPrice;
 use App\Services\AiUsage\Pricing\AiModelPriceWriter;
 use App\Services\AiUsage\Pricing\CatalogModelBrowser;
 use App\Services\AiUsage\Pricing\CatalogUnavailableException;
 use App\Services\AiUsage\Pricing\Data\CatalogModelOption;
 use App\Services\AiUsage\Pricing\Data\WriteOutcome;
 use App\Services\AiUsage\Pricing\RefreshScope;
+use App\Services\Audit\AuditChanges;
+use App\Services\Audit\AuditLogger;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Validation\ValidationException;
@@ -44,12 +48,14 @@ class AiModelCatalogController extends Controller
     /**
      * Add the admin's picked catalog models. Prices always come from the
      * catalog, never the request, and each row is written through the pricing
-     * writer so it carries feed provenance and keeps syncing.
+     * writer so it carries feed provenance and keeps syncing. Every created
+     * row gets its own settings audit row, like a price added by hand.
      */
     public function store(
         StoreCatalogModelPricesRequest $storeCatalogModelPricesRequest,
         CatalogModelBrowser $catalogModelBrowser,
         AiModelPriceWriter $aiModelPriceWriter,
+        AuditLogger $auditLogger,
     ): RedirectResponse {
         $validated = $storeCatalogModelPricesRequest->validated();
         /** @var string $provider */
@@ -70,9 +76,24 @@ class AiModelCatalogController extends Controller
         $added = 0;
 
         foreach ($candidates as $candidate) {
-            if ($aiModelPriceWriter->write($candidate, $refreshScope, $candidate->source) === WriteOutcome::Created) {
-                $added++;
+            if ($aiModelPriceWriter->write($candidate, $refreshScope, $candidate->source) !== WriteOutcome::Created) {
+                continue;
             }
+
+            $added++;
+
+            $aiModelPrice = AiModelPrice::query()
+                ->where('provider', RefreshScope::canonicalProvider($candidate->provider))
+                ->where('model', trim($candidate->model))
+                ->sole();
+
+            $auditLogger->settingsUpdated(
+                SettingsGroup::AiModelPrices,
+                [],
+                AuditChanges::snapshot($aiModelPrice),
+                ['operation' => 'created', 'record_id' => $aiModelPrice->id],
+                sprintf('Added the catalog model price for %s/%s.', $aiModelPrice->provider, $aiModelPrice->model),
+            );
         }
 
         $total = count($models);

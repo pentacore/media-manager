@@ -28,6 +28,14 @@ class SearchController extends Controller
 {
     private const int MAX_RESULTS = 20;
 
+    /**
+     * Query parameter names (lower-cased) that carry tracker or indexer
+     * credentials in a Prowlarr infoUrl.
+     *
+     * @var list<string>
+     */
+    private const array INFO_URL_SECRET_PARAMETERS = ['passkey', 'apikey', 'api_key', 'token', 'auth', 'rsskey', 'torrent_pass', 'key', 'sig'];
+
     private function maxResults(): int
     {
         return (int) config('mediamanager.search.max_results', self::MAX_RESULTS);
@@ -383,7 +391,7 @@ class SearchController extends Controller
                 'seeders' => $hit['seeders'] ?? null,
                 'leechers' => $hit['leechers'] ?? null,
                 'age' => $age,
-                'info_url' => $hit['infoUrl'] ?? null,
+                'info_url' => self::sanitizeInfoUrl($hit['infoUrl'] ?? null),
                 // Prowlarr returns a quality-style score in 0-100 only for
                 // some indexers; expose what's there but don't synthesise.
                 'score' => $hit['qualityWeight'] ?? null,
@@ -394,6 +402,54 @@ class SearchController extends Controller
             'results' => array_slice($rows, 0, self::MAX_RESULTS),
             'error' => null,
         ];
+    }
+
+    /**
+     * Prowlarr's infoUrl can carry a tracker passkey either in the query
+     * string (e.g. `?passkey=...`) or, more rarely, in the URL's userinfo
+     * part (`https://user:pass@host/...`). Only secret-looking query
+     * parameters are dropped, so query-identified details pages
+     * (`details.php?id=123`) keep working; a userinfo credential can't be
+     * dropped piecemeal, so the whole URL is discarded instead, as is
+     * anything but an http(s) link (it becomes an href).
+     */
+    private static function sanitizeInfoUrl(mixed $infoUrl): ?string
+    {
+        if (! is_string($infoUrl) || $infoUrl === '') {
+            return null;
+        }
+
+        $parts = parse_url($infoUrl);
+
+        if (
+            $parts === false
+            || ! in_array(strtolower($parts['scheme'] ?? ''), ['http', 'https'], true)
+            || ($parts['host'] ?? '') === ''
+            || isset($parts['user'])
+            || isset($parts['pass'])
+        ) {
+            return null;
+        }
+
+        if (! isset($parts['query'])) {
+            return $infoUrl;
+        }
+
+        $keptPairs = array_filter(
+            explode('&', $parts['query']),
+            static fn (string $pair): bool => ! in_array(
+                strtolower(urldecode(explode('=', $pair, 2)[0])),
+                self::INFO_URL_SECRET_PARAMETERS,
+                true,
+            ),
+        );
+
+        return sprintf(
+            '%s%s%s',
+            strstr($infoUrl, '?', true),
+            $keptPairs === [] ? '' : sprintf('?%s', implode('&', $keptPairs)),
+            isset($parts['fragment']) ? sprintf('#%s', $parts['fragment']) : '',
+        );
     }
 
     /**

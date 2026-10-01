@@ -64,6 +64,7 @@ test('prev/next navigation changes the month and its items', function (): void {
         ->assertSeeIn('[data-calendar-month-label]', 'August 2026')
         ->assertDontSeeIn('[data-calendar-agenda]', 'Severance')
         ->click('[data-calendar-next]')
+        ->assertSeeIn('[data-calendar-month-label]', 'September 2026')
         ->click('[data-calendar-next]')
         ->assertSeeIn('[data-calendar-month-label]', 'October 2026')
         ->assertDontSeeIn('[data-calendar-agenda]', 'Severance');

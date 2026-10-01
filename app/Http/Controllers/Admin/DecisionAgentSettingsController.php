@@ -6,8 +6,11 @@ namespace App\Http\Controllers\Admin;
 
 use App\Ai\ModelCatalog;
 use App\Enums\AiReasoningLevel;
+use App\Enums\SettingsGroup;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Admin\UpdateDecisionAgentSettingsRequest;
+use App\Services\Audit\AuditLogger;
+use App\Services\Audit\SettingsSnapshot;
 use App\Settings\DecisionAgentSettings;
 use Illuminate\Http\RedirectResponse;
 use Inertia\Inertia;
@@ -35,8 +38,13 @@ class DecisionAgentSettingsController extends Controller
         ]);
     }
 
-    public function update(UpdateDecisionAgentSettingsRequest $updateDecisionAgentSettingsRequest, DecisionAgentSettings $decisionAgentSettings): RedirectResponse
-    {
+    public function update(
+        UpdateDecisionAgentSettingsRequest $updateDecisionAgentSettingsRequest,
+        DecisionAgentSettings $decisionAgentSettings,
+        SettingsSnapshot $settingsSnapshot,
+        AuditLogger $auditLogger,
+    ): RedirectResponse {
+        $before = $settingsSnapshot->capture(SettingsGroup::DecisionAgent);
         $validated = $updateDecisionAgentSettingsRequest->validated();
 
         $decisionAgentSettings->setEnabled((bool) $validated['enabled']);
@@ -52,6 +60,8 @@ class DecisionAgentSettingsController extends Controller
         $decisionAgentSettings->setNotifyOnAct((bool) $validated['notify_on_act']);
         $decisionAgentSettings->setMaxActionsPerRun((int) $validated['max_actions_per_run']);
         $decisionAgentSettings->setReasoning(AiReasoningLevel::from($validated['reasoning_level']));
+
+        $auditLogger->settingsUpdated(SettingsGroup::DecisionAgent, $before, $settingsSnapshot->capture(SettingsGroup::DecisionAgent));
 
         Inertia::flash('toast', ['type' => 'success', 'message' => __('Decision agent settings updated.')]);
 

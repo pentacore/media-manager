@@ -12,6 +12,7 @@ use App\Http\Requests\Admin\CreateUserRequest;
 use App\Http\Requests\Admin\UpdateUserRoleRequest;
 use App\Mail\UserInvitation;
 use App\Models\User;
+use App\Services\Audit\AuditLogger;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\URL;
@@ -46,7 +47,7 @@ class UserController extends Controller
         ]);
     }
 
-    public function store(CreateUserRequest $createUserRequest): RedirectResponse
+    public function store(CreateUserRequest $createUserRequest, AuditLogger $auditLogger): RedirectResponse
     {
         $fields = ['name', 'email', 'role'];
 
@@ -66,24 +67,40 @@ class UserController extends Controller
 
             Mail::to($user)->send(new UserInvitation($user, $inviteUrl));
 
+            $auditLogger->record('invite.created', $user, sprintf('Invited %s <%s> as %s.', $user->name, $user->email, $user->role->label()), context: ['role' => $user->role->value]);
+
             Inertia::flash('toast', ['type' => 'success', 'message' => __('Invitation sent to :email.', ['email' => $user->email])]);
         } else {
+            $auditLogger->record('user.created', $user, sprintf('Created %s <%s> as %s.', $user->name, $user->email, $user->role->label()), context: ['role' => $user->role->value]);
+
             Inertia::flash('toast', ['type' => 'success', 'message' => __('User created.')]);
         }
 
         return to_route('admin.users.index');
     }
 
-    public function updateRole(UpdateUserRoleRequest $updateUserRoleRequest, User $user, ModifyUserAccess $modifyUserAccess): RedirectResponse
+    public function updateRole(UpdateUserRoleRequest $updateUserRoleRequest, User $user, ModifyUserAccess $modifyUserAccess, AuditLogger $auditLogger): RedirectResponse
     {
         abort_if($user->id === $updateUserRoleRequest->user()->id, 403);
 
+        $previousRole = $user->role;
+        $userRole = UserRole::from((string) $updateUserRoleRequest->validated('role'));
+
         try {
-            $modifyUserAccess->changeRole($user, UserRole::from((string) $updateUserRoleRequest->validated('role')));
+            $modifyUserAccess->changeRole($user, $userRole);
         } catch (LastAdminException) {
             Inertia::flash('toast', ['type' => 'error', 'message' => __('At least one admin must remain.')]);
 
             return to_route('admin.users.index');
+        }
+
+        if ($previousRole !== $userRole) {
+            $auditLogger->record(
+                'user.role_changed',
+                $user,
+                sprintf("Changed %s's role from %s to %s.", $user->name, $previousRole->label(), $userRole->label()),
+                ['role' => ['from' => $previousRole->value, 'to' => $userRole->value]],
+            );
         }
 
         Inertia::flash('toast', ['type' => 'success', 'message' => __('User role updated.')]);
@@ -91,9 +108,13 @@ class UserController extends Controller
         return to_route('admin.users.index');
     }
 
-    public function destroy(User $user, ModifyUserAccess $modifyUserAccess): RedirectResponse
+    public function destroy(User $user, ModifyUserAccess $modifyUserAccess, AuditLogger $auditLogger): RedirectResponse
     {
         abort_if($user->id === request()->user()->id, 403);
+
+        // An account that never accepted its invite (no password, no SSO) is a
+        // pending invitation: deleting it revokes the invite.
+        $pendingInvite = $user->password === null && $user->sso_provider === null && $user->invite_accepted_at === null;
 
         try {
             $modifyUserAccess->delete($user);
@@ -102,6 +123,15 @@ class UserController extends Controller
 
             return to_route('admin.users.index');
         }
+
+        $auditLogger->record(
+            $pendingInvite ? 'invite.revoked' : 'user.deleted',
+            $user,
+            $pendingInvite
+                ? sprintf('Revoked the invitation for %s <%s>.', $user->name, $user->email)
+                : sprintf('Deleted %s <%s>.', $user->name, $user->email),
+            context: ['role' => $user->role->value],
+        );
 
         Inertia::flash('toast', ['type' => 'success', 'message' => __('User deleted.')]);
 

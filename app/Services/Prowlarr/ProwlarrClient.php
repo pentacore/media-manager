@@ -44,6 +44,22 @@ class ProwlarrClient extends ArrClient
     }
 
     /**
+     * Send a release from a Prowlarr search to Prowlarr's own download
+     * client. Prowlarr looks it up by {indexerId}_{guid} in its 30-minute
+     * release cache (404 on a miss). Named apart from ArrClient::grabRelease()
+     * (a different signature). Never retried: a lost response may already
+     * have started the download.
+     *
+     * @throws RequestException|ConnectionException
+     */
+    public function grabIndexerRelease(string $guid, int $indexerId): void
+    {
+        $this->buildClient(withRetry: false)
+            ->post(sprintf('/api/%s/search', $this->apiVersion), ['guid' => $guid, 'indexerId' => $indexerId])
+            ->throw();
+    }
+
+    /**
      * @return array<int, array<string, mixed>>
      *
      * @throws RequestException|ConnectionException

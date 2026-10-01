@@ -56,6 +56,28 @@ test('queue index pulls live queue + history when configured', function (): void
         );
 });
 
+test('a successful queue load clears the error a failed poll left behind', function (): void {
+    ServiceConnection::factory()->sabnzbd()->create(['url' => 'http://sab.local:8080', 'api_key' => 'k']);
+    Http::fake(['sab.local:8080/api*' => Http::sequence()
+        ->push(['queue' => ['paused' => false, 'slots' => []]])
+        ->push(['history' => ['slots' => []]])]);
+
+    $this->actingAs($this->user)
+        ->get(route('sabnzbd.queue.index'))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->where('configured', true)
+            ->where('connection.name', fn (string $name): bool => $name !== '')
+            ->where('error', null));
+});
+
+test('without a connection the queue page carries no error', function (): void {
+    $this->actingAs($this->user)
+        ->get(route('sabnzbd.queue.index'))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page->where('configured', false)->where('error', null));
+});
+
 test('hidden_categories filters out matching slots from queue and history', function (): void {
     ServiceConnection::factory()->sabnzbd()->create([
         'url' => 'http://sab.local:8080',
@@ -130,12 +152,12 @@ test('pauseSlot endpoint logs activity and flashes a toast', function (): void {
 
     $this->actingAs($this->user)
         ->from(route('sabnzbd.queue.index'))
-        ->post(route('sabnzbd.queue.slot.pause', ['nzoId' => 'NZO-9']))
+        ->post(route('sabnzbd.queue.slot.pause', ['nzoId' => 'SABnzbd_nzo_9']))
         ->assertRedirect(route('sabnzbd.queue.index'));
 
     $activityLog = ActivityLog::query()->where('action', 'sabnzbd.slot.paused')->firstOrFail();
     expect($activityLog->service_connection_id)->toBe($connection->id);
-    expect($activityLog->metadata['nzo_id'])->toBe('NZO-9');
+    expect($activityLog->metadata['nzo_id'])->toBe('SABnzbd_nzo_9');
 });
 
 test('reprioritize validates priority is in the SABnzbd range', function (): void {
@@ -146,7 +168,7 @@ test('reprioritize validates priority is in the SABnzbd range', function (): voi
 
     $this->actingAs($this->user)
         ->from(route('sabnzbd.queue.index'))
-        ->patch(route('sabnzbd.queue.slot.priority', ['nzoId' => 'X']), ['priority' => 99])
+        ->patch(route('sabnzbd.queue.slot.priority', ['nzoId' => 'SABnzbd_nzo_x']), ['priority' => 99])
         ->assertSessionHasErrors('priority');
 });
 
@@ -162,7 +184,7 @@ test('reprioritize accepts valid priority and writes activity', function (): voi
 
     $this->actingAs($this->user)
         ->from(route('sabnzbd.queue.index'))
-        ->patch(route('sabnzbd.queue.slot.priority', ['nzoId' => 'NZO-7']), ['priority' => 1])
+        ->patch(route('sabnzbd.queue.slot.priority', ['nzoId' => 'SABnzbd_nzo_7']), ['priority' => 1])
         ->assertRedirect();
 
     $activityLog = ActivityLog::query()->where('action', 'sabnzbd.slot.reprioritized')->firstOrFail();

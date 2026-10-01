@@ -3,6 +3,8 @@
 declare(strict_types=1);
 
 use App\Enums\PricingSource;
+use App\Enums\SettingsGroup;
+use App\Models\ActivityLog;
 use App\Models\AiModelPrice;
 use App\Models\User;
 use App\Settings\AiSettings;
@@ -156,6 +158,34 @@ test('bulk add skips existing and vanished models and leaves existing rows untou
     expect($existing->fresh()->input_per_mtok)->toBe('1.5000')
         ->and(AiModelPrice::query()->where('model', 'vendor/gone')->exists())->toBeFalse()
         ->and(AiModelPrice::query()->where('model', 'anthropic/claude-haiku-6')->exists())->toBeTrue();
+});
+
+test('bulk add writes one settings audit row per created price row', function (): void {
+    catalogPickerControllerFake();
+    AiModelPrice::factory()->create(['provider' => 'openrouter', 'model' => 'anthropic/claude-haiku-6']);
+    $admin = User::factory()->admin()->create();
+
+    $this->actingAs($admin)
+        ->post(route('admin.ai-prices.catalog.store'), [
+            'provider' => 'openrouter',
+            'models' => ['anthropic/claude-opus-5.5', 'openai/gpt-6-luna', 'anthropic/claude-haiku-6'],
+        ])
+        ->assertRedirect(route('admin.ai-prices.index'));
+
+    $auditRows = ActivityLog::query()->where('action', 'settings.updated')->orderBy('id')->get();
+    $aiModelPrice = AiModelPrice::query()->where('model', 'anthropic/claude-opus-5.5')->sole();
+    $luna = AiModelPrice::query()->where('model', 'openai/gpt-6-luna')->sole();
+
+    expect($auditRows)->toHaveCount(2)
+        ->and($auditRows->every(fn (ActivityLog $activityLog): bool => $activityLog->isAudit()
+            && $activityLog->user_id === $admin->id
+            && $activityLog->subject_type === SettingsGroup::AiModelPrices->value))->toBeTrue()
+        ->and($auditRows->pluck('metadata.context')->all())->toBe([
+            ['operation' => 'created', 'record_id' => $aiModelPrice->id],
+            ['operation' => 'created', 'record_id' => $luna->id],
+        ])
+        ->and($auditRows[0]->description)->toBe('Added the catalog model price for openrouter/anthropic/claude-opus-5.5.')
+        ->and($auditRows[0]->metadata['changes']['model'])->toBe(['from' => null, 'to' => 'anthropic/claude-opus-5.5']);
 });
 
 test('bulk add names a single skipped model in the singular', function (): void {

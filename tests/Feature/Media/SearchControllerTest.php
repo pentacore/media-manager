@@ -541,6 +541,48 @@ test('scope=indexers never exposes Prowlarr download links or guids', function (
         );
 });
 
+test('scope=indexers keeps the Prowlarr infoUrl usable while dropping secrets and unsafe links', function (string $infoUrl, ?string $shown): void {
+    $member = User::factory()->member()->create();
+    ServiceConnection::factory()->prowlarr()->create([
+        'url' => 'http://prowlarr.local:9696',
+        'api_key' => 'test',
+    ]);
+
+    Http::fake([
+        'prowlarr.local:9696/api/v1/search*' => Http::response([[
+            'guid' => 'guid-1',
+            'title' => 'Severance.S02E07.1080p.WEB-DL.x264',
+            'indexer' => 'ETTV',
+            'size' => 2_500_000_000,
+            'infoUrl' => $infoUrl,
+        ]]),
+    ]);
+
+    $this->actingAs($member)
+        ->get(route('media.search.index', ['q' => 'severance', 'scope' => 'indexers']))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->loadDeferredProps(function ($page) use ($shown): void {
+                $page->where('indexerResults.results.0.info_url', $shown);
+
+                expect(json_encode($page->toArray(), JSON_THROW_ON_ERROR))
+                    ->not->toContain('tracker-passkey')
+                    ->not->toContain('hunter2');
+            })
+        );
+})->with([
+    'passkey only' => ['https://tracker.example/details/1?passkey=tracker-passkey', 'https://tracker.example/details/1'],
+    'id kept, passkey dropped' => ['https://tracker.example/details.php?id=123&passkey=tracker-passkey', 'https://tracker.example/details.php?id=123'],
+    'guid kept' => ['https://geek.example/geekseek.php?guid=abc123', 'https://geek.example/geekseek.php?guid=abc123'],
+    'secret names are case-insensitive' => ['https://tracker.example/t?ApiKey=tracker-passkey&id=7&TORRENT_PASS=tracker-passkey&Sig=tracker-passkey', 'https://tracker.example/t?id=7'],
+    'every listed secret name' => ['https://tracker.example/t?token=tracker-passkey&auth=tracker-passkey&rsskey=tracker-passkey&key=tracker-passkey&api_key=tracker-passkey&page=2', 'https://tracker.example/t?page=2'],
+    'fragment kept' => ['https://tracker.example/details.php?id=5&passkey=tracker-passkey#comments', 'https://tracker.example/details.php?id=5#comments'],
+    'javascript scheme' => ['javascript:alert(1)', null],
+    'data scheme' => ['data:text/html,<script>alert(1)</script>', null],
+    'ftp scheme' => ['ftp://tracker.example/details/1', null],
+    'userinfo' => ['https://user:hunter2@tracker.example/details/1', null],
+]);
+
 test('typesense driver returns indexed series results scoped to active connection', function (): void {
     config()->set('mediamanager.search.driver', 'typesense');
     config()->set('scout.driver', 'database');

@@ -4,9 +4,12 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers;
 
+use App\Enums\ActivityLogCategory;
 use App\Http\Resources\ActivityLogResource;
 use App\Models\ActivityLog;
 use App\Models\ServiceConnection;
+use App\Models\User;
+use App\Support\Abilities;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
@@ -27,11 +30,13 @@ class ActivityLogController extends Controller
 
     public function index(Request $request): Response
     {
+        $user = $request->user();
         $action = $request->string('action')->toString();
         $serviceId = $request->integer('service_id');
         $since = $this->resolveSince($request);
+        $category = $this->resolveCategory($request);
 
-        $lengthAwarePaginator = $this->buildBuilder($action, $serviceId, $since)
+        $lengthAwarePaginator = $this->buildBuilder($user, $action, $serviceId, $since, $category)
             ->with(['user:id,name', 'serviceConnection:id,name,type'])
             ->paginate(50)
             ->withQueryString();
@@ -51,9 +56,11 @@ class ActivityLogController extends Controller
                 'action' => $action,
                 'service_id' => $serviceId > 0 ? $serviceId : null,
                 'since' => $since,
+                'category' => $category?->value,
             ],
             'filterOptions' => [
                 'actions' => ActivityLog::query()
+                    ->visibleTo($user)
                     ->select('action')
                     ->distinct()
                     ->orderBy('action')
@@ -70,6 +77,7 @@ class ActivityLogController extends Controller
                     ->all(),
                 'rangeHours' => self::RANGE_HOURS,
                 'todayValue' => self::TODAY,
+                'categories' => $user?->can(Abilities::ADMIN) ? ActivityLogCategory::values() : [],
             ],
         ]);
     }
@@ -77,15 +85,16 @@ class ActivityLogController extends Controller
     /**
      * Streams the filtered slice as newline-delimited JSON so it can be
      * piped into jq, grep, or any log-shipping tool. Honours the same
-     * filters as index() so what you see is what you export.
+     * filters and visibility as index() so what you see is what you export.
      */
     public function export(Request $request): StreamedResponse
     {
         $action = $request->string('action')->toString();
         $serviceId = $request->integer('service_id');
         $since = $this->resolveSince($request);
+        $category = $this->resolveCategory($request);
 
-        $builder = $this->buildBuilder($action, $serviceId, $since)
+        $builder = $this->buildBuilder($request->user(), $action, $serviceId, $since, $category)
             ->with(['user:id,name', 'serviceConnection:id,name,type']);
 
         $filename = sprintf('activity-log-%s.ndjson', now()->format('Ymd-His'));
@@ -97,6 +106,7 @@ class ActivityLogController extends Controller
                 fwrite($handle, json_encode([
                     'id' => $activityLog->id,
                     'created_at' => $activityLog->created_at?->toIso8601String(),
+                    'category' => $activityLog->isAudit() ? ActivityLogCategory::Audit->value : ActivityLogCategory::Activity->value,
                     'user' => $activityLog->user?->name,
                     'service' => $activityLog->serviceConnection?->name,
                     'service_type' => $activityLog->serviceConnection?->type->value,
@@ -119,9 +129,13 @@ class ActivityLogController extends Controller
     /**
      * @return Builder<ActivityLog>
      */
-    private function buildBuilder(string $action, int $serviceId, int|string $since): Builder
+    private function buildBuilder(?User $user, string $action, int $serviceId, int|string $since, ?ActivityLogCategory $category): Builder
     {
-        $builder = ActivityLog::query()->latest();
+        $builder = ActivityLog::query()->visibleTo($user)->latest();
+
+        if ($category instanceof ActivityLogCategory) {
+            $builder->where('category', $category->value);
+        }
 
         if ($action !== '') {
             $builder->where('action', $action);
@@ -134,6 +148,22 @@ class ActivityLogController extends Controller
         $builder->where('created_at', '>=', $this->cutoffFor($since));
 
         return $builder;
+    }
+
+    /**
+     * ?category= narrows to one feed. Audit is admin-only, so a non-admin
+     * asking for it gets the unfiltered (activity-only) feed rather than a
+     * hint that audit rows exist.
+     */
+    private function resolveCategory(Request $request): ?ActivityLogCategory
+    {
+        $category = ActivityLogCategory::tryFrom($request->string('category')->toString());
+
+        if ($category?->isAdminOnly() === true && $request->user()?->can(Abilities::ADMIN) !== true) {
+            return null;
+        }
+
+        return $category;
     }
 
     /**

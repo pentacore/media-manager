@@ -113,6 +113,8 @@ test('results never carry Prowlarr download links or other credential-bearing fi
     $response->assertOk()
         ->assertInertia(fn (AssertableInertia $assertableInertia): AssertableInertia => $assertableInertia
             ->where('results.0', [
+                'key' => hash('sha256', 'https://tracker.example/download/1?passkey=tracker-passkey'),
+                'indexer_id' => 3,
                 'title' => 'Demo.S01E01.1080p',
                 'indexer' => 'Demo',
                 'size' => 1_000_000_000,

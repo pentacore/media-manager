@@ -5,10 +5,13 @@ declare(strict_types=1);
 namespace App\Http\Controllers\Admin;
 
 use App\Enums\SeasonPackPolicy;
+use App\Enums\SettingsGroup;
 use App\Enums\SubtitleRuleStrength;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Admin\UpdateMediaReplacementSettingsRequest;
 use App\Models\MediaReplacementAttempt;
+use App\Services\Audit\AuditLogger;
+use App\Services\Audit\SettingsSnapshot;
 use App\Settings\MediaReplacementSettings;
 use Illuminate\Http\RedirectResponse;
 use Inertia\Inertia;
@@ -40,12 +43,17 @@ class MediaReplacementSettingsController extends Controller
     public function update(
         UpdateMediaReplacementSettingsRequest $updateMediaReplacementSettingsRequest,
         MediaReplacementSettings $mediaReplacementSettings,
+        SettingsSnapshot $settingsSnapshot,
+        AuditLogger $auditLogger,
     ): RedirectResponse {
+        $before = $settingsSnapshot->capture(SettingsGroup::MediaReplacement);
         $validated = $updateMediaReplacementSettingsRequest->validated();
 
         $mediaReplacementConfiguration = $validated['media_replacement'];
         $mediaReplacementConfiguration['sonarr_root_folders'] = $mediaReplacementSettings->sonarrRootFolders();
         $mediaReplacementSettings->setConfiguration($mediaReplacementConfiguration);
+
+        $auditLogger->settingsUpdated(SettingsGroup::MediaReplacement, $before, $settingsSnapshot->capture(SettingsGroup::MediaReplacement));
 
         Inertia::flash('toast', ['type' => 'success', 'message' => __('Media replacement settings updated.')]);
 

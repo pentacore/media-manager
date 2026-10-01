@@ -26,7 +26,7 @@ declare module '@inertiajs/core' {
             name: string;
             auth: Auth;
             ai: { enabled: boolean };
-            integrations: { seerr: boolean };
+            integrations: { seerr: boolean; prowlarr: boolean };
             nav: {
                 pendingActions: number;
                 activeSessions: number;
