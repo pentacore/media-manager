@@ -12,6 +12,12 @@ use RectorLaravel\Rector\StaticCall\RouteActionCallableRector;
 use RectorLaravel\Set\LaravelSetList;
 use RectorLaravel\Set\LaravelSetProvider;
 
+// Rector refuses a container cache directory that does not exist yet.
+$containerCacheDirectory = __DIR__.'/storage/framework/cache/rector-container';
+if (! is_dir($containerCacheDirectory)) {
+    mkdir($containerCacheDirectory, 0777, true);
+}
+
 return RectorConfig::configure()
     ->withPhpSets()
     ->withPreparedSets(
@@ -63,7 +69,12 @@ return RectorConfig::configure()
     ])
     // On the bind mount, not the container's /tmp: a run as root (sail exec)
     // left root-owned cache files there that the sail user cannot overwrite.
-    ->withCache(__DIR__.'/storage/framework/cache/rector')
+    // That covers Rector's internal PHPStan container cache too, which
+    // otherwise lands in /tmp/cache.
+    ->withCache(
+        cacheDirectory: __DIR__.'/storage/framework/cache/rector',
+        containerCacheDirectory: $containerCacheDirectory,
+    )
     ->withSkipPath(__DIR__.'/bootstrap/cache')
     ->withSkip([
         PostIncDecToPreIncDecRector::class,
