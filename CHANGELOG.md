@@ -1,3 +1,28 @@
+# [1.28.0](https://github.com/pentacore/media-manager/compare/v1.27.0...v1.28.0) (2026-10-01)
+
+
+### Bug Fixes
+
+* **admin:** explain a stale catalog pick saved as manual ([03bc3f0](https://github.com/pentacore/media-manager/commit/03bc3f0f04214a066df13d36ac6a6a2472fceaf9))
+* **admin:** keep bulk catalog picks when the catalog is down ([0236cca](https://github.com/pentacore/media-manager/commit/0236cca23a58c7109139a6cae1806e2742a99579))
+* **admin:** reload the catalog list each time the bulk dialog opens ([ed25342](https://github.com/pentacore/media-manager/commit/ed25342825158d270e0c3c5d2b16deffe51b677a))
+* **admin:** tidy the catalog picker and add price form ([9f6ebc9](https://github.com/pentacore/media-manager/commit/9f6ebc9c22b75419800b34e12759ca2a7ee6183b))
+* **ai-prices:** link the uncovered-provider message to AI settings ([0d3043c](https://github.com/pentacore/media-manager/commit/0d3043cdf6805e36ee26d369a08076e11018ce93))
+* **pricing:** fingerprint the catalog cache key with the xai key state ([171bbb5](https://github.com/pentacore/media-manager/commit/171bbb5361549623eaa28451da8bcef3b935654c))
+* **pricing:** load the catalog picker slice safely ([6968dec](https://github.com/pentacore/media-manager/commit/6968decc07f298f67573b2958336c42954fa2690))
+* **pricing:** only count feeds that could cover a provider as an outage ([d928f6a](https://github.com/pentacore/media-manager/commit/d928f6a86fcf4ae1de8dfca3790b2486869ed779))
+
+
+### Features
+
+* **admin:** add models in bulk from the pricing catalog ([9644d19](https://github.com/pentacore/media-manager/commit/9644d19651f70d4d836bd6b27528fbccf0be0e8d))
+* **admin:** bulk add picked catalog models as synced prices ([fa89ee2](https://github.com/pentacore/media-manager/commit/fa89ee25bca7f808149e9fc80103322830861f69))
+* **admin:** keep feed provenance for an unedited catalog pick ([6336753](https://github.com/pentacore/media-manager/commit/6336753cb921ba8a4e6d0d709b7f79e8f549a8bc))
+* **admin:** pick a catalog model inside the add price form ([6933e60](https://github.com/pentacore/media-manager/commit/6933e60bdfa96ab78694d72f921f726c72791334))
+* **admin:** serve addable catalog models per provider ([d9b9f9a](https://github.com/pentacore/media-manager/commit/d9b9f9a47e76233364756dcc6bc1a710e664dd43))
+* **pricing:** browse addable catalog models per provider ([cbdc288](https://github.com/pentacore/media-manager/commit/cbdc288445e19a023d1f6d78bcc8520b3c3d8aa1))
+* **pricing:** let an admin's explicit catalog pick create rows ([611f7ac](https://github.com/pentacore/media-manager/commit/611f7acec0d97ea6d8fb6cd803e7fe871de867d9))
+
 # [1.27.0](https://github.com/pentacore/media-manager/compare/v1.26.0...v1.27.0) (2026-09-30)
 
 

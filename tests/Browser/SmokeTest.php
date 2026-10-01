@@ -408,7 +408,6 @@ function browserSmokeExcludedRouteNames(): array
     return [
         'activity-log.export',
         'admin.ai-usage.export',
-        'admin.ai-prices.openrouter-models.index',
         'ai.chat.pending-workflow',
         'ai.conversations.index',
         'media.search.instant',

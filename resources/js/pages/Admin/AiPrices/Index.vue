@@ -5,7 +5,12 @@ import { onMounted, onUnmounted, ref } from 'vue';
 import { toast } from 'vue-sonner';
 import AiFreeUsagePoolController from '@/actions/App/Http/Controllers/Admin/AiFreeUsagePoolController';
 import AiModelPriceController from '@/actions/App/Http/Controllers/Admin/AiModelPriceController';
-import OpenRouterModelPicker from '@/components/ai/OpenRouterModelPicker.vue';
+import {
+    AddFromCatalogDialog,
+    CreatePriceDialog,
+    SOURCE_LABELS,
+} from '@/components/ai-prices';
+import type { RateLimitDraft } from '@/components/ai-prices';
 import InputError from '@/components/InputError.vue';
 import {
     Pill,
@@ -113,7 +118,7 @@ const props = defineProps<{
     refresh_running: boolean;
     rate_limit_metrics: Array<{ value: string; label: string }>;
     rate_limit_periods: Array<{ value: string; label: string }>;
-    openrouter_pricing_enabled: boolean;
+    catalog_providers: string[];
 }>();
 
 defineOptions({
@@ -125,28 +130,18 @@ defineOptions({
     },
 });
 
-const showCreateDialog = ref(false);
 const editing = ref<PriceRow | null>(null);
 const refreshing = ref(props.refresh_running);
 
 const showPoolCreateDialog = ref(false);
 const editingPool = ref<PoolRow | null>(null);
 
-interface RateLimitDraft {
-    metric: 'requests' | 'tokens';
-    period: 'minute' | 'hour' | 'day';
-    limit_value: number | undefined;
-}
-
-const createRateLimits = ref<RateLimitDraft[]>([]);
 const editRateLimits = ref<RateLimitDraft[]>([]);
 
-const createPoolId = ref('none');
 const editPoolId = ref('none');
 
-// Whether a manually managed row opts into online refreshes. Create defaults
-// OFF so a hand-entered price stays locked; edit mirrors the row's state.
-const createAutomaticUpdates = ref(false);
+// Whether a manually managed row opts into online refreshes. Edit mirrors
+// the row's state.
 const editAutomaticUpdates = ref(false);
 
 // Tracks whether the admin actually interacted with the edit dialog's toggle
@@ -162,18 +157,6 @@ function onEditAutomaticUpdatesChange(value: boolean): void {
 }
 
 type PricingSource = NonNullable<PriceRow['pricing_source']>;
-
-const SOURCE_LABELS: Record<PricingSource, string> = {
-    seed: 'Seed data',
-    models_dev: 'Models.dev',
-    first_party: 'First-party source',
-    manual: 'Manual',
-    legacy: 'Legacy',
-    openrouter: 'OpenRouter',
-    litellm: 'LiteLLM',
-    xai_api: 'xAI API',
-    feed_consensus: 'Models.dev + LiteLLM',
-};
 
 const SOURCE_VARIANTS: Record<
     PricingSource,
@@ -394,13 +377,6 @@ function startEdit(price: PriceRow) {
     editAutomaticUpdatesTouched.value = false;
 }
 
-function onCreateSuccess() {
-    showCreateDialog.value = false;
-    createRateLimits.value = [];
-    createPoolId.value = 'none';
-    createAutomaticUpdates.value = false;
-}
-
 function cancelEdit() {
     editing.value = null;
 }
@@ -473,7 +449,7 @@ const priciest = ref(
 
     <div class="flex flex-col gap-4 p-5">
         <!-- Hero -->
-        <div class="flex items-end justify-between gap-3">
+        <div class="flex flex-wrap items-end justify-between gap-3">
             <div>
                 <div class="mb-1.5 text-[13px] text-muted-foreground">
                     Admin <span class="text-fg-subtle">/</span> AI prices
@@ -489,7 +465,7 @@ const priciest = ref(
                     spend shows up.
                 </p>
             </div>
-            <div class="flex items-center gap-2">
+            <div class="flex flex-wrap items-center gap-2">
                 <Button
                     variant="outline"
                     size="sm"
@@ -502,205 +478,13 @@ const priciest = ref(
                         :class="{ 'animate-spin': refreshing }"
                     />Refresh online
                 </Button>
-                <OpenRouterModelPicker
-                    :pricing-enabled="openrouter_pricing_enabled"
+                <AddFromCatalogDialog :providers="catalog_providers" />
+                <CreatePriceDialog
+                    :pools="pools"
+                    :rate-limit-metrics="rate_limit_metrics"
+                    :rate-limit-periods="rate_limit_periods"
+                    :catalog-providers="catalog_providers"
                 />
-                <Dialog v-model:open="showCreateDialog">
-                    <DialogTrigger as-child>
-                        <Button size="sm" class="h-7 gap-1.5 text-xs">
-                            <Plus class="size-3.5" />Add model price
-                        </Button>
-                    </DialogTrigger>
-                    <DialogContent>
-                        <DialogHeader>
-                            <DialogTitle>Add model price</DialogTitle>
-                        </DialogHeader>
-                        <Form
-                            v-bind="AiModelPriceController.store.form()"
-                            class="space-y-4"
-                            v-slot="{ errors, processing }"
-                            @success="onCreateSuccess"
-                        >
-                            <div class="space-y-2">
-                                <Label for="provider">Provider</Label>
-                                <Input
-                                    id="provider"
-                                    name="provider"
-                                    placeholder="openai, anthropic, gemini, …"
-                                />
-                                <InputError :message="errors.provider" />
-                            </div>
-                            <div class="space-y-2">
-                                <Label for="model">Model</Label>
-                                <Input
-                                    id="model"
-                                    name="model"
-                                    placeholder="gpt-5-mini"
-                                />
-                                <InputError :message="errors.model" />
-                            </div>
-                            <div class="grid grid-cols-2 gap-4">
-                                <div
-                                    v-for="field in [
-                                        ['input_per_mtok', 'Input ($/M)'],
-                                        ['output_per_mtok', 'Output ($/M)'],
-                                        [
-                                            'cache_read_per_mtok',
-                                            'Cache Read ($/M)',
-                                        ],
-                                        [
-                                            'cache_write_per_mtok',
-                                            'Cache Write ($/M)',
-                                        ],
-                                    ] as const"
-                                    :key="field[0]"
-                                    class="space-y-2"
-                                >
-                                    <Label :for="field[0]">{{
-                                        field[1]
-                                    }}</Label>
-                                    <Input
-                                        :id="field[0]"
-                                        :name="field[0]"
-                                        type="number"
-                                        step="0.0001"
-                                        min="0"
-                                    />
-                                    <InputError
-                                        :message="
-                                            errors[
-                                                field[0] as
-                                                    | 'input_per_mtok'
-                                                    | 'output_per_mtok'
-                                                    | 'cache_read_per_mtok'
-                                                    | 'cache_write_per_mtok'
-                                            ]
-                                        "
-                                    />
-                                </div>
-                                <div class="col-span-2 space-y-2">
-                                    <Label for="reasoning_per_mtok"
-                                        >Reasoning ($/M)</Label
-                                    >
-                                    <Input
-                                        id="reasoning_per_mtok"
-                                        name="reasoning_per_mtok"
-                                        type="number"
-                                        step="0.0001"
-                                        min="0"
-                                    />
-                                    <InputError
-                                        :message="errors.reasoning_per_mtok"
-                                    />
-                                </div>
-                                <div
-                                    class="col-span-2 space-y-2"
-                                    data-search-unit-field
-                                >
-                                    <Label for="search_unit_per_k"
-                                        >Search units ($/1k)</Label
-                                    >
-                                    <Input
-                                        id="search_unit_per_k"
-                                        name="search_unit_per_k"
-                                        type="number"
-                                        step="0.0001"
-                                        min="0"
-                                    />
-                                    <p class="text-[11px] text-fg-subtle">
-                                        Rerank models only — price per 1,000
-                                        searches.
-                                    </p>
-                                    <InputError
-                                        :message="errors.search_unit_per_k"
-                                    />
-                                </div>
-                                <div class="col-span-2 space-y-2">
-                                    <Label for="free_usage_pool_id"
-                                        >Free usage pool</Label
-                                    >
-                                    <input
-                                        type="hidden"
-                                        name="free_usage_pool_id"
-                                        :value="
-                                            createPoolId === 'none'
-                                                ? ''
-                                                : createPoolId
-                                        "
-                                    />
-                                    <Select
-                                        id="free_usage_pool_id"
-                                        v-model="createPoolId"
-                                    >
-                                        <SelectTrigger
-                                            class="h-9 w-full text-sm"
-                                        >
-                                            <SelectValue
-                                                placeholder="No pool"
-                                            />
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                            <SelectItem value="none">
-                                                No pool
-                                            </SelectItem>
-                                            <SelectItem
-                                                v-for="pool in pools"
-                                                :key="pool.id"
-                                                :value="String(pool.id)"
-                                            >
-                                                {{ pool.name }}
-                                            </SelectItem>
-                                        </SelectContent>
-                                    </Select>
-                                    <InputError
-                                        :message="errors.free_usage_pool_id"
-                                    />
-                                </div>
-                                <div class="col-span-2 space-y-2">
-                                    <Label>Automatic pricing updates</Label>
-                                    <input
-                                        type="hidden"
-                                        name="automatic_updates_enabled"
-                                        :value="
-                                            createAutomaticUpdates ? '1' : '0'
-                                        "
-                                    />
-                                    <Toggle
-                                        v-model="createAutomaticUpdates"
-                                        role="switch"
-                                        aria-label="Automatic pricing updates"
-                                        :aria-checked="createAutomaticUpdates"
-                                        :label="
-                                            createAutomaticUpdates
-                                                ? 'On — kept in sync online'
-                                                : 'Off — locked to manual price'
-                                        "
-                                    />
-                                    <p class="text-[11px] text-fg-subtle">
-                                        Off locks this row so an online refresh
-                                        never overwrites your entered price.
-                                    </p>
-                                    <InputError
-                                        :message="
-                                            errors.automatic_updates_enabled
-                                        "
-                                    />
-                                </div>
-                                <RateLimitEditor
-                                    v-model="createRateLimits"
-                                    :metrics="rate_limit_metrics"
-                                    :periods="rate_limit_periods"
-                                    :errors="errors"
-                                />
-                            </div>
-                            <DialogFooter>
-                                <Button type="submit" :disabled="processing"
-                                    >Save</Button
-                                >
-                            </DialogFooter>
-                        </Form>
-                    </DialogContent>
-                </Dialog>
             </div>
         </div>
 
@@ -960,7 +744,10 @@ const priciest = ref(
                 </div>
             </div>
             <div class="overflow-x-auto">
-                <table class="w-full border-collapse text-[13px]">
+                <table
+                    class="w-full border-collapse text-[13px]"
+                    data-prices-table
+                >
                     <thead>
                         <tr>
                             <th
@@ -1087,6 +874,7 @@ const priciest = ref(
                                                         price.pricing_source,
                                                     )
                                                 "
+                                                data-price-source
                                             >
                                                 {{
                                                     sourceLabel(
@@ -1102,6 +890,7 @@ const priciest = ref(
                                                     price.pricing_source,
                                                 )
                                             "
+                                            data-price-source
                                         >
                                             {{
                                                 sourceLabel(

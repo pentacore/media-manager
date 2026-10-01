@@ -14,7 +14,7 @@ use App\Http\Requests\Admin\UpdateAiModelPriceRequest;
 use App\Jobs\RefreshAiPricesJob;
 use App\Models\AiFreeUsagePool;
 use App\Models\AiModelPrice;
-use App\Settings\AiSettings;
+use App\Services\AiUsage\Pricing\CatalogModelBrowser;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\Auth;
@@ -45,9 +45,10 @@ class AiModelPriceController extends Controller
         'batch_search_unit_per_k',
     ];
 
-    public function index(AiSettings $aiSettings): Response
+    public function index(CatalogModelBrowser $catalogModelBrowser): Response
     {
         return Inertia::render('Admin/AiPrices/Index', [
+            'catalog_providers' => $catalogModelBrowser->providers(),
             'prices' => AiModelPrice::query()
                 ->with('rateLimits')
                 ->orderBy('provider')
@@ -60,15 +61,15 @@ class AiModelPriceController extends Controller
             'refresh_running' => RefreshAiPricesJob::isRunning(),
             'rate_limit_metrics' => RateLimitMetric::options(),
             'rate_limit_periods' => RateLimitPeriod::options(),
-            'openrouter_pricing_enabled' => $aiSettings->openRouterPricingEnabled(),
         ]);
     }
 
-    public function store(StoreAiModelPriceRequest $storeAiModelPriceRequest): RedirectResponse
+    public function store(StoreAiModelPriceRequest $storeAiModelPriceRequest, CatalogModelBrowser $catalogModelBrowser): RedirectResponse
     {
         $validated = $storeAiModelPriceRequest->validated();
         $rateLimits = Arr::pull($validated, 'rate_limits') ?? [];
         $automaticUpdatesEnabled = $this->pullBooleanFlag($validated, 'automatic_updates_enabled');
+        $fromCatalog = $this->pullBooleanFlag($validated, 'from_catalog');
         $this->zeroBlankSearchUnitRate($validated);
 
         // A manually entered price is owned by the admin: it defaults to
@@ -77,10 +78,34 @@ class AiModelPriceController extends Controller
         $validated['pricing_source'] = PricingSource::Manual;
         $validated['is_price_locked'] = $automaticUpdatesEnabled !== true;
 
+        // A price picked from the catalog and saved unedited with automatic
+        // updates on keeps the feed's provenance, so it reads as synced. When
+        // it stays manual instead, tell a cold cache (the pick sat past the
+        // catalog TTL, so nothing was cached to compare against) apart from a
+        // genuine mismatch (cached, but the submitted rates differ or the
+        // model is gone): only the cold-cache case needs an explanation, the
+        // mismatch keeps the ordinary toast.
+        $catalogExpired = false;
+
+        if ($fromCatalog === true && $automaticUpdatesEnabled === true) {
+            $catalogAttributes = $catalogModelBrowser->catalogAttributes($validated['provider'], $validated['model'], $validated);
+
+            if ($catalogAttributes !== null) {
+                $validated = [...$validated, ...$catalogAttributes];
+            } elseif (! $catalogModelBrowser->isCached($validated['provider'])) {
+                $catalogExpired = true;
+            }
+        }
+
         $aiModelPrice = AiModelPrice::create($validated);
         $aiModelPrice->rateLimits()->createMany($rateLimits);
 
-        Inertia::flash('toast', ['type' => 'success', 'message' => __('Model price added.')]);
+        Inertia::flash('toast', [
+            'type' => 'success',
+            'message' => $catalogExpired
+                ? __("Model price added as a manual price — the catalog had expired, so its feed source wasn't recorded. The next price refresh will sync it.")
+                : __('Model price added.'),
+        ]);
 
         return to_route('admin.ai-prices.index');
     }
