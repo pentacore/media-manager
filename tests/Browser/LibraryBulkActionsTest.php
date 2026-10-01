@@ -2,6 +2,8 @@
 
 declare(strict_types=1);
 
+use App\Cache\Services\RadarrCache;
+use App\Cache\Services\SonarrCache;
 use App\Jobs\ExecuteActionRequest;
 use App\Models\ActionRequest;
 use App\Models\IndexedMovie;
@@ -170,4 +172,111 @@ test('a viewer sees no selection controls', function (): void {
         ->assertSeeIn('[data-series-card="1"]', 'Series 001')
         ->assertCount('[data-bulk-select]', 0)
         ->assertCount('[data-bulk-select-all]', 0);
+});
+
+test('a series that drops out of the library during a reload drops out of the bulk selection too', function (): void {
+    $full = [
+        ['id' => 1, 'title' => 'Series 001', 'titleSlug' => 'series-1', 'year' => 2020, 'status' => 'continuing', 'monitored' => false, 'qualityProfileId' => 1, 'images' => bulkBrowserPoster(), 'seasons' => [], 'statistics' => ['sizeOnDisk' => 0, 'episodeCount' => 0, 'episodeFileCount' => 0]],
+        ['id' => 2, 'title' => 'Series 002', 'titleSlug' => 'series-2', 'year' => 2020, 'status' => 'continuing', 'monitored' => false, 'qualityProfileId' => 1, 'images' => bulkBrowserPoster(), 'seasons' => [], 'statistics' => ['sizeOnDisk' => 0, 'episodeCount' => 0, 'episodeFileCount' => 0]],
+        ['id' => 3, 'title' => 'Series 003', 'titleSlug' => 'series-3', 'year' => 2020, 'status' => 'continuing', 'monitored' => false, 'qualityProfileId' => 1, 'images' => bulkBrowserPoster(), 'seasons' => [], 'statistics' => ['sizeOnDisk' => 0, 'episodeCount' => 0, 'episodeFileCount' => 0]],
+    ];
+    // Series 002 is gone from Sonarr's own list by the next reload (e.g.
+    // deleted there directly). Http::fake() appends stubs rather than
+    // replacing them — a second Http::fake() call for the same URL would
+    // never be reached, the first-registered stub always matches first — so
+    // this is one registration with a stateful closure (held on an object,
+    // never a by-reference variable, so it is readable after the fact too).
+    $state = new class
+    {
+        public int $calls = 0;
+    };
+    Http::fake([
+        'sonarr.local:8989/api/v3/series' => function () use ($state, $full) {
+            $state->calls++;
+
+            return Http::response($state->calls === 1 ? $full : [$full[0], $full[2]]);
+        },
+        'sonarr.local:8989/api/v3/qualityprofile' => Http::response([['id' => 1, 'name' => 'HD-1080p'], ['id' => 6, 'name' => 'Ultra-HD']]),
+    ]);
+    foreach ($full as $series) {
+        IndexedSeries::factory()->for($this->sonarr, 'serviceConnection')->create(['sonarr_id' => $series['id'], 'title' => $series['title'], 'year' => $series['year']]);
+    }
+    $this->actingAs(User::factory()->member()->create());
+
+    $page = visit(route('media.series.index', absolute: false))
+        ->assertNoSmoke()
+        ->assertSeeIn('[data-series-card="1"]', 'Series 001')
+        ->click('[data-bulk-select="1"]')
+        ->click('[data-bulk-select="2"]')
+        ->assertSeeIn('[data-bulk-count]', '2 selected');
+
+    // A plain upstream fake swap alone would still be served from the warm
+    // list cache, same as production — bust it so the Sync reload actually
+    // asks Sonarr again (and reaches the closure's second call).
+    (new SonarrCache($this->sonarr))->bustAll();
+
+    $page->click('Sync')
+        ->assertSeeIn('[data-series-card="1"]', 'Series 001')
+        ->assertCount('[data-series-card="2"]', 0)
+        ->assertCount('[data-bulk-select="2"]', 0)
+        ->assertSeeIn('[data-bulk-count]', '1 selected')
+        ->assertNoSmoke();
+
+    $page->click('[data-bulk-action="monitor"]')
+        ->assertSee('1 started');
+
+    expect(ActionRequest::query()->where('type', 'monitor_series')->pluck('payload')->all())->toEqual([
+        ['series_id' => 1, 'monitored' => true, 'service_connection_id' => $this->sonarr->id],
+    ]);
+    expect($state->calls)->toBe(2);
+});
+
+test('a movie that drops out of the library during a reload drops out of the bulk selection too', function (): void {
+    $radarr = ServiceConnection::factory()->radarr()->create(['url' => 'http://radarr.local:7878', 'api_key' => 'k']);
+    $full = [];
+
+    foreach ([10 => 'Dune', 11 => 'Arrival', 12 => 'Nope'] as $id => $title) {
+        $full[] = ['id' => $id, 'title' => $title, 'titleSlug' => strtolower($title), 'year' => 2021, 'monitored' => true, 'hasFile' => true, 'qualityProfileId' => 1, 'sizeOnDisk' => 0, 'images' => bulkBrowserPoster()];
+        IndexedMovie::factory()->for($radarr, 'serviceConnection')->create(['radarr_id' => $id, 'title' => $title, 'year' => 2021]);
+    }
+
+    // Arrival (11) is gone from Radarr's own list by the next reload — same
+    // single-registration, stateful-closure fake as the Sonarr test above.
+    $state = new class
+    {
+        public int $calls = 0;
+    };
+    Http::fake([
+        'radarr.local:7878/api/v3/movie' => function () use ($state, $full) {
+            $state->calls++;
+
+            return Http::response($state->calls === 1 ? $full : [$full[0], $full[2]]);
+        },
+        'radarr.local:7878/api/v3/qualityprofile' => Http::response([['id' => 1, 'name' => 'HD-1080p'], ['id' => 6, 'name' => 'Ultra-HD']]),
+    ]);
+    $this->actingAs(User::factory()->member()->create());
+
+    $page = visit(route('media.movies.index', absolute: false))
+        ->assertNoSmoke()
+        ->assertSeeIn('[data-movie-card="10"]', 'Dune')
+        ->click('[data-bulk-select="10"]')
+        ->click('[data-bulk-select="11"]')
+        ->assertSeeIn('[data-bulk-count]', '2 selected');
+
+    (new RadarrCache($radarr))->bustAll();
+
+    $page->click('Sync')
+        ->assertSeeIn('[data-movie-card="10"]', 'Dune')
+        ->assertCount('[data-movie-card="11"]', 0)
+        ->assertCount('[data-bulk-select="11"]', 0)
+        ->assertSeeIn('[data-bulk-count]', '1 selected')
+        ->assertNoSmoke();
+
+    $page->click('[data-bulk-action="monitor"]')
+        ->assertSee('1 started');
+
+    expect(ActionRequest::query()->where('type', 'monitor_movie')->pluck('payload')->all())->toEqual([
+        ['movie_id' => 10, 'monitored' => true, 'service_connection_id' => $radarr->id],
+    ]);
+    expect($state->calls)->toBe(2);
 });
