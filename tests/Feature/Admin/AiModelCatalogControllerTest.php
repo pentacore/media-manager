@@ -173,7 +173,7 @@ test('bulk add writes one settings audit row per created price row', function ()
         ->assertRedirect(route('admin.ai-prices.index'));
 
     $auditRows = ActivityLog::query()->where('action', 'settings.updated')->orderBy('id')->get();
-    $opus = AiModelPrice::query()->where('model', 'anthropic/claude-opus-5.5')->sole();
+    $aiModelPrice = AiModelPrice::query()->where('model', 'anthropic/claude-opus-5.5')->sole();
     $luna = AiModelPrice::query()->where('model', 'openai/gpt-6-luna')->sole();
 
     expect($auditRows)->toHaveCount(2)
@@ -181,7 +181,7 @@ test('bulk add writes one settings audit row per created price row', function ()
             && $activityLog->user_id === $admin->id
             && $activityLog->subject_type === SettingsGroup::AiModelPrices->value))->toBeTrue()
         ->and($auditRows->pluck('metadata.context')->all())->toBe([
-            ['operation' => 'created', 'record_id' => $opus->id],
+            ['operation' => 'created', 'record_id' => $aiModelPrice->id],
             ['operation' => 'created', 'record_id' => $luna->id],
         ])
         ->and($auditRows[0]->description)->toBe('Added the catalog model price for openrouter/anthropic/claude-opus-5.5.')
