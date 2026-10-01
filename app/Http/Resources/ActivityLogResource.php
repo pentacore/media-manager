@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Http\Resources;
 
+use App\Enums\ActivityLogCategory;
 use App\Models\ActivityLog;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
@@ -16,6 +17,7 @@ use Pentacore\Typefinder\Attributes\TypefinderResource;
 #[TypefinderResource(shape: [
     'id' => 'number',
     'action' => 'string',
+    'category' => "'activity' | 'audit'",
     'description' => 'string',
     'user_name' => 'string | null',
     'service_id' => 'number | null',
@@ -39,8 +41,12 @@ class ActivityLogResource extends JsonResource
         return [
             'id' => $this->id,
             'action' => $this->action,
+            'category' => $this->isAudit() ? ActivityLogCategory::Audit->value : ActivityLogCategory::Activity->value,
             'description' => $this->description,
-            'user_name' => $this->whenLoaded('user', fn () => $this->user?->name),
+            // A deleted account nulls user_id; audit rows keep the actor's name.
+            'user_name' => $this->user_id === null
+                ? $this->recordedActorName()
+                : $this->whenLoaded('user', fn () => $this->user?->name),
             'service_id' => $this->service_connection_id,
             'service_name' => $this->whenLoaded('serviceConnection', fn () => $this->serviceConnection?->name),
             'service_type' => $this->whenLoaded('serviceConnection', fn () => $this->serviceConnection?->type->value),
@@ -49,5 +55,12 @@ class ActivityLogResource extends JsonResource
             'metadata' => $this->metadata,
             'created_at' => $this->created_at?->toISOString(),
         ];
+    }
+
+    private function recordedActorName(): ?string
+    {
+        $name = $this->metadata['actor']['name'] ?? null;
+
+        return is_string($name) ? $name : null;
     }
 }

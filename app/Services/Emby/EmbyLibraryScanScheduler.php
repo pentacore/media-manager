@@ -62,14 +62,7 @@ final readonly class EmbyLibraryScanScheduler
             $scanAfter = now()->addSeconds(self::DEBOUNCE_SECONDS);
             $trigger = (string) ($scanPayload['trigger'] ?? $sourceService);
 
-            $pendingScan = ActionRequest::query()
-                ->where('type', 'emby_library_scan')
-                ->whereIn('status', [ActionRequestStatus::Pending->value, ActionRequestStatus::Approved->value])
-                ->where('payload->emby_connection_id', (string) $embyConnectionId)
-                ->where('created_at', '>=', now()->subMinutes(self::MAX_COALESCE_MINUTES))
-                ->latest('id')
-                ->lockForUpdate()
-                ->first();
+            $pendingScan = $this->pendingScan($embyConnectionId);
 
             if ($pendingScan instanceof ActionRequest) {
                 $payload = $pendingScan->payload;
@@ -105,6 +98,53 @@ final readonly class EmbyLibraryScanScheduler
 
             return $actionRequest;
         });
+    }
+
+    /**
+     * A person clicked "Refresh library". If a scan for this Emby server is
+     * still waiting (webhook-coalesced or pending approval), fold the click
+     * into it and pull it forward to run now instead of queueing a second
+     * refresh. Returns null when nothing is waiting — the caller then
+     * dispatches a fresh manual scan.
+     */
+    public function foldManualTrigger(int $embyConnectionId): ?ActionRequest
+    {
+        return DB::transaction(function () use ($embyConnectionId): ?ActionRequest {
+            DB::select('SELECT pg_advisory_xact_lock(hashtext(?))', [sprintf('emby-library-scan:%d', $embyConnectionId)]);
+
+            $pendingScan = $this->pendingScan($embyConnectionId);
+
+            if (! $pendingScan instanceof ActionRequest) {
+                return null;
+            }
+
+            $scanAfter = now();
+            $payload = $pendingScan->payload;
+            $payload['coalesced_events'] = (int) ($payload['coalesced_events'] ?? 1) + 1;
+            $payload['triggers'] = array_slice([...($payload['triggers'] ?? []), 'manual'], -self::MAX_RECORDED_TRIGGERS);
+            $payload['scan_after'] = $scanAfter->toIso8601String();
+            $pendingScan->update(['payload' => $payload]);
+
+            $this->wakeAfter($pendingScan, $scanAfter);
+
+            return $pendingScan;
+        });
+    }
+
+    /**
+     * The newest not-yet-started scan for this Emby server inside the
+     * coalescing window, locked for update. Call inside the advisory lock.
+     */
+    private function pendingScan(int $embyConnectionId): ?ActionRequest
+    {
+        return ActionRequest::query()
+            ->where('type', 'emby_library_scan')
+            ->whereIn('status', [ActionRequestStatus::Pending->value, ActionRequestStatus::Approved->value])
+            ->where('payload->emby_connection_id', (string) $embyConnectionId)
+            ->where('created_at', '>=', now()->subMinutes(self::MAX_COALESCE_MINUTES))
+            ->latest('id')
+            ->lockForUpdate()
+            ->first();
     }
 
     /**

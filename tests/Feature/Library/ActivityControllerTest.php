@@ -362,44 +362,22 @@ test('member cannot trigger manual import', function (): void {
         ->assertForbidden();
 });
 
-test('history merges Sonarr and Radarr records sorted newest first', function (): void {
-    ServiceConnection::factory()->sonarr()->create([
-        'url' => 'http://sonarr.local:8989',
-        'api_key' => 'sonarr-key',
-    ]);
-    ServiceConnection::factory()->radarr()->create([
-        'url' => 'http://radarr.local:7878',
-        'api_key' => 'radarr-key',
-    ]);
+test('history shows the Sonarr tab by default and a Radarr tab on request', function (): void {
+    ServiceConnection::factory()->sonarr()->create(['url' => 'http://sonarr.local:8989', 'api_key' => 'sonarr-key']);
+    ServiceConnection::factory()->radarr()->create(['url' => 'http://radarr.local:7878', 'api_key' => 'radarr-key']);
 
     Http::fake([
         'sonarr.local:8989/api/v3/queue*' => Http::response(['records' => []]),
         'radarr.local:7878/api/v3/queue*' => Http::response(['records' => []]),
-        'sonarr.local:8989/api/v3/history*' => Http::response([
-            'records' => [
-                [
-                    'id' => 1,
-                    'eventType' => 'grabbed',
-                    'sourceTitle' => 'Severance.S01E01.WEBDL-1080p.mkv',
-                    'series' => ['title' => 'Severance'],
-                    'episode' => ['seasonNumber' => 1, 'episodeNumber' => 1, 'title' => 'Pilot'],
-                    'quality' => ['quality' => ['name' => 'WEBDL-1080p']],
-                    'date' => '2026-04-30T08:00:00Z',
-                ],
-            ],
-        ]),
-        'radarr.local:7878/api/v3/history*' => Http::response([
-            'records' => [
-                [
-                    'id' => 99,
-                    'eventType' => 'downloadFailed',
-                    'sourceTitle' => 'Dune.2021.Bluray-1080p.mkv',
-                    'movie' => ['title' => 'Dune', 'year' => 2021],
-                    'quality' => ['quality' => ['name' => 'Bluray-1080p']],
-                    'date' => '2026-04-30T09:00:00Z',
-                ],
-            ],
-        ]),
+        'sonarr.local:8989/api/v3/history*' => Http::response(['totalRecords' => 1, 'records' => [[
+            'id' => 1, 'eventType' => 'grabbed', 'sourceTitle' => 'Severance.S01E01.WEBDL-1080p.mkv',
+            'series' => ['title' => 'Severance'], 'episode' => ['seasonNumber' => 1, 'episodeNumber' => 1, 'title' => 'Pilot'],
+            'quality' => ['quality' => ['name' => 'WEBDL-1080p']], 'date' => '2026-04-30T08:00:00Z',
+        ]]]),
+        'radarr.local:7878/api/v3/history*' => Http::response(['totalRecords' => 1, 'records' => [[
+            'id' => 99, 'eventType' => 'downloadFailed', 'sourceTitle' => 'Dune.2021.Bluray-1080p.mkv',
+            'movie' => ['title' => 'Dune', 'year' => 2021], 'quality' => ['quality' => ['name' => 'Bluray-1080p']], 'date' => '2026-04-30T09:00:00Z',
+        ]]]),
     ]);
 
     $member = User::factory()->member()->create();
@@ -409,18 +387,18 @@ test('history merges Sonarr and Radarr records sorted newest first', function ()
         ->assertOk()
         ->assertInertia(fn ($page) => $page
             ->component('Library/Activity')
-            ->loadDeferredProps('default', function ($page): void {
-                $page
-                    ->where('history.services.sonarr', true)
-                    ->where('history.services.radarr', true)
-                    ->has('history.rows', 2)
-                    ->where('history.rows.0.service', 'radarr')
-                    ->where('history.rows.0.event_type', 'downloadFailed')
-                    ->where('history.rows.1.service', 'sonarr')
-                    ->where('history.rows.1.event_type', 'grabbed')
-                    ->where('history.rows.1.subtitle', 'S01E01 · Pilot');
-            })
-        );
+            ->where('historyFilters', ['service' => 'sonarr', 'page' => 1, 'active' => false])
+            ->loadDeferredProps('history', fn ($page) => $page
+                ->has('history.rows', 1)
+                ->where('history.rows.0.service', 'sonarr')
+                ->where('history.rows.0.subtitle', 'S01E01 · Pilot')));
+
+    $this->actingAs($member)
+        ->get(route('media.library.activity.queue', ['history_service' => 'radarr']))
+        ->assertInertia(fn ($page) => $page->loadDeferredProps('history', fn ($page) => $page
+            ->has('history.rows', 1)
+            ->where('history.rows.0.service', 'radarr')
+            ->where('history.rows.0.event_type', 'downloadFailed')));
 });
 
 test('queue is empty when no Sonarr or Radarr connection is configured', function (): void {

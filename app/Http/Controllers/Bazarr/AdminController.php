@@ -5,11 +5,14 @@ declare(strict_types=1);
 namespace App\Http\Controllers\Bazarr;
 
 use App\Enums\ServiceType;
+use App\Enums\SettingsGroup;
 use App\Http\Requests\Bazarr\AdminSettingsRequest;
 use App\Http\Requests\Bazarr\AutomationSettingsRequest;
 use App\Models\ActivityLog;
 use App\Models\BazarrServiceLink;
 use App\Models\ServiceConnection;
+use App\Services\Audit\AuditLogger;
+use App\Services\Audit\SettingsSnapshot;
 use App\Services\Bazarr\BazarrClient;
 use App\Services\Bazarr\BazarrSettingsAdapter;
 use App\Settings\BazarrAutomationSettings;
@@ -47,7 +50,10 @@ final class AdminController extends BazarrController
     public function updateAutomation(
         AutomationSettingsRequest $automationSettingsRequest,
         BazarrAutomationSettings $bazarrAutomationSettings,
+        SettingsSnapshot $settingsSnapshot,
+        AuditLogger $auditLogger,
     ): RedirectResponse {
+        $before = $settingsSnapshot->capture(SettingsGroup::BazarrAutomation);
         $configuration = $automationSettingsRequest->validated('automation');
         $previous = $bazarrAutomationSettings->configuration();
         $bazarrAutomationSettings->setConfiguration($configuration);
@@ -65,6 +71,8 @@ final class AdminController extends BazarrController
             'description' => 'Updated Bazarr automation settings.',
             'metadata' => ['changed_keys' => $changedKeys],
         ]);
+
+        $auditLogger->settingsUpdated(SettingsGroup::BazarrAutomation, $before, $settingsSnapshot->capture(SettingsGroup::BazarrAutomation));
 
         Inertia::flash('toast', ['type' => 'success', 'message' => __('Bazarr automation updated.')]);
 

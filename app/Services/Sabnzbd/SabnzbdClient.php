@@ -25,6 +25,13 @@ use Throwable;
  */
 class SabnzbdClient
 {
+    /**
+     * SABnzbd job ids: `SABnzbd_nzo_` plus a tempfile-style suffix. Every
+     * route taking an nzo_id is constrained by this so nothing else can ride
+     * into the API query string.
+     */
+    public const string NZO_ID_PATTERN = 'SABnzbd_nzo_[A-Za-z0-9_]{1,64}';
+
     public function __construct(
         protected ServiceConnection $connection,
     ) {}
@@ -201,6 +208,44 @@ class SabnzbdClient
         }
 
         return $rows;
+    }
+
+    /**
+     * `value` is a percentage of SABnzbd's configured maximum ("50"), an
+     * absolute rate ("500K", "5M"), or null to remove the limit (SABnzbd
+     * treats an empty value as "no limit").
+     *
+     * @throws RequestException|ConnectionException
+     */
+    public function setSpeedLimit(?string $value): bool
+    {
+        return (bool) ($this->request([
+            'mode' => 'config',
+            'name' => 'speedlimit',
+            'value' => $value ?? '',
+        ])['status'] ?? false);
+    }
+
+    /**
+     * @throws RequestException|ConnectionException
+     */
+    public function retryHistory(string $nzoId): bool
+    {
+        return (bool) ($this->request(['mode' => 'retry', 'value' => $nzoId])['status'] ?? false);
+    }
+
+    /**
+     * @throws RequestException|ConnectionException
+     */
+    public function deleteHistory(string $nzoId, bool $withFiles): bool
+    {
+        $params = ['mode' => 'history', 'name' => 'delete', 'value' => $nzoId];
+
+        if ($withFiles) {
+            $params['del_files'] = 1;
+        }
+
+        return (bool) ($this->request($params)['status'] ?? false);
     }
 
     /**

@@ -250,10 +250,11 @@ test('an opened sub-group stays open across a navigation', function (): void {
         // AwaitableWebpage, whose __call wraps every method in
         // Execution::waitForExpectation() — a retry loop budgeted by
         // Playwright::timeout(), which tests/Pest.php sets to 30_000ms. So the
-        // assertions below poll rather than sampling once, and
-        // `Append-only audit feed` exists only on the destination page.
+        // assertions below poll rather than sampling once, and the hero
+        // paragraph text below exists only on the destination page (no
+        // data-* selector on ActivityLog.vue's hero to scope to instead).
         ->click('[data-sidebar="content"] a:has-text("Activity log")')
-        ->assertSee('Append-only audit feed')
+        ->assertSee('Every webhook, tool call and write')
         ->assertPathIs('/activity-log')
         // Scoped: the activity-log page renders webhook-derived rows, so an
         // unscoped assertion here would not be reading the sidebar.

@@ -176,3 +176,15 @@ test('viewer cannot join the admin.media-replacement channel', function (): void
         ])
         ->assertForbidden();
 });
+
+test('only admins can join the audit activity channel', function (): void {
+    foreach ([User::factory()->create(), User::factory()->member()->create()] as $nonAdmin) {
+        $this->actingAs($nonAdmin)
+            ->post('/broadcasting/auth', ['socket_id' => '1234.1234567', 'channel_name' => 'private-activity.audit'])
+            ->assertForbidden();
+    }
+
+    $this->actingAs(User::factory()->admin()->create())
+        ->post('/broadcasting/auth', ['socket_id' => '1234.1234567', 'channel_name' => 'private-activity.audit'])
+        ->assertOk();
+});

@@ -93,6 +93,8 @@ Route::middleware(['auth', 'verified', 'password.set', 'role:admin'])->prefix('a
         Route::get('ai-prices', [AiModelPriceController::class, 'index'])->name('ai-prices.index');
         Route::post('ai-prices', [AiModelPriceController::class, 'store'])->name('ai-prices.store');
         Route::post('ai-prices/refresh', [AiModelPriceController::class, 'refresh'])->name('ai-prices.refresh');
+        Route::put('ai-prices/bulk', [AiModelPriceController::class, 'bulkUpdate'])->name('ai-prices.bulk-update');
+        Route::delete('ai-prices/bulk', [AiModelPriceController::class, 'bulkDestroy'])->name('ai-prices.bulk-destroy');
         Route::put('ai-prices/{aiModelPrice}', [AiModelPriceController::class, 'update'])->name('ai-prices.update');
         Route::delete('ai-prices/{aiModelPrice}', [AiModelPriceController::class, 'destroy'])->name('ai-prices.destroy');
         Route::get('ai-prices/catalog/{provider}', [AiModelCatalogController::class, 'index'])

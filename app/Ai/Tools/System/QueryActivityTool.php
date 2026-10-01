@@ -41,7 +41,11 @@ class QueryActivityTool extends BaseTool
         $since = now()->subDays($sinceDays);
 
         if ($scope === 'system') {
-            $logs = ActivityLog::with('user:id,name', 'serviceConnection:id,name,type')
+            // Audit rows never reach a model: chat transcripts go to an AI
+            // provider and the decision agent runs without a user.
+            $logs = ActivityLog::query()
+                ->visibleTo(null)
+                ->with('user:id,name', 'serviceConnection:id,name,type')
                 ->where('created_at', '>=', $since)
                 ->latest()
                 ->limit($limit)

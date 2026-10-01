@@ -104,6 +104,14 @@ Route::middleware(['auth', 'verified', 'password.set'])
                     ->whereIn('service', ['sonarr', 'radarr'])
                     ->name('library.activity.manual-import.execute');
             });
+
+            // Admin-only history write, pinned to the tab's connection.
+            Route::middleware('can:admin')->group(function (): void {
+                Route::post('library/activity/history/{service}/{id}/failed', [LibraryActivityController::class, 'markHistoryFailed'])
+                    ->whereIn('service', ['sonarr', 'radarr'])
+                    ->whereNumber('id')
+                    ->name('library.activity.history.failed');
+            });
         });
 
         // Seerr request management — members and admins.

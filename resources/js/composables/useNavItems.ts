@@ -1,6 +1,7 @@
 import { usePage } from '@inertiajs/vue3';
 import {
     Activity,
+    Antenna,
     BellRing,
     Bot,
     Brain,
@@ -64,6 +65,7 @@ import RequestController from '@/actions/App/Http/Controllers/Media/RequestContr
 import SearchController from '@/actions/App/Http/Controllers/Media/SearchController';
 import SeriesController from '@/actions/App/Http/Controllers/Media/SeriesController';
 import ServiceHealthController from '@/actions/App/Http/Controllers/Monitoring/ServiceHealthController';
+import SearchIndexersController from '@/actions/App/Http/Controllers/Prowlarr/SearchIndexersController';
 import SabnzbdQueueController from '@/actions/App/Http/Controllers/Sabnzbd/QueueController';
 import StatisticsController from '@/actions/App/Http/Controllers/StatisticsController';
 import { useCan } from '@/composables/useCan';
@@ -89,6 +91,13 @@ export function useNavItems(counts?: NavCounts): ComputedRef<NavGroup[]> {
 
     function visible(item: NavItem): boolean {
         if (item.requiresSeerr === true && !page.props.integrations?.seerr) {
+            return false;
+        }
+
+        if (
+            item.requiresProwlarr === true &&
+            !page.props.integrations?.prowlarr
+        ) {
             return false;
         }
 
@@ -202,6 +211,13 @@ export function useNavItems(counts?: NavCounts): ComputedRef<NavGroup[]> {
                         href: BazarrOverviewController.url(),
                         icon: Captions,
                         ability: 'manage-library',
+                    },
+                    {
+                        title: 'Indexer search',
+                        href: SearchIndexersController().url,
+                        icon: Antenna,
+                        ability: 'manage-library',
+                        requiresProwlarr: true,
                     },
                     {
                         title: 'Search',

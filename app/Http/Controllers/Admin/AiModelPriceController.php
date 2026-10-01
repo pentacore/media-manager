@@ -7,17 +7,24 @@ namespace App\Http\Controllers\Admin;
 use App\Enums\PricingSource;
 use App\Enums\RateLimitMetric;
 use App\Enums\RateLimitPeriod;
+use App\Enums\SettingsGroup;
 use App\Events\AiPriceRefreshStateChanged;
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Admin\BulkDestroyAiModelPriceRequest;
+use App\Http\Requests\Admin\BulkUpdateAiModelPriceRequest;
 use App\Http\Requests\Admin\StoreAiModelPriceRequest;
 use App\Http\Requests\Admin\UpdateAiModelPriceRequest;
 use App\Jobs\RefreshAiPricesJob;
 use App\Models\AiFreeUsagePool;
 use App\Models\AiModelPrice;
+use App\Models\AiModelRateLimit;
 use App\Services\AiUsage\Pricing\CatalogModelBrowser;
+use App\Services\Audit\AuditChanges;
+use App\Services\Audit\AuditLogger;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -64,7 +71,7 @@ class AiModelPriceController extends Controller
         ]);
     }
 
-    public function store(StoreAiModelPriceRequest $storeAiModelPriceRequest, CatalogModelBrowser $catalogModelBrowser): RedirectResponse
+    public function store(StoreAiModelPriceRequest $storeAiModelPriceRequest, CatalogModelBrowser $catalogModelBrowser, AuditLogger $auditLogger): RedirectResponse
     {
         $validated = $storeAiModelPriceRequest->validated();
         $rateLimits = Arr::pull($validated, 'rate_limits') ?? [];
@@ -100,6 +107,14 @@ class AiModelPriceController extends Controller
         $aiModelPrice = AiModelPrice::create($validated);
         $aiModelPrice->rateLimits()->createMany($rateLimits);
 
+        $auditLogger->settingsUpdated(
+            SettingsGroup::AiModelPrices,
+            [],
+            $this->auditSnapshot($aiModelPrice->refresh()),
+            ['operation' => 'created', 'record_id' => $aiModelPrice->id],
+            sprintf('Added the AI model price for %s/%s.', $aiModelPrice->provider, $aiModelPrice->model),
+        );
+
         Inertia::flash('toast', [
             'type' => 'success',
             'message' => $catalogExpired
@@ -110,8 +125,9 @@ class AiModelPriceController extends Controller
         return to_route('admin.ai-prices.index');
     }
 
-    public function update(UpdateAiModelPriceRequest $updateAiModelPriceRequest, AiModelPrice $aiModelPrice): RedirectResponse
+    public function update(UpdateAiModelPriceRequest $updateAiModelPriceRequest, AiModelPrice $aiModelPrice, AuditLogger $auditLogger): RedirectResponse
     {
+        $before = $this->auditSnapshot($aiModelPrice);
         $validated = $updateAiModelPriceRequest->validated();
         $rateLimits = Arr::pull($validated, 'rate_limits') ?? [];
         $automaticUpdatesEnabled = $this->pullBooleanFlag($validated, 'automatic_updates_enabled');
@@ -139,16 +155,88 @@ class AiModelPriceController extends Controller
         $aiModelPrice->rateLimits()->delete();
         $aiModelPrice->rateLimits()->createMany($rateLimits);
 
+        $auditLogger->settingsUpdated(
+            SettingsGroup::AiModelPrices,
+            $before,
+            $this->auditSnapshot($aiModelPrice),
+            ['operation' => 'updated', 'record_id' => $aiModelPrice->id],
+            sprintf('Updated the AI model price for %s/%s.', $aiModelPrice->provider, $aiModelPrice->model),
+        );
+
         Inertia::flash('toast', ['type' => 'success', 'message' => __('Model price updated.')]);
 
         return to_route('admin.ai-prices.index');
     }
 
-    public function destroy(AiModelPrice $aiModelPrice): RedirectResponse
+    public function destroy(AiModelPrice $aiModelPrice, AuditLogger $auditLogger): RedirectResponse
     {
+        $before = $this->auditSnapshot($aiModelPrice);
+
         $aiModelPrice->delete();
 
+        $auditLogger->settingsUpdated(
+            SettingsGroup::AiModelPrices,
+            $before,
+            [],
+            ['operation' => 'deleted', 'record_id' => $aiModelPrice->id],
+            sprintf('Removed the AI model price for %s/%s.', $aiModelPrice->provider, $aiModelPrice->model),
+        );
+
         Inertia::flash('toast', ['type' => 'success', 'message' => __('Model price removed.')]);
+
+        return to_route('admin.ai-prices.index');
+    }
+
+    /**
+     * Apply the same automatic-updates, free-pool and rate-limit settings to
+     * every selected row; a field the request leaves out stays unchanged.
+     * Like the single-row edit, toggling automatic updates only flips the
+     * lock and never rewrites the stored price's pricing_source.
+     */
+    public function bulkUpdate(BulkUpdateAiModelPriceRequest $bulkUpdateAiModelPriceRequest): RedirectResponse
+    {
+        $validated = $bulkUpdateAiModelPriceRequest->validated();
+        $ids = Arr::pull($validated, 'ids');
+        $automaticUpdatesEnabled = $this->pullBooleanFlag($validated, 'automatic_updates_enabled');
+        $rateLimits = Arr::pull($validated, 'rate_limits');
+
+        $attributes = Arr::only($validated, ['free_usage_pool_id']);
+
+        if ($automaticUpdatesEnabled !== null) {
+            $attributes['is_price_locked'] = ! $automaticUpdatesEnabled;
+        }
+
+        DB::transaction(function () use ($ids, $attributes, $rateLimits): void {
+            if ($attributes !== []) {
+                AiModelPrice::query()->whereKey($ids)->update($attributes);
+            }
+
+            if ($rateLimits !== null) {
+                AiModelPrice::query()->whereKey($ids)->get()->each(function (AiModelPrice $aiModelPrice) use ($rateLimits): void {
+                    $aiModelPrice->rateLimits()->delete();
+                    $aiModelPrice->rateLimits()->createMany($rateLimits);
+                });
+            }
+        });
+
+        Inertia::flash('toast', [
+            'type' => 'success',
+            'message' => trans_choice(':count model price updated.|:count model prices updated.', count($ids)),
+        ]);
+
+        return to_route('admin.ai-prices.index');
+    }
+
+    public function bulkDestroy(BulkDestroyAiModelPriceRequest $bulkDestroyAiModelPriceRequest): RedirectResponse
+    {
+        $validated = $bulkDestroyAiModelPriceRequest->validated();
+
+        $removed = AiModelPrice::query()->whereKey($validated['ids'])->delete();
+
+        Inertia::flash('toast', [
+            'type' => 'success',
+            'message' => trans_choice(':count model price removed.|:count model prices removed.', $removed),
+        ]);
 
         return to_route('admin.ai-prices.index');
     }
@@ -259,5 +347,28 @@ class AiModelPriceController extends Controller
         ]);
 
         return to_route('admin.ai-prices.index');
+    }
+
+    /**
+     * The price row plus its rate limits, which the edit form replaces as a
+     * whole, so they diff as one list.
+     *
+     * @return array<string, mixed>
+     */
+    private function auditSnapshot(AiModelPrice $aiModelPrice): array
+    {
+        return [
+            ...AuditChanges::snapshot($aiModelPrice),
+            'rate_limits' => $aiModelPrice->rateLimits()
+                ->orderBy('id')
+                ->get()
+                ->map(fn (AiModelRateLimit $aiModelRateLimit): array => [
+                    'metric' => $aiModelRateLimit->metric->value,
+                    'period' => $aiModelRateLimit->period->value,
+                    'limit_value' => $aiModelRateLimit->limit_value,
+                ])
+                ->values()
+                ->all(),
+        ];
     }
 }
