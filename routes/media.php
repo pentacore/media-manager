@@ -15,6 +15,7 @@ use App\Http\Controllers\Media\MyRequestController;
 use App\Http\Controllers\Media\RequestController;
 use App\Http\Controllers\Media\SearchController;
 use App\Http\Controllers\Media\SeriesController;
+use App\Http\Controllers\Whisparr\WhisparrActionController;
 use App\Http\Controllers\Whisparr\WhisparrController;
 use Illuminate\Support\Facades\Route;
 
@@ -141,5 +142,9 @@ Route::middleware(['auth', 'verified', 'password.set'])
         Route::middleware('can:admin')->prefix('whisparr')->name('whisparr.')->group(function (): void {
             Route::get('/', [WhisparrController::class, 'index'])->name('index');
             Route::get('{id}', [WhisparrController::class, 'show'])->whereNumber('id')->name('show');
+            Route::post('actions/monitor', [WhisparrActionController::class, 'monitor'])->name('actions.monitor');
+            Route::post('actions/quality-profile', [WhisparrActionController::class, 'qualityProfile'])->name('actions.quality-profile');
+            Route::post('actions/search', [WhisparrActionController::class, 'search'])->name('actions.search');
+            Route::post('actions/delete', [WhisparrActionController::class, 'delete'])->name('actions.delete');
         });
     });

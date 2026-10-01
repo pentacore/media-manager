@@ -91,6 +91,10 @@ dataset('member write routes', [
 dataset('admin-only routes', [
     'whisparr index' => ['GET', 'media.whisparr.index', []],
     'whisparr show' => ['GET', 'media.whisparr.show', ['id' => 1]],
+    'whisparr monitor' => ['POST', 'media.whisparr.actions.monitor', []],
+    'whisparr quality profile' => ['POST', 'media.whisparr.actions.quality-profile', []],
+    'whisparr search' => ['POST', 'media.whisparr.actions.search', []],
+    'whisparr delete' => ['POST', 'media.whisparr.actions.delete', []],
 ]);
 
 test('viewer-level read routes open for viewers', function (string $routeName, array $parameters): void {

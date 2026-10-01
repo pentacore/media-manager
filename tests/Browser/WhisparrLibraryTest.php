@@ -3,9 +3,13 @@
 declare(strict_types=1);
 
 use App\Enums\WhisparrVersion;
+use App\Jobs\ExecuteActionRequest;
+use App\Models\ActionRequest;
 use App\Models\ServiceConnection;
 use App\Models\User;
+use Database\Seeders\ActionTypeConfigSeeder;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Queue;
 
 /**
  * @return list<array{coverType: string, remoteUrl: string}>
@@ -186,4 +190,43 @@ test('a v2 site lists its scenes by year', function (): void {
         ->assertNoSmoke()
         ->assertSeeIn('[data-whisparr-show-title]', 'Site Five')
         ->assertSeeIn('[data-whisparr-scene-year="2024"]', 'Scene 2024-A');
+});
+
+test('an admin monitors, searches and deletes from the Whisparr title page', function (): void {
+    $this->seed(ActionTypeConfigSeeder::class);
+    Queue::fake([ExecuteActionRequest::class]);
+    fakeWhisparrBrowserLibrary();
+    $this->actingAs(User::factory()->admin()->create());
+
+    visit(route('media.whisparr.show', ['id' => 11], absolute: false))
+        ->assertNoSmoke()
+        ->assertSeeIn('[data-whisparr-show-title]', 'Aurora Scene')
+        ->click('[data-whisparr-actions] [data-monitor-toggle]')
+        ->assertSee('Monitoring updated.')
+        ->click('[data-whisparr-actions] [data-search-now]')
+        ->assertSee('Search started.')
+        ->click('[data-delete-trigger]')
+        ->click('[data-delete-files]')
+        ->click('[data-delete-confirm]')
+        ->assertSee('Queued for approval in the Action Queue.')
+        ->assertNoSmoke();
+
+    expect(ActionRequest::query()->where('type', 'whisparr_monitor_item')->sole()->payload['monitored'])->toBeFalse()
+        ->and(ActionRequest::query()->where('type', 'whisparr_search')->exists())->toBeTrue()
+        ->and(ActionRequest::query()->where('type', 'whisparr_delete_item')->sole()->payload['delete_files'])->toBeTrue();
+});
+
+test('an admin changes the quality profile from the title page', function (): void {
+    $this->seed(ActionTypeConfigSeeder::class);
+    Queue::fake([ExecuteActionRequest::class]);
+    fakeWhisparrBrowserLibrary();
+    $this->actingAs(User::factory()->admin()->create());
+
+    visit(route('media.whisparr.show', ['id' => 11], absolute: false))
+        ->assertNoSmoke()
+        ->click('[data-quality-profile-trigger]')
+        ->click('[data-quality-profile-option="2"]')
+        ->assertSee('Quality profile updated.');
+
+    expect(ActionRequest::query()->where('type', 'whisparr_set_quality_profile')->sole()->payload['quality_profile_id'])->toBe(2);
 });

@@ -1,10 +1,36 @@
 <script setup lang="ts">
-import { Head, Link } from '@inertiajs/vue3';
-import { ArrowLeft, ExternalLink } from '@lucide/vue';
-import { computed } from 'vue';
+import { Head, Link, router } from '@inertiajs/vue3';
+import {
+    ArrowLeft,
+    Bookmark,
+    BookmarkX,
+    ExternalLink,
+    Search,
+    Trash2,
+} from '@lucide/vue';
+import { computed, ref, watch } from 'vue';
+import WhisparrActionController from '@/actions/App/Http/Controllers/Whisparr/WhisparrActionController';
 import WhisparrController from '@/actions/App/Http/Controllers/Whisparr/WhisparrController';
 import { Pill, Poster, SvcChip } from '@/components/mm';
 import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/checkbox';
+import {
+    Dialog,
+    DialogContent,
+    DialogDescription,
+    DialogFooter,
+    DialogHeader,
+    DialogTitle,
+    DialogTrigger,
+} from '@/components/ui/dialog';
+import { Label } from '@/components/ui/label';
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useWhisparrBlur } from '@/composables/useWhisparrBlur';
 import { formatSize } from '@/lib/arr';
@@ -34,6 +60,75 @@ defineOptions({
 
 const { blurPosters } = useWhisparrBlur();
 
+const busy = ref(false);
+const deleteDialogOpen = ref(false);
+const deleteFiles = ref(false);
+const profileValue = ref<string | undefined>(
+    props.item.quality_profile_id
+        ? String(props.item.quality_profile_id)
+        : undefined,
+);
+
+watch(
+    () => props.item.quality_profile_id,
+    (id) => {
+        profileValue.value = id ? String(id) : undefined;
+    },
+);
+
+const target = computed(() => ({
+    service_connection_id: props.connection.id,
+    item_id: props.item.id,
+}));
+
+function post(url: string, data: Record<string, unknown>): void {
+    if (busy.value) {
+        return;
+    }
+
+    busy.value = true;
+    router.post(
+        url,
+        { ...target.value, ...data },
+        {
+            preserveScroll: true,
+            onFinish: () => {
+                busy.value = false;
+                deleteDialogOpen.value = false;
+            },
+        },
+    );
+}
+
+function toggleMonitored(): void {
+    post(WhisparrActionController.monitor.url(), {
+        monitored: !props.item.monitored,
+    });
+}
+
+function changeProfile(value: unknown): void {
+    const id = Number(value);
+
+    if (!id || id === props.item.quality_profile_id) {
+        return;
+    }
+
+    profileValue.value = String(id);
+    post(WhisparrActionController.qualityProfile.url(), {
+        quality_profile_id: id,
+    });
+}
+
+function searchNow(): void {
+    post(WhisparrActionController.search.url(), {});
+}
+
+function confirmDelete(): void {
+    post(WhisparrActionController.delete.url(), {
+        delete_files: deleteFiles.value,
+    });
+}
+
 const profileName = computed(() => {
     if (props.item.quality_profile_id === null || !props.qualityProfiles) {
         return '—';
@@ -51,19 +146,127 @@ const profileName = computed(() => {
     <Head :title="item.title" />
 
     <div class="flex flex-col gap-6 p-5">
-        <div class="flex items-center justify-between">
+        <div class="flex flex-wrap items-center justify-between gap-3">
             <Link :href="WhisparrController.index.url()">
                 <Button variant="ghost" size="sm" class="h-8 text-xs">
                     <ArrowLeft class="size-3.5" />
                     Back to Whisparr
                 </Button>
             </Link>
-            <a :href="connection.url" target="_blank" rel="noopener noreferrer">
-                <Button variant="outline" size="sm" class="h-8 text-xs">
-                    <ExternalLink class="size-3.5" />
-                    Open Whisparr
+            <div
+                class="flex flex-wrap items-center gap-2"
+                data-whisparr-actions
+            >
+                <Button
+                    variant="outline"
+                    size="sm"
+                    class="h-7 gap-1.5 text-xs"
+                    :disabled="busy"
+                    :aria-pressed="item.monitored"
+                    data-monitor-toggle
+                    @click="toggleMonitored"
+                >
+                    <Bookmark v-if="item.monitored" class="size-3.5" />
+                    <BookmarkX v-else class="size-3.5" />
+                    {{ item.monitored ? 'Monitored' : 'Unmonitored' }}
                 </Button>
-            </a>
+                <Skeleton
+                    v-if="qualityProfiles === undefined"
+                    class="h-7 w-44"
+                />
+                <Select
+                    v-else
+                    :model-value="profileValue"
+                    @update:model-value="changeProfile"
+                >
+                    <SelectTrigger
+                        class="h-7 w-44 text-xs"
+                        data-quality-profile-trigger
+                    >
+                        <SelectValue placeholder="Quality profile" />
+                    </SelectTrigger>
+                    <SelectContent>
+                        <SelectItem
+                            v-for="profile in qualityProfiles"
+                            :key="profile.id"
+                            :value="String(profile.id)"
+                            :data-quality-profile-option="profile.id"
+                        >
+                            {{ profile.name }}
+                        </SelectItem>
+                    </SelectContent>
+                </Select>
+                <Button
+                    variant="outline"
+                    size="sm"
+                    class="h-7 gap-1.5 text-xs"
+                    :disabled="busy"
+                    data-search-now
+                    @click="searchNow"
+                >
+                    <Search class="size-3.5" />
+                    Search now
+                </Button>
+                <Dialog v-model:open="deleteDialogOpen">
+                    <DialogTrigger as-child>
+                        <Button
+                            variant="destructive"
+                            size="sm"
+                            class="h-7 gap-1.5 text-xs"
+                            data-delete-trigger
+                        >
+                            <Trash2 class="size-3.5" />
+                            Delete
+                        </Button>
+                    </DialogTrigger>
+                    <DialogContent>
+                        <DialogHeader>
+                            <DialogTitle>Delete {{ item.title }}?</DialogTitle>
+                            <DialogDescription>
+                                Removes it from Whisparr. Cannot be undone.
+                                Deletion may require approval in the Action
+                                Queue.
+                            </DialogDescription>
+                        </DialogHeader>
+                        <div class="flex items-center gap-2 py-2">
+                            <Checkbox
+                                id="whisparr_delete_files"
+                                v-model="deleteFiles"
+                                data-delete-files
+                            />
+                            <Label for="whisparr_delete_files"
+                                >Also delete files on disk</Label
+                            >
+                        </div>
+                        <DialogFooter>
+                            <Button
+                                variant="outline"
+                                @click="deleteDialogOpen = false"
+                            >
+                                Cancel
+                            </Button>
+                            <Button
+                                variant="destructive"
+                                :disabled="busy"
+                                data-delete-confirm
+                                @click="confirmDelete"
+                            >
+                                Delete
+                            </Button>
+                        </DialogFooter>
+                    </DialogContent>
+                </Dialog>
+                <a
+                    :href="connection.url"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                >
+                    <Button variant="outline" size="sm" class="h-7 text-xs">
+                        <ExternalLink class="size-3.5" />
+                        Open Whisparr
+                    </Button>
+                </a>
+            </div>
         </div>
 
         <div class="rounded-xl border border-border bg-card p-6">
