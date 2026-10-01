@@ -8,8 +8,15 @@ import {
     RefreshCcw,
     Search,
 } from '@lucide/vue';
-import { computed, onMounted, ref } from 'vue';
+import { computed, onMounted, ref, watch } from 'vue';
+import MediaActionController from '@/actions/App/Http/Controllers/Library/MediaActionController';
 import SeriesController from '@/actions/App/Http/Controllers/Media/SeriesController';
+import {
+    BulkActionBar,
+    BulkCheckbox,
+    BulkSelectAll,
+    LibraryBulkActions,
+} from '@/components/bulk';
 import { OpenInServiceButton, Pill, Poster, SvcChip } from '@/components/mm';
 import { Button } from '@/components/ui/button';
 import {
@@ -20,11 +27,13 @@ import {
     SelectValue,
 } from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
+import { useBulkSelection } from '@/composables/useBulkSelection';
 import { useCan } from '@/composables/useCan';
 import { useRealtimeReload } from '@/composables/useRealtimeReload';
 import { arrPosterUrl } from '@/lib/arr';
 import { cn } from '@/lib/utils';
 import { dashboard } from '@/routes';
+import type { BulkSummary } from '@/types';
 
 interface QualityProfile {
     id: number;
@@ -54,6 +63,7 @@ interface Series {
 
 const props = defineProps<{
     connection: { url: string | null };
+    service_connection_id: number | null;
     series?: Series[];
     qualityProfiles?: QualityProfile[];
 }>();
@@ -131,6 +141,41 @@ const visible = computed<Series[]>(() => {
         return true;
     });
 });
+
+const canBulk = computed(
+    () => can('manage-library') && props.service_connection_id !== null,
+);
+
+const {
+    ids: selectedIds,
+    count: selectedCount,
+    isSelected,
+    toggle: toggleSelected,
+    setAll: setAllSelected,
+    clear: clearSelection,
+    retain: retainSelection,
+} = useBulkSelection<number>([monitoredFilter, profileFilter, query]);
+
+const visibleIds = computed<number[]>(() =>
+    visible.value.map((item) => item.id),
+);
+
+const selectedOnPage = computed(
+    () => visibleIds.value.filter((id) => isSelected(id)).length,
+);
+
+watch(
+    () => props.series,
+    (rows) => retainSelection((rows ?? []).map((row) => row.id)),
+);
+
+function bulkDone(summary: BulkSummary): void {
+    clearSelection();
+
+    if (summary.started + summary.queued > 0) {
+        router.reload({ only: ['series'] });
+    }
+}
 
 const counts = computed(() => {
     const all = props.series?.length ?? 0;
@@ -291,6 +336,7 @@ function sonarrSeriesUrl(slug: string | null): string | null {
                     ] as const"
                     :key="opt[0]"
                     type="button"
+                    :data-monitored-filter="opt[0]"
                     :class="
                         cn(
                             'inline-flex h-6 items-center rounded px-2 text-xs font-medium transition-colors',
@@ -357,6 +403,13 @@ function sonarrSeriesUrl(slug: string | null): string | null {
                     <Database class="size-3.5" />
                 </button>
             </div>
+
+            <BulkSelectAll
+                v-if="canBulk"
+                :selected-count="selectedOnPage"
+                :page-count="visibleIds.length"
+                @toggle="(value) => setAllSelected(visibleIds, value)"
+            />
         </div>
 
         <!-- Grid -->
@@ -369,6 +422,7 @@ function sonarrSeriesUrl(slug: string | null): string | null {
                 v-for="item in visible"
                 :key="item.id"
                 :href="SeriesController.show.url(item.id)"
+                :data-series-card="item.id"
                 class="group flex flex-col gap-2"
             >
                 <div class="relative">
@@ -383,6 +437,16 @@ function sonarrSeriesUrl(slug: string | null): string | null {
                     >
                         Unmonitored
                     </Pill>
+                    <BulkCheckbox
+                        v-if="canBulk"
+                        class="absolute right-2 bottom-2 rounded bg-black/55 p-1"
+                        :checked="isSelected(item.id)"
+                        :label="`Select ${item.title}`"
+                        :data-bulk-select="item.id"
+                        @update:checked="
+                            (value) => toggleSelected(item.id, value)
+                        "
+                    />
                 </div>
                 <div>
                     <div
@@ -427,6 +491,10 @@ function sonarrSeriesUrl(slug: string | null): string | null {
                     <thead>
                         <tr>
                             <th
+                                v-if="canBulk"
+                                class="w-8 border-b border-border bg-card px-3 py-2"
+                            />
+                            <th
                                 v-for="h in [
                                     'Series',
                                     'Year',
@@ -449,6 +517,17 @@ function sonarrSeriesUrl(slug: string | null): string | null {
                             :key="item.id"
                             class="border-b border-border last:border-b-0 hover:bg-bg-hover"
                         >
+                            <td v-if="canBulk" class="px-3 py-2.5">
+                                <BulkCheckbox
+                                    :checked="isSelected(item.id)"
+                                    :label="`Select ${item.title}`"
+                                    :data-bulk-select="item.id"
+                                    @update:checked="
+                                        (value) =>
+                                            toggleSelected(item.id, value)
+                                    "
+                                />
+                            </td>
                             <td class="px-3 py-2.5">
                                 <span class="flex items-center gap-2.5">
                                     <Poster
@@ -510,7 +589,7 @@ function sonarrSeriesUrl(slug: string | null): string | null {
                         </tr>
                         <tr v-if="visible.length === 0">
                             <td
-                                colspan="7"
+                                :colspan="canBulk ? 8 : 7"
                                 class="px-3 py-8 text-center text-sm text-fg-subtle"
                             >
                                 No series match these filters.
@@ -533,5 +612,26 @@ function sonarrSeriesUrl(slug: string | null): string | null {
                 <Skeleton class="h-2 w-1/2" />
             </div>
         </div>
+
+        <BulkActionBar
+            v-if="canBulk"
+            :count="selectedCount"
+            @clear="clearSelection()"
+        >
+            <template #default="{ disabled }">
+                <LibraryBulkActions
+                    :endpoint="MediaActionController.bulk.url()"
+                    :target="{
+                        service: 'sonarr',
+                        service_connection_id: service_connection_id,
+                    }"
+                    :ids="selectedIds"
+                    :disabled="disabled"
+                    :quality-profiles="qualityProfiles"
+                    noun="series"
+                    @done="bulkDone"
+                />
+            </template>
+        </BulkActionBar>
     </div>
 </template>
