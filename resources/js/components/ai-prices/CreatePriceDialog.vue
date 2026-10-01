@@ -143,7 +143,7 @@ function onCreateSuccess(): void {
             </DialogHeader>
             <Form
                 v-bind="AiModelPriceController.store.form()"
-                class="space-y-4"
+                class="min-w-0 space-y-4"
                 v-slot="{ errors, processing }"
                 @success="onCreateSuccess"
             >
