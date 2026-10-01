@@ -606,7 +606,6 @@ class ActivityController extends Controller
         return [
             'id' => $record['id'] ?? null,
             'service' => 'sonarr',
-            'service_connection_id' => $serviceConnection->id,
             'service_url' => $serviceConnection->linkUrl(),
             'title' => $title,
             'subtitle' => $subtitle,
@@ -640,7 +639,6 @@ class ActivityController extends Controller
         return [
             'id' => $record['id'] ?? null,
             'service' => 'radarr',
-            'service_connection_id' => $serviceConnection->id,
             'service_url' => $serviceConnection->linkUrl(),
             'title' => $title,
             'subtitle' => $year === null ? null : (string) $year,

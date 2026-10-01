@@ -25,18 +25,25 @@ beforeEach(function (): void {
 });
 
 /**
- * @param  list<int>  $failingIds
+ * @param  list<int>  $failingIds  DELETE answers 503 (a transport-level outage)
+ * @param  list<int>  $refusedIds  DELETE answers 404 (a refusal, not an outage)
  */
-function fakeBulkSonarrQueue(array $failingIds = []): void
+function fakeBulkSonarrQueue(array $failingIds = [], array $refusedIds = []): void
 {
     Http::fake([
-        'sonarr.local:8989/api/v3/queue*' => function (Request $request) use ($failingIds) {
+        'sonarr.local:8989/api/v3/queue*' => function (Request $request) use ($failingIds, $refusedIds) {
             if ($request->method() === 'DELETE') {
                 $queueId = (int) Str::before(Str::afterLast($request->url(), '/'), '?');
 
-                return in_array($queueId, $failingIds, true)
-                    ? Http::response(['message' => 'upstream body /data/secret'], 503)
-                    : Http::response('', 200);
+                if (in_array($queueId, $failingIds, true)) {
+                    return Http::response(['message' => 'upstream body /data/secret'], 503);
+                }
+
+                if (in_array($queueId, $refusedIds, true)) {
+                    return Http::response(['message' => 'Queue item not found'], 404);
+                }
+
+                return Http::response('', 200);
             }
 
             return Http::response(['records' => [
@@ -47,6 +54,32 @@ function fakeBulkSonarrQueue(array $failingIds = []): void
         'sonarr.local:8989/api/v3/history*' => Http::response(['records' => []]),
         'radarr.local:7878/api/v3/queue*' => Http::response(['records' => []]),
         'radarr.local:7878/api/v3/history*' => Http::response(['records' => []]),
+    ]);
+}
+
+/**
+ * @param  list<int>  $failingIds
+ */
+function fakeBulkRadarrQueue(array $failingIds = []): void
+{
+    Http::fake([
+        'radarr.local:7878/api/v3/queue*' => function (Request $request) use ($failingIds) {
+            if ($request->method() === 'DELETE') {
+                $queueId = (int) Str::before(Str::afterLast($request->url(), '/'), '?');
+
+                return in_array($queueId, $failingIds, true)
+                    ? Http::response(['message' => 'upstream body /data/secret'], 503)
+                    : Http::response('', 200);
+            }
+
+            return Http::response(['records' => [
+                ['id' => 51, 'title' => 'Dune.2021.1080p', 'movie' => ['title' => 'Dune']],
+                ['id' => 52, 'title' => 'Arrival.2016.1080p', 'movie' => ['title' => 'Arrival']],
+            ]]);
+        },
+        'radarr.local:7878/api/v3/history*' => Http::response(['records' => []]),
+        'sonarr.local:8989/api/v3/queue*' => Http::response(['records' => []]),
+        'sonarr.local:8989/api/v3/history*' => Http::response(['records' => []]),
     ]);
 }
 
@@ -157,7 +190,7 @@ test('an outage short-circuits the rest of the batch after the first unreachable
     expect($deleteAttempts)->toBe(3);
 });
 
-test('a refusal (RequestException) never trips the outage short-circuit', function (): void {
+test('a server error (RequestException) never trips the outage short-circuit', function (): void {
     Sleep::fake();
     fakeBulkSonarrQueue(failingIds: [41]);
 
@@ -168,6 +201,31 @@ test('a refusal (RequestException) never trips the outage short-circuit', functi
 
     Http::assertSent(fn (Request $request): bool => $request->method() === 'DELETE'
         && str_contains($request->url(), '/api/v3/queue/42?'));
+});
+
+test('a 4xx refusal (RequestException) is worded as a refusal and never trips the outage short-circuit', function (): void {
+    fakeBulkSonarrQueue(refusedIds: [41]);
+
+    $this->actingAs($this->admin)
+        ->postJson(route('media.library.activity.queue.bulk'), bulkQueuePayload(['ids' => [41, 42]]))
+        ->assertJsonPath('started', 1)
+        ->assertJsonPath('failed', [['id' => 41, 'title' => 'Severance', 'reason' => 'Sonarr refused the change.']]);
+
+    Http::assertSent(fn (Request $request): bool => $request->method() === 'DELETE'
+        && str_contains($request->url(), '/api/v3/queue/42?'));
+});
+
+test('a Radarr bulk run deletes from the Radarr queue and names a failed item from it', function (): void {
+    Sleep::fake();
+    fakeBulkRadarrQueue(failingIds: [52]);
+
+    $this->actingAs($this->admin)
+        ->postJson(route('media.library.activity.queue.bulk'), bulkQueuePayload(['service' => 'radarr', 'ids' => [51, 52]]))
+        ->assertJsonPath('started', 1)
+        ->assertJsonPath('failed', [['id' => 52, 'title' => 'Arrival', 'reason' => 'Radarr is unreachable right now.']]);
+
+    Http::assertSent(fn (Request $request): bool => $request->method() === 'DELETE'
+        && str_contains($request->url(), 'radarr.local:7878/api/v3/queue/51?'));
 });
 
 test('a bulk queue action with no active connection for the service is refused and nothing is sent', function (): void {
@@ -204,14 +262,4 @@ test('members cannot remove queue items in bulk', function (): void {
         ->assertForbidden();
 
     Http::assertNothingSent();
-});
-
-test('queue rows carry the connection they came from', function (): void {
-    fakeBulkSonarrQueue();
-
-    $this->actingAs($this->admin)
-        ->get(route('media.library.activity.queue'))
-        ->assertInertia(fn ($page) => $page
-            ->loadDeferredProps('default', fn ($reload) => $reload
-                ->where('queue.rows.0.service_connection_id', $this->sonarr->id)));
 });

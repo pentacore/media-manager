@@ -4,9 +4,7 @@ declare(strict_types=1);
 
 use App\Models\ServiceConnection;
 use App\Models\User;
-use App\Services\Library\InterventionCounter;
 use Illuminate\Http\Client\Request;
-use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
 
 /**
@@ -35,8 +33,6 @@ function fakeGrabQueueBrowser(): void
 }
 
 beforeEach(function (): void {
-    // The shared nav badge would otherwise walk the Sonarr queue on every request.
-    Cache::put(InterventionCounter::CACHE_KEY, 0, 600);
     ServiceConnection::factory()->sonarr()->create(['url' => 'http://sonarr.local:8989', 'api_key' => 'k']);
 });
 
@@ -52,9 +48,11 @@ test('an admin removes two Sonarr queue items in bulk', function (): void {
         ->click('[data-bulk-select="42"]')
         ->assertSeeIn('[data-bulk-count]', '2 selected')
         ->click('[data-bulk-queue-action="remove"]')
+        ->assertSee('Remove 2 items from the queue?')
         ->assertSeeIn('[data-bulk-queue-confirm]', 'Confirm')
         ->click('[data-bulk-queue-confirm]')
         ->assertSee('2 removed')
+        ->assertMissing('[data-bulk-bar]')
         ->assertNoSmoke();
 
     Http::assertSent(fn (Request $request): bool => $request->method() === 'DELETE' && str_contains($request->url(), '/api/v3/queue/41?'));
@@ -83,8 +81,22 @@ test('a member sees no queue selection', function (): void {
         ->assertCount('[data-bulk-select]', 0);
 });
 
-test('the selection clears when the service filter changes', function (): void {
-    fakeGrabQueueBrowser();
+test('the selection clears when the service filter changes, even though the same id stays visible', function (): void {
+    // id 41 exists in both queues: if the selection only dropped ids that
+    // vanished from the page (retain()), switching to Radarr would keep it
+    // selected. Only the serviceFilter reset in useBulkSelection clears it.
+    ServiceConnection::factory()->radarr()->create(['url' => 'http://radarr.local:7878', 'api_key' => 'k']);
+
+    Http::fake([
+        'sonarr.local:8989/api/v3/queue*' => fn (Request $request) => $request->method() === 'DELETE'
+            ? Http::response('', 200)
+            : Http::response(['records' => [grabQueueBrowserRecord(41, 'Severance'), grabQueueBrowserRecord(42, 'Andor')]]),
+        'sonarr.local:8989/api/v3/history*' => Http::response(['records' => [], 'totalRecords' => 0]),
+        'radarr.local:7878/api/v3/queue*' => fn (Request $request) => $request->method() === 'DELETE'
+            ? Http::response('', 200)
+            : Http::response(['records' => [grabQueueBrowserRecord(41, 'Dune')]]),
+        'radarr.local:7878/api/v3/history*' => Http::response(['records' => [], 'totalRecords' => 0]),
+    ]);
     $this->actingAs(User::factory()->admin()->create());
 
     visit(route('media.library.activity.queue', absolute: false))
@@ -93,8 +105,7 @@ test('the selection clears when the service filter changes', function (): void {
         ->click('[data-bulk-select="41"]')
         ->assertSeeIn('[data-bulk-count]', '1 selected')
         ->click('[data-service-filter="radarr"]')
-        ->click('[data-service-filter="sonarr"]')
-        ->assertPresent('[data-queue-row="sonarr-41"]')
+        ->assertPresent('[data-queue-row="radarr-41"]')
         ->assertDontSee('1 selected');
 });
 

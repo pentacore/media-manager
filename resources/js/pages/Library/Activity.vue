@@ -37,7 +37,6 @@ import { dashboard } from '@/routes';
 interface QueueRow {
     id: number;
     service: 'sonarr' | 'radarr';
-    service_connection_id: number;
     service_url: string;
     title: string | null;
     subtitle: string | null;
@@ -1002,8 +1001,8 @@ async function runQueueBulk(): Promise<void> {
                         <DialogTitle>
                             {{
                                 queueBulkConfirm === 'blocklist'
-                                    ? `Remove and blocklist ${selectedQueueCount} releases?`
-                                    : `Remove ${selectedQueueCount} items from the queue?`
+                                    ? `Remove and blocklist ${selectedQueueCount} ${selectedQueueCount === 1 ? 'release' : 'releases'}?`
+                                    : `Remove ${selectedQueueCount} ${selectedQueueCount === 1 ? 'item' : 'items'} from the queue?`
                             }}
                         </DialogTitle>
                         <DialogDescription>
