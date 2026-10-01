@@ -201,9 +201,10 @@ test('a series that drops out of the library during a reload drops out of the bu
     foreach ($full as $series) {
         IndexedSeries::factory()->for($this->sonarr, 'serviceConnection')->create(['sonarr_id' => $series['id'], 'title' => $series['title'], 'year' => $series['year']]);
     }
+
     $this->actingAs(User::factory()->member()->create());
 
-    $page = visit(route('media.series.index', absolute: false))
+    $webpage = visit(route('media.series.index', absolute: false))
         ->assertNoSmoke()
         ->assertSeeIn('[data-series-card="1"]', 'Series 001')
         ->click('[data-bulk-select="1"]')
@@ -213,16 +214,16 @@ test('a series that drops out of the library during a reload drops out of the bu
     // A plain upstream fake swap alone would still be served from the warm
     // list cache, same as production — bust it so the Sync reload actually
     // asks Sonarr again (and reaches the closure's second call).
-    (new SonarrCache($this->sonarr))->bustAll();
+    new SonarrCache($this->sonarr)->bustAll();
 
-    $page->click('Sync')
+    $webpage->click('Sync')
         ->assertSeeIn('[data-series-card="1"]', 'Series 001')
         ->assertCount('[data-series-card="2"]', 0)
         ->assertCount('[data-bulk-select="2"]', 0)
         ->assertSeeIn('[data-bulk-count]', '1 selected')
         ->assertNoSmoke();
 
-    $page->click('[data-bulk-action="monitor"]')
+    $webpage->click('[data-bulk-action="monitor"]')
         ->assertSee('1 started');
 
     expect(ActionRequest::query()->where('type', 'monitor_series')->pluck('payload')->all())->toEqual([
@@ -256,23 +257,23 @@ test('a movie that drops out of the library during a reload drops out of the bul
     ]);
     $this->actingAs(User::factory()->member()->create());
 
-    $page = visit(route('media.movies.index', absolute: false))
+    $webpage = visit(route('media.movies.index', absolute: false))
         ->assertNoSmoke()
         ->assertSeeIn('[data-movie-card="10"]', 'Dune')
         ->click('[data-bulk-select="10"]')
         ->click('[data-bulk-select="11"]')
         ->assertSeeIn('[data-bulk-count]', '2 selected');
 
-    (new RadarrCache($radarr))->bustAll();
+    new RadarrCache($radarr)->bustAll();
 
-    $page->click('Sync')
+    $webpage->click('Sync')
         ->assertSeeIn('[data-movie-card="10"]', 'Dune')
         ->assertCount('[data-movie-card="11"]', 0)
         ->assertCount('[data-bulk-select="11"]', 0)
         ->assertSeeIn('[data-bulk-count]', '1 selected')
         ->assertNoSmoke();
 
-    $page->click('[data-bulk-action="monitor"]')
+    $webpage->click('[data-bulk-action="monitor"]')
         ->assertSee('1 started');
 
     expect(ActionRequest::query()->where('type', 'monitor_movie')->pluck('payload')->all())->toEqual([
