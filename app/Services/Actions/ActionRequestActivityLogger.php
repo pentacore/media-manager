@@ -7,6 +7,7 @@ namespace App\Services\Actions;
 use App\Enums\ActionRequestStatus;
 use App\Models\ActionRequest;
 use App\Models\ActivityLog;
+use Illuminate\Support\Str;
 
 /**
  * Writes the ActionRequest audit trail. The observer covers Eloquent saves;
@@ -108,7 +109,13 @@ final class ActionRequestActivityLogger
             'action' => $action,
             'subject_type' => ActionRequest::class,
             'subject_id' => $actionRequest->id,
-            'description' => $description,
+            // activity_logs.description is varchar(255); a long bulk-reject
+            // reason (up to 500 chars, stored in full on
+            // result.rejection_reason) would otherwise overflow the column
+            // and fail this insert inside the reviewer's transaction,
+            // rolling back the whole reject. Limit every description here,
+            // not just rejections, so nothing else can hit the same wall.
+            'description' => Str::limit($description, 252),
             'metadata' => [
                 'type' => $actionRequest->type,
                 'source_service' => $actionRequest->source_service,

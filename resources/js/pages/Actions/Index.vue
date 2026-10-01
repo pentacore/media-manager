@@ -1150,7 +1150,12 @@ function pipelineState(
         <Dialog v-model:open="rejectDialogOpen">
             <DialogContent>
                 <DialogHeader>
-                    <DialogTitle>Reject {{ bulkCount }} requests?</DialogTitle>
+                    <DialogTitle
+                        >Reject {{ bulkCount }}
+                        {{
+                            bulkCount === 1 ? 'request' : 'requests'
+                        }}?</DialogTitle
+                    >
                     <DialogDescription>
                         One reason is saved on every rejected request and in the
                         activity log. Requests that are no longer pending are

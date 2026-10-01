@@ -67,6 +67,23 @@ test('a shared reason is stored on every rejected request and on its activity ro
     Queue::assertNotPushed(ExecuteActionRequest::class);
 });
 
+test('a 500-character reason rejects every request without breaking the activity log', function (): void {
+    $pending = ActionRequest::factory()->count(2)->create(['status' => ActionRequestStatus::Pending]);
+    $reason = str_repeat('x', 500);
+
+    $this->actingAs($this->admin)
+        ->postJson(route('actions.requests.bulk'), ['ids' => $pending->pluck('id')->all(), 'action' => 'reject', 'reason' => $reason])
+        ->assertJsonPath('started', 2);
+
+    foreach ($pending as $actionRequest) {
+        expect($actionRequest->fresh()->status)->toBe(ActionRequestStatus::Rejected)
+            ->and($actionRequest->fresh()->result)->toBe(['rejection_reason' => $reason]);
+
+        $description = ActivityLog::query()->where('action', 'action_request.rejected')->where('subject_id', $actionRequest->id)->sole()->description;
+        expect(mb_strlen($description))->toBeLessThanOrEqual(255);
+    }
+});
+
 test('a request that no longer exists is reported as failed', function (): void {
     $this->actingAs($this->admin)
         ->postJson(route('actions.requests.bulk'), ['ids' => [999], 'action' => 'approve'])
@@ -90,6 +107,16 @@ test('members cannot review in bulk', function (): void {
     $pending = ActionRequest::factory()->create(['status' => ActionRequestStatus::Pending]);
 
     $this->actingAs(User::factory()->member()->create())
+        ->postJson(route('actions.requests.bulk'), ['ids' => [$pending->id], 'action' => 'approve'])
+        ->assertForbidden();
+
+    expect($pending->fresh()->status)->toBe(ActionRequestStatus::Pending);
+});
+
+test('viewers cannot review in bulk', function (): void {
+    $pending = ActionRequest::factory()->create(['status' => ActionRequestStatus::Pending]);
+
+    $this->actingAs(User::factory()->create())
         ->postJson(route('actions.requests.bulk'), ['ids' => [$pending->id], 'action' => 'approve'])
         ->assertForbidden();
 
