@@ -103,3 +103,60 @@ test('SharedUserResource exposes resolved preferences', function (): void {
             ->where('auth.user.preferences.show_relative_time', true)
         );
 });
+
+/**
+ * @param  array<string, mixed>  $overrides
+ * @return array<string, mixed>
+ */
+function whisparrPreferencesPayload(array $overrides = []): array
+{
+    return [
+        'time_format' => '24h',
+        'date_format' => 'iso',
+        'timezone' => 'UTC',
+        'first_day_of_week' => 1,
+        'show_relative_time' => true,
+        ...$overrides,
+    ];
+}
+
+test('the Whisparr poster blur defaults to on, on the page and in the shared user', function (): void {
+    $user = User::factory()->admin()->create(['preferences' => null]);
+
+    $this->actingAs($user)
+        ->get(route('settings.preferences.edit'))
+        ->assertInertia(fn ($page) => $page
+            ->where('preferences.whisparr_blur_posters', true)
+            ->where('auth.user.preferences.whisparr_blur_posters', true));
+});
+
+test('an admin can turn the Whisparr poster blur off', function (): void {
+    $user = User::factory()->admin()->create(['preferences' => null]);
+
+    $this->actingAs($user)
+        ->put(route('settings.preferences.update'), whisparrPreferencesPayload(['whisparr_blur_posters' => false]))
+        ->assertRedirect();
+
+    expect($user->refresh()->resolvedPreferences()['whisparr_blur_posters'])->toBeFalse();
+});
+
+test('a save without the Whisparr toggle keeps the stored value', function (): void {
+    $user = User::factory()->admin()->create(['preferences' => ['whisparr_blur_posters' => false]]);
+
+    $this->actingAs($user)
+        ->put(route('settings.preferences.update'), whisparrPreferencesPayload(['time_format' => '12h']))
+        ->assertRedirect();
+
+    expect($user->refresh()->resolvedPreferences())
+        ->toMatchArray(['time_format' => '12h', 'whisparr_blur_posters' => false]);
+});
+
+test('a non-boolean Whisparr toggle is rejected', function (): void {
+    $this->actingAs(User::factory()->admin()->create())
+        ->put(route('settings.preferences.update'), whisparrPreferencesPayload(['whisparr_blur_posters' => 'maybe']))
+        ->assertSessionHasErrors('whisparr_blur_posters');
+});
+
+test('a stored non-boolean blur value falls back to the default', function (): void {
+    expect(UserPreferences::withDefaults(['whisparr_blur_posters' => 'no'])['whisparr_blur_posters'])->toBeTrue();
+});

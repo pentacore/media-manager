@@ -21,3 +21,8 @@ export interface ReleaseRow {
     rejected: boolean;
     rejections: string[];
 }
+
+export interface QualityProfileOption {
+    id: number;
+    name: string;
+}

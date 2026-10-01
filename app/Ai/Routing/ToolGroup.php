@@ -8,11 +8,13 @@ use App\Ai\Agents\MediaFileInspectorAgent;
 use App\Ai\Agents\StuckDownloadInvestigatorAgent;
 use App\Ai\Tools\Arr\AddMediaTool;
 use App\Ai\Tools\Arr\DeleteMediaTool;
+use App\Ai\Tools\Arr\GetMediaAddOptionsTool;
 use App\Ai\Tools\Arr\GetMediaTool;
 use App\Ai\Tools\Arr\MonitorMediaTool;
 use App\Ai\Tools\Arr\RemoveStuckDownloadChatTool;
 use App\Ai\Tools\Arr\ReplaceMediaFileTool;
 use App\Ai\Tools\Arr\ResolveManualImportChatTool;
+use App\Ai\Tools\Arr\SearchMediaReleasesTool;
 use App\Ai\Tools\Arr\SearchMediaTool;
 use App\Ai\Tools\Arr\SetMediaQualityProfileTool;
 use App\Ai\Tools\Bazarr\InspectSubtitleTool;
@@ -83,7 +85,7 @@ enum ToolGroup: string
     {
         return match ($this) {
             self::Downloads => 'Is the user asking about downloads, the download queue, download history, or a stuck or failed import?',
-            self::LibraryChanges => 'Does the user want to add, delete, monitor, change the quality profile of, or rescan something in the media library?',
+            self::LibraryChanges => 'Does the user want to add or download, delete, monitor, change the quality profile of, rescan, or start an indexer search for something in the media library — including searching for everything missing?',
             self::Requests => 'Is the user asking about media requests — pending, approving, declining or cleaning them up?',
             self::Discovery => 'Does the user want recommendations, trending or popular titles, similar titles, cast/crew, or to find something new to watch?',
             self::Playback => 'Is the user asking what is playing, their watch history, or to mark something watched or unwatched?',
@@ -104,9 +106,11 @@ enum ToolGroup: string
                 RemoveStuckDownloadChatTool::class,
             ],
             self::LibraryChanges => [
+                GetMediaAddOptionsTool::class,
                 AddMediaTool::class,
                 MonitorMediaTool::class,
                 SetMediaQualityProfileTool::class,
+                SearchMediaReleasesTool::class,
                 DeleteMediaTool::class,
                 LibraryScanTool::class,
             ],

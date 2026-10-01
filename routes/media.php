@@ -15,6 +15,8 @@ use App\Http\Controllers\Media\MyRequestController;
 use App\Http\Controllers\Media\RequestController;
 use App\Http\Controllers\Media\SearchController;
 use App\Http\Controllers\Media\SeriesController;
+use App\Http\Controllers\Whisparr\WhisparrActionController;
+use App\Http\Controllers\Whisparr\WhisparrController;
 use Illuminate\Support\Facades\Route;
 
 Route::middleware(['auth', 'verified', 'password.set'])
@@ -86,9 +88,12 @@ Route::middleware(['auth', 'verified', 'password.set'])
                     ->middleware('throttle:release-search')
                     ->name('releases');
                 Route::post('grab', [MediaActionController::class, 'grab'])->name('grab');
+                Route::post('bulk', [MediaActionController::class, 'bulk'])->name('bulk');
             });
 
             Route::middleware('role:admin')->group(function (): void {
+                Route::post('library/activity/queue/bulk', [LibraryActivityController::class, 'bulkQueue'])
+                    ->name('library.activity.queue.bulk');
                 Route::post('library/activity/queue/{service}/{id}/remove', [LibraryActivityController::class, 'removeQueueItem'])
                     ->whereIn('service', ['sonarr', 'radarr'])
                     ->whereNumber('id')
@@ -134,5 +139,16 @@ Route::middleware(['auth', 'verified', 'password.set'])
                 Route::get('requests/{id}/edit-options', [RequestController::class, 'editOptions'])->whereNumber('id')->name('requests.edit-options');
                 Route::put('requests/{id}', [RequestController::class, 'update'])->whereNumber('id')->name('requests.update');
             });
+        });
+
+        // Whisparr browse and manage — admins only.
+        Route::middleware('can:admin')->prefix('whisparr')->name('whisparr.')->group(function (): void {
+            Route::get('/', [WhisparrController::class, 'index'])->name('index');
+            Route::get('{id}', [WhisparrController::class, 'show'])->whereNumber('id')->name('show');
+            Route::post('actions/monitor', [WhisparrActionController::class, 'monitor'])->name('actions.monitor');
+            Route::post('actions/quality-profile', [WhisparrActionController::class, 'qualityProfile'])->name('actions.quality-profile');
+            Route::post('actions/search', [WhisparrActionController::class, 'search'])->name('actions.search');
+            Route::post('actions/delete', [WhisparrActionController::class, 'delete'])->name('actions.delete');
+            Route::post('bulk', [WhisparrActionController::class, 'bulk'])->name('bulk');
         });
     });

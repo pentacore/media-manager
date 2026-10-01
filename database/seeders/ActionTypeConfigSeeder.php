@@ -229,6 +229,13 @@ class ActionTypeConfigSeeder extends Seeder
                 'requires_approval' => false,
                 'is_enabled' => true,
             ],
+            [
+                'type' => 'whisparr_search',
+                'label' => 'Search indexers from Whisparr',
+                'description' => 'Start an automatic indexer search for a Whisparr site or movie from the Whisparr pages.',
+                'requires_approval' => false,
+                'is_enabled' => true,
+            ],
         ];
 
         foreach ($types as $type) {

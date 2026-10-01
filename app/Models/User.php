@@ -111,7 +111,8 @@ class User extends Authenticatable implements MustVerifyEmail
      *     date_format: 'iso'|'us'|'eu'|'long',
      *     timezone: string,
      *     first_day_of_week: int,
-     *     show_relative_time: bool
+     *     show_relative_time: bool,
+     *     whisparr_blur_posters: bool
      * }
      */
     public function resolvedPreferences(): array

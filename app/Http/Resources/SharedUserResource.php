@@ -26,7 +26,7 @@ use Pentacore\Typefinder\Attributes\TypefinderResource;
     'email_verified_at' => 'string | null',
     'role' => "'admin' | 'member' | 'viewer'",
     'avatar_url' => 'string | null',
-    'preferences' => "{ time_format: '12h' | '24h'; date_format: 'iso' | 'us' | 'eu' | 'long'; timezone: string; first_day_of_week: number; show_relative_time: boolean }",
+    'preferences' => "{ time_format: '12h' | '24h'; date_format: 'iso' | 'us' | 'eu' | 'long'; timezone: string; first_day_of_week: number; show_relative_time: boolean; whisparr_blur_posters: boolean }",
 ])]
 class SharedUserResource extends JsonResource
 {

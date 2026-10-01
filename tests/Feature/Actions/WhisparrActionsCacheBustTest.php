@@ -20,7 +20,7 @@ test('deleteItem busts the Whisparr cache', function (): void {
 
     (new WhisparrActions)->execute(ActionRequest::factory()->create([
         'type' => 'whisparr_delete_item',
-        'payload' => ['whisparr_item_id' => 3],
+        'payload' => ['whisparr_item_id' => 3, 'service_connection_id' => $connection->id],
     ]));
 
     $fresh = new WhisparrCache($connection)->rememberList('list', fn (): array => ['miss']);

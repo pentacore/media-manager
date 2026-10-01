@@ -61,6 +61,9 @@ return RectorConfig::configure()
         __DIR__.'/routes',
         __DIR__.'/tests',
     ])
+    // On the bind mount, not the container's /tmp: a run as root (sail exec)
+    // left root-owned cache files there that the sail user cannot overwrite.
+    ->withCache(__DIR__.'/storage/framework/cache/rector')
     ->withSkipPath(__DIR__.'/bootstrap/cache')
     ->withSkip([
         PostIncDecToPreIncDecRector::class,

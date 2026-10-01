@@ -69,7 +69,10 @@ class ActionRequestResource extends JsonResource
     }
 
     /**
-     * @return array<string, mixed>|null
+     * What a non-admin may read of the result. The reviewer's rejection
+     * reason is written for the requester, so it is included.
+     *
+     * @return array{success: mixed, reason: mixed, rejection_reason: string|null}|null
      */
     private function safeResult(): ?array
     {
@@ -77,9 +80,12 @@ class ActionRequestResource extends JsonResource
             return null;
         }
 
+        $rejectionReason = $this->result['rejection_reason'] ?? null;
+
         return [
             'success' => $this->result['success'] ?? null,
             'reason' => $this->result['reason'] ?? null,
+            'rejection_reason' => is_string($rejectionReason) ? $rejectionReason : null,
         ];
     }
 }

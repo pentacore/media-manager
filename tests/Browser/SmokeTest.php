@@ -397,6 +397,7 @@ function browserSmokeAdminRouteNames(): array
         'admin.webhook-log.index',
         'admin.jobs.index',
         'ai.chat',
+        'media.whisparr.index',
     ];
 }
 

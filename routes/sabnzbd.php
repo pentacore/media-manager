@@ -29,7 +29,7 @@ Route::middleware(['auth', 'verified', 'password.set', 'role:member'])
             ->where('nzoId', SabnzbdClient::NZO_ID_PATTERN)
             ->name('queue.slot.priority');
 
-        // Admin-only download management: speed limit and history.
+        // Admin-only download management: speed limit, history, and bulk slot actions.
         Route::middleware('can:admin')->group(function (): void {
             Route::post('speed-limit', [QueueController::class, 'setSpeedLimit'])->name('speed-limit.update');
             Route::post('history/{nzoId}/retry', [QueueController::class, 'retryHistory'])
@@ -38,5 +38,6 @@ Route::middleware(['auth', 'verified', 'password.set', 'role:member'])
             Route::delete('history/{nzoId}', [QueueController::class, 'deleteHistory'])
                 ->where('nzoId', SabnzbdClient::NZO_ID_PATTERN)
                 ->name('history.destroy');
+            Route::post('queue/bulk', [QueueController::class, 'bulk'])->name('queue.bulk');
         });
     });

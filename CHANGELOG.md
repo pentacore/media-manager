@@ -1,3 +1,34 @@
+# [1.31.0](https://github.com/pentacore/media-manager/compare/v1.30.1...v1.31.0) (2026-10-01)
+
+
+### Bug Fixes
+
+* **actions:** keep long reject reasons from breaking the activity log ([c0ea5dd](https://github.com/pentacore/media-manager/commit/c0ea5dd633eb18a59fc527406f6e73384750fa9b))
+* **bulk:** bound bulk runs by a time budget and stop retrying an unreachable upstream ([0d8854e](https://github.com/pentacore/media-manager/commit/0d8854e46935f989dc7ae3742c5161cf7f768bd9))
+* **bulk:** freeze the selection while a run is in flight and keep bulk UI honest ([fab7f12](https://github.com/pentacore/media-manager/commit/fab7f126dc3765284af3f881bb6ca73108ffe9ec))
+* **bulk:** keep the time budget hard and cut descriptions by character ([7eacfa1](https://github.com/pentacore/media-manager/commit/7eacfa1221380a1abff6bc0b10f8afa571768c3e))
+* **library:** address grab-queue bulk review findings ([2294b30](https://github.com/pentacore/media-manager/commit/2294b30a5c5812047a2835d99ca5a548efc3491d))
+* **sabnzbd:** close review gaps in the bulk slot actions ([2e136a5](https://github.com/pentacore/media-manager/commit/2e136a510ad5fc483466a35a4aee97b8c4f87f08))
+* **whisparr:** describe Whisparr actions only on their pinned connection ([ed6a376](https://github.com/pentacore/media-manager/commit/ed6a376e86b5dfcd61772daa33b880b65ad19314))
+* **whisparr:** treat non-JSON reads and profile outages as errors, expose rejection reasons ([5b05302](https://github.com/pentacore/media-manager/commit/5b05302582b0de815fa345a080352fa0d64027b4))
+
+
+### Features
+
+* **actions:** add a bulk runner that fans out through the single-item path ([587dd00](https://github.com/pentacore/media-manager/commit/587dd003a2e8c1b4e0131f1234534f1769d06672))
+* **actions:** approve or reject Action Queue requests in bulk ([59573f6](https://github.com/pentacore/media-manager/commit/59573f6166005388838398575318d8b61cd3ad87))
+* **ai:** look up add options and start indexer searches from chat ([7a32754](https://github.com/pentacore/media-manager/commit/7a327548cfc43b990dcd3fb224322df4107e661f))
+* **library:** add the Sonarr and Radarr bulk action endpoint ([cf1d139](https://github.com/pentacore/media-manager/commit/cf1d1392eb252a10064b5e25b1a589d6b62e3cd2))
+* **library:** remove or blocklist many Grab-queue items per service ([efb843a](https://github.com/pentacore/media-manager/commit/efb843a5c8073e8c217de483bfe20563e40e2fe5))
+* **library:** select series and movies and act on them in bulk ([cd685d0](https://github.com/pentacore/media-manager/commit/cd685d07a1d3cf979c7089eedc18ce002f0503fd))
+* **sabnzbd:** pause, resume and delete many queue slots at once ([10bc7fc](https://github.com/pentacore/media-manager/commit/10bc7fcacdd4a39e4fdb2bc3744d683cb610f3d2))
+* **settings:** add a per-user Whisparr poster blur and a blur-capable poster ([72e593b](https://github.com/pentacore/media-manager/commit/72e593b34eff27d053f2eaa5eca4eac501ec4d03))
+* **whisparr:** add the admin-only Whisparr library and title pages ([8cdf377](https://github.com/pentacore/media-manager/commit/8cdf3773113b15a9fb09d2b8609f213c9ba9f50f))
+* **whisparr:** add the pinned whisparr_search action type ([57858e9](https://github.com/pentacore/media-manager/commit/57858e9a5699e1f70379463f71befdbcc5f35a37))
+* **whisparr:** bulk monitor, re-profile, search and delete from the library ([a4f0ea6](https://github.com/pentacore/media-manager/commit/a4f0ea68b0567932bc23d21b832b99e6f7d7bf73))
+* **whisparr:** monitor, re-profile, search and delete from the title page ([8e885c5](https://github.com/pentacore/media-manager/commit/8e885c5086ce3234e1cdb0d54031dbb27741fa00))
+* **whisparr:** present v2 sites and v3 movies as one row shape ([530bd96](https://github.com/pentacore/media-manager/commit/530bd96381e74aca91c4bcc64e571c3951eccb1d))
+
 ## [1.30.1](https://github.com/pentacore/media-manager/compare/v1.30.0...v1.30.1) (2026-10-01)
 
 

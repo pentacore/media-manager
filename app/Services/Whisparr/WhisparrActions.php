@@ -23,6 +23,7 @@ class WhisparrActions implements ActionExecutor
             'whisparr_add_item' => $this->addItem($actionRequest),
             'whisparr_monitor_item' => $this->monitorItem($actionRequest),
             'whisparr_set_quality_profile' => $this->setQualityProfile($actionRequest),
+            'whisparr_search' => $this->search($actionRequest),
             default => throw new InvalidArgumentException(sprintf('WhisparrActions cannot execute type "%s"', $actionRequest->type)),
         };
     }
@@ -37,7 +38,7 @@ class WhisparrActions implements ActionExecutor
         throw_if($itemId <= 0, InvalidArgumentException::class, 'whisparr_item_id is required');
 
         $deleteFiles = (bool) ($payload['delete_files'] ?? false);
-        $serviceConnection = ServiceConnection::resolvePinned($payload, ServiceType::Whisparr);
+        $serviceConnection = ServiceConnection::resolvePinnedStrict($payload, ServiceType::Whisparr);
         new WhisparrClient($serviceConnection)->deleteItem($itemId, $deleteFiles);
         new WhisparrCache($serviceConnection)->bustAll();
 
@@ -53,7 +54,7 @@ class WhisparrActions implements ActionExecutor
         $tmdbId = (int) ($payload['tmdb_id'] ?? 0);
         throw_if($tmdbId <= 0, InvalidArgumentException::class, 'tmdb_id is required');
 
-        $serviceConnection = ServiceConnection::resolvePinned($payload, ServiceType::Whisparr);
+        $serviceConnection = ServiceConnection::resolvePinnedStrict($payload, ServiceType::Whisparr);
         $whisparrClient = new WhisparrClient($serviceConnection);
 
         $candidates = $whisparrClient->searchItems(sprintf('tmdb:%d', $tmdbId));
@@ -83,7 +84,7 @@ class WhisparrActions implements ActionExecutor
         throw_if($itemId <= 0, InvalidArgumentException::class, 'whisparr_item_id is required');
 
         $monitored = (bool) ($payload['monitored'] ?? true);
-        $serviceConnection = ServiceConnection::resolvePinned($payload, ServiceType::Whisparr);
+        $serviceConnection = ServiceConnection::resolvePinnedStrict($payload, ServiceType::Whisparr);
         $whisparrClient = new WhisparrClient($serviceConnection);
         $item = $whisparrClient->getItemById($itemId);
         $item['monitored'] = $monitored;
@@ -104,7 +105,7 @@ class WhisparrActions implements ActionExecutor
         throw_if($itemId <= 0, InvalidArgumentException::class, 'whisparr_item_id is required');
         throw_if($qualityProfileId <= 0, InvalidArgumentException::class, 'quality_profile_id is required');
 
-        $serviceConnection = ServiceConnection::resolvePinned($payload, ServiceType::Whisparr);
+        $serviceConnection = ServiceConnection::resolvePinnedStrict($payload, ServiceType::Whisparr);
         $whisparrClient = new WhisparrClient($serviceConnection);
         $item = $whisparrClient->getItemById($itemId);
         $item['qualityProfileId'] = $qualityProfileId;
@@ -112,5 +113,22 @@ class WhisparrActions implements ActionExecutor
         new WhisparrCache($serviceConnection)->bustAll();
 
         return ['whisparr_item_id' => $itemId, 'quality_profile_id' => $qualityProfileId];
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function search(ActionRequest $actionRequest): array
+    {
+        $payload = $actionRequest->payload;
+        $itemId = (int) ($payload['whisparr_item_id'] ?? 0);
+        throw_if($itemId <= 0, InvalidArgumentException::class, 'whisparr_item_id is required');
+
+        // Item ids overlap between Whisparr instances: a search only ever
+        // runs against the pinned connection, never "the active one".
+        $serviceConnection = ServiceConnection::resolvePinnedStrict($payload, ServiceType::Whisparr);
+        $response = new WhisparrClient($serviceConnection)->searchItem($itemId);
+
+        return ['whisparr_item_id' => $itemId, 'whisparr_command_id' => $response['id'] ?? null];
     }
 }

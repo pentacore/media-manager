@@ -70,6 +70,7 @@ dataset('member-only routes', [
     'library search' => ['POST', 'media.library.actions.search', []],
     'library releases' => ['GET', 'media.library.actions.releases', []],
     'library grab' => ['POST', 'media.library.actions.grab', []],
+    'library bulk' => ['POST', 'media.library.actions.bulk', []],
     'wanted' => ['GET', 'media.wanted.index', []],
 ]);
 
@@ -86,6 +87,20 @@ dataset('member write routes', [
     'library monitor' => ['POST', 'media.library.actions.monitor', []],
     'library monitor episodes' => ['POST', 'media.library.actions.monitor-episodes', []],
     'library quality profile' => ['POST', 'media.library.actions.quality-profile', []],
+    'library bulk' => ['POST', 'media.library.actions.bulk', []],
+]);
+
+dataset('admin-only routes', [
+    'action queue bulk' => ['POST', 'actions.requests.bulk', []],
+    'whisparr index' => ['GET', 'media.whisparr.index', []],
+    'whisparr show' => ['GET', 'media.whisparr.show', ['id' => 1]],
+    'whisparr monitor' => ['POST', 'media.whisparr.actions.monitor', []],
+    'whisparr quality profile' => ['POST', 'media.whisparr.actions.quality-profile', []],
+    'whisparr search' => ['POST', 'media.whisparr.actions.search', []],
+    'whisparr delete' => ['POST', 'media.whisparr.actions.delete', []],
+    'whisparr bulk' => ['POST', 'media.whisparr.bulk', []],
+    'sabnzbd bulk' => ['POST', 'sabnzbd.queue.bulk', []],
+    'queue bulk' => ['POST', 'media.library.activity.queue.bulk', []],
 ]);
 
 test('viewer-level read routes open for viewers', function (string $routeName, array $parameters): void {
@@ -106,6 +121,12 @@ test('member-level routes pass the ability gate for members', function (string $
 
     expect($response->getStatusCode())->not->toBe(403);
 })->with('member write routes');
+
+test('admin-only routes are forbidden to members', function (string $method, string $routeName, array $parameters): void {
+    $this->actingAs(User::factory()->member()->create())
+        ->call($method, route($routeName, $parameters))
+        ->assertForbidden();
+})->with('admin-only routes');
 
 test('media.discover.title passes the ability gate for viewers (view-library)', function (): void {
     $response = $this->actingAs(User::factory()->create())

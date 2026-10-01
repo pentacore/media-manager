@@ -102,37 +102,36 @@ final readonly class ActionTargets
     }
 
     /**
+     * Every `whisparr_*` executor resolves its connection with
+     * {@see ServiceConnection::resolvePinnedStrict()}, so the describer
+     * does too: a missing, wrong-type, deleted or deactivated pin aborts
+     * (UNDESCRIBABLE) instead of describing the active instance's item
+     * for an action that could never run.
+     *
      * @param  array<string, mixed>  $pinContext
+     *
+     * @throws ModelNotFoundException|InvalidArgumentException
      */
     public function whisparrItem(int $itemId, array $pinContext = [], ?string $fallbackName = null): ActionTarget
     {
-        return $this->attempt('item', $itemId, $fallbackName, false, function () use ($itemId, $pinContext): ?ActionTarget {
-            $serviceConnection = ServiceConnection::resolvePinned($pinContext, ServiceType::Whisparr);
-            $name = $this->nameFrom(new WhisparrClient($serviceConnection)->getItemById($itemId));
+        $serviceConnection = ServiceConnection::resolvePinnedStrict($pinContext, ServiceType::Whisparr);
 
-            return $name === null ? null : new ActionTarget('item', $name, [
-                ['label' => 'Item', 'value' => $name],
-                ['label' => 'Whisparr ID', 'value' => (string) $itemId],
-                ['label' => 'Connection', 'value' => $serviceConnection->name],
-            ]);
-        });
+        return $this->attempt('item', $itemId, $fallbackName, false, fn (): ?ActionTarget => $this->whisparrItemTarget($itemId, $serviceConnection));
     }
 
     /**
+     * Strict like {@see whisparrItem()}: the whisparr_add_item executor
+     * resolves its pin strictly.
+     *
      * @param  array<string, mixed>  $pinContext
+     *
+     * @throws ModelNotFoundException|InvalidArgumentException
      */
     public function whisparrLookup(int $tmdbId, array $pinContext = [], ?string $fallbackName = null): ActionTarget
     {
-        return $this->attempt('item', $tmdbId, $fallbackName, false, function () use ($tmdbId, $pinContext): ?ActionTarget {
-            $serviceConnection = ServiceConnection::resolvePinned($pinContext, ServiceType::Whisparr);
-            $name = $this->nameFrom(new WhisparrClient($serviceConnection)->searchItems(sprintf('tmdb:%d', $tmdbId))[0] ?? []);
+        $serviceConnection = ServiceConnection::resolvePinnedStrict($pinContext, ServiceType::Whisparr);
 
-            return $name === null ? null : new ActionTarget('item', $name, [
-                ['label' => 'Item', 'value' => $name],
-                ['label' => 'TMDB ID', 'value' => (string) $tmdbId],
-                ['label' => 'Connection', 'value' => $serviceConnection->name],
-            ]);
-        });
+        return $this->attempt('item', $tmdbId, $fallbackName, false, fn (): ?ActionTarget => $this->whisparrLookupTarget($tmdbId, $serviceConnection));
     }
 
     /**
@@ -294,6 +293,51 @@ final readonly class ActionTargets
         return $name === null ? null : new ActionTarget('movie', $name, [
             ['label' => 'Movie', 'value' => $name],
             ['label' => 'Radarr ID', 'value' => (string) $radarrId],
+            ['label' => 'Connection', 'value' => $serviceConnection->name],
+        ]);
+    }
+
+    /**
+     * Whisparr has no local index, so the name comes from the cached library
+     * list the Whisparr page uses (one upstream call per TTL, normally a
+     * cache hit): a 100-title bulk then describes without 100 live lookups.
+     * Only an item missing from that list (added since it was cached) is
+     * read by id.
+     */
+    private function whisparrItemTarget(int $itemId, ServiceConnection $serviceConnection): ?ActionTarget
+    {
+        $whisparrClient = new WhisparrClient($serviceConnection);
+        $name = $this->nameFrom($this->whisparrListItem($whisparrClient->getItems(), $itemId) ?? $whisparrClient->getItemById($itemId));
+
+        return $name === null ? null : new ActionTarget('item', $name, [
+            ['label' => 'Item', 'value' => $name],
+            ['label' => 'Whisparr ID', 'value' => (string) $itemId],
+            ['label' => 'Connection', 'value' => $serviceConnection->name],
+        ]);
+    }
+
+    /**
+     * @param  array<array-key, mixed>  $items
+     * @return array<string, mixed>|null
+     */
+    private function whisparrListItem(array $items, int $itemId): ?array
+    {
+        foreach ($items as $item) {
+            if (is_array($item) && is_numeric($item['id'] ?? null) && (int) $item['id'] === $itemId) {
+                return $item;
+            }
+        }
+
+        return null;
+    }
+
+    private function whisparrLookupTarget(int $tmdbId, ServiceConnection $serviceConnection): ?ActionTarget
+    {
+        $name = $this->nameFrom(new WhisparrClient($serviceConnection)->searchItems(sprintf('tmdb:%d', $tmdbId))[0] ?? []);
+
+        return $name === null ? null : new ActionTarget('item', $name, [
+            ['label' => 'Item', 'value' => $name],
+            ['label' => 'TMDB ID', 'value' => (string) $tmdbId],
             ['label' => 'Connection', 'value' => $serviceConnection->name],
         ]);
     }

@@ -85,6 +85,7 @@ test('AddMediaTool queues an add_movie ActionRequest for radarr', function (): v
 
 test('AddMediaTool queues a whisparr_add_item ActionRequest for whisparr', function (): void {
     ActionTypeConfig::factory()->create(['type' => 'whisparr_add_item', 'is_enabled' => true, 'requires_approval' => true]);
+    $whisparr = ServiceConnection::factory()->whisparr()->create(['url' => 'http://whisparr.local:6969']);
 
     $result = json_decode((new AddMediaTool)->handle(new Request([
         'service' => 'whisparr',
@@ -100,6 +101,7 @@ test('AddMediaTool queues a whisparr_add_item ActionRequest for whisparr', funct
     $ar = ActionRequest::firstWhere('type', 'whisparr_add_item');
     expect($ar->target_service)->toBe('whisparr');
     expect($ar->payload['tmdb_id'])->toBe(27205);
+    expect($ar->payload['service_connection_id'])->toBe($whisparr->id);
     expect($ar->payload)->not->toHaveKey('season_folder');
 });
 
@@ -133,13 +135,14 @@ test('DeleteMediaTool queues a delete_movie ActionRequest for radarr', function 
 
 test('DeleteMediaTool queues a whisparr_delete_item ActionRequest for whisparr', function (): void {
     ActionTypeConfig::factory()->create(['type' => 'whisparr_delete_item', 'is_enabled' => true, 'requires_approval' => true]);
+    $whisparr = ServiceConnection::factory()->whisparr()->create(['url' => 'http://whisparr.local:6969']);
 
     json_decode((new DeleteMediaTool)->handle(new Request([
         'service' => 'whisparr', 'item_id' => 9, 'delete_files' => true,
     ])), true);
 
     $ar = ActionRequest::firstWhere('type', 'whisparr_delete_item');
-    expect($ar->payload)->toEqual(['whisparr_item_id' => 9, 'delete_files' => true]);
+    expect($ar->payload)->toEqual(['whisparr_item_id' => 9, 'delete_files' => true, 'service_connection_id' => $whisparr->id]);
 });
 
 test('DeleteMediaTool reports no_action_type_config when the rule is missing', function (): void {
@@ -180,13 +183,14 @@ test('MonitorMediaTool queues a monitor_movie ActionRequest for radarr', functio
 
 test('MonitorMediaTool queues a whisparr_monitor_item ActionRequest for whisparr', function (): void {
     ActionTypeConfig::factory()->create(['type' => 'whisparr_monitor_item', 'is_enabled' => true, 'requires_approval' => false]);
+    $whisparr = ServiceConnection::factory()->whisparr()->create(['url' => 'http://whisparr.local:6969']);
 
     json_decode((new MonitorMediaTool)->handle(new Request([
         'service' => 'whisparr', 'item_id' => 9, 'monitored' => true,
     ])), true);
 
     $ar = ActionRequest::firstWhere('type', 'whisparr_monitor_item');
-    expect($ar->payload)->toEqual(['whisparr_item_id' => 9, 'monitored' => true]);
+    expect($ar->payload)->toEqual(['whisparr_item_id' => 9, 'monitored' => true, 'service_connection_id' => $whisparr->id]);
 });
 
 test('SetMediaQualityProfileTool queues a set_series_quality_profile ActionRequest for sonarr', function (): void {
@@ -218,13 +222,14 @@ test('SetMediaQualityProfileTool queues a set_movie_quality_profile ActionReques
 
 test('SetMediaQualityProfileTool queues a whisparr_set_quality_profile ActionRequest for whisparr', function (): void {
     ActionTypeConfig::factory()->create(['type' => 'whisparr_set_quality_profile', 'is_enabled' => true, 'requires_approval' => false]);
+    $whisparr = ServiceConnection::factory()->whisparr()->create(['url' => 'http://whisparr.local:6969']);
 
     json_decode((new SetMediaQualityProfileTool)->handle(new Request([
         'service' => 'whisparr', 'item_id' => 9, 'quality_profile_id' => 7,
     ])), true);
 
     $ar = ActionRequest::firstWhere('type', 'whisparr_set_quality_profile');
-    expect($ar->payload)->toEqual(['whisparr_item_id' => 9, 'quality_profile_id' => 7]);
+    expect($ar->payload)->toEqual(['whisparr_item_id' => 9, 'quality_profile_id' => 7, 'service_connection_id' => $whisparr->id]);
 });
 
 test('DeleteMediaTool reports a non-positive item_id as invalid arguments', function (): void {
@@ -240,6 +245,25 @@ test('DeleteMediaTool reports a non-positive item_id as invalid arguments', func
 test('unknown service returns tool_failed for every write tool', function (): void {
     foreach ([new AddMediaTool, new DeleteMediaTool, new MonitorMediaTool, new SetMediaQualityProfileTool] as $tool) {
         $result = json_decode($tool->handle(new Request(['service' => 'emby', 'item_id' => 1])), true);
+
+        expect($result['error'])->toBe('tool_failed');
+    }
+
+    expect(ActionRequest::count())->toBe(0);
+});
+
+test('a Whisparr write tool with no active Whisparr connection returns tool_failed', function (): void {
+    $cases = [
+        fn (): string => (new AddMediaTool)->handle(new Request([
+            'service' => 'whisparr', 'remote_id' => 1, 'quality_profile_id' => 1, 'root_folder_path' => '/data', 'monitored' => true, 'season_folder' => null,
+        ])),
+        fn (): string => (new DeleteMediaTool)->handle(new Request(['service' => 'whisparr', 'item_id' => 9, 'delete_files' => false])),
+        fn (): string => (new MonitorMediaTool)->handle(new Request(['service' => 'whisparr', 'item_id' => 9, 'monitored' => true])),
+        fn (): string => (new SetMediaQualityProfileTool)->handle(new Request(['service' => 'whisparr', 'item_id' => 9, 'quality_profile_id' => 7])),
+    ];
+
+    foreach ($cases as $case) {
+        $result = json_decode($case(), true);
 
         expect($result['error'])->toBe('tool_failed');
     }

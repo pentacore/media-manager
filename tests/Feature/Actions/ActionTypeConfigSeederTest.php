@@ -21,7 +21,7 @@ test('seeder is idempotent', function (): void {
     $this->seed(ActionTypeConfigSeeder::class);
     $this->seed(ActionTypeConfigSeeder::class);
 
-    expect(ActionTypeConfig::count())->toBe(31);
+    expect(ActionTypeConfig::count())->toBe(32);
 });
 
 test('seeds the media replacement rule as enabled and requiring approval', function (): void {
