@@ -3,8 +3,10 @@
 declare(strict_types=1);
 
 use App\Enums\PricingSource;
+use App\Enums\SettingsGroup;
 use App\Events\AiPriceRefreshStateChanged;
 use App\Jobs\RefreshAiPricesJob;
+use App\Models\ActivityLog;
 use App\Models\AiFreeUsagePool;
 use App\Models\AiModelPrice;
 use App\Models\User;
@@ -744,6 +746,25 @@ test('a catalog pick with unchanged prices keeps feed provenance and stays unloc
         ->and($aiModelPrice->pricing_source_url)->toBe('https://openrouter.ai/api/v1/models')
         ->and($aiModelPrice->pricing_synced_at)->not->toBeNull()
         ->and($aiModelPrice->is_price_locked)->toBeFalse();
+});
+
+test('a catalog pick is audited as a created price with its feed provenance', function (): void {
+    catalogPickerStoreSetup();
+    $admin = User::factory()->admin()->create();
+
+    $this->actingAs($admin)
+        ->post(route('admin.ai-prices.store'), catalogPickerOpusPayload())
+        ->assertRedirect(route('admin.ai-prices.index'));
+
+    $aiModelPrice = AiModelPrice::query()->where('model', 'anthropic/claude-opus-5.5')->sole();
+    $activityLog = ActivityLog::query()
+        ->where('action', 'settings.updated')
+        ->where('subject_type', SettingsGroup::AiModelPrices->value)
+        ->sole();
+
+    expect($activityLog->user_id)->toBe($admin->id)
+        ->and($activityLog->metadata['context'])->toBe(['operation' => 'created', 'record_id' => $aiModelPrice->id])
+        ->and($activityLog->metadata['changes']['pricing_source'])->toBe(['from' => null, 'to' => PricingSource::OpenRouter->value]);
 });
 
 test('a catalog pick with an edited price is saved as manual', function (bool $automaticUpdates, bool $locked): void {

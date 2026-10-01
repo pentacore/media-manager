@@ -224,3 +224,36 @@ test('adding a free pool and removing a pool and a price are audited with what c
             'to' => null,
         ]);
 });
+
+test('adding and editing an AI model price are audited with what changed', function (): void {
+    $admin = User::factory()->admin()->create();
+
+    $this->actingAs($admin)->post(route('admin.ai-prices.store'), [
+        'provider' => 'openai',
+        'model' => 'gpt-audit-create',
+        'input_per_mtok' => 1.25,
+        'output_per_mtok' => 5,
+        'cache_read_per_mtok' => 0,
+        'cache_write_per_mtok' => 0,
+        'reasoning_per_mtok' => 0,
+    ])->assertSessionHasNoErrors();
+
+    $aiModelPrice = AiModelPrice::query()->where('model', 'gpt-audit-create')->sole();
+
+    $this->actingAs($admin)->put(route('admin.ai-prices.update', $aiModelPrice), [
+        'input_per_mtok' => 2.5,
+        'output_per_mtok' => 5,
+        'cache_read_per_mtok' => 0,
+        'cache_write_per_mtok' => 0,
+        'reasoning_per_mtok' => 0,
+    ])->assertSessionHasNoErrors();
+
+    $rows = settingsAuditRows('ai_model_prices');
+
+    expect($rows)->toHaveCount(2)
+        ->and($rows[0]->metadata['context'])->toBe(['operation' => 'created', 'record_id' => $aiModelPrice->id])
+        ->and($rows[0]->metadata['changes']['model'])->toBe(['from' => null, 'to' => 'gpt-audit-create'])
+        ->and($rows[1]->metadata['context'])->toBe(['operation' => 'updated', 'record_id' => $aiModelPrice->id])
+        ->and($rows[1]->metadata['changes'])->toHaveKey('input_per_mtok')
+        ->and($rows[1]->metadata['changes'])->not->toHaveKey('model');
+});
