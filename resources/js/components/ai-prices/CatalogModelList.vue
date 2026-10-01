@@ -122,7 +122,7 @@ function formatRate(value: string | null): string {
 </script>
 
 <template>
-    <div :class="cn('space-y-2', props.class)" data-catalog-list>
+    <div :class="cn('min-w-0 space-y-2', props.class)" data-catalog-list>
         <Input
             v-model="search"
             placeholder="Search models…"
@@ -137,7 +137,9 @@ function formatRate(value: string | null): string {
             class="flex items-center justify-between gap-2 rounded-md border border-border p-3 text-[13px]"
             data-catalog-error
         >
-            <span class="text-muted-foreground">{{ error }}</span>
+            <span class="min-w-0 break-words text-muted-foreground">{{
+                error
+            }}</span>
             <Button
                 type="button"
                 variant="outline"
@@ -202,6 +204,7 @@ function formatRate(value: string | null): string {
                     </span>
                     <span
                         class="font-mono-tabular min-w-0 flex-1 truncate text-[13px]"
+                        :title="option.model"
                         >{{ option.model }}</span
                     >
                     <Pill v-if="option.tiered" variant="warn">tiered</Pill>

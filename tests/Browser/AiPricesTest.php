@@ -427,6 +427,71 @@ function catalogPickerBrowserFeeds(): void
     ]);
 }
 
+/**
+ * OpenRouter feed with one model id far longer than the dialog is wide, to pin
+ * that long catalog data truncates instead of stretching the dialog.
+ */
+function catalogPickerLongIdFeeds(): string
+{
+    // Not catalogPickerBrowserFeeds(): a second Http::fake() appends stubs, so
+    // its fixture would win over this one.
+    foreach (['models_dev', 'litellm', 'xai'] as $source) {
+        config()->set(sprintf('mediamanager.ai.pricing.%s.enabled', $source), false);
+    }
+
+    config()->set('mediamanager.ai.pricing.openrouter.enabled', true);
+    config()->set('mediamanager.ai.pricing.openrouter.retries', 0);
+
+    $longModelId = 'vendor/'.str_repeat('extraordinarily-long-model-identifier-', 6).'v1';
+
+    Http::fake([
+        'openrouter.ai/*' => Http::response(['data' => [[
+            'id' => $longModelId,
+            'architecture' => ['input_modalities' => ['text'], 'output_modalities' => ['text']],
+            'pricing' => ['prompt' => '0.000001', 'completion' => '0.000002'],
+        ]]]),
+    ]);
+
+    return $longModelId;
+}
+
+/**
+ * Whether the open dialog stays within its 32rem (512px) max width with nothing
+ * overflowing horizontally.
+ */
+function catalogPickerDialogFitsScript(): string
+{
+    return <<<'JS'
+        (() => {
+            const dialog = document.querySelector('[data-slot="dialog-content"]');
+
+            return dialog.getBoundingClientRect().width <= 512 && dialog.scrollWidth <= dialog.clientWidth;
+        })()
+    JS;
+}
+
+test('a long catalog model id truncates inside the add from catalog dialog', function (): void {
+    $longModelId = catalogPickerLongIdFeeds();
+
+    visit('/admin/ai-prices')
+        ->click('[data-add-from-catalog]')
+        ->assertVisible(sprintf('[data-catalog-row="%s"]', $longModelId))
+        ->assertScript(catalogPickerDialogFitsScript())
+        ->assertNoSmoke();
+});
+
+test('a long catalog model id truncates inside the add price form picker', function (): void {
+    $longModelId = catalogPickerLongIdFeeds();
+
+    visit('/admin/ai-prices')
+        ->click('[data-create-price]')
+        ->fill('provider', 'openrouter')
+        ->click('[data-catalog-pick-toggle]')
+        ->assertVisible(sprintf('[data-catalog-row="%s"]', $longModelId))
+        ->assertScript(catalogPickerDialogFitsScript())
+        ->assertNoSmoke();
+});
+
 test('admin bulk-adds openrouter models from the catalog', function (): void {
     catalogPickerBrowserFeeds();
 

@@ -86,7 +86,9 @@ function submit(): void {
                     yet. Added rows keep syncing on every refresh.
                 </DialogDescription>
             </DialogHeader>
-            <div class="space-y-4">
+            <!-- min-w-0: a grid item otherwise grows to its widest unbreakable
+                 content (a long model id) and overflows the dialog. -->
+            <div class="min-w-0 space-y-4">
                 <div class="space-y-2">
                     <Label for="catalog_provider">Provider</Label>
                     <Select id="catalog_provider" v-model="provider">
