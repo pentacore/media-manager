@@ -12,6 +12,7 @@ use Database\Factories\ActivityLogFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\ObservedBy;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\MassPrunable;
 use Illuminate\Database\Eloquent\Model;
@@ -77,6 +78,21 @@ class ActivityLog extends Model
             'category' => ActivityLogCategory::class,
             'metadata' => 'array',
         ];
+    }
+
+    /**
+     * `description` is varchar(255). Every writer (controllers, jobs,
+     * webhook handlers, the ActionRequest logger, AuditLogger) goes through
+     * this, so a long title or reason is cut here instead of failing the
+     * insert. Postgres counts varchar length in characters, so the cut is
+     * by character (mb_substr), not by display width: a CJK or emoji
+     * description keeps its full 255 characters.
+     *
+     * @return Attribute<string, string|null>
+     */
+    protected function description(): Attribute
+    {
+        return Attribute::make(set: static fn (?string $value): ?string => $value === null || mb_strlen($value) <= 255 ? $value : mb_substr($value, 0, 252).'...');
     }
 
     /**

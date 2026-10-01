@@ -1,8 +1,15 @@
 <script setup lang="ts">
 import { Head, Link, router } from '@inertiajs/vue3';
 import { ExternalLink, Plus, RefreshCcw, Search } from '@lucide/vue';
-import { computed, onMounted, ref } from 'vue';
+import { computed, onMounted, ref, watch } from 'vue';
+import MediaActionController from '@/actions/App/Http/Controllers/Library/MediaActionController';
 import MovieController from '@/actions/App/Http/Controllers/Media/MovieController';
+import {
+    BulkActionBar,
+    BulkCheckbox,
+    BulkSelectAll,
+    LibraryBulkActions,
+} from '@/components/bulk';
 import { OpenInServiceButton, Pill, Poster, SvcChip } from '@/components/mm';
 import { Button } from '@/components/ui/button';
 import {
@@ -13,10 +20,13 @@ import {
     SelectValue,
 } from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
+import { useBulkSelection } from '@/composables/useBulkSelection';
 import { useCan } from '@/composables/useCan';
 import { useRealtimeReload } from '@/composables/useRealtimeReload';
 import { arrPosterUrl } from '@/lib/arr';
+import { focusAfterBulk } from '@/lib/bulk';
 import { dashboard } from '@/routes';
+import type { BulkSummary } from '@/types';
 
 interface QualityProfile {
     id: number;
@@ -44,6 +54,7 @@ interface Movie {
 
 const props = defineProps<{
     connection: { url: string | null };
+    service_connection_id: number | null;
     movies?: Movie[];
     qualityProfiles?: QualityProfile[];
 }>();
@@ -153,6 +164,44 @@ const visible = computed<Movie[]>(() => {
         return true;
     });
 });
+
+const canBulk = computed(
+    () => can('manage-library') && props.service_connection_id !== null,
+);
+
+const {
+    ids: selectedIds,
+    count: selectedCount,
+    isSelected,
+    toggle: toggleSelected,
+    setAll: setAllSelected,
+    clear: clearSelection,
+    retain: retainSelection,
+} = useBulkSelection<number>([query, profileFilter, yearFilter, studioFilter]);
+
+const visibleIds = computed<number[]>(() =>
+    visible.value.map((movie) => movie.id),
+);
+
+const selectedOnPage = computed(
+    () => visibleIds.value.filter((id) => isSelected(id)).length,
+);
+
+const bulkBusy = ref(false);
+
+// Retain against the rows on screen, not every loaded row: a realtime reload
+// that moves a selected title out of the active filter drops it, so a bulk
+// request never names a title the user can no longer see.
+watch(visibleIds, (ids) => retainSelection(ids));
+
+function bulkDone(summary: BulkSummary): void {
+    clearSelection();
+    focusAfterBulk();
+
+    if (summary.started + summary.queued > 0) {
+        router.reload({ only: ['movies'] });
+    }
+}
 
 const totalSize = computed(() => {
     const sum = (props.movies ?? []).reduce(
@@ -323,6 +372,14 @@ function is4k(movie: Movie): boolean {
                     </SelectItem>
                 </SelectContent>
             </Select>
+
+            <BulkSelectAll
+                v-if="canBulk"
+                :selected-count="selectedOnPage"
+                :page-count="visibleIds.length"
+                :disabled="bulkBusy"
+                @toggle="(value) => setAllSelected(visibleIds, value)"
+            />
         </div>
 
         <!-- Grid -->
@@ -335,6 +392,7 @@ function is4k(movie: Movie): boolean {
                 v-for="movie in visible"
                 :key="movie.id"
                 :href="MovieController.show.url(movie.id)"
+                :data-movie-card="movie.id"
                 class="group flex flex-col gap-2"
             >
                 <div class="relative">
@@ -355,6 +413,17 @@ function is4k(movie: Movie): boolean {
                     >
                         missing
                     </Pill>
+                    <BulkCheckbox
+                        v-if="canBulk"
+                        class="absolute right-2 bottom-2 rounded bg-black/55 p-1"
+                        :checked="isSelected(movie.id)"
+                        :disabled="bulkBusy"
+                        :label="`Select ${movie.title}`"
+                        :data-bulk-select="movie.id"
+                        @update:checked="
+                            (value) => toggleSelected(movie.id, value)
+                        "
+                    />
                     <a
                         v-if="
                             can('manage-library') &&
@@ -404,5 +473,28 @@ function is4k(movie: Movie): boolean {
                 <Skeleton class="h-2 w-1/2" />
             </div>
         </div>
+
+        <BulkActionBar
+            v-if="canBulk"
+            :count="selectedCount"
+            :busy="bulkBusy"
+            @clear="clearSelection()"
+        >
+            <template #default="{ disabled }">
+                <LibraryBulkActions
+                    v-model:busy="bulkBusy"
+                    :endpoint="MediaActionController.bulk.url()"
+                    :target="{
+                        service: 'radarr',
+                        service_connection_id: service_connection_id,
+                    }"
+                    :ids="selectedIds"
+                    :disabled="disabled"
+                    :quality-profiles="qualityProfiles"
+                    noun="movies"
+                    @done="bulkDone"
+                />
+            </template>
+        </BulkActionBar>
     </div>
 </template>

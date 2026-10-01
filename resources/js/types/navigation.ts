@@ -31,6 +31,8 @@ export type NavItem = {
     requiresSeerr?: boolean;
     /** Hidden unless an active Prowlarr connection exists (shared `integrations.prowlarr`). */
     requiresProwlarr?: boolean;
+    /** Hidden unless an active Whisparr connection exists and the viewer is an admin (shared `integrations.whisparr`). */
+    requiresWhisparr?: boolean;
 };
 
 /**

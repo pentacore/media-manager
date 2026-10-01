@@ -17,6 +17,9 @@ Route::middleware(['auth', 'verified', 'password.set'])->group(function (): void
         Route::post('requests/{actionRequest}/retry', [ActionRequestController::class, 'retry'])
             ->middleware('role:admin')
             ->name('requests.retry');
+        Route::post('requests/bulk', [ActionRequestController::class, 'bulk'])
+            ->middleware('can:admin')
+            ->name('requests.bulk');
     });
 
     // Action rules: admin only

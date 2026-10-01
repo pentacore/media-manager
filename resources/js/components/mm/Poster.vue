@@ -6,10 +6,27 @@ const props = withDefaults(
         hint: string;
         size?: 'sm' | 'md' | 'lg' | 'xl' | 'full';
         src?: string | null;
+        /** Blur the image until hover, keyboard focus or a first tap (Whisparr). */
+        blurred?: boolean;
+        /**
+         * Revealed by the parent: a card link that has focus, or a pointer
+         * over the card's overlays (checkbox, pills), which are siblings of
+         * the poster rather than descendants.
+         */
+        revealed?: boolean;
+        /**
+         * Whether a blurred poster is its own tab stop. False inside a link:
+         * the link is the focus target (and reveals via `revealed`), so the
+         * poster adds no inert tab stop nested in the anchor.
+         */
+        focusable?: boolean;
     }>(),
     {
         size: 'md',
         src: null,
+        blurred: false,
+        revealed: false,
+        focusable: true,
     },
 );
 
@@ -31,16 +48,59 @@ const widthClass = computed(() => {
 });
 
 const failed = ref(false);
+const hovered = ref(false);
+const focused = ref(false);
+const tapRevealed = ref(false);
+let lastPointerType = '';
 
-// A new URL deserves a fresh attempt even if the previous one 404'd.
+// A new URL deserves a fresh attempt even if the previous one 404'd, and a
+// fresh blur.
 watch(
     () => props.src,
     () => {
         failed.value = false;
+        tapRevealed.value = false;
     },
 );
 
 const showImage = computed(() => Boolean(props.src) && !failed.value);
+
+const concealable = computed(() => props.blurred && showImage.value);
+
+const concealed = computed(
+    () =>
+        concealable.value &&
+        !props.revealed &&
+        !hovered.value &&
+        !focused.value &&
+        !tapRevealed.value,
+);
+
+function onPointerEnter(event: PointerEvent): void {
+    if (event.pointerType !== 'touch') {
+        hovered.value = true;
+    }
+}
+
+function onPointerDown(event: PointerEvent): void {
+    lastPointerType = event.pointerType;
+}
+
+// Touch has no hover: the first tap on a blurred poster reveals it instead of
+// following the surrounding link; the next tap navigates.
+function onClickCapture(event: MouseEvent): void {
+    if (
+        !concealable.value ||
+        tapRevealed.value ||
+        lastPointerType !== 'touch'
+    ) {
+        return;
+    }
+
+    event.preventDefault();
+    event.stopPropagation();
+    tapRevealed.value = true;
+}
 
 const hue = computed(
     () =>
@@ -59,15 +119,30 @@ const styleVars = computed(() => ({
         :class="[
             'relative flex aspect-[2/3] items-end overflow-hidden rounded-md border border-border p-2 font-mono text-[10px]',
             widthClass,
+            concealable && focusable
+                ? 'outline-none focus-visible:ring-2 focus-visible:ring-ring'
+                : '',
         ]"
         :style="styleVars"
+        :tabindex="concealable && focusable ? 0 : undefined"
+        data-poster
+        :data-blurred="concealed ? 'true' : 'false'"
+        @pointerenter="onPointerEnter"
+        @pointerleave="hovered = false"
+        @pointerdown="onPointerDown"
+        @focusin="focused = true"
+        @focusout="focused = false"
+        @click.capture="onClickCapture"
     >
         <img
             v-if="showImage"
             :src="src!"
             :alt="hint"
             loading="lazy"
-            class="absolute inset-0 size-full object-cover"
+            :class="[
+                'absolute inset-0 size-full object-cover',
+                concealed ? 'scale-110 blur-xl' : '',
+            ]"
             @error="failed = true"
         />
         <template v-else>

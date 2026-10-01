@@ -33,7 +33,12 @@ class UserPreferencesController extends Controller
     {
         $user = $updateUserPreferencesRequest->user();
 
-        $user->preferences = UserPreferences::withDefaults($updateUserPreferencesRequest->validated());
+        // Keys a form may leave out (the admin-only Whisparr toggle) keep
+        // their stored value instead of snapping back to the default.
+        $user->preferences = UserPreferences::withDefaults([
+            ...$user->resolvedPreferences(),
+            ...$updateUserPreferencesRequest->validated(),
+        ]);
         $user->save();
 
         Inertia::flash('toast', ['type' => 'success', 'message' => __('Preferences saved.')]);

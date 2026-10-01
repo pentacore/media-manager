@@ -4,17 +4,22 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers\Library;
 
+use App\Enums\QueueBulkAction;
 use App\Enums\ServiceType;
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Library\BulkQueueItemsRequest;
 use App\Http\Requests\Library\MarkHistoryFailedRequest;
 use App\Models\ActivityLog;
 use App\Models\ServiceConnection;
+use App\Services\Actions\BulkItemOutcome;
+use App\Services\Actions\BulkRunner;
 use App\Services\Arr\ArrClient;
 use App\Services\Arr\ManualImportResolver;
-use App\Services\Audit\AuditLogger;
+use App\Services\Arr\QueueItemRemover;
 use App\Services\Radarr\RadarrClient;
 use App\Services\Sonarr\SonarrClient;
 use App\Support\UpstreamErrorText;
+use Closure;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\RequestException;
@@ -77,7 +82,7 @@ class ActivityController extends Controller
      * action; `block` additionally blocklists the release and triggers a
      * re-search so the next better match downloads instead.
      */
-    public function removeQueueItem(Request $request, string $service, int $id, AuditLogger $auditLogger): RedirectResponse
+    public function removeQueueItem(Request $request, string $service, int $id, QueueItemRemover $queueItemRemover): RedirectResponse
     {
         $verb = (string) $request->input('verb', 'remove');
 
@@ -90,27 +95,11 @@ class ActivityController extends Controller
             return $this->flashAndBack('error', __('Unknown service.'));
         }
 
-        $arrClient = $this->clientFor($service, $connection);
-
         try {
-            $arrClient->removeQueueItem(
-                id: $id,
-                removeFromClient: true,
-                blocklist: $verb === 'block',
-                skipRedownload: $verb === 'remove',
-            );
+            $queueItemRemover->remove($connection, $id, $verb === 'block');
         } catch (RequestException|ConnectionException $throwable) {
             return $this->flashAndBack('error', __('Queue removal failed: :msg', ['msg' => UpstreamErrorText::sanitize($throwable->getMessage())]));
         }
-
-        $auditLogger->record(
-            $verb === 'block' ? 'queue.blocklisted' : 'queue.removed',
-            $connection,
-            $verb === 'block'
-                ? sprintf('Removed %s queue item %d and blocklisted the release.', ucfirst($service), $id)
-                : sprintf('Removed %s queue item %d.', ucfirst($service), $id),
-            context: ['service' => $service, 'queue_id' => $id],
-        );
 
         return $this->flashAndBack(
             'success',
@@ -118,6 +107,99 @@ class ActivityController extends Controller
                 ? __('Removed and blocklisted; a fresh search will run.')
                 : __('Removed from queue.'),
         );
+    }
+
+    /**
+     * Remove or blocklist many queue items of one service, resolved to the
+     * same active connection the single-item remove path uses (not a
+     * client-supplied pin). No active connection for the service refuses
+     * the whole request before anything is sent.
+     */
+    public function bulkQueue(BulkQueueItemsRequest $bulkQueueItemsRequest, QueueItemRemover $queueItemRemover, BulkRunner $bulkRunner): JsonResponse
+    {
+        $validated = $bulkQueueItemsRequest->validated();
+        $service = (string) $validated['service'];
+        $queueBulkAction = QueueBulkAction::from((string) $validated['action']);
+
+        $connection = $this->resolveConnection($service);
+        if (! $connection instanceof ServiceConnection) {
+            return response()->json(['message' => __('No :service connection configured.', ['service' => ucfirst($service)])], 422);
+        }
+
+        $label = $connection->type->label();
+
+        // A connect-level outage costs one retried round-trip per item. Once
+        // the service has dropped one connection, or answered two server
+        // errors in a row (a proxy's 502 for a stopped container), the rest
+        // of the batch is failed locally instead of repeating that cost for
+        // every remaining id. A 4xx never trips this, and neither does a
+        // single 5xx, which can be specific to one item.
+        $unreachable = false;
+        $consecutiveServerErrors = 0;
+
+        $bulkSummary = $bulkRunner->run(
+            $bulkQueueItemsRequest->bulkIds(),
+            function (int $queueId) use ($queueItemRemover, $connection, $queueBulkAction, $label, &$unreachable, &$consecutiveServerErrors): BulkItemOutcome {
+                if ($unreachable) {
+                    return BulkItemOutcome::failed(__(':service is unreachable right now.', ['service' => $label]));
+                }
+
+                try {
+                    $queueItemRemover->remove($connection, $queueId, $queueBulkAction === QueueBulkAction::Blocklist);
+                } catch (ConnectionException $connectionException) {
+                    $unreachable = true;
+
+                    return BulkItemOutcome::fromUpstreamFailure($connectionException, $label);
+                } catch (RequestException $requestException) {
+                    $consecutiveServerErrors = $requestException->response->serverError() ? $consecutiveServerErrors + 1 : 0;
+                    $unreachable = $consecutiveServerErrors >= 2;
+
+                    return BulkItemOutcome::fromUpstreamFailure($requestException, $label);
+                }
+
+                $consecutiveServerErrors = 0;
+
+                return BulkItemOutcome::started();
+            },
+            $this->queueTitles($connection, $unreachable),
+        );
+
+        return response()->json($bulkSummary->withToast($queueBulkAction->pastTense()));
+    }
+
+    /**
+     * Failure-line names from the service's own queue, fetched once and
+     * only when an item failed. Once the batch has marked the service
+     * unreachable, no queue read is sent: the queue id stands in.
+     *
+     * @return Closure(int): string
+     */
+    private function queueTitles(ServiceConnection $serviceConnection, bool &$unreachable): Closure
+    {
+        /** @var array<int, string>|null $titles */
+        $titles = null;
+
+        return function (int $queueId) use (&$titles, &$unreachable, $serviceConnection): string {
+            if ($titles === null && $unreachable) {
+                return sprintf('#%d', $queueId);
+            }
+
+            if ($titles === null) {
+                $errors = [];
+                $rows = $serviceConnection->type === ServiceType::Sonarr
+                    ? $this->fetchSonarr($serviceConnection, $errors)
+                    : $this->fetchRadarr($serviceConnection, $errors);
+                $titles = [];
+
+                foreach ($rows as $row) {
+                    if (is_int($row['id'] ?? null) && is_string($row['title'] ?? null)) {
+                        $titles[$row['id']] = $row['title'];
+                    }
+                }
+            }
+
+            return $titles[$queueId] ?? sprintf('#%d', $queueId);
+        };
     }
 
     /**

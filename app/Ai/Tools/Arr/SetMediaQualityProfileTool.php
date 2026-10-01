@@ -6,6 +6,8 @@ namespace App\Ai\Tools\Arr;
 
 use App\Ai\Risk;
 use App\Ai\Tools\BaseTool;
+use App\Enums\ServiceType;
+use App\Models\ServiceConnection;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
 use Illuminate\JsonSchema\Types\Type;
 use InvalidArgumentException;
@@ -17,7 +19,7 @@ class SetMediaQualityProfileTool extends BaseTool
     public function description(): Stringable|string
     {
         return 'Change the quality profile for a Sonarr series, Radarr movie, or Whisparr item. Use the item_id '
-            .'from SearchMediaTool/GetMediaTool and a quality_profile_id from the target service. Queues an ActionRequest.';
+            .'from SearchMediaTool/GetMediaTool and a quality_profile_id from GetMediaAddOptionsTool. Queues an ActionRequest.';
     }
 
     public function risk(): Risk
@@ -49,7 +51,14 @@ class SetMediaQualityProfileTool extends BaseTool
             'whisparr' => [
                 'type' => 'whisparr_set_quality_profile',
                 'target_service' => 'whisparr',
-                'payload' => ['whisparr_item_id' => $itemId, 'quality_profile_id' => $qualityProfileId],
+                'payload' => [
+                    'whisparr_item_id' => $itemId,
+                    'quality_profile_id' => $qualityProfileId,
+                    // whisparr_* executors resolve strictly: item ids overlap
+                    // between Whisparr instances, so the connection this call
+                    // resolved must be the one execution runs against.
+                    'service_connection_id' => ServiceConnection::resolveActive(ServiceType::Whisparr)->id,
+                ],
             ],
             default => throw new InvalidArgumentException('service must be "sonarr", "radarr", or "whisparr".'),
         }, 'fallback_title' => is_string($args['title'] ?? null) ? $args['title'] : null];
@@ -69,7 +78,7 @@ class SetMediaQualityProfileTool extends BaseTool
                 ->description('Service-native id (Sonarr series id / Radarr movie id / Whisparr item id). Use SearchMediaTool/GetMediaTool to find.')
                 ->required(),
             'quality_profile_id' => $schema->integer()
-                ->description('Quality profile id to apply (from the target service).')
+                ->description('Quality profile id to apply. Get valid ids from GetMediaAddOptionsTool.')
                 ->required(),
             'title' => $schema->string()
                 ->description('Human name of the item (e.g. the series title) as shown to the user. Only displayed if the server cannot look the id up; such requests always wait for approval.')

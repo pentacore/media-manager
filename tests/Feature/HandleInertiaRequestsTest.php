@@ -285,3 +285,18 @@ test('viewers get zero library badges without any recompute or upstream call', f
         ->and(Cache::has(SabnzbdDownloadCounter::CACHE_KEY))->toBeFalse()
         ->and(Cache::has(WantedCounter::CACHE_KEY))->toBeFalse();
 });
+
+test('integrations.whisparr is true only for admins with an active Whisparr connection', function (): void {
+    $admin = User::factory()->admin()->create();
+    $member = User::factory()->member()->create();
+
+    $this->actingAs($admin)->get(route('dashboard'))
+        ->assertInertia(fn ($page) => $page->where('integrations.whisparr', false));
+
+    ServiceConnection::factory()->whisparr()->create(['url' => 'http://whisparr.local:6969']);
+
+    $this->actingAs($admin)->get(route('dashboard'))
+        ->assertInertia(fn ($page) => $page->where('integrations.whisparr', true));
+    $this->actingAs($member)->get(route('dashboard'))
+        ->assertInertia(fn ($page) => $page->where('integrations.whisparr', false));
+});
