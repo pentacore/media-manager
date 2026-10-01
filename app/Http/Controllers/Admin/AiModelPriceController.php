@@ -9,6 +9,8 @@ use App\Enums\RateLimitMetric;
 use App\Enums\RateLimitPeriod;
 use App\Events\AiPriceRefreshStateChanged;
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Admin\BulkDestroyAiModelPriceRequest;
+use App\Http\Requests\Admin\BulkUpdateAiModelPriceRequest;
 use App\Http\Requests\Admin\StoreAiModelPriceRequest;
 use App\Http\Requests\Admin\UpdateAiModelPriceRequest;
 use App\Jobs\RefreshAiPricesJob;
@@ -18,6 +20,7 @@ use App\Services\AiUsage\Pricing\CatalogModelBrowser;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -149,6 +152,60 @@ class AiModelPriceController extends Controller
         $aiModelPrice->delete();
 
         Inertia::flash('toast', ['type' => 'success', 'message' => __('Model price removed.')]);
+
+        return to_route('admin.ai-prices.index');
+    }
+
+    /**
+     * Apply the same automatic-updates, free-pool and rate-limit settings to
+     * every selected row; a field the request leaves out stays unchanged.
+     * Like the single-row edit, toggling automatic updates only flips the
+     * lock and never rewrites the stored price's pricing_source.
+     */
+    public function bulkUpdate(BulkUpdateAiModelPriceRequest $bulkUpdateAiModelPriceRequest): RedirectResponse
+    {
+        $validated = $bulkUpdateAiModelPriceRequest->validated();
+        $ids = Arr::pull($validated, 'ids');
+        $automaticUpdatesEnabled = $this->pullBooleanFlag($validated, 'automatic_updates_enabled');
+        $rateLimits = Arr::pull($validated, 'rate_limits');
+
+        $attributes = Arr::only($validated, ['free_usage_pool_id']);
+
+        if ($automaticUpdatesEnabled !== null) {
+            $attributes['is_price_locked'] = ! $automaticUpdatesEnabled;
+        }
+
+        DB::transaction(function () use ($ids, $attributes, $rateLimits): void {
+            if ($attributes !== []) {
+                AiModelPrice::query()->whereKey($ids)->update($attributes);
+            }
+
+            if ($rateLimits !== null) {
+                AiModelPrice::query()->whereKey($ids)->get()->each(function (AiModelPrice $aiModelPrice) use ($rateLimits): void {
+                    $aiModelPrice->rateLimits()->delete();
+                    $aiModelPrice->rateLimits()->createMany($rateLimits);
+                });
+            }
+        });
+
+        Inertia::flash('toast', [
+            'type' => 'success',
+            'message' => trans_choice(':count model price updated.|:count model prices updated.', count($ids)),
+        ]);
+
+        return to_route('admin.ai-prices.index');
+    }
+
+    public function bulkDestroy(BulkDestroyAiModelPriceRequest $bulkDestroyAiModelPriceRequest): RedirectResponse
+    {
+        $validated = $bulkDestroyAiModelPriceRequest->validated();
+
+        $removed = AiModelPrice::query()->whereKey($validated['ids'])->delete();
+
+        Inertia::flash('toast', [
+            'type' => 'success',
+            'message' => trans_choice(':count model price removed.|:count model prices removed.', $removed),
+        ]);
 
         return to_route('admin.ai-prices.index');
     }

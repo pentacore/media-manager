@@ -1,3 +1,10 @@
+# [1.29.0](https://github.com/pentacore/media-manager/compare/v1.28.0...v1.29.0) (2026-10-01)
+
+
+### Features
+
+* **admin:** bulk edit and delete AI model prices ([17b1a47](https://github.com/pentacore/media-manager/commit/17b1a47da3046a596f8ec8089d0be85bebb0f603))
+
 # [1.28.0](https://github.com/pentacore/media-manager/compare/v1.27.0...v1.28.0) (2026-10-01)
 
 

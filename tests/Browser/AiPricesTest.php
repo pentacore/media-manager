@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use App\Enums\PricingSource;
 use App\Jobs\RefreshAiPricesJob;
+use App\Models\AiFreeUsagePool;
 use App\Models\AiModelPrice;
 use App\Models\User;
 use Illuminate\Support\Facades\Bus;
@@ -601,4 +602,98 @@ test('closing the add form clears what was entered', function (): void {
         ->assertSee('Off — locked to manual price');
 
     expect(AiModelPrice::query()->exists())->toBeFalse();
+});
+
+test('admin filters by provider, selects every shown model and bulk assigns a free pool', function (): void {
+    $pool = AiFreeUsagePool::factory()->create(['name' => 'Gemini free tier']);
+    $flash = AiModelPrice::factory()->create(['provider' => 'gemini', 'model' => 'gemini-3-flash']);
+    $pro = AiModelPrice::factory()->create(['provider' => 'gemini', 'model' => 'gemini-3-pro']);
+    $other = AiModelPrice::factory()->create(['provider' => 'openai', 'model' => 'gpt-5-mini']);
+
+    visit('/admin/ai-prices')
+        ->assertNoSmoke()
+        ->click('[data-price-filter-provider]')
+        ->click('[role="option"][aria-label="gemini"]')
+        ->assertMissing('[data-price-row="gpt-5-mini"]')
+        ->click('[data-select-all]')
+        ->assertSeeIn('[data-bulk-count]', '2 selected')
+        ->click('[data-bulk-edit]')
+        ->assertSeeIn('[data-bulk-edit-dialog]', 'Edit 2 models')
+        ->click('[data-bulk-free-usage-pool]')
+        ->click('[role="option"][aria-label="Gemini free tier"]')
+        ->click('[data-bulk-edit-submit]')
+        ->assertSee('2 model prices updated.')
+        ->assertMissing('[data-bulk-bar]');
+
+    expect($flash->fresh()->free_usage_pool_id)->toBe($pool->id);
+    expect($pro->fresh()->free_usage_pool_id)->toBe($pool->id);
+    expect($other->fresh()->free_usage_pool_id)->toBeNull();
+});
+
+test('admin bulk locks selected models against automatic updates', function (): void {
+    $selected = AiModelPrice::factory()->create([
+        'provider' => 'openai',
+        'model' => 'gpt-5-mini',
+        'pricing_source' => PricingSource::ModelsDev,
+        'is_price_locked' => false,
+    ]);
+    $unselected = AiModelPrice::factory()->create([
+        'provider' => 'openai',
+        'model' => 'gpt-5-nano',
+        'pricing_source' => PricingSource::ModelsDev,
+        'is_price_locked' => false,
+    ]);
+
+    visit('/admin/ai-prices')
+        ->assertNoSmoke()
+        ->click('[data-price-row="gpt-5-mini"] [data-select-row]')
+        ->assertSeeIn('[data-bulk-count]', '1 selected')
+        ->click('[data-bulk-edit]')
+        ->click('[data-bulk-automatic-updates]')
+        ->click('[role="option"][aria-label="Automatic updates off"]')
+        ->click('[data-bulk-edit-submit]')
+        ->assertSee('1 model price updated.')
+        ->assertSeeIn('[data-price-row="gpt-5-mini"]', 'Locked')
+        ->assertSeeIn('[data-price-row="gpt-5-nano"]', 'Auto-updates on');
+
+    expect($selected->fresh()->is_price_locked)->toBeTrue();
+    expect($selected->fresh()->pricing_source)->toBe(PricingSource::ModelsDev);
+    expect($unselected->fresh()->is_price_locked)->toBeFalse();
+});
+
+test('narrowing the model search drops hidden rows from the selection', function (): void {
+    AiModelPrice::factory()->create(['provider' => 'openai', 'model' => 'gpt-5-mini']);
+    AiModelPrice::factory()->create(['provider' => 'anthropic', 'model' => 'claude-haiku-6']);
+
+    visit('/admin/ai-prices')
+        ->assertNoSmoke()
+        ->click('[data-select-all]')
+        ->assertSeeIn('[data-bulk-count]', '2 selected')
+        ->fill('[data-price-filter-search]', 'claude')
+        ->assertMissing('[data-price-row="gpt-5-mini"]')
+        ->assertSeeIn('[data-bulk-count]', '1 selected')
+        ->fill('[data-price-filter-search]', 'no-such-model')
+        ->assertSee('No models match the filter.')
+        ->assertMissing('[data-bulk-bar]');
+});
+
+test('admin bulk deletes the selected models after confirming', function (): void {
+    AiModelPrice::factory()->create(['provider' => 'openai', 'model' => 'gpt-5-mini']);
+    AiModelPrice::factory()->create(['provider' => 'openai', 'model' => 'gpt-5-nano']);
+    $kept = AiModelPrice::factory()->create(['provider' => 'anthropic', 'model' => 'claude-haiku-6']);
+
+    visit('/admin/ai-prices')
+        ->assertNoSmoke()
+        ->fill('[data-price-filter-search]', 'gpt-5')
+        ->click('[data-select-all]')
+        ->click('[data-bulk-delete]')
+        ->assertSeeIn('[data-bulk-delete-dialog]', 'Remove 2 model prices?')
+        ->assertSeeIn('[data-bulk-delete-dialog]', 'openai / gpt-5-mini')
+        ->click('[data-bulk-delete-confirm]')
+        ->assertSee('2 model prices removed.')
+        ->fill('[data-price-filter-search]', '')
+        ->assertMissing('[data-price-row="gpt-5-mini"]')
+        ->assertVisible('[data-price-row="claude-haiku-6"]');
+
+    expect(AiModelPrice::query()->pluck('id')->all())->toBe([$kept->id]);
 });
