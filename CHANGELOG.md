@@ -1,3 +1,10 @@
+## [1.30.1](https://github.com/pentacore/media-manager/compare/v1.30.0...v1.30.1) (2026-10-01)
+
+
+### Bug Fixes
+
+* **admin:** keep long catalog model ids inside the picker dialogs ([2a840d4](https://github.com/pentacore/media-manager/commit/2a840d434d82bfc210a9a78d147a79e876c035ef))
+
 # [1.30.0](https://github.com/pentacore/media-manager/compare/v1.29.0...v1.30.0) (2026-10-01)
 
 
