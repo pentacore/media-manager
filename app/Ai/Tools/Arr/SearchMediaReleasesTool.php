@@ -50,9 +50,9 @@ class SearchMediaReleasesTool extends BaseTool
             'movie_ids.*' => ['integer', 'min:1'],
         ]);
 
-        $command = MediaSearchCommand::from($validated['command']);
-        $serviceType = $command->service();
-        $payload = ['service' => $serviceType->value, 'command' => $command->value];
+        $mediaSearchCommand = MediaSearchCommand::from($validated['command']);
+        $serviceType = $mediaSearchCommand->service();
+        $payload = ['service' => $serviceType->value, 'command' => $mediaSearchCommand->value];
 
         foreach (['series_id', 'season_number'] as $key) {
             if (isset($validated[$key])) {

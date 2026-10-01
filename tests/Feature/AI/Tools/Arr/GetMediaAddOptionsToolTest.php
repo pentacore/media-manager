@@ -35,6 +35,7 @@ test('returns the trimmed quality profiles and root folders of the requested ser
     if ($service === 'whisparr') {
         $factory = $factory->whisparrVersion(WhisparrVersion::V3);
     }
+
     $factory->create(['url' => 'http://'.$host, 'api_key' => 'test', 'is_active' => true]);
     fakeMediaAddOptions($host);
 
