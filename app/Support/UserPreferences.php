@@ -41,7 +41,8 @@ final class UserPreferences
      *     date_format: 'iso'|'us'|'eu'|'long',
      *     timezone: string,
      *     first_day_of_week: int,
-     *     show_relative_time: bool
+     *     show_relative_time: bool,
+     *     whisparr_blur_posters: bool
      * }
      */
     public static function defaults(): array
@@ -52,6 +53,7 @@ final class UserPreferences
             'timezone' => 'UTC',
             'first_day_of_week' => 1,
             'show_relative_time' => true,
+            'whisparr_blur_posters' => true,
         ];
     }
 
@@ -62,7 +64,8 @@ final class UserPreferences
      *     date_format: 'iso'|'us'|'eu'|'long',
      *     timezone: string,
      *     first_day_of_week: int,
-     *     show_relative_time: bool
+     *     show_relative_time: bool,
+     *     whisparr_blur_posters: bool
      * }
      */
     public static function withDefaults(?array $stored): array
@@ -93,12 +96,17 @@ final class UserPreferences
             ? $stored['show_relative_time']
             : $defaults['show_relative_time'];
 
+        $blurWhisparrPosters = is_bool($stored['whisparr_blur_posters'] ?? null)
+            ? $stored['whisparr_blur_posters']
+            : $defaults['whisparr_blur_posters'];
+
         return [
             'time_format' => $timeFormat,
             'date_format' => $dateFormat,
             'timezone' => $timezone,
             'first_day_of_week' => $firstDay,
             'show_relative_time' => $showRelative,
+            'whisparr_blur_posters' => $blurWhisparrPosters,
         ];
     }
 
