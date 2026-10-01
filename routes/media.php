@@ -88,6 +88,7 @@ Route::middleware(['auth', 'verified', 'password.set'])
                     ->middleware('throttle:release-search')
                     ->name('releases');
                 Route::post('grab', [MediaActionController::class, 'grab'])->name('grab');
+                Route::post('bulk', [MediaActionController::class, 'bulk'])->name('bulk');
             });
 
             Route::middleware('role:admin')->group(function (): void {

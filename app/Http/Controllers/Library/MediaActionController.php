@@ -4,16 +4,22 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers\Library;
 
+use App\Enums\LibraryBulkAction;
 use App\Enums\MediaSearchCommand;
 use App\Enums\ServiceType;
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Library\BulkLibraryActionRequest;
 use App\Http\Requests\Library\GrabReleaseRequest;
 use App\Http\Requests\Library\MonitorEpisodesRequest;
 use App\Http\Requests\Library\MonitorMediaRequest;
 use App\Http\Requests\Library\ReleaseSearchRequest;
 use App\Http\Requests\Library\SearchMediaRequest;
 use App\Http\Requests\Library\SetQualityProfileRequest;
+use App\Models\IndexedMovie;
+use App\Models\IndexedSeries;
 use App\Models\ServiceConnection;
+use App\Services\Actions\BulkItemOutcome;
+use App\Services\Actions\BulkRunner;
 use App\Services\Actions\ManualActionDispatcher;
 use App\Services\Actions\ManualActionOutcome;
 use App\Services\Arr\ReleaseSelectionCache;
@@ -199,6 +205,56 @@ class MediaActionController extends Controller
             'requires_approval' => $manualActionOutcome->state === ManualActionOutcome::QUEUED,
             'message' => $manualActionOutcome->toast(__('Release sent to the download client.'))['message'],
         ], 201);
+    }
+
+    public function bulk(BulkLibraryActionRequest $bulkLibraryActionRequest, LibraryActionRequester $libraryActionRequester, BulkRunner $bulkRunner): JsonResponse
+    {
+        $validated = $bulkLibraryActionRequest->validated();
+        $connection = $bulkLibraryActionRequest->connection();
+        $libraryBulkAction = LibraryBulkAction::from((string) $validated['action']);
+        $ids = $bulkLibraryActionRequest->bulkIds();
+        $qualityProfileId = isset($validated['quality_profile_id']) ? (int) $validated['quality_profile_id'] : null;
+        $deleteFiles = (bool) ($validated['delete_files'] ?? false);
+        $because = sprintf('Requested in bulk from the library by %s.', $bulkLibraryActionRequest->user()->name);
+        $titles = $this->indexedTitles($connection, $ids);
+
+        $bulkSummary = $bulkRunner->run(
+            $ids,
+            fn (int $itemId): BulkItemOutcome => BulkItemOutcome::fromManualAction(
+                $libraryActionRequester->apply($libraryBulkAction, $connection, $itemId, $qualityProfileId, $deleteFiles, $because),
+            ),
+            fn (int $itemId): string => $titles[$itemId] ?? sprintf('#%d', $itemId),
+        );
+
+        return response()->json($bulkSummary->withToast());
+    }
+
+    /**
+     * Failure-line names from the local library index (no upstream call),
+     * never from the browser.
+     *
+     * @param  list<int>  $ids
+     * @return array<int, string>
+     */
+    private function indexedTitles(ServiceConnection $serviceConnection, array $ids): array
+    {
+        $titled = static fn (string $title, ?int $year): string => $year !== null && $year > 0 ? sprintf('%s (%d)', $title, $year) : $title;
+
+        if ($serviceConnection->type === ServiceType::Sonarr) {
+            return IndexedSeries::query()
+                ->where('service_connection_id', $serviceConnection->id)
+                ->whereIn('sonarr_id', $ids)
+                ->get(['sonarr_id', 'title', 'year'])
+                ->mapWithKeys(fn (IndexedSeries $indexedSeries): array => [$indexedSeries->sonarr_id => $titled($indexedSeries->title, $indexedSeries->year)])
+                ->all();
+        }
+
+        return IndexedMovie::query()
+            ->where('service_connection_id', $serviceConnection->id)
+            ->whereIn('radarr_id', $ids)
+            ->get(['radarr_id', 'title', 'year'])
+            ->mapWithKeys(fn (IndexedMovie $indexedMovie): array => [$indexedMovie->radarr_id => $titled($indexedMovie->title, $indexedMovie->year)])
+            ->all();
     }
 
     private function replacementInFlight(PendingReplacementGuard $pendingReplacementGuard, ServiceConnection $serviceConnection, ?int $seriesId, ?int $movieId): bool

@@ -70,6 +70,7 @@ dataset('member-only routes', [
     'library search' => ['POST', 'media.library.actions.search', []],
     'library releases' => ['GET', 'media.library.actions.releases', []],
     'library grab' => ['POST', 'media.library.actions.grab', []],
+    'library bulk' => ['POST', 'media.library.actions.bulk', []],
     'wanted' => ['GET', 'media.wanted.index', []],
 ]);
 
@@ -86,6 +87,7 @@ dataset('member write routes', [
     'library monitor' => ['POST', 'media.library.actions.monitor', []],
     'library monitor episodes' => ['POST', 'media.library.actions.monitor-episodes', []],
     'library quality profile' => ['POST', 'media.library.actions.quality-profile', []],
+    'library bulk' => ['POST', 'media.library.actions.bulk', []],
 ]);
 
 dataset('admin-only routes', [

@@ -33,6 +33,7 @@ class SeriesController extends BaseArrController
 
         return Inertia::render('Sonarr/Series/Index', [
             'connection' => $canManageLibrary ? $this->connectionUrl($connection) : ['url' => null],
+            'service_connection_id' => $canManageLibrary ? $connection->id : null,
             'series' => Inertia::defer(fn (): array => array_map(
                 fn (array $item): array => $this->mapSeries($item),
                 $this->tryClientCall($connection, fn (SonarrClient $sonarrClient): array => $sonarrClient->getSeries()),

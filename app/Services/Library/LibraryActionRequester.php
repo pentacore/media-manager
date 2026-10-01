@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Services\Library;
 
+use App\Enums\LibraryBulkAction;
 use App\Enums\ServiceType;
 use App\Models\ActionRequest;
 use App\Models\ServiceConnection;
@@ -28,6 +29,21 @@ final readonly class LibraryActionRequester
         private PendingReplacementGuard $pendingReplacementGuard,
         private AuditLogger $auditLogger,
     ) {}
+
+    /**
+     * One bulk library action on one title — the same method the title
+     * page's button calls.
+     */
+    public function apply(LibraryBulkAction $libraryBulkAction, ServiceConnection $serviceConnection, int $itemId, ?int $qualityProfileId, bool $deleteFiles, string $because): ManualActionOutcome
+    {
+        return match ($libraryBulkAction) {
+            LibraryBulkAction::Monitor => $this->monitor($serviceConnection, $itemId, true, $because),
+            LibraryBulkAction::Unmonitor => $this->monitor($serviceConnection, $itemId, false, $because),
+            LibraryBulkAction::QualityProfile => $this->setQualityProfile($serviceConnection, $itemId, (int) $qualityProfileId, $because),
+            LibraryBulkAction::Search => $this->search($serviceConnection, $itemId, $because),
+            LibraryBulkAction::Delete => $this->delete($serviceConnection, $itemId, $deleteFiles, $because),
+        };
+    }
 
     public function monitor(ServiceConnection $serviceConnection, int $itemId, bool $monitored, string $because): ManualActionOutcome
     {

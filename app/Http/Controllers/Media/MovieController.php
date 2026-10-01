@@ -33,6 +33,7 @@ class MovieController extends BaseArrController
 
         return Inertia::render('Radarr/Movies/Index', [
             'connection' => $canManageLibrary ? $this->connectionUrl($connection) : ['url' => null],
+            'service_connection_id' => $canManageLibrary ? $connection->id : null,
             'movies' => Inertia::defer(fn (): array => array_map(
                 fn (array $item): array => $this->mapMovie($item),
                 $this->tryClientCall($connection, fn (RadarrClient $radarrClient): array => $radarrClient->getMovies()),
