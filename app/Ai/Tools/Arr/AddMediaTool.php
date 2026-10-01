@@ -6,6 +6,8 @@ namespace App\Ai\Tools\Arr;
 
 use App\Ai\Risk;
 use App\Ai\Tools\BaseTool;
+use App\Enums\ServiceType;
+use App\Models\ServiceConnection;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
 use Illuminate\JsonSchema\Types\Type;
 use InvalidArgumentException;
@@ -59,7 +61,14 @@ class AddMediaTool extends BaseTool
             'whisparr' => [
                 'type' => 'whisparr_add_item',
                 'target_service' => 'whisparr',
-                'payload' => ['tmdb_id' => (int) ($args['remote_id'] ?? 0), ...$payload],
+                'payload' => [
+                    'tmdb_id' => (int) ($args['remote_id'] ?? 0),
+                    ...$payload,
+                    // whisparr_* executors resolve strictly: item ids overlap
+                    // between Whisparr instances, so the connection this call
+                    // resolved must be the one execution runs against.
+                    'service_connection_id' => ServiceConnection::resolveActive(ServiceType::Whisparr)->id,
+                ],
             ],
             default => throw new InvalidArgumentException('service must be "sonarr", "radarr", or "whisparr".'),
         }, 'fallback_title' => is_string($args['title'] ?? null) ? $args['title'] : null];

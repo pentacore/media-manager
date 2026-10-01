@@ -86,4 +86,11 @@ abstract class BaseArrController extends Controller
 
         return to_route('dashboard');
     }
+
+    protected function flashAnd(string $type, string $message, RedirectResponse $redirectResponse): RedirectResponse
+    {
+        Inertia::flash('toast', ['type' => $type, 'message' => $message]);
+
+        return $redirectResponse;
+    }
 }

@@ -7,13 +7,15 @@ import {
     MoreVertical,
     RefreshCcw,
 } from '@lucide/vue';
-import { computed, ref } from 'vue';
+import { computed, ref, watch } from 'vue';
 import LibraryActivityController from '@/actions/App/Http/Controllers/Library/ActivityController';
+import { BulkActionBar, BulkCheckbox, BulkSelectAll } from '@/components/bulk';
 import { Pill, SvcChip } from '@/components/mm';
 import { Button } from '@/components/ui/button';
 import {
     Dialog,
     DialogContent,
+    DialogDescription,
     DialogFooter,
     DialogHeader,
     DialogTitle,
@@ -27,7 +29,9 @@ import {
     DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Skeleton } from '@/components/ui/skeleton';
+import { useBulkSelection } from '@/composables/useBulkSelection';
 import { useCan } from '@/composables/useCan';
+import { focusAfterBulk, submitBulk } from '@/lib/bulk';
 import { dashboard } from '@/routes';
 
 interface QueueRow {
@@ -549,6 +553,73 @@ const filteredRows = computed<QueueRow[]>(() => {
 
     return all.filter((row) => row.service === serviceFilter.value);
 });
+
+// Queue ids are per service: bulk works on one service at a time, resolved
+// server-side to that service's active connection — same as the row menu.
+const bulkService = computed<'sonarr' | 'radarr' | null>(() =>
+    isAdmin.value &&
+    activeTab.value === 'queue' &&
+    serviceFilter.value !== 'all'
+        ? serviceFilter.value
+        : null,
+);
+
+const {
+    ids: selectedQueueIds,
+    count: selectedQueueCount,
+    isSelected: isQueueSelected,
+    toggle: toggleQueue,
+    setAll: setAllQueue,
+    clear: clearQueueSelection,
+    retain: retainQueue,
+} = useBulkSelection<number>([serviceFilter, activeTab]);
+
+const queuePageIds = computed<number[]>(() =>
+    bulkService.value === null ? [] : filteredRows.value.map((row) => row.id),
+);
+
+watch(queuePageIds, (ids) => retainQueue(ids));
+
+const selectedQueueOnPage = computed(
+    () => queuePageIds.value.filter((id) => isQueueSelected(id)).length,
+);
+
+const queueBulkBusy = ref(false);
+const queueBulkConfirm = ref<'remove' | 'blocklist' | null>(null);
+
+// A refresh can empty the selection while the confirm is open: close it
+// rather than let Confirm send an empty id list.
+watch(selectedQueueCount, (count) => {
+    if (count === 0) {
+        queueBulkConfirm.value = null;
+    }
+});
+
+async function runQueueBulk(): Promise<void> {
+    const action = queueBulkConfirm.value;
+
+    if (action === null || queueBulkBusy.value || bulkService.value === null) {
+        return;
+    }
+
+    queueBulkBusy.value = true;
+    const summary = await submitBulk(
+        LibraryActivityController.bulkQueue.url(),
+        {
+            service: bulkService.value,
+            ids: selectedQueueIds.value,
+            action,
+        },
+    );
+    queueBulkBusy.value = false;
+    queueBulkConfirm.value = null;
+
+    if (summary) {
+        clearQueueSelection();
+        focusAfterBulk();
+        router.reload({ only: ['queue'] });
+    }
+}
 </script>
 
 <template>
@@ -610,6 +681,7 @@ const filteredRows = computed<QueueRow[]>(() => {
                         v-for="value in ['all', 'sonarr', 'radarr'] as const"
                         :key="value"
                         type="button"
+                        :data-service-filter="value"
                         :class="[
                             'inline-flex h-6 items-center rounded-[4px] px-2 text-[11.5px] font-medium transition-colors',
                             serviceFilter === value
@@ -669,184 +741,305 @@ const filteredRows = computed<QueueRow[]>(() => {
                 </template>
             </div>
 
-            <!-- Rows -->
-            <div
-                v-else
-                class="overflow-hidden rounded-xl border border-border bg-card"
-            >
-                <div class="overflow-x-auto">
-                    <table class="w-full border-collapse text-[13px]">
-                        <thead>
-                            <tr>
-                                <th
-                                    v-for="header in [
-                                        'Service',
-                                        'Title',
-                                        'Quality',
-                                        'State',
-                                        'Size',
-                                        'Time left',
-                                        '',
-                                    ]"
-                                    :key="header"
-                                    class="border-b border-border bg-card px-3 py-2 text-left text-[11.5px] font-medium tracking-[0.05em] text-muted-foreground uppercase"
+            <template v-else>
+                <p
+                    v-if="isAdmin && bulkService === null"
+                    class="text-[12px] text-muted-foreground"
+                    data-queue-bulk-hint
+                >
+                    Pick Sonarr or Radarr above to select queue items in bulk.
+                </p>
+
+                <!-- Rows -->
+                <div
+                    class="overflow-hidden rounded-xl border border-border bg-card"
+                >
+                    <div class="overflow-x-auto">
+                        <table class="w-full border-collapse text-[13px]">
+                            <thead>
+                                <tr>
+                                    <th
+                                        v-if="bulkService !== null"
+                                        class="w-8 border-b border-border bg-card px-3 py-2"
+                                    >
+                                        <BulkSelectAll
+                                            hide-label
+                                            :selected-count="
+                                                selectedQueueOnPage
+                                            "
+                                            :page-count="queuePageIds.length"
+                                            :disabled="queueBulkBusy"
+                                            @toggle="
+                                                (value) =>
+                                                    setAllQueue(
+                                                        queuePageIds,
+                                                        value,
+                                                    )
+                                            "
+                                        />
+                                    </th>
+                                    <th
+                                        v-for="header in [
+                                            'Service',
+                                            'Title',
+                                            'Quality',
+                                            'State',
+                                            'Size',
+                                            'Time left',
+                                            '',
+                                        ]"
+                                        :key="header"
+                                        class="border-b border-border bg-card px-3 py-2 text-left text-[11.5px] font-medium tracking-[0.05em] text-muted-foreground uppercase"
+                                    >
+                                        {{ header }}
+                                    </th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr
+                                    v-for="row in filteredRows"
+                                    :key="`${row.service}-${row.id}`"
+                                    :data-queue-row="`${row.service}-${row.id}`"
+                                    class="border-b border-border last:border-b-0 hover:bg-bg-hover"
                                 >
-                                    {{ header }}
-                                </th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            <tr
-                                v-for="row in filteredRows"
-                                :key="`${row.service}-${row.id}`"
-                                class="border-b border-border last:border-b-0 hover:bg-bg-hover"
-                            >
-                                <td class="px-3 py-2.5">
-                                    <SvcChip :id="row.service" />
-                                </td>
-                                <td class="px-3 py-2.5">
-                                    <div class="font-medium">
-                                        {{ row.title ?? '—' }}
-                                    </div>
-                                    <div
-                                        v-if="row.subtitle"
-                                        class="text-[11.5px] text-muted-foreground"
+                                    <td
+                                        v-if="bulkService !== null"
+                                        class="px-3 py-2.5"
                                     >
-                                        {{ row.subtitle }}
-                                    </div>
-                                    <div
-                                        v-if="row.error_message"
-                                        class="mt-1 text-[11.5px] text-destructive"
-                                    >
-                                        {{ row.error_message }}
-                                    </div>
-                                    <div
-                                        v-for="(
-                                            message, mi
-                                        ) in row.status_messages"
-                                        :key="mi"
-                                        class="text-warn mt-1 text-[11.5px]"
-                                    >
-                                        <span class="font-medium"
-                                            >{{ message.title }}:</span
+                                        <BulkCheckbox
+                                            :checked="isQueueSelected(row.id)"
+                                            :disabled="queueBulkBusy"
+                                            :label="`Select ${row.title ?? 'queue item'}`"
+                                            :data-bulk-select="row.id"
+                                            @update:checked="
+                                                (value) =>
+                                                    toggleQueue(row.id, value)
+                                            "
+                                        />
+                                    </td>
+                                    <td class="px-3 py-2.5">
+                                        <SvcChip :id="row.service" />
+                                    </td>
+                                    <td class="px-3 py-2.5">
+                                        <div class="font-medium">
+                                            {{ row.title ?? '—' }}
+                                        </div>
+                                        <div
+                                            v-if="row.subtitle"
+                                            class="text-[11.5px] text-muted-foreground"
                                         >
-                                        {{ message.messages.join('; ') }}
-                                    </div>
-                                </td>
-                                <td class="px-3 py-2.5 text-[12px]">
-                                    {{ row.quality ?? '—' }}
-                                </td>
-                                <td class="px-3 py-2.5">
-                                    <Pill :variant="trackedVariant(row)">
-                                        {{ statusLabel(row) }}
-                                    </Pill>
-                                </td>
-                                <td
-                                    class="font-mono-tabular px-3 py-2.5 text-right text-[12px]"
-                                >
-                                    <div>{{ formatBytes(row.size) }}</div>
-                                    <div
-                                        class="text-[11px] text-muted-foreground"
-                                    >
-                                        {{ progress(row) }}%
-                                    </div>
-                                </td>
-                                <td
-                                    class="font-mono-tabular px-3 py-2.5 text-right text-[12px]"
-                                >
-                                    {{ timeleftLabel(row) }}
-                                </td>
-                                <td class="px-3 py-2.5 text-right">
-                                    <div
-                                        class="flex items-center justify-end gap-1"
-                                    >
-                                        <a
-                                            :href="`${row.service_url}/activity/queue`"
-                                            target="_blank"
-                                            rel="noopener noreferrer"
-                                            class="inline-flex items-center gap-1 text-[12px] text-muted-foreground hover:text-foreground"
+                                            {{ row.subtitle }}
+                                        </div>
+                                        <div
+                                            v-if="row.error_message"
+                                            class="mt-1 text-[11.5px] text-destructive"
                                         >
-                                            <ExternalLink
-                                                class="size-3.5"
-                                            />Open
-                                        </a>
-                                        <DropdownMenu v-if="isAdmin">
-                                            <DropdownMenuTrigger as-child>
-                                                <Button
-                                                    variant="ghost"
-                                                    size="sm"
-                                                    class="size-7 p-0"
-                                                    :disabled="
-                                                        acting ===
-                                                            actionKey(
+                                            {{ row.error_message }}
+                                        </div>
+                                        <div
+                                            v-for="(
+                                                message, mi
+                                            ) in row.status_messages"
+                                            :key="mi"
+                                            class="text-warn mt-1 text-[11.5px]"
+                                        >
+                                            <span class="font-medium"
+                                                >{{ message.title }}:</span
+                                            >
+                                            {{ message.messages.join('; ') }}
+                                        </div>
+                                    </td>
+                                    <td class="px-3 py-2.5 text-[12px]">
+                                        {{ row.quality ?? '—' }}
+                                    </td>
+                                    <td class="px-3 py-2.5">
+                                        <Pill :variant="trackedVariant(row)">
+                                            {{ statusLabel(row) }}
+                                        </Pill>
+                                    </td>
+                                    <td
+                                        class="font-mono-tabular px-3 py-2.5 text-right text-[12px]"
+                                    >
+                                        <div>{{ formatBytes(row.size) }}</div>
+                                        <div
+                                            class="text-[11px] text-muted-foreground"
+                                        >
+                                            {{ progress(row) }}%
+                                        </div>
+                                    </td>
+                                    <td
+                                        class="font-mono-tabular px-3 py-2.5 text-right text-[12px]"
+                                    >
+                                        {{ timeleftLabel(row) }}
+                                    </td>
+                                    <td class="px-3 py-2.5 text-right">
+                                        <div
+                                            class="flex items-center justify-end gap-1"
+                                        >
+                                            <a
+                                                :href="`${row.service_url}/activity/queue`"
+                                                target="_blank"
+                                                rel="noopener noreferrer"
+                                                class="inline-flex items-center gap-1 text-[12px] text-muted-foreground hover:text-foreground"
+                                            >
+                                                <ExternalLink
+                                                    class="size-3.5"
+                                                />Open
+                                            </a>
+                                            <DropdownMenu v-if="isAdmin">
+                                                <DropdownMenuTrigger as-child>
+                                                    <Button
+                                                        variant="ghost"
+                                                        size="sm"
+                                                        class="size-7 p-0"
+                                                        :disabled="
+                                                            acting ===
+                                                                actionKey(
+                                                                    row,
+                                                                    'remove',
+                                                                ) ||
+                                                            acting ===
+                                                                actionKey(
+                                                                    row,
+                                                                    'block',
+                                                                )
+                                                        "
+                                                        :aria-label="`Manage ${row.title ?? 'queue item'}`"
+                                                    >
+                                                        <MoreVertical
+                                                            class="size-3.5"
+                                                        />
+                                                    </Button>
+                                                </DropdownMenuTrigger>
+                                                <DropdownMenuContent
+                                                    align="end"
+                                                    class="w-52"
+                                                >
+                                                    <DropdownMenuLabel
+                                                        >Manage queue
+                                                        item</DropdownMenuLabel
+                                                    >
+                                                    <DropdownMenuSeparator />
+                                                    <DropdownMenuItem
+                                                        @select="forceGrab(row)"
+                                                    >
+                                                        Force grab now
+                                                    </DropdownMenuItem>
+                                                    <DropdownMenuItem
+                                                        :disabled="
+                                                            !row.download_id
+                                                        "
+                                                        @select="
+                                                            openManualImport(
+                                                                row,
+                                                            )
+                                                        "
+                                                    >
+                                                        Manual import…
+                                                    </DropdownMenuItem>
+                                                    <DropdownMenuItem
+                                                        @select="
+                                                            removeQueueItem(
                                                                 row,
                                                                 'remove',
-                                                            ) ||
-                                                        acting ===
-                                                            actionKey(
+                                                            )
+                                                        "
+                                                    >
+                                                        Remove from queue
+                                                    </DropdownMenuItem>
+                                                    <DropdownMenuItem
+                                                        class="text-destructive focus:text-destructive"
+                                                        @select="
+                                                            removeQueueItem(
                                                                 row,
                                                                 'block',
                                                             )
-                                                    "
-                                                    :aria-label="`Manage ${row.title ?? 'queue item'}`"
-                                                >
-                                                    <MoreVertical
-                                                        class="size-3.5"
-                                                    />
-                                                </Button>
-                                            </DropdownMenuTrigger>
-                                            <DropdownMenuContent
-                                                align="end"
-                                                class="w-52"
-                                            >
-                                                <DropdownMenuLabel
-                                                    >Manage queue
-                                                    item</DropdownMenuLabel
-                                                >
-                                                <DropdownMenuSeparator />
-                                                <DropdownMenuItem
-                                                    @select="forceGrab(row)"
-                                                >
-                                                    Force grab now
-                                                </DropdownMenuItem>
-                                                <DropdownMenuItem
-                                                    :disabled="!row.download_id"
-                                                    @select="
-                                                        openManualImport(row)
-                                                    "
-                                                >
-                                                    Manual import…
-                                                </DropdownMenuItem>
-                                                <DropdownMenuItem
-                                                    @select="
-                                                        removeQueueItem(
-                                                            row,
-                                                            'remove',
-                                                        )
-                                                    "
-                                                >
-                                                    Remove from queue
-                                                </DropdownMenuItem>
-                                                <DropdownMenuItem
-                                                    class="text-destructive focus:text-destructive"
-                                                    @select="
-                                                        removeQueueItem(
-                                                            row,
-                                                            'block',
-                                                        )
-                                                    "
-                                                >
-                                                    Blocklist & retry
-                                                </DropdownMenuItem>
-                                            </DropdownMenuContent>
-                                        </DropdownMenu>
-                                    </div>
-                                </td>
-                            </tr>
-                        </tbody>
-                    </table>
+                                                        "
+                                                    >
+                                                        Blocklist & retry
+                                                    </DropdownMenuItem>
+                                                </DropdownMenuContent>
+                                            </DropdownMenu>
+                                        </div>
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
                 </div>
-            </div>
+            </template>
+
+            <BulkActionBar
+                v-if="bulkService !== null"
+                :count="selectedQueueCount"
+                :busy="queueBulkBusy"
+                @clear="clearQueueSelection()"
+            >
+                <template #default="{ disabled }">
+                    <Button
+                        variant="outline"
+                        size="sm"
+                        class="h-7 text-xs"
+                        :disabled="disabled"
+                        data-bulk-queue-action="remove"
+                        @click="queueBulkConfirm = 'remove'"
+                    >
+                        Remove…
+                    </Button>
+                    <Button
+                        variant="destructive"
+                        size="sm"
+                        class="h-7 text-xs"
+                        :disabled="disabled"
+                        data-bulk-queue-action="blocklist"
+                        @click="queueBulkConfirm = 'blocklist'"
+                    >
+                        Blocklist & retry…
+                    </Button>
+                </template>
+            </BulkActionBar>
+
+            <Dialog
+                :open="queueBulkConfirm !== null"
+                @update:open="
+                    (open) => {
+                        if (!open) queueBulkConfirm = null;
+                    }
+                "
+            >
+                <DialogContent>
+                    <DialogHeader>
+                        <DialogTitle>
+                            {{
+                                queueBulkConfirm === 'blocklist'
+                                    ? `Remove and blocklist ${selectedQueueCount} ${selectedQueueCount === 1 ? 'release' : 'releases'}?`
+                                    : `Remove ${selectedQueueCount} ${selectedQueueCount === 1 ? 'item' : 'items'} from the queue?`
+                            }}
+                        </DialogTitle>
+                        <DialogDescription>
+                            {{
+                                queueBulkConfirm === 'blocklist'
+                                    ? 'Each release is blocklisted and a fresh search runs for it.'
+                                    : 'Each item is removed from the queue and the download client.'
+                            }}
+                        </DialogDescription>
+                    </DialogHeader>
+                    <DialogFooter>
+                        <Button
+                            variant="outline"
+                            @click="queueBulkConfirm = null"
+                            >Cancel</Button
+                        >
+                        <Button
+                            variant="destructive"
+                            :disabled="queueBulkBusy"
+                            data-bulk-queue-confirm
+                            @click="runQueueBulk"
+                            >Confirm</Button
+                        >
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
         </template>
 
         <!-- History tab -->

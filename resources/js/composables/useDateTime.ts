@@ -8,6 +8,7 @@ const FALLBACK: UserPreferences = {
     timezone: 'UTC',
     first_day_of_week: 1,
     show_relative_time: true,
+    whisparr_blur_posters: true,
 };
 
 /**

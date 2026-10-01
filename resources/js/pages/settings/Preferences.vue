@@ -16,6 +16,7 @@ import {
     SelectValue,
 } from '@/components/ui/select';
 import { Separator } from '@/components/ui/separator';
+import { useCan } from '@/composables/useCan';
 import { edit } from '@/routes/settings/preferences';
 import type {
     DateFormat,
@@ -37,6 +38,9 @@ const props = defineProps<{
         week_starts: number[];
     };
 }>();
+
+const { can } = useCan();
+const isAdmin = computed(() => can('admin'));
 
 defineOptions({
     layout: {
@@ -125,6 +129,13 @@ const filteredTimezones = computed<TimezoneGroup[]>(() => {
                     ...data,
                     show_relative_time: Boolean(data.show_relative_time),
                     first_day_of_week: Number(data.first_day_of_week),
+                    ...(isAdmin
+                        ? {
+                              whisparr_blur_posters: Boolean(
+                                  data.whisparr_blur_posters,
+                              ),
+                          }
+                        : {}),
                 })
             "
             class="rounded-xl border border-border bg-card p-6"
@@ -333,6 +344,43 @@ const filteredTimezones = computed<TimezoneGroup[]>(() => {
                         />
                     </div>
                 </div>
+
+                <template v-if="isAdmin">
+                    <Separator />
+
+                    <!-- Whisparr poster blur (Whisparr is admin-only) -->
+                    <div
+                        class="grid items-start gap-6"
+                        style="grid-template-columns: 200px 1fr"
+                    >
+                        <Field
+                            label="Whisparr posters"
+                            hint="Blur Whisparr posters until you hover, focus or tap them."
+                        >
+                            <span />
+                        </Field>
+                        <div>
+                            <label
+                                class="inline-flex items-center gap-2 text-[13px]"
+                            >
+                                <input
+                                    type="checkbox"
+                                    name="whisparr_blur_posters"
+                                    :checked="
+                                        props.preferences.whisparr_blur_posters
+                                    "
+                                    class="size-4 rounded border-border accent-accent"
+                                    data-whisparr-blur-toggle
+                                />
+                                Blur posters on the Whisparr pages
+                            </label>
+                            <InputError
+                                :message="errors.whisparr_blur_posters"
+                                class="mt-1"
+                            />
+                        </div>
+                    </div>
+                </template>
 
                 <div class="flex justify-end pt-2">
                     <Button

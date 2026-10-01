@@ -56,8 +56,40 @@ test('members see sanitized action results in request listings', function (): vo
             ->where('requests.data.0.result', [
                 'success' => false,
                 'reason' => 'execution_failed',
+                'rejection_reason' => null,
             ])
         );
+});
+
+test('members see the reviewer rejection reason on a rejected request', function (): void {
+    $member = User::factory()->member()->create();
+    ActionRequest::factory()->create([
+        'status' => ActionRequestStatus::Rejected,
+        'result' => ['rejection_reason' => 'Already on disk in 4K.'],
+    ]);
+
+    $this->actingAs($member)
+        ->get(route('actions.requests.index'))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->where('requests.data.0.result', [
+                'success' => null,
+                'reason' => null,
+                'rejection_reason' => 'Already on disk in 4K.',
+            ])
+        );
+});
+
+test('a non-string rejection reason never reaches a member', function (): void {
+    $member = User::factory()->member()->create();
+    ActionRequest::factory()->create([
+        'status' => ActionRequestStatus::Rejected,
+        'result' => ['rejection_reason' => ['nested' => 'LEAKED']],
+    ]);
+
+    $this->actingAs($member)
+        ->get(route('actions.requests.index'))
+        ->assertInertia(fn ($page) => $page->where('requests.data.0.result.rejection_reason', null));
 });
 
 test('replacement request listings expose only bounded review fields', function (): void {

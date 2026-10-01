@@ -11,6 +11,7 @@ import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import ActionRequestController from '@/actions/App/Http/Controllers/Actions/ActionRequestController';
 import ActionTypeConfigController from '@/actions/App/Http/Controllers/Actions/ActionTypeConfigController';
 import MediaReplacementAttemptController from '@/actions/App/Http/Controllers/Admin/MediaReplacementAttemptController';
+import { BulkActionBar, BulkCheckbox, BulkSelectAll } from '@/components/bulk';
 import {
     Field,
     InitialsAvatar,
@@ -20,10 +21,20 @@ import {
     TimeStamp,
 } from '@/components/mm';
 import { Button } from '@/components/ui/button';
+import {
+    Dialog,
+    DialogContent,
+    DialogDescription,
+    DialogFooter,
+    DialogHeader,
+    DialogTitle,
+} from '@/components/ui/dialog';
+import { useBulkSelection } from '@/composables/useBulkSelection';
 import { useCan } from '@/composables/useCan';
 import { useRealtimeList } from '@/composables/useRealtimeList';
 import { useWebSocket } from '@/composables/useWebSocket';
 import type { ChannelLease } from '@/composables/useWebSocket';
+import { focusAfterBulk, submitBulk } from '@/lib/bulk';
 import { cn } from '@/lib/utils';
 import { dashboard } from '@/routes';
 import type { ActionRequestResource } from '@/typefinder/resources/ActionRequestResource';
@@ -137,6 +148,67 @@ const selected = computed<ActionRequestRow | null>(
         visibleRequests.value.find((row) => row.id === selectedId.value) ??
         null,
 );
+
+const pendingOnPage = computed<number[]>(() =>
+    visibleRequests.value
+        .filter((row) => row.status === 'pending')
+        .map((row) => row.id),
+);
+
+const {
+    ids: bulkIds,
+    count: bulkCount,
+    isSelected: isBulkSelected,
+    toggle: toggleBulk,
+    setAll: setAllBulk,
+    clear: clearBulk,
+    retain: retainBulk,
+} = useBulkSelection<number>([
+    () => props.filters.status,
+    () => props.requests.meta.current_page,
+]);
+
+// A row approved or rejected elsewhere (live status event, refresh) drops out.
+watch(pendingOnPage, (ids) => retainBulk(ids));
+
+const bulkSelectedOnPage = computed(
+    () => pendingOnPage.value.filter((id) => isBulkSelected(id)).length,
+);
+
+const bulkBusy = ref(false);
+const rejectDialogOpen = ref(false);
+const rejectReason = ref('');
+
+// A live status event can empty the selection while the reject dialog is
+// open: close it rather than leave a "Reject 0 requests" confirm.
+watch(bulkCount, (count) => {
+    if (count === 0) {
+        rejectDialogOpen.value = false;
+    }
+});
+
+async function bulkReview(action: 'approve' | 'reject'): Promise<void> {
+    if (bulkBusy.value || bulkIds.value.length === 0) {
+        return;
+    }
+
+    bulkBusy.value = true;
+    const reason = rejectReason.value.trim();
+    const summary = await submitBulk(ActionRequestController.bulk.url(), {
+        ids: bulkIds.value,
+        action,
+        reason: action === 'reject' && reason !== '' ? reason : null,
+    });
+    bulkBusy.value = false;
+
+    if (summary) {
+        clearBulk();
+        focusAfterBulk();
+        rejectDialogOpen.value = false;
+        rejectReason.value = '';
+        router.reload({ only: ['requests', 'statusCounts'] });
+    }
+}
 
 const { acquirePrivateChannel } = useWebSocket();
 let statusLease: ChannelLease | null = null;
@@ -339,6 +411,13 @@ function goToPage(url: string | null): void {
     }
 
     router.get(url, {}, { preserveState: true, preserveScroll: true });
+}
+
+/** The reviewer's shared reason, stored in full on a rejected request. */
+function rejectionReason(row: ActionRequestRow): string | null {
+    const reason = row.result?.rejection_reason;
+
+    return typeof reason === 'string' && reason !== '' ? reason : null;
 }
 
 function payloadTitle(row: ActionRequestRow): string {
@@ -583,6 +662,21 @@ function pipelineState(
                         <thead>
                             <tr>
                                 <th
+                                    v-if="isAdmin"
+                                    class="w-8 border-b border-border bg-card px-3 py-2"
+                                >
+                                    <BulkSelectAll
+                                        hide-label
+                                        :selected-count="bulkSelectedOnPage"
+                                        :page-count="pendingOnPage.length"
+                                        :disabled="bulkBusy"
+                                        @toggle="
+                                            (value) =>
+                                                setAllBulk(pendingOnPage, value)
+                                        "
+                                    />
+                                </th>
+                                <th
                                     class="w-6 border-b border-border bg-card px-3 py-2"
                                 />
                                 <th
@@ -616,6 +710,7 @@ function pipelineState(
                             <tr
                                 v-for="row in visibleRequests"
                                 :key="row.id"
+                                :data-action-row="row.id"
                                 :class="
                                     cn(
                                         'border-b border-border transition-colors hover:bg-bg-hover',
@@ -624,6 +719,21 @@ function pipelineState(
                                 "
                                 @click="selectedId = row.id"
                             >
+                                <td
+                                    v-if="isAdmin"
+                                    class="px-3 py-2.5 align-middle"
+                                >
+                                    <BulkCheckbox
+                                        v-if="row.status === 'pending'"
+                                        :checked="isBulkSelected(row.id)"
+                                        :disabled="bulkBusy"
+                                        :label="`Select ${payloadTitle(row)}`"
+                                        :data-bulk-select="row.id"
+                                        @update:checked="
+                                            (value) => toggleBulk(row.id, value)
+                                        "
+                                    />
+                                </td>
                                 <td class="px-3 py-2.5 align-middle">
                                     <span
                                         :class="
@@ -670,7 +780,7 @@ function pipelineState(
                             </tr>
                             <tr v-if="visibleRequests.length === 0">
                                 <td
-                                    colspan="6"
+                                    :colspan="isAdmin ? 7 : 6"
                                     class="px-3 py-12 text-center text-sm text-fg-subtle"
                                 >
                                     <div
@@ -760,6 +870,19 @@ function pipelineState(
                         </Field>
                         <Field label="Created">
                             <TimeStamp :iso="selected.created_at" />
+                        </Field>
+                        <Field
+                            v-if="
+                                selected.status === 'rejected' &&
+                                rejectionReason(selected)
+                            "
+                            label="Rejection reason"
+                        >
+                            <span
+                                class="text-[13px] whitespace-pre-line"
+                                data-action-rejection-reason
+                                >{{ rejectionReason(selected) }}</span
+                            >
                         </Field>
                         <p
                             v-if="payloadDetail(selected)"
@@ -1025,6 +1148,73 @@ function pipelineState(
                 </div>
             </aside>
         </div>
+
+        <BulkActionBar
+            v-if="isAdmin"
+            :count="bulkCount"
+            :busy="bulkBusy"
+            @clear="clearBulk()"
+        >
+            <template #default="{ disabled }">
+                <Button
+                    size="sm"
+                    class="h-7 text-xs"
+                    :disabled="disabled"
+                    data-bulk-approve
+                    @click="bulkReview('approve')"
+                >
+                    Approve
+                </Button>
+                <Button
+                    size="sm"
+                    variant="destructive"
+                    class="h-7 text-xs"
+                    :disabled="disabled"
+                    data-bulk-reject
+                    @click="rejectDialogOpen = true"
+                >
+                    Reject…
+                </Button>
+            </template>
+        </BulkActionBar>
+
+        <Dialog v-model:open="rejectDialogOpen">
+            <DialogContent>
+                <DialogHeader>
+                    <DialogTitle
+                        >Reject {{ bulkCount }}
+                        {{
+                            bulkCount === 1 ? 'request' : 'requests'
+                        }}?</DialogTitle
+                    >
+                    <DialogDescription>
+                        One reason is saved on every rejected request and in the
+                        activity log. Requests that are no longer pending are
+                        skipped.
+                    </DialogDescription>
+                </DialogHeader>
+                <textarea
+                    v-model="rejectReason"
+                    maxlength="500"
+                    rows="3"
+                    placeholder="Reason (optional)"
+                    class="w-full rounded-md border border-border bg-bg-elev p-2 text-[13px] outline-none placeholder:text-fg-subtle"
+                    data-bulk-reject-reason
+                />
+                <DialogFooter>
+                    <Button variant="outline" @click="rejectDialogOpen = false"
+                        >Cancel</Button
+                    >
+                    <Button
+                        variant="destructive"
+                        :disabled="bulkBusy"
+                        data-bulk-reject-confirm
+                        @click="bulkReview('reject')"
+                        >Reject {{ bulkCount }}</Button
+                    >
+                </DialogFooter>
+            </DialogContent>
+        </Dialog>
 
         <!-- Pagination -->
         <div

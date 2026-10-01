@@ -22,6 +22,7 @@ class UpdateUserPreferencesRequest extends FormRequest
             'timezone' => ['required', 'string', Rule::in(UserPreferences::availableTimezones())],
             'first_day_of_week' => ['required', 'integer', Rule::in(UserPreferences::WEEK_STARTS)],
             'show_relative_time' => ['required', 'boolean'],
+            'whisparr_blur_posters' => ['sometimes', 'boolean'],
         ];
     }
 }
