@@ -53,12 +53,15 @@ final class ActionRequestActivityLogger
     private function logRejected(ActionRequest $actionRequest): void
     {
         $approver = $actionRequest->approvedByUser?->name;
+        $reason = $actionRequest->result['rejection_reason'] ?? null;
+        $description = $approver !== null
+            ? sprintf('Action #%d rejected by %s', $actionRequest->id, $approver)
+            : sprintf('Action #%d rejected', $actionRequest->id);
+
         $this->writeLog(
             $actionRequest,
             'action_request.rejected',
-            $approver !== null
-                ? sprintf('Action #%d rejected by %s', $actionRequest->id, $approver)
-                : sprintf('Action #%d rejected', $actionRequest->id),
+            is_string($reason) && $reason !== '' ? sprintf('%s: %s', $description, $reason) : $description,
         );
     }
 

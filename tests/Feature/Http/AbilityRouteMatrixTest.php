@@ -91,6 +91,7 @@ dataset('member write routes', [
 ]);
 
 dataset('admin-only routes', [
+    'action queue bulk' => ['POST', 'actions.requests.bulk', []],
     'whisparr index' => ['GET', 'media.whisparr.index', []],
     'whisparr show' => ['GET', 'media.whisparr.show', ['id' => 1]],
     'whisparr monitor' => ['POST', 'media.whisparr.actions.monitor', []],
