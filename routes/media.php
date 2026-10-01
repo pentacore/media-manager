@@ -92,6 +92,8 @@ Route::middleware(['auth', 'verified', 'password.set'])
             });
 
             Route::middleware('role:admin')->group(function (): void {
+                Route::post('library/activity/queue/bulk', [LibraryActivityController::class, 'bulkQueue'])
+                    ->name('library.activity.queue.bulk');
                 Route::post('library/activity/queue/{service}/{id}/remove', [LibraryActivityController::class, 'removeQueueItem'])
                     ->whereIn('service', ['sonarr', 'radarr'])
                     ->whereNumber('id')
