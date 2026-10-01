@@ -105,3 +105,30 @@ test('an ignored or unsupported provider never creates even when on the auto-cre
     expect($refreshScope->allowsCreate('groq'))->toBeFalse()
         ->and($refreshScope->allowsCreate('not-a-provider'))->toBeFalse();
 });
+
+test('explicit creates allow exactly the picked models to be created on an update-only provider', function (): void {
+    resolve(AiSettings::class)->setAutoCreatePricingProviders(['openai']);
+
+    $refreshScope = RefreshScope::forExplicitCreates('openrouter', ['anthropic/claude-opus-5.5']);
+
+    expect($refreshScope->allowsCreate('openrouter'))->toBeFalse()
+        ->and($refreshScope->allowsCreateModel('openrouter', 'anthropic/claude-opus-5.5'))->toBeTrue()
+        ->and($refreshScope->allowsCreateModel('openrouter', 'openai/gpt-6-luna'))->toBeFalse()
+        ->and($refreshScope->allowsWrite('openrouter', 'anthropic/claude-opus-5.5'))->toBeTrue()
+        ->and($refreshScope->allowsWrite('openrouter', 'openai/gpt-6-luna'))->toBeFalse()
+        ->and($refreshScope->allowsProvider('openai'))->toBeFalse();
+});
+
+test('explicit creates for an unsupported or ignored provider allow nothing', function (): void {
+    resolve(AiSettings::class)->setIgnoredPricingProviders(['groq']);
+
+    expect(RefreshScope::forExplicitCreates('groq', ['llama-5'])->allowsCreateModel('groq', 'llama-5'))->toBeFalse()
+        ->and(RefreshScope::forExplicitCreates('not-a-provider', ['x'])->allowsWrite('not-a-provider', 'x'))->toBeFalse();
+});
+
+test('other scopes still ignore explicit creates', function (): void {
+    resolve(AiSettings::class)->setAutoCreatePricingProviders(['openai']);
+
+    expect(RefreshScope::forProviderModels(['openrouter' => ['anthropic/claude-opus-5.5']])
+        ->allowsCreateModel('openrouter', 'anthropic/claude-opus-5.5'))->toBeFalse();
+});
