@@ -8,6 +8,9 @@ parameters:
     # must be clean. Regenerate the baseline only to REMOVE fixed errors or
     # after a rebase: composer analyse -- --generate-baseline
     level: 6
+    # On the bind mount, not the container's /tmp: a run as root (sail exec)
+    # left root-owned cache files there that the sail user cannot overwrite.
+    tmpDir: storage/framework/cache/phpstan
     paths:
         - app
         - bootstrap/app.php
