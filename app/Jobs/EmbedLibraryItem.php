@@ -8,12 +8,9 @@ use App\Enums\QueueLane;
 use App\Models\IndexedMovie;
 use App\Models\IndexedSeries;
 use App\Services\Search\LibraryEmbedder;
-use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
-use Illuminate\Foundation\Bus\Dispatchable;
+use Illuminate\Foundation\Queue\Queueable;
 use Illuminate\Queue\Attributes\Queue;
-use Illuminate\Queue\InteractsWithQueue;
-use Illuminate\Queue\SerializesModels;
 
 /**
  * Generates and persists the semantic-search embedding for a single indexed
@@ -22,10 +19,7 @@ use Illuminate\Queue\SerializesModels;
 #[Queue(QueueLane::Ai)]
 class EmbedLibraryItem implements ShouldQueue
 {
-    use Dispatchable;
-    use InteractsWithQueue;
     use Queueable;
-    use SerializesModels;
 
     public int $tries = 2;
 

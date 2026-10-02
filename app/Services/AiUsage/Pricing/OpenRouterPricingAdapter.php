@@ -49,7 +49,7 @@ final class OpenRouterPricingAdapter
             $rawId = is_array($model) ? ($model['id'] ?? null) : null;
             $modelId = is_string($rawId) ? PricingModelIds::normalize($rawId) : null;
 
-            if ($modelId === null || ! is_array($model)) {
+            if ($modelId === null) {
                 $rejections[] = new PricingRejection(self::PROVIDER, is_string($rawId) ? $rawId : '', PricingRejection::INVALID_IDENTIFIER);
 
                 continue;
