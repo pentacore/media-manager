@@ -28,13 +28,14 @@ test('it runs the callback, returns its value and releases the lock', function (
 
 test('it refuses at once while another write holds the request', function (): void {
     Cache::lock(SeerrRequestLock::key(3, 41), SeerrRequestLock::TTL_SECONDS)->get();
-    $ran = false;
+    $seen = new stdClass;
+    $seen->ran = false;
 
-    expect(fn () => (new SeerrRequestLock)->run(seerrRequestLockConnection(), 41, function () use (&$ran): void {
-        $ran = true;
+    expect(fn () => (new SeerrRequestLock)->run(seerrRequestLockConnection(), 41, function () use ($seen): void {
+        $seen->ran = true;
     }))->toThrow(SeerrRequestBusy::class);
 
-    expect($ran)->toBeFalse();
+    expect($seen->ran)->toBeFalse();
 });
 
 test('a waiting caller gives up after its wait', function (): void {

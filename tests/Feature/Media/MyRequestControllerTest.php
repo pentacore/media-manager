@@ -179,10 +179,16 @@ test('a cancel is refused while another MediaManager write holds the request', f
 
 test('a cancel whose Seerr delete times out is sent once and reported as unreachable', function (): void {
     Sleep::fake();
-    $deletes = 0;
-    fakeMyRequestsSeerr(['seerr.local:5055/api/v1/request/41' => function (Request $request) use (&$deletes) {
+    $seen = new stdClass;
+    $seen->deletes = 0;
+    $seen->lockHeldDuringDelete = false;
+
+    $lockKey = SeerrRequestLock::key(ServiceConnection::query()->sole()->id, 41);
+    fakeMyRequestsSeerr(['seerr.local:5055/api/v1/request/41' => function (Request $request) use ($seen, $lockKey) {
         if ($request->method() === 'DELETE') {
-            $deletes++;
+            $seen->deletes++;
+            // The status read and the DELETE sit inside one critical section.
+            $seen->lockHeldDuringDelete = ! Cache::lock($lockKey, 1)->get();
 
             throw new ConnectionException('Operation timed out');
         }
@@ -194,6 +200,7 @@ test('a cancel whose Seerr delete times out is sent once and reported as unreach
         ->delete(route('media.requests.mine.destroy', ['id' => 41]))
         ->assertSessionHas('inertia.flash_data.toast.message', 'Seerr is unreachable right now.');
 
-    expect($deletes)->toBe(1)
-        ->and(Cache::lock(SeerrRequestLock::key(ServiceConnection::query()->sole()->id, 41), 1)->get())->toBeTrue();
+    expect($seen->deletes)->toBe(1)
+        ->and($seen->lockHeldDuringDelete)->toBeTrue()
+        ->and(Cache::lock($lockKey, 1)->get())->toBeTrue();
 });

@@ -10,10 +10,12 @@ use Illuminate\Contracts\Cache\LockTimeoutException;
 use Illuminate\Support\Facades\Cache;
 
 /**
- * Serialises MediaManager's own writes to one Seerr request, so a member's
- * cancel (live status read, then DELETE) cannot interleave with an approve
- * or decline sent from MediaManager — which would let a member cancel a
- * request that was approved a moment earlier.
+ * Serialises a member's cancel (live status read, then DELETE) with the
+ * approve and decline MediaManager sends for the same Seerr request, so a
+ * member cannot cancel a request that was approved a moment earlier. Other
+ * writes (the console's delete, retry and edit, cleanup of available media,
+ * the bulk clear) are deliberately unlocked: none of them can turn a
+ * member's cancel into the wrong outcome.
  *
  * Approvals made inside Seerr's own UI bypass this lock. That residual race
  * is accepted: it needs an admin acting in Seerr within the cancel's one
@@ -21,8 +23,12 @@ use Illuminate\Support\Facades\Cache;
  */
 final readonly class SeerrRequestLock
 {
-    /** Long enough for one live read plus one write at the 10 s client timeout. */
-    public const int TTL_SECONDS = 25;
+    /**
+     * Outlives a cancel's worst case: the live read retries (3 × 10 s plus
+     * backoff) and the non-retrying DELETE (10 s) — about 42 s — so the lock
+     * never lapses mid-cancel. Well under Octane's 150 s request ceiling.
+     */
+    public const int TTL_SECONDS = 60;
 
     /** How long a queued action waits for a member's cancel to finish. */
     public const int JOB_WAIT_SECONDS = 10;

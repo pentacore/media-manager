@@ -13,6 +13,7 @@ use App\Services\Bazarr\BazarrActions;
 use App\Services\Bazarr\BazarrIndeterminateOutcomeException;
 use App\Services\MediaReplacement\MediaReplacementActions;
 use App\Services\Radarr\RadarrActions;
+use App\Services\Seerr\SeerrRequestLock;
 use App\Services\Sonarr\SonarrActions;
 use Illuminate\Contracts\Queue\Job;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
@@ -21,8 +22,10 @@ use Illuminate\Http\Client\RequestException;
 use Illuminate\Http\Client\Response;
 use Illuminate\Queue\Attributes\Timeout;
 use Illuminate\Queue\Attributes\UniqueFor;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Sleep;
 
 beforeEach(function (): void {
     Event::fake([ActionRequestStatusChanged::class]);
@@ -404,4 +407,26 @@ test('a request pinned to a deleted connection fails with the pin message', func
             'message' => 'Service connection 999999 pinned to this action no longer exists; aborting instead of acting on a different instance.',
             'exception' => ModelNotFoundException::class,
         ]);
+});
+
+test('a queued Seerr approve that cannot get the request lock fails without retrying', function (): void {
+    Sleep::fake(syncWithCarbon: true);
+    $seerr = ServiceConnection::factory()->seerr()->create();
+    Cache::lock(SeerrRequestLock::key($seerr->id, 77), SeerrRequestLock::TTL_SECONDS)->get();
+    Http::fake();
+
+    $request = ActionRequest::factory()->create([
+        'status' => ActionRequestStatus::Approved,
+        'type' => 'approve_seerr_request',
+        'payload' => ['seerr_request_id' => 77, 'service_connection_id' => $seerr->id],
+    ]);
+
+    new ExecuteActionRequest($request)->handle();
+
+    expect($request->fresh()->status)->toBe(ActionRequestStatus::Failed)
+        ->and($request->fresh()->result)->toMatchArray([
+            'reason' => 'execution_failed',
+            'message' => 'Seerr request 77 is being changed by another MediaManager action.',
+        ]);
+    Http::assertNothingSent();
 });
