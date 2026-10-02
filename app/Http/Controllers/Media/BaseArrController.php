@@ -14,6 +14,7 @@ use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\RequestException;
 use Illuminate\Http\RedirectResponse;
 use Inertia\Inertia;
+use InvalidArgumentException;
 
 abstract class BaseArrController extends Controller
 {
@@ -34,6 +35,25 @@ abstract class BaseArrController extends Controller
             return ServiceConnection::resolveActive($this->serviceType());
         } catch (ModelNotFoundException) {
             return $this->noConnectionRedirect();
+        }
+    }
+
+    /**
+     * The connection a title page was rendered from, for a write that must
+     * act on exactly that instance (media ids overlap between instances). A
+     * deleted, deactivated or other-service pin refuses with a "refresh and
+     * try again" toast instead of falling back to the active connection.
+     */
+    protected function resolvePinnedConnection(int $serviceConnectionId): ServiceConnection|RedirectResponse
+    {
+        try {
+            return ServiceConnection::resolvePinnedStrict(['service_connection_id' => $serviceConnectionId], $this->serviceType());
+        } catch (InvalidArgumentException|ModelNotFoundException) {
+            return $this->flashAnd(
+                'error',
+                __('That :service connection is unavailable — refresh and try again.', ['service' => $this->serviceType()->label()]),
+                back(),
+            );
         }
     }
 

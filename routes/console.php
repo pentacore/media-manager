@@ -76,8 +76,8 @@ Schedule::command(ReconcileMediaReplacementAttempts::class)
     ->withoutOverlapping(50);
 
 Schedule::command(ReconcileStuckActionRequests::class)
-    ->hourly()
-    ->withoutOverlapping(50);
+    ->everyFifteenMinutes()
+    ->withoutOverlapping(10);
 
 Schedule::command(ReconcileBazarrSubtitles::class)
     ->everyFiveMinutes()

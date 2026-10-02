@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 use App\Jobs\ReconcileBazarrConnection;
 use App\Models\ServiceConnection;
+use Illuminate\Console\Scheduling\Event;
+use Illuminate\Console\Scheduling\Schedule;
 use Illuminate\Support\Facades\Queue;
 
 test('the command dispatches one job for each active Bazarr connection', function (): void {
@@ -32,8 +34,9 @@ test('the connection option scopes discovery to one active Bazarr connection', f
 });
 
 test('the scheduler registers bounded Bazarr discovery every five minutes', function (): void {
-    $this->artisan('schedule:list')
-        ->expectsOutputToContain('bazarr:reconcile')
-        ->expectsOutputToContain('*/5 * * * *')
-        ->assertSuccessful();
+    $event = collect(resolve(Schedule::class)->events())
+        ->first(fn (Event $event): bool => str_contains((string) ($event->command ?? $event->description), 'bazarr:reconcile'));
+
+    expect($event)->not->toBeNull()
+        ->and($event->getExpression())->toBe('*/5 * * * *');
 });

@@ -9,12 +9,18 @@ use App\Models\ActionRequest;
 use App\Models\ActivityLog;
 use App\Models\ServiceConnection;
 use App\Services\Actions\ActionExecutor;
+use App\Services\Arr\ArrActions;
+use App\Services\Arr\ManualImportActions;
+use App\Services\Arr\RemoveStuckDownloadActions;
 use App\Services\Bazarr\BazarrActions;
 use App\Services\Bazarr\BazarrIndeterminateOutcomeException;
+use App\Services\Emby\EmbyActions;
 use App\Services\MediaReplacement\MediaReplacementActions;
 use App\Services\Radarr\RadarrActions;
+use App\Services\Seerr\SeerrActions;
 use App\Services\Seerr\SeerrRequestLock;
 use App\Services\Sonarr\SonarrActions;
+use App\Services\Whisparr\WhisparrActions;
 use Illuminate\Contracts\Queue\Job;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Http\Client\ConnectionException;
@@ -30,6 +36,25 @@ use Illuminate\Support\Sleep;
 beforeEach(function (): void {
     Event::fake([ActionRequestStatusChanged::class]);
 });
+
+/**
+ * The job as the queue hands it over on a given delivery attempt.
+ */
+function executeActionRequestOnAttempt(ActionRequest $actionRequest, int $attempt): ExecuteActionRequest
+{
+    $job = new ExecuteActionRequest($actionRequest);
+    $mock = Mockery::mock(Job::class);
+    $mock->shouldReceive('attempts')->andReturn($attempt);
+    $mock->shouldReceive('uuid')->andReturn('job-uuid');
+    $mock->shouldReceive('getJobId')->andReturn('job-id');
+    $mock->shouldReceive('resolveName')->andReturn(ExecuteActionRequest::class);
+    $mock->shouldReceive('hasFailed')->andReturn(false);
+    $mock->shouldReceive('isReleased')->andReturn(false);
+    $mock->shouldReceive('isDeleted')->andReturn(false);
+    $job->setJob($mock);
+
+    return $job;
+}
 
 test('skips execution when status is not Approved', function (): void {
     $request = ActionRequest::factory()->create([
@@ -262,9 +287,31 @@ test('failed() hook does not overwrite already-Failed status', function (): void
     expect($fresh->result)->toMatchArray(['reason' => 'execution_failed', 'message' => 'original']);
 });
 
+test('failed() hook leaves a finished request untouched', function (
+    ActionRequestStatus $actionRequestStatus,
+): void {
+    // The worker can die after Completed committed but before the ack; the
+    // re-delivery's MaxAttemptsExceeded must not turn the landed change into
+    // job_failed and invite a manual retry.
+    $request = ActionRequest::factory()->create([
+        'status' => $actionRequestStatus,
+        'type' => 'delete_series',
+        'result' => ['success' => true, 'original' => true],
+    ]);
+
+    new ExecuteActionRequest($request)->failed(new RuntimeException('queue gave up'));
+
+    $fresh = $request->fresh();
+    expect($fresh->status)->toBe($actionRequestStatus)
+        ->and($fresh->result)->toBe(['success' => true, 'original' => true]);
+})->with([
+    'completed' => [ActionRequestStatus::Completed],
+    'rejected' => [ActionRequestStatus::Rejected],
+]);
+
 test('failed() hook records job_failed when queue exhausts without explicit state', function (): void {
     $request = ActionRequest::factory()->create([
-        'status' => ActionRequestStatus::Executing,
+        'status' => ActionRequestStatus::Approved,
     ]);
 
     $job = new ExecuteActionRequest($request);
@@ -277,6 +324,52 @@ test('failed() hook records job_failed when queue exhausts without explicit stat
         'reason' => 'job_failed',
         'message' => 'queue gave up',
     ]);
+});
+
+test('failed() hook fails for reconciliation when the worker running the final attempt was lost', function (): void {
+    $request = ActionRequest::factory()->create([
+        'status' => ActionRequestStatus::Executing,
+        'type' => 'delete_series',
+        'result' => null,
+    ]);
+
+    $job = new ExecuteActionRequest($request);
+    $job->failed(new RuntimeException('worker killed'));
+
+    $fresh = $request->fresh();
+    expect($fresh->status)->toBe(ActionRequestStatus::Failed)
+        ->and($fresh->result)->toBe([
+            'success' => false,
+            'reason' => 'needs_reconciliation',
+            'message' => 'The worker running this action stopped before recording an outcome, so the change may already have reached the target service. Check it there before retrying.',
+            'indeterminate' => true,
+            'worker_lost' => true,
+            'exception' => RuntimeException::class,
+        ]);
+});
+
+test('failed() hook records job_failed when Executing with an unconsumed retry marker', function (): void {
+    // The attempt-3 worker died before it reached the executor: the marker
+    // from attempt 1's deliberate rethrow was never consumed, so this is not
+    // the worker-lost case P2 covers — it falls through to the generic
+    // job_failed result like any other failed() call outside the executor.
+    $request = ActionRequest::factory()->create([
+        'status' => ActionRequestStatus::Executing,
+        'type' => 'delete_series',
+        'result' => ['retry_scheduled' => true, 'attempt' => 2],
+    ]);
+
+    $job = new ExecuteActionRequest($request);
+    $job->failed(new RuntimeException('queue gave up'));
+
+    $fresh = $request->fresh();
+    expect($fresh->status)->toBe(ActionRequestStatus::Failed)
+        ->and($fresh->result)->toMatchArray([
+            'success' => false,
+            'reason' => 'job_failed',
+            'message' => 'queue gave up',
+        ])
+        ->and($fresh->result)->not->toHaveKey('worker_lost');
 });
 
 test('job has timeout and unique-for duration', function (): void {
@@ -380,7 +473,7 @@ test('a permanent failure message naming a path is stored redacted', function ()
 
 test('the failed() hook stores a sanitized message', function (): void {
     $request = ActionRequest::factory()->create([
-        'status' => ActionRequestStatus::Executing,
+        'status' => ActionRequestStatus::Approved,
         'type' => 'delete_movie',
     ]);
 
@@ -429,4 +522,137 @@ test('a queued Seerr approve that cannot get the request lock fails without retr
             'message' => 'Seerr request 77 is being changed by another MediaManager action.',
         ]);
     Http::assertNothingSent();
+});
+
+test('a transient rethrow leaves a retry marker on the executing request', function (): void {
+    $request = ActionRequest::factory()->create(['status' => ActionRequestStatus::Approved, 'type' => 'delete_movie']);
+    $mock = Mockery::mock(ActionExecutor::class);
+    $mock->shouldReceive('execute')->once()->andThrow(new ConnectionException('connection refused'));
+    $this->app->bind(RadarrActions::class, fn (): ActionExecutor => $mock);
+
+    expect(fn () => executeActionRequestOnAttempt($request, 1)->handle())->toThrow(ConnectionException::class);
+
+    $fresh = $request->fresh();
+    expect($fresh->status)->toBe(ActionRequestStatus::Executing)
+        ->and($fresh->result)->toBe(['retry_scheduled' => true, 'attempt' => 1])
+        ->and(ActivityLog::query()->where('subject_id', $request->id)->where('action', 'action_request.failed')->exists())->toBeFalse();
+});
+
+test('the re-delivery of a deliberate retry clears the marker before it runs the executor again', function (): void {
+    $request = ActionRequest::factory()->create([
+        'status' => ActionRequestStatus::Executing,
+        'type' => 'delete_movie',
+        'result' => ['retry_scheduled' => true, 'attempt' => 1],
+    ]);
+    $holder = new stdClass;
+    $mock = Mockery::mock(ActionExecutor::class);
+    $mock->shouldReceive('execute')->once()->andReturnUsing(function (ActionRequest $actionRequest) use ($holder): array {
+        $holder->storedResultWhileExecuting = ActionRequest::query()->whereKey($actionRequest->id)->value('result');
+
+        return ['deleted' => true];
+    });
+    $this->app->bind(RadarrActions::class, fn (): ActionExecutor => $mock);
+
+    executeActionRequestOnAttempt($request, 2)->handle();
+
+    expect($holder->storedResultWhileExecuting)->toBeNull()
+        ->and($request->fresh()->status)->toBe(ActionRequestStatus::Completed)
+        ->and($request->fresh()->result)->toBe(['success' => true, 'deleted' => true]);
+});
+
+test('a transient failure on the first attempt is retried and completes on the second', function (): void {
+    $request = ActionRequest::factory()->create(['status' => ActionRequestStatus::Approved, 'type' => 'delete_movie']);
+    $holder = new stdClass;
+    $holder->calls = 0;
+
+    $mock = Mockery::mock(ActionExecutor::class);
+    $mock->shouldReceive('execute')->twice()->andReturnUsing(function () use ($holder): array {
+        $holder->calls++;
+
+        throw_if($holder->calls === 1, ConnectionException::class, 'connection reset');
+
+        return ['deleted' => true];
+    });
+    $this->app->bind(RadarrActions::class, fn (): ActionExecutor => $mock);
+
+    expect(fn () => executeActionRequestOnAttempt($request, 1)->handle())->toThrow(ConnectionException::class);
+    executeActionRequestOnAttempt($request->fresh(), 2)->handle();
+
+    expect($holder->calls)->toBe(2)
+        ->and($request->fresh()->status)->toBe(ActionRequestStatus::Completed);
+});
+
+test('a re-delivered request whose worker was lost fails for reconciliation instead of running again', function (string $type, string $executorClass): void {
+    $request = ActionRequest::factory()->create(['status' => ActionRequestStatus::Executing, 'type' => $type, 'result' => null]);
+    $mock = Mockery::mock(ActionExecutor::class);
+    $mock->shouldNotReceive('execute');
+
+    $this->app->bind($executorClass, fn (): ActionExecutor => $mock);
+
+    executeActionRequestOnAttempt($request, 2)->handle();
+
+    $fresh = $request->fresh();
+    expect($fresh->status)->toBe(ActionRequestStatus::Failed)
+        ->and($fresh->result)->toBe([
+            'success' => false,
+            'reason' => 'needs_reconciliation',
+            'message' => 'The worker running this action stopped before recording an outcome, so the change may already have reached the target service. Check it there before retrying.',
+            'indeterminate' => true,
+            'worker_lost' => true,
+        ])
+        ->and(ActivityLog::query()->where('subject_id', $request->id)->where('action', 'action_request.failed')->sole()->description)
+        ->toBe(sprintf('Action #%d failed: needs_reconciliation', $request->id));
+
+    Event::assertDispatched(ActionRequestStatusChanged::class);
+})->with([
+    'sonarr delete' => ['delete_series', SonarrActions::class],
+    'release grab' => ['grab_release', ArrActions::class],
+    'radarr add' => ['add_movie', RadarrActions::class],
+    'whisparr delete' => ['whisparr_delete_item', WhisparrActions::class],
+    'seerr approve' => ['approve_seerr_request', SeerrActions::class],
+    'bazarr download' => ['bazarr_download_best', BazarrActions::class],
+    'stuck download removal' => ['remove_stuck_download', RemoveStuckDownloadActions::class],
+    'manual import' => ['resolve_manual_import', ManualImportActions::class],
+    'media replacement' => ['replace_media_file', MediaReplacementActions::class],
+]);
+
+test('a re-delivery after the retry marker was consumed fails instead of running a third time', function (): void {
+    // Attempt 1 rethrew (marker), attempt 2 cleared the marker and started
+    // the executor, then its worker died: attempt 3 finds Executing, no marker.
+    $request = ActionRequest::factory()->create(['status' => ActionRequestStatus::Executing, 'type' => 'grab_release', 'result' => null]);
+    $mock = Mockery::mock(ActionExecutor::class);
+    $mock->shouldNotReceive('execute');
+
+    $this->app->bind(ArrActions::class, fn (): ActionExecutor => $mock);
+
+    executeActionRequestOnAttempt($request, 3)->handle();
+
+    expect($request->fresh()->status)->toBe(ActionRequestStatus::Failed)
+        ->and($request->fresh()->result['reason'])->toBe('needs_reconciliation');
+});
+
+test('a crash-safe action resumes after a lost worker', function (string $type, string $executorClass): void {
+    $request = ActionRequest::factory()->create(['status' => ActionRequestStatus::Executing, 'type' => $type, 'result' => null]);
+    $mock = Mockery::mock(ActionExecutor::class);
+    $mock->shouldReceive('execute')->once()->andReturn(['resumed' => true]);
+    $this->app->bind($executorClass, fn (): ActionExecutor => $mock);
+
+    executeActionRequestOnAttempt($request, 2)->handle();
+
+    expect($request->fresh()->status)->toBe(ActionRequestStatus::Completed);
+})->with([
+    'emby library scan' => ['emby_library_scan', EmbyActions::class],
+]);
+
+test('a first delivery that finds the request already executing still skips it', function (): void {
+    $request = ActionRequest::factory()->create(['status' => ActionRequestStatus::Executing, 'type' => 'delete_series', 'result' => null]);
+    $mock = Mockery::mock(ActionExecutor::class);
+    $mock->shouldNotReceive('execute');
+
+    $this->app->bind(SonarrActions::class, fn (): ActionExecutor => $mock);
+
+    executeActionRequestOnAttempt($request, 1)->handle();
+
+    expect($request->fresh()->status)->toBe(ActionRequestStatus::Executing)
+        ->and($request->fresh()->result)->toBeNull();
 });

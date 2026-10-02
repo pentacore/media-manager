@@ -9,6 +9,7 @@ use App\Services\Arr\ReleaseGrabFailed;
 use App\Services\Arr\SearchCommandFailed;
 use App\Services\MediaReplacement\ReplacementInFlight;
 use App\Services\Sonarr\SonarrActions;
+use App\Services\Sonarr\SonarrClient;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\Request;
@@ -164,6 +165,19 @@ function sonarrActionsConnectionId(): int
     return ServiceConnection::query()->where('type', 'sonarr')->firstOrFail()->id;
 }
 
+/**
+ * Episodes 70 and 71 (season 1) of series 7, for Http::fake().
+ *
+ * @return array<string, mixed>
+ */
+function sonarrActionsEpisodesOfSeriesSeven(): array
+{
+    return ['sonarr.local:8989/api/v3/episode?seriesId=7*' => Http::response([
+        ['id' => 70, 'seriesId' => 7, 'seasonNumber' => 1],
+        ['id' => 71, 'seriesId' => 7, 'seasonNumber' => 1],
+    ])];
+}
+
 function sonarrActionsQueuedReplacement(int $seriesId): void
 {
     ActionRequest::factory()->create([
@@ -180,7 +194,7 @@ function sonarrActionsQueuedReplacement(int $seriesId): void
 }
 
 test('monitor_episodes sets monitoring on exactly the given episodes', function (): void {
-    Http::fake(['sonarr.local:8989/api/v3/episode/monitor' => Http::response([], 202)]);
+    Http::fake(['sonarr.local:8989/api/v3/episode/monitor' => Http::response([], 202), ...sonarrActionsEpisodesOfSeriesSeven()]);
 
     $result = (new SonarrActions)->execute(ActionRequest::factory()->create([
         'type' => 'monitor_episodes',
@@ -236,7 +250,7 @@ test('the pinned-connection executors refuse to run against a mismatched connect
 ]);
 
 test('search_media runs the matching Sonarr command', function (string $command, array $payload, array $body): void {
-    Http::fake(['sonarr.local:8989/api/v3/command' => Http::response(['id' => 501, 'name' => $body['name']], 201)]);
+    Http::fake(['sonarr.local:8989/api/v3/command' => Http::response(['id' => 501, 'name' => $body['name']], 201), ...sonarrActionsEpisodesOfSeriesSeven()]);
 
     $result = (new SonarrActions)->execute(ActionRequest::factory()->create([
         'type' => 'search_media',
@@ -325,4 +339,67 @@ test('grab_release completes even when busting the cache afterward fails', funct
     ]));
 
     expect($result)->toBe(['indexer_id' => 3, 'title' => 'x']);
+});
+
+test('a series write starts from what Sonarr holds now, not from a cached snapshot', function (string $type, array $payload, array $changedInSonarr, array $expectedPut): void {
+    $upstream = new stdClass;
+    $upstream->series = ['id' => 42, 'title' => 'Demo', 'monitored' => true, 'qualityProfileId' => 1];
+    $upstream->puts = [];
+    Http::fake([
+        'sonarr.local:8989/api/v3/series/42' => function (Request $request) use ($upstream) {
+            if ($request->method() === 'PUT') {
+                $upstream->puts[] = $request->data();
+
+                return Http::response($request->data());
+            }
+
+            return Http::response($upstream->series);
+        },
+    ]);
+
+    // A page view caches the series; then someone changes it in Sonarr itself.
+    new SonarrClient(ServiceConnection::query()->where('type', 'sonarr')->sole())->getSeriesById(42);
+    $upstream->series = [...$upstream->series, ...$changedInSonarr];
+
+    new SonarrActions()->execute(ActionRequest::factory()->create(['type' => $type, 'payload' => $payload]));
+
+    expect($upstream->puts)->toHaveCount(1)
+        ->and($upstream->puts[0])->toMatchArray($expectedPut);
+})->with([
+    'monitoring keeps a profile changed in Sonarr' => ['monitor_series', ['series_id' => 42, 'monitored' => false], ['qualityProfileId' => 4], ['monitored' => false, 'qualityProfileId' => 4]],
+    'a profile change keeps monitoring changed in Sonarr' => ['set_series_quality_profile', ['series_id' => 42, 'quality_profile_id' => 7], ['monitored' => false], ['monitored' => false, 'qualityProfileId' => 7]],
+]);
+
+test('monitor_episodes refuses episode ids that are not episodes of the series and changes nothing', function (array $payload): void {
+    Http::fake(['sonarr.local:8989/api/v3/episode/monitor' => Http::response([], 202), ...sonarrActionsEpisodesOfSeriesSeven()]);
+
+    expect(fn (): array => (new SonarrActions)->execute(ActionRequest::factory()->create([
+        'type' => 'monitor_episodes',
+        'payload' => [...$payload, 'monitored' => false, 'service_connection_id' => sonarrActionsConnectionId()],
+    ])))->toThrow(InvalidArgumentException::class, 'episode_ids are not all episodes of series 7');
+
+    Http::assertNotSent(fn (Request $request): bool => str_ends_with($request->url(), '/api/v3/episode/monitor'));
+})->with([
+    'an episode of another series' => [['series_id' => 7, 'episode_ids' => [70, 999]]],
+    'an episode of another season' => [['series_id' => 7, 'episode_ids' => [70], 'season_number' => 2]],
+]);
+
+test('an episode search refuses episode ids that are not episodes of the series', function (): void {
+    Http::fake(['sonarr.local:8989/api/v3/command' => Http::response(['id' => 501], 201), ...sonarrActionsEpisodesOfSeriesSeven()]);
+
+    expect(fn (): array => (new SonarrActions)->execute(ActionRequest::factory()->create([
+        'type' => 'search_media',
+        'payload' => ['service' => 'sonarr', 'command' => 'episode_search', 'series_id' => 7, 'episode_ids' => [999], 'service_connection_id' => sonarrActionsConnectionId()],
+    ])))->toThrow(InvalidArgumentException::class, 'episode_ids are not all episodes of series 7');
+
+    Http::assertNotSent(fn (Request $request): bool => str_ends_with($request->url(), '/api/v3/command'));
+});
+
+test('an episode search without its series is refused', function (): void {
+    expect(fn (): array => (new SonarrActions)->execute(ActionRequest::factory()->create([
+        'type' => 'search_media',
+        'payload' => ['service' => 'sonarr', 'command' => 'episode_search', 'episode_ids' => [70], 'service_connection_id' => sonarrActionsConnectionId()],
+    ])))->toThrow(InvalidArgumentException::class, 'series_id and episode_ids are required for an episode search');
+
+    Http::assertNothingSent();
 });

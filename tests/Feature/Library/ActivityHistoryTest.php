@@ -203,7 +203,7 @@ test('queue removals are audited as removed or blocklisted', function (string $v
 
     $this->actingAs($admin)
         ->from(route('media.library.activity.queue'))
-        ->post(route('media.library.activity.queue.remove', ['service' => 'sonarr', 'id' => 42]), ['verb' => $verb])
+        ->post(route('media.library.activity.queue.remove', ['service' => 'sonarr', 'id' => 42]), ['verb' => $verb, 'service_connection_id' => $this->sonarr->id])
         ->assertSessionHas('inertia.flash_data.toast.type', 'success');
 
     $activityLog = ActivityLog::query()->where('action', $action)->sole();
@@ -225,7 +225,7 @@ test('a failed queue removal is not audited and never echoes the upstream url', 
 
     $this->actingAs(User::factory()->admin()->create())
         ->from(route('media.library.activity.queue'))
-        ->post(route('media.library.activity.queue.remove', ['service' => 'sonarr', 'id' => 9]), ['verb' => 'remove'])
+        ->post(route('media.library.activity.queue.remove', ['service' => 'sonarr', 'id' => 9]), ['verb' => 'remove', 'service_connection_id' => $this->sonarr->id])
         ->assertSessionHas('inertia.flash_data.toast.type', 'error');
 
     expect((string) session('inertia.flash_data.toast.message'))->not->toContain('?removeFromClient')
