@@ -43,3 +43,12 @@ test('long-running tasks keep enough lock time to finish', function (string $nee
     'nightly retention prune' => ['model:prune', 180],
     'statistics prune' => ['statistics:prune', 180],
 ]);
+
+test('the stuck action reconcile runs every fifteen minutes', function (): void {
+    $event = collect(resolve(Schedule::class)->events())
+        ->first(fn (Event $event): bool => str_contains(scheduleOverlapEventLabel($event), 'actions:reconcile-stuck'));
+
+    expect($event)->not->toBeNull()
+        ->and(scheduleOverlapCadenceMinutes($event))->toBe(15)
+        ->and($event->expiresAt)->toBe(10);
+});

@@ -89,6 +89,20 @@ final class ActionRequestActivityLogger
     }
 
     /**
+     * actions:reconcile-stuck handed an Approved request whose execution job
+     * was lost back to the queue. The request stays Approved (not a status
+     * change), so the observer never sees it.
+     */
+    public function redispatched(ActionRequest $actionRequest): void
+    {
+        $this->writeLog(
+            $actionRequest,
+            'action_request.redispatched',
+            sprintf('Action #%d re-dispatched after its execution job was lost', $actionRequest->id),
+        );
+    }
+
+    /**
      * A trigger folded into a scan that had not started yet (a webhook burst
      * or a "Refresh library" click). Only the payload changes, so the
      * observer never sees it.
