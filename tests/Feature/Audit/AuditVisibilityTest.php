@@ -111,7 +111,7 @@ test('the dashboard recent activity shows audit rows to admins only', function (
         ->assertOk()
         ->assertInertia(fn ($page) => $page->has('recentActivity', $expected));
 })->with([
-    'viewer' => ['viewer', 1],
+    'viewer' => ['viewer', 0],
     'member' => ['member', 1],
     'admin' => ['admin', 2],
 ]);
