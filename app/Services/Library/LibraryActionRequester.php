@@ -12,6 +12,7 @@ use App\Services\Actions\ManualActionDispatcher;
 use App\Services\Actions\ManualActionOutcome;
 use App\Services\Audit\AuditLogger;
 use App\Services\MediaReplacement\PendingReplacementGuard;
+use Illuminate\Support\Facades\DB;
 use InvalidArgumentException;
 
 /**
@@ -112,28 +113,33 @@ final readonly class LibraryActionRequester
             default => ['whisparr_delete_item', 'whisparr_item_id', 'whisparr.deleted'],
         };
 
-        $manualActionOutcome = $this->manualActionDispatcher->dispatch($type, $serviceType, [
-            $idKey => $itemId,
-            'delete_files' => $deleteFiles,
-            'service_connection_id' => $serviceConnection->id,
-        ], $because);
+        // The request and its audit row commit together: an audit write that
+        // fails must not leave a delete nobody audited. ActionOrchestrator
+        // queues the execution job after commit, so it cannot start first.
+        return DB::transaction(function () use ($serviceConnection, $itemId, $deleteFiles, $because, $serviceType, $type, $idKey, $auditAction): ManualActionOutcome {
+            $manualActionOutcome = $this->manualActionDispatcher->dispatch($type, $serviceType, [
+                $idKey => $itemId,
+                'delete_files' => $deleteFiles,
+                'service_connection_id' => $serviceConnection->id,
+            ], $because);
 
-        // A person asked for this delete (the agent never comes through
-        // here): one audit row per filed request, bulk included.
-        if ($manualActionOutcome->actionRequest instanceof ActionRequest) {
-            $this->auditLogger->record(
-                $auditAction,
-                $manualActionOutcome->actionRequest,
-                (string) $manualActionOutcome->actionRequest->title,
-                context: [
-                    $idKey => $itemId,
-                    'delete_files' => $deleteFiles,
-                    'service_connection_id' => $serviceConnection->id,
-                ],
-            );
-        }
+            // A person asked for this delete (the agent never comes through
+            // here): one audit row per filed request, bulk included.
+            if ($manualActionOutcome->actionRequest instanceof ActionRequest) {
+                $this->auditLogger->record(
+                    $auditAction,
+                    $manualActionOutcome->actionRequest,
+                    (string) $manualActionOutcome->actionRequest->title,
+                    context: [
+                        $idKey => $itemId,
+                        'delete_files' => $deleteFiles,
+                        'service_connection_id' => $serviceConnection->id,
+                    ],
+                );
+            }
 
-        return $manualActionOutcome;
+            return $manualActionOutcome;
+        });
     }
 
     private function serviceType(ServiceConnection $serviceConnection): ServiceType
