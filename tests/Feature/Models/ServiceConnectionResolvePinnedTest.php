@@ -27,3 +27,10 @@ test('a pinned connection of another type falls back to the active connection', 
 
     expect(ServiceConnection::resolvePinned(['service_connection_id' => $sonarr->id], ServiceType::Emby)->id)->toBe($emby->id);
 });
+
+test('a deleted pinned connection aborts with a message that names the pin', function (string $resolver): void {
+    ServiceConnection::factory()->sonarr()->create();
+
+    expect(fn (): ServiceConnection => ServiceConnection::{$resolver}(['service_connection_id' => 999_999], ServiceType::Sonarr))
+        ->toThrow(ModelNotFoundException::class, 'Service connection 999999 pinned to this action no longer exists; aborting instead of acting on a different instance.');
+})->with(['resolvePinned', 'resolvePinnedStrict']);

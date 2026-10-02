@@ -15,6 +15,7 @@ use App\Services\MediaReplacement\MediaReplacementActions;
 use App\Services\Radarr\RadarrActions;
 use App\Services\Sonarr\SonarrActions;
 use Illuminate\Contracts\Queue\Job;
+use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\RequestException;
 use Illuminate\Http\Client\Response;
@@ -385,4 +386,22 @@ test('the failed() hook stores a sanitized message', function (): void {
     expect($request->fresh()->result['reason'])->toBe('job_failed')
         ->and($request->fresh()->result['message'])->toContain('cURL error 7')
         ->and($request->fresh()->result['message'])->not->toContain('radarr-secret');
+});
+
+test('a request pinned to a deleted connection fails with the pin message', function (): void {
+    ServiceConnection::factory()->seerr()->create();
+    $request = ActionRequest::factory()->create([
+        'status' => ActionRequestStatus::Approved,
+        'type' => 'cleanup_seerr_request',
+        'payload' => ['seerr_request_id' => 5, 'service_connection_id' => 999_999],
+    ]);
+
+    new ExecuteActionRequest($request)->handle();
+
+    expect($request->fresh()->status)->toBe(ActionRequestStatus::Failed)
+        ->and($request->fresh()->result)->toMatchArray([
+            'reason' => 'execution_failed',
+            'message' => 'Service connection 999999 pinned to this action no longer exists; aborting instead of acting on a different instance.',
+            'exception' => ModelNotFoundException::class,
+        ]);
 });
