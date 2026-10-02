@@ -297,6 +297,10 @@ test('a bulk queue action acts on the pinned connection, not the active one', fu
         ->assertJsonPath('started', 1);
 
     Http::assertSent(fn (Request $request): bool => $request->method() === 'DELETE' && str_contains($request->url(), 'sonarr-4k.local:8989/api/v3/queue/41?'));
+
+    $activityLog = ActivityLog::query()->where('category', 'audit')->where('action', 'queue.removed')->sole();
+    expect($activityLog->subject_type)->toBe(ServiceConnection::class)
+        ->and($activityLog->subject_id)->toBe($secondSonarr->id);
 });
 
 test('an invalid bulk payload is refused before anything is sent', function (array $overrides): void {

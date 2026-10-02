@@ -109,6 +109,35 @@ test('the selection clears when the service filter changes, even though the same
         ->assertDontSee('1 selected');
 });
 
+test('the selection clears when a refresh renders another connection with the same queue ids', function (): void {
+    // Queue ids overlap across instances: if only vanished ids were dropped
+    // (retain()), the selection would survive the switch and Confirm would
+    // remove the second instance's items under the new pin.
+    ServiceConnection::factory()->sonarr()->create(['url' => 'http://sonarr-4k.local:8989', 'api_key' => 'k']);
+    Http::fake([
+        'sonarr.local:8989/api/v3/queue*' => Http::response(['records' => [grabQueueBrowserRecord(41, 'Severance')]]),
+        'sonarr.local:8989/api/v3/history*' => Http::response(['records' => [], 'totalRecords' => 0]),
+        'sonarr-4k.local:8989/api/v3/queue*' => Http::response(['records' => [grabQueueBrowserRecord(41, 'Andor')]]),
+        'sonarr-4k.local:8989/api/v3/history*' => Http::response(['records' => [], 'totalRecords' => 0]),
+    ]);
+    $this->actingAs(User::factory()->admin()->create());
+
+    $webpage = visit(route('media.library.activity.queue', absolute: false))
+        ->assertNoSmoke()
+        ->assertSeeIn('[data-queue-row="sonarr-41"]', 'Severance')
+        ->click('[data-service-filter="sonarr"]')
+        ->click('[data-bulk-select="41"]')
+        ->assertSeeIn('[data-bulk-count]', '1 selected');
+
+    // Bypasses the observer on purpose: no health ping, just the state change.
+    ServiceConnection::query()->where('url', 'http://sonarr.local:8989')->update(['is_active' => false]);
+
+    $webpage->click('[data-activity-refresh]')
+        ->assertSeeIn('[data-queue-row="sonarr-41"]', 'Andor')
+        ->assertMissing('[data-bulk-bar]')
+        ->assertDontSee('1 selected');
+});
+
 test('the selection clears when switching to the history tab and back', function (): void {
     fakeGrabQueueBrowser();
     $this->actingAs(User::factory()->admin()->create());

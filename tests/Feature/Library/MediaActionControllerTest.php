@@ -379,6 +379,8 @@ test("an episode search naming episodes that are not that series' is refused and
 
     $this->actingAs($this->member)
         ->post(route('media.library.actions.search'), ['service' => 'sonarr', 'service_connection_id' => $this->sonarr->id, 'command' => 'episode_search', 'series_id' => 7, 'episode_ids' => [999]])
+        ->assertRedirect()
+        ->assertSessionHas('inertia.flash_data.toast.type', 'error')
         ->assertSessionHas('inertia.flash_data.toast.message', 'Those episodes are not part of this series — refresh and try again.');
 
     expect(ActionRequest::query()->where('type', 'search_media')->exists())->toBeFalse();

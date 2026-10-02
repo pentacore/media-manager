@@ -581,7 +581,7 @@ const {
     setAll: setAllQueue,
     clear: clearQueueSelection,
     retain: retainQueue,
-} = useBulkSelection<number>([serviceFilter, activeTab]);
+} = useBulkSelection<number>([serviceFilter, activeTab, bulkConnectionId]);
 
 const queuePageIds = computed<number[]>(() =>
     bulkService.value === null ? [] : filteredRows.value.map((row) => row.id),
@@ -712,6 +712,7 @@ async function runQueueBulk(): Promise<void> {
                     variant="outline"
                     size="sm"
                     class="h-7 gap-1.5 text-xs"
+                    data-activity-refresh
                     :disabled="refreshing"
                     @click="refresh"
                 >

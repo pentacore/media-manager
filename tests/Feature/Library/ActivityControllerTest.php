@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use App\Models\ActivityLog;
 use App\Models\ServiceConnection;
 use App\Models\User;
 use Illuminate\Support\Facades\Http;
@@ -259,6 +260,10 @@ test('a queue removal acts on the connection the rows came from, not the active 
 
     Http::assertSent(fn ($request): bool => $request->method() === 'DELETE' && str_contains((string) $request->url(), 'sonarr-4k.local:8989/api/v3/queue/42'));
     Http::assertSentCount(1);
+
+    $activityLog = ActivityLog::query()->where('category', 'audit')->where('action', 'queue.removed')->sole();
+    expect($activityLog->subject_type)->toBe(ServiceConnection::class)
+        ->and($activityLog->subject_id)->toBe($secondSonarr->id);
 });
 
 test('a queue removal refuses a pin that is gone, deactivated or another service and sends nothing', function (int $pinnedConnectionId): void {

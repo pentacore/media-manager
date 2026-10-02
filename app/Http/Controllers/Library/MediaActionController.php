@@ -124,12 +124,14 @@ class MediaActionController extends Controller
             ), __('Search started.'));
         }
 
+        $episodeIds = array_values(array_map(intval(...), $validated['episode_ids'] ?? []));
+
         if ($mediaSearchCommand === MediaSearchCommand::EpisodeSearch) {
             $refusal = $this->episodeOwnershipRefusal(
                 $sonarrEpisodeOwnership,
                 $connection,
                 (int) $validated['series_id'],
-                array_values(array_map(intval(...), $validated['episode_ids'])),
+                $episodeIds,
                 null,
             );
 
@@ -146,10 +148,12 @@ class MediaActionController extends Controller
             }
         }
 
-        foreach (['episode_ids', 'movie_ids'] as $key) {
-            if (! empty($validated[$key])) {
-                $payload[$key] = array_values(array_map(intval(...), $validated[$key]));
-            }
+        if ($episodeIds !== []) {
+            $payload['episode_ids'] = $episodeIds;
+        }
+
+        if (! empty($validated['movie_ids'])) {
+            $payload['movie_ids'] = array_values(array_map(intval(...), $validated['movie_ids']));
         }
 
         return $this->answer($manualActionDispatcher->dispatch(
