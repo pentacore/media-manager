@@ -6,6 +6,7 @@ namespace App\Models;
 
 use Carbon\CarbonImmutable;
 use Database\Factories\StatRollupFactory;
+use Illuminate\Database\Eloquent\Attributes\Unguarded;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -31,13 +32,11 @@ use Override;
  *
  * @mixin \Eloquent
  */
+#[Unguarded]
 class StatRollup extends Model
 {
     /** @use HasFactory<StatRollupFactory> */
     use HasFactory;
-
-    #[Override]
-    protected $guarded = [];
 
     /**
      * @return array<string, string>
