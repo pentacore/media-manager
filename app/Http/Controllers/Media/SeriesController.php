@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Http\Controllers\Media;
 
 use App\Enums\ServiceType;
+use App\Http\Requests\Media\DestroyArrMediaRequest;
 use App\Http\Requests\Media\StoreSeriesRequest;
 use App\Models\ServiceConnection;
 use App\Services\Actions\ManualActionOutcome;
@@ -152,9 +153,10 @@ class SeriesController extends BaseArrController
         return to_route('media.series.index');
     }
 
-    public function destroy(int $id, Request $request, LibraryActionRequester $libraryActionRequester): RedirectResponse
+    public function destroy(int $id, DestroyArrMediaRequest $destroyArrMediaRequest, LibraryActionRequester $libraryActionRequester): RedirectResponse
     {
-        $connection = $this->resolveConnection();
+        $validated = $destroyArrMediaRequest->validated();
+        $connection = $this->resolvePinnedConnection((int) $validated['service_connection_id']);
         if ($connection instanceof RedirectResponse) {
             return $connection;
         }
@@ -162,8 +164,8 @@ class SeriesController extends BaseArrController
         $manualActionOutcome = $libraryActionRequester->delete(
             $connection,
             $id,
-            $request->boolean('delete_files'),
-            sprintf('Requested from the series page by %s.', $request->user()->name),
+            (bool) ($validated['delete_files'] ?? false),
+            sprintf('Requested from the series page by %s.', $destroyArrMediaRequest->user()->name),
         );
 
         return match ($manualActionOutcome->state) {

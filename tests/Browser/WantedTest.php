@@ -18,6 +18,7 @@ beforeEach(function (): void {
         ]]),
         'sonarr.local:8989/api/v3/series/7' => Http::response(['id' => 7, 'title' => 'Severance', 'year' => 2022]),
         'sonarr.local:8989/api/v3/command' => Http::response(['id' => 1], 201),
+        'sonarr.local:8989/api/v3/episode?seriesId=7*' => Http::response([['id' => 70, 'seriesId' => 7, 'seasonNumber' => 1]]),
         'radarr.local:7878/api/v3/wanted/missing*' => Http::response(['page' => 1, 'totalRecords' => 1, 'records' => [
             ['id' => 10, 'title' => 'Dune', 'year' => 2021, 'digitalRelease' => '2021-10-22T00:00:00Z'],
         ]]),

@@ -195,7 +195,7 @@ test('a series delete requested from the series page is audited against its acti
     Http::fake(['sonarr.local:8989/api/v3/series/42' => Http::response(['id' => 42, 'title' => 'My Show', 'year' => 2024])]);
     $member = User::factory()->member()->create();
 
-    $this->actingAs($member)->delete(route('media.series.destroy', 42), ['delete_files' => true])->assertRedirect();
+    $this->actingAs($member)->delete(route('media.series.destroy', 42), ['delete_files' => true, 'service_connection_id' => $connection->id])->assertRedirect();
 
     $activityLog = adminAuditRow('series.delete_requested');
     $actionRequest = ActionRequest::query()->where('type', 'delete_series')->sole();
@@ -213,7 +213,7 @@ test('a movie delete requested from the movie page is audited against its action
     Http::fake(['radarr.local:7878/api/v3/movie/7' => Http::response(['id' => 7, 'title' => 'Dune', 'year' => 2021])]);
     $member = User::factory()->member()->create();
 
-    $this->actingAs($member)->delete(route('media.movies.destroy', 7))->assertRedirect();
+    $this->actingAs($member)->delete(route('media.movies.destroy', 7), ['service_connection_id' => $connection->id])->assertRedirect();
 
     expect(adminAuditRow('movie.delete_requested')->metadata['context'])
         ->toBe(['radarr_movie_id' => 7, 'delete_files' => false, 'service_connection_id' => $connection->id]);

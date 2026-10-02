@@ -9,6 +9,7 @@ use App\Enums\ServiceType;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Library\BulkQueueItemsRequest;
 use App\Http\Requests\Library\MarkHistoryFailedRequest;
+use App\Http\Requests\Library\RemoveQueueItemRequest;
 use App\Models\ActivityLog;
 use App\Models\ServiceConnection;
 use App\Services\Actions\BulkItemOutcome;
@@ -81,19 +82,23 @@ class ActivityController extends Controller
      * Drop a stuck or unwanted item from the *arr download queue. Verb
      * controls intent: `remove` strips it from the queue without further
      * action; `block` additionally blocklists the release and triggers a
-     * re-search so the next better match downloads instead.
+     * re-search so the next better match downloads instead. Pinned to the
+     * connection the row was rendered from.
      */
-    public function removeQueueItem(Request $request, string $service, int $id, QueueItemRemover $queueItemRemover): RedirectResponse
+    public function removeQueueItem(RemoveQueueItemRequest $removeQueueItemRequest, string $service, int $id, QueueItemRemover $queueItemRemover): RedirectResponse
     {
-        $verb = (string) $request->input('verb', 'remove');
+        $validated = $removeQueueItemRequest->validated();
+        $verb = (string) ($validated['verb'] ?? 'remove');
 
         if (! in_array($verb, ['remove', 'block'], true)) {
             return $this->flashAndBack('error', __('Invalid removal verb.'));
         }
 
-        $connection = $this->resolveConnection($service);
+        $serviceType = $service === 'radarr' ? ServiceType::Radarr : ServiceType::Sonarr;
+        $connection = $this->resolvePinnedQueueConnection($serviceType, (int) $validated['service_connection_id']);
+
         if (! $connection instanceof ServiceConnection) {
-            return $this->flashAndBack('error', __('Unknown service.'));
+            return $this->flashAndBack('error', $this->unavailablePinMessage($serviceType));
         }
 
         try {
@@ -111,10 +116,10 @@ class ActivityController extends Controller
     }
 
     /**
-     * Remove or blocklist many queue items of one service, resolved to the
-     * same active connection the single-item remove path uses (not a
-     * client-supplied pin). No active connection for the service refuses
-     * the whole request before anything is sent.
+     * Remove or blocklist many queue items of one service. Pinned, like the
+     * single-item path, to the connection the rows were rendered from: a
+     * stale or mismatched pin refuses the whole request before anything is
+     * sent.
      */
     public function bulkQueue(BulkQueueItemsRequest $bulkQueueItemsRequest, QueueItemRemover $queueItemRemover, BulkRunner $bulkRunner): JsonResponse
     {
@@ -122,9 +127,11 @@ class ActivityController extends Controller
         $service = (string) $validated['service'];
         $queueBulkAction = QueueBulkAction::from((string) $validated['action']);
 
-        $connection = $this->resolveConnection($service);
+        $serviceType = $service === 'radarr' ? ServiceType::Radarr : ServiceType::Sonarr;
+        $connection = $this->resolvePinnedQueueConnection($serviceType, (int) $validated['service_connection_id']);
+
         if (! $connection instanceof ServiceConnection) {
-            return response()->json(['message' => __('No :service connection configured.', ['service' => ucfirst($service)])], 422);
+            return response()->json(['message' => $this->unavailablePinMessage($serviceType)], 422);
         }
 
         $label = $connection->type->label();
@@ -216,10 +223,10 @@ class ActivityController extends Controller
         $serviceType = $service === 'radarr' ? ServiceType::Radarr : ServiceType::Sonarr;
         $label = $serviceType->label();
 
-        try {
-            $connection = ServiceConnection::resolvePinnedStrict(['service_connection_id' => (int) $validated['service_connection_id']], $serviceType);
-        } catch (InvalidArgumentException|ModelNotFoundException) {
-            return $this->flashAndBack('error', __('That :service connection is unavailable — refresh and try again.', ['service' => $label]));
+        $connection = $this->resolvePinnedQueueConnection($serviceType, (int) $validated['service_connection_id']);
+
+        if (! $connection instanceof ServiceConnection) {
+            return $this->flashAndBack('error', $this->unavailablePinMessage($serviceType));
         }
 
         if (! $grabbedHistoryCache->isGrabbed($connection, $id)) {
@@ -384,6 +391,26 @@ class ActivityController extends Controller
         };
 
         return $type === null ? null : $this->safeResolve($type);
+    }
+
+    /**
+     * The connection the Grab-queue or History rows were rendered from.
+     * Queue and history ids overlap between instances, so writes are pinned
+     * to it; a deleted, deactivated or other-service pin resolves to null and
+     * nothing is sent.
+     */
+    private function resolvePinnedQueueConnection(ServiceType $serviceType, int $serviceConnectionId): ?ServiceConnection
+    {
+        try {
+            return ServiceConnection::resolvePinnedStrict(['service_connection_id' => $serviceConnectionId], $serviceType);
+        } catch (InvalidArgumentException|ModelNotFoundException) {
+            return null;
+        }
+    }
+
+    private function unavailablePinMessage(ServiceType $serviceType): string
+    {
+        return __('That :service connection is unavailable — refresh and try again.', ['service' => $serviceType->label()]);
     }
 
     private function clientFor(string $service, ServiceConnection $serviceConnection): ArrClient
@@ -636,6 +663,7 @@ class ActivityController extends Controller
         return [
             'id' => $record['id'] ?? null,
             'service' => 'sonarr',
+            'service_connection_id' => $serviceConnection->id,
             'service_url' => $serviceConnection->linkUrl(),
             'title' => $title,
             'subtitle' => $subtitle,
@@ -669,6 +697,7 @@ class ActivityController extends Controller
         return [
             'id' => $record['id'] ?? null,
             'service' => 'radarr',
+            'service_connection_id' => $serviceConnection->id,
             'service_url' => $serviceConnection->linkUrl(),
             'title' => $title,
             'subtitle' => $year === null ? null : (string) $year,

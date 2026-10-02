@@ -285,7 +285,7 @@ test('destroy queues a delete_series action request instead of calling sonarr', 
     Queue::fake();
 
     $this->actingAs($member)
-        ->delete(route('media.series.destroy', 42), ['delete_files' => true])
+        ->delete(route('media.series.destroy', 42), ['delete_files' => true, 'service_connection_id' => $this->connection->id])
         ->assertRedirect()
         ->assertSessionHas('inertia.flash_data.toast.type', 'info')
         ->assertSessionHas('inertia.flash_data.toast.message', 'Deletion queued for approval in the Action Queue.');
@@ -320,7 +320,7 @@ test('destroy auto-executes when the rule does not require approval', function (
     Queue::fake();
 
     $this->actingAs($member)
-        ->delete(route('media.series.destroy', 42))
+        ->delete(route('media.series.destroy', 42), ['service_connection_id' => $this->connection->id])
         ->assertRedirect(route('media.series.index'))
         ->assertSessionHas('inertia.flash_data.toast.type', 'success')
         ->assertSessionHas('inertia.flash_data.toast.message', 'Series deletion queued.');
@@ -348,7 +348,7 @@ test('destroy reports a disabled rule', function (): void {
     ]);
 
     $this->actingAs($member)
-        ->delete(route('media.series.destroy', 42))
+        ->delete(route('media.series.destroy', 42), ['service_connection_id' => $this->connection->id])
         ->assertRedirect()
         ->assertSessionHas('inertia.flash_data.toast.type', 'error')
         ->assertSessionHas('inertia.flash_data.toast.message', 'Deleting series is disabled in Action Rules.');
@@ -432,7 +432,7 @@ test('destroy follows the rule even when the chat AI is in advisory mode', funct
     Queue::fake();
 
     $this->actingAs($member)
-        ->delete(route('media.series.destroy', 42))
+        ->delete(route('media.series.destroy', 42), ['service_connection_id' => $this->connection->id])
         ->assertRedirect(route('media.series.index'));
 
     $actionRequest = ActionRequest::query()->where('type', 'delete_series')->sole();
@@ -502,4 +502,47 @@ test('the add-series form reports failed lookups, profiles and root folders', fu
                 ->where('qualityProfiles.error', 'Sonarr is unreachable right now.')
                 ->where('rootFolders.error', 'Sonarr is unreachable right now.')
                 ->where('searchResults', ['items' => [], 'error' => 'Sonarr is unreachable right now.'])));
+});
+
+test('destroy acts on the connection the page was rendered from, not the active one', function (): void {
+    $member = User::factory()->member()->create();
+    ActionTypeConfig::factory()->create(['type' => 'delete_series', 'requires_approval' => true, 'is_enabled' => true]);
+    $secondSonarr = ServiceConnection::factory()->sonarr()->create(['url' => 'http://sonarr-4k.local:8989', 'api_key' => 'k']);
+    Http::fake(['sonarr-4k.local:8989/api/v3/series/42' => Http::response(['id' => 42, 'title' => 'My Show', 'year' => 2024])]);
+    Queue::fake();
+
+    $this->actingAs($member)
+        ->delete(route('media.series.destroy', 42), ['service_connection_id' => $secondSonarr->id])
+        ->assertSessionHas('inertia.flash_data.toast.message', 'Deletion queued for approval in the Action Queue.');
+
+    expect(ActionRequest::query()->where('type', 'delete_series')->sole()->payload['service_connection_id'])->toBe($secondSonarr->id);
+});
+
+test('destroy refuses a pin that is gone, deactivated or another service and files nothing', function (int $pinnedConnectionId): void {
+    $member = User::factory()->member()->create();
+    ActionTypeConfig::factory()->create(['type' => 'delete_series', 'requires_approval' => false, 'is_enabled' => true]);
+    Queue::fake();
+
+    $this->actingAs($member)
+        ->from(route('media.series.show', 42))
+        ->delete(route('media.series.destroy', 42), ['service_connection_id' => $pinnedConnectionId])
+        ->assertRedirect(route('media.series.show', 42))
+        ->assertSessionHas('inertia.flash_data.toast.type', 'error')
+        ->assertSessionHas('inertia.flash_data.toast.message', 'That Sonarr connection is unavailable — refresh and try again.');
+
+    expect(ActionRequest::query()->exists())->toBeFalse();
+    Http::assertNothingSent();
+    Queue::assertNotPushed(ExecuteActionRequest::class);
+})->with([
+    'deleted' => [fn (): int => 999_999],
+    'deactivated' => [fn (): int => ServiceConnection::factory()->sonarr()->inactive()->create(['url' => 'http://sonarr-old.local:8989'])->id],
+    'another service' => [fn (): int => ServiceConnection::factory()->radarr()->create(['url' => 'http://radarr.local:7878'])->id],
+]);
+
+test('destroy without a connection pin is a validation error', function (): void {
+    $this->actingAs(User::factory()->member()->create())
+        ->delete(route('media.series.destroy', 42), ['delete_files' => true])
+        ->assertSessionHasErrors('service_connection_id');
+
+    expect(ActionRequest::query()->exists())->toBeFalse();
 });

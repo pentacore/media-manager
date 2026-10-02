@@ -45,8 +45,23 @@ class WhisparrClient extends ArrClient
     {
         return $this->cache()->rememberEntity(
             'item:'.$id,
-            fn (): array => $this->arrayBody($this->buildClient()->get(sprintf('%s/%d', $this->resourcePath(), $id))->throw()),
+            fn (): array => $this->fetchItemById($id),
         );
+    }
+
+    /**
+     * Uncached read for a write path. WhisparrActions changes one field and
+     * PUTs the whole item back, so it must start from what Whisparr holds
+     * now: a snapshot cached by an earlier page view would revert whatever
+     * changed in Whisparr since.
+     *
+     * @return array<string, mixed>
+     *
+     * @throws RequestException|ConnectionException|WhisparrUnexpectedResponse
+     */
+    public function fetchItemById(int $id): array
+    {
+        return $this->arrayBody($this->buildClient()->get(sprintf('%s/%d', $this->resourcePath(), $id))->throw());
     }
 
     /**

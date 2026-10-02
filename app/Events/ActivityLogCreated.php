@@ -9,10 +9,16 @@ use App\Models\ActivityLog;
 use Illuminate\Broadcasting\InteractsWithSockets;
 use Illuminate\Broadcasting\PrivateChannel;
 use Illuminate\Contracts\Broadcasting\ShouldBroadcast;
+use Illuminate\Contracts\Events\ShouldDispatchAfterCommit;
 use Illuminate\Foundation\Events\Dispatchable;
 use Illuminate\Queue\SerializesModels;
 
-class ActivityLogCreated implements ShouldBroadcast
+/**
+ * Dispatched after commit: a row written inside a transaction that rolls
+ * back must never reach a browser, and the queued broadcast job must never
+ * try to restore a row that does not exist.
+ */
+class ActivityLogCreated implements ShouldBroadcast, ShouldDispatchAfterCommit
 {
     use Dispatchable;
     use InteractsWithSockets;

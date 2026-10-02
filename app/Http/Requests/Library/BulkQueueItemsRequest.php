@@ -15,9 +15,9 @@ class BulkQueueItemsRequest extends FormRequest
     use BulkActionValidationRules;
 
     /**
-     * Unlike the media-action surfaces, the queue is not pinned to a
-     * `service_connection_id`: bulk resolves the same way the single-item
-     * remove path does — the active connection for `service`.
+     * Pinned like the single-item remove path: `service_connection_id` is the
+     * connection the queue rows were rendered from (queue ids overlap
+     * between instances).
      *
      * @return array<string, mixed>
      */
@@ -25,6 +25,7 @@ class BulkQueueItemsRequest extends FormRequest
     {
         return [
             'service' => ['required', Rule::in([ServiceType::Sonarr->value, ServiceType::Radarr->value])],
+            'service_connection_id' => ['required', 'integer', 'min:1'],
             ...$this->bulkIdRules(),
             'action' => ['required', QueueBulkAction::validationRule()],
         ];

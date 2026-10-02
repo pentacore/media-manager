@@ -158,6 +158,7 @@ test('a failed Bazarr download moves the case to review only once', function ():
 });
 
 test('an indeterminate Bazarr download keeps the case waiting and records the uncertainty once', function (): void {
+    Queue::fake([ReconcileSubtitleCase::class]);
     [$subtitleCase, $actionRequest] = actionCorrelatedSubtitleCase(
         SubtitleCaseStatus::DownloadRequested,
         'bazarr_download_best',
@@ -189,6 +190,41 @@ test('an indeterminate Bazarr download keeps the case waiting and records the un
     expect($attempts)->toHaveCount(1)
         ->and($attempts->first()->outcome)->toBe(SubtitleCaseAttemptOutcome::Indeterminate)
         ->and($attempts->first()->summary)->toMatchArray(['language' => 'swe']);
+
+    // BazarrActions schedules its own targeted read for an uncertain reply.
+    Queue::assertNotPushed(ReconcileSubtitleCase::class);
+});
+
+test('a Bazarr download failed by a lost worker schedules targeted reconciliation for its case', function (): void {
+    Queue::fake([ReconcileSubtitleCase::class]);
+    [$subtitleCase, $actionRequest] = actionCorrelatedSubtitleCase(
+        SubtitleCaseStatus::DownloadRequested,
+        'bazarr_download_exact',
+        [
+            'status' => ActionRequestStatus::Failed,
+            'result' => [
+                'success' => false,
+                'reason' => 'needs_reconciliation',
+                'indeterminate' => true,
+                'worker_lost' => true,
+            ],
+        ],
+    );
+
+    resolve(UpdateSubtitleCaseFromActionRequest::class)->handle(
+        new ActionRequestStatusChanged($actionRequest),
+    );
+
+    // The worker died before BazarrActions could schedule its own read, and the
+    // subtitle may already have landed, so only a targeted read can resolve it.
+    expect($subtitleCase->fresh()->status)->toBe(SubtitleCaseStatus::DownloadRequested);
+
+    Queue::assertPushedTimes(ReconcileSubtitleCase::class, 1);
+    Queue::assertPushed(
+        ReconcileSubtitleCase::class,
+        fn (ReconcileSubtitleCase $job): bool => $job->subtitleCaseId === $subtitleCase->id
+            && $job->delay !== null,
+    );
 });
 
 test('a pending or executing replacement request keeps the case replacement requested', function (
