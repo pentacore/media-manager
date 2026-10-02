@@ -21,7 +21,7 @@ test('member queues a movie delete for approval from the show page', function ()
         'is_enabled' => true,
     ]);
 
-    ServiceConnection::factory()->radarr()->create(['url' => 'http://radarr.local:7878']);
+    $radarr = ServiceConnection::factory()->radarr()->create(['url' => 'http://radarr.local:7878']);
 
     Http::fake([
         'radarr.local:7878/api/v3/qualityprofile*' => Http::response([['id' => 1, 'name' => 'HD-1080p']]),
@@ -62,6 +62,7 @@ test('member queues a movie delete for approval from the show page', function ()
     expect($actionRequest->payload)->toMatchArray([
         'radarr_movie_id' => 10,
         'delete_files' => false,
+        'service_connection_id' => $radarr->id,
     ]);
 });
 
@@ -189,4 +190,50 @@ test('a double-clicked series delete confirm sends one request and stays disable
 
     $webpage->assertDisabled('[data-delete-confirm]')
         ->assertScript('window.__deleteRequests', 1);
+});
+
+test('member queues a series delete pinned to the connection the page came from', function (): void {
+    ActionTypeConfig::factory()->create([
+        'type' => 'delete_series',
+        'requires_approval' => true,
+        'is_enabled' => true,
+    ]);
+
+    $sonarr = ServiceConnection::factory()->sonarr()->create(['url' => 'http://sonarr.local:8989']);
+
+    Http::fake([
+        'sonarr.local:8989/api/v3/qualityprofile*' => Http::response([['id' => 1, 'name' => 'HD-1080p']]),
+        'sonarr.local:8989/api/v3/series/20' => Http::response([
+            'id' => 20,
+            'title' => 'A Show',
+            'titleSlug' => 'a-show',
+            'year' => 2026,
+            'status' => 'continuing',
+            'monitored' => true,
+            'qualityProfileId' => 1,
+            'images' => [],
+            'seasons' => [],
+            'overview' => 'A show about a thing.',
+            'statistics' => ['sizeOnDisk' => 0, 'episodeFileCount' => 0, 'episodeCount' => 0],
+        ]),
+        'sonarr.local:8989/api/v3/episode*' => Http::response([]),
+    ]);
+
+    $this->actingAs(User::factory()->member()->create());
+
+    visit(route('media.series.show', ['id' => 20], absolute: false))
+        ->assertSee('A Show')
+        ->assertNoSmoke()
+        ->click('[data-delete-trigger]')
+        ->click('[data-delete-confirm]')
+        ->assertSee('Deletion queued for approval in the Action Queue.')
+        ->assertNoSmoke();
+
+    Http::assertNotSent(fn ($request): bool => $request->method() === 'DELETE');
+
+    expect(ActionRequest::query()->where('type', 'delete_series')->sole()->payload)->toMatchArray([
+        'sonarr_series_id' => 20,
+        'delete_files' => false,
+        'service_connection_id' => $sonarr->id,
+    ]);
 });

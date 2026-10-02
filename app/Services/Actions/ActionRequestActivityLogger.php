@@ -9,9 +9,9 @@ use App\Models\ActionRequest;
 use App\Models\ActivityLog;
 
 /**
- * Writes the ActionRequest audit trail. The observer covers Eloquent saves;
- * conditional query-builder transitions (the Executing claim, the stuck
- * reconcile) bypass observers and call statusChanged() themselves.
+ * Writes the ActionRequest audit trail. The observer covers Eloquent saves
+ * (after commit); conditional query-builder transitions (the Executing claim,
+ * the stuck reconcile) bypass observers and call statusChanged() themselves.
  */
 final class ActionRequestActivityLogger
 {
@@ -88,7 +88,42 @@ final class ActionRequestActivityLogger
         );
     }
 
-    private function writeLog(ActionRequest $actionRequest, string $action, string $description): void
+    /**
+     * actions:reconcile-stuck handed an Approved request whose execution job
+     * was lost back to the queue. The request stays Approved (not a status
+     * change), so the observer never sees it.
+     */
+    public function redispatched(ActionRequest $actionRequest): void
+    {
+        $this->writeLog(
+            $actionRequest,
+            'action_request.redispatched',
+            sprintf('Action #%d re-dispatched after its execution job was lost', $actionRequest->id),
+        );
+    }
+
+    /**
+     * A trigger folded into a scan that had not started yet (a webhook burst
+     * or a "Refresh library" click). Only the payload changes, so the
+     * observer never sees it.
+     */
+    public function coalesced(ActionRequest $actionRequest, string $trigger): void
+    {
+        $trigger = mb_substr($trigger, 0, 64);
+        $coalescedEvents = (int) ($actionRequest->payload['coalesced_events'] ?? 1);
+
+        $this->writeLog(
+            $actionRequest,
+            'action_request.coalesced',
+            sprintf('Action #%d absorbed another trigger (%s); %d trigger(s) so far', $actionRequest->id, $trigger, $coalescedEvents),
+            ['trigger' => $trigger, 'coalesced_events' => $coalescedEvents],
+        );
+    }
+
+    /**
+     * @param  array<string, mixed>  $metadata  extra keys merged after the standard ones
+     */
+    private function writeLog(ActionRequest $actionRequest, string $action, string $description, array $metadata = []): void
     {
         $actionRequest->loadMissing('webhookEvent');
 
@@ -117,6 +152,7 @@ final class ActionRequestActivityLogger
                 'target_service' => $actionRequest->target_service,
                 'status' => $actionRequest->status->value,
                 'result' => $safeResult,
+                ...$metadata,
             ],
         ]);
     }

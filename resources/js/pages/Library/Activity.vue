@@ -37,6 +37,7 @@ import { dashboard } from '@/routes';
 interface QueueRow {
     id: number;
     service: 'sonarr' | 'radarr';
+    service_connection_id: number;
     service_url: string;
     title: string | null;
     subtitle: string | null;
@@ -310,7 +311,7 @@ function removeQueueItem(row: QueueRow, verb: 'remove' | 'block'): void {
             service: row.service,
             id: row.id,
         }),
-        { verb },
+        { verb, service_connection_id: row.service_connection_id },
         {
             preserveScroll: true,
             onSuccess: () => router.reload({ only: ['queue'] }),
@@ -554,14 +555,22 @@ const filteredRows = computed<QueueRow[]>(() => {
     return all.filter((row) => row.service === serviceFilter.value);
 });
 
-// Queue ids are per service: bulk works on one service at a time, resolved
-// server-side to that service's active connection — same as the row menu.
+// Queue ids are per service and per instance: bulk works on one service at a
+// time, pinned to the connection its rows came from — same as the row menu.
 const bulkService = computed<'sonarr' | 'radarr' | null>(() =>
     isAdmin.value &&
     activeTab.value === 'queue' &&
     serviceFilter.value !== 'all'
         ? serviceFilter.value
         : null,
+);
+
+// Every row of one service comes from the same connection.
+const bulkConnectionId = computed<number | null>(() =>
+    bulkService.value === null
+        ? null
+        : (filteredRows.value.find((row) => row.service === bulkService.value)
+              ?.service_connection_id ?? null),
 );
 
 const {
@@ -572,7 +581,7 @@ const {
     setAll: setAllQueue,
     clear: clearQueueSelection,
     retain: retainQueue,
-} = useBulkSelection<number>([serviceFilter, activeTab]);
+} = useBulkSelection<number>([serviceFilter, activeTab, bulkConnectionId]);
 
 const queuePageIds = computed<number[]>(() =>
     bulkService.value === null ? [] : filteredRows.value.map((row) => row.id),
@@ -598,7 +607,12 @@ watch(selectedQueueCount, (count) => {
 async function runQueueBulk(): Promise<void> {
     const action = queueBulkConfirm.value;
 
-    if (action === null || queueBulkBusy.value || bulkService.value === null) {
+    if (
+        action === null ||
+        queueBulkBusy.value ||
+        bulkService.value === null ||
+        bulkConnectionId.value === null
+    ) {
         return;
     }
 
@@ -607,6 +621,7 @@ async function runQueueBulk(): Promise<void> {
         LibraryActivityController.bulkQueue.url(),
         {
             service: bulkService.value,
+            service_connection_id: bulkConnectionId.value,
             ids: selectedQueueIds.value,
             action,
         },
@@ -697,6 +712,7 @@ async function runQueueBulk(): Promise<void> {
                     variant="outline"
                     size="sm"
                     class="h-7 gap-1.5 text-xs"
+                    data-activity-refresh
                     :disabled="refreshing"
                     @click="refresh"
                 >
@@ -905,6 +921,7 @@ async function runQueueBulk(): Promise<void> {
                                                                 )
                                                         "
                                                         :aria-label="`Manage ${row.title ?? 'queue item'}`"
+                                                        data-queue-row-menu
                                                     >
                                                         <MoreVertical
                                                             class="size-3.5"
@@ -938,6 +955,7 @@ async function runQueueBulk(): Promise<void> {
                                                         Manual import…
                                                     </DropdownMenuItem>
                                                     <DropdownMenuItem
+                                                        data-queue-remove="remove"
                                                         @select="
                                                             removeQueueItem(
                                                                 row,
@@ -949,6 +967,7 @@ async function runQueueBulk(): Promise<void> {
                                                     </DropdownMenuItem>
                                                     <DropdownMenuItem
                                                         class="text-destructive focus:text-destructive"
+                                                        data-queue-remove="block"
                                                         @select="
                                                             removeQueueItem(
                                                                 row,

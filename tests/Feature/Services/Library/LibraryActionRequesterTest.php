@@ -3,6 +3,8 @@
 declare(strict_types=1);
 
 use App\Enums\ActionRequestStatus;
+use App\Enums\ActivityLogCategory;
+use App\Jobs\ExecuteActionRequest;
 use App\Models\ActionRequest;
 use App\Models\ActionTypeConfig;
 use App\Models\ActivityLog;
@@ -14,6 +16,7 @@ use App\Services\Actions\ManualActionOutcome;
 use App\Services\Library\LibraryActionRequester;
 use Database\Seeders\ActionTypeConfigSeeder;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Queue;
 
 beforeEach(function (): void {
     Http::preventStrayRequests();
@@ -114,4 +117,36 @@ test('a connection without library actions is refused', function (): void {
 
     expect(fn () => resolve(LibraryActionRequester::class)->monitor($sabnzbd, 1, true, 'Requested by a test.'))
         ->toThrow(InvalidArgumentException::class);
+});
+
+test('a delete whose audit row cannot be written files nothing and starts nothing', function (): void {
+    // Queue::fake() records a job the instant it's dispatched and ignores
+    // ->afterCommit() — it can't prove a rolled-back transaction drops the
+    // job. Excepting ExecuteActionRequest lets the real sync queue honour
+    // afterCommit(), so a rollback here truly never queues it; no Http::fake
+    // route is registered for the delete, so it would also be loud if run.
+    Queue::fake()->except([ExecuteActionRequest::class]);
+    ActionTypeConfig::query()->where('type', 'delete_series')->update(['requires_approval' => false]);
+    ActivityLog::creating(static function (ActivityLog $activityLog): void {
+        throw_if($activityLog->category === ActivityLogCategory::Audit, RuntimeException::class, 'audit store unavailable');
+    });
+
+    expect(fn (): ManualActionOutcome => resolve(LibraryActionRequester::class)->delete($this->sonarr, 7, true, 'Requested by a test.'))
+        ->toThrow(RuntimeException::class, 'audit store unavailable');
+
+    expect(ActionRequest::query()->where('type', 'delete_series')->exists())->toBeFalse()
+        ->and(ActivityLog::query()->where('action', 'action_request.created')->exists())->toBeFalse();
+    Http::assertNothingSent();
+});
+
+test('an auto-executing delete queues exactly one execution job', function (): void {
+    Queue::fake();
+    ActionTypeConfig::query()->where('type', 'delete_series')->update(['requires_approval' => false]);
+
+    $manualActionOutcome = resolve(LibraryActionRequester::class)->delete($this->sonarr, 7, false, 'Requested by a test.');
+
+    expect($manualActionOutcome->state)->toBe(ManualActionOutcome::STARTED)
+        ->and(ActivityLog::query()->where('category', 'audit')->where('action', 'series.delete_requested')->sole()->subject_id)
+        ->toBe($manualActionOutcome->actionRequest?->id);
+    Queue::assertPushed(ExecuteActionRequest::class, 1);
 });

@@ -281,7 +281,7 @@ test('destroy queues a delete_movie action request instead of calling radarr', f
     Queue::fake();
 
     $this->actingAs($member)
-        ->delete(route('media.movies.destroy', 42), ['delete_files' => true])
+        ->delete(route('media.movies.destroy', 42), ['delete_files' => true, 'service_connection_id' => $this->connection->id])
         ->assertRedirect()
         ->assertSessionHas('inertia.flash_data.toast.type', 'info')
         ->assertSessionHas('inertia.flash_data.toast.message', 'Deletion queued for approval in the Action Queue.');
@@ -316,7 +316,7 @@ test('destroy auto-executes when the rule does not require approval', function (
     Queue::fake();
 
     $this->actingAs($member)
-        ->delete(route('media.movies.destroy', 42))
+        ->delete(route('media.movies.destroy', 42), ['service_connection_id' => $this->connection->id])
         ->assertRedirect(route('media.movies.index'))
         ->assertSessionHas('inertia.flash_data.toast.type', 'success')
         ->assertSessionHas('inertia.flash_data.toast.message', 'Movie deletion queued.');
@@ -344,7 +344,7 @@ test('destroy reports a disabled rule', function (): void {
     ]);
 
     $this->actingAs($member)
-        ->delete(route('media.movies.destroy', 42))
+        ->delete(route('media.movies.destroy', 42), ['service_connection_id' => $this->connection->id])
         ->assertRedirect()
         ->assertSessionHas('inertia.flash_data.toast.type', 'error')
         ->assertSessionHas('inertia.flash_data.toast.message', 'Deleting movies is disabled in Action Rules.');
@@ -419,7 +419,7 @@ test('destroy follows the rule even when the chat AI is in advisory mode', funct
     Queue::fake();
 
     $this->actingAs($member)
-        ->delete(route('media.movies.destroy', 42))
+        ->delete(route('media.movies.destroy', 42), ['service_connection_id' => $this->connection->id])
         ->assertRedirect(route('media.movies.index'));
 
     $actionRequest = ActionRequest::query()->where('type', 'delete_movie')->sole();
@@ -483,4 +483,47 @@ test('a movie page says when its quality profiles could not load', function (): 
         ->assertInertia(fn ($page) => $page
             ->loadDeferredProps('qualityProfiles', fn ($reload) => $reload
                 ->where('qualityProfiles', ['items' => [], 'error' => 'Radarr is unreachable right now.'])));
+});
+
+test('destroy acts on the connection the page was rendered from, not the active one', function (): void {
+    $member = User::factory()->member()->create();
+    ActionTypeConfig::factory()->create(['type' => 'delete_movie', 'requires_approval' => true, 'is_enabled' => true]);
+    $secondRadarr = ServiceConnection::factory()->radarr()->create(['url' => 'http://radarr-4k.local:7878', 'api_key' => 'k']);
+    Http::fake(['radarr-4k.local:7878/api/v3/movie/42' => Http::response(['id' => 42, 'title' => 'Dune', 'year' => 2021])]);
+    Queue::fake();
+
+    $this->actingAs($member)
+        ->delete(route('media.movies.destroy', 42), ['service_connection_id' => $secondRadarr->id])
+        ->assertSessionHas('inertia.flash_data.toast.message', 'Deletion queued for approval in the Action Queue.');
+
+    expect(ActionRequest::query()->where('type', 'delete_movie')->sole()->payload['service_connection_id'])->toBe($secondRadarr->id);
+});
+
+test('destroy refuses a pin that is gone, deactivated or another service and files nothing', function (int $pinnedConnectionId): void {
+    $member = User::factory()->member()->create();
+    ActionTypeConfig::factory()->create(['type' => 'delete_movie', 'requires_approval' => false, 'is_enabled' => true]);
+    Queue::fake();
+
+    $this->actingAs($member)
+        ->from(route('media.movies.show', 42))
+        ->delete(route('media.movies.destroy', 42), ['service_connection_id' => $pinnedConnectionId])
+        ->assertRedirect(route('media.movies.show', 42))
+        ->assertSessionHas('inertia.flash_data.toast.type', 'error')
+        ->assertSessionHas('inertia.flash_data.toast.message', 'That Radarr connection is unavailable — refresh and try again.');
+
+    expect(ActionRequest::query()->exists())->toBeFalse();
+    Http::assertNothingSent();
+    Queue::assertNotPushed(ExecuteActionRequest::class);
+})->with([
+    'deleted' => [fn (): int => 999_999],
+    'deactivated' => [fn (): int => ServiceConnection::factory()->radarr()->inactive()->create(['url' => 'http://radarr-old.local:7878'])->id],
+    'another service' => [fn (): int => ServiceConnection::factory()->sonarr()->create(['url' => 'http://sonarr.local:8989'])->id],
+]);
+
+test('destroy without a connection pin is a validation error', function (): void {
+    $this->actingAs(User::factory()->member()->create())
+        ->delete(route('media.movies.destroy', 42))
+        ->assertSessionHasErrors('service_connection_id');
+
+    expect(ActionRequest::query()->exists())->toBeFalse();
 });

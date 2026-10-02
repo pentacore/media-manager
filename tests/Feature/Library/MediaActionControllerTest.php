@@ -13,6 +13,7 @@ use App\Models\User;
 use App\Services\Actions\ManualActionDispatcher;
 use App\Services\Actions\ManualActionOutcome;
 use Database\Seeders\ActionTypeConfigSeeder;
+use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\Request;
 use Illuminate\Support\Facades\Http;
 
@@ -28,6 +29,20 @@ beforeEach(function (): void {
     IndexedMovie::factory()->for($this->radarr, 'serviceConnection')->create(['radarr_id' => 10, 'title' => 'Dune', 'year' => 2021]);
     $this->member = User::factory()->member()->create(['name' => 'Mia']);
 });
+
+/**
+ * Episodes 70 and 71 (season 1) and 80 (season 2) of series 7, for Http::fake().
+ *
+ * @return array<string, mixed>
+ */
+function mediaActionEpisodesOfSeriesSeven(): array
+{
+    return ['sonarr.local:8989/api/v3/episode?seriesId=7*' => Http::response([
+        ['id' => 70, 'seriesId' => 7, 'seasonNumber' => 1],
+        ['id' => 71, 'seriesId' => 7, 'seasonNumber' => 1],
+        ['id' => 80, 'seriesId' => 7, 'seasonNumber' => 2],
+    ])];
+}
 
 test('a member toggles series monitoring through the action pipeline, pinned to the connection', function (): void {
     $this->actingAs($this->member)
@@ -79,6 +94,8 @@ test('monitoring is refused while a replacement is in flight for the title', fun
 });
 
 test("a season toggle sends that season's episode ids", function (): void {
+    Http::fake(mediaActionEpisodesOfSeriesSeven());
+
     $this->actingAs($this->member)
         ->post(route('media.library.actions.monitor-episodes'), ['service_connection_id' => $this->sonarr->id, 'series_id' => 7, 'episode_ids' => [70, 71], 'season_number' => 1, 'monitored' => true])
         ->assertSessionHas('inertia.flash_data.toast.message', 'Monitoring updated.');
@@ -105,6 +122,8 @@ test('a quality profile change is dispatched with the profile id', function (): 
 });
 
 test('searches are dispatched as search_media with only the fields the command needs', function (array $body, array $payload): void {
+    Http::fake(mediaActionEpisodesOfSeriesSeven());
+
     $this->actingAs($this->member)
         ->post(route('media.library.actions.search'), ['service_connection_id' => $this->{$body['service']}->id, ...$body])
         ->assertSessionHas('inertia.flash_data.toast.message', 'Search started.');
@@ -161,13 +180,13 @@ test('releases are fetched from Sonarr for a season, presented and remembered fo
 });
 
 test('an episode release search asks Sonarr by episode id', function (): void {
-    Http::fake(['sonarr.local:8989/api/v3/release*' => Http::response([])]);
+    Http::fake(['sonarr.local:8989/api/v3/release*' => Http::response([]), ...mediaActionEpisodesOfSeriesSeven()]);
 
     $this->actingAs($this->member)
         ->getJson(route('media.library.actions.releases', ['service' => 'sonarr', 'service_connection_id' => $this->sonarr->id, 'item_id' => 7, 'episode_id' => 70]))
         ->assertOk();
 
-    Http::assertSent(fn (Request $request): bool => $request['episodeId'] === 70 && ! isset($request['seriesId']));
+    Http::assertSent(fn (Request $request): bool => ($request['episodeId'] ?? null) === 70 && ! isset($request['seriesId']));
 });
 
 test('release searches are throttled per user, with a JSON message the dialog can show', function (): void {
@@ -338,4 +357,61 @@ test('a wrong-type pin is refused at validation before it ever reaches the descr
         ->assertStatus(422);
 
     expect(ActionRequest::query()->count())->toBe(0);
+});
+
+test("an episode toggle naming episodes that are not that series' is refused and nothing is filed", function (array $body): void {
+    Http::fake(mediaActionEpisodesOfSeriesSeven());
+
+    $this->actingAs($this->member)
+        ->post(route('media.library.actions.monitor-episodes'), ['service_connection_id' => $this->sonarr->id, 'series_id' => 7, 'monitored' => false, ...$body])
+        ->assertRedirect()
+        ->assertSessionHas('inertia.flash_data.toast.type', 'error')
+        ->assertSessionHas('inertia.flash_data.toast.message', 'Those episodes are not part of this series — refresh and try again.');
+
+    expect(ActionRequest::query()->where('type', 'monitor_episodes')->exists())->toBeFalse();
+})->with([
+    'an episode of another series' => [['episode_ids' => [70, 999]]],
+    "a season toggle carrying another season's episode" => [['episode_ids' => [70, 80], 'season_number' => 1]],
+]);
+
+test("an episode search naming episodes that are not that series' is refused and nothing is filed", function (): void {
+    Http::fake(mediaActionEpisodesOfSeriesSeven());
+
+    $this->actingAs($this->member)
+        ->post(route('media.library.actions.search'), ['service' => 'sonarr', 'service_connection_id' => $this->sonarr->id, 'command' => 'episode_search', 'series_id' => 7, 'episode_ids' => [999]])
+        ->assertRedirect()
+        ->assertSessionHas('inertia.flash_data.toast.type', 'error')
+        ->assertSessionHas('inertia.flash_data.toast.message', 'Those episodes are not part of this series — refresh and try again.');
+
+    expect(ActionRequest::query()->where('type', 'search_media')->exists())->toBeFalse();
+});
+
+test('an episode release search for an episode of another series is refused before Sonarr is searched', function (): void {
+    Http::fake(['sonarr.local:8989/api/v3/release*' => Http::response([]), ...mediaActionEpisodesOfSeriesSeven()]);
+
+    $this->actingAs($this->member)
+        ->getJson(route('media.library.actions.releases', ['service' => 'sonarr', 'service_connection_id' => $this->sonarr->id, 'item_id' => 7, 'episode_id' => 999]))
+        ->assertUnprocessable()
+        ->assertJsonPath('message', 'Those episodes are not part of this series — refresh and try again.');
+
+    Http::assertNotSent(fn (Request $request): bool => str_contains($request->url(), '/api/v3/release'));
+});
+
+test('an unreachable Sonarr refuses an episode toggle without filing it', function (): void {
+    Http::fake(['sonarr.local:8989/api/v3/episode*' => fn (): never => throw new ConnectionException('Connection refused.')]);
+
+    $this->actingAs($this->member)
+        ->post(route('media.library.actions.monitor-episodes'), ['service_connection_id' => $this->sonarr->id, 'series_id' => 7, 'episode_ids' => [70], 'monitored' => false])
+        ->assertSessionHas('inertia.flash_data.toast.message', 'Sonarr is unreachable.');
+
+    expect(ActionRequest::query()->where('type', 'monitor_episodes')->exists())->toBeFalse();
+});
+
+test('an unreachable Sonarr answers 502 for an episode release search', function (): void {
+    Http::fake(['sonarr.local:8989/api/v3/episode*' => fn (): never => throw new ConnectionException('Connection refused.')]);
+
+    $this->actingAs($this->member)
+        ->getJson(route('media.library.actions.releases', ['service' => 'sonarr', 'service_connection_id' => $this->sonarr->id, 'item_id' => 7, 'episode_id' => 70]))
+        ->assertStatus(502)
+        ->assertJsonPath('message', 'Sonarr is unreachable.');
 });

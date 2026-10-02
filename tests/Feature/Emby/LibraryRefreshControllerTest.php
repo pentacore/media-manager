@@ -127,6 +127,19 @@ test('library refresh is admin-only', function (): void {
     expect(ActionRequest::query()->count())->toBe(0);
 });
 
+test('a refresh that joins a waiting scan logs the fold on that request', function (): void {
+    libraryRefreshRuleRequiresApproval();
+    $waiting = libraryRefreshWebhookScan();
+
+    $this->actingAs(User::factory()->admin()->create())
+        ->from(route('monitoring.now-playing'))
+        ->post(route('monitoring.now-playing.refresh-library'))
+        ->assertRedirect(route('monitoring.now-playing'));
+
+    expect(ActivityLog::query()->where('subject_id', $waiting?->id)->where('action', 'action_request.coalesced')->sole()->metadata)
+        ->toMatchArray(['trigger' => 'manual', 'coalesced_events' => 2]);
+});
+
 test('without an active Emby connection the refresh is refused', function (): void {
     libraryRefreshRuleRequiresApproval();
     $this->emby->update(['is_active' => false]);

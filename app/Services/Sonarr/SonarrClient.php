@@ -42,8 +42,23 @@ class SonarrClient extends ArrClient implements Warmable
     {
         return $this->cache()->rememberEntity(
             'series:'.$id,
-            fn (): array => $this->buildClient()->get(sprintf('/api/%s/series/%d', $this->apiVersion, $id))->throw()->json() ?? [],
+            fn (): array => $this->fetchSeriesById($id),
         );
+    }
+
+    /**
+     * Uncached read for a write path. SonarrActions changes one field and
+     * PUTs the whole series back, so it must start from what Sonarr holds
+     * now: a snapshot cached by an earlier page view would revert whatever
+     * changed in Sonarr since.
+     *
+     * @return array<string, mixed>
+     *
+     * @throws RequestException|ConnectionException
+     */
+    public function fetchSeriesById(int $id): array
+    {
+        return $this->buildClient()->get(sprintf('/api/%s/series/%d', $this->apiVersion, $id))->throw()->json() ?? [];
     }
 
     /**
@@ -100,11 +115,24 @@ class SonarrClient extends ArrClient implements Warmable
     {
         return $this->cache()->rememberList(
             'episodes:'.$seriesId,
-            fn (): array => $this->buildClient()
-                ->get(sprintf('/api/%s/episode', $this->apiVersion), ['seriesId' => $seriesId])
-                ->throw()
-                ->json() ?? [],
+            fn (): array => $this->fetchEpisodesBySeries($seriesId),
         );
+    }
+
+    /**
+     * Uncached episode list, for a check that must not trust a list cached
+     * before Sonarr added an episode (SonarrEpisodeOwnership).
+     *
+     * @return array<int, array<string, mixed>>
+     *
+     * @throws RequestException|ConnectionException
+     */
+    public function fetchEpisodesBySeries(int $seriesId): array
+    {
+        return $this->buildClient()
+            ->get(sprintf('/api/%s/episode', $this->apiVersion), ['seriesId' => $seriesId])
+            ->throw()
+            ->json() ?? [];
     }
 
     /**

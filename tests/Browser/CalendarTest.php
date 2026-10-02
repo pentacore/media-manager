@@ -29,6 +29,7 @@ beforeEach(function (): void {
         ]]),
         'sonarr.local:8989/api/v3/command' => Http::response(['id' => 1], 201),
         'sonarr.local:8989/api/v3/series/7' => Http::response(['id' => 7, 'title' => 'Severance', 'year' => 2022]),
+        'sonarr.local:8989/api/v3/episode?seriesId=7*' => Http::response([['id' => 70, 'seriesId' => 7, 'seasonNumber' => 1]]),
         'radarr.local:7878/api/v3/calendar*' => Http::response([[
             'id' => 10, 'title' => 'Dune', 'monitored' => true, 'hasFile' => false, 'digitalRelease' => '2026-09-24T00:00:00Z',
             'images' => [['coverType' => 'poster', 'remoteUrl' => 'https://img.test/dune.jpg']],
@@ -118,7 +119,10 @@ test('the monitored-only filter hides unmonitored items', function (): void {
 test("a movie item's Search and Monitor controls post the movie path", function (): void {
     Http::fake([
         'radarr.local:7878/api/v3/command' => Http::response(['id' => 2], 201),
+        // The describe read, the executor's fresh read before its PUT, then
+        // the PUT's own response.
         'radarr.local:7878/api/v3/movie/10' => Http::sequence()
+            ->push(['id' => 10, 'title' => 'Dune', 'monitored' => true])
             ->push(['id' => 10, 'title' => 'Dune', 'monitored' => true])
             ->push(['id' => 10, 'title' => 'Dune', 'monitored' => false]),
     ]);
@@ -171,6 +175,7 @@ test('a member toggles an episode of an unmonitored series by its own monitored 
         ]]),
         'sonarr-unmonitored.local:8989/api/v3/episode/monitor' => Http::response([], 202),
         'sonarr-unmonitored.local:8989/api/v3/series/8' => Http::response(['id' => 8, 'title' => 'Old Show', 'year' => 2019]),
+        'sonarr-unmonitored.local:8989/api/v3/episode?seriesId=8*' => Http::response([['id' => 80, 'seriesId' => 8, 'seasonNumber' => 1]]),
     ]);
     $this->actingAs(User::factory()->member()->create());
 
