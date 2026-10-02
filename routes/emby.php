@@ -20,10 +20,14 @@ Route::middleware(['auth', 'verified', 'password.set'])->group(function (): void
         Route::post('watch-history/{embyActivity}/played', [WatchHistoryController::class, 'togglePlayed'])
             ->middleware('can:view-library')
             ->name('watch-history.played');
-        Route::get('service-health', [ServiceHealthController::class, 'index'])->name('service-health');
-        Route::post('service-health/run-checks', [ServiceHealthController::class, 'runChecks'])
-            ->middleware(['role:member', 'throttle:health-checks'])
-            ->name('service-health.run-checks');
+        // Service health shows versions, failure reasons and disk paths —
+        // members and admins only.
+        Route::middleware('can:manage-library')->group(function (): void {
+            Route::get('service-health', [ServiceHealthController::class, 'index'])->name('service-health');
+            Route::post('service-health/run-checks', [ServiceHealthController::class, 'runChecks'])
+                ->middleware('throttle:health-checks')
+                ->name('service-health.run-checks');
+        });
     });
 
     Route::prefix('emby')->name('emby.')->group(function (): void {

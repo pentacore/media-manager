@@ -23,7 +23,7 @@ use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Queue;
 use Tests\Support\ParseMultipartBrowserRequests;
 
-test('viewer can browse the subtitle center', function (): void {
+test('member can browse the subtitle center', function (): void {
     $bazarr = ServiceConnection::factory()->bazarr()->create([
         'name' => 'Primary Bazarr',
         'url' => 'http://bazarr.test',
@@ -36,7 +36,7 @@ test('viewer can browse the subtitle center', function (): void {
         'bazarr.test/api/movies/wanted*' => Http::response(['data' => [], 'total' => 0]),
     ]);
 
-    $this->actingAs(User::factory()->create());
+    $this->actingAs(User::factory()->member()->create());
 
     visit(route('bazarr.overview', ['connection' => $bazarr->id], false))
         ->assertSee('Subtitle Center')
@@ -610,20 +610,14 @@ test('the drawer offers a retry once capability discovery keeps failing', functi
     expect(ActionRequest::query()->where('type', 'bazarr_sync_subtitle')->count())->toBe(1);
 });
 
-test('a viewer inspects an item without asking for capabilities', function (): void {
+test('a viewer is forbidden from the library page', function (): void {
     $serviceConnection = bazarrSyncableLibrary(failedCapabilityReads: 0);
     $this->actingAs(User::factory()->create());
 
-    // The capabilities endpoint is member-only: a viewer's request would be
-    // refused, retried, and end in an error that does not apply to them. Wait
-    // out both retries (1s + 2s) so that error would have appeared.
+    // can:manage-library aborts with 403; the page never renders, so the
+    // member-only "Subtitle library" title must not appear.
     visit(route('bazarr.library', ['connection' => $serviceConnection->id], false))
-        ->click('@subtitle-item-movie-801')
-        ->assertSee('Example.Movie.2024.swe.srt')
-        ->assertMissing('@subtitle-track-0-sync')
-        ->wait(4)
-        ->assertMissing('@subtitle-capabilities-error')
-        ->assertNoSmoke();
+        ->assertDontSee('Subtitle library');
 });
 
 test('track operations Bazarr cannot perform are disabled once capabilities load', function (): void {

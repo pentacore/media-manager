@@ -247,7 +247,12 @@ function isDestructive(type: string): boolean {
 
 onMounted(() => {
     subscribeStats();
-    subscribeActivity();
+
+    // The `activity` channel carries every user's rows; viewers only get
+    // their own, server-rendered, so they never join it.
+    if (canManageLibrary.value) {
+        subscribeActivity();
+    }
 });
 </script>
 
@@ -356,9 +361,12 @@ onMounted(() => {
                 >
                     <span
                         class="flex items-center gap-2 text-[12px] font-semibold tracking-[0.06em] text-muted-foreground uppercase"
+                        data-dashboard-activity-heading
                     >
-                        <LiveDot class="text-accent" />
-                        Live activity
+                        <LiveDot v-if="canManageLibrary" class="text-accent" />
+                        {{
+                            canManageLibrary ? 'Live activity' : 'Your activity'
+                        }}
                     </span>
                     <div class="flex items-center gap-1">
                         <button
@@ -368,8 +376,10 @@ onMounted(() => {
                             <Filter class="size-3.5" />All services
                         </button>
                         <Link
+                            v-if="canManageLibrary"
                             :href="ActivityLogController.index.url()"
                             class="inline-flex h-7 items-center rounded-md px-2 text-xs font-medium text-muted-foreground transition-colors hover:bg-bg-hover hover:text-foreground"
+                            data-dashboard-activity-log-link
                         >
                             View log →
                         </Link>
@@ -387,6 +397,7 @@ onMounted(() => {
                         v-for="row in liveActivity"
                         :key="row.id"
                         class="flex items-center gap-3 border-b border-border px-4 py-2.5 last:border-b-0"
+                        data-dashboard-activity-row
                     >
                         <TimeStamp
                             :iso="row.created_at"

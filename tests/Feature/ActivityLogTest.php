@@ -16,8 +16,15 @@ test('guests are redirected to login', function (): void {
     $this->get(route('activity-log'))->assertRedirect(route('login'));
 });
 
-test('authenticated users see paginated activity entries', function (): void {
-    $user = User::factory()->create();
+test('viewers are forbidden from the activity log and its export', function (): void {
+    $viewer = User::factory()->create();
+
+    $this->actingAs($viewer)->get(route('activity-log'))->assertForbidden();
+    $this->actingAs($viewer)->get(route('activity-log.export'))->assertForbidden();
+});
+
+test('members see paginated activity entries', function (): void {
+    $user = User::factory()->member()->create();
     $connection = ServiceConnection::factory()->create();
 
     ActivityLog::factory()->count(3)->create([
@@ -45,7 +52,7 @@ test('authenticated users see paginated activity entries', function (): void {
 });
 
 test('action filter scopes the result set', function (): void {
-    $user = User::factory()->create();
+    $user = User::factory()->member()->create();
     ActivityLog::factory()->create(['user_id' => $user->id, 'action' => 'created']);
     ActivityLog::factory()->create(['user_id' => $user->id, 'action' => 'deleted']);
     ActivityLog::factory()->create(['user_id' => $user->id, 'action' => 'deleted']);
@@ -61,7 +68,7 @@ test('action filter scopes the result set', function (): void {
 });
 
 test('since=today only returns rows from the local current day', function (): void {
-    $user = User::factory()->create();
+    $user = User::factory()->member()->create();
 
     CarbonImmutable::setTestNow(CarbonImmutable::create(2026, 4, 29, 14, 30));
 
@@ -88,7 +95,7 @@ test('since=today only returns rows from the local current day', function (): vo
 });
 
 test('unknown since value falls back to default 24h', function (): void {
-    $user = User::factory()->create();
+    $user = User::factory()->member()->create();
 
     $this->actingAs($user)
         ->get(route('activity-log', ['since' => 'forever']))
@@ -97,7 +104,7 @@ test('unknown since value falls back to default 24h', function (): void {
 });
 
 test('service filter scopes the result set', function (): void {
-    $user = User::factory()->create();
+    $user = User::factory()->member()->create();
     $connectionA = ServiceConnection::factory()->create();
     $connectionB = ServiceConnection::factory()->create();
 

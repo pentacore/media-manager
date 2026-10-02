@@ -5,6 +5,7 @@ declare(strict_types=1);
 use App\Models\ServiceConnection;
 use App\Models\User;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Sleep;
 
 beforeEach(function (): void {
     config()->set('inertia.ssr.enabled', false);
@@ -416,4 +417,141 @@ test('queue is empty when no Sonarr or Radarr connection is configured', functio
                     ->where('queue.errors', []);
             })
         );
+});
+
+test('a failed queue load names the service without echoing the upstream response', function (): void {
+    Sleep::fake();
+    ServiceConnection::factory()->sonarr()->create(['url' => 'http://sonarr.local:8989']);
+
+    Http::fake([
+        'sonarr.local:8989/api/v3/queue*' => Http::response('Error reading /config/sonarr.db?apikey=sonarr-secret', 500),
+        'sonarr.local:8989/api/v3/history*' => Http::response(['records' => []]),
+    ]);
+
+    $this->actingAs(User::factory()->member()->create())
+        ->get(route('media.library.activity.queue'))
+        ->assertInertia(fn ($page) => $page
+            ->loadDeferredProps('default', fn ($page) => $page
+                ->where('queue.errors', ['Sonarr is unreachable right now — its queue could not be loaded.'])));
+});
+
+test('queue status messages and error text keep their words but lose paths', function (): void {
+    ServiceConnection::factory()->sonarr()->create(['url' => 'http://sonarr.local:8989']);
+
+    Http::fake([
+        'sonarr.local:8989/api/v3/queue*' => Http::response(['records' => [[
+            'id' => 3,
+            'status' => 'completed',
+            'trackedDownloadState' => 'importBlocked',
+            'series' => ['title' => 'Severance'],
+            'added' => '2026-09-30T10:00:00Z',
+            'errorMessage' => 'Import failed at /downloads/complete/Severance.S02E01/file.mkv',
+            'statusMessages' => [[
+                'title' => '/downloads/complete/Severance.S02E01/file.mkv',
+                'messages' => ['No files found are eligible for import in /downloads/complete/Severance.S02E01', '   '],
+            ]],
+        ]]]),
+        'sonarr.local:8989/api/v3/history*' => Http::response(['records' => []]),
+    ]);
+
+    $this->actingAs(User::factory()->member()->create())
+        ->get(route('media.library.activity.queue'))
+        ->assertInertia(fn ($page) => $page
+            ->loadDeferredProps('default', fn ($page) => $page
+                ->where('queue.rows.0.error_message', 'Import failed at [redacted path]')
+                ->where('queue.rows.0.status_messages', [[
+                    'title' => '[redacted path]',
+                    'messages' => ['No files found are eligible for import in [redacted path]'],
+                ]])));
+});
+
+test('malformed queue status messages render as an empty or trimmed list, never a 500', function (mixed $statusMessages, array $expected): void {
+    ServiceConnection::factory()->sonarr()->create(['url' => 'http://sonarr.local:8989']);
+
+    Http::fake([
+        'sonarr.local:8989/api/v3/queue*' => Http::response(['records' => [[
+            'id' => 4,
+            'series' => ['title' => 'Severance'],
+            'added' => '2026-09-30T10:00:00Z',
+            'errorMessage' => '  ',
+            'statusMessages' => $statusMessages,
+        ]]]),
+        'sonarr.local:8989/api/v3/history*' => Http::response(['records' => []]),
+    ]);
+
+    $this->actingAs(User::factory()->member()->create())
+        ->get(route('media.library.activity.queue'))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->loadDeferredProps('default', fn ($page) => $page
+                ->where('queue.rows.0.error_message', null)
+                ->where('queue.rows.0.status_messages', $expected)));
+})->with([
+    'a string' => ['oops', []],
+    'junk entries' => [[['title' => null, 'messages' => 'x'], 'junk', ['title' => 'Sample', 'messages' => [12, '', 'Not an upgrade']]], [
+        ['title' => '', 'messages' => []],
+        ['title' => 'Sample', 'messages' => ['Not an upgrade']],
+    ]],
+]);
+
+test('a refused force grab reports the reason without paths', function (): void {
+    ServiceConnection::factory()->sonarr()->create(['url' => 'http://sonarr.local:8989']);
+    Http::fake(['sonarr.local:8989/api/v3/queue/grab/55' => Http::response('Cannot read /data/torrents/Severance.S02E01', 400)]);
+
+    $this->actingAs(User::factory()->admin()->create())
+        ->from(route('media.library.activity.queue'))
+        ->post(route('media.library.activity.queue.grab', ['service' => 'sonarr', 'id' => 55]))
+        ->assertSessionHas('inertia.flash_data.toast.type', 'error');
+
+    expect((string) session('inertia.flash_data.toast.message'))
+        ->toStartWith('Force grab failed:')
+        ->toContain('[redacted path]')
+        ->not->toContain('/data/torrents');
+});
+
+test('manual import failures never echo upstream paths', function (): void {
+    ServiceConnection::factory()->sonarr()->create(['url' => 'http://sonarr.local:8989']);
+    Http::fake(['sonarr.local:8989/api/v3/manualimport*' => Http::response('Folder /downloads/complete/ABC123 is not readable', 400)]);
+    $admin = User::factory()->admin()->create();
+
+    $json = $this->actingAs($admin)
+        ->getJson(route('media.library.activity.manual-import.candidates', ['service' => 'sonarr', 'downloadId' => 'ABC123']))
+        ->assertStatus(502)
+        ->json('error');
+
+    expect($json)->toContain('[redacted path]')->not->toContain('/downloads/complete');
+
+    $this->actingAs($admin)
+        ->from(route('media.library.activity.queue'))
+        ->post(route('media.library.activity.manual-import.execute', ['service' => 'sonarr']), ['download_id' => 'ABC123'])
+        ->assertSessionHas('inertia.flash_data.toast.type', 'error');
+
+    expect((string) session('inertia.flash_data.toast.message'))
+        ->toStartWith('Could not enumerate import candidates:')
+        ->not->toContain('/downloads/complete');
+});
+
+test('a failed manual import command never echoes upstream paths', function (): void {
+    ServiceConnection::factory()->sonarr()->create(['url' => 'http://sonarr.local:8989']);
+    Http::fake([
+        'sonarr.local:8989/api/v3/manualimport*' => Http::response([[
+            'path' => '/downloads/Show.S01E01.mkv',
+            'series' => ['id' => 12, 'title' => 'Severance'],
+            'episodes' => [['id' => 555, 'seasonNumber' => 1, 'episodeNumber' => 1]],
+            'quality' => ['quality' => ['id' => 4]],
+            'languages' => [['id' => 1]],
+            'rejections' => [],
+        ]]),
+        'sonarr.local:8989/api/v3/command' => Http::response('Cannot move /downloads/Show.S01E01.mkv to /tv/Severance', 400),
+    ]);
+
+    $this->actingAs(User::factory()->admin()->create())
+        ->from(route('media.library.activity.queue'))
+        ->post(route('media.library.activity.manual-import.execute', ['service' => 'sonarr']), ['download_id' => 'ABC123'])
+        ->assertSessionHas('inertia.flash_data.toast.type', 'error');
+
+    expect((string) session('inertia.flash_data.toast.message'))
+        ->toStartWith('Manual import failed:')
+        ->not->toContain('/downloads/')
+        ->not->toContain('/tv/');
 });

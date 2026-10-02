@@ -26,7 +26,7 @@ import { useRealtimeReload } from '@/composables/useRealtimeReload';
 import { arrPosterUrl } from '@/lib/arr';
 import { focusAfterBulk } from '@/lib/bulk';
 import { dashboard } from '@/routes';
-import type { BulkSummary } from '@/types';
+import type { BulkSummary, UpstreamList } from '@/types';
 
 interface QualityProfile {
     id: number;
@@ -55,8 +55,8 @@ interface Movie {
 const props = defineProps<{
     connection: { url: string | null };
     service_connection_id: number | null;
-    movies?: Movie[];
-    qualityProfiles?: QualityProfile[];
+    movies?: UpstreamList<Movie>;
+    qualityProfiles?: UpstreamList<QualityProfile>;
 }>();
 
 const { can } = useCan();
@@ -104,7 +104,7 @@ function syncMovies(): void {
 const yearOptions = computed<number[]>(() => {
     const years = new Set<number>();
 
-    for (const m of props.movies ?? []) {
+    for (const m of props.movies?.items ?? []) {
         if (m.year) {
             years.add(m.year);
         }
@@ -116,7 +116,7 @@ const yearOptions = computed<number[]>(() => {
 const studioOptions = computed<string[]>(() => {
     const studios = new Set<string>();
 
-    for (const m of props.movies ?? []) {
+    for (const m of props.movies?.items ?? []) {
         const studio = (m as Movie & { studio?: string | null }).studio;
 
         if (studio) {
@@ -134,7 +134,7 @@ const visible = computed<Movie[]>(() => {
 
     const q = query.value.toLowerCase();
 
-    return props.movies.filter((m) => {
+    return props.movies.items.filter((m) => {
         if (q && !m.title.toLowerCase().includes(q)) {
             return false;
         }
@@ -204,7 +204,7 @@ function bulkDone(summary: BulkSummary): void {
 }
 
 const totalSize = computed(() => {
-    const sum = (props.movies ?? []).reduce(
+    const sum = (props.movies?.items ?? []).reduce(
         (acc, m) => acc + (m.size_on_disk ?? 0),
         0,
     );
@@ -239,7 +239,7 @@ function qualityName(id: number | null): string {
         return '—';
     }
 
-    return props.qualityProfiles?.find((p) => p.id === id)?.name ?? '—';
+    return props.qualityProfiles?.items.find((p) => p.id === id)?.name ?? '—';
 }
 
 function is4k(movie: Movie): boolean {
@@ -268,10 +268,19 @@ function is4k(movie: Movie): boolean {
                     >
                 </div>
                 <h1 class="text-[22px] font-semibold tracking-tight">Movies</h1>
-                <p v-if="movies" class="mt-1 text-[13px] text-muted-foreground">
-                    {{ movies.length }} titles ·
+                <p
+                    v-if="movies && !movies.error"
+                    class="mt-1 text-[13px] text-muted-foreground"
+                >
+                    {{ movies.items.length }} titles ·
                     <span class="font-mono-tabular">{{ totalSize }}</span> on
                     disk
+                </p>
+                <p
+                    v-else-if="movies"
+                    class="mt-1 text-[13px] text-muted-foreground"
+                >
+                    Library unavailable
                 </p>
                 <Skeleton v-else class="mt-1 h-4 w-48" />
             </div>
@@ -323,7 +332,7 @@ function is4k(movie: Movie): boolean {
                 <Search class="size-3.5 text-fg-subtle" />
                 <input
                     v-model="query"
-                    :placeholder="`Search ${movies?.length ?? 0} movies…`"
+                    :placeholder="`Search ${movies?.items.length ?? 0} movies…`"
                     class="flex-1 bg-transparent text-[13px] outline-none placeholder:text-fg-subtle"
                 />
             </div>
@@ -334,7 +343,7 @@ function is4k(movie: Movie): boolean {
                 <SelectContent>
                     <SelectItem value="all">All quality</SelectItem>
                     <SelectItem
-                        v-for="profile in qualityProfiles ?? []"
+                        v-for="profile in qualityProfiles?.items ?? []"
                         :key="profile.id"
                         :value="String(profile.id)"
                     >
@@ -382,9 +391,17 @@ function is4k(movie: Movie): boolean {
             />
         </div>
 
+        <div
+            v-if="movies?.error"
+            class="rounded-xl border border-border bg-card px-4 py-10 text-center text-sm text-destructive"
+            data-library-error
+        >
+            {{ movies.error }}
+        </div>
+
         <!-- Grid -->
         <div
-            v-if="movies"
+            v-else-if="movies"
             class="grid gap-[18px]"
             style="grid-template-columns: repeat(auto-fill, minmax(150px, 1fr))"
         >
@@ -490,7 +507,8 @@ function is4k(movie: Movie): boolean {
                     }"
                     :ids="selectedIds"
                     :disabled="disabled"
-                    :quality-profiles="qualityProfiles"
+                    :quality-profiles="qualityProfiles?.items"
+                    :quality-profiles-error="qualityProfiles?.error"
                     noun="movies"
                     @done="bulkDone"
                 />

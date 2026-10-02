@@ -24,13 +24,10 @@ test('guests are redirected to login', function (): void {
     $this->get(route('monitoring.service-health'))->assertRedirect(route('login'));
 });
 
-test('viewers can access service health page', function (): void {
-    $viewer = User::factory()->create();
-
-    $this->actingAs($viewer)
+test('viewers are forbidden from the service health page', function (): void {
+    $this->actingAs(User::factory()->create())
         ->get(route('monitoring.service-health'))
-        ->assertOk()
-        ->assertInertia(fn ($page) => $page->component('Monitoring/ServiceHealth'));
+        ->assertForbidden();
 });
 
 test('members and admins can access service health page', function (): void {
@@ -42,7 +39,7 @@ test('members and admins can access service health page', function (): void {
 });
 
 test('renders persisted connection state including health_status and version info', function (): void {
-    $user = User::factory()->create();
+    $user = User::factory()->member()->create();
 
     ServiceConnection::factory()->seerr()->create([
         'name' => 'Seerr Prod',
@@ -69,7 +66,7 @@ test('renders persisted connection state including health_status and version inf
 });
 
 test('update_available is false when versions match', function (): void {
-    $user = User::factory()->create();
+    $user = User::factory()->member()->create();
 
     ServiceConnection::factory()->sonarr()->create([
         'url' => 'http://sonarr.local:8989',
@@ -87,7 +84,7 @@ test('update_available is false when versions match', function (): void {
 });
 
 test('health_status defaults to "unknown" when null', function (): void {
-    $user = User::factory()->create();
+    $user = User::factory()->member()->create();
 
     ServiceConnection::factory()->seerr()->create([
         'health_status' => null,
@@ -102,7 +99,7 @@ test('health_status defaults to "unknown" when null', function (): void {
 });
 
 test('initial response defers diskSpace and does not call disk-space APIs', function (): void {
-    $user = User::factory()->create();
+    $user = User::factory()->member()->create();
 
     ServiceConnection::factory()->sonarr()->create([
         'url' => 'http://sonarr.local:8989',
@@ -120,7 +117,7 @@ test('initial response defers diskSpace and does not call disk-space APIs', func
 });
 
 test('deferred diskSpace includes disk space for Sonarr connection', function (): void {
-    $user = User::factory()->create();
+    $user = User::factory()->member()->create();
 
     $sonarr = ServiceConnection::factory()->sonarr()->create([
         'url' => 'http://sonarr.local:8989',
@@ -145,7 +142,7 @@ test('deferred diskSpace includes disk space for Sonarr connection', function ()
 });
 
 test('deferred diskSpace gracefully handles disk space API failure', function (): void {
-    $user = User::factory()->create();
+    $user = User::factory()->member()->create();
 
     $radarr = ServiceConnection::factory()->radarr()->create([
         'url' => 'http://radarr.local:7878',
@@ -164,7 +161,7 @@ test('deferred diskSpace gracefully handles disk space API failure', function ()
 });
 
 test('non-arr services have empty diskSpace without making HTTP calls', function (): void {
-    $user = User::factory()->create();
+    $user = User::factory()->member()->create();
 
     $emby = ServiceConnection::factory()->emby()->create();
     $seerr = ServiceConnection::factory()->seerr()->create();
@@ -182,7 +179,7 @@ test('non-arr services have empty diskSpace without making HTTP calls', function
 });
 
 test('inactive connections do not trigger disk space HTTP calls', function (): void {
-    $user = User::factory()->create();
+    $user = User::factory()->member()->create();
 
     $sonarr = ServiceConnection::factory()->sonarr()->inactive()->create([
         'url' => 'http://sonarr.local:8989',
@@ -296,7 +293,7 @@ test('inactive Prowlarr connection is absent from prowlarrIndexers map', functio
 });
 
 test('disk-mode=selected filters disks to chosen paths', function (): void {
-    $user = User::factory()->create();
+    $user = User::factory()->member()->create();
 
     $connection = ServiceConnection::factory()->sonarr()->create([
         'url' => 'http://sonarr.local:8989',
@@ -322,7 +319,7 @@ test('disk-mode=selected filters disks to chosen paths', function (): void {
 });
 
 test('disk-mode=sum collapses chosen paths into a single total row', function (): void {
-    $user = User::factory()->create();
+    $user = User::factory()->member()->create();
 
     $connection = ServiceConnection::factory()->radarr()->create([
         'url' => 'http://radarr.local:7878',
@@ -351,7 +348,7 @@ test('disk-mode=sum collapses chosen paths into a single total row', function ()
 });
 
 test('disk display=used carries used metric on each row', function (): void {
-    $user = User::factory()->create();
+    $user = User::factory()->member()->create();
 
     $connection = ServiceConnection::factory()->sonarr()->create([
         'url' => 'http://sonarr.local:8989',
@@ -381,7 +378,7 @@ test('disk display=used carries used metric on each row', function (): void {
 });
 
 test('disk display sum=free attaches metric to the synthetic sum row', function (): void {
-    $user = User::factory()->create();
+    $user = User::factory()->member()->create();
 
     $connection = ServiceConnection::factory()->radarr()->create([
         'url' => 'http://radarr.local:7878',
@@ -488,13 +485,10 @@ test('health-check throttling has its own budget, separate from heartbeat and ot
     Redis::connection()->del(config('mediamanager.presence.key'));
 });
 
-test('the page tells the client whether the user may run checks', function (bool $isMember, bool $expected): void {
-    $user = $isMember ? User::factory()->member()->create() : User::factory()->create();
+test('the page tells members and admins they may run checks', function (string $role): void {
+    $user = $role === 'admin' ? User::factory()->admin()->create() : User::factory()->member()->create();
 
     $this->actingAs($user)
         ->get(route('monitoring.service-health'))
-        ->assertInertia(fn ($page) => $page->component('Monitoring/ServiceHealth')->where('canRunChecks', $expected));
-})->with([
-    'member' => [true, true],
-    'viewer' => [false, false],
-]);
+        ->assertInertia(fn ($page) => $page->component('Monitoring/ServiceHealth')->where('canRunChecks', true));
+})->with(['member', 'admin']);

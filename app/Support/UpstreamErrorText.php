@@ -21,8 +21,17 @@ class UpstreamErrorText
         // the path pattern below sees them.
         $message = str_replace('\/', '/', $message);
         $message = UrlQueryRedactor::redact($message);
+        // A URL keeps its scheme and host (the slashes after "scheme:" and the
+        // ones inside the URL are not path starts), so an operator still sees
+        // which server failed; its query string is already redacted above.
         $message = preg_replace(
-            '#(?<![\w:])/(?:[\w.\-+@%~]+/)*[\w.\-+@%~]+#',
+            '#(?<![\w:/])/(?:[\w.\-+@%~]+/)*[\w.\-+@%~]+#',
+            '[redacted path]',
+            $message,
+        ) ?? $message;
+        // Windows drive-letter and UNC paths (arr instances on Windows hosts).
+        $message = preg_replace(
+            '#(?<!\w)(?:[A-Za-z]:\\\\|\\\\\\\\)[^\s"\'<>|]+#',
             '[redacted path]',
             $message,
         ) ?? $message;

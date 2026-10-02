@@ -72,6 +72,11 @@ dataset('member-only routes', [
     'library grab' => ['POST', 'media.library.actions.grab', []],
     'library bulk' => ['POST', 'media.library.actions.bulk', []],
     'wanted' => ['GET', 'media.wanted.index', []],
+    'service health run checks' => ['POST', 'monitoring.service-health.run-checks', []],
+    'subtitles capabilities' => ['GET', 'bazarr.capabilities', []],
+    'subtitles search' => ['GET', 'bazarr.search', []],
+    'subtitles operations' => ['POST', 'bazarr.operations.store', []],
+    'subtitles uploads' => ['POST', 'bazarr.uploads.store', []],
 ]);
 
 dataset('member write routes', [
@@ -103,6 +108,18 @@ dataset('admin-only routes', [
     'queue bulk' => ['POST', 'media.library.activity.queue.bulk', []],
 ]);
 
+dataset('member-level read pages', [
+    'activity log' => ['activity-log'],
+    'activity log export' => ['activity-log.export'],
+    'statistics' => ['statistics.index'],
+    'service health' => ['monitoring.service-health'],
+    'subtitles overview' => ['bazarr.overview'],
+    'subtitles missing' => ['bazarr.missing'],
+    'subtitles library' => ['bazarr.library'],
+    'subtitles history' => ['bazarr.history'],
+    'subtitles escalations' => ['bazarr.escalations'],
+]);
+
 test('viewer-level read routes open for viewers', function (string $routeName, array $parameters): void {
     $this->actingAs(User::factory()->create())
         ->get(route($routeName, $parameters))
@@ -127,6 +144,19 @@ test('admin-only routes are forbidden to members', function (string $method, str
         ->call($method, route($routeName, $parameters))
         ->assertForbidden();
 })->with('admin-only routes');
+
+test('member-level read pages are forbidden to viewers', function (string $routeName): void {
+    $this->actingAs(User::factory()->create())
+        ->get(route($routeName))
+        ->assertForbidden();
+})->with('member-level read pages');
+
+test('member-level read pages pass the ability gate for members', function (string $routeName): void {
+    $response = $this->actingAs(User::factory()->member()->create())
+        ->get(route($routeName));
+
+    expect($response->getStatusCode())->not->toBe(403);
+})->with('member-level read pages');
 
 test('media.discover.title passes the ability gate for viewers (view-library)', function (): void {
     $response = $this->actingAs(User::factory()->create())

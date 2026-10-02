@@ -17,10 +17,14 @@ Route::get('/', WelcomeController::class)->name('home');
 
 Route::middleware(['auth', 'verified', 'password.set'])->group(function (): void {
     Route::get('dashboard', DashboardController::class)->name('dashboard');
-    Route::get('activity-log', [ActivityLogController::class, 'index'])->name('activity-log');
-    Route::get('activity-log/export', [ActivityLogController::class, 'export'])->name('activity-log.export');
 
-    Route::get('statistics', StatisticsController::class)->name('statistics.index');
+    // The activity log names other users' actions and service internals, and
+    // the watch statistics cover every user — members and admins only.
+    Route::middleware('can:manage-library')->group(function (): void {
+        Route::get('activity-log', [ActivityLogController::class, 'index'])->name('activity-log');
+        Route::get('activity-log/export', [ActivityLogController::class, 'export'])->name('activity-log.export');
+        Route::get('statistics', StatisticsController::class)->name('statistics.index');
+    });
 
     Route::get('notifications', [NotificationController::class, 'index'])->name('notifications.index');
     Route::patch('notifications/read-all', [NotificationController::class, 'markAllRead'])->name('notifications.read-all');

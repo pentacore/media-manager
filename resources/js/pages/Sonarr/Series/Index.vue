@@ -34,7 +34,7 @@ import { arrPosterUrl } from '@/lib/arr';
 import { focusAfterBulk } from '@/lib/bulk';
 import { cn } from '@/lib/utils';
 import { dashboard } from '@/routes';
-import type { BulkSummary } from '@/types';
+import type { BulkSummary, UpstreamList } from '@/types';
 
 interface QualityProfile {
     id: number;
@@ -65,8 +65,8 @@ interface Series {
 const props = defineProps<{
     connection: { url: string | null };
     service_connection_id: number | null;
-    series?: Series[];
-    qualityProfiles?: QualityProfile[];
+    series?: UpstreamList<Series>;
+    qualityProfiles?: UpstreamList<QualityProfile>;
 }>();
 
 const { can } = useCan();
@@ -116,7 +116,7 @@ const visible = computed<Series[]>(() => {
         return [];
     }
 
-    return props.series.filter((s) => {
+    return props.series.items.filter((s) => {
         if (monitoredFilter.value === 'monitored' && !s.monitored) {
             return false;
         }
@@ -182,14 +182,15 @@ function bulkDone(summary: BulkSummary): void {
 }
 
 const counts = computed(() => {
-    const all = props.series?.length ?? 0;
-    const monitored = props.series?.filter((s) => s.monitored).length ?? 0;
+    const all = props.series?.items.length ?? 0;
+    const monitored =
+        props.series?.items.filter((s) => s.monitored).length ?? 0;
 
     return { all, monitored, unmonitored: all - monitored };
 });
 
 const totalSize = computed(() => {
-    const sum = (props.series ?? []).reduce(
+    const sum = (props.series?.items ?? []).reduce(
         (acc, s) => acc + (s.size_on_disk ?? 0),
         0,
     );
@@ -225,7 +226,8 @@ function qualityName(id: number | null): string {
     }
 
     return (
-        props.qualityProfiles.find((profile) => profile.id === id)?.name ?? '—'
+        props.qualityProfiles.items.find((profile) => profile.id === id)
+            ?.name ?? '—'
     );
 }
 
@@ -264,11 +266,12 @@ function sonarrSeriesUrl(slug: string | null): string | null {
                     Library
                 </h1>
                 <p class="mt-1 text-[13px] text-muted-foreground">
-                    <template v-if="series">
+                    <template v-if="series && !series.error">
                         {{ counts.all }} series ·
                         <span class="font-mono-tabular">{{ totalSize }}</span>
                         on disk · {{ counts.monitored }} monitored
                     </template>
+                    <template v-else-if="series">Library unavailable</template>
                     <Skeleton v-else class="inline-block h-4 w-40" />
                 </p>
             </div>
@@ -366,7 +369,7 @@ function sonarrSeriesUrl(slug: string | null): string | null {
                 <SelectContent>
                     <SelectItem value="all">All profiles</SelectItem>
                     <SelectItem
-                        v-for="profile in qualityProfiles ?? []"
+                        v-for="profile in qualityProfiles?.items ?? []"
                         :key="profile.id"
                         :value="String(profile.id)"
                     >
@@ -417,9 +420,17 @@ function sonarrSeriesUrl(slug: string | null): string | null {
             />
         </div>
 
+        <div
+            v-if="series?.error"
+            class="rounded-xl border border-border bg-card px-4 py-10 text-center text-sm text-destructive"
+            data-library-error
+        >
+            {{ series.error }}
+        </div>
+
         <!-- Grid -->
         <div
-            v-if="view === 'grid' && series"
+            v-else-if="view === 'grid' && series"
             class="grid gap-[18px]"
             style="grid-template-columns: repeat(auto-fill, minmax(160px, 1fr))"
         >
@@ -636,7 +647,8 @@ function sonarrSeriesUrl(slug: string | null): string | null {
                     }"
                     :ids="selectedIds"
                     :disabled="disabled"
-                    :quality-profiles="qualityProfiles"
+                    :quality-profiles="qualityProfiles?.items"
+                    :quality-profiles-error="qualityProfiles?.error"
                     noun="series"
                     @done="bulkDone"
                 />

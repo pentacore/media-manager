@@ -32,11 +32,14 @@ class SeerrClient implements Warmable
 
     /**
      * $withRetry MUST be false for creation-style POSTs (createRequest,
-     * updateRequestStatus, retryRequest): Seerr may have accepted the request
-     * before the response was lost, so a transparent re-POST can file
-     * duplicate requests or double-transition one — the same hazard
-     * ArrClient::grabRelease() documents. Connection loss on those calls is
-     * an indeterminate outcome, not a retryable failure.
+     * updateRequestStatus, retryRequest) and for deleteRequest: Seerr may
+     * have accepted the request before the response was lost, so a
+     * transparent re-POST can file duplicate requests or double-transition
+     * one — the same hazard ArrClient::grabRelease() documents. A timed-out
+     * DELETE may already have landed; repeating it transparently can turn a
+     * timeout into a 404 or delete a request someone just re-filed.
+     * Connection loss on those calls is an indeterminate outcome, not a
+     * retryable failure.
      */
     protected function buildClient(bool $withRetry = true): PendingRequest
     {
@@ -114,7 +117,7 @@ class SeerrClient implements Warmable
      */
     public function deleteRequest(int $id): void
     {
-        $this->buildClient()->delete(sprintf('/api/%s/request/%d', $this->apiVersion, $id))->throw();
+        $this->buildClient(withRetry: false)->delete(sprintf('/api/%s/request/%d', $this->apiVersion, $id))->throw();
     }
 
     /**

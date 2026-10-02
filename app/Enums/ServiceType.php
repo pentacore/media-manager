@@ -40,4 +40,32 @@ enum ServiceType: string
             default => false,
         };
     }
+
+    /**
+     * Bazarr posts to its own webhooks/bazarr/{serviceConnection} route; every
+     * other service delivers to the generic webhooks/{service}/{connection}
+     * endpoint.
+     */
+    public function usesGenericWebhook(): bool
+    {
+        return $this !== self::Bazarr;
+    }
+
+    /**
+     * @return list<string>
+     */
+    public static function genericWebhookValues(): array
+    {
+        $values = [];
+
+        foreach (self::cases() as $serviceType) {
+            if (! $serviceType->usesGenericWebhook()) {
+                continue;
+            }
+
+            $values[] = $serviceType->value;
+        }
+
+        return $values;
+    }
 }

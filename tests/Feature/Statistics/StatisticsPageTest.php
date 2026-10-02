@@ -13,8 +13,14 @@ it('requires authentication', function (): void {
     $this->get(route('statistics.index'))->assertRedirect(route('login'));
 });
 
-it('renders the statistics page with headline props', function (): void {
+it('forbids viewers from the statistics page', function (): void {
     $this->actingAs(User::factory()->create())
+        ->get(route('statistics.index'))
+        ->assertForbidden();
+});
+
+it('renders the statistics page with headline props', function (): void {
+    $this->actingAs(User::factory()->member()->create())
         ->get(route('statistics.index'))
         ->assertOk()
         ->assertInertia(fn ($page) => $page
@@ -33,7 +39,7 @@ it('renders the statistics page with headline props', function (): void {
 });
 
 it('honours the window query parameter', function (): void {
-    $this->actingAs(User::factory()->create())
+    $this->actingAs(User::factory()->member()->create())
         ->get(route('statistics.index', ['window' => '7d']))
         ->assertOk()
         ->assertInertia(fn ($page) => $page
@@ -42,7 +48,7 @@ it('honours the window query parameter', function (): void {
 });
 
 it('exposes deferred leaderboard, top titles, and heatmap props', function (): void {
-    $this->actingAs(User::factory()->create())
+    $this->actingAs(User::factory()->member()->create())
         ->get(route('statistics.index'))
         ->assertOk()
         ->assertInertia(fn ($page) => $page

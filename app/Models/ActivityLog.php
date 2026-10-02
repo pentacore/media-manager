@@ -130,11 +130,13 @@ class ActivityLog extends Model
     }
 
     /**
-     * Audit rows are admin-only. Every reader that shows activity to a person
-     * or a model (the Activity log page and its export, the dashboard, AI
-     * tools) goes through this scope; a null user (AI tools, jobs) never sees
-     * audit rows. tests/Unit/Architecture/ActivityLogVisibilityArchTest.php
-     * fails on a new reader that skips it.
+     * Audit rows are admin-only, and a viewer — who cannot open the activity
+     * log — sees only the activity rows they caused themselves. Every reader
+     * that shows activity to a person or a model (the Activity log page and
+     * its export, the dashboard, AI tools) goes through this scope; a null
+     * user (AI tools, jobs) never sees audit rows.
+     * tests/Unit/Architecture/ActivityLogVisibilityArchTest.php fails on a
+     * new reader that skips it.
      *
      * @param  Builder<static>  $query
      * @return Builder<static>
@@ -145,7 +147,13 @@ class ActivityLog extends Model
             return $query;
         }
 
-        return $query->where('category', ActivityLogCategory::Activity->value);
+        $query->where('category', ActivityLogCategory::Activity->value);
+
+        if ($user instanceof User && ! $user->can(Abilities::MANAGE_LIBRARY)) {
+            $query->where('user_id', $user->id);
+        }
+
+        return $query;
     }
 
     /**
