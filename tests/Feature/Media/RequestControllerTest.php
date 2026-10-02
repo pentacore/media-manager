@@ -7,6 +7,7 @@ use App\Models\ServiceConnection;
 use App\Models\User;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Queue;
+use Illuminate\Support\Sleep;
 
 beforeEach(function (): void {
     config()->set('inertia.ssr.enabled', false);
@@ -837,3 +838,45 @@ test('requests page prefers external_url for connection link', function (): void
             ->where('connection.url', 'https://seerr.example.com')
         );
 });
+
+test('edit options never echo the Seerr or arr response', function (): void {
+    Sleep::fake();
+    ServiceConnection::factory()->sonarr()->create(['url' => 'http://sonarr.local:8989', 'api_key' => 'sonarr-key']);
+    $admin = User::factory()->admin()->create();
+
+    Http::fake(['seerr.local:5055/api/v1/request/42' => Http::response('Cannot open /app/config/db/db.sqlite3', 500)]);
+
+    expect($this->actingAs($admin)->getJson(route('media.requests.edit-options', 42))->assertStatus(502)->json('error'))
+        ->toContain('[redacted path]')
+        ->not->toContain('/app/config');
+});
+
+test('edit options report an arr failure without its paths', function (): void {
+    Sleep::fake();
+    ServiceConnection::factory()->sonarr()->create(['url' => 'http://sonarr.local:8989', 'api_key' => 'sonarr-key']);
+
+    Http::fake([
+        'seerr.local:5055/api/v1/request/42' => Http::response(['id' => 42, 'media' => ['id' => 100, 'mediaType' => 'tv']]),
+        'sonarr.local:8989/api/v3/qualityprofile' => Http::response('Database at /config/sonarr.db is locked', 500),
+    ]);
+
+    expect($this->actingAs(User::factory()->admin()->create())->getJson(route('media.requests.edit-options', 42))->assertStatus(502)->json('error'))
+        ->toStartWith('arr_unreachable: ')
+        ->not->toContain('/config/sonarr.db');
+});
+
+test('a failed request update toast never echoes the Seerr response', function (string $failingStep): void {
+    Sleep::fake();
+    Http::fake(['seerr.local:5055/api/v1/request/42' => $failingStep === 'load'
+        ? Http::response('Cannot open /app/config/db/db.sqlite3', 500)
+        : Http::sequence()
+            ->push(['id' => 42, 'media' => ['id' => 100, 'mediaType' => 'movie'], 'serverId' => 0])
+            ->push('Cannot write /app/config/db/db.sqlite3', 400)]);
+
+    $this->actingAs(User::factory()->admin()->create())
+        ->from(route('media.requests.index'))
+        ->put(route('media.requests.update', 42), ['profile_id' => 9, 'root_folder' => '/movies'])
+        ->assertSessionHas('inertia.flash_data.toast.type', 'error');
+
+    expect((string) session('inertia.flash_data.toast.message'))->not->toContain('/app/config');
+})->with(['load', 'update']);

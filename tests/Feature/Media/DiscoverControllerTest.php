@@ -253,6 +253,8 @@ test('Seerr errors become clear toasts', function (int $status, array $body, str
     'bad request' => [400, ['message' => 'Malformed request.'], 'Seerr rejected the request — check the Seerr connection.'],
     'unauthorized' => [401, ['message' => 'Invalid API key.'], 'Seerr rejected the request — check the Seerr connection.'],
     'non-string message' => [403, ['message' => ['nested' => 'oops']], 'Seerr is unreachable right now.'],
+    'permission naming a path' => [403, ['message' => 'Cannot write /config/db/settings.json'], 'Seerr refused the request: Cannot write [redacted path]'],
+    'blank message' => [403, ['message' => '   '], 'Seerr is unreachable right now.'],
 ]);
 
 test('a lost Seerr response tells the user to check before retrying', function (): void {

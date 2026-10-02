@@ -14,6 +14,7 @@ use App\Services\Radarr\RadarrClient;
 use App\Services\Seerr\SeerrClient;
 use App\Services\Seerr\SeerrTitleResolver;
 use App\Services\Sonarr\SonarrClient;
+use App\Support\UpstreamErrorText;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\RequestException;
@@ -148,7 +149,7 @@ class RequestController extends Controller
         try {
             $request = new SeerrClient($connection)->getRequestById($id);
         } catch (RequestException|ConnectionException $throwable) {
-            return new JsonResponse(['error' => $throwable->getMessage()], 502);
+            return new JsonResponse(['error' => UpstreamErrorText::sanitize($throwable->getMessage())], 502);
         }
 
         $mediaType = (string) ($request['media']['mediaType'] ?? $request['type'] ?? '');
@@ -161,7 +162,7 @@ class RequestController extends Controller
             $profiles = $arrClient->getQualityProfiles();
             $rootFolders = $arrClient->getRootFolders();
         } catch (RequestException|ConnectionException $throwable) {
-            return new JsonResponse(['error' => 'arr_unreachable: '.$throwable->getMessage()], 502);
+            return new JsonResponse(['error' => sprintf('arr_unreachable: %s', UpstreamErrorText::sanitize($throwable->getMessage()))], 502);
         }
 
         return new JsonResponse([
@@ -215,7 +216,7 @@ class RequestController extends Controller
         try {
             $existing = $seerrClient->getRequestById($id);
         } catch (RequestException|ConnectionException $throwable) {
-            Inertia::flash('toast', ['type' => 'error', 'message' => __('Failed to load request: :msg', ['msg' => $throwable->getMessage()])]);
+            Inertia::flash('toast', ['type' => 'error', 'message' => __('Failed to load request: :msg', ['msg' => UpstreamErrorText::sanitize($throwable->getMessage())])]);
 
             return back();
         }
@@ -249,7 +250,7 @@ class RequestController extends Controller
             $seerrClient->updateRequest($id, $payload);
             new SeerrCache($connection)->bustAll();
         } catch (RequestException|ConnectionException $throwable) {
-            Inertia::flash('toast', ['type' => 'error', 'message' => __('Seerr rejected the update: :msg', ['msg' => $throwable->getMessage()])]);
+            Inertia::flash('toast', ['type' => 'error', 'message' => __('Seerr rejected the update: :msg', ['msg' => UpstreamErrorText::sanitize($throwable->getMessage())])]);
 
             return back();
         }
