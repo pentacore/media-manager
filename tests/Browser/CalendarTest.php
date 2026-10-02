@@ -119,7 +119,10 @@ test('the monitored-only filter hides unmonitored items', function (): void {
 test("a movie item's Search and Monitor controls post the movie path", function (): void {
     Http::fake([
         'radarr.local:7878/api/v3/command' => Http::response(['id' => 2], 201),
+        // The describe read, the executor's fresh read before its PUT, then
+        // the PUT's own response.
         'radarr.local:7878/api/v3/movie/10' => Http::sequence()
+            ->push(['id' => 10, 'title' => 'Dune', 'monitored' => true])
             ->push(['id' => 10, 'title' => 'Dune', 'monitored' => true])
             ->push(['id' => 10, 'title' => 'Dune', 'monitored' => false]),
     ]);
