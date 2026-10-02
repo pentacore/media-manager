@@ -96,6 +96,28 @@ class ExecuteActionRequest implements ShouldBeUnique, ShouldQueue
         'bazarr_run_task' => BazarrActions::class,
     ];
 
+    /**
+     * Types whose executor is safe to enter again after a worker died
+     * mid-run: MediaReplacementActions resumes from its durable
+     * MediaReplacementAttempt checkpoints (and never re-issues an attempted
+     * grab), and an Emby library refresh is idempotent. Any other executor
+     * may already have changed the target service, so a lost worker fails
+     * the request for a person to check instead of repeating the change.
+     *
+     * @var list<string>
+     */
+    private const array RESUMABLE_TYPES = ['replace_media_file', 'emby_library_scan'];
+
+    /**
+     * Fixed text for the needs_reconciliation / worker_lost result written
+     * both when a re-delivery finds its request Executing with no retry
+     * marker (resumeRedelivery()) and when the worker running the final
+     * attempt is lost outright, so the queue calls failed() directly without
+     * ever re-entering handle() (failed()). Either way the upstream call may
+     * already have landed with no recorded outcome.
+     */
+    private const string WORKER_LOST_MESSAGE = 'The worker running this action stopped before recording an outcome, so the change may already have reached the target service. Check it there before retrying.';
+
     public function __construct(public ActionRequest $actionRequest) {}
 
     public function handle(): void
@@ -191,10 +213,23 @@ class ExecuteActionRequest implements ShouldBeUnique, ShouldQueue
 
     public function failed(?Throwable $throwable): void
     {
-        // Called by Laravel when retries are exhausted via a rethrown exception.
+        // Called by Laravel when retries are exhausted via a rethrown exception,
+        // or when the worker running the final attempt was lost outright (killed,
+        // OOM'd, or timed out) with no further attempt left to re-deliver it.
         // If handle() already persisted Failed state, short-circuit.
         $this->actionRequest->refresh();
         if ($this->actionRequest->status === ActionRequestStatus::Failed) {
+            return;
+        }
+
+        if ($this->actionRequest->status === ActionRequestStatus::Executing && ! $this->retryWasScheduled()) {
+            $this->markFailed([
+                'reason' => 'needs_reconciliation',
+                'message' => self::WORKER_LOST_MESSAGE,
+                'indeterminate' => true,
+                'worker_lost' => true,
+            ]);
+
             return;
         }
 
@@ -243,18 +278,48 @@ class ExecuteActionRequest implements ShouldBeUnique, ShouldQueue
         }
 
         if ($this->actionRequest->status === ActionRequestStatus::Executing && $this->attempts() > 1) {
-            if ($this->retryWasScheduled()) {
-                // Consume the marker before running again: if this attempt's
-                // worker dies too, the next re-delivery must not find it.
-                $this->actionRequest->update(['result' => null]);
-            }
-
-            return true;
+            return $this->resumeRedelivery();
         }
 
         Log::info('ExecuteActionRequest: skipping — not approved', [
             'action_request_id' => $this->actionRequest->id,
             'status' => $this->actionRequest->status->value,
+        ]);
+
+        return false;
+    }
+
+    /**
+     * A re-delivery of a request that is already Executing. A deliberate
+     * retry (handle() rethrew a transient failure) left the retry marker;
+     * without it the previous worker died mid-execute (SIGKILL, OOM, the job
+     * timeout) after the upstream call may already have landed.
+     */
+    private function resumeRedelivery(): bool
+    {
+        if ($this->retryWasScheduled()) {
+            // Consume the marker before running again: if this attempt's
+            // worker dies too, the next re-delivery must not find it.
+            $this->actionRequest->update(['result' => null]);
+
+            return true;
+        }
+
+        if (in_array($this->actionRequest->type, self::RESUMABLE_TYPES, true)) {
+            return true;
+        }
+
+        Log::warning('ExecuteActionRequest: worker lost mid-execution; failing instead of running the action again', [
+            'action_request_id' => $this->actionRequest->id,
+            'type' => $this->actionRequest->type,
+            'attempt' => $this->attempts(),
+        ]);
+
+        $this->markFailed([
+            'reason' => 'needs_reconciliation',
+            'message' => self::WORKER_LOST_MESSAGE,
+            'indeterminate' => true,
+            'worker_lost' => true,
         ]);
 
         return false;
