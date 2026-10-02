@@ -3,11 +3,14 @@
 declare(strict_types=1);
 
 use App\Enums\ActionRequestStatus;
+use App\Events\ActivityLogCreated;
 use App\Models\ActionRequest;
 use App\Models\ActivityLog;
 use App\Models\User;
 use App\Models\WebhookEvent;
 use Illuminate\Database\QueryException;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Event;
 
 test('logs ActivityLog entry when an ActionRequest is created', function (): void {
     ActionRequest::factory()->create([
@@ -186,4 +189,36 @@ test('service_connection_id populated from webhook event when available', functi
     $log = ActivityLog::where('subject_id', $request->id)->first();
 
     expect($log->service_connection_id)->toBe($webhookEvent->service_connection_id);
+});
+
+test('a status change made inside a transaction is logged only when the transaction commits', function (): void {
+    $request = ActionRequest::factory()->create(['status' => ActionRequestStatus::Pending]);
+    $holder = new stdClass;
+
+    DB::transaction(function () use ($request, $holder): void {
+        $request->update(['status' => ActionRequestStatus::Approved]);
+        $holder->approvedRowsBeforeCommit = ActivityLog::query()
+            ->where('subject_id', $request->id)
+            ->where('action', 'action_request.approved')
+            ->count();
+    });
+
+    expect($holder->approvedRowsBeforeCommit)->toBe(0)
+        ->and(ActivityLog::query()->where('subject_id', $request->id)->where('action', 'action_request.approved')->count())->toBe(1);
+});
+
+test('a rolled-back create or status change writes and broadcasts nothing', function (): void {
+    $pending = ActionRequest::factory()->create(['status' => ActionRequestStatus::Pending]);
+    $rowsBefore = ActivityLog::query()->count();
+    Event::fake([ActivityLogCreated::class]);
+
+    expect(fn () => DB::transaction(function () use ($pending): void {
+        ActionRequest::factory()->create(['webhook_event_id' => null]);
+        $pending->update(['status' => ActionRequestStatus::Rejected]);
+
+        throw new RuntimeException('roll back');
+    }))->toThrow(RuntimeException::class, 'roll back');
+
+    expect(ActivityLog::query()->count())->toBe($rowsBefore);
+    Event::assertNotDispatched(ActivityLogCreated::class);
 });

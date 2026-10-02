@@ -9,9 +9,9 @@ use App\Models\ActionRequest;
 use App\Models\ActivityLog;
 
 /**
- * Writes the ActionRequest audit trail. The observer covers Eloquent saves;
- * conditional query-builder transitions (the Executing claim, the stuck
- * reconcile) bypass observers and call statusChanged() themselves.
+ * Writes the ActionRequest audit trail. The observer covers Eloquent saves
+ * (after commit); conditional query-builder transitions (the Executing claim,
+ * the stuck reconcile) bypass observers and call statusChanged() themselves.
  */
 final class ActionRequestActivityLogger
 {
