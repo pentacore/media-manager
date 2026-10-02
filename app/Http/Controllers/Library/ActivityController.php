@@ -70,7 +70,7 @@ class ActivityController extends Controller
         try {
             $client->grabQueueItem($id);
         } catch (RequestException|ConnectionException $throwable) {
-            return $this->flashAndBack('error', __('Force grab failed: :msg', ['msg' => $throwable->getMessage()]));
+            return $this->flashAndBack('error', __('Force grab failed: :msg', ['msg' => UpstreamErrorText::sanitize($throwable->getMessage())]));
         }
 
         return $this->flashAndBack('success', __('Grab triggered.'));
@@ -260,7 +260,7 @@ class ActivityController extends Controller
         try {
             $candidates = $client->getManualImport(['downloadId' => $downloadId]);
         } catch (RequestException|ConnectionException $throwable) {
-            return new JsonResponse(['error' => $throwable->getMessage()], 502);
+            return new JsonResponse(['error' => UpstreamErrorText::sanitize($throwable->getMessage())], 502);
         }
 
         return new JsonResponse([
@@ -291,7 +291,7 @@ class ActivityController extends Controller
         try {
             $candidates = $client->getManualImport(['downloadId' => $downloadId]);
         } catch (RequestException|ConnectionException $throwable) {
-            return $this->flashAndBack('error', __('Could not enumerate import candidates: :msg', ['msg' => $throwable->getMessage()]));
+            return $this->flashAndBack('error', __('Could not enumerate import candidates: :msg', ['msg' => UpstreamErrorText::sanitize($throwable->getMessage())]));
         }
 
         $files = resolve(ManualImportResolver::class)->toImportPayload($candidates, $service, $downloadId);
@@ -305,7 +305,7 @@ class ActivityController extends Controller
                 'importMode' => 'auto',
             ]);
         } catch (RequestException|ConnectionException $throwable) {
-            return $this->flashAndBack('error', __('Manual import failed: :msg', ['msg' => $throwable->getMessage()]));
+            return $this->flashAndBack('error', __('Manual import failed: :msg', ['msg' => UpstreamErrorText::sanitize($throwable->getMessage())]));
         }
 
         return $this->flashAndBack('success', __('Manual import queued (:n file(s)).', ['n' => count($files)]));
@@ -558,8 +558,8 @@ class ActivityController extends Controller
                 'includeSeries' => 'true',
                 'includeEpisode' => 'true',
             ]);
-        } catch (RequestException|ConnectionException $throwable) {
-            $errors[] = 'Sonarr: '.$throwable->getMessage();
+        } catch (RequestException|ConnectionException) {
+            $errors[] = sprintf('%s is unreachable right now — its queue could not be loaded.', ServiceType::Sonarr->label());
 
             return [];
         }
@@ -587,8 +587,8 @@ class ActivityController extends Controller
                 'includeUnknownMovieItems' => 'true',
                 'includeMovie' => 'true',
             ]);
-        } catch (RequestException|ConnectionException $throwable) {
-            $errors[] = 'Radarr: '.$throwable->getMessage();
+        } catch (RequestException|ConnectionException) {
+            $errors[] = sprintf('%s is unreachable right now — its queue could not be loaded.', ServiceType::Radarr->label());
 
             return [];
         }
@@ -630,8 +630,8 @@ class ActivityController extends Controller
             'sizeleft' => $record['sizeleft'] ?? null,
             'timeleft' => $record['timeleft'] ?? null,
             'estimated_completion_time' => $record['estimatedCompletionTime'] ?? null,
-            'error_message' => $record['errorMessage'] ?? null,
-            'status_messages' => $record['statusMessages'] ?? [],
+            'error_message' => $this->upstreamText($record['errorMessage'] ?? null),
+            'status_messages' => $this->statusMessages($record['statusMessages'] ?? null),
             'added' => $record['added'] ?? null,
             'quality' => $record['quality']['quality']['name'] ?? null,
             'download_id' => $record['downloadId'] ?? null,
@@ -663,11 +663,59 @@ class ActivityController extends Controller
             'sizeleft' => $record['sizeleft'] ?? null,
             'timeleft' => $record['timeleft'] ?? null,
             'estimated_completion_time' => $record['estimatedCompletionTime'] ?? null,
-            'error_message' => $record['errorMessage'] ?? null,
-            'status_messages' => $record['statusMessages'] ?? [],
+            'error_message' => $this->upstreamText($record['errorMessage'] ?? null),
+            'status_messages' => $this->statusMessages($record['statusMessages'] ?? null),
             'added' => $record['added'] ?? null,
             'quality' => $record['quality']['quality']['name'] ?? null,
             'download_id' => $record['downloadId'] ?? null,
         ];
+    }
+
+    /**
+     * Queue rows echo what the arr says about a download, which routinely
+     * carries absolute download and library paths; keep the words, lose the
+     * paths and query strings. Blank or non-string text is dropped rather
+     * than replaced by sanitize()'s "no usable description" filler.
+     */
+    private function upstreamText(mixed $text): ?string
+    {
+        return is_string($text) && trim($text) !== '' ? UpstreamErrorText::sanitize($text) : null;
+    }
+
+    /**
+     * @return list<array{title: string, messages: list<string>}>
+     */
+    private function statusMessages(mixed $statusMessages): array
+    {
+        if (! is_array($statusMessages)) {
+            return [];
+        }
+
+        $sanitized = [];
+
+        foreach ($statusMessages as $statusMessage) {
+            if (! is_array($statusMessage)) {
+                continue;
+            }
+
+            $messages = [];
+
+            foreach (is_array($statusMessage['messages'] ?? null) ? $statusMessage['messages'] : [] as $message) {
+                $text = $this->upstreamText($message);
+
+                if ($text === null) {
+                    continue;
+                }
+
+                $messages[] = $text;
+            }
+
+            $sanitized[] = [
+                'title' => $this->upstreamText($statusMessage['title'] ?? null) ?? '',
+                'messages' => $messages,
+            ];
+        }
+
+        return $sanitized;
     }
 }
