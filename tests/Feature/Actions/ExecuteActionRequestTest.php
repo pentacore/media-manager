@@ -337,3 +337,52 @@ test('a grab whose response is lost fails once instead of retrying into a second
     expect($request->fresh()->status)->toBe(ActionRequestStatus::Failed)
         ->and($request->fresh()->result['message'])->toContain('did not confirm the grab');
 });
+
+test('a deterministic upstream failure stores the reason without its paths or secrets', function (): void {
+    $request = ActionRequest::factory()->create([
+        'status' => ActionRequestStatus::Approved,
+        'type' => 'delete_movie',
+    ]);
+
+    $response = new Response(new GuzzleHttp\Psr7\Response(404, [], 'Movie folder /media/movies/Dune (2021) not found; see http://radarr.local/api/v3/movie/7?apikey=radarr-secret'));
+    $mock = Mockery::mock(ActionExecutor::class);
+    $mock->shouldReceive('execute')->once()->andThrow(new RequestException($response));
+    $this->app->bind(RadarrActions::class, fn (): ActionExecutor => $mock);
+
+    new ExecuteActionRequest($request)->handle();
+
+    $message = $request->fresh()->result['message'];
+
+    expect($request->fresh()->result['reason'])->toBe('execution_failed')
+        ->and($message)->toContain('HTTP request returned status code 404')
+        ->and($message)->not->toContain('/media/movies')
+        ->and($message)->not->toContain('radarr-secret');
+});
+
+test('a permanent failure message naming a path is stored redacted', function (): void {
+    $request = ActionRequest::factory()->create([
+        'status' => ActionRequestStatus::Approved,
+        'type' => 'delete_movie',
+    ]);
+
+    $mock = Mockery::mock(ActionExecutor::class);
+    $mock->shouldReceive('execute')->once()->andThrow(new RuntimeException('Could not unlink /media/movies/Dune.mkv'));
+    $this->app->bind(RadarrActions::class, fn (): ActionExecutor => $mock);
+
+    new ExecuteActionRequest($request)->handle();
+
+    expect($request->fresh()->result['message'])->toBe('Could not unlink [redacted path]');
+});
+
+test('the failed() hook stores a sanitized message', function (): void {
+    $request = ActionRequest::factory()->create([
+        'status' => ActionRequestStatus::Executing,
+        'type' => 'delete_movie',
+    ]);
+
+    new ExecuteActionRequest($request)->failed(new ConnectionException('cURL error 7: Failed to connect for http://radarr.local:7878/api/v3/movie?apikey=radarr-secret'));
+
+    expect($request->fresh()->result['reason'])->toBe('job_failed')
+        ->and($request->fresh()->result['message'])->toContain('cURL error 7')
+        ->and($request->fresh()->result['message'])->not->toContain('radarr-secret');
+});
