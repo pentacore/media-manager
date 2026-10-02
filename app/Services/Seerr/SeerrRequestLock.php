@@ -19,7 +19,10 @@ use Illuminate\Support\Facades\Cache;
  *
  * Approvals made inside Seerr's own UI bypass this lock. That residual race
  * is accepted: it needs an admin acting in Seerr within the cancel's one
- * read-then-delete window, and the member can simply request again.
+ * read-then-delete window, and the member can simply request again. So is
+ * an approve whose response timed out but is still landing in Seerr after
+ * its lock was released. The lock needs a shared cache store (the default
+ * Redis/Valkey one); a per-process store would not serialise anything.
  */
 final readonly class SeerrRequestLock
 {
