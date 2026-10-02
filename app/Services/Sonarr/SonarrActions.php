@@ -28,6 +28,7 @@ class SonarrActions implements ActionExecutor
         private readonly PendingReplacementGuard $pendingReplacementGuard = new PendingReplacementGuard,
         private readonly ReleaseGrabber $releaseGrabber = new ReleaseGrabber,
         private readonly SearchCommandRunner $searchCommandRunner = new SearchCommandRunner,
+        private readonly SonarrEpisodeOwnership $sonarrEpisodeOwnership = new SonarrEpisodeOwnership,
     ) {}
 
     /**
@@ -166,10 +167,8 @@ class SonarrActions implements ActionExecutor
     {
         $payload = $actionRequest->payload;
         $seriesId = (int) ($payload['series_id'] ?? 0);
-        $episodeIds = array_values(array_unique(array_filter(
-            array_map(intval(...), (array) ($payload['episode_ids'] ?? [])),
-            static fn (int $id): bool => $id > 0,
-        )));
+        $episodeIds = $this->episodeIds($payload);
+        $seasonNumber = isset($payload['season_number']) ? (int) $payload['season_number'] : null;
 
         throw_if($seriesId <= 0, InvalidArgumentException::class, 'series_id is required');
         throw_if($episodeIds === [], InvalidArgumentException::class, 'episode_ids is required');
@@ -179,7 +178,17 @@ class SonarrActions implements ActionExecutor
 
         throw_if($this->pendingReplacementGuard->inFlightForMedia($serviceConnection->id, seriesId: $seriesId), ReplacementInFlight::forTitle());
 
-        new SonarrClient($serviceConnection)->setEpisodesMonitored($episodeIds, $monitored);
+        $sonarrClient = new SonarrClient($serviceConnection);
+
+        // The guard above and the Action Queue card trust series_id; the ids
+        // Sonarr acts on must really be that series' (and season's) episodes.
+        throw_unless(
+            $this->sonarrEpisodeOwnership->allBelongTo($sonarrClient, $seriesId, $episodeIds, $seasonNumber),
+            InvalidArgumentException::class,
+            sprintf('episode_ids are not all episodes of series %d%s', $seriesId, $seasonNumber === null ? '' : sprintf(' season %d', $seasonNumber)),
+        );
+
+        $sonarrClient->setEpisodesMonitored($episodeIds, $monitored);
         new SonarrCache($serviceConnection)->bustAll();
 
         return [
@@ -200,7 +209,21 @@ class SonarrActions implements ActionExecutor
         throw_unless($command instanceof MediaSearchCommand && $command->service() === ServiceType::Sonarr, InvalidArgumentException::class, 'command is not a Sonarr search');
 
         $serviceConnection = ServiceConnection::resolvePinnedStrict($payload, ServiceType::Sonarr);
-        $response = $this->searchCommandRunner->run(new SonarrClient($serviceConnection), 'Sonarr', $command, $command->arrParameters($payload));
+        $sonarrClient = new SonarrClient($serviceConnection);
+
+        if ($command === MediaSearchCommand::EpisodeSearch) {
+            $seriesId = (int) ($payload['series_id'] ?? 0);
+            $episodeIds = $this->episodeIds($payload);
+
+            throw_if($seriesId <= 0 || $episodeIds === [], InvalidArgumentException::class, 'series_id and episode_ids are required for an episode search');
+            throw_unless(
+                $this->sonarrEpisodeOwnership->allBelongTo($sonarrClient, $seriesId, $episodeIds),
+                InvalidArgumentException::class,
+                sprintf('episode_ids are not all episodes of series %d', $seriesId),
+            );
+        }
+
+        $response = $this->searchCommandRunner->run($sonarrClient, 'Sonarr', $command, $command->arrParameters($payload));
 
         return [
             'command' => $command->value,
@@ -240,5 +263,17 @@ class SonarrActions implements ActionExecutor
             'indexer_id' => $indexerId,
             'title' => is_string($payload['release']['title'] ?? null) ? $payload['release']['title'] : null,
         ];
+    }
+
+    /**
+     * @param  array<string, mixed>  $payload
+     * @return list<int>
+     */
+    private function episodeIds(array $payload): array
+    {
+        return array_values(array_unique(array_filter(
+            array_map(intval(...), (array) ($payload['episode_ids'] ?? [])),
+            static fn (int $id): bool => $id > 0,
+        )));
     }
 }

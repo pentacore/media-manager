@@ -115,11 +115,24 @@ class SonarrClient extends ArrClient implements Warmable
     {
         return $this->cache()->rememberList(
             'episodes:'.$seriesId,
-            fn (): array => $this->buildClient()
-                ->get(sprintf('/api/%s/episode', $this->apiVersion), ['seriesId' => $seriesId])
-                ->throw()
-                ->json() ?? [],
+            fn (): array => $this->fetchEpisodesBySeries($seriesId),
         );
+    }
+
+    /**
+     * Uncached episode list, for a check that must not trust a list cached
+     * before Sonarr added an episode (SonarrEpisodeOwnership).
+     *
+     * @return array<int, array<string, mixed>>
+     *
+     * @throws RequestException|ConnectionException
+     */
+    public function fetchEpisodesBySeries(int $seriesId): array
+    {
+        return $this->buildClient()
+            ->get(sprintf('/api/%s/episode', $this->apiVersion), ['seriesId' => $seriesId])
+            ->throw()
+            ->json() ?? [];
     }
 
     /**
