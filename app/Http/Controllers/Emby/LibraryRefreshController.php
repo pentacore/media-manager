@@ -10,7 +10,6 @@ use App\Http\Controllers\Controller;
 use App\Models\ActionRequest;
 use App\Models\ActivityLog;
 use App\Models\ServiceConnection;
-use App\Services\Actions\ManualActionDispatcher;
 use App\Services\Emby\EmbyLibraryScanScheduler;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Http\RedirectResponse;
@@ -19,13 +18,13 @@ use Inertia\Inertia;
 
 /**
  * "Refresh library" on Now Playing (admin). Joins a scan that is already
- * waiting for the active Emby server; otherwise dispatches emby_library_scan
- * pinned to that server through the Action Queue (origin manual, Action
- * Rules apply).
+ * waiting for the active Emby server, or dispatches emby_library_scan pinned
+ * to that server through the Action Queue (origin manual, Action Rules
+ * apply) — both under the scheduler's per-server lock.
  */
 class LibraryRefreshController extends Controller
 {
-    public function __invoke(Request $request, EmbyLibraryScanScheduler $embyLibraryScanScheduler, ManualActionDispatcher $manualActionDispatcher): RedirectResponse
+    public function __invoke(Request $request, EmbyLibraryScanScheduler $embyLibraryScanScheduler): RedirectResponse
     {
         try {
             $connection = ServiceConnection::resolveActive(ServiceType::Emby);
@@ -35,30 +34,26 @@ class LibraryRefreshController extends Controller
             return back();
         }
 
-        $folded = $embyLibraryScanScheduler->foldManualTrigger($connection->id);
+        $refresh = $embyLibraryScanScheduler->foldOrDispatchManual(
+            $connection->id,
+            sprintf('Requested from Now Playing by %s.', $request->user()->name),
+        );
 
-        if ($folded instanceof ActionRequest) {
-            $this->log($request, $connection, $folded, folded: true);
+        if ($refresh instanceof ActionRequest) {
+            $this->log($request, $connection, $refresh, folded: true);
 
-            Inertia::flash('toast', $folded->status === ActionRequestStatus::Pending
+            Inertia::flash('toast', $refresh->status === ActionRequestStatus::Pending
                 ? ['type' => 'info', 'message' => __('Queued for approval in the Action Queue.')]
                 : ['type' => 'success', 'message' => __('Library refresh queued.')]);
 
             return back();
         }
 
-        $manualActionOutcome = $manualActionDispatcher->dispatch('emby_library_scan', ServiceType::Emby, [
-            'trigger' => 'manual',
-            'emby_connection_id' => $connection->id,
-            'coalesced_events' => 1,
-            'triggers' => ['manual'],
-        ], sprintf('Requested from Now Playing by %s.', $request->user()->name));
-
-        if ($manualActionOutcome->actionRequest instanceof ActionRequest) {
-            $this->log($request, $connection, $manualActionOutcome->actionRequest, folded: false);
+        if ($refresh->actionRequest instanceof ActionRequest) {
+            $this->log($request, $connection, $refresh->actionRequest, folded: false);
         }
 
-        Inertia::flash('toast', $manualActionOutcome->toast(__('Library refresh queued.')));
+        Inertia::flash('toast', $refresh->toast(__('Library refresh queued.')));
 
         return back();
     }

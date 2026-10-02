@@ -13,6 +13,8 @@ use App\Models\WebhookEvent;
 use App\Services\Actions\ActionDescription;
 use App\Services\Actions\ActionOrchestrator;
 use App\Services\Actions\ActionRequestActivityLogger;
+use App\Services\Actions\ManualActionDispatcher;
+use App\Services\Actions\ManualActionOutcome;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
 
@@ -36,6 +38,7 @@ final readonly class EmbyLibraryScanScheduler
     public function __construct(
         private ActionOrchestrator $actionOrchestrator,
         private ActionRequestActivityLogger $actionRequestActivityLogger,
+        private ManualActionDispatcher $manualActionDispatcher,
     ) {}
 
     /**
@@ -61,7 +64,7 @@ final readonly class EmbyLibraryScanScheduler
         }
 
         return DB::transaction(function () use ($sourceService, $scanPayload, $description, $webhookEvent, $embyConnectionId): ?ActionRequest {
-            DB::select('SELECT pg_advisory_xact_lock(hashtext(?))', [sprintf('emby-library-scan:%d', $embyConnectionId)]);
+            $this->lock($embyConnectionId);
 
             $scanAfter = now()->addSeconds(self::DEBOUNCE_SECONDS);
             $trigger = (string) ($scanPayload['trigger'] ?? $sourceService);
@@ -101,24 +104,32 @@ final readonly class EmbyLibraryScanScheduler
     /**
      * A person clicked "Refresh library". If a scan for this Emby server is
      * still waiting (webhook-coalesced or pending approval), fold the click
-     * into it and pull it forward to run now instead of queueing a second
-     * refresh. Returns null when nothing is waiting — the caller then
-     * dispatches a fresh manual scan.
+     * into it and pull it forward to run now; otherwise file a fresh manual
+     * scan. Both branches run under the advisory lock schedule() takes, so a
+     * webhook landing between "nothing is waiting" and the fresh dispatch can
+     * no longer file a second scan of its own.
+     *
+     * @return ActionRequest|ManualActionOutcome the request the click joined, or the fresh dispatch's outcome
      */
-    public function foldManualTrigger(int $embyConnectionId): ?ActionRequest
+    public function foldOrDispatchManual(int $embyConnectionId, string $because): ActionRequest|ManualActionOutcome
     {
-        return DB::transaction(function () use ($embyConnectionId): ?ActionRequest {
-            DB::select('SELECT pg_advisory_xact_lock(hashtext(?))', [sprintf('emby-library-scan:%d', $embyConnectionId)]);
+        return DB::transaction(function () use ($embyConnectionId, $because): ActionRequest|ManualActionOutcome {
+            $this->lock($embyConnectionId);
 
             $pendingScan = $this->pendingScan($embyConnectionId);
 
-            if (! $pendingScan instanceof ActionRequest) {
-                return null;
+            if ($pendingScan instanceof ActionRequest) {
+                $this->fold($pendingScan, 'manual', now());
+
+                return $pendingScan;
             }
 
-            $this->fold($pendingScan, 'manual', now());
-
-            return $pendingScan;
+            return $this->manualActionDispatcher->dispatch('emby_library_scan', ServiceType::Emby, [
+                'trigger' => 'manual',
+                'emby_connection_id' => $embyConnectionId,
+                'coalesced_events' => 1,
+                'triggers' => ['manual'],
+            ], $because);
         });
     }
 
@@ -137,6 +148,15 @@ final readonly class EmbyLibraryScanScheduler
 
         $this->actionRequestActivityLogger->coalesced($pendingScan, $trigger);
         $this->wakeAfter($pendingScan, $scanAfter);
+    }
+
+    /**
+     * Serialises every fold and fresh dispatch for one Emby server until the
+     * surrounding transaction ends. Call inside DB::transaction().
+     */
+    private function lock(int $embyConnectionId): void
+    {
+        DB::select('SELECT pg_advisory_xact_lock(hashtext(?))', [sprintf('emby-library-scan:%d', $embyConnectionId)]);
     }
 
     /**

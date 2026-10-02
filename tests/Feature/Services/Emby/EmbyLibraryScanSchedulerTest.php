@@ -11,8 +11,11 @@ use App\Models\ActivityLog;
 use App\Models\ServiceConnection;
 use App\Models\WebhookEvent;
 use App\Services\Actions\ActionDescriber;
+use App\Services\Actions\ManualActionOutcome;
 use App\Services\Emby\EmbyLibraryScanScheduler;
 use Carbon\CarbonImmutable;
+use Illuminate\Database\Events\QueryExecuted;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Queue;
 
 beforeEach(function (): void {
@@ -149,4 +152,55 @@ test('a scan filed fresh writes no coalesced row', function (): void {
     scheduleImportScan($this->sonarr);
 
     expect(ActivityLog::query()->where('action', 'action_request.coalesced')->exists())->toBeFalse();
+});
+
+test('a manual refresh with nothing waiting files its scan inside the scan lock', function (): void {
+    scanSchedulerConfig();
+    $emby = ServiceConnection::factory()->emby()->create();
+    $holder = new stdClass;
+    $holder->queries = [];
+    DB::listen(function (QueryExecuted $queryExecuted) use ($holder): void {
+        $holder->queries[] = ['sql' => $queryExecuted->sql, 'level' => $queryExecuted->connection->transactionLevel()];
+    });
+
+    $outcome = resolve(EmbyLibraryScanScheduler::class)->foldOrDispatchManual($emby->id, 'Requested by a test.');
+
+    $queries = collect($holder->queries);
+    $lockAt = $queries->search(fn (array $query): bool => str_contains($query['sql'], 'pg_advisory_xact_lock'));
+    $insertAt = $queries->search(fn (array $query): bool => str_starts_with($query['sql'], 'insert into "action_requests"'));
+
+    expect($outcome)->toBeInstanceOf(ManualActionOutcome::class)
+        ->and($outcome->state)->toBe(ManualActionOutcome::STARTED)
+        ->and($outcome->actionRequest?->payload)->toMatchArray(['trigger' => 'manual', 'emby_connection_id' => $emby->id, 'coalesced_events' => 1, 'triggers' => ['manual']])
+        ->and($outcome->actionRequest?->origin)->toBe('manual')
+        ->and($lockAt)->toBeInt()
+        ->and($insertAt)->toBeInt()
+        ->and($lockAt)->toBeLessThan($insertAt)
+        ->and($holder->queries[$insertAt]['level'])->toBe($holder->queries[$lockAt]['level']);
+
+    Queue::assertPushed(ExecuteActionRequest::class, 1);
+});
+
+test('a manual refresh joins a waiting scan instead of filing a second one', function (): void {
+    scanSchedulerConfig();
+    $emby = ServiceConnection::factory()->emby()->create();
+    $waiting = scheduleImportScan($this->sonarr);
+
+    $folded = resolve(EmbyLibraryScanScheduler::class)->foldOrDispatchManual($emby->id, 'Requested by a test.');
+
+    expect($folded)->toBeInstanceOf(ActionRequest::class)
+        ->and($folded->id)->toBe($waiting?->id)
+        ->and($folded->payload['triggers'])->toBe(['sonarr_download', 'manual'])
+        ->and(ActionRequest::query()->where('type', 'emby_library_scan')->count())->toBe(1);
+});
+
+test('a manual refresh with its rule disabled files nothing', function (): void {
+    ActionTypeConfig::factory()->create(['type' => 'emby_library_scan', 'requires_approval' => false, 'is_enabled' => false]);
+    $emby = ServiceConnection::factory()->emby()->create();
+
+    $outcome = resolve(EmbyLibraryScanScheduler::class)->foldOrDispatchManual($emby->id, 'Requested by a test.');
+
+    expect($outcome)->toBeInstanceOf(ManualActionOutcome::class)
+        ->and($outcome->state)->toBe(ManualActionOutcome::DISABLED)
+        ->and(ActionRequest::query()->count())->toBe(0);
 });
