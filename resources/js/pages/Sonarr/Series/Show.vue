@@ -217,7 +217,10 @@ function confirmDelete() {
 
     deleting.value = true;
     router.delete(SeriesController.destroy.url(props.series.id), {
-        data: { delete_files: deleteFiles.value },
+        data: {
+            delete_files: deleteFiles.value,
+            service_connection_id: props.service_connection_id,
+        },
         preserveScroll: true,
         onFinish: () => {
             deleting.value = false;
