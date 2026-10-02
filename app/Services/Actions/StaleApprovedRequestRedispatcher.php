@@ -12,6 +12,7 @@ use App\Jobs\ExecuteActionRequest;
 use App\Models\ActionRequest;
 use App\Models\SubtitleCaseAttempt;
 use Carbon\CarbonImmutable;
+use Exception;
 use Illuminate\Bus\UniqueLock;
 use Illuminate\Contracts\Bus\Dispatcher;
 use Illuminate\Support\Facades\Cache;
@@ -131,7 +132,13 @@ final readonly class StaleApprovedRequestRedispatcher
             return false;
         }
 
-        $this->actionRequestActivityLogger->redispatched($actionRequest);
+        // The job is queued; a failing audit-trail write must not abort the
+        // rest of the run (the same reason the push above is guarded).
+        try {
+            $this->actionRequestActivityLogger->redispatched($actionRequest);
+        } catch (Exception $exception) {
+            report($exception);
+        }
 
         Log::warning('actions:reconcile-stuck re-dispatched an approved action request that never started', [
             'action_request_id' => $actionRequest->id,

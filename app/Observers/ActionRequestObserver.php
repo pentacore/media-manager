@@ -6,8 +6,8 @@ namespace App\Observers;
 
 use App\Models\ActionRequest;
 use App\Services\Actions\ActionRequestActivityLogger;
+use Exception;
 use Illuminate\Contracts\Events\ShouldHandleEventsAfterCommit;
-use Throwable;
 
 /**
  * Runs after the caller's transaction commits, so a rollback never leaves an
@@ -33,8 +33,8 @@ class ActionRequestObserver implements ShouldHandleEventsAfterCommit
     {
         try {
             $this->actionRequestActivityLogger->created($actionRequest);
-        } catch (Throwable $throwable) {
-            report($throwable);
+        } catch (Exception $exception) {
+            report($exception);
         }
     }
 
@@ -46,8 +46,8 @@ class ActionRequestObserver implements ShouldHandleEventsAfterCommit
 
         try {
             $this->actionRequestActivityLogger->statusChanged($actionRequest);
-        } catch (Throwable $throwable) {
-            report($throwable);
+        } catch (Exception $exception) {
+            report($exception);
         }
     }
 }
