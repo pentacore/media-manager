@@ -289,7 +289,7 @@ test('failed() hook does not overwrite already-Failed status', function (): void
 
 test('failed() hook records job_failed when queue exhausts without explicit state', function (): void {
     $request = ActionRequest::factory()->create([
-        'status' => ActionRequestStatus::Pending,
+        'status' => ActionRequestStatus::Approved,
     ]);
 
     $job = new ExecuteActionRequest($request);
@@ -322,7 +322,32 @@ test('failed() hook fails for reconciliation when the worker running the final a
             'message' => 'The worker running this action stopped before recording an outcome, so the change may already have reached the target service. Check it there before retrying.',
             'indeterminate' => true,
             'worker_lost' => true,
+            'exception' => RuntimeException::class,
         ]);
+});
+
+test('failed() hook records job_failed when Executing with an unconsumed retry marker', function (): void {
+    // The attempt-3 worker died before it reached the executor: the marker
+    // from attempt 1's deliberate rethrow was never consumed, so this is not
+    // the worker-lost case P2 covers — it falls through to the generic
+    // job_failed result like any other failed() call outside the executor.
+    $request = ActionRequest::factory()->create([
+        'status' => ActionRequestStatus::Executing,
+        'type' => 'delete_series',
+        'result' => ['retry_scheduled' => true, 'attempt' => 2],
+    ]);
+
+    $job = new ExecuteActionRequest($request);
+    $job->failed(new RuntimeException('queue gave up'));
+
+    $fresh = $request->fresh();
+    expect($fresh->status)->toBe(ActionRequestStatus::Failed)
+        ->and($fresh->result)->toMatchArray([
+            'success' => false,
+            'reason' => 'job_failed',
+            'message' => 'queue gave up',
+        ])
+        ->and($fresh->result)->not->toHaveKey('worker_lost');
 });
 
 test('job has timeout and unique-for duration', function (): void {
@@ -426,7 +451,7 @@ test('a permanent failure message naming a path is stored redacted', function ()
 
 test('the failed() hook stores a sanitized message', function (): void {
     $request = ActionRequest::factory()->create([
-        'status' => ActionRequestStatus::Pending,
+        'status' => ActionRequestStatus::Approved,
         'type' => 'delete_movie',
     ]);
 
@@ -566,6 +591,7 @@ test('a re-delivered request whose worker was lost fails for reconciliation inst
     'bazarr download' => ['bazarr_download_best', BazarrActions::class],
     'stuck download removal' => ['remove_stuck_download', RemoveStuckDownloadActions::class],
     'manual import' => ['resolve_manual_import', ManualImportActions::class],
+    'media replacement' => ['replace_media_file', MediaReplacementActions::class],
 ]);
 
 test('a re-delivery after the retry marker was consumed fails instead of running a third time', function (): void {
@@ -593,7 +619,6 @@ test('a crash-safe action resumes after a lost worker', function (string $type, 
 
     expect($request->fresh()->status)->toBe(ActionRequestStatus::Completed);
 })->with([
-    'media replacement' => ['replace_media_file', MediaReplacementActions::class],
     'emby library scan' => ['emby_library_scan', EmbyActions::class],
 ]);
 

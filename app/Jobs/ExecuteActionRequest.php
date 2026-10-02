@@ -98,15 +98,19 @@ class ExecuteActionRequest implements ShouldBeUnique, ShouldQueue
 
     /**
      * Types whose executor is safe to enter again after a worker died
-     * mid-run: MediaReplacementActions resumes from its durable
-     * MediaReplacementAttempt checkpoints (and never re-issues an attempted
-     * grab), and an Emby library refresh is idempotent. Any other executor
-     * may already have changed the target service, so a lost worker fails
-     * the request for a person to check instead of repeating the change.
+     * mid-run: an Emby library refresh is idempotent. replace_media_file is
+     * deliberately NOT here even though MediaReplacementActions resumes from
+     * durable MediaReplacementAttempt checkpoints: its execution lock
+     * (Cache::lock, 900s) outlives a dead worker, so the re-delivery arrives
+     * while the lease is still held and LockTimeoutException surfaces as an
+     * ordinary execution_failed instead of actually resuming. It still fails
+     * safely — no grab is duplicated — but as needs_reconciliation like every
+     * other non-idempotent type; a later manual retry resumes through
+     * runReplacement()'s checkpoints once the lease has expired.
      *
      * @var list<string>
      */
-    private const array RESUMABLE_TYPES = ['replace_media_file', 'emby_library_scan'];
+    private const array RESUMABLE_TYPES = ['emby_library_scan'];
 
     /**
      * Fixed text for the needs_reconciliation / worker_lost result written
@@ -223,11 +227,20 @@ class ExecuteActionRequest implements ShouldBeUnique, ShouldQueue
         }
 
         if ($this->actionRequest->status === ActionRequestStatus::Executing && ! $this->retryWasScheduled()) {
+            $exceptionClass = $throwable instanceof Throwable ? $throwable::class : null;
+
+            Log::warning('ExecuteActionRequest: worker lost on the final attempt; failing instead of running the action again', [
+                'action_request_id' => $this->actionRequest->id,
+                'type' => $this->actionRequest->type,
+                'exception' => $exceptionClass,
+            ]);
+
             $this->markFailed([
                 'reason' => 'needs_reconciliation',
                 'message' => self::WORKER_LOST_MESSAGE,
                 'indeterminate' => true,
                 'worker_lost' => true,
+                'exception' => $exceptionClass,
             ]);
 
             return;
