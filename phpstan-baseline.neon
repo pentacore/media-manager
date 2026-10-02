@@ -577,12 +577,6 @@ parameters:
 			path: app/Jobs/ReconcileSubtitleCase.php
 
 		-
-			message: '#^Property App\\Jobs\\ReconcileSubtitleCase\:\:\$reservationId in isset\(\) is not nullable nor uninitialized\.$#'
-			identifier: isset.initializedProperty
-			count: 1
-			path: app/Jobs/ReconcileSubtitleCase.php
-
-		-
 			message: '#^Readonly property App\\Jobs\\ReconcileSubtitleCase\:\:\$reservationId is assigned outside of the constructor\.$#'
 			identifier: property.readOnlyAssignNotInConstructor
 			count: 1
@@ -1249,7 +1243,7 @@ parameters:
 			path: config/clockwork.php
 
 		-
-			message: '#^Comparison operation "\>\=" between int\<80500, 80599\> and 80500 is always true\.$#'
+			message: '#^Comparison operation "\>\=" between int\<80500, 80699\> and 80500 is always true\.$#'
 			identifier: greaterOrEqual.alwaysTrue
 			count: 2
 			path: config/database.php

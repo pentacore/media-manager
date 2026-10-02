@@ -24,7 +24,7 @@ class ServiceMetricFactory extends Factory
         return [
             'service_connection_id' => ServiceConnection::factory(),
             'status' => HealthStatus::Healthy,
-            'latency_ms' => $this->faker->numberBetween(20, 200),
+            'latency_ms' => fake()->numberBetween(20, 200),
             'message' => null,
             'recorded_at' => now(),
         ];

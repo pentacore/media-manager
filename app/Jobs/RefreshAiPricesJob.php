@@ -11,12 +11,9 @@ use App\Models\User;
 use App\Services\AiUsage\Pricing\AiPriceRefreshCoordinator;
 use App\Services\AiUsage\Pricing\Data\RefreshReport;
 use App\Services\AiUsage\Pricing\RefreshScope;
-use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
-use Illuminate\Foundation\Bus\Dispatchable;
+use Illuminate\Foundation\Queue\Queueable;
 use Illuminate\Queue\Attributes\Queue;
-use Illuminate\Queue\InteractsWithQueue;
-use Illuminate\Queue\SerializesModels;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
 use Throwable;
@@ -24,10 +21,7 @@ use Throwable;
 #[Queue(QueueLane::Ai)]
 class RefreshAiPricesJob implements ShouldQueue
 {
-    use Dispatchable;
-    use InteractsWithQueue;
     use Queueable;
-    use SerializesModels;
 
     /**
      * Concurrency is enforced via {@see tryLock()} at dispatch time so the

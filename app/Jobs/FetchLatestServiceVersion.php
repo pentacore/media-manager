@@ -10,19 +10,13 @@ use App\Notifications\ServiceUpdateAvailable;
 use App\Services\GitHub\GitHubReleaseClient;
 use App\Services\Notifications\AdminNotifier;
 use Illuminate\Bus\Batchable;
-use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
-use Illuminate\Foundation\Bus\Dispatchable;
-use Illuminate\Queue\InteractsWithQueue;
-use Illuminate\Queue\SerializesModels;
+use Illuminate\Foundation\Queue\Queueable;
 
 class FetchLatestServiceVersion implements ShouldQueue
 {
     use Batchable;
-    use Dispatchable;
-    use InteractsWithQueue;
     use Queueable;
-    use SerializesModels;
 
     /**
      * Deleting the underlying model while this job is queued must drop the

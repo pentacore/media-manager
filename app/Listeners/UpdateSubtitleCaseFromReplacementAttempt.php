@@ -49,9 +49,11 @@ final readonly class UpdateSubtitleCaseFromReplacementAttempt
         // NeedsAttention already parked the case, so a later Verified for the same
         // request has to be able to resolve it — an explicitly closed case
         // (dismissed, handled) still stays closed.
-        $acceptedStatuses = $mediaReplacementAttempt->status === MediaReplacementStatus::Verified
-            ? [SubtitleCaseStatus::ReplacementRequested, SubtitleCaseStatus::NeedsReview]
-            : [SubtitleCaseStatus::ReplacementRequested];
+        $acceptedStatuses = [SubtitleCaseStatus::ReplacementRequested];
+
+        if ($mediaReplacementAttempt->status === MediaReplacementStatus::Verified) {
+            $acceptedStatuses[] = SubtitleCaseStatus::NeedsReview;
+        }
 
         if (! $subtitleCase instanceof SubtitleCase
             || ! in_array($subtitleCase->status, $acceptedStatuses, true)
