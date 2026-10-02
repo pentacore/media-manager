@@ -31,6 +31,25 @@ beforeEach(function (): void {
     Event::fake([ActionRequestStatusChanged::class]);
 });
 
+/**
+ * The job as the queue hands it over on a given delivery attempt.
+ */
+function executeActionRequestOnAttempt(ActionRequest $actionRequest, int $attempt): ExecuteActionRequest
+{
+    $job = new ExecuteActionRequest($actionRequest);
+    $mock = Mockery::mock(Job::class);
+    $mock->shouldReceive('attempts')->andReturn($attempt);
+    $mock->shouldReceive('uuid')->andReturn('job-uuid');
+    $mock->shouldReceive('getJobId')->andReturn('job-id');
+    $mock->shouldReceive('resolveName')->andReturn(ExecuteActionRequest::class);
+    $mock->shouldReceive('hasFailed')->andReturn(false);
+    $mock->shouldReceive('isReleased')->andReturn(false);
+    $mock->shouldReceive('isDeleted')->andReturn(false);
+    $job->setJob($mock);
+
+    return $job;
+}
+
 test('skips execution when status is not Approved', function (): void {
     $request = ActionRequest::factory()->create([
         'status' => ActionRequestStatus::Pending,
@@ -429,4 +448,62 @@ test('a queued Seerr approve that cannot get the request lock fails without retr
             'message' => 'Seerr request 77 is being changed by another MediaManager action.',
         ]);
     Http::assertNothingSent();
+});
+
+test('a transient rethrow leaves a retry marker on the executing request', function (): void {
+    $request = ActionRequest::factory()->create(['status' => ActionRequestStatus::Approved, 'type' => 'delete_movie']);
+    $mock = Mockery::mock(ActionExecutor::class);
+    $mock->shouldReceive('execute')->once()->andThrow(new ConnectionException('connection refused'));
+    $this->app->bind(RadarrActions::class, fn (): ActionExecutor => $mock);
+
+    expect(fn () => executeActionRequestOnAttempt($request, 1)->handle())->toThrow(ConnectionException::class);
+
+    $fresh = $request->fresh();
+    expect($fresh->status)->toBe(ActionRequestStatus::Executing)
+        ->and($fresh->result)->toBe(['retry_scheduled' => true, 'attempt' => 1])
+        ->and(ActivityLog::query()->where('subject_id', $request->id)->where('action', 'action_request.failed')->exists())->toBeFalse();
+});
+
+test('the re-delivery of a deliberate retry clears the marker before it runs the executor again', function (): void {
+    $request = ActionRequest::factory()->create([
+        'status' => ActionRequestStatus::Executing,
+        'type' => 'delete_movie',
+        'result' => ['retry_scheduled' => true, 'attempt' => 1],
+    ]);
+    $holder = new stdClass;
+    $mock = Mockery::mock(ActionExecutor::class);
+    $mock->shouldReceive('execute')->once()->andReturnUsing(function (ActionRequest $actionRequest) use ($holder): array {
+        $holder->storedResultWhileExecuting = ActionRequest::query()->whereKey($actionRequest->id)->value('result');
+
+        return ['deleted' => true];
+    });
+    $this->app->bind(RadarrActions::class, fn (): ActionExecutor => $mock);
+
+    executeActionRequestOnAttempt($request, 2)->handle();
+
+    expect($holder->storedResultWhileExecuting)->toBeNull()
+        ->and($request->fresh()->status)->toBe(ActionRequestStatus::Completed)
+        ->and($request->fresh()->result)->toBe(['success' => true, 'deleted' => true]);
+});
+
+test('a transient failure on the first attempt is retried and completes on the second', function (): void {
+    $request = ActionRequest::factory()->create(['status' => ActionRequestStatus::Approved, 'type' => 'delete_movie']);
+    $holder = new stdClass;
+    $holder->calls = 0;
+
+    $mock = Mockery::mock(ActionExecutor::class);
+    $mock->shouldReceive('execute')->twice()->andReturnUsing(function () use ($holder): array {
+        $holder->calls++;
+
+        throw_if($holder->calls === 1, ConnectionException::class, 'connection reset');
+
+        return ['deleted' => true];
+    });
+    $this->app->bind(RadarrActions::class, fn (): ActionExecutor => $mock);
+
+    expect(fn () => executeActionRequestOnAttempt($request, 1)->handle())->toThrow(ConnectionException::class);
+    executeActionRequestOnAttempt($request->fresh(), 2)->handle();
+
+    expect($holder->calls)->toBe(2)
+        ->and($request->fresh()->status)->toBe(ActionRequestStatus::Completed);
 });

@@ -157,6 +157,13 @@ class ExecuteActionRequest implements ShouldBeUnique, ShouldQueue
                 return;
             }
 
+            // Tell the re-delivery that this attempt gave up on purpose. Without
+            // the marker, a re-delivery of an Executing request means the
+            // worker died mid-execute (see claimForExecution()).
+            $this->actionRequest->update([
+                'result' => ['retry_scheduled' => true, 'attempt' => $this->attempts()],
+            ]);
+
             throw $exception;
         } catch (Throwable $permanent) {
             // Permanent failure: mark Failed immediately — no retry.
@@ -236,6 +243,12 @@ class ExecuteActionRequest implements ShouldBeUnique, ShouldQueue
         }
 
         if ($this->actionRequest->status === ActionRequestStatus::Executing && $this->attempts() > 1) {
+            if ($this->retryWasScheduled()) {
+                // Consume the marker before running again: if this attempt's
+                // worker dies too, the next re-delivery must not find it.
+                $this->actionRequest->update(['result' => null]);
+            }
+
             return true;
         }
 
@@ -245,6 +258,11 @@ class ExecuteActionRequest implements ShouldBeUnique, ShouldQueue
         ]);
 
         return false;
+    }
+
+    private function retryWasScheduled(): bool
+    {
+        return ($this->actionRequest->result['retry_scheduled'] ?? false) === true;
     }
 
     private function resolveExecutor(string $type): ?ActionExecutor
