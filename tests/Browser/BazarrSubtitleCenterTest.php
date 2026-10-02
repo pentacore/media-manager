@@ -23,7 +23,7 @@ use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Queue;
 use Tests\Support\ParseMultipartBrowserRequests;
 
-test('viewer can browse the subtitle center', function (): void {
+test('member can browse the subtitle center', function (): void {
     $bazarr = ServiceConnection::factory()->bazarr()->create([
         'name' => 'Primary Bazarr',
         'url' => 'http://bazarr.test',
@@ -36,7 +36,7 @@ test('viewer can browse the subtitle center', function (): void {
         'bazarr.test/api/movies/wanted*' => Http::response(['data' => [], 'total' => 0]),
     ]);
 
-    $this->actingAs(User::factory()->create());
+    $this->actingAs(User::factory()->member()->create());
 
     visit(route('bazarr.overview', ['connection' => $bazarr->id], false))
         ->assertSee('Subtitle Center')

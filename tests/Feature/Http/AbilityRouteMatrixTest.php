@@ -73,6 +73,10 @@ dataset('member-only routes', [
     'library bulk' => ['POST', 'media.library.actions.bulk', []],
     'wanted' => ['GET', 'media.wanted.index', []],
     'service health run checks' => ['POST', 'monitoring.service-health.run-checks', []],
+    'subtitles capabilities' => ['GET', 'bazarr.capabilities', []],
+    'subtitles search' => ['GET', 'bazarr.search', []],
+    'subtitles operations' => ['POST', 'bazarr.operations.store', []],
+    'subtitles uploads' => ['POST', 'bazarr.uploads.store', []],
 ]);
 
 dataset('member write routes', [
@@ -109,6 +113,11 @@ dataset('member-level read pages', [
     'activity log export' => ['activity-log.export'],
     'statistics' => ['statistics.index'],
     'service health' => ['monitoring.service-health'],
+    'subtitles overview' => ['bazarr.overview'],
+    'subtitles missing' => ['bazarr.missing'],
+    'subtitles library' => ['bazarr.library'],
+    'subtitles history' => ['bazarr.history'],
+    'subtitles escalations' => ['bazarr.escalations'],
 ]);
 
 test('viewer-level read routes open for viewers', function (string $routeName, array $parameters): void {

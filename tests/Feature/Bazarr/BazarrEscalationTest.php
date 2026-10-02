@@ -19,7 +19,7 @@ beforeEach(function (): void {
     config()->set('inertia.testing.ensure_pages_exist', false);
 });
 
-test('viewer sees paginated sanitized escalation summaries', function (): void {
+test('member sees paginated sanitized escalation summaries', function (): void {
     $bazarr = ServiceConnection::factory()->bazarr()->create(['name' => 'Primary Bazarr']);
     $downloadRequest = ActionRequest::factory()->create([
         'status' => ActionRequestStatus::Completed,
@@ -61,7 +61,7 @@ test('viewer sees paginated sanitized escalation summaries', function (): void {
         'completed_at' => now()->subMinutes(29),
     ]);
 
-    $response = $this->actingAs(User::factory()->create())
+    $response = $this->actingAs(User::factory()->member()->create())
         ->get(route('bazarr.escalations', ['connection' => $bazarr->id]))
         ->assertOk()
         ->assertInertia(fn (AssertableInertia $assertableInertia): AssertableInertia => $assertableInertia
