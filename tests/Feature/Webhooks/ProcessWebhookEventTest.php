@@ -218,3 +218,14 @@ test('a no-handler event is marked processed with NoHandler status, not left unp
     expect($fresh->processed_at)->not->toBeNull()
         ->and($fresh->handling_status)->toBe(WebhookHandlingStatus::NoHandler);
 });
+
+test('a stored Bazarr event resolves to no handler instead of crashing', function (): void {
+    $connection = ServiceConnection::factory()->bazarr()->create();
+    $event = WebhookEvent::factory()->create(['service_connection_id' => $connection->id]);
+
+    new ProcessWebhookEvent($event)->handle();
+
+    $fresh = $event->fresh();
+    expect($fresh->processed_at)->not->toBeNull()
+        ->and($fresh->handling_status)->toBe(WebhookHandlingStatus::NoHandler);
+});

@@ -99,8 +99,10 @@ class WebhookController extends Controller
             ServiceType::Prowlarr,
             ServiceType::Whisparr,
             ServiceType::SABnzbd => 'eventType',
+            // Unreachable through the route constraint; total for safety.
+            ServiceType::Bazarr => null,
         };
 
-        return (string) $request->input($key, 'unknown');
+        return $key === null ? 'unknown' : (string) $request->input($key, 'unknown');
     }
 }
