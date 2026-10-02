@@ -10,7 +10,6 @@ use Rector\Naming\Rector\Class_\RenamePropertyToMatchTypeRector;
 use Rector\Naming\Rector\ClassMethod\RenameParamToMatchTypeRector;
 use RectorLaravel\Rector\StaticCall\RouteActionCallableRector;
 use RectorLaravel\Set\LaravelSetList;
-use RectorLaravel\Set\LaravelSetProvider;
 
 // Rector refuses a container cache directory that does not exist yet.
 $containerCacheDirectory = __DIR__.'/storage/framework/cache/rector-container';
@@ -34,7 +33,6 @@ return RectorConfig::configure()
         rectorPreset: true,
         phpunitCodeQuality: true,
     )
-    ->withSetProviders(LaravelSetProvider::class)
     ->withComposerBased(phpunit: true, laravel: true)
     ->withImportNames()
     ->withAttributesSets()

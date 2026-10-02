@@ -13,14 +13,11 @@ use App\Services\Radarr\RadarrClient;
 use App\Services\Search\MovieIndexer;
 use App\Services\Search\SeriesIndexer;
 use App\Services\Sonarr\SonarrClient;
-use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldBeUnique;
 use Illuminate\Contracts\Queue\ShouldQueue;
-use Illuminate\Foundation\Bus\Dispatchable;
+use Illuminate\Foundation\Queue\Queueable;
 use Illuminate\Queue\Attributes\Queue;
 use Illuminate\Queue\Attributes\UniqueFor;
-use Illuminate\Queue\InteractsWithQueue;
-use Illuminate\Queue\SerializesModels;
 use Illuminate\Support\Facades\Log;
 use Throwable;
 
@@ -36,10 +33,7 @@ use Throwable;
 #[UniqueFor(1800)]
 class ReconcileSearchIndex implements ShouldBeUnique, ShouldQueue
 {
-    use Dispatchable;
-    use InteractsWithQueue;
     use Queueable;
-    use SerializesModels;
 
     public int $tries = 3;
 

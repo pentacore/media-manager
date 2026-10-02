@@ -29,7 +29,7 @@ class AiModelRateLimitFactory extends Factory
             'ai_model_price_id' => AiModelPrice::factory(),
             'metric' => RateLimitMetric::Requests,
             'period' => RateLimitPeriod::Minute,
-            'limit_value' => $this->faker->numberBetween(100, 100_000),
+            'limit_value' => fake()->numberBetween(100, 100_000),
         ];
     }
 }
