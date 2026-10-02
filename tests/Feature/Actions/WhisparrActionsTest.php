@@ -8,7 +8,9 @@ use App\Jobs\ExecuteActionRequest;
 use App\Models\ActionRequest;
 use App\Models\ServiceConnection;
 use App\Services\Whisparr\WhisparrActions;
+use App\Services\Whisparr\WhisparrClient;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
+use Illuminate\Http\Client\Request;
 use Illuminate\Http\Client\RequestException;
 use Illuminate\Support\Facades\Http;
 
@@ -191,4 +193,36 @@ test('the pinned-connection Whisparr executors refuse to run against a mismatche
     'whisparr_monitor_item' => ['whisparr_monitor_item', ['whisparr_item_id' => 11, 'monitored' => true]],
     'whisparr_set_quality_profile' => ['whisparr_set_quality_profile', ['whisparr_item_id' => 11, 'quality_profile_id' => 2]],
     'whisparr_search' => ['whisparr_search', ['whisparr_item_id' => 11]],
+]);
+
+test('a Whisparr write starts from what Whisparr holds now, not from a cached snapshot', function (string $type, array $payload, array $changedInWhisparr, array $expectedPut): void {
+    $serviceConnection = whisparrActionsConnection();
+    $upstream = new stdClass;
+    $upstream->item = ['id' => 42, 'title' => 'Aurora Scene', 'monitored' => true, 'qualityProfileId' => 1];
+    $upstream->puts = [];
+    Http::fake([
+        'whisparr.local:6969/api/v3/movie/42' => function (Request $request) use ($upstream) {
+            if ($request->method() === 'PUT') {
+                $upstream->puts[] = $request->data();
+
+                return Http::response($request->data());
+            }
+
+            return Http::response($upstream->item);
+        },
+    ]);
+
+    new WhisparrClient($serviceConnection)->getItemById(42);
+    $upstream->item = [...$upstream->item, ...$changedInWhisparr];
+
+    new WhisparrActions()->execute(ActionRequest::factory()->create([
+        'type' => $type,
+        'payload' => [...$payload, 'service_connection_id' => $serviceConnection->id],
+    ]));
+
+    expect($upstream->puts)->toHaveCount(1)
+        ->and($upstream->puts[0])->toMatchArray($expectedPut);
+})->with([
+    'monitoring keeps a profile changed in Whisparr' => ['whisparr_monitor_item', ['whisparr_item_id' => 42, 'monitored' => false], ['qualityProfileId' => 4], ['monitored' => false, 'qualityProfileId' => 4]],
+    'a profile change keeps monitoring changed in Whisparr' => ['whisparr_set_quality_profile', ['whisparr_item_id' => 42, 'quality_profile_id' => 7], ['monitored' => false], ['monitored' => false, 'qualityProfileId' => 7]],
 ]);

@@ -41,8 +41,23 @@ class RadarrClient extends ArrClient implements Warmable
     {
         return $this->cache()->rememberEntity(
             'movie:'.$id,
-            fn (): array => $this->buildClient()->get(sprintf('/api/%s/movie/%d', $this->apiVersion, $id))->throw()->json() ?? [],
+            fn (): array => $this->fetchMovieById($id),
         );
+    }
+
+    /**
+     * Uncached read for a write path. RadarrActions changes one field and
+     * PUTs the whole movie back, so it must start from what Radarr holds now:
+     * a snapshot cached by an earlier page view would revert whatever changed
+     * in Radarr since.
+     *
+     * @return array<string, mixed>
+     *
+     * @throws RequestException|ConnectionException
+     */
+    public function fetchMovieById(int $id): array
+    {
+        return $this->buildClient()->get(sprintf('/api/%s/movie/%d', $this->apiVersion, $id))->throw()->json() ?? [];
     }
 
     /**

@@ -8,6 +8,7 @@ use App\Models\ServiceConnection;
 use App\Services\Arr\SearchCommandFailed;
 use App\Services\MediaReplacement\ReplacementInFlight;
 use App\Services\Radarr\RadarrActions;
+use App\Services\Radarr\RadarrClient;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\Request;
 use Illuminate\Support\Facades\Http;
@@ -148,3 +149,31 @@ test('grab_release completes even when busting the cache afterward fails', funct
 
     expect($result)->toBe(['indexer_id' => 4, 'title' => 'x']);
 });
+
+test('a movie write starts from what Radarr holds now, not from a cached snapshot', function (string $type, array $payload, array $changedInRadarr, array $expectedPut): void {
+    $upstream = new stdClass;
+    $upstream->movie = ['id' => 42, 'title' => 'Dune', 'monitored' => true, 'qualityProfileId' => 1];
+    $upstream->puts = [];
+    Http::fake([
+        'radarr.local:7878/api/v3/movie/42' => function (Request $request) use ($upstream) {
+            if ($request->method() === 'PUT') {
+                $upstream->puts[] = $request->data();
+
+                return Http::response($request->data());
+            }
+
+            return Http::response($upstream->movie);
+        },
+    ]);
+
+    new RadarrClient(ServiceConnection::query()->where('type', 'radarr')->sole())->getMovieById(42);
+    $upstream->movie = [...$upstream->movie, ...$changedInRadarr];
+
+    resolve(RadarrActions::class)->execute(ActionRequest::factory()->create(['type' => $type, 'payload' => $payload]));
+
+    expect($upstream->puts)->toHaveCount(1)
+        ->and($upstream->puts[0])->toMatchArray($expectedPut);
+})->with([
+    'monitoring keeps a profile changed in Radarr' => ['monitor_movie', ['movie_id' => 42, 'monitored' => false], ['qualityProfileId' => 4], ['monitored' => false, 'qualityProfileId' => 4]],
+    'a profile change keeps monitoring changed in Radarr' => ['set_movie_quality_profile', ['movie_id' => 42, 'quality_profile_id' => 7], ['monitored' => false], ['monitored' => false, 'qualityProfileId' => 7]],
+]);

@@ -86,7 +86,7 @@ class WhisparrActions implements ActionExecutor
         $monitored = (bool) ($payload['monitored'] ?? true);
         $serviceConnection = ServiceConnection::resolvePinnedStrict($payload, ServiceType::Whisparr);
         $whisparrClient = new WhisparrClient($serviceConnection);
-        $item = $whisparrClient->getItemById($itemId);
+        $item = $whisparrClient->fetchItemById($itemId);
         $item['monitored'] = $monitored;
         $whisparrClient->updateItem($itemId, $item);
         new WhisparrCache($serviceConnection)->bustAll();
@@ -107,7 +107,7 @@ class WhisparrActions implements ActionExecutor
 
         $serviceConnection = ServiceConnection::resolvePinnedStrict($payload, ServiceType::Whisparr);
         $whisparrClient = new WhisparrClient($serviceConnection);
-        $item = $whisparrClient->getItemById($itemId);
+        $item = $whisparrClient->fetchItemById($itemId);
         $item['qualityProfileId'] = $qualityProfileId;
         $whisparrClient->updateItem($itemId, $item);
         new WhisparrCache($serviceConnection)->bustAll();

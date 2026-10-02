@@ -121,7 +121,7 @@ class RadarrActions implements ActionExecutor
         throw_if($this->pendingReplacementGuard->inFlightForMedia($serviceConnection->id, movieId: $movieId), ReplacementInFlight::forTitle());
 
         $radarrClient = new RadarrClient($serviceConnection);
-        $movie = $radarrClient->getMovieById($movieId);
+        $movie = $radarrClient->fetchMovieById($movieId);
         $movie['monitored'] = $monitored;
         $radarrClient->updateMovie($movieId, $movie);
         new RadarrCache($serviceConnection)->bustAll();
@@ -146,7 +146,7 @@ class RadarrActions implements ActionExecutor
 
         $serviceConnection = ServiceConnection::resolvePinned($payload, ServiceType::Radarr);
         $radarrClient = new RadarrClient($serviceConnection);
-        $movie = $radarrClient->getMovieById($movieId);
+        $movie = $radarrClient->fetchMovieById($movieId);
         $movie['qualityProfileId'] = $qualityProfileId;
         $radarrClient->updateMovie($movieId, $movie);
         new RadarrCache($serviceConnection)->bustAll();
