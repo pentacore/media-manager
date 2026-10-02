@@ -29,6 +29,7 @@ beforeEach(function (): void {
         ]]),
         'sonarr.local:8989/api/v3/command' => Http::response(['id' => 1], 201),
         'sonarr.local:8989/api/v3/series/7' => Http::response(['id' => 7, 'title' => 'Severance', 'year' => 2022]),
+        'sonarr.local:8989/api/v3/episode?seriesId=7*' => Http::response([['id' => 70, 'seriesId' => 7, 'seasonNumber' => 1]]),
         'radarr.local:7878/api/v3/calendar*' => Http::response([[
             'id' => 10, 'title' => 'Dune', 'monitored' => true, 'hasFile' => false, 'digitalRelease' => '2026-09-24T00:00:00Z',
             'images' => [['coverType' => 'poster', 'remoteUrl' => 'https://img.test/dune.jpg']],
@@ -171,6 +172,7 @@ test('a member toggles an episode of an unmonitored series by its own monitored 
         ]]),
         'sonarr-unmonitored.local:8989/api/v3/episode/monitor' => Http::response([], 202),
         'sonarr-unmonitored.local:8989/api/v3/series/8' => Http::response(['id' => 8, 'title' => 'Old Show', 'year' => 2019]),
+        'sonarr-unmonitored.local:8989/api/v3/episode?seriesId=8*' => Http::response([['id' => 80, 'seriesId' => 8, 'seasonNumber' => 1]]),
     ]);
     $this->actingAs(User::factory()->member()->create());
 

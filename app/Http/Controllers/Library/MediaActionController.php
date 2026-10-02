@@ -27,6 +27,7 @@ use App\Services\Library\LibraryActionRequester;
 use App\Services\MediaReplacement\PendingReplacementGuard;
 use App\Services\Radarr\RadarrClient;
 use App\Services\Sonarr\SonarrClient;
+use App\Services\Sonarr\SonarrEpisodeOwnership;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\RequestException;
 use Illuminate\Http\JsonResponse;
@@ -53,23 +54,28 @@ class MediaActionController extends Controller
         ), __('Monitoring updated.'));
     }
 
-    public function monitorEpisodes(MonitorEpisodesRequest $monitorEpisodesRequest, ManualActionDispatcher $manualActionDispatcher, PendingReplacementGuard $pendingReplacementGuard): RedirectResponse
+    public function monitorEpisodes(MonitorEpisodesRequest $monitorEpisodesRequest, ManualActionDispatcher $manualActionDispatcher, PendingReplacementGuard $pendingReplacementGuard, SonarrEpisodeOwnership $sonarrEpisodeOwnership): RedirectResponse
     {
         $validated = $monitorEpisodesRequest->validated();
         $connection = $monitorEpisodesRequest->connection();
         $seriesId = (int) $validated['series_id'];
+        $episodeIds = array_values(array_map(intval(...), $validated['episode_ids']));
+        $seasonNumber = isset($validated['season_number']) ? (int) $validated['season_number'] : null;
 
         if ($this->replacementInFlight($pendingReplacementGuard, $connection, $seriesId, null)) {
             return $this->refuseDuringReplacement();
         }
 
-        $payload = [
-            'series_id' => $seriesId,
-            'episode_ids' => array_values(array_map(intval(...), $validated['episode_ids'])),
-        ];
+        $refusal = $this->episodeOwnershipRefusal($sonarrEpisodeOwnership, $connection, $seriesId, $episodeIds, $seasonNumber);
 
-        if (isset($validated['season_number'])) {
-            $payload['season_number'] = (int) $validated['season_number'];
+        if ($refusal !== null) {
+            return $this->refuse($refusal['message']);
+        }
+
+        $payload = ['series_id' => $seriesId, 'episode_ids' => $episodeIds];
+
+        if ($seasonNumber !== null) {
+            $payload['season_number'] = $seasonNumber;
         }
 
         return $this->answer($manualActionDispatcher->dispatch(
@@ -92,7 +98,7 @@ class MediaActionController extends Controller
         ), __('Quality profile updated.'));
     }
 
-    public function search(SearchMediaRequest $searchMediaRequest, ManualActionDispatcher $manualActionDispatcher, LibraryActionRequester $libraryActionRequester): RedirectResponse
+    public function search(SearchMediaRequest $searchMediaRequest, ManualActionDispatcher $manualActionDispatcher, LibraryActionRequester $libraryActionRequester, SonarrEpisodeOwnership $sonarrEpisodeOwnership): RedirectResponse
     {
         $validated = $searchMediaRequest->validated();
         $connection = $searchMediaRequest->connection();
@@ -118,6 +124,20 @@ class MediaActionController extends Controller
             ), __('Search started.'));
         }
 
+        if ($mediaSearchCommand === MediaSearchCommand::EpisodeSearch) {
+            $refusal = $this->episodeOwnershipRefusal(
+                $sonarrEpisodeOwnership,
+                $connection,
+                (int) $validated['series_id'],
+                array_values(array_map(intval(...), $validated['episode_ids'])),
+                null,
+            );
+
+            if ($refusal !== null) {
+                return $this->refuse($refusal['message']);
+            }
+        }
+
         $payload = ['service' => $mediaSearchCommand->service()->value, 'command' => $mediaSearchCommand->value];
 
         foreach (['series_id', 'season_number'] as $key) {
@@ -140,11 +160,19 @@ class MediaActionController extends Controller
         ), __('Search started.'));
     }
 
-    public function releases(ReleaseSearchRequest $releaseSearchRequest, ReleaseSelectionCache $releaseSelectionCache): JsonResponse
+    public function releases(ReleaseSearchRequest $releaseSearchRequest, ReleaseSelectionCache $releaseSelectionCache, SonarrEpisodeOwnership $sonarrEpisodeOwnership): JsonResponse
     {
         $validated = $releaseSearchRequest->validated();
         $connection = $releaseSearchRequest->connection();
         $serviceType = $releaseSearchRequest->serviceType();
+
+        if ($serviceType === ServiceType::Sonarr && isset($validated['episode_id'])) {
+            $refusal = $this->episodeOwnershipRefusal($sonarrEpisodeOwnership, $connection, (int) $validated['item_id'], [(int) $validated['episode_id']], null);
+
+            if ($refusal !== null) {
+                return response()->json(['message' => $refusal['message']], $refusal['status']);
+            }
+        }
 
         $params = match (true) {
             $serviceType === ServiceType::Radarr => ['movieId' => (int) $validated['item_id']],
@@ -257,6 +285,33 @@ class MediaActionController extends Controller
             ->all();
     }
 
+    /**
+     * Null when every id is an episode of the series (and season); otherwise
+     * the refusal to show, with the status a JSON caller answers.
+     *
+     * @param  list<int>  $episodeIds
+     * @return array{message: string, status: int}|null
+     */
+    private function episodeOwnershipRefusal(SonarrEpisodeOwnership $sonarrEpisodeOwnership, ServiceConnection $serviceConnection, int $seriesId, array $episodeIds, ?int $seasonNumber): ?array
+    {
+        try {
+            if ($sonarrEpisodeOwnership->allBelongTo(new SonarrClient($serviceConnection), $seriesId, $episodeIds, $seasonNumber)) {
+                return null;
+            }
+        } catch (RequestException|ConnectionException) {
+            return ['message' => sprintf('%s is unreachable.', ucfirst($serviceConnection->type->value)), 'status' => 502];
+        }
+
+        return ['message' => __('Those episodes are not part of this series — refresh and try again.'), 'status' => 422];
+    }
+
+    private function refuse(string $message): RedirectResponse
+    {
+        Inertia::flash('toast', ['type' => 'error', 'message' => $message]);
+
+        return back();
+    }
+
     private function replacementInFlight(PendingReplacementGuard $pendingReplacementGuard, ServiceConnection $serviceConnection, ?int $seriesId, ?int $movieId): bool
     {
         return $pendingReplacementGuard->inFlightForMedia($serviceConnection->id, seriesId: $seriesId, movieId: $movieId);
@@ -264,9 +319,7 @@ class MediaActionController extends Controller
 
     private function refuseDuringReplacement(): RedirectResponse
     {
-        Inertia::flash('toast', ['type' => 'error', 'message' => __('A file replacement is in progress for this title — try again when it finishes.')]);
-
-        return back();
+        return $this->refuse(__('A file replacement is in progress for this title — try again when it finishes.'));
     }
 
     private function because(Request $request): string
