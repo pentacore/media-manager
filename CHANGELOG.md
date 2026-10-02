@@ -1,3 +1,32 @@
+# [1.32.0](https://github.com/pentacore/media-manager/compare/v1.31.3...v1.32.0) (2026-10-02)
+
+
+### Bug Fixes
+
+* **actions:** close the final-review gaps in lost-worker and stale-approved recovery ([f935657](https://github.com/pentacore/media-manager/commit/f9356576cc15d7e10885fc75401e9256251b7d42))
+* **actions:** count only dispatches that acquire their lock, and stop marking never-started rows indeterminate ([6f43094](https://github.com/pentacore/media-manager/commit/6f43094e48ee1057bd142b5af1fe41b402d8a2d5))
+* **actions:** fail a lost-worker re-delivery for reconciliation instead of re-running it ([21203c0](https://github.com/pentacore/media-manager/commit/21203c0f03d1e6ad0fc87215c9ce1d639a2ae9f9))
+* **actions:** keep replace_media_file out of the lost-worker resume allow-list and log/record the cause in failed() ([f31d0d9](https://github.com/pentacore/media-manager/commit/f31d0d9204d6bc2cf6193286e32a271a5bf87a06))
+* **actions:** let programming errors surface from the activity observer ([aa79cb0](https://github.com/pentacore/media-manager/commit/aa79cb0af716965a6d4f486642cc4d9d5c06e7d7))
+* **actions:** re-dispatch approved requests whose execution job was lost ([9f81853](https://github.com/pentacore/media-manager/commit/9f818536c55a34711551c6f340dbeda2178683f0))
+* **actions:** write action activity rows and broadcasts only after commit ([428bc0d](https://github.com/pentacore/media-manager/commit/428bc0d9b6c047d6cd2994d94c8e94f82a646748))
+* **arr:** read Radarr and Whisparr items uncached before an executor PUTs them back ([7311419](https://github.com/pentacore/media-manager/commit/7311419865d9f701091c9e68ebbdf23f07eb56ec))
+* **emby:** fold or dispatch a manual library refresh under one lock ([d66f4d4](https://github.com/pentacore/media-manager/commit/d66f4d4cdf7fa1ef457d58664e8a3eaa6c19f5f8))
+* **library:** file a delete and its audit row in one transaction ([11576df](https://github.com/pentacore/media-manager/commit/11576df024e599baacc68414af77a9e7195aa75f))
+* **library:** pin Grab-queue removal to the connection its rows came from ([7e279c5](https://github.com/pentacore/media-manager/commit/7e279c5adb969bc8635aeacad97774be7d753919))
+* **library:** refuse episode requests whose episodes are not the series' ([1de2b97](https://github.com/pentacore/media-manager/commit/1de2b977285ebc77933ae44315d31088d3536f97))
+* **library:** reset the Grab-queue selection when the rendered connection changes ([1a64ac5](https://github.com/pentacore/media-manager/commit/1a64ac5ad78aeb7e4309a963690a857a3494209b))
+* **media:** pin single series and movie deletes to the page's connection ([2b7cd56](https://github.com/pentacore/media-manager/commit/2b7cd562d75940903ab76557c2366fc8826cf853))
+* **schedule:** assert the Bazarr schedule's cron expression directly ([bcb538b](https://github.com/pentacore/media-manager/commit/bcb538bc311160af5009ca0c8b35457cc1478307))
+* **sonarr:** read the series uncached before an executor PUTs it back ([6163478](https://github.com/pentacore/media-manager/commit/616347866078e434ede56cbde27652d7ae1c1a22))
+* **sonarr:** refuse episode ids that are not episodes of the request's series ([7d6bc60](https://github.com/pentacore/media-manager/commit/7d6bc60cd35bf82bc19a00b45eedb2d1e8ffc471))
+
+
+### Features
+
+* **actions:** mark a deliberate transient retry on the executing request ([91c042c](https://github.com/pentacore/media-manager/commit/91c042cda10b355f38a42afb883ab42a762fd8a5))
+* **emby:** log each trigger folded into a waiting library scan ([3c250b1](https://github.com/pentacore/media-manager/commit/3c250b129fce543534326f1ba670fe466b7b8523))
+
 ## [1.31.3](https://github.com/pentacore/media-manager/compare/v1.31.2...v1.31.3) (2026-10-02)
 
 
