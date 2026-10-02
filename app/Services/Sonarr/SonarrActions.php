@@ -123,7 +123,7 @@ class SonarrActions implements ActionExecutor
         throw_if($this->pendingReplacementGuard->inFlightForMedia($serviceConnection->id, seriesId: $seriesId), ReplacementInFlight::forTitle());
 
         $sonarrClient = new SonarrClient($serviceConnection);
-        $series = $sonarrClient->getSeriesById($seriesId);
+        $series = $sonarrClient->fetchSeriesById($seriesId);
         $series['monitored'] = $monitored;
         $sonarrClient->updateSeries($seriesId, $series);
         new SonarrCache($serviceConnection)->bustAll();
@@ -148,7 +148,7 @@ class SonarrActions implements ActionExecutor
 
         $serviceConnection = ServiceConnection::resolvePinned($payload, ServiceType::Sonarr);
         $sonarrClient = new SonarrClient($serviceConnection);
-        $series = $sonarrClient->getSeriesById($seriesId);
+        $series = $sonarrClient->fetchSeriesById($seriesId);
         $series['qualityProfileId'] = $qualityProfileId;
         $sonarrClient->updateSeries($seriesId, $series);
         new SonarrCache($serviceConnection)->bustAll();

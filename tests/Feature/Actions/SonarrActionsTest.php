@@ -9,6 +9,7 @@ use App\Services\Arr\ReleaseGrabFailed;
 use App\Services\Arr\SearchCommandFailed;
 use App\Services\MediaReplacement\ReplacementInFlight;
 use App\Services\Sonarr\SonarrActions;
+use App\Services\Sonarr\SonarrClient;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\Request;
@@ -326,3 +327,32 @@ test('grab_release completes even when busting the cache afterward fails', funct
 
     expect($result)->toBe(['indexer_id' => 3, 'title' => 'x']);
 });
+
+test('a series write starts from what Sonarr holds now, not from a cached snapshot', function (string $type, array $payload, array $changedInSonarr, array $expectedPut): void {
+    $upstream = new stdClass;
+    $upstream->series = ['id' => 42, 'title' => 'Demo', 'monitored' => true, 'qualityProfileId' => 1];
+    $upstream->puts = [];
+    Http::fake([
+        'sonarr.local:8989/api/v3/series/42' => function (Request $request) use ($upstream) {
+            if ($request->method() === 'PUT') {
+                $upstream->puts[] = $request->data();
+
+                return Http::response($request->data());
+            }
+
+            return Http::response($upstream->series);
+        },
+    ]);
+
+    // A page view caches the series; then someone changes it in Sonarr itself.
+    new SonarrClient(ServiceConnection::query()->where('type', 'sonarr')->sole())->getSeriesById(42);
+    $upstream->series = [...$upstream->series, ...$changedInSonarr];
+
+    new SonarrActions()->execute(ActionRequest::factory()->create(['type' => $type, 'payload' => $payload]));
+
+    expect($upstream->puts)->toHaveCount(1)
+        ->and($upstream->puts[0])->toMatchArray($expectedPut);
+})->with([
+    'monitoring keeps a profile changed in Sonarr' => ['monitor_series', ['series_id' => 42, 'monitored' => false], ['qualityProfileId' => 4], ['monitored' => false, 'qualityProfileId' => 4]],
+    'a profile change keeps monitoring changed in Sonarr' => ['set_series_quality_profile', ['series_id' => 42, 'quality_profile_id' => 7], ['monitored' => false], ['monitored' => false, 'qualityProfileId' => 7]],
+]);
