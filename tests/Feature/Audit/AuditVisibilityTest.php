@@ -34,7 +34,15 @@ function auditVisibilityRows(): array
     ];
 }
 
-test('the activity log page never lists audit rows for viewers or members', function (string $role): void {
+test('viewers cannot open the activity log or its export at all', function (): void {
+    auditVisibilityRows();
+    $user = auditVisibilityUser('viewer');
+
+    $this->actingAs($user)->get(route('activity-log'))->assertForbidden();
+    $this->actingAs($user)->get(route('activity-log.export', ['category' => 'audit']))->assertForbidden();
+});
+
+test('the activity log page never lists audit rows for members', function (string $role): void {
     [$activity] = auditVisibilityRows();
 
     $this->actingAs(auditVisibilityUser($role))
@@ -48,7 +56,7 @@ test('the activity log page never lists audit rows for viewers or members', func
             ->where('filterOptions.actions', ['sabnzbd.queue.paused'])
             ->where('filterOptions.categories', [])
             ->where('filters.category', null));
-})->with(['viewer', 'member']);
+})->with(['member']);
 
 test('asking for the audit category as a non-admin returns only activity rows, on the page and in the export', function (string $role): void {
     [$activity, $audit] = auditVisibilityRows();
@@ -68,7 +76,7 @@ test('asking for the audit category as a non-admin returns only activity rows, o
     expect($export)->toContain('"id":'.$activity->id)
         ->not->toContain('connection.updated')
         ->not->toContain('"id":'.$audit->id.',');
-})->with(['viewer', 'member']);
+})->with(['member']);
 
 test('admins see audit rows and can narrow the page and the export to them', function (): void {
     [$activity, $audit] = auditVisibilityRows();
