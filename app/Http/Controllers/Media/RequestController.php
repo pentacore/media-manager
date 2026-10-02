@@ -12,6 +12,8 @@ use App\Models\ServiceConnection;
 use App\Services\Arr\ArrClient;
 use App\Services\Radarr\RadarrClient;
 use App\Services\Seerr\SeerrClient;
+use App\Services\Seerr\SeerrRequestBusy;
+use App\Services\Seerr\SeerrRequestLock;
 use App\Services\Seerr\SeerrTitleResolver;
 use App\Services\Sonarr\SonarrClient;
 use App\Support\UpstreamErrorText;
@@ -103,14 +105,14 @@ class RequestController extends Controller
         return to_route('media.requests.index');
     }
 
-    public function approve(int $id): RedirectResponse
+    public function approve(int $id, SeerrRequestLock $seerrRequestLock): RedirectResponse
     {
-        return $this->updateStatus($id, 'approve', __('Request approved.'), __('Failed to approve request.'));
+        return $this->updateStatus($id, 'approve', __('Request approved.'), __('Failed to approve request.'), $seerrRequestLock);
     }
 
-    public function decline(int $id): RedirectResponse
+    public function decline(int $id, SeerrRequestLock $seerrRequestLock): RedirectResponse
     {
-        return $this->updateStatus($id, 'decline', __('Request declined.'), __('Failed to decline request.'));
+        return $this->updateStatus($id, 'decline', __('Request declined.'), __('Failed to decline request.'), $seerrRequestLock);
     }
 
     public function retry(int $id): RedirectResponse
@@ -601,14 +603,20 @@ class RequestController extends Controller
         ];
     }
 
-    private function updateStatus(int $id, string $status, string $successMessage, string $failureMessage): RedirectResponse
+    private function updateStatus(int $id, string $status, string $successMessage, string $failureMessage, SeerrRequestLock $seerrRequestLock): RedirectResponse
     {
         try {
             $connection = ServiceConnection::resolveActive(ServiceType::Seerr);
-            new SeerrClient($connection)->updateRequestStatus($id, $status);
+            $seerrRequestLock->run($connection, $id, function () use ($connection, $id, $status): void {
+                new SeerrClient($connection)->updateRequestStatus($id, $status);
+            });
             new SeerrCache($connection)->bustAll();
         } catch (ModelNotFoundException) {
             return $this->noConnectionRedirect();
+        } catch (SeerrRequestBusy) {
+            Inertia::flash('toast', ['type' => 'error', 'message' => __('This request is being updated right now — try again in a moment.')]);
+
+            return back();
         } catch (RequestException|ConnectionException) {
             Inertia::flash('toast', ['type' => 'error', 'message' => $failureMessage]);
 

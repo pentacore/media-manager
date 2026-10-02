@@ -34,7 +34,7 @@ test('cleanup_seerr_request busts the Seerr cache for its connection', function 
         'payload' => ['seerr_request_id' => 55],
     ]);
 
-    new SeerrActions()->execute($actionRequest);
+    resolve(SeerrActions::class)->execute($actionRequest);
 
     $hits = 0;
     $cache->rememberList('list', function () use (&$hits): array {
@@ -62,7 +62,7 @@ test('approve_seerr_request busts the Seerr cache for its connection', function 
         'payload' => ['seerr_request_id' => 77],
     ]);
 
-    new SeerrActions()->execute($actionRequest);
+    resolve(SeerrActions::class)->execute($actionRequest);
 
     $hits = 0;
     $cache->rememberList('list', function () use (&$hits): array {
@@ -90,7 +90,7 @@ test('decline_seerr_request busts the Seerr cache for its connection', function 
         'payload' => ['seerr_request_id' => 88],
     ]);
 
-    new SeerrActions()->execute($actionRequest);
+    resolve(SeerrActions::class)->execute($actionRequest);
 
     $hits = 0;
     $cache->rememberList('list', function () use (&$hits): array {
@@ -120,7 +120,7 @@ test('failed HTTP write does NOT bust the Seerr cache', function (): void {
     ]);
 
     try {
-        new SeerrActions()->execute($actionRequest);
+        resolve(SeerrActions::class)->execute($actionRequest);
     } catch (Throwable) {
         // expected — Seerr returned 500
     }

@@ -10,6 +10,8 @@ use App\Http\Controllers\Controller;
 use App\Models\ServiceConnection;
 use App\Models\User;
 use App\Services\Seerr\SeerrClient;
+use App\Services\Seerr\SeerrRequestBusy;
+use App\Services\Seerr\SeerrRequestLock;
 use App\Services\Seerr\SeerrTitleResolver;
 use App\Services\Seerr\SeerrUserResolver;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
@@ -49,7 +51,7 @@ class MyRequestController extends Controller
         ]);
     }
 
-    public function destroy(int $id, Request $request, SeerrUserResolver $seerrUserResolver): RedirectResponse
+    public function destroy(int $id, Request $request, SeerrUserResolver $seerrUserResolver, SeerrRequestLock $seerrRequestLock): RedirectResponse
     {
         $connection = $this->seerrConnection();
 
@@ -58,8 +60,6 @@ class MyRequestController extends Controller
 
             return back();
         }
-
-        $seerrClient = new SeerrClient($connection);
 
         try {
             $seerrUserId = $seerrUserResolver->resolve($connection, $request->user());
@@ -72,6 +72,21 @@ class MyRequestController extends Controller
         // No own Seerr match means nothing this user could have requested —
         // refuse before ever reading the request from Seerr.
         abort_if($seerrUserId === null, 403);
+
+        // The status check and the DELETE run under the request's lock, so an
+        // approve sent from MediaManager cannot land between them.
+        try {
+            return $seerrRequestLock->run($connection, $id, fn (): RedirectResponse => $this->cancelOwnPending($connection, $id, $seerrUserId));
+        } catch (SeerrRequestBusy) {
+            Inertia::flash('toast', ['type' => 'error', 'message' => __('This request is being updated right now — try again in a moment.')]);
+
+            return back();
+        }
+    }
+
+    private function cancelOwnPending(ServiceConnection $serviceConnection, int $id, int $seerrUserId): RedirectResponse
+    {
+        $seerrClient = new SeerrClient($serviceConnection);
 
         try {
             $seerrRequest = $seerrClient->getRequestByIdUncached($id);
@@ -105,7 +120,7 @@ class MyRequestController extends Controller
             return back();
         }
 
-        new SeerrCache($connection)->bustAll();
+        new SeerrCache($serviceConnection)->bustAll();
         Inertia::flash('toast', ['type' => 'success', 'message' => __('Request cancelled.')]);
 
         return back();

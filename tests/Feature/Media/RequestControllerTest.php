@@ -5,6 +5,8 @@ declare(strict_types=1);
 use App\Jobs\ClearSeerrRequests;
 use App\Models\ServiceConnection;
 use App\Models\User;
+use App\Services\Seerr\SeerrRequestLock;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Sleep;
@@ -880,3 +882,15 @@ test('a failed request update toast never echoes the Seerr response', function (
 
     expect((string) session('inertia.flash_data.toast.message'))->not->toContain('/app/config');
 })->with(['load', 'update']);
+
+test('approving or declining is refused while a member cancel holds the request', function (string $routeName): void {
+    Cache::lock(SeerrRequestLock::key($this->connection->id, 42), SeerrRequestLock::TTL_SECONDS)->get();
+
+    $this->actingAs(User::factory()->member()->create())
+        ->from(route('media.requests.index'))
+        ->post(route($routeName, 42))
+        ->assertRedirect(route('media.requests.index'))
+        ->assertSessionHas('inertia.flash_data.toast.message', 'This request is being updated right now — try again in a moment.');
+
+    Http::assertNothingSent();
+})->with(['media.requests.approve', 'media.requests.decline']);
