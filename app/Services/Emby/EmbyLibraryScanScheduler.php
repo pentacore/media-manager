@@ -12,6 +12,7 @@ use App\Models\ServiceConnection;
 use App\Models\WebhookEvent;
 use App\Services\Actions\ActionDescription;
 use App\Services\Actions\ActionOrchestrator;
+use App\Services\Actions\ActionRequestActivityLogger;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
 
@@ -32,7 +33,10 @@ final readonly class EmbyLibraryScanScheduler
 
     public const int MAX_RECORDED_TRIGGERS = 20;
 
-    public function __construct(private ActionOrchestrator $actionOrchestrator) {}
+    public function __construct(
+        private ActionOrchestrator $actionOrchestrator,
+        private ActionRequestActivityLogger $actionRequestActivityLogger,
+    ) {}
 
     /**
      * @param  array<string, mixed>  $scanPayload  must carry a `trigger` string
@@ -65,13 +69,7 @@ final readonly class EmbyLibraryScanScheduler
             $pendingScan = $this->pendingScan($embyConnectionId);
 
             if ($pendingScan instanceof ActionRequest) {
-                $payload = $pendingScan->payload;
-                $payload['coalesced_events'] = (int) ($payload['coalesced_events'] ?? 1) + 1;
-                $payload['triggers'] = array_slice([...($payload['triggers'] ?? []), $trigger], -self::MAX_RECORDED_TRIGGERS);
-                $payload['scan_after'] = $scanAfter->toIso8601String();
-                $pendingScan->update(['payload' => $payload]);
-
-                $this->wakeAfter($pendingScan, $scanAfter);
+                $this->fold($pendingScan, $trigger, $scanAfter);
 
                 return $pendingScan;
             }
@@ -118,17 +116,27 @@ final readonly class EmbyLibraryScanScheduler
                 return null;
             }
 
-            $scanAfter = now();
-            $payload = $pendingScan->payload;
-            $payload['coalesced_events'] = (int) ($payload['coalesced_events'] ?? 1) + 1;
-            $payload['triggers'] = array_slice([...($payload['triggers'] ?? []), 'manual'], -self::MAX_RECORDED_TRIGGERS);
-            $payload['scan_after'] = $scanAfter->toIso8601String();
-            $pendingScan->update(['payload' => $payload]);
-
-            $this->wakeAfter($pendingScan, $scanAfter);
+            $this->fold($pendingScan, 'manual', now());
 
             return $pendingScan;
         });
+    }
+
+    /**
+     * Count one more trigger on a scan that has not started, record it, move
+     * scan_after to $scanAfter, log the fold and schedule the wake-up. Call
+     * inside the advisory lock.
+     */
+    private function fold(ActionRequest $pendingScan, string $trigger, CarbonImmutable $scanAfter): void
+    {
+        $payload = $pendingScan->payload;
+        $payload['coalesced_events'] = (int) ($payload['coalesced_events'] ?? 1) + 1;
+        $payload['triggers'] = array_slice([...($payload['triggers'] ?? []), $trigger], -self::MAX_RECORDED_TRIGGERS);
+        $payload['scan_after'] = $scanAfter->toIso8601String();
+        $pendingScan->update(['payload' => $payload]);
+
+        $this->actionRequestActivityLogger->coalesced($pendingScan, $trigger);
+        $this->wakeAfter($pendingScan, $scanAfter);
     }
 
     /**

@@ -7,6 +7,7 @@ use App\Jobs\ExecuteActionRequest;
 use App\Jobs\ExecuteDebouncedLibraryScan;
 use App\Models\ActionRequest;
 use App\Models\ActionTypeConfig;
+use App\Models\ActivityLog;
 use App\Models\ServiceConnection;
 use App\Models\WebhookEvent;
 use App\Services\Actions\ActionDescriber;
@@ -119,4 +120,33 @@ test('the trigger list is capped', function (): void {
     $actionRequest = ActionRequest::query()->where('type', 'emby_library_scan')->sole();
     expect($actionRequest->payload['triggers'])->toHaveCount(EmbyLibraryScanScheduler::MAX_RECORDED_TRIGGERS)
         ->and($actionRequest->payload['coalesced_events'])->toBe(EmbyLibraryScanScheduler::MAX_RECORDED_TRIGGERS + 5);
+});
+
+test('every trigger folded into a waiting scan is logged on that request', function (): void {
+    scanSchedulerConfig();
+    ServiceConnection::factory()->emby()->create();
+
+    $actionRequest = scheduleImportScan($this->sonarr);
+    scheduleImportScan($this->sonarr, 'sonarr_upgrade');
+    scheduleImportScan($this->sonarr, 'radarr_download');
+
+    $rows = ActivityLog::query()
+        ->where('subject_id', $actionRequest->id)
+        ->where('action', 'action_request.coalesced')
+        ->orderBy('id')
+        ->get();
+
+    expect($rows)->toHaveCount(2)
+        ->and($rows[0]->metadata)->toMatchArray(['type' => 'emby_library_scan', 'trigger' => 'sonarr_upgrade', 'coalesced_events' => 2])
+        ->and($rows[1]->metadata)->toMatchArray(['trigger' => 'radarr_download', 'coalesced_events' => 3])
+        ->and($rows[1]->description)->toBe(sprintf('Action #%d absorbed another trigger (radarr_download); 3 trigger(s) so far', $actionRequest->id));
+});
+
+test('a scan filed fresh writes no coalesced row', function (): void {
+    scanSchedulerConfig();
+    ServiceConnection::factory()->emby()->create();
+
+    scheduleImportScan($this->sonarr);
+
+    expect(ActivityLog::query()->where('action', 'action_request.coalesced')->exists())->toBeFalse();
 });

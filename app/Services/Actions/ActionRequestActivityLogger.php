@@ -88,7 +88,28 @@ final class ActionRequestActivityLogger
         );
     }
 
-    private function writeLog(ActionRequest $actionRequest, string $action, string $description): void
+    /**
+     * A trigger folded into a scan that had not started yet (a webhook burst
+     * or a "Refresh library" click). Only the payload changes, so the
+     * observer never sees it.
+     */
+    public function coalesced(ActionRequest $actionRequest, string $trigger): void
+    {
+        $trigger = mb_substr($trigger, 0, 64);
+        $coalescedEvents = (int) ($actionRequest->payload['coalesced_events'] ?? 1);
+
+        $this->writeLog(
+            $actionRequest,
+            'action_request.coalesced',
+            sprintf('Action #%d absorbed another trigger (%s); %d trigger(s) so far', $actionRequest->id, $trigger, $coalescedEvents),
+            ['trigger' => $trigger, 'coalesced_events' => $coalescedEvents],
+        );
+    }
+
+    /**
+     * @param  array<string, mixed>  $metadata  extra keys merged after the standard ones
+     */
+    private function writeLog(ActionRequest $actionRequest, string $action, string $description, array $metadata = []): void
     {
         $actionRequest->loadMissing('webhookEvent');
 
@@ -117,6 +138,7 @@ final class ActionRequestActivityLogger
                 'target_service' => $actionRequest->target_service,
                 'status' => $actionRequest->status->value,
                 'result' => $safeResult,
+                ...$metadata,
             ],
         ]);
     }
