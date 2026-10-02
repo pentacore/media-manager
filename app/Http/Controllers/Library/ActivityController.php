@@ -14,6 +14,7 @@ use App\Models\ServiceConnection;
 use App\Services\Actions\BulkItemOutcome;
 use App\Services\Actions\BulkRunner;
 use App\Services\Arr\ArrClient;
+use App\Services\Arr\GrabbedHistoryCache;
 use App\Services\Arr\ManualImportResolver;
 use App\Services\Arr\QueueItemRemover;
 use App\Services\Radarr\RadarrClient;
@@ -38,7 +39,7 @@ class ActivityController extends Controller
      * renders first; history is per service because two independently
      * paged feeds cannot be merged into one correct page.
      */
-    public function queue(Request $request): Response
+    public function queue(Request $request, GrabbedHistoryCache $grabbedHistoryCache): Response
     {
         $historyService = $request->query('history_service') === 'radarr' ? 'radarr' : 'sonarr';
         $historyPage = min(10_000, max(1, $request->integer('history_page', 1)));
@@ -50,7 +51,7 @@ class ActivityController extends Controller
                 'page' => $historyPage,
                 'active' => $request->has('history_service') || $request->has('history_page'),
             ],
-            'history' => Inertia::defer(fn (): array => $this->loadHistory($historyService, $historyPage), 'history'),
+            'history' => Inertia::defer(fn (): array => $this->loadHistory($historyService, $historyPage, $grabbedHistoryCache), 'history'),
         ]);
     }
 
@@ -206,9 +207,10 @@ class ActivityController extends Controller
      * Mark a grabbed history row failed: Sonarr/Radarr blocklist the release
      * and, with "Redownload failed" on, search again. History ids overlap
      * between instances, so the call is pinned to the connection the tab
-     * was rendered from and refuses anything else.
+     * was rendered from and refuses anything else, and only an id the
+     * History tab rendered as a grab (see GrabbedHistoryCache) is accepted.
      */
-    public function markHistoryFailed(MarkHistoryFailedRequest $markHistoryFailedRequest, string $service, int $id): RedirectResponse
+    public function markHistoryFailed(MarkHistoryFailedRequest $markHistoryFailedRequest, string $service, int $id, GrabbedHistoryCache $grabbedHistoryCache): RedirectResponse
     {
         $validated = $markHistoryFailedRequest->validated();
         $serviceType = $service === 'radarr' ? ServiceType::Radarr : ServiceType::Sonarr;
@@ -218,6 +220,10 @@ class ActivityController extends Controller
             $connection = ServiceConnection::resolvePinnedStrict(['service_connection_id' => (int) $validated['service_connection_id']], $serviceType);
         } catch (InvalidArgumentException|ModelNotFoundException) {
             return $this->flashAndBack('error', __('That :service connection is unavailable — refresh and try again.', ['service' => $label]));
+        }
+
+        if (! $grabbedHistoryCache->isGrabbed($connection, $id)) {
+            return $this->flashAndBack('error', __('Only a grabbed :service history entry can be marked as failed — refresh the history and try again.', ['service' => $label]));
         }
 
         $client = $serviceType === ServiceType::Sonarr ? new SonarrClient($connection) : new RadarrClient($connection);
@@ -426,7 +432,7 @@ class ActivityController extends Controller
     /**
      * @return array{service: string, configured: bool, connection_id: int|null, rows: list<array<string, mixed>>, page: int, page_size: int, total: int, error: string|null}
      */
-    private function loadHistory(string $service, int $page): array
+    private function loadHistory(string $service, int $page, GrabbedHistoryCache $grabbedHistoryCache): array
     {
         $serviceType = $service === 'radarr' ? ServiceType::Radarr : ServiceType::Sonarr;
         $connection = $this->safeResolve($serviceType);
@@ -462,6 +468,18 @@ class ActivityController extends Controller
         }
 
         $records = is_array($payload['records'] ?? null) ? array_values(array_filter($payload['records'], is_array(...))) : [];
+
+        $grabbedIds = [];
+
+        foreach ($records as $record) {
+            if (($record['eventType'] ?? null) !== 'grabbed' || ! is_int($record['id'] ?? null)) {
+                continue;
+            }
+
+            $grabbedIds[] = $record['id'];
+        }
+
+        $grabbedHistoryCache->remember($connection, $grabbedIds);
 
         return [
             ...$result,
