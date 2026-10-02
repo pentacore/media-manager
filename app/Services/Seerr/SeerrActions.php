@@ -13,6 +13,8 @@ use InvalidArgumentException;
 
 class SeerrActions implements ActionExecutor
 {
+    public function __construct(private readonly SeerrRequestLock $seerrRequestLock) {}
+
     /**
      * @return array<string, mixed>
      */
@@ -55,7 +57,9 @@ class SeerrActions implements ActionExecutor
         throw_if($requestId <= 0, InvalidArgumentException::class, 'seerr_request_id is required');
 
         $serviceConnection = ServiceConnection::resolvePinned($actionRequest->payload, ServiceType::Seerr);
-        new SeerrClient($serviceConnection)->updateRequestStatus($requestId, 'approve');
+        $this->seerrRequestLock->run($serviceConnection, $requestId, function () use ($serviceConnection, $requestId): void {
+            new SeerrClient($serviceConnection)->updateRequestStatus($requestId, 'approve');
+        }, SeerrRequestLock::JOB_WAIT_SECONDS);
         new SeerrCache($serviceConnection)->bustAll();
 
         return [
@@ -74,7 +78,9 @@ class SeerrActions implements ActionExecutor
         throw_if($requestId <= 0, InvalidArgumentException::class, 'seerr_request_id is required');
 
         $serviceConnection = ServiceConnection::resolvePinned($actionRequest->payload, ServiceType::Seerr);
-        new SeerrClient($serviceConnection)->updateRequestStatus($requestId, 'decline');
+        $this->seerrRequestLock->run($serviceConnection, $requestId, function () use ($serviceConnection, $requestId): void {
+            new SeerrClient($serviceConnection)->updateRequestStatus($requestId, 'decline');
+        }, SeerrRequestLock::JOB_WAIT_SECONDS);
         new SeerrCache($serviceConnection)->bustAll();
 
         return [

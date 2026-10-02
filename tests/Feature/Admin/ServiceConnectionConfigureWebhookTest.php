@@ -5,6 +5,7 @@ declare(strict_types=1);
 use App\Models\ServiceConnection;
 use App\Models\User;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Sleep;
 
 beforeEach(function (): void {
     Http::preventStrayRequests();
@@ -73,4 +74,19 @@ test('configure webhook surfaces upstream failure as a flash error', function ()
         ->post(route('admin.connections.configure-webhook', $connection))
         ->assertRedirect(route('admin.connections.edit', $connection))
         ->assertSessionHasErrors(['configure_webhook']);
+});
+
+test('a failed webhook configuration never echoes the upstream response', function (): void {
+    Sleep::fake();
+    $connection = ServiceConnection::factory()->sonarr()->create(['url' => 'http://sonarr.local', 'webhook_token' => 'secret-token']);
+    Http::fake(['sonarr.local/api/v3/notification*' => Http::response('Cannot write /config/config.xml', 500)]);
+
+    $this->actingAs(User::factory()->admin()->create())
+        ->from(route('admin.connections.edit', $connection))
+        ->post(route('admin.connections.configure-webhook', $connection))
+        ->assertRedirect(route('admin.connections.edit', $connection))
+        ->assertSessionHasErrors('configure_webhook');
+
+    expect((string) session('inertia.flash_data.toast.message'))->toStartWith('Failed to configure webhook:')->not->toContain('/config/config.xml')
+        ->and((string) session('errors')->first('configure_webhook'))->not->toContain('/config/config.xml');
 });

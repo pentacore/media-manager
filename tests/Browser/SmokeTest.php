@@ -321,9 +321,9 @@ test('admin edit page for a Prowlarr connection renders without console errors',
 });
 
 test('viewer landing on dashboard sees no realtime auth errors in the console', function (): void {
-    // Verifies the I1 fix: dashboard, activity, and emby.activity channels
-    // are now open to all auth users, so a viewer's Echo subscriptions don't
-    // 403 and surface as console errors.
+    // A viewer's dashboard subscribes only to channels a viewer may join
+    // (dashboard, emby.activity) — never the member-only `activity` feed —
+    // so no Echo subscription 403s into the console.
     $viewer = User::factory()->create(); // default role is Viewer
 
     $this->actingAs($viewer);

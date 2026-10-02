@@ -34,7 +34,7 @@ test('visibleTo hides audit rows from everyone but admins', function (string $ro
 
     expect(ActivityLog::query()->visibleTo(auditStorageUser($role))->count())->toBe($expected);
 })->with([
-    'viewer' => ['viewer', 1],
+    'viewer' => ['viewer', 0],
     'member' => ['member', 1],
     'admin' => ['admin', 2],
 ]);

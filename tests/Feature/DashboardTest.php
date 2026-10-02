@@ -258,3 +258,35 @@ test('a member dashboard keeps approvals, webhook events and service versions', 
             ->where('services', fn ($services): bool => collect($services)->firstWhere('id', $connection->id)['version'] === '4.0.1'
                 && collect($services)->firstWhere('id', $connection->id)['latest_version'] === '4.0.2'));
 });
+
+test('a viewer dashboard lists only their own activity rows', function (): void {
+    $viewer = User::factory()->create();
+    $own = ActivityLog::factory()->create(['user_id' => $viewer->id, 'description' => 'Requested Dune.']);
+    ActivityLog::factory()->create(['description' => 'Someone else paused the SABnzbd queue.']);
+    ActivityLog::factory()->create(['user_id' => null, 'description' => 'A webhook marked an import.']);
+
+    $this->actingAs($viewer)
+        ->get(route('dashboard'))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->has('recentActivity', 1)
+            ->where('recentActivity.0.id', $own->id));
+});
+
+test('a viewer never sees their own audit rows on the dashboard', function (): void {
+    $viewer = User::factory()->create();
+    ActivityLog::factory()->audit()->create(['user_id' => $viewer->id, 'action' => 'emby.user_unlinked']);
+
+    $this->actingAs($viewer)
+        ->get(route('dashboard'))
+        ->assertInertia(fn ($page) => $page->has('recentActivity', 0));
+});
+
+test("a member dashboard lists everyone's activity rows", function (): void {
+    ActivityLog::factory()->count(2)->create();
+    ActivityLog::factory()->create(['user_id' => null]);
+
+    $this->actingAs(User::factory()->member()->create())
+        ->get(route('dashboard'))
+        ->assertInertia(fn ($page) => $page->has('recentActivity', 3));
+});

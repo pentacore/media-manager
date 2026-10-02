@@ -26,3 +26,9 @@ export interface QualityProfileOption {
     id: number;
     name: string;
 }
+
+/** A deferred upstream list: an outage is `error`, never an empty `items`. */
+export interface UpstreamList<T> {
+    items: T[];
+    error: string | null;
+}

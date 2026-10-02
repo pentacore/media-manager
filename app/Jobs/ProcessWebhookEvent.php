@@ -153,9 +153,11 @@ class ProcessWebhookEvent implements ShouldQueue
             ServiceType::Prowlarr => ProwlarrWebhookHandler::class,
             ServiceType::SABnzbd => SabnzbdWebhookHandler::class,
             ServiceType::Whisparr => WhisparrWebhookHandler::class,
+            // Bazarr notifications go through BazarrNotificationController.
+            ServiceType::Bazarr => null,
         };
 
-        if (! class_exists($class)) {
+        if ($class === null || ! class_exists($class)) {
             return null;
         }
 

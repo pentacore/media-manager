@@ -11,6 +11,7 @@ use App\Models\ServiceConnection;
 use App\Services\Seerr\SeerrClient;
 use App\Services\Seerr\SeerrTitlePresenter;
 use App\Services\Seerr\SeerrUserResolver;
+use App\Support\UpstreamErrorText;
 use Closure;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Http\Client\ConnectionException;
@@ -182,7 +183,9 @@ class DiscoverController extends Controller
         // Seerr's error body is not guaranteed to carry a string `message`
         // (a malformed or unexpected payload could hand back an array or
         // scalar) — only ever trust it when it actually is one.
-        $message = is_string($json) ? Str::limit($json, 200) : '';
+        // Blank stays blank: sanitize() would otherwise turn it into its
+        // "no usable description" filler and the 403 branch would echo that.
+        $message = is_string($json) && trim($json) !== '' ? UpstreamErrorText::sanitize($json, 200) : '';
 
         return match (true) {
             $status === 409 => __('This title has already been requested.'),

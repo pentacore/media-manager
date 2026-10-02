@@ -46,6 +46,7 @@ import {
 } from '@/components/ui/tooltip';
 import { useCan } from '@/composables/useCan';
 import { dashboard } from '@/routes';
+import type { UpstreamList } from '@/types';
 
 interface QualityProfile {
     id: number;
@@ -101,8 +102,8 @@ const props = defineProps<{
     connection: { url: string | null };
     service_connection_id: number;
     series: SeriesDetail;
-    episodes?: Episode[];
-    qualityProfiles?: QualityProfile[];
+    episodes?: UpstreamList<Episode>;
+    qualityProfiles?: UpstreamList<QualityProfile>;
 }>();
 
 const { can } = useCan();
@@ -159,7 +160,7 @@ function formatSize(bytes: number): string {
 }
 
 function episodesForSeason(seasonNumber: number): Episode[] {
-    return (props.episodes ?? [])
+    return (props.episodes?.items ?? [])
         .filter((episode) => episode.season_number === seasonNumber)
         .sort((a, b) => a.episode_number - b.episode_number);
 }
@@ -426,7 +427,8 @@ function sonarrSeriesUrl(): string | null {
                                     service="sonarr"
                                     :connection-id="service_connection_id"
                                     :item-id="series.id"
-                                    :profiles="qualityProfiles"
+                                    :profiles="qualityProfiles?.items"
+                                    :error="qualityProfiles?.error"
                                     :current-id="series.quality_profile_id"
                                 />
                             </div>
@@ -514,6 +516,13 @@ function sonarrSeriesUrl(): string | null {
                         No seasons available.
                     </p>
                 </template>
+                <p
+                    v-if="episodes?.error"
+                    class="rounded-xl border border-border bg-card px-4 py-3 text-[13px] text-destructive"
+                    data-episodes-error
+                >
+                    {{ episodes.error }}
+                </p>
 
                 <div
                     v-for="season in series.seasons"

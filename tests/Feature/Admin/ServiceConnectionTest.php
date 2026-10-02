@@ -11,6 +11,7 @@ use App\Models\SubtitleCase;
 use App\Models\User;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Queue;
+use Illuminate\Support\Sleep;
 use Inertia\Testing\AssertableInertia;
 
 test('Bazarr is an available service connection type', function (): void {
@@ -1194,4 +1195,18 @@ test('edit form exposes external_url', function (): void {
         ->assertInertia(fn ($page) => $page
             ->where('connection.external_url', 'https://sonarr.example.com')
         );
+});
+
+test('a failed connection test explains itself without echoing upstream paths', function (): void {
+    Sleep::fake();
+    Http::fake(['sonarr.local:8989/*' => Http::response('Database at /config/sonarr.db is locked', 401)]);
+
+    $message = $this->actingAs(User::factory()->admin()->create())
+        ->postJson(route('admin.connections.test'), ['type' => 'sonarr', 'url' => 'http://sonarr.local:8989', 'api_key' => 'bad-key'])
+        ->assertUnprocessable()
+        ->json('message');
+
+    expect($message)->toStartWith('Connection failed: ')
+        ->toContain('[redacted path]')
+        ->not->toContain('/config/sonarr.db');
 });

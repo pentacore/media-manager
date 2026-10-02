@@ -29,7 +29,19 @@ test('guests are redirected from every subtitle center page', function (string $
     $this->get(route($routeName))->assertRedirect(route('login'));
 })->with('subtitle center pages');
 
-test('viewers can read every subtitle center page without secret props', function (
+test('viewers are forbidden from every subtitle center page', function (string $routeName): void {
+    $this->actingAs(User::factory()->create())
+        ->get(route($routeName))
+        ->assertForbidden();
+})->with('subtitle center pages');
+
+test('viewers are forbidden from the escalations page', function (): void {
+    $this->actingAs(User::factory()->create())
+        ->get(route('bazarr.escalations'))
+        ->assertForbidden();
+});
+
+test('members can read every subtitle center page without secret props', function (
     string $routeName,
     string $component,
 ): void {
@@ -39,7 +51,7 @@ test('viewers can read every subtitle center page without secret props', functio
         'api_key' => 'bazarr-secret',
     ]);
 
-    $response = $this->actingAs(User::factory()->create())
+    $response = $this->actingAs(User::factory()->member()->create())
         ->get(route($routeName, ['connection' => $bazarr->id]))
         ->assertOk()
         ->assertInertia(fn (AssertableInertia $assertableInertia): AssertableInertia => $assertableInertia
@@ -61,7 +73,7 @@ test('multiple active Bazarr connections require an explicit selection', functio
     $first = ServiceConnection::factory()->bazarr()->create(['name' => 'First Bazarr']);
     $second = ServiceConnection::factory()->bazarr()->create(['name' => 'Second Bazarr']);
 
-    $this->actingAs(User::factory()->create())
+    $this->actingAs(User::factory()->member()->create())
         ->get(route('bazarr.overview'))
         ->assertOk()
         ->assertInertia(fn (AssertableInertia $assertableInertia): AssertableInertia => $assertableInertia
@@ -78,13 +90,13 @@ test('multiple active Bazarr connections require an explicit selection', functio
 test('inactive and non Bazarr connections cannot be selected', function (): void {
     $inactive = ServiceConnection::factory()->bazarr()->create(['is_active' => false]);
     $sonarr = ServiceConnection::factory()->sonarr()->create();
-    $viewer = User::factory()->create();
+    $member = User::factory()->member()->create();
 
-    $this->actingAs($viewer)
+    $this->actingAs($member)
         ->get(route('bazarr.overview', ['connection' => $inactive->id]))
         ->assertNotFound();
 
-    $this->actingAs($viewer)
+    $this->actingAs($member)
         ->get(route('bazarr.overview', ['connection' => $sonarr->id]))
         ->assertNotFound();
 });
@@ -99,7 +111,7 @@ test('library and history inventory are deferred', function (
         'api_key' => 'bazarr-secret',
     ]);
 
-    $this->actingAs(User::factory()->create())
+    $this->actingAs(User::factory()->member()->create())
         ->get(route($routeName, ['connection' => $bazarr->id]))
         ->assertOk()
         ->assertInertia(fn (AssertableInertia $assertableInertia): AssertableInertia => $assertableInertia
@@ -117,9 +129,9 @@ test('library and history inventory are deferred', function (
 
 test('read query parameters are validated', function (): void {
     $bazarr = ServiceConnection::factory()->bazarr()->create();
-    $viewer = User::factory()->create();
+    $member = User::factory()->member()->create();
 
-    $this->actingAs($viewer)
+    $this->actingAs($member)
         ->get(route('bazarr.library', [
             'connection' => $bazarr->id,
             'page' => 0,

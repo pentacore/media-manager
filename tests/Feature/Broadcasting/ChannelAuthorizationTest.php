@@ -45,8 +45,8 @@ test('user cannot authenticate another users private channel', function (): void
         ->assertForbidden();
 });
 
-$memberOnlyChannels = ['private-services', 'private-members.actions'];
-$openToAuthChannels = ['private-emby.activity', 'private-dashboard', 'private-activity'];
+$memberOnlyChannels = ['private-services', 'private-members.actions', 'private-activity'];
+$openToAuthChannels = ['private-emby.activity', 'private-dashboard'];
 
 test('members can join member-only channels', function () use ($memberOnlyChannels): void {
     $user = User::factory()->member()->create();
@@ -87,7 +87,7 @@ test('viewers cannot join member-only channels', function () use ($memberOnlyCha
     }
 });
 
-test('all authenticated users can join the shared dashboard/activity/emby.activity channels', function () use ($openToAuthChannels): void {
+test('all authenticated users can join the shared dashboard and emby.activity channels', function () use ($openToAuthChannels): void {
     foreach (['viewer', 'member', 'admin'] as $rolename) {
         $user = match ($rolename) {
             'admin' => User::factory()->admin()->create(),

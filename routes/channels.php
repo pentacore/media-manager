@@ -22,12 +22,16 @@ Broadcast::channel('members.actions', fn (User $user): bool => $user->role->isAt
 // SABnzbd download lifecycle. Member+ only since the queue page is gated the same way.
 Broadcast::channel('members.sabnzbd', fn (User $user): bool => $user->role->isAtLeast(UserRole::Member));
 
-// Open to anyone authenticated. The matching pages (dashboard, activity log,
-// now playing, watch history) are also unrestricted, so locking the realtime
-// feeds tighter than the pages just yields silent broken UI for viewers.
+// Open to anyone authenticated. The matching pages (dashboard, now playing,
+// watch history) are also open to viewers, so locking these feeds tighter
+// than the pages just yields silent broken UI for viewers.
 Broadcast::channel('emby.activity', fn (User $user): bool => true);
 Broadcast::channel('dashboard', fn (User $user): bool => true);
-Broadcast::channel('activity', fn (User $user): bool => true);
+
+// Every non-audit activity row, from every user. Viewers see only their own
+// rows (ActivityLog::visibleTo()), so they never join this feed — the
+// dashboard subscribes only for manage-library users.
+Broadcast::channel('activity', fn (User $user): bool => $user->can(Abilities::MANAGE_LIBRARY));
 
 // Audit rows (admin changes with masked diffs) — admins only. ActivityLogCreated
 // routes every audit row here and never onto `activity`.

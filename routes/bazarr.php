@@ -22,7 +22,9 @@ Route::post('webhooks/bazarr/{serviceConnection}', BazarrNotificationController:
     ->middleware(['throttle:60,1', 'webhook.payload-limit'])
     ->name('webhooks.bazarr');
 
-Route::middleware(['auth', 'verified', 'password.set', 'role:viewer'])
+// Every subtitle page names library files, provider results and failure
+// reasons — members and admins only, matching the "Subtitles" nav item.
+Route::middleware(['auth', 'verified', 'password.set', 'can:manage-library'])
     ->prefix('subtitles')
     ->name('bazarr.')
     ->group(function (): void {
@@ -38,12 +40,10 @@ Route::middleware(['auth', 'verified', 'password.set', 'role:viewer'])
             Route::put('admin/automation', [AdminController::class, 'updateAutomation'])->name('admin.automation.update');
         });
 
-        Route::middleware('role:member')->group(function (): void {
-            Route::post('escalations/{subtitleCase}/advisor', AdvisorController::class)
-                ->name('advisor.store');
-            Route::get('capabilities', CapabilityController::class)->name('capabilities');
-            Route::get('search', SearchController::class)->name('search');
-            Route::post('operations', OperationController::class)->name('operations.store');
-            Route::post('uploads', UploadController::class)->name('uploads.store');
-        });
+        Route::post('escalations/{subtitleCase}/advisor', AdvisorController::class)
+            ->name('advisor.store');
+        Route::get('capabilities', CapabilityController::class)->name('capabilities');
+        Route::get('search', SearchController::class)->name('search');
+        Route::post('operations', OperationController::class)->name('operations.store');
+        Route::post('uploads', UploadController::class)->name('uploads.store');
     });

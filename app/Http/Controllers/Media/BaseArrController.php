@@ -38,22 +38,38 @@ abstract class BaseArrController extends Controller
     }
 
     /**
-     * Wrap a closure that performs an *arr HTTP call. Returns the closure's value, OR an
-     * empty array when the call failed — for use inside Inertia::defer where we don't
-     * want to redirect.
+     * Run one deferred upstream read for a list prop. An outage becomes an
+     * `error` the page shows in place of the list — never an empty list that
+     * reads as an empty library. The upstream body is never echoed.
      *
-     * @template T
+     * @template TRow
      *
-     * @param  callable(SonarrClient|RadarrClient): T  $fn
-     * @return T|array<empty>
+     * @param  callable(SonarrClient|RadarrClient): array<int, array<string, mixed>>  $fetch
+     * @param  callable(array<string, mixed>): TRow  $map
+     * @return array{items: list<TRow>, error: string|null}
      */
-    protected function tryClientCall(ServiceConnection $serviceConnection, callable $fn): mixed
+    protected function tryClientList(ServiceConnection $serviceConnection, callable $fetch, callable $map): array
     {
         try {
-            return $fn($this->buildClient($serviceConnection));
-        } catch (RequestException|ConnectionException) {
-            return [];
+            $rows = $fetch($this->buildClient($serviceConnection));
+        } catch (RequestException|ConnectionException $exception) {
+            return ['items' => [], 'error' => $this->upstreamFailureMessage($exception)];
         }
+
+        return ['items' => array_values(array_map($map, $rows)), 'error' => null];
+    }
+
+    /**
+     * A 4xx means the service answered but refused (a bad API key, a wrong
+     * base URL); anything else is an outage.
+     */
+    protected function upstreamFailureMessage(RequestException|ConnectionException $exception): string
+    {
+        $label = $this->serviceType()->label();
+
+        return $exception instanceof RequestException && $exception->response->clientError()
+            ? __(':service refused the request — check the connection settings.', ['service' => $label])
+            : __(':service is unreachable right now.', ['service' => $label]);
     }
 
     /**
