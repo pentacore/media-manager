@@ -169,9 +169,12 @@ test('a request whose job is still queued is not queued a second time', function
     dispatch(new ExecuteActionRequest($request));
     reconcileStuckApprovedSince($request, 45);
 
-    $this->artisan('actions:reconcile-stuck')->assertSuccessful();
+    $this->artisan('actions:reconcile-stuck')
+        ->expectsOutputToContain('Re-dispatched 0 approved action request(s) that never started.')
+        ->assertSuccessful();
 
     Queue::assertPushed(ExecuteActionRequest::class, 1);
+    expect(ActivityLog::query()->where('subject_id', $request->id)->where('action', 'action_request.redispatched')->exists())->toBeFalse();
 });
 
 test('pending requests are never dispatched by the reconcile', function (): void {
@@ -196,9 +199,60 @@ test('an approved request older than 24 hours is failed as needs_reconciliation 
     $fresh = $ancient->fresh();
     expect($fresh->status)->toBe(ActionRequestStatus::Failed)
         ->and($fresh->result['reason'])->toBe('needs_reconciliation')
-        ->and($fresh->result['indeterminate'])->toBeTrue()
+        ->and($fresh->result['indeterminate'])->toBeFalse()
         ->and($fresh->result['never_started'])->toBeTrue();
 
     $activityLog = ActivityLog::query()->where('subject_id', $ancient->id)->where('action', 'action_request.failed')->sole();
     expect($activityLog->description)->toContain('needs_reconciliation');
+    Event::assertDispatched(ActionRequestStatusChanged::class);
+});
+
+test('an emby scan still inside its debounce window is left waiting even past the 24 hour bound', function (): void {
+    Queue::fake();
+    $scan = ActionRequest::factory()->autoExecute()->create([
+        'type' => 'emby_library_scan',
+        'payload' => ['trigger' => 'sonarr_download', 'scan_after' => now()->addMinutes(5)->toIso8601String()],
+    ]);
+    reconcileStuckApprovedSince($scan, 25 * 60);
+
+    $this->artisan('actions:reconcile-stuck')->assertSuccessful();
+
+    Queue::assertNotPushed(ExecuteActionRequest::class);
+    expect($scan->fresh()->status)->toBe(ActionRequestStatus::Approved);
+});
+
+test('an unfinalized subtitle advisor replacement is left waiting even past the 24 hour bound', function (): void {
+    Queue::fake();
+    $replacement = ActionRequest::factory()->autoExecute()->create([
+        'type' => 'replace_media_file',
+        'source_service' => 'subtitle_advisor',
+        'payload' => ['subtitle_case_id' => 1],
+    ]);
+    reconcileStuckApprovedSince($replacement, 25 * 60);
+
+    $this->artisan('actions:reconcile-stuck')->assertSuccessful();
+
+    Queue::assertNotPushed(ExecuteActionRequest::class);
+    expect($replacement->fresh()->status)->toBe(ActionRequestStatus::Approved);
+});
+
+test('the approved-minutes option floors below five minutes', function (): void {
+    Queue::fake();
+    $request = ActionRequest::factory()->autoExecute()->create();
+    reconcileStuckApprovedSince($request, 4);
+
+    $this->artisan('actions:reconcile-stuck', ['--approved-minutes' => 1])->assertSuccessful();
+
+    Queue::assertNotPushed(ExecuteActionRequest::class);
+});
+
+test('the approved-minutes option cannot exceed the 24 hour age bound', function (): void {
+    Queue::fake();
+    $ancient = ActionRequest::factory()->autoExecute()->create(['type' => 'delete_series']);
+    reconcileStuckApprovedSince($ancient, 25 * 60);
+
+    $this->artisan('actions:reconcile-stuck', ['--approved-minutes' => 100_000])->assertSuccessful();
+
+    Queue::assertNotPushed(ExecuteActionRequest::class);
+    expect($ancient->fresh()->status)->toBe(ActionRequestStatus::Failed);
 });

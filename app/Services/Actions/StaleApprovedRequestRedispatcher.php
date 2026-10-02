@@ -12,6 +12,9 @@ use App\Jobs\ExecuteActionRequest;
 use App\Models\ActionRequest;
 use App\Models\SubtitleCaseAttempt;
 use Carbon\CarbonImmutable;
+use Illuminate\Bus\UniqueLock;
+use Illuminate\Contracts\Bus\Dispatcher;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
 
 /**
@@ -32,12 +35,12 @@ final readonly class StaleApprovedRequestRedispatcher
 
     private const string NEVER_STARTED_MESSAGE = 'This request was approved more than 24 hours ago and its execution job never started. Review it before re-approving by hand.';
 
-    public function __construct(private ActionRequestActivityLogger $actionRequestActivityLogger) {}
+    public function __construct(
+        private ActionRequestActivityLogger $actionRequestActivityLogger,
+        private Dispatcher $busDispatcher,
+    ) {}
 
-    /**
-     * @return int how many requests were handed to dispatch() again (one whose job is still queued counts, though its unique lock drops the duplicate)
-     */
-    public function redispatch(CarbonImmutable $cutoff): int
+    public function redispatch(CarbonImmutable $cutoff): StaleApprovedReconciliation
     {
         $ageBound = CarbonImmutable::now()->subHours(self::MAX_AGE_HOURS);
 
@@ -48,6 +51,7 @@ final readonly class StaleApprovedRequestRedispatcher
             ->get();
 
         $redispatched = 0;
+        $neverStarted = 0;
 
         foreach ($stale as $actionRequest) {
             if ($this->debounceWindowOpen($actionRequest, $cutoff) || $this->awaitsAdvisorFinalization($actionRequest)) {
@@ -55,24 +59,51 @@ final readonly class StaleApprovedRequestRedispatcher
             }
 
             if ($actionRequest->updated_at !== null && $actionRequest->updated_at->lessThan($ageBound)) {
-                $this->failAsNeverStarted($actionRequest);
+                if ($this->failAsNeverStarted($actionRequest, $ageBound)) {
+                    $neverStarted++;
+                }
 
                 continue;
             }
 
-            dispatch(new ExecuteActionRequest($actionRequest));
-            $redispatched++;
-
-            $this->actionRequestActivityLogger->redispatched($actionRequest);
-
-            Log::warning('actions:reconcile-stuck re-dispatched an approved action request that never started', [
-                'action_request_id' => $actionRequest->id,
-                'type' => $actionRequest->type,
-                'approved_since' => $actionRequest->updated_at?->toIso8601String(),
-            ]);
+            if ($this->dispatchIfUnclaimed($actionRequest)) {
+                $redispatched++;
+            }
         }
 
-        return $redispatched;
+        return new StaleApprovedReconciliation($redispatched, $neverStarted);
+    }
+
+    /**
+     * Acquires ExecuteActionRequest's own ShouldBeUnique lock ourselves
+     * before dispatching, instead of going through the dispatch() helper.
+     * dispatch() re-checks the lock itself but only inside PendingDispatch's
+     * destructor, which swallows the outcome — a job that is in fact still
+     * queued (holding the lock) would otherwise be silently dropped while
+     * this method still logged and counted it as re-dispatched. Acquiring
+     * first lets us log and count only a dispatch that actually reaches the
+     * queue; the worker still releases this same lock on completion since
+     * acquire() stamps the job with its lock owner before it is pushed.
+     */
+    private function dispatchIfUnclaimed(ActionRequest $actionRequest): bool
+    {
+        $executeActionRequest = new ExecuteActionRequest($actionRequest);
+
+        if (! new UniqueLock(Cache::store())->acquire($executeActionRequest)) {
+            return false;
+        }
+
+        $this->busDispatcher->dispatch($executeActionRequest);
+
+        $this->actionRequestActivityLogger->redispatched($actionRequest);
+
+        Log::warning('actions:reconcile-stuck re-dispatched an approved action request that never started', [
+            'action_request_id' => $actionRequest->id,
+            'type' => $actionRequest->type,
+            'approved_since' => $actionRequest->updated_at?->toIso8601String(),
+        ]);
+
+        return true;
     }
 
     /**
@@ -106,33 +137,37 @@ final readonly class StaleApprovedRequestRedispatcher
     }
 
     /**
-     * A row this stale is treated like a lost worker on an Executing row
-     * (Task 5): same reason, same indeterminate marker, except the marker
-     * records that execution never even started.
+     * A row this stale never reached an executor at all — unlike a lost
+     * worker on an Executing row (Task 5), the upstream call never happened,
+     * so unlike worker_lost this is NOT indeterminate: there is nothing to
+     * check upstream, only who approved it and why nothing ever picked it up.
      */
-    private function failAsNeverStarted(ActionRequest $actionRequest): void
+    private function failAsNeverStarted(ActionRequest $actionRequest, CarbonImmutable $ageBound): bool
     {
         $affected = ActionRequest::query()
             ->whereKey($actionRequest->id)
             ->where('status', ActionRequestStatus::Approved->value)
+            ->where('updated_at', '<', $ageBound)
             ->update([
                 'status' => ActionRequestStatus::Failed->value,
                 'result' => json_encode([
                     'success' => false,
                     'reason' => 'needs_reconciliation',
                     'message' => self::NEVER_STARTED_MESSAGE,
-                    'indeterminate' => true,
+                    'indeterminate' => false,
                     'never_started' => true,
                 ]),
             ]);
 
         if ($affected !== 1) {
-            return;
+            return false;
         }
 
         $actionRequest->refresh();
         // The conditional update bypasses ActionRequestObserver.
         $this->actionRequestActivityLogger->statusChanged($actionRequest);
         event(new ActionRequestStatusChanged($actionRequest));
+
+        return true;
     }
 }

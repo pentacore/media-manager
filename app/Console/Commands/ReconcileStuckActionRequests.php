@@ -15,7 +15,7 @@ use Illuminate\Console\Attributes\Signature;
 use Illuminate\Console\Command;
 
 #[Description('Fail action requests stuck in executing past a timeout, and re-dispatch approved requests whose execution job was lost. A worker killed without running the failed() hook (SIGKILL, host crash, lost Redis job) leaves the row in executing forever, and a lost job leaves an approved row waiting forever; neither the UI retry (which requires failed) nor any job would touch them again.')]
-#[Signature('actions:reconcile-stuck {--hours=2 : Fail executing action requests last updated more than this many hours ago} {--approved-minutes=30 : Re-dispatch approved action requests last updated more than this many minutes ago}')]
+#[Signature('actions:reconcile-stuck {--hours=2 : Fail executing action requests last updated more than this many hours ago} {--approved-minutes=30 : Re-dispatch approved action requests last updated more than this many minutes ago (capped below 24 hours)}')]
 class ReconcileStuckActionRequests extends Command
 {
     public function handle(ActionRequestActivityLogger $actionRequestActivityLogger, StaleApprovedRequestRedispatcher $staleApprovedRequestRedispatcher): int
@@ -61,10 +61,14 @@ class ReconcileStuckActionRequests extends Command
 
         $this->info(sprintf('Failed %d action request(s) stuck in executing.', $failed));
 
-        $approvedMinutes = max(5, (int) $this->option('approved-minutes'));
-        $redispatched = $staleApprovedRequestRedispatcher->redispatch(CarbonImmutable::now()->subMinutes($approvedMinutes));
+        // Capped below the 24 h age bound: an operator-supplied value at or
+        // above it would make every selected row fail as never_started and
+        // the redispatch path unreachable.
+        $approvedMinutes = max(5, min(1439, (int) $this->option('approved-minutes')));
+        $staleApprovedReconciliation = $staleApprovedRequestRedispatcher->redispatch(CarbonImmutable::now()->subMinutes($approvedMinutes));
 
-        $this->info(sprintf('Re-dispatched %d approved action request(s) that never started.', $redispatched));
+        $this->info(sprintf('Re-dispatched %d approved action request(s) that never started.', $staleApprovedReconciliation->redispatched));
+        $this->info(sprintf('Failed %d approved action request(s) older than 24 hours as needs_reconciliation.', $staleApprovedReconciliation->neverStarted));
 
         return self::SUCCESS;
     }
