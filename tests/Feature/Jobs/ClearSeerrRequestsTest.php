@@ -48,8 +48,9 @@ test('it stops calling seerr after repeated connection failures', function (): v
 
     new ClearSeerrRequests($this->connection->id, 'completed', $ids, null)->handle();
 
-    // 3 attempts per id (client retry) for the first N ids, then no more calls.
-    Http::assertSentCount(ClearSeerrRequests::MAX_CONSECUTIVE_CONNECTION_FAILURES * 3);
+    // One attempt per id (a DELETE is never retried) for the first N ids,
+    // then no more calls.
+    Http::assertSentCount(ClearSeerrRequests::MAX_CONSECUTIVE_CONNECTION_FAILURES);
     expect(ActivityLog::query()->where('action', 'seerr.requests_cleared')->sole()->metadata)
         ->toMatchArray(['deleted' => 0, 'failed' => count($ids)]);
 });

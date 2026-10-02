@@ -4,13 +4,12 @@ declare(strict_types=1);
 
 use App\Models\User;
 
-test('a viewer does not get the run-checks button', function (): void {
+test('a viewer has no service health link to follow', function (): void {
     $this->actingAs(User::factory()->create());
 
-    visit(route('monitoring.service-health', absolute: false))
+    visit(route('dashboard', absolute: false))
         ->assertNoSmoke()
-        ->assertSee('Service health')
-        ->assertMissing('[data-run-health-checks]');
+        ->assertDontSeeIn('[data-sidebar="content"]', 'Service Health');
 });
 
 test('a member can queue health checks from the service health page', function (): void {

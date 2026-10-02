@@ -13,15 +13,19 @@ use App\Services\Bazarr\BazarrActions;
 use App\Services\Bazarr\BazarrIndeterminateOutcomeException;
 use App\Services\MediaReplacement\MediaReplacementActions;
 use App\Services\Radarr\RadarrActions;
+use App\Services\Seerr\SeerrRequestLock;
 use App\Services\Sonarr\SonarrActions;
 use Illuminate\Contracts\Queue\Job;
+use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\RequestException;
 use Illuminate\Http\Client\Response;
 use Illuminate\Queue\Attributes\Timeout;
 use Illuminate\Queue\Attributes\UniqueFor;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Sleep;
 
 beforeEach(function (): void {
     Event::fake([ActionRequestStatusChanged::class]);
@@ -336,4 +340,93 @@ test('a grab whose response is lost fails once instead of retrying into a second
 
     expect($request->fresh()->status)->toBe(ActionRequestStatus::Failed)
         ->and($request->fresh()->result['message'])->toContain('did not confirm the grab');
+});
+
+test('a deterministic upstream failure stores the reason without its paths or secrets', function (): void {
+    $request = ActionRequest::factory()->create([
+        'status' => ActionRequestStatus::Approved,
+        'type' => 'delete_movie',
+    ]);
+
+    $response = new Response(new GuzzleHttp\Psr7\Response(404, [], 'Movie folder /media/movies/Dune (2021) not found; see http://radarr.local/api/v3/movie/7?apikey=radarr-secret'));
+    $mock = Mockery::mock(ActionExecutor::class);
+    $mock->shouldReceive('execute')->once()->andThrow(new RequestException($response));
+    $this->app->bind(RadarrActions::class, fn (): ActionExecutor => $mock);
+
+    new ExecuteActionRequest($request)->handle();
+
+    $message = $request->fresh()->result['message'];
+
+    expect($request->fresh()->result['reason'])->toBe('execution_failed')
+        ->and($message)->toContain('HTTP request returned status code 404')
+        ->and($message)->not->toContain('/media/movies')
+        ->and($message)->not->toContain('radarr-secret');
+});
+
+test('a permanent failure message naming a path is stored redacted', function (): void {
+    $request = ActionRequest::factory()->create([
+        'status' => ActionRequestStatus::Approved,
+        'type' => 'delete_movie',
+    ]);
+
+    $mock = Mockery::mock(ActionExecutor::class);
+    $mock->shouldReceive('execute')->once()->andThrow(new RuntimeException('Could not unlink /media/movies/Dune.mkv'));
+    $this->app->bind(RadarrActions::class, fn (): ActionExecutor => $mock);
+
+    new ExecuteActionRequest($request)->handle();
+
+    expect($request->fresh()->result['message'])->toBe('Could not unlink [redacted path]');
+});
+
+test('the failed() hook stores a sanitized message', function (): void {
+    $request = ActionRequest::factory()->create([
+        'status' => ActionRequestStatus::Executing,
+        'type' => 'delete_movie',
+    ]);
+
+    new ExecuteActionRequest($request)->failed(new ConnectionException('cURL error 7: Failed to connect for http://radarr.local:7878/api/v3/movie?apikey=radarr-secret'));
+
+    expect($request->fresh()->result['reason'])->toBe('job_failed')
+        ->and($request->fresh()->result['message'])->toContain('cURL error 7')
+        ->and($request->fresh()->result['message'])->not->toContain('radarr-secret');
+});
+
+test('a request pinned to a deleted connection fails with the pin message', function (): void {
+    ServiceConnection::factory()->seerr()->create();
+    $request = ActionRequest::factory()->create([
+        'status' => ActionRequestStatus::Approved,
+        'type' => 'cleanup_seerr_request',
+        'payload' => ['seerr_request_id' => 5, 'service_connection_id' => 999_999],
+    ]);
+
+    new ExecuteActionRequest($request)->handle();
+
+    expect($request->fresh()->status)->toBe(ActionRequestStatus::Failed)
+        ->and($request->fresh()->result)->toMatchArray([
+            'reason' => 'execution_failed',
+            'message' => 'Service connection 999999 pinned to this action no longer exists; aborting instead of acting on a different instance.',
+            'exception' => ModelNotFoundException::class,
+        ]);
+});
+
+test('a queued Seerr approve that cannot get the request lock fails without retrying', function (): void {
+    Sleep::fake(syncWithCarbon: true);
+    $seerr = ServiceConnection::factory()->seerr()->create();
+    Cache::lock(SeerrRequestLock::key($seerr->id, 77), SeerrRequestLock::TTL_SECONDS)->get();
+    Http::fake();
+
+    $request = ActionRequest::factory()->create([
+        'status' => ActionRequestStatus::Approved,
+        'type' => 'approve_seerr_request',
+        'payload' => ['seerr_request_id' => 77, 'service_connection_id' => $seerr->id],
+    ]);
+
+    new ExecuteActionRequest($request)->handle();
+
+    expect($request->fresh()->status)->toBe(ActionRequestStatus::Failed)
+        ->and($request->fresh()->result)->toMatchArray([
+            'reason' => 'execution_failed',
+            'message' => 'Seerr request 77 is being changed by another MediaManager action.',
+        ]);
+    Http::assertNothingSent();
 });

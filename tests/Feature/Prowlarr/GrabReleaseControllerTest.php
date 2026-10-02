@@ -115,7 +115,7 @@ test('Prowlarr refusals are sanitized and never retried', function (int $status,
     expect(ActivityLog::query()->where('action', 'prowlarr.release.grabbed')->exists())->toBeFalse();
 })->with([
     'not in prowlarr cache' => [404, ['message' => "Couldn't find requested release in cache"], 422, 'Prowlarr no longer has that release cached — run the search again.'],
-    'no download client' => [500, ['message' => "Usenet Download client isn't configured yet, see http://prowlarr.local:9696/settings?apikey=prowlarr-secret-key"], 422, "Prowlarr could not grab the release: Usenet Download client isn't configured yet, see http:/[redacted path]:9696/settings?[redacted]"],
+    'no download client' => [500, ['message' => "Usenet Download client isn't configured yet, see http://prowlarr.local:9696/settings?apikey=prowlarr-secret-key"], 422, "Prowlarr could not grab the release: Usenet Download client isn't configured yet, see http://prowlarr.local:9696/settings?[redacted]"],
     'bare server error' => [503, 'Service Unavailable', 502, 'Prowlarr is unreachable right now.'],
     'bare refusal' => [400, '', 422, 'Prowlarr refused the grab.'],
 ]);

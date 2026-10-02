@@ -17,6 +17,7 @@ import {
 } from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
 import { dashboard } from '@/routes';
+import type { UpstreamList } from '@/types';
 
 interface QualityProfile {
     id: number;
@@ -40,10 +41,10 @@ interface LookupResult {
 
 const props = defineProps<{
     connection: { url: string };
-    qualityProfiles?: QualityProfile[];
-    rootFolders?: RootFolder[];
+    qualityProfiles?: UpstreamList<QualityProfile>;
+    rootFolders?: UpstreamList<RootFolder>;
     searchTerm: string;
-    searchResults?: LookupResult[];
+    searchResults?: UpstreamList<LookupResult>;
 }>();
 
 defineOptions({
@@ -89,8 +90,8 @@ function selectResult(result: LookupResult) {
     selectedTvdbId.value = result.tvdb_id;
     form.title = result.title ?? '';
     form.tvdbId = result.tvdb_id;
-    form.qualityProfileId = props.qualityProfiles?.[0]?.id ?? null;
-    form.rootFolderPath = props.rootFolders?.[0]?.path ?? '';
+    form.qualityProfileId = props.qualityProfiles?.items[0]?.id ?? null;
+    form.rootFolderPath = props.rootFolders?.items[0]?.path ?? '';
     form.monitored = true;
 }
 
@@ -146,7 +147,7 @@ function formatFreeSpace(bytes: number | null): string {
         </form>
 
         <div
-            v-if="!searchTerm && (searchResults?.length ?? 0) === 0"
+            v-if="!searchTerm && (searchResults?.items.length ?? 0) === 0"
             class="rounded-md border bg-muted/30 p-8 text-center text-muted-foreground"
         >
             Search for a series to add.
@@ -174,7 +175,15 @@ function formatFreeSpace(bytes: number | null): string {
         </div>
 
         <div
-            v-else-if="(searchResults?.length ?? 0) === 0"
+            v-else-if="searchResults?.error"
+            class="rounded-md border bg-muted/30 p-8 text-center text-destructive"
+            data-search-error
+        >
+            {{ searchResults.error }}
+        </div>
+
+        <div
+            v-else-if="(searchResults?.items.length ?? 0) === 0"
             class="rounded-md border bg-muted/30 p-8 text-center text-muted-foreground"
         >
             No results found for "{{ searchTerm }}".
@@ -185,7 +194,7 @@ function formatFreeSpace(bytes: number | null): string {
             class="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3"
         >
             <Card
-                v-for="result in searchResults"
+                v-for="result in searchResults?.items"
                 :key="result.tvdb_id ?? result.title ?? ''"
                 class="overflow-hidden"
             >
@@ -259,7 +268,8 @@ function formatFreeSpace(bytes: number | null): string {
                             </SelectTrigger>
                             <SelectContent>
                                 <SelectItem
-                                    v-for="profile in qualityProfiles ?? []"
+                                    v-for="profile in qualityProfiles?.items ??
+                                    []"
                                     :key="profile.id"
                                     :value="profile.id"
                                 >
@@ -268,6 +278,13 @@ function formatFreeSpace(bytes: number | null): string {
                             </SelectContent>
                         </Select>
                         <InputError :message="form.errors.qualityProfileId" />
+                        <p
+                            v-if="qualityProfiles?.error"
+                            class="text-[12px] text-destructive"
+                            data-quality-profiles-error
+                        >
+                            {{ qualityProfiles.error }}
+                        </p>
                     </div>
 
                     <div class="space-y-1">
@@ -289,7 +306,7 @@ function formatFreeSpace(bytes: number | null): string {
                             </SelectTrigger>
                             <SelectContent>
                                 <SelectItem
-                                    v-for="folder in rootFolders ?? []"
+                                    v-for="folder in rootFolders?.items ?? []"
                                     :key="folder.id"
                                     :value="folder.path"
                                 >
@@ -299,6 +316,13 @@ function formatFreeSpace(bytes: number | null): string {
                             </SelectContent>
                         </Select>
                         <InputError :message="form.errors.rootFolderPath" />
+                        <p
+                            v-if="rootFolders?.error"
+                            class="text-[12px] text-destructive"
+                            data-root-folders-error
+                        >
+                            {{ rootFolders.error }}
+                        </p>
                     </div>
 
                     <div class="flex gap-2">

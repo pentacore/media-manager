@@ -5,6 +5,7 @@ declare(strict_types=1);
 use App\Models\ActivityLog;
 use App\Models\ServiceConnection;
 use App\Models\User;
+use App\Services\Arr\GrabbedHistoryCache;
 use App\Services\Library\InterventionCounter;
 use Illuminate\Http\Client\Request;
 use Illuminate\Support\Facades\Cache;
@@ -133,6 +134,7 @@ test('a service without a connection says so', function (): void {
 });
 
 test('an admin marks a grabbed history row as failed on the pinned connection', function (): void {
+    resolve(GrabbedHistoryCache::class)->remember($this->sonarr, [55]);
     Http::fake(['sonarr.local:8989/api/v3/history/failed/55' => Http::response('', 200)]);
     $admin = User::factory()->admin()->create();
 
@@ -169,6 +171,7 @@ test('mark failed refuses a pin to the wrong service or a deactivated connection
 
 test('mark failed reports upstream refusals and outages', function (int $status, string $message): void {
     Sleep::fake();
+    resolve(GrabbedHistoryCache::class)->remember($this->sonarr, [55]);
     Http::fake(['sonarr.local:8989/api/v3/history/failed/55' => Http::response(['message' => 'Not found at /data/media?apikey=x'], $status)]);
 
     $this->actingAs(User::factory()->admin()->create())
@@ -227,4 +230,63 @@ test('a failed queue removal is not audited and never echoes the upstream url', 
 
     expect((string) session('inertia.flash_data.toast.message'))->not->toContain('?removeFromClient')
         ->and(ActivityLog::query()->where('action', 'queue.removed')->exists())->toBeFalse();
+});
+
+test('rendering the history remembers only its grabbed rows', function (): void {
+    Http::fake([
+        'sonarr.local:8989/api/v3/history?*' => Http::response(['totalRecords' => 2, 'records' => [
+            activityHistorySonarrRecord(55),
+            activityHistorySonarrRecord(56, 'downloadFolderImported'),
+        ]]),
+    ]);
+
+    $this->actingAs(User::factory()->admin()->create())
+        ->get(route('media.library.activity.queue', ['history_service' => 'sonarr']))
+        ->assertInertia(fn ($page) => $page->loadDeferredProps('history', fn ($page) => $page->has('history.rows', 2)));
+
+    $grabbedHistoryCache = resolve(GrabbedHistoryCache::class);
+
+    expect($grabbedHistoryCache->isGrabbed($this->sonarr, 55))->toBeTrue()
+        ->and($grabbedHistoryCache->isGrabbed($this->sonarr, 56))->toBeFalse()
+        ->and($grabbedHistoryCache->isGrabbed($this->radarr, 55))->toBeFalse();
+});
+
+test('a history id never rendered as grabbed cannot be marked failed', function (): void {
+    resolve(GrabbedHistoryCache::class)->remember($this->sonarr, [55]);
+
+    $this->actingAs(User::factory()->admin()->create())
+        ->from(route('media.library.activity.queue'))
+        ->post(route('media.library.activity.history.failed', ['service' => 'sonarr', 'id' => 56]), ['service_connection_id' => $this->sonarr->id])
+        ->assertSessionHas('inertia.flash_data.toast.type', 'error')
+        ->assertSessionHas('inertia.flash_data.toast.message', 'Only a grabbed Sonarr history entry can be marked as failed — refresh the history and try again.');
+
+    Http::assertNothingSent();
+    expect(ActivityLog::query()->where('action', 'library.history.marked_failed')->exists())->toBeFalse();
+});
+
+test('after the remembered rows are gone, mark failed asks for a refresh and sends nothing', function (): void {
+    resolve(GrabbedHistoryCache::class)->remember($this->sonarr, [55]);
+    Cache::flush();
+    // HandleInertiaRequests computes the nav badges on every request, POSTs
+    // included; re-seed the one beforeEach seeded so it never walks the queues.
+    Cache::put(InterventionCounter::CACHE_KEY, 0, 600);
+
+    $this->actingAs(User::factory()->admin()->create())
+        ->from(route('media.library.activity.queue'))
+        ->post(route('media.library.activity.history.failed', ['service' => 'sonarr', 'id' => 55]), ['service_connection_id' => $this->sonarr->id])
+        ->assertSessionHas('inertia.flash_data.toast.message', 'Only a grabbed Sonarr history entry can be marked as failed — refresh the history and try again.');
+
+    Http::assertNothingSent();
+});
+
+test('a grabbed row remembered for one Sonarr instance is not markable on another', function (): void {
+    $second = ServiceConnection::factory()->sonarr()->create(['url' => 'http://sonarr2.local:8989']);
+    resolve(GrabbedHistoryCache::class)->remember($this->sonarr, [55]);
+
+    $this->actingAs(User::factory()->admin()->create())
+        ->from(route('media.library.activity.queue'))
+        ->post(route('media.library.activity.history.failed', ['service' => 'sonarr', 'id' => 55]), ['service_connection_id' => $second->id])
+        ->assertSessionHas('inertia.flash_data.toast.message', 'Only a grabbed Sonarr history entry can be marked as failed — refresh the history and try again.');
+
+    Http::assertNothingSent();
 });

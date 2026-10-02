@@ -12,6 +12,7 @@ use App\Models\User;
 use App\Settings\AiSettings;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Queue;
+use Illuminate\Support\Sleep;
 
 beforeEach(function (): void {
     config()->set('inertia.ssr.enabled', false);
@@ -68,9 +69,10 @@ test('members can list movies', function (): void {
 
     $page = $response->json();
     expect($page['component'])->toBe('Radarr/Movies/Index');
-    expect($page['props']['movies'])->toHaveCount(1);
-    expect($page['props']['qualityProfiles'])->toHaveCount(1);
-    expect($page['props']['movies'][0]['title'])->toBe('Test Movie');
+    expect($page['props']['movies']['error'])->toBeNull();
+    expect($page['props']['movies']['items'])->toHaveCount(1);
+    expect($page['props']['qualityProfiles']['items'])->toHaveCount(1);
+    expect($page['props']['movies']['items'][0]['title'])->toBe('Test Movie');
 });
 
 test('movies index exposes connection url as non-deferred prop', function (): void {
@@ -112,7 +114,7 @@ test('movies index maps title_slug through to response', function (): void {
 
     $page = $response->json();
     expect($page['component'])->toBe('Radarr/Movies/Index');
-    expect($page['props']['movies'][0]['title_slug'])->toBe('slugged-movie-2024');
+    expect($page['props']['movies']['items'][0]['title_slug'])->toBe('slugged-movie-2024');
 });
 
 test('admins can list movies', function (): void {
@@ -135,12 +137,11 @@ test('movies index redirects when no active radarr connection', function (): voi
         ->assertRedirect(route('dashboard'));
 });
 
-test('movies index handles connection failure gracefully', function (): void {
-    $member = User::factory()->member()->create();
+test('movies index reports an outage instead of an empty library', function (int $status, string $message): void {
+    Sleep::fake();
+    Http::fake(['radarr.local:7878/*' => Http::response('Error at /config/radarr.db', $status)]);
 
-    Http::fake(fn () => Http::response('Service Unavailable', 503));
-
-    $response = $this->actingAs($member)
+    $response = $this->actingAs(User::factory()->member()->create())
         ->withHeaders([
             'X-Inertia' => 'true',
             'X-Inertia-Version' => inertiaVersion(),
@@ -150,11 +151,12 @@ test('movies index handles connection failure gracefully', function (): void {
         ->get(route('media.movies.index'))
         ->assertOk();
 
-    $page = $response->json();
-    expect($page['component'])->toBe('Radarr/Movies/Index');
-    expect($page['props']['movies'])->toBe([]);
-    expect($page['props']['qualityProfiles'])->toBe([]);
-});
+    expect($response->json('props.movies'))->toBe(['items' => [], 'error' => $message])
+        ->and($response->json('props.qualityProfiles'))->toBe(['items' => [], 'error' => $message]);
+})->with([
+    'outage' => [503, 'Radarr is unreachable right now.'],
+    'bad api key' => [401, 'Radarr refused the request — check the connection settings.'],
+]);
 
 test('members can view a single movie', function (): void {
     $member = User::factory()->member()->create();
@@ -199,9 +201,9 @@ test('members can view create form with quality profiles and root folders', func
 
     $page = $response->json();
     expect($page['component'])->toBe('Radarr/Movies/Create');
-    expect($page['props']['qualityProfiles'])->toHaveCount(1);
-    expect($page['props']['rootFolders'])->toHaveCount(1);
-    expect($page['props']['searchResults'])->toBe([]);
+    expect($page['props']['qualityProfiles']['items'])->toHaveCount(1);
+    expect($page['props']['rootFolders']['items'])->toHaveCount(1);
+    expect($page['props']['searchResults'])->toBe(['items' => [], 'error' => null]);
     expect($page['props']['connection']['url'])->toBe('http://radarr.local:7878');
 });
 
@@ -227,8 +229,8 @@ test('create form returns lookup results when q is provided', function (): void 
         ->assertOk();
 
     $page = $response->json();
-    expect($page['props']['searchResults'])->toHaveCount(1);
-    expect($page['props']['searchResults'][0]['title'])->toBe('Found Movie');
+    expect($page['props']['searchResults']['items'])->toHaveCount(1);
+    expect($page['props']['searchResults']['items'][0]['title'])->toBe('Found Movie');
 });
 
 test('members can store a new movie', function (): void {
@@ -435,7 +437,7 @@ test('the movie page defers the quality profiles for the profile dropdown', func
         ->get(route('media.movies.show', ['id' => 1]))
         ->assertInertia(fn ($page) => $page
             ->missing('qualityProfiles')
-            ->loadDeferredProps('qualityProfiles', fn ($reload) => $reload->where('qualityProfiles', [['id' => 6, 'name' => 'Ultra-HD']])));
+            ->loadDeferredProps('qualityProfiles', fn ($reload) => $reload->where('qualityProfiles', ['items' => [['id' => 6, 'name' => 'Ultra-HD']], 'error' => null])));
 });
 
 test('viewers never trigger the quality profile lookup on the movie page', function (): void {
@@ -450,4 +452,35 @@ test('viewers never trigger the quality profile lookup on the movie page', funct
 
     expect($response->viewData('page')['deferredProps'] ?? [])->toBe([]);
     Http::assertNotSent(fn ($request): bool => str_contains($request->url(), '/qualityprofile'));
+});
+
+test('the add-movie form reports failed lookups, profiles and root folders', function (): void {
+    Sleep::fake();
+    Http::fake([
+        'radarr.local:7878/api/v3/qualityprofile' => Http::response('boom', 503),
+        'radarr.local:7878/api/v3/rootfolder' => Http::response('boom', 503),
+        'radarr.local:7878/api/v3/movie/lookup*' => Http::response('nope', 401),
+    ]);
+
+    $this->actingAs(User::factory()->member()->create())
+        ->get(route('media.movies.create', ['q' => 'dune']))
+        ->assertInertia(fn ($page) => $page
+            ->reloadOnly(['qualityProfiles', 'rootFolders', 'searchResults'], fn ($reload) => $reload
+                ->where('qualityProfiles.error', 'Radarr is unreachable right now.')
+                ->where('rootFolders.error', 'Radarr is unreachable right now.')
+                ->where('searchResults', ['items' => [], 'error' => 'Radarr refused the request — check the connection settings.'])));
+});
+
+test('a movie page says when its quality profiles could not load', function (): void {
+    Sleep::fake();
+    Http::fake([
+        'radarr.local:7878/api/v3/movie/1' => Http::response(['id' => 1, 'title' => 'Movie', 'images' => []]),
+        'radarr.local:7878/api/v3/qualityprofile' => Http::response('boom', 503),
+    ]);
+
+    $this->actingAs(User::factory()->member()->create())
+        ->get(route('media.movies.show', ['id' => 1]))
+        ->assertInertia(fn ($page) => $page
+            ->loadDeferredProps('qualityProfiles', fn ($reload) => $reload
+                ->where('qualityProfiles', ['items' => [], 'error' => 'Radarr is unreachable right now.'])));
 });

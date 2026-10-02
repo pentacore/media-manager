@@ -5,8 +5,12 @@ declare(strict_types=1);
 use App\Models\ServiceConnection;
 use App\Models\User;
 use App\Services\Seerr\SeerrClient;
+use App\Services\Seerr\SeerrRequestLock;
+use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\Request;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Sleep;
 
 beforeEach(function (): void {
     config()->set('inertia.ssr.enabled', false);
@@ -159,4 +163,44 @@ test('the ownership check reads the live request, not a cached copy', function (
         ->assertSessionHas('inertia.flash_data.toast.message', 'Only pending requests can be cancelled.');
 
     Http::assertNotSent(fn (Request $request): bool => $request->method() === 'DELETE');
+});
+
+test('a cancel is refused while another MediaManager write holds the request', function (): void {
+    fakeMyRequestsSeerr();
+    Cache::lock(SeerrRequestLock::key(ServiceConnection::query()->sole()->id, 41), SeerrRequestLock::TTL_SECONDS)->get();
+
+    $this->actingAs(User::factory()->create(['email' => 'viewer@example.com']))
+        ->delete(route('media.requests.mine.destroy', ['id' => 41]))
+        ->assertRedirect()
+        ->assertSessionHas('inertia.flash_data.toast.message', 'This request is being updated right now — try again in a moment.');
+
+    Http::assertNotSent(fn (Request $request): bool => str_contains($request->url(), '/api/v1/request/41'));
+});
+
+test('a cancel whose Seerr delete times out is sent once and reported as unreachable', function (): void {
+    Sleep::fake();
+    $seen = new stdClass;
+    $seen->deletes = 0;
+    $seen->lockHeldDuringDelete = false;
+
+    $lockKey = SeerrRequestLock::key(ServiceConnection::query()->sole()->id, 41);
+    fakeMyRequestsSeerr(['seerr.local:5055/api/v1/request/41' => function (Request $request) use ($seen, $lockKey) {
+        if ($request->method() === 'DELETE') {
+            $seen->deletes++;
+            // The status read and the DELETE sit inside one critical section.
+            $seen->lockHeldDuringDelete = ! Cache::lock($lockKey, 1)->get();
+
+            throw new ConnectionException('Operation timed out');
+        }
+
+        return Http::response(['id' => 41, 'status' => 1, 'requestedBy' => ['id' => 7]]);
+    }]);
+
+    $this->actingAs(User::factory()->create(['email' => 'viewer@example.com']))
+        ->delete(route('media.requests.mine.destroy', ['id' => 41]))
+        ->assertSessionHas('inertia.flash_data.toast.message', 'Seerr is unreachable right now.');
+
+    expect($seen->deletes)->toBe(1)
+        ->and($seen->lockHeldDuringDelete)->toBeTrue()
+        ->and(Cache::lock($lockKey, 1)->get())->toBeTrue();
 });

@@ -30,4 +30,7 @@ Use `->paginate($n)->withQueryString()` for Eloquent-backed index pages; do not 
 Type-hint services on the controller action itself so the container resolves them per request. Reserve constructor promotion for dependencies genuinely used by every action in the class.
 
 ## Upstream calls from controllers: base class, defer, narrow catches
-Controllers for the same upstream service extend a shared abstract base (e.g. `BaseArrController`, `BazarrController`) that owns connection resolution, client construction, and failure redirects. Wrap slow upstream round-trips in `Inertia::defer()` and use the base's `tryClientCall()` inside deferred closures (you cannot redirect from one). Catch `RequestException|ConnectionException`, never `Throwable`.
+Controllers for the same upstream service extend a shared abstract base (e.g. `BaseArrController`, `BazarrController`) that owns connection resolution, client construction, and failure redirects. Wrap slow upstream round-trips in `Inertia::defer()` and return the base's `tryClientList()` shape (`{items, error}`) from deferred closures (you cannot redirect from one) — an outage is an `error` the page renders, never an empty list. Catch `RequestException|ConnectionException`, never `Throwable`.
+
+## Never echo raw upstream error text
+Every upstream error text that reaches a toast, JSON body, validation error or stored display field goes through `App\Support\UpstreamErrorText::sanitize()` (on the same line as `->getMessage()`) or becomes a fixed sentence. Raw messages may only appear in `Log::` contexts. `tests/Unit/Architecture/UpstreamErrorEchoArchTest.php` enforces it; add to its reviewed list only app-authored text.

@@ -24,6 +24,7 @@ use App\Services\Prowlarr\ProwlarrClient;
 use App\Services\Radarr\RadarrClient;
 use App\Services\ServiceClientFactory;
 use App\Services\Sonarr\SonarrClient;
+use App\Support\UpstreamErrorText;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\QueryException;
 use Illuminate\Http\JsonResponse;
@@ -706,7 +707,7 @@ class ServiceConnectionController extends Controller
         } catch (Throwable $throwable) {
             return response()->json([
                 'success' => false,
-                'message' => 'Connection failed: '.$throwable->getMessage(),
+                'message' => sprintf('Connection failed: %s', UpstreamErrorText::sanitize($throwable->getMessage())),
             ], 422);
         }
     }
@@ -742,11 +743,11 @@ class ServiceConnectionController extends Controller
 
             Inertia::flash('toast', [
                 'type' => 'error',
-                'message' => __('Failed to configure webhook: :error', ['error' => $throwable->getMessage()]),
+                'message' => __('Failed to configure webhook: :error', ['error' => UpstreamErrorText::sanitize($throwable->getMessage())]),
             ]);
 
             return back()->withErrors([
-                'configure_webhook' => $throwable->getMessage(),
+                'configure_webhook' => UpstreamErrorText::sanitize($throwable->getMessage()),
             ]);
         }
 

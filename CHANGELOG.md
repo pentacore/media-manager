@@ -1,3 +1,25 @@
+## [1.31.3](https://github.com/pentacore/media-manager/compare/v1.31.2...v1.31.3) (2026-10-02)
+
+
+### Bug Fixes
+
+* **actions:** keep the abort message when a pinned connection was deleted ([b127af8](https://github.com/pentacore/media-manager/commit/b127af8493f1de684734d7981a086827d3aea195))
+* **actions:** store sanitized failure messages on action requests ([a1ee8bb](https://github.com/pentacore/media-manager/commit/a1ee8bb68c2e0f9c9c0d310df7274d0a9b14bb5e))
+* **admin:** sanitize upstream errors in connection and indexer tests ([9c03bbe](https://github.com/pentacore/media-manager/commit/9c03bbe56bf80dbfb15755b188718c54229ccf6b))
+* **auth:** gate activity log, statistics and service health behind manage-library ([e4b40bf](https://github.com/pentacore/media-manager/commit/e4b40bfc0bf423f45bc9793ec94201ca5d51f33b))
+* **auth:** gate every subtitle page behind manage-library ([0e2440b](https://github.com/pentacore/media-manager/commit/0e2440ba396f227247297be0d61cc151a58d257f))
+* **auth:** limit a viewer's dashboard feed to their own activity ([ac79877](https://github.com/pentacore/media-manager/commit/ac798777146927e4c6edfc9cefc29488ea756fba))
+* **errors:** keep URL hosts and redact Windows paths in upstream error text ([fc78544](https://github.com/pentacore/media-manager/commit/fc78544c608d43a58066d7359c35fdb136d8b5e2))
+* **library:** only mark history rows failed that were rendered as grabs ([2b60f1c](https://github.com/pentacore/media-manager/commit/2b60f1cfceb2178dc53cfed75d9c6232458bf4cc))
+* **library:** stop echoing raw arr errors and paths on the grab queue ([27fb5c8](https://github.com/pentacore/media-manager/commit/27fb5c88c86e9b5393325b4a6d4729496d10a792))
+* **radarr:** show an outage instead of an empty library on movie pages ([b6f698a](https://github.com/pentacore/media-manager/commit/b6f698a5ba0d78d07dd9b8ac39bc2b4219bf48d5))
+* **seerr:** keep the request lock for a cancel's worst case ([6d47a65](https://github.com/pentacore/media-manager/commit/6d47a65de46921b154a513e3888a7b61dc409d87))
+* **seerr:** sanitize upstream error text in request and discover responses ([3f038de](https://github.com/pentacore/media-manager/commit/3f038defb23f5b61df02ad3ca8fa9a3d4f865380))
+* **seerr:** serialise request cancel with approvals and never retry a delete ([c05cd0c](https://github.com/pentacore/media-manager/commit/c05cd0cd36381dc980fe300259138402b6eb8daf))
+* **sonarr:** show an outage instead of an empty library on series pages ([7f963ba](https://github.com/pentacore/media-manager/commit/7f963ba1c179de91416fa0ece0171177225d52de))
+* **webhooks:** drop the stale Bazarr match.unhandled baseline entries ([3e113ca](https://github.com/pentacore/media-manager/commit/3e113ca02eef50f0df410ff0f14ae303bc0c9756))
+* **webhooks:** return 404 for Bazarr on the generic webhook endpoint ([2f5e380](https://github.com/pentacore/media-manager/commit/2f5e380be8eaa00c6f2ca7d8e442c7e09b217b7d))
+
 ## [1.31.2](https://github.com/pentacore/media-manager/compare/v1.31.1...v1.31.2) (2026-10-02)
 
 

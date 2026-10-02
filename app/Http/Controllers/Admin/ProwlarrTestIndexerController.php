@@ -8,6 +8,7 @@ use App\Enums\ServiceType;
 use App\Http\Controllers\Controller;
 use App\Models\ServiceConnection;
 use App\Services\Prowlarr\ProwlarrClient;
+use App\Support\UpstreamErrorText;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Support\Facades\Log;
 use Inertia\Inertia;
@@ -38,7 +39,8 @@ class ProwlarrTestIndexerController extends Controller
         if ($result['success']) {
             Inertia::flash('toast', ['type' => 'success', 'message' => sprintf('Indexer #%d tested OK.', $indexerId)]);
         } else {
-            $first = $result['errors'][0]['errorMessage'] ?? 'Test failed.';
+            $reason = $result['errors'][0]['errorMessage'] ?? null;
+            $first = is_string($reason) && trim($reason) !== '' ? UpstreamErrorText::sanitize($reason) : 'Test failed.';
             Inertia::flash('toast', ['type' => 'error', 'message' => sprintf('Indexer #%d: %s', $indexerId, $first)]);
         }
 

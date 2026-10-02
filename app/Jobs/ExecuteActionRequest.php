@@ -21,6 +21,7 @@ use App\Services\Radarr\RadarrActions;
 use App\Services\Seerr\SeerrActions;
 use App\Services\Sonarr\SonarrActions;
 use App\Services\Whisparr\WhisparrActions;
+use App\Support\UpstreamErrorText;
 use Illuminate\Contracts\Queue\ShouldBeUnique;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
@@ -197,10 +198,18 @@ class ExecuteActionRequest implements ShouldBeUnique, ShouldQueue
     }
 
     /**
+     * Executor exception text embeds upstream response bodies
+     * (RequestException) and file paths, and result.message is shown on the
+     * Action Queue — so it is stored reduced, never raw.
+     *
      * @param  array<string, mixed>  $result
      */
     private function markFailed(array $result): void
     {
+        if (is_string($result['message'] ?? null)) {
+            $result['message'] = UpstreamErrorText::sanitize($result['message']);
+        }
+
         $this->actionRequest->update([
             'status' => ActionRequestStatus::Failed,
             'result' => ['success' => false, ...$result],
