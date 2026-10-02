@@ -120,11 +120,16 @@ final readonly class UpdateSubtitleCaseFromActionRequest
 
     /**
      * An uncertain write may still have landed in Bazarr, and only a live read can
-     * tell. BazarrActions already scheduled targeted reconciliation, which verifies
-     * download_requested and bazarr_searching cases only — parking the case here
-     * would turn that read into a no-op and leave a satisfied requirement stranded
-     * outside the missing feed forever. The case keeps waiting and the uncertainty
-     * is recorded as its own attempt instead.
+     * tell. Targeted reconciliation verifies download_requested and
+     * bazarr_searching cases only — parking the case here would turn that read
+     * into a no-op and leave a satisfied requirement stranded outside the missing
+     * feed forever. The case keeps waiting and the uncertainty is recorded as its
+     * own attempt instead.
+     *
+     * BazarrActions schedules that read itself for an uncertain upstream reply.
+     * A lost worker (`worker_lost`, written by ExecuteActionRequest and
+     * actions:reconcile-stuck) never got that far, so the read is scheduled here;
+     * otherwise nothing would ever look at the case again.
      */
     private function recordIndeterminateDownload(
         SubtitleCase $subtitleCase,
@@ -148,6 +153,10 @@ final readonly class UpdateSubtitleCaseFromActionRequest
                 'completed_at' => now(),
             ],
         );
+
+        if (($actionRequest->result['worker_lost'] ?? false) === true) {
+            dispatch(ReconcileSubtitleCase::forCase($subtitleCase)->delay(now()->addMinute()));
+        }
     }
 
     /**

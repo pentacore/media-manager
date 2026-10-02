@@ -220,9 +220,12 @@ class ExecuteActionRequest implements ShouldBeUnique, ShouldQueue
         // Called by Laravel when retries are exhausted via a rethrown exception,
         // or when the worker running the final attempt was lost outright (killed,
         // OOM'd, or timed out) with no further attempt left to re-deliver it.
-        // If handle() already persisted Failed state, short-circuit.
+        // Only a request this job still owns — Approved, or Executing — is
+        // failed here. A terminal row is left alone: the worker can die after
+        // Completed committed but before the ack, and turning that into
+        // job_failed would invite a manual retry of a change that landed.
         $this->actionRequest->refresh();
-        if ($this->actionRequest->status === ActionRequestStatus::Failed) {
+        if (! in_array($this->actionRequest->status, [ActionRequestStatus::Approved, ActionRequestStatus::Executing], true)) {
             return;
         }
 

@@ -16,6 +16,7 @@ use Illuminate\Bus\UniqueLock;
 use Illuminate\Contracts\Bus\Dispatcher;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
+use Throwable;
 
 /**
  * Hands Approved requests whose execution job was lost (a flushed queue, a
@@ -28,6 +29,10 @@ use Illuminate\Support\Facades\Log;
  * approved it is long gone, and an admin should look before the upstream
  * effect lands unreviewed. It is failed as needs_reconciliation / never_started
  * instead, the same way a lost worker on an Executing row is.
+ *
+ * Recovery is bounded by the unique lock's UniqueFor TTL as well as by the
+ * cutoff: a lost job whose cache lock survived keeps this dispatch out until
+ * that lock expires.
  */
 final readonly class StaleApprovedRequestRedispatcher
 {
@@ -50,11 +55,13 @@ final readonly class StaleApprovedRequestRedispatcher
             ->orderBy('id')
             ->get();
 
+        $finalizedAdvisorRequestIds = $this->finalizedAdvisorRequestIds($stale->all());
+
         $redispatched = 0;
         $neverStarted = 0;
 
         foreach ($stale as $actionRequest) {
-            if ($this->debounceWindowOpen($actionRequest, $cutoff) || $this->awaitsAdvisorFinalization($actionRequest)) {
+            if ($this->debounceWindowOpen($actionRequest, $cutoff)) {
                 continue;
             }
 
@@ -66,12 +73,16 @@ final readonly class StaleApprovedRequestRedispatcher
                 continue;
             }
 
+            if ($this->awaitsAdvisorFinalization($actionRequest, $finalizedAdvisorRequestIds)) {
+                continue;
+            }
+
             if ($this->dispatchIfUnclaimed($actionRequest)) {
                 $redispatched++;
             }
         }
 
-        return new StaleApprovedReconciliation($redispatched, $neverStarted);
+        return new StaleApprovedReconciliation(redispatched: $redispatched, neverStarted: $neverStarted);
     }
 
     /**
@@ -84,16 +95,41 @@ final readonly class StaleApprovedRequestRedispatcher
      * first lets us log and count only a dispatch that actually reaches the
      * queue; the worker still releases this same lock on completion since
      * acquire() stamps the job with its lock owner before it is pushed.
+     *
+     * The stale set is read once, so a backlogged original job may have
+     * claimed and finished the row (releasing its lock) before this loop
+     * reaches it; the status is re-read under the lock for that reason. A
+     * push that fails releases the lock again and is reported, so one queue
+     * blip neither holds the row for the lock's TTL nor aborts the run.
      */
     private function dispatchIfUnclaimed(ActionRequest $actionRequest): bool
     {
         $executeActionRequest = new ExecuteActionRequest($actionRequest);
+        $uniqueLock = new UniqueLock(Cache::store());
 
-        if (! new UniqueLock(Cache::store())->acquire($executeActionRequest)) {
+        if (! $uniqueLock->acquire($executeActionRequest)) {
             return false;
         }
 
-        $this->busDispatcher->dispatch($executeActionRequest);
+        $stillApproved = ActionRequest::query()
+            ->whereKey($actionRequest->id)
+            ->where('status', ActionRequestStatus::Approved->value)
+            ->exists();
+
+        if (! $stillApproved) {
+            $uniqueLock->release($executeActionRequest);
+
+            return false;
+        }
+
+        try {
+            $this->busDispatcher->dispatch($executeActionRequest);
+        } catch (Throwable $throwable) {
+            $uniqueLock->release($executeActionRequest);
+            report($throwable);
+
+            return false;
+        }
 
         $this->actionRequestActivityLogger->redispatched($actionRequest);
 
@@ -121,19 +157,45 @@ final readonly class StaleApprovedRequestRedispatcher
      * The subtitle advisor files its replacement Approved but deferred; only
      * RunSubtitleAdvisor::finishWithQueuedAction() starts it, and that marks
      * the advisor attempt for the request Succeeded. Without such an attempt
-     * the replacement was deliberately never started.
+     * the replacement was deliberately never started. That wait is bounded by
+     * the 24 h age bound like any other row: past it, nothing will ever
+     * finalize the request, so it fails as never_started.
+     *
+     * @param  array<int, bool>  $finalizedAdvisorRequestIds
      */
-    private function awaitsAdvisorFinalization(ActionRequest $actionRequest): bool
+    private function awaitsAdvisorFinalization(ActionRequest $actionRequest, array $finalizedAdvisorRequestIds): bool
     {
-        if ($actionRequest->source_service !== 'subtitle_advisor') {
-            return false;
+        return $actionRequest->source_service === 'subtitle_advisor'
+            && ! isset($finalizedAdvisorRequestIds[$actionRequest->id]);
+    }
+
+    /**
+     * One query for every advisor row in the stale set, keyed by request id.
+     *
+     * @param  array<int, ActionRequest>  $stale
+     * @return array<int, bool>
+     */
+    private function finalizedAdvisorRequestIds(array $stale): array
+    {
+        $advisorRequestIds = array_map(
+            static fn (ActionRequest $actionRequest): int => $actionRequest->id,
+            array_values(array_filter(
+                $stale,
+                static fn (ActionRequest $actionRequest): bool => $actionRequest->source_service === 'subtitle_advisor',
+            )),
+        );
+
+        if ($advisorRequestIds === []) {
+            return [];
         }
 
-        return ! SubtitleCaseAttempt::query()
-            ->where('action_request_id', $actionRequest->id)
+        return SubtitleCaseAttempt::query()
+            ->whereIn('action_request_id', $advisorRequestIds)
             ->where('type', SubtitleCaseAttemptType::Advisor)
             ->where('outcome', SubtitleCaseAttemptOutcome::Succeeded)
-            ->exists();
+            ->pluck('action_request_id')
+            ->mapWithKeys(static fn (int $actionRequestId): array => [$actionRequestId => true])
+            ->all();
     }
 
     /**

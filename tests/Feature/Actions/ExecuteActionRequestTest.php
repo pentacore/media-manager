@@ -287,6 +287,28 @@ test('failed() hook does not overwrite already-Failed status', function (): void
     expect($fresh->result)->toMatchArray(['reason' => 'execution_failed', 'message' => 'original']);
 });
 
+test('failed() hook leaves a finished request untouched', function (
+    ActionRequestStatus $actionRequestStatus,
+): void {
+    // The worker can die after Completed committed but before the ack; the
+    // re-delivery's MaxAttemptsExceeded must not turn the landed change into
+    // job_failed and invite a manual retry.
+    $request = ActionRequest::factory()->create([
+        'status' => $actionRequestStatus,
+        'type' => 'delete_series',
+        'result' => ['success' => true, 'original' => true],
+    ]);
+
+    new ExecuteActionRequest($request)->failed(new RuntimeException('queue gave up'));
+
+    $fresh = $request->fresh();
+    expect($fresh->status)->toBe($actionRequestStatus)
+        ->and($fresh->result)->toBe(['success' => true, 'original' => true]);
+})->with([
+    'completed' => [ActionRequestStatus::Completed],
+    'rejected' => [ActionRequestStatus::Rejected],
+]);
+
 test('failed() hook records job_failed when queue exhausts without explicit state', function (): void {
     $request = ActionRequest::factory()->create([
         'status' => ActionRequestStatus::Approved,

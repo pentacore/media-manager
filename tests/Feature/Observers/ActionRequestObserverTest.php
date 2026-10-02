@@ -11,6 +11,7 @@ use App\Models\WebhookEvent;
 use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Event;
+use Illuminate\Support\Facades\Exceptions;
 
 test('logs ActivityLog entry when an ActionRequest is created', function (): void {
     ActionRequest::factory()->create([
@@ -222,3 +223,34 @@ test('a rolled-back create or status change writes and broadcasts nothing', func
     expect(ActivityLog::query()->count())->toBe($rowsBefore);
     Event::assertNotDispatched(ActivityLogCreated::class);
 });
+
+test('a failing activity write never stops the after-commit callbacks queued after it', function (
+    string $transition,
+): void {
+    Exceptions::fake();
+    $pending = ActionRequest::factory()->create(['status' => ActionRequestStatus::Pending]);
+    ActivityLog::creating(static function (): never {
+        throw new RuntimeException('activity write failed');
+    });
+    $holder = new stdClass;
+    $holder->jobPushRan = false;
+
+    DB::transaction(function () use ($transition, $pending, $holder): void {
+        if ($transition === 'created') {
+            ActionRequest::factory()->create(['webhook_event_id' => null]);
+        } else {
+            $pending->update(['status' => ActionRequestStatus::Approved]);
+        }
+
+        // Stands in for ActionOrchestrator's dispatch(...)->afterCommit() push.
+        DB::afterCommit(static function () use ($holder): void {
+            $holder->jobPushRan = true;
+        });
+    });
+
+    expect($holder->jobPushRan)->toBeTrue();
+    Exceptions::assertReported(fn (RuntimeException $runtimeException): bool => $runtimeException->getMessage() === 'activity write failed');
+})->with([
+    'created' => ['created'],
+    'status change' => ['updated'],
+]);

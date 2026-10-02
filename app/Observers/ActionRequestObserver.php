@@ -7,6 +7,7 @@ namespace App\Observers;
 use App\Models\ActionRequest;
 use App\Services\Actions\ActionRequestActivityLogger;
 use Illuminate\Contracts\Events\ShouldHandleEventsAfterCommit;
+use Throwable;
 
 /**
  * Runs after the caller's transaction commits, so a rollback never leaves an
@@ -17,6 +18,12 @@ use Illuminate\Contracts\Events\ShouldHandleEventsAfterCommit;
  * transaction (another status change, or any other attribute) overwrites
  * wasChanged() before the deferred event fires, so only the final save is
  * logged and an earlier status change is lost.
+ *
+ * A failing activity write is reported, never thrown: after-commit callbacks
+ * run in order with no isolation, and the job push the caller queued after
+ * this one must still run. Before R5 the same failure rolled the request
+ * back; now it is committed, so aborting here would leave it Approved with
+ * no job until actions:reconcile-stuck picks it up.
  */
 class ActionRequestObserver implements ShouldHandleEventsAfterCommit
 {
@@ -24,7 +31,11 @@ class ActionRequestObserver implements ShouldHandleEventsAfterCommit
 
     public function created(ActionRequest $actionRequest): void
     {
-        $this->actionRequestActivityLogger->created($actionRequest);
+        try {
+            $this->actionRequestActivityLogger->created($actionRequest);
+        } catch (Throwable $throwable) {
+            report($throwable);
+        }
     }
 
     public function updated(ActionRequest $actionRequest): void
@@ -33,6 +44,10 @@ class ActionRequestObserver implements ShouldHandleEventsAfterCommit
             return;
         }
 
-        $this->actionRequestActivityLogger->statusChanged($actionRequest);
+        try {
+            $this->actionRequestActivityLogger->statusChanged($actionRequest);
+        } catch (Throwable $throwable) {
+            report($throwable);
+        }
     }
 }

@@ -13,15 +13,4 @@ final readonly class StaleApprovedReconciliation
         public int $redispatched,
         public int $neverStarted,
     ) {}
-
-    /**
-     * @return array{redispatched: int, never_started: int}
-     */
-    public function toArray(): array
-    {
-        return [
-            'redispatched' => $this->redispatched,
-            'never_started' => $this->neverStarted,
-        ];
-    }
 }

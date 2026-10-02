@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use App\Enums\ActionRequestStatus;
+use App\Enums\QueueLane;
 use App\Enums\SubtitleCaseAttemptOutcome;
 use App\Enums\SubtitleCaseAttemptType;
 use App\Events\ActionRequestStatusChanged;
@@ -10,7 +11,16 @@ use App\Jobs\ExecuteActionRequest;
 use App\Models\ActionRequest;
 use App\Models\ActivityLog;
 use App\Models\SubtitleCaseAttempt;
+use App\Services\Actions\ActionRequestActivityLogger;
+use App\Services\Actions\StaleApprovedRequestRedispatcher;
+use Carbon\CarbonImmutable;
+use Illuminate\Bus\UniqueLock;
+use Illuminate\Contracts\Bus\Dispatcher;
+use Illuminate\Database\Events\QueryExecuted;
+use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Event;
+use Illuminate\Support\Facades\Exceptions;
 use Illuminate\Support\Facades\Queue;
 
 beforeEach(function (): void {
@@ -20,6 +30,43 @@ beforeEach(function (): void {
 function reconcileStuckApprovedSince(ActionRequest $actionRequest, int $minutesAgo): void
 {
     ActionRequest::query()->whereKey($actionRequest->id)->update(['updated_at' => now()->subMinutes($minutesAgo)]);
+}
+
+/**
+ * True when nothing holds ExecuteActionRequest's unique lock for the request;
+ * the probe lock is released again so the check leaves no trace.
+ */
+function reconcileStuckUniqueLockIsFree(ActionRequest $actionRequest): bool
+{
+    $probe = new ExecuteActionRequest($actionRequest);
+    $uniqueLock = new UniqueLock(Cache::store());
+
+    if (! $uniqueLock->acquire($probe)) {
+        return false;
+    }
+
+    $uniqueLock->release($probe);
+
+    return true;
+}
+
+/**
+ * A redispatcher whose Bus push runs $beforePush first and then hands the job
+ * to the real (faked-queue) dispatcher.
+ */
+function reconcileStuckRedispatcherWithPush(Closure $beforePush): StaleApprovedRequestRedispatcher
+{
+    $realDispatcher = resolve(Dispatcher::class);
+    $mock = Mockery::mock(Dispatcher::class);
+    $mock->shouldReceive('dispatch')->andReturnUsing(
+        static function (ExecuteActionRequest $executeActionRequest) use ($beforePush, $realDispatcher): mixed {
+            $beforePush($executeActionRequest);
+
+            return $realDispatcher->dispatch($executeActionRequest);
+        },
+    );
+
+    return new StaleApprovedRequestRedispatcher(resolve(ActionRequestActivityLogger::class), $mock);
 }
 
 test('an action request stuck in executing past the threshold is failed as needs_reconciliation', function (): void {
@@ -74,11 +121,119 @@ test('an approved request whose execution job was lost is handed to the queue ag
         ->expectsOutputToContain('Re-dispatched 1 approved action request(s) that never started.')
         ->assertSuccessful();
 
-    Queue::assertPushed(ExecuteActionRequest::class, fn (ExecuteActionRequest $executeActionRequest): bool => $executeActionRequest->actionRequest->id === $stale->id);
-    expect($stale->fresh()->status)->toBe(ActionRequestStatus::Approved);
+    // The job carries the owner of the unique lock acquired for it, so the
+    // worker's owner-checked release frees exactly that lock, and it rides the
+    // actions lane like any other approved action.
+    Queue::assertPushedOn(
+        QueueLane::Actions,
+        ExecuteActionRequest::class,
+        fn (ExecuteActionRequest $executeActionRequest): bool => $executeActionRequest->actionRequest->id === $stale->id
+            && is_string($executeActionRequest->uniqueLockOwner)
+            && $executeActionRequest->uniqueLockOwner !== '',
+    );
+    expect($stale->fresh()->status)->toBe(ActionRequestStatus::Approved)
+        ->and(reconcileStuckUniqueLockIsFree($stale))->toBeFalse();
 
     $activityLog = ActivityLog::query()->where('subject_id', $stale->id)->where('action', 'action_request.redispatched')->sole();
     expect($activityLog->description)->toContain((string) $stale->id);
+});
+
+test('a re-dispatched job releases its unique lock once it has run', function (): void {
+    // Sync queue: the re-dispatched job runs through the real queue handler,
+    // which releases the lock with the owner the redispatcher stamped on it.
+    Queue::fake()->except([ExecuteActionRequest::class]);
+    $stale = ActionRequest::factory()->autoExecute()->create(['type' => 'reconcile_stuck_unregistered_type']);
+    reconcileStuckApprovedSince($stale, 45);
+
+    $this->artisan('actions:reconcile-stuck')
+        ->expectsOutputToContain('Re-dispatched 1 approved action request(s) that never started.')
+        ->assertSuccessful();
+
+    expect($stale->fresh()->status)->toBe(ActionRequestStatus::Failed)
+        ->and($stale->fresh()->result['reason'])->toBe('no_executor')
+        ->and(reconcileStuckUniqueLockIsFree($stale))->toBeTrue();
+});
+
+test('a row that finished between selection and its lock is not re-dispatched', function (): void {
+    Queue::fake();
+    $first = ActionRequest::factory()->autoExecute()->create(['type' => 'delete_series']);
+    $finishedMeanwhile = ActionRequest::factory()->autoExecute()->create(['type' => 'delete_series']);
+    reconcileStuckApprovedSince($first, 45);
+    reconcileStuckApprovedSince($finishedMeanwhile, 45);
+
+    // While the first row is pushed, the second row's backlogged original job
+    // claims and completes it, releasing its lock before the loop gets there.
+    $staleApprovedRequestRedispatcher = reconcileStuckRedispatcherWithPush(
+        static function (ExecuteActionRequest $executeActionRequest) use ($first, $finishedMeanwhile): void {
+            if ($executeActionRequest->actionRequest->id === $first->id) {
+                ActionRequest::query()->whereKey($finishedMeanwhile->id)->update(['status' => ActionRequestStatus::Completed->value]);
+            }
+        },
+    );
+
+    $staleApprovedReconciliation = $staleApprovedRequestRedispatcher->redispatch(CarbonImmutable::now()->subMinutes(30));
+
+    expect($staleApprovedReconciliation->redispatched)->toBe(1);
+    Queue::assertPushed(ExecuteActionRequest::class, 1);
+    Queue::assertPushed(ExecuteActionRequest::class, fn (ExecuteActionRequest $executeActionRequest): bool => $executeActionRequest->actionRequest->id === $first->id);
+    expect(ActivityLog::query()->where('subject_id', $finishedMeanwhile->id)->where('action', 'action_request.redispatched')->exists())->toBeFalse()
+        ->and(reconcileStuckUniqueLockIsFree($finishedMeanwhile))->toBeTrue();
+});
+
+test('a failed push releases its lock and the run carries on', function (): void {
+    Queue::fake();
+    Exceptions::fake();
+    $unpushable = ActionRequest::factory()->autoExecute()->create(['type' => 'delete_series']);
+    $next = ActionRequest::factory()->autoExecute()->create(['type' => 'delete_series']);
+    $ancient = ActionRequest::factory()->autoExecute()->create(['type' => 'delete_series']);
+    reconcileStuckApprovedSince($unpushable, 45);
+    reconcileStuckApprovedSince($next, 45);
+    reconcileStuckApprovedSince($ancient, 25 * 60);
+
+    $staleApprovedRequestRedispatcher = reconcileStuckRedispatcherWithPush(
+        static function (ExecuteActionRequest $executeActionRequest) use ($unpushable): void {
+            throw_if($executeActionRequest->actionRequest->id === $unpushable->id, RuntimeException::class, 'queue unavailable');
+        },
+    );
+
+    $staleApprovedReconciliation = $staleApprovedRequestRedispatcher->redispatch(CarbonImmutable::now()->subMinutes(30));
+
+    expect($staleApprovedReconciliation->redispatched)->toBe(1)
+        ->and($staleApprovedReconciliation->neverStarted)->toBe(1)
+        ->and(reconcileStuckUniqueLockIsFree($unpushable))->toBeTrue()
+        ->and($unpushable->fresh()->status)->toBe(ActionRequestStatus::Approved)
+        ->and($ancient->fresh()->status)->toBe(ActionRequestStatus::Failed)
+        ->and(ActivityLog::query()->where('subject_id', $unpushable->id)->where('action', 'action_request.redispatched')->exists())->toBeFalse();
+    Queue::assertPushed(ExecuteActionRequest::class, fn (ExecuteActionRequest $executeActionRequest): bool => $executeActionRequest->actionRequest->id === $next->id);
+    Exceptions::assertReported(fn (RuntimeException $runtimeException): bool => $runtimeException->getMessage() === 'queue unavailable');
+});
+
+test('advisor attempts for every stale advisor replacement are read in one query', function (): void {
+    Queue::fake();
+    $replacements = ActionRequest::factory()->autoExecute()->count(3)->create([
+        'type' => 'replace_media_file',
+        'source_service' => 'subtitle_advisor',
+        'payload' => ['subtitle_case_id' => 1],
+    ]);
+    SubtitleCaseAttempt::factory()->create([
+        'action_request_id' => $replacements->first()->id,
+        'type' => SubtitleCaseAttemptType::Advisor,
+        'outcome' => SubtitleCaseAttemptOutcome::Succeeded,
+        'completed_at' => now(),
+    ]);
+    $replacements->each(fn (ActionRequest $actionRequest) => reconcileStuckApprovedSince($actionRequest, 45));
+    $attemptQueries = new stdClass;
+    $attemptQueries->count = 0;
+    DB::listen(static function (QueryExecuted $queryExecuted) use ($attemptQueries): void {
+        if (str_contains($queryExecuted->sql, 'subtitle_case_attempts')) {
+            $attemptQueries->count++;
+        }
+    });
+
+    $this->artisan('actions:reconcile-stuck')->assertSuccessful();
+
+    expect($attemptQueries->count)->toBe(1);
+    Queue::assertPushed(ExecuteActionRequest::class, 1);
 });
 
 test('a recently approved request is left to its own job', function (): void {
@@ -192,7 +347,9 @@ test('an approved request older than 24 hours is failed as needs_reconciliation 
     $ancient = ActionRequest::factory()->autoExecute()->create(['type' => 'delete_series']);
     reconcileStuckApprovedSince($ancient, 25 * 60);
 
-    $this->artisan('actions:reconcile-stuck')->assertSuccessful();
+    $this->artisan('actions:reconcile-stuck')
+        ->expectsOutputToContain('Failed 1 approved action request(s) older than 24 hours as needs_reconciliation.')
+        ->assertSuccessful();
 
     Queue::assertNotPushed(ExecuteActionRequest::class);
 
@@ -221,7 +378,9 @@ test('an emby scan still inside its debounce window is left waiting even past th
     expect($scan->fresh()->status)->toBe(ActionRequestStatus::Approved);
 });
 
-test('an unfinalized subtitle advisor replacement is left waiting even past the 24 hour bound', function (): void {
+test('an unfinalized subtitle advisor replacement past the 24 hour bound is failed as never started', function (): void {
+    // Nothing finalizes an advisor replacement after its own job: one still
+    // unfinalized a day later would otherwise sit Approved forever.
     Queue::fake();
     $replacement = ActionRequest::factory()->autoExecute()->create([
         'type' => 'replace_media_file',
@@ -233,7 +392,10 @@ test('an unfinalized subtitle advisor replacement is left waiting even past the 
     $this->artisan('actions:reconcile-stuck')->assertSuccessful();
 
     Queue::assertNotPushed(ExecuteActionRequest::class);
-    expect($replacement->fresh()->status)->toBe(ActionRequestStatus::Approved);
+    $fresh = $replacement->fresh();
+    expect($fresh->status)->toBe(ActionRequestStatus::Failed)
+        ->and($fresh->result['reason'])->toBe('needs_reconciliation')
+        ->and($fresh->result['never_started'])->toBeTrue();
 });
 
 test('the approved-minutes option floors below five minutes', function (): void {
