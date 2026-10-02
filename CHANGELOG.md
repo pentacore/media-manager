@@ -1,3 +1,11 @@
+## [1.31.2](https://github.com/pentacore/media-manager/compare/v1.31.1...v1.31.2) (2026-10-02)
+
+
+### Bug Fixes
+
+* **auth:** render the two-factor challenge page ([2ef31d0](https://github.com/pentacore/media-manager/commit/2ef31d049960351f4b8d0d1614cb20f633a13a40))
+* **phpstan:** clear findings from phpstan 2.2.16 ([314d67a](https://github.com/pentacore/media-manager/commit/314d67ae39e9da32f2f6ac4e2eb3a7a031c2432f))
+
 ## [1.31.1](https://github.com/pentacore/media-manager/compare/v1.31.0...v1.31.1) (2026-10-01)
 
 
