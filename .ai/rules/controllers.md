@@ -31,3 +31,6 @@ Type-hint services on the controller action itself so the container resolves the
 
 ## Upstream calls from controllers: base class, defer, narrow catches
 Controllers for the same upstream service extend a shared abstract base (e.g. `BaseArrController`, `BazarrController`) that owns connection resolution, client construction, and failure redirects. Wrap slow upstream round-trips in `Inertia::defer()` and use the base's `tryClientCall()` inside deferred closures (you cannot redirect from one). Catch `RequestException|ConnectionException`, never `Throwable`.
+
+## Never echo raw upstream error text
+Every upstream error text that reaches a toast, JSON body, validation error or stored display field goes through `App\Support\UpstreamErrorText::sanitize()` (on the same line as `->getMessage()`) or becomes a fixed sentence. Raw messages may only appear in `Log::` contexts. `tests/Unit/Architecture/UpstreamErrorEchoArchTest.php` enforces it; add to its reviewed list only app-authored text.
