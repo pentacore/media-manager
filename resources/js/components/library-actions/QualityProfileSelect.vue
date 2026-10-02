@@ -17,6 +17,7 @@ const props = defineProps<{
     itemId: number;
     profiles?: { id: number; name: string }[];
     currentId: number | null;
+    error?: string | null;
 }>();
 
 const value = ref<string | undefined>(
@@ -53,6 +54,12 @@ function change(next: unknown): void {
 
 <template>
     <Skeleton v-if="profiles === undefined" class="h-7 w-44" />
+    <span
+        v-else-if="error"
+        class="text-[12px] text-destructive"
+        data-quality-profile-error
+        >{{ error }}</span
+    >
     <Select v-else :model-value="value" @update:model-value="change">
         <SelectTrigger class="h-7 w-44 text-xs" data-quality-profile-trigger>
             <SelectValue placeholder="Quality profile" />

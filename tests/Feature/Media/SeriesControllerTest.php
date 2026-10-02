@@ -12,6 +12,7 @@ use App\Models\User;
 use App\Settings\AiSettings;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Queue;
+use Illuminate\Support\Sleep;
 
 beforeEach(function (): void {
     config()->set('inertia.ssr.enabled', false);
@@ -66,11 +67,12 @@ test('members can list series via deferred props', function (): void {
         ->assertInertia(fn ($page) => $page
             ->component('Sonarr/Series/Index')
             ->reloadOnly(['series', 'qualityProfiles'], fn ($reload) => $reload
-                ->has('series', 1)
-                ->has('qualityProfiles', 1)
-                ->where('series.0.title', 'Test Show')
-                ->where('series.0.title_slug', 'test-show')
-                ->where('qualityProfiles.0.name', 'HD-1080p')
+                ->where('series.error', null)
+                ->has('series.items', 1)
+                ->has('qualityProfiles.items', 1)
+                ->where('series.items.0.title', 'Test Show')
+                ->where('series.items.0.title_slug', 'test-show')
+                ->where('qualityProfiles.items.0.name', 'HD-1080p')
             )
         );
 });
@@ -95,21 +97,23 @@ test('series index redirects when no active sonarr connection', function (): voi
         ->assertRedirect(route('dashboard'));
 });
 
-test('series index deferred props return empty arrays on connection failure', function (): void {
-    $member = User::factory()->member()->create();
+test('series index deferred props report an outage instead of an empty library', function (int $status, string $message): void {
+    Sleep::fake();
+    Http::fake(['sonarr.local:8989/*' => Http::response('Error at /config/sonarr.db', $status)]);
 
-    Http::fake(fn () => Http::response('Service Unavailable', 503));
-
-    $this->actingAs($member)
+    $this->actingAs(User::factory()->member()->create())
         ->get(route('media.series.index'))
         ->assertOk()
         ->assertInertia(fn ($page) => $page
             ->reloadOnly(['series', 'qualityProfiles'], fn ($reload) => $reload
-                ->where('series', [])
-                ->where('qualityProfiles', [])
+                ->where('series', ['items' => [], 'error' => $message])
+                ->where('qualityProfiles', ['items' => [], 'error' => $message])
             )
         );
-});
+})->with([
+    'outage' => [503, 'Sonarr is unreachable right now.'],
+    'bad api key' => [401, 'Sonarr refused the request — check the connection settings.'],
+]);
 
 test('members can view a single series with deferred episodes', function (): void {
     $member = User::factory()->member()->create();
@@ -135,8 +139,8 @@ test('members can view a single series with deferred episodes', function (): voi
             ->where('series.title_slug', 'my-show')
             ->missing('episodes')
             ->reloadOnly(['episodes'], fn ($reload) => $reload
-                ->has('episodes', 1)
-                ->where('episodes.0.title', 'Pilot')
+                ->has('episodes.items', 1)
+                ->where('episodes.items.0.title', 'Pilot')
             )
         );
 });
@@ -183,9 +187,9 @@ test('create form loads quality profiles and root folders via deferred props', f
             ->reloadOnly(
                 ['qualityProfiles', 'rootFolders', 'searchResults'],
                 fn ($reload) => $reload
-                    ->has('qualityProfiles', 1)
-                    ->has('rootFolders', 1)
-                    ->where('searchResults', []),
+                    ->has('qualityProfiles.items', 1)
+                    ->has('rootFolders.items', 1)
+                    ->where('searchResults', ['items' => [], 'error' => null]),
             )
         );
 });
@@ -207,8 +211,8 @@ test('create form returns lookup results via deferred prop when q is provided', 
         ->assertInertia(fn ($page) => $page
             ->component('Sonarr/Series/Create')
             ->reloadOnly(['searchResults'], fn ($reload) => $reload
-                ->has('searchResults', 1)
-                ->where('searchResults.0.title', 'Found Show')
+                ->has('searchResults.items', 1)
+                ->where('searchResults.items.0.title', 'Found Show')
             )
         );
 });
@@ -228,7 +232,7 @@ test('title slug is mapped from sonarr response', function (): void {
         ->assertOk()
         ->assertInertia(fn ($page) => $page
             ->reloadOnly(['series'], fn ($reload) => $reload
-                ->where('series.0.title_slug', 'slugged-42')
+                ->where('series.items.0.title_slug', 'slugged-42')
             )
         );
 });
@@ -447,7 +451,7 @@ test('the series page defers the quality profiles for the profile dropdown', fun
         ->get(route('media.series.show', ['id' => 1]))
         ->assertInertia(fn ($page) => $page
             ->missing('qualityProfiles')
-            ->loadDeferredProps('qualityProfiles', fn ($reload) => $reload->where('qualityProfiles', [['id' => 6, 'name' => 'Ultra-HD']])));
+            ->loadDeferredProps('qualityProfiles', fn ($reload) => $reload->where('qualityProfiles', ['items' => [['id' => 6, 'name' => 'Ultra-HD']], 'error' => null])));
 });
 
 test('viewers never trigger the quality profile lookup on the series page', function (): void {
@@ -461,8 +465,41 @@ test('viewers never trigger the quality profile lookup on the series page', func
         ->assertOk()
         ->assertInertia(fn ($page) => $page
             ->missing('qualityProfiles')
-            ->loadDeferredProps(fn ($reload) => $reload->where('episodes', [])->missing('qualityProfiles')));
+            ->loadDeferredProps(fn ($reload) => $reload->where('episodes', ['items' => [], 'error' => null])->missing('qualityProfiles')));
 
     expect($response->viewData('page')['deferredProps'] ?? [])->not->toHaveKey('qualityProfiles');
     Http::assertNotSent(fn ($request): bool => str_contains($request->url(), '/qualityprofile'));
+});
+
+test('a series page whose episodes fail to load says so', function (): void {
+    Sleep::fake();
+    Http::fake([
+        'sonarr.local:8989/api/v3/series/1' => Http::response(['id' => 1, 'title' => 'Show', 'seasons' => [], 'images' => []]),
+        'sonarr.local:8989/api/v3/episode*' => Http::response('boom', 503),
+        'sonarr.local:8989/api/v3/qualityprofile' => Http::response('nope', 401),
+    ]);
+
+    $this->actingAs(User::factory()->member()->create())
+        ->get(route('media.series.show', ['id' => 1]))
+        ->assertInertia(fn ($page) => $page
+            ->loadDeferredProps(fn ($reload) => $reload
+                ->where('episodes', ['items' => [], 'error' => 'Sonarr is unreachable right now.'])
+                ->where('qualityProfiles', ['items' => [], 'error' => 'Sonarr refused the request — check the connection settings.'])));
+});
+
+test('the add-series form reports failed lookups, profiles and root folders', function (): void {
+    Sleep::fake();
+    Http::fake([
+        'sonarr.local:8989/api/v3/qualityprofile' => Http::response('boom', 503),
+        'sonarr.local:8989/api/v3/rootfolder' => Http::response('boom', 503),
+        'sonarr.local:8989/api/v3/series/lookup*' => Http::response('boom', 503),
+    ]);
+
+    $this->actingAs(User::factory()->member()->create())
+        ->get(route('media.series.create', ['q' => 'dune']))
+        ->assertInertia(fn ($page) => $page
+            ->reloadOnly(['qualityProfiles', 'rootFolders', 'searchResults'], fn ($reload) => $reload
+                ->where('qualityProfiles.error', 'Sonarr is unreachable right now.')
+                ->where('rootFolders.error', 'Sonarr is unreachable right now.')
+                ->where('searchResults', ['items' => [], 'error' => 'Sonarr is unreachable right now.'])));
 });
