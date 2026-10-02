@@ -16,6 +16,7 @@ import {
 } from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
 import { dashboard } from '@/routes';
+import type { UpstreamList } from '@/types';
 
 interface QualityProfile {
     id: number;
@@ -46,9 +47,9 @@ interface LookupResult {
 const props = defineProps<{
     connection: { url: string };
     searchTerm: string;
-    qualityProfiles?: QualityProfile[];
-    rootFolders?: RootFolder[];
-    searchResults?: LookupResult[];
+    qualityProfiles?: UpstreamList<QualityProfile>;
+    rootFolders?: UpstreamList<RootFolder>;
+    searchResults?: UpstreamList<LookupResult>;
 }>();
 
 defineOptions({
@@ -96,8 +97,8 @@ function startAdd(result: LookupResult) {
     form.tmdbId = result.tmdb_id;
     form.year = result.year;
     form.images = result.images;
-    form.qualityProfileId = props.qualityProfiles?.[0]?.id ?? null;
-    form.rootFolderPath = props.rootFolders?.[0]?.path ?? '';
+    form.qualityProfileId = props.qualityProfiles?.items[0]?.id ?? null;
+    form.rootFolderPath = props.rootFolders?.items[0]?.path ?? '';
 }
 
 function cancelAdd() {
@@ -164,7 +165,15 @@ function submitAdd() {
             </div>
 
             <div
-                v-else-if="searchResults.length === 0"
+                v-else-if="searchResults.error"
+                class="rounded-md border border-dashed p-10 text-center text-destructive"
+                data-search-error
+            >
+                {{ searchResults.error }}
+            </div>
+
+            <div
+                v-else-if="searchResults.items.length === 0"
                 class="rounded-md border border-dashed p-10 text-center text-muted-foreground"
             >
                 No results found for "{{ searchTerm }}".
@@ -175,7 +184,7 @@ function submitAdd() {
                 class="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3"
             >
                 <Card
-                    v-for="result in searchResults"
+                    v-for="result in searchResults.items"
                     :key="result.tmdb_id ?? result.title ?? ''"
                 >
                     <CardContent class="p-4">
@@ -246,7 +255,7 @@ function submitAdd() {
                                     </SelectTrigger>
                                     <SelectContent>
                                         <SelectItem
-                                            v-for="profile in qualityProfiles ??
+                                            v-for="profile in qualityProfiles?.items ??
                                             []"
                                             :key="profile.id"
                                             :value="String(profile.id)"
@@ -255,6 +264,13 @@ function submitAdd() {
                                         </SelectItem>
                                     </SelectContent>
                                 </Select>
+                                <p
+                                    v-if="qualityProfiles?.error"
+                                    class="text-[12px] text-destructive"
+                                    data-quality-profiles-error
+                                >
+                                    {{ qualityProfiles.error }}
+                                </p>
                             </div>
 
                             <div class="space-y-2">
@@ -274,7 +290,8 @@ function submitAdd() {
                                     </SelectTrigger>
                                     <SelectContent>
                                         <SelectItem
-                                            v-for="folder in rootFolders ?? []"
+                                            v-for="folder in rootFolders?.items ??
+                                            []"
                                             :key="folder.id"
                                             :value="folder.path"
                                         >
@@ -282,6 +299,13 @@ function submitAdd() {
                                         </SelectItem>
                                     </SelectContent>
                                 </Select>
+                                <p
+                                    v-if="rootFolders?.error"
+                                    class="text-[12px] text-destructive"
+                                    data-root-folders-error
+                                >
+                                    {{ rootFolders.error }}
+                                </p>
                             </div>
 
                             <div class="flex gap-2">

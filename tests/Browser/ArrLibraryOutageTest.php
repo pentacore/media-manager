@@ -68,3 +68,58 @@ test('the add-series search says when the Sonarr lookup failed', function (): vo
         ->assertSeeIn('[data-search-error]', 'Sonarr refused the request — check the connection settings.')
         ->assertDontSee('No results found for');
 });
+
+function arrOutageRadarr(): void
+{
+    ServiceConnection::factory()->radarr()->create(['url' => 'http://radarr.local:7878', 'api_key' => 'k']);
+}
+
+test('the movie library shows a Radarr outage instead of an empty library', function (): void {
+    arrOutageRadarr();
+    Http::fake([
+        'radarr.local:7878/api/v3/movie' => Http::response('Unauthorized', 401),
+        'radarr.local:7878/api/v3/qualityprofile' => Http::response('Unauthorized', 401),
+    ]);
+
+    $this->actingAs(User::factory()->member()->create());
+
+    visit(route('media.movies.index', absolute: false))
+        ->assertNoSmoke()
+        ->assertSeeIn('[data-library-error]', 'Radarr refused the request — check the connection settings.')
+        ->assertDontSee('No movies match.')
+        ->assertDontSee('0 titles');
+});
+
+test('a movie page says when its quality profiles could not load', function (): void {
+    arrOutageRadarr();
+    Http::fake([
+        'radarr.local:7878/api/v3/movie/7' => Http::response([
+            'id' => 7, 'title' => 'Dune', 'titleSlug' => 'dune-2021', 'year' => 2021, 'status' => 'released',
+            'monitored' => true, 'hasFile' => false, 'qualityProfileId' => 1, 'sizeOnDisk' => 0, 'images' => [],
+        ]),
+        'radarr.local:7878/api/v3/qualityprofile' => Http::response('Unauthorized', 401),
+    ]);
+
+    $this->actingAs(User::factory()->member()->create());
+
+    visit(route('media.movies.show', ['id' => 7], absolute: false))
+        ->assertNoSmoke()
+        ->assertSee('Dune')
+        ->assertSeeIn('[data-quality-profile-error]', 'Radarr refused the request — check the connection settings.');
+});
+
+test('the add-movie search says when the Radarr lookup failed', function (): void {
+    arrOutageRadarr();
+    Http::fake([
+        'radarr.local:7878/api/v3/qualityprofile' => Http::response([]),
+        'radarr.local:7878/api/v3/rootfolder' => Http::response([]),
+        'radarr.local:7878/api/v3/movie/lookup*' => Http::response('Unauthorized', 401),
+    ]);
+
+    $this->actingAs(User::factory()->member()->create());
+
+    visit(route('media.movies.create', ['q' => 'dune'], absolute: false))
+        ->assertNoSmoke()
+        ->assertSeeIn('[data-search-error]', 'Radarr refused the request — check the connection settings.')
+        ->assertDontSee('No results found for');
+});

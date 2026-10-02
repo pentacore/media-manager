@@ -34,12 +34,15 @@ class MovieController extends BaseArrController
         return Inertia::render('Radarr/Movies/Index', [
             'connection' => $canManageLibrary ? $this->connectionUrl($connection) : ['url' => null],
             'service_connection_id' => $canManageLibrary ? $connection->id : null,
-            'movies' => Inertia::defer(fn (): array => array_map(
+            'movies' => Inertia::defer(fn (): array => $this->tryClientList(
+                $connection,
+                fn (RadarrClient $radarrClient): array => $radarrClient->getMovies(),
                 fn (array $item): array => $this->mapMovie($item),
-                $this->tryClientCall($connection, fn (RadarrClient $radarrClient): array => $radarrClient->getMovies()),
             )),
-            'qualityProfiles' => Inertia::defer(fn (): array => $this->mapQualityProfiles(
-                $this->tryClientCall($connection, fn (RadarrClient $radarrClient): array => $radarrClient->getQualityProfiles()),
+            'qualityProfiles' => Inertia::defer(fn (): array => $this->tryClientList(
+                $connection,
+                fn (RadarrClient $radarrClient): array => $radarrClient->getQualityProfiles(),
+                $this->mapQualityProfile(...),
             )),
         ]);
     }
@@ -66,8 +69,10 @@ class MovieController extends BaseArrController
             // Only the profile dropdown needs these, and only manage-library
             // users get the dropdown — viewers trigger no upstream lookup.
             ...$canManageLibrary ? [
-                'qualityProfiles' => Inertia::defer(fn (): array => $this->mapQualityProfiles(
-                    $this->tryClientCall($connection, fn (RadarrClient $radarrClient): array => $radarrClient->getQualityProfiles()),
+                'qualityProfiles' => Inertia::defer(fn (): array => $this->tryClientList(
+                    $connection,
+                    fn (RadarrClient $radarrClient): array => $radarrClient->getQualityProfiles(),
+                    $this->mapQualityProfile(...),
                 ), 'qualityProfiles'),
             ] : [],
         ]);
@@ -85,24 +90,34 @@ class MovieController extends BaseArrController
         return Inertia::render('Radarr/Movies/Create', [
             'connection' => $this->connectionUrl($connection),
             'searchTerm' => $term,
-            'qualityProfiles' => Inertia::defer(fn (): array => $this->mapQualityProfiles(
-                $this->tryClientCall($connection, fn (RadarrClient $radarrClient): array => $radarrClient->getQualityProfiles()),
+            'qualityProfiles' => Inertia::defer(fn (): array => $this->tryClientList(
+                $connection,
+                fn (RadarrClient $radarrClient): array => $radarrClient->getQualityProfiles(),
+                $this->mapQualityProfile(...),
             )),
-            'rootFolders' => Inertia::defer(fn (): array => array_map(fn (array $f): array => [
-                'id' => $f['id'] ?? null,
-                'path' => $f['path'] ?? '',
-                'free_space' => $f['freeSpace'] ?? null,
-            ], $this->tryClientCall($connection, fn (RadarrClient $radarrClient): array => $radarrClient->getRootFolders()))),
+            'rootFolders' => Inertia::defer(fn (): array => $this->tryClientList(
+                $connection,
+                fn (RadarrClient $radarrClient): array => $radarrClient->getRootFolders(),
+                fn (array $f): array => [
+                    'id' => $f['id'] ?? null,
+                    'path' => $f['path'] ?? '',
+                    'free_space' => $f['freeSpace'] ?? null,
+                ],
+            )),
             'searchResults' => Inertia::defer(fn (): array => $term === ''
-                ? []
-                : array_map(fn (array $item): array => [
-                    'tmdb_id' => $item['tmdbId'] ?? null,
-                    'title' => $item['title'] ?? null,
-                    'year' => $item['year'] ?? null,
-                    'overview' => $item['overview'] ?? null,
-                    'remote_poster' => $item['remotePoster'] ?? null,
-                    'images' => $item['images'] ?? [],
-                ], $this->tryClientCall($connection, fn (RadarrClient $radarrClient): array => $radarrClient->searchMovies($term)))),
+                ? ['items' => [], 'error' => null]
+                : $this->tryClientList(
+                    $connection,
+                    fn (RadarrClient $radarrClient): array => $radarrClient->searchMovies($term),
+                    fn (array $item): array => [
+                        'tmdb_id' => $item['tmdbId'] ?? null,
+                        'title' => $item['title'] ?? null,
+                        'year' => $item['year'] ?? null,
+                        'overview' => $item['overview'] ?? null,
+                        'remote_poster' => $item['remotePoster'] ?? null,
+                        'images' => $item['images'] ?? [],
+                    ],
+                )),
         ]);
     }
 
@@ -219,14 +234,14 @@ class MovieController extends BaseArrController
     }
 
     /**
-     * @param  array<int, array<string, mixed>>  $profiles
-     * @return array<int, array<string, mixed>>
+     * @param  array<string, mixed>  $profile
+     * @return array{id: mixed, name: mixed}
      */
-    private function mapQualityProfiles(array $profiles): array
+    private function mapQualityProfile(array $profile): array
     {
-        return array_map(fn (array $p): array => [
-            'id' => $p['id'] ?? null,
-            'name' => $p['name'] ?? null,
-        ], $profiles);
+        return [
+            'id' => $profile['id'] ?? null,
+            'name' => $profile['name'] ?? null,
+        ];
     }
 }

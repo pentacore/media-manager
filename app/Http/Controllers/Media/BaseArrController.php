@@ -38,25 +38,6 @@ abstract class BaseArrController extends Controller
     }
 
     /**
-     * Wrap a closure that performs an *arr HTTP call. Returns the closure's value, OR an
-     * empty array when the call failed — for use inside Inertia::defer where we don't
-     * want to redirect.
-     *
-     * @template T
-     *
-     * @param  callable(SonarrClient|RadarrClient): T  $fn
-     * @return T|array<empty>
-     */
-    protected function tryClientCall(ServiceConnection $serviceConnection, callable $fn): mixed
-    {
-        try {
-            return $fn($this->buildClient($serviceConnection));
-        } catch (RequestException|ConnectionException) {
-            return [];
-        }
-    }
-
-    /**
      * Run one deferred upstream read for a list prop. An outage becomes an
      * `error` the page shows in place of the list — never an empty list that
      * reads as an empty library. The upstream body is never echoed.

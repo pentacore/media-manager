@@ -31,6 +31,7 @@ import {
 } from '@/components/ui/dialog';
 import { useCan } from '@/composables/useCan';
 import { dashboard } from '@/routes';
+import type { UpstreamList } from '@/types';
 
 interface MovieImage {
     coverType: string;
@@ -66,7 +67,7 @@ const props = defineProps<{
     connection: { url: string | null };
     service_connection_id: number;
     movie: MovieDetail;
-    qualityProfiles?: { id: number; name: string }[];
+    qualityProfiles?: UpstreamList<{ id: number; name: string }>;
 }>();
 
 const { can } = useCan();
@@ -176,7 +177,8 @@ function confirmDelete() {
                         service="radarr"
                         :connection-id="service_connection_id"
                         :item-id="movie.id"
-                        :profiles="qualityProfiles"
+                        :profiles="qualityProfiles?.items"
+                        :error="qualityProfiles?.error"
                         :current-id="movie.quality_profile_id"
                     />
                 </div>
