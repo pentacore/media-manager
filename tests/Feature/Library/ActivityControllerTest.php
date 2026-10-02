@@ -27,11 +27,11 @@ test('viewers cannot access the activity queue', function (): void {
 });
 
 test('combined queue merges Sonarr and Radarr records and tags them by service', function (): void {
-    ServiceConnection::factory()->sonarr()->create([
+    $sonarr = ServiceConnection::factory()->sonarr()->create([
         'url' => 'http://sonarr.local:8989',
         'api_key' => 'sonarr-key',
     ]);
-    ServiceConnection::factory()->radarr()->create([
+    $radarr = ServiceConnection::factory()->radarr()->create([
         'url' => 'http://radarr.local:7878',
         'api_key' => 'radarr-key',
     ]);
@@ -84,16 +84,18 @@ test('combined queue merges Sonarr and Radarr records and tags them by service',
         ->assertOk()
         ->assertInertia(fn ($page) => $page
             ->component('Library/Activity')
-            ->loadDeferredProps('default', function ($page): void {
+            ->loadDeferredProps('default', function ($page) use ($sonarr, $radarr): void {
                 $page
                     ->where('queue.services.sonarr', true)
                     ->where('queue.services.radarr', true)
                     ->has('queue.rows', 2)
                     // Latest-added first.
                     ->where('queue.rows.0.service', 'radarr')
+                    ->where('queue.rows.0.service_connection_id', $radarr->id)
                     ->where('queue.rows.0.title', 'Dune')
                     ->where('queue.rows.0.error_message', 'Sample folder is not allowed')
                     ->where('queue.rows.1.service', 'sonarr')
+                    ->where('queue.rows.1.service_connection_id', $sonarr->id)
                     ->where('queue.rows.1.title', 'Severance')
                     ->where('queue.rows.1.subtitle', 'S02E01 · Hello, Ms. Cobel')
                     ->where('queue.errors', []);
@@ -158,7 +160,7 @@ test('member cannot force-grab a queue item', function (): void {
 });
 
 test('admin can remove a Sonarr queue item without blocklisting', function (): void {
-    ServiceConnection::factory()->sonarr()->create([
+    $connection = ServiceConnection::factory()->sonarr()->create([
         'url' => 'http://sonarr.local:8989',
     ]);
 
@@ -170,7 +172,7 @@ test('admin can remove a Sonarr queue item without blocklisting', function (): v
 
     $this->actingAs($admin)
         ->from(route('media.library.activity.queue'))
-        ->post(route('media.library.activity.queue.remove', ['service' => 'sonarr', 'id' => 42]), ['verb' => 'remove'])
+        ->post(route('media.library.activity.queue.remove', ['service' => 'sonarr', 'id' => 42]), ['verb' => 'remove', 'service_connection_id' => $connection->id])
         ->assertRedirect(route('media.library.activity.queue'))
         ->assertSessionHas('inertia.flash_data.toast.type', 'success');
 
@@ -182,7 +184,7 @@ test('admin can remove a Sonarr queue item without blocklisting', function (): v
 });
 
 test('admin can blocklist and re-search a Radarr queue item', function (): void {
-    ServiceConnection::factory()->radarr()->create([
+    $connection = ServiceConnection::factory()->radarr()->create([
         'url' => 'http://radarr.local:7878',
     ]);
 
@@ -194,7 +196,7 @@ test('admin can blocklist and re-search a Radarr queue item', function (): void 
 
     $this->actingAs($admin)
         ->from(route('media.library.activity.queue'))
-        ->post(route('media.library.activity.queue.remove', ['service' => 'radarr', 'id' => 77]), ['verb' => 'block'])
+        ->post(route('media.library.activity.queue.remove', ['service' => 'radarr', 'id' => 77]), ['verb' => 'block', 'service_connection_id' => $connection->id])
         ->assertRedirect(route('media.library.activity.queue'))
         ->assertSessionHas('inertia.flash_data.toast.type', 'success');
 
@@ -214,7 +216,7 @@ test('member cannot remove a queue item', function (): void {
 });
 
 test('queue removal rejects an unknown verb', function (): void {
-    ServiceConnection::factory()->sonarr()->create([
+    $connection = ServiceConnection::factory()->sonarr()->create([
         'url' => 'http://sonarr.local:8989',
     ]);
 
@@ -222,13 +224,13 @@ test('queue removal rejects an unknown verb', function (): void {
 
     $this->actingAs($admin)
         ->from(route('media.library.activity.queue'))
-        ->post(route('media.library.activity.queue.remove', ['service' => 'sonarr', 'id' => 1]), ['verb' => 'nuke'])
+        ->post(route('media.library.activity.queue.remove', ['service' => 'sonarr', 'id' => 1]), ['verb' => 'nuke', 'service_connection_id' => $connection->id])
         ->assertRedirect(route('media.library.activity.queue'))
         ->assertSessionHas('inertia.flash_data.toast.type', 'error');
 });
 
 test('queue removal reports upstream HTTP failure', function (): void {
-    ServiceConnection::factory()->sonarr()->create([
+    $connection = ServiceConnection::factory()->sonarr()->create([
         'url' => 'http://sonarr.local:8989',
     ]);
 
@@ -240,9 +242,52 @@ test('queue removal reports upstream HTTP failure', function (): void {
 
     $this->actingAs($admin)
         ->from(route('media.library.activity.queue'))
-        ->post(route('media.library.activity.queue.remove', ['service' => 'sonarr', 'id' => 9]), ['verb' => 'remove'])
+        ->post(route('media.library.activity.queue.remove', ['service' => 'sonarr', 'id' => 9]), ['verb' => 'remove', 'service_connection_id' => $connection->id])
         ->assertRedirect(route('media.library.activity.queue'))
         ->assertSessionHas('inertia.flash_data.toast.type', 'error');
+});
+
+test('a queue removal acts on the connection the rows came from, not the active one', function (): void {
+    ServiceConnection::factory()->sonarr()->create(['url' => 'http://sonarr.local:8989']);
+    $secondSonarr = ServiceConnection::factory()->sonarr()->create(['url' => 'http://sonarr-4k.local:8989']);
+    Http::fake(['sonarr-4k.local:8989/api/v3/queue/42*' => Http::response('', 200)]);
+
+    $this->actingAs(User::factory()->admin()->create())
+        ->from(route('media.library.activity.queue'))
+        ->post(route('media.library.activity.queue.remove', ['service' => 'sonarr', 'id' => 42]), ['verb' => 'remove', 'service_connection_id' => $secondSonarr->id])
+        ->assertSessionHas('inertia.flash_data.toast.type', 'success');
+
+    Http::assertSent(fn ($request): bool => $request->method() === 'DELETE' && str_contains((string) $request->url(), 'sonarr-4k.local:8989/api/v3/queue/42'));
+    Http::assertSentCount(1);
+});
+
+test('a queue removal refuses a pin that is gone, deactivated or another service and sends nothing', function (int $pinnedConnectionId): void {
+    ServiceConnection::factory()->sonarr()->create(['url' => 'http://sonarr.local:8989']);
+    Http::fake(['sonarr.local:8989/api/v3/queue/*' => Http::response('', 200)]);
+
+    $this->actingAs(User::factory()->admin()->create())
+        ->from(route('media.library.activity.queue'))
+        ->post(route('media.library.activity.queue.remove', ['service' => 'sonarr', 'id' => 42]), ['verb' => 'remove', 'service_connection_id' => $pinnedConnectionId])
+        ->assertRedirect(route('media.library.activity.queue'))
+        ->assertSessionHas('inertia.flash_data.toast.type', 'error')
+        ->assertSessionHas('inertia.flash_data.toast.message', 'That Sonarr connection is unavailable — refresh and try again.');
+
+    Http::assertNothingSent();
+})->with([
+    'deleted' => [fn (): int => 999_999],
+    'deactivated' => [fn (): int => ServiceConnection::factory()->sonarr()->inactive()->create(['url' => 'http://sonarr-old.local:8989'])->id],
+    'another service' => [fn (): int => ServiceConnection::factory()->radarr()->create(['url' => 'http://radarr.local:7878'])->id],
+]);
+
+test('a queue removal without a pin is a validation error', function (): void {
+    ServiceConnection::factory()->sonarr()->create(['url' => 'http://sonarr.local:8989']);
+    Http::fake(['sonarr.local:8989/api/v3/queue/*' => Http::response('', 200)]);
+
+    $this->actingAs(User::factory()->admin()->create())
+        ->post(route('media.library.activity.queue.remove', ['service' => 'sonarr', 'id' => 42]), ['verb' => 'remove'])
+        ->assertSessionHasErrors('service_connection_id');
+
+    Http::assertNothingSent();
 });
 
 test('admin can list manual import candidates for a Sonarr download', function (): void {

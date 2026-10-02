@@ -84,15 +84,23 @@ function fakeBulkRadarrQueue(array $failingIds = []): void
 }
 
 /**
- * Bulk no longer takes a `service_connection_id` — it resolves the active
- * connection for `service`, exactly like the single remove path.
+ * Bulk is pinned to the connection the queue rows were rendered from; by
+ * default, the first connection of the requested service.
  *
  * @param  array<string, mixed>  $overrides
  * @return array<string, mixed>
  */
 function bulkQueuePayload(array $overrides = []): array
 {
-    return ['service' => 'sonarr', 'ids' => [41, 42], 'action' => 'remove', ...$overrides];
+    $service = (string) ($overrides['service'] ?? 'sonarr');
+
+    return [
+        'service' => $service,
+        'service_connection_id' => ServiceConnection::query()->where('type', $service)->orderBy('id')->value('id'),
+        'ids' => [41, 42],
+        'action' => 'remove',
+        ...$overrides,
+    ];
 }
 
 test('an admin removes several Sonarr queue items, each removed and audited', function (): void {
@@ -261,15 +269,34 @@ test('a Radarr bulk run deletes from the Radarr queue and names a failed item fr
         && str_contains($request->url(), 'radarr.local:7878/api/v3/queue/51?'));
 });
 
-test('a bulk queue action with no active connection for the service is refused and nothing is sent', function (): void {
-    $this->radarr->update(['is_active' => false]);
-
+test('a bulk queue action pinned to a connection that is gone, deactivated or another service is refused and nothing is sent', function (int $pinnedConnectionId): void {
     $this->actingAs($this->admin)
-        ->postJson(route('media.library.activity.queue.bulk'), bulkQueuePayload(['service' => 'radarr']))
+        ->postJson(route('media.library.activity.queue.bulk'), bulkQueuePayload(['service' => 'radarr', 'service_connection_id' => $pinnedConnectionId]))
         ->assertUnprocessable()
-        ->assertJsonPath('message', 'No Radarr connection configured.');
+        ->assertJsonPath('message', 'That Radarr connection is unavailable — refresh and try again.');
 
     Http::assertNothingSent();
+})->with([
+    'deleted' => [fn (): int => 999_999],
+    'deactivated' => [function (): int {
+        $serviceConnection = ServiceConnection::query()->where('type', 'radarr')->sole();
+        ServiceConnection::query()->whereKey($serviceConnection->id)->update(['is_active' => false]);
+
+        return $serviceConnection->id;
+    }],
+    'another service' => [fn (): int => ServiceConnection::query()->where('type', 'sonarr')->sole()->id],
+]);
+
+test('a bulk queue action acts on the pinned connection, not the active one', function (): void {
+    $secondSonarr = ServiceConnection::factory()->sonarr()->create(['url' => 'http://sonarr-4k.local:8989', 'api_key' => 'k']);
+    Http::fake(['sonarr-4k.local:8989/api/v3/queue*' => Http::response('', 200)]);
+
+    $this->actingAs($this->admin)
+        ->postJson(route('media.library.activity.queue.bulk'), bulkQueuePayload(['service_connection_id' => $secondSonarr->id, 'ids' => [41]]))
+        ->assertOk()
+        ->assertJsonPath('started', 1);
+
+    Http::assertSent(fn (Request $request): bool => $request->method() === 'DELETE' && str_contains($request->url(), 'sonarr-4k.local:8989/api/v3/queue/41?'));
 });
 
 test('an invalid bulk payload is refused before anything is sent', function (array $overrides): void {
@@ -287,6 +314,7 @@ test('an invalid bulk payload is refused before anything is sent', function (arr
     'a non-integer id' => [['ids' => ['abc']]],
     'an unknown action' => [['action' => 'purge']],
     'an unknown service' => [['service' => 'bazarr']],
+    'no connection pin' => [['service_connection_id' => null]],
 ]);
 
 test('members cannot remove queue items in bulk', function (): void {

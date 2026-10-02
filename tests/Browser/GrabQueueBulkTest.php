@@ -154,3 +154,67 @@ test('the remove confirm closes when the selection empties under it, and nothing
 
     Http::assertNotSent(fn (Request $request): bool => $request->method() === 'DELETE');
 });
+
+/**
+ * The row menu asks with a native confirm(); accept it.
+ */
+function grabQueueAcceptConfirmScript(): string
+{
+    return '() => { window.confirm = () => true; }';
+}
+
+test('an admin removes one queue item from its row menu', function (): void {
+    fakeGrabQueueBrowser();
+    $this->actingAs(User::factory()->admin()->create());
+
+    $webpage = visit(route('media.library.activity.queue', absolute: false))
+        ->assertNoSmoke()
+        ->assertSeeIn('[data-queue-row="sonarr-41"]', 'Severance');
+
+    $webpage->script(grabQueueAcceptConfirmScript());
+    $webpage->click('[data-queue-row="sonarr-41"] [data-queue-row-menu]')
+        ->click('[data-queue-remove="remove"]')
+        ->assertSee('Removed from queue.')
+        ->assertNoSmoke();
+
+    Http::assertSent(fn (Request $request): bool => $request->method() === 'DELETE' && str_contains($request->url(), '/api/v3/queue/41?'));
+});
+
+test('a row removal whose connection was deactivated after the page loaded is refused and sends nothing', function (): void {
+    fakeGrabQueueBrowser();
+    $this->actingAs(User::factory()->admin()->create());
+
+    $webpage = visit(route('media.library.activity.queue', absolute: false))
+        ->assertNoSmoke()
+        ->assertSeeIn('[data-queue-row="sonarr-41"]', 'Severance');
+
+    // Bypasses the observer on purpose: no health ping, just the state change.
+    ServiceConnection::query()->where('type', 'sonarr')->update(['is_active' => false]);
+
+    $webpage->script(grabQueueAcceptConfirmScript());
+    $webpage->click('[data-queue-row="sonarr-41"] [data-queue-row-menu]')
+        ->click('[data-queue-remove="remove"]')
+        ->assertSee('That Sonarr connection is unavailable — refresh and try again.');
+
+    Http::assertNotSent(fn (Request $request): bool => $request->method() === 'DELETE');
+});
+
+test('a bulk removal whose connection was deactivated after the page loaded is refused and sends nothing', function (): void {
+    fakeGrabQueueBrowser();
+    $this->actingAs(User::factory()->admin()->create());
+
+    $webpage = visit(route('media.library.activity.queue', absolute: false))
+        ->assertNoSmoke()
+        ->assertSeeIn('[data-queue-row="sonarr-41"]', 'Severance')
+        ->click('[data-service-filter="sonarr"]')
+        ->click('[data-bulk-select="41"]')
+        ->click('[data-bulk-queue-action="remove"]')
+        ->assertSeeIn('[data-bulk-queue-confirm]', 'Confirm');
+
+    ServiceConnection::query()->where('type', 'sonarr')->update(['is_active' => false]);
+
+    $webpage->click('[data-bulk-queue-confirm]')
+        ->assertSee('That Sonarr connection is unavailable — refresh and try again.');
+
+    Http::assertNotSent(fn (Request $request): bool => $request->method() === 'DELETE');
+});
