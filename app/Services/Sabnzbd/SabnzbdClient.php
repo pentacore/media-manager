@@ -207,16 +207,23 @@ class SabnzbdClient
     }
 
     /**
+     * SABnzbd answers a priority change with the job's new queue position,
+     * `-1` when it has no job with that id — not a status flag. A refusal
+     * (`status: false`) carries no position either.
+     *
      * @throws RequestException|ConnectionException
      */
     public function changePriority(string $nzoId, int $priority): bool
     {
-        return (bool) ($this->request([
+        $body = $this->request([
             'mode' => 'queue',
             'name' => 'priority',
             'value' => $nzoId,
             'value2' => $priority,
-        ])['status'] ?? false);
+        ]);
+        $position = $body['position'] ?? null;
+
+        return (is_numeric($position) && (int) $position >= 0) || ($body['status'] ?? null) === true;
     }
 
     /**

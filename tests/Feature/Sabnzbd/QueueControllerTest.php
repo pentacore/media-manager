@@ -6,6 +6,7 @@ use App\Models\ActivityLog;
 use App\Models\ServiceConnection;
 use App\Models\User;
 use App\Services\Sabnzbd\SabnzbdDownloadCounter;
+use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Sleep;
@@ -180,7 +181,7 @@ test('reprioritize accepts valid priority and writes activity', function (): voi
     ]);
 
     Http::fake([
-        'sab.local:8080/api*' => Http::response(['status' => true]),
+        'sab.local:8080/api*' => Http::response(['position' => 1]),
     ]);
 
     $this->actingAs($this->user)
@@ -221,4 +222,41 @@ test('a queue page SABnzbd cannot be reached for still says it could not reach S
         ->get(route('sabnzbd.queue.index'))
         ->assertOk()
         ->assertInertia(fn ($page) => $page->where('error', 'Could not reach SABnzbd.'));
+});
+
+test('a priority change SABnzbd does not place in the queue is refused and writes nothing', function (): void {
+    ServiceConnection::factory()->sabnzbd()->create(['url' => 'http://sab.local:8080', 'api_key' => 'k']);
+    Http::fake(['sab.local:8080/api*' => Http::response(['position' => -1])]);
+
+    $this->actingAs($this->user)
+        ->from(route('sabnzbd.queue.index'))
+        ->patch(route('sabnzbd.queue.slot.priority', ['nzoId' => 'SABnzbd_nzo_7']), ['priority' => 1])
+        ->assertRedirect(route('sabnzbd.queue.index'))
+        ->assertSessionHas('inertia.flash_data.toast', ['type' => 'error', 'message' => 'SABnzbd refused the change.']);
+
+    expect(ActivityLog::query()->where('action', 'sabnzbd.slot.reprioritized')->exists())->toBeFalse();
+});
+
+test('a SABnzbd outage during a queue pause is reported with the failure toast', function (): void {
+    Sleep::fake();
+    ServiceConnection::factory()->sabnzbd()->create(['url' => 'http://sab.local:8080', 'api_key' => 'k']);
+    Http::fake(['sab.local:8080/api*' => fn () => throw new ConnectionException('Connection refused')]);
+
+    $this->actingAs($this->user)
+        ->from(route('sabnzbd.queue.index'))
+        ->post(route('sabnzbd.queue.pause'))
+        ->assertSessionHas('inertia.flash_data.toast', ['type' => 'error', 'message' => 'Failed to pause queue.']);
+});
+
+test('a failure writing the queue pause activity row surfaces instead of reading as a SABnzbd failure', function (): void {
+    ServiceConnection::factory()->sabnzbd()->create(['url' => 'http://sab.local:8080', 'api_key' => 'k']);
+    Http::fake(['sab.local:8080/api*' => Http::response(['status' => true])]);
+    ActivityLog::creating(static function (): void {
+        throw new RuntimeException('activity store unavailable');
+    });
+
+    expect(fn () => $this->withoutExceptionHandling()
+        ->actingAs($this->user)
+        ->post(route('sabnzbd.queue.pause')))
+        ->toThrow(RuntimeException::class, 'activity store unavailable');
 });

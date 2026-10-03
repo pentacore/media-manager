@@ -89,7 +89,7 @@ test('deleteSlot sends queue/delete/{nzo} request', function (): void {
 
 test('changePriority sends value+value2 with priority integer', function (): void {
     Http::fake([
-        'sab.local:8080/api*' => Http::response(['status' => true]),
+        'sab.local:8080/api*' => Http::response(['position' => 0]),
     ]);
 
     expect($this->client->changePriority('NZO-3', 2))->toBeTrue();
@@ -154,4 +154,24 @@ test('fullstatus answers with a status object, which is not a refusal', function
     Http::fake(['sab.local:8080/api*' => Http::response(['status' => ['version' => '4.2.0', 'paused' => false]])]);
 
     expect($this->client->getFullStatus()['status']['version'])->toBe('4.2.0');
+});
+
+test('a priority change is accepted only when SABnzbd reports a queue position', function (mixed $body, bool $accepted): void {
+    Http::fake(['sab.local:8080/api*' => Http::response($body)]);
+
+    expect($this->client->changePriority('SABnzbd_nzo_3', 1))->toBe($accepted);
+})->with([
+    'new position' => [['position' => 2], true],
+    'moved to the top' => [['position' => 0], true],
+    'numeric string position' => [['position' => '4'], true],
+    'status true' => [['status' => true], true],
+    'unknown job' => [['position' => -1], false],
+    'status false' => [['status' => false, 'error' => 'not found'], false],
+    'empty object' => [[], false],
+]);
+
+test('a write answered with a bare JSON scalar reads as refused, not a TypeError', function (): void {
+    Http::fake(['sab.local:8080/api*' => Http::response('true')]);
+
+    expect($this->client->pauseQueue())->toBeFalse();
 });

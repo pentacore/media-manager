@@ -32,7 +32,6 @@ use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
 use RuntimeException;
-use Throwable;
 
 class QueueController extends Controller
 {
@@ -210,10 +209,10 @@ class QueueController extends Controller
     }
 
     /**
-     * Unlike 7a's withClient() (catch (Throwable)), this only catches the
-     * exceptions SabnzbdSlotOperator documents throwing. An unexpected error
-     * (e.g. a DB failure writing the activity row) surfaces as a 500 rather
-     * than a generic toast — deliberate, per .ai/rules/controllers.md.
+     * Like withClient(), this only catches the exceptions SabnzbdSlotOperator
+     * documents throwing. An unexpected error (e.g. a DB failure writing the
+     * activity row) surfaces as a 500 rather than a generic toast —
+     * deliberate, per .ai/rules/controllers.md.
      *
      * @param  Closure(ServiceConnection): void  $action
      */
@@ -275,9 +274,10 @@ class QueueController extends Controller
         $priority = (int) $changePriorityRequest->validated('priority');
 
         return $this->withClient(function (SabnzbdClient $sabnzbdClient, ServiceConnection $serviceConnection) use ($nzoId, $priority): bool {
-            // SABnzbd answers a priority change with the job's new queue
-            // position, not a status flag, so there is no refusal to honour.
-            $sabnzbdClient->changePriority($nzoId, $priority);
+            if (! $sabnzbdClient->changePriority($nzoId, $priority)) {
+                return false;
+            }
+
             $this->log(
                 $serviceConnection,
                 'sabnzbd.slot.reprioritized',
@@ -348,7 +348,9 @@ class QueueController extends Controller
     /**
      * One member SABnzbd write. Like adminAction(), the callback returns
      * whether SABnzbd accepted it (a refusal is HTTP 200 with `status:
-     * false`) and writes its activity/audit rows only when it did.
+     * false`) and writes its activity rows only when it did. Only upstream
+     * failures become the failure toast; anything else (a failed activity
+     * write) surfaces, as in runSlot().
      *
      * @param  Closure(SabnzbdClient, ServiceConnection): bool  $action
      */
@@ -364,7 +366,7 @@ class QueueController extends Controller
             Inertia::flash('toast', ['type' => 'success', 'message' => __($success)]);
         } catch (ModelNotFoundException) {
             Inertia::flash('toast', ['type' => 'error', 'message' => __('No SABnzbd connection configured.')]);
-        } catch (Throwable) {
+        } catch (RequestException|ConnectionException) {
             Inertia::flash('toast', ['type' => 'error', 'message' => __($failure)]);
         }
 
