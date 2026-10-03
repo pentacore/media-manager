@@ -10,6 +10,7 @@ use App\Models\ActivityLog;
 use App\Models\ServiceConnection;
 use App\Services\Actions\ActionExecutor;
 use App\Services\Arr\ArrActions;
+use App\Services\Arr\ArrUnexpectedResponse;
 use App\Services\Arr\ManualImportActions;
 use App\Services\Arr\RemoveStuckDownloadActions;
 use App\Services\Bazarr\BazarrActions;
@@ -271,6 +272,43 @@ test('rethrows transient 5xx RequestException when retry budget remains', functi
     $job->setJob($fake);
 
     expect(fn () => $job->handle())->toThrow(RequestException::class);
+});
+
+test('rethrows an ArrUnexpectedResponse (a 200 that is not JSON data) as transient, with the retry marker set', function (): void {
+    $request = ActionRequest::factory()->create(['status' => ActionRequestStatus::Approved, 'type' => 'delete_movie']);
+
+    $response = new Response(new GuzzleHttp\Psr7\Response(200, [], '<html>Sign in</html>'));
+    $mock = Mockery::mock(ActionExecutor::class);
+    $mock->shouldReceive('execute')->once()->andThrow(new ArrUnexpectedResponse($response, 'Radarr'));
+    $this->app->bind(RadarrActions::class, fn (): ActionExecutor => $mock);
+
+    expect(fn () => executeActionRequestOnAttempt($request, 1)->handle())->toThrow(ArrUnexpectedResponse::class);
+
+    $fresh = $request->fresh();
+    expect($fresh->status)->toBe(ActionRequestStatus::Executing)
+        ->and($fresh->result)->toBe(['retry_scheduled' => true, 'attempt' => 1]);
+});
+
+test('marks a 4xx RequestException as Failed immediately — still permanent', function (): void {
+    $request = ActionRequest::factory()->create([
+        'status' => ActionRequestStatus::Approved,
+        'type' => 'delete_movie',
+    ]);
+
+    $response = new Response(new GuzzleHttp\Psr7\Response(401, [], 'unauthorized'));
+    $mock = Mockery::mock(ActionExecutor::class);
+    $mock->shouldReceive('execute')->once()->andThrow(new RequestException($response));
+    $this->app->bind(RadarrActions::class, fn (): ActionExecutor => $mock);
+
+    new ExecuteActionRequest($request)->handle();
+
+    $fresh = $request->fresh();
+    expect($fresh->status)->toBe(ActionRequestStatus::Failed)
+        ->and($fresh->result)->toMatchArray([
+            'success' => false,
+            'reason' => 'execution_failed',
+            'exception' => RequestException::class,
+        ]);
 });
 
 test('failed() hook does not overwrite already-Failed status', function (): void {

@@ -26,5 +26,11 @@ final class ArrUnexpectedResponse extends RequestException
         parent::__construct($response);
 
         $this->message = sprintf('%s answered with a body that is not JSON data.', $service);
+
+        // RequestException::report() rebuilds $this->message from the raw
+        // response body/status unless this is already true — without it, an
+        // uncaught instance reaching the exception handler would undo the
+        // "never quotes the body" guarantee in this class's docblock.
+        $this->hasBeenSummarized = true;
     }
 }

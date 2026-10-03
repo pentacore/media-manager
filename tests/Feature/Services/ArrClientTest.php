@@ -245,6 +245,22 @@ test('the not-JSON failure is a RequestException on the 200 response and never q
     });
 });
 
+test('the fixed message survives report(), which would otherwise rebuild it from the raw body', function (): void {
+    Http::fake(['sonarr.local:8989/api/v3/series' => Http::response('<html>Sign in at /sso/login</html>', 200, ['Content-Type' => 'text/html'])]);
+
+    try {
+        new SonarrClient($this->connection)->getSeries();
+    } catch (ArrUnexpectedResponse $arrUnexpectedResponse) {
+        $arrUnexpectedResponse->report();
+
+        expect($arrUnexpectedResponse->getMessage())->toBe('Sonarr answered with a body that is not JSON data.');
+
+        return;
+    }
+
+    $this->fail('Expected ArrUnexpectedResponse to be thrown.');
+});
+
 test('an object-shaped list body still reads as data, as in Whisparr', function (): void {
     Http::fake(['sonarr.local:8989/api/v3/qualityprofile' => Http::response(['message' => 'Unexpected'])]);
 

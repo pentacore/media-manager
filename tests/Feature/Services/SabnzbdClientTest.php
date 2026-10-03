@@ -150,6 +150,22 @@ test('a refused read is a RequestException with a fixed message that never quote
     });
 });
 
+test('the fixed message survives report(), which would otherwise rebuild it from the raw body', function (): void {
+    Http::fake(['sab.local:8080/api*' => Http::response(['status' => false, 'error' => 'API Key Incorrect, see /config/sabnzbd.ini'])]);
+
+    try {
+        $this->client->getQueue();
+    } catch (SabnzbdRefused $sabnzbdRefused) {
+        $sabnzbdRefused->report();
+
+        expect($sabnzbdRefused->getMessage())->toBe('SABnzbd refused the request.');
+
+        return;
+    }
+
+    $this->fail('Expected SabnzbdRefused to be thrown.');
+});
+
 test('fullstatus answers with a status object, which is not a refusal', function (): void {
     Http::fake(['sab.local:8080/api*' => Http::response(['status' => ['version' => '4.2.0', 'paused' => false]])]);
 

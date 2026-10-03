@@ -26,5 +26,11 @@ final class SabnzbdRefused extends RequestException
         parent::__construct($response);
 
         $this->message = $message;
+
+        // RequestException::report() rebuilds $this->message from the raw
+        // response body/status unless this is already true — without it, an
+        // uncaught instance reaching the exception handler would undo the
+        // "never quotes the body" guarantee above.
+        $this->hasBeenSummarized = true;
     }
 }
