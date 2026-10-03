@@ -8,6 +8,9 @@ use App\Enums\QueueBulkAction;
 use App\Enums\ServiceType;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Library\BulkQueueItemsRequest;
+use App\Http\Requests\Library\ExecuteManualImportRequest;
+use App\Http\Requests\Library\GrabQueueItemRequest;
+use App\Http\Requests\Library\ManualImportCandidatesRequest;
 use App\Http\Requests\Library\MarkHistoryFailedRequest;
 use App\Http\Requests\Library\RemoveQueueItemRequest;
 use App\Models\ActivityLog;
@@ -60,17 +63,20 @@ class ActivityController extends Controller
      * Skip the RSS-sync delay on a queued release and grab it now.
      * Common for stuck "delay" status rows where the user knows the
      * release is good and doesn't want to wait an hour for the next
-     * indexer poll.
+     * indexer poll. Pinned to the connection the row was rendered from.
      */
-    public function grabQueueItem(string $service, int $id): RedirectResponse
+    public function grabQueueItem(GrabQueueItemRequest $grabQueueItemRequest, string $service, int $id): RedirectResponse
     {
-        $client = $this->resolveClient($service);
-        if (! $client instanceof ArrClient) {
-            return $this->flashAndBack('error', __('Unknown service.'));
+        $validated = $grabQueueItemRequest->validated();
+        $serviceType = $service === 'radarr' ? ServiceType::Radarr : ServiceType::Sonarr;
+        $connection = $this->resolvePinnedQueueConnection($serviceType, (int) $validated['service_connection_id']);
+
+        if (! $connection instanceof ServiceConnection) {
+            return $this->flashAndBack('error', $this->unavailablePinMessage($serviceType));
         }
 
         try {
-            $client->grabQueueItem($id);
+            $this->clientFor($service, $connection)->grabQueueItem($id);
         } catch (RequestException|ConnectionException $throwable) {
             return $this->flashAndBack('error', __('Force grab failed: :msg', ['msg' => UpstreamErrorText::sanitize($throwable->getMessage())]));
         }
@@ -262,16 +268,20 @@ class ActivityController extends Controller
      * Look up the candidate files Sonarr/Radarr will offer up if we ask
      * it to manually import this stuck download. Returned shape is the
      * upstream ManualImportResource trimmed to what the modal needs.
+     * Pinned to the connection the row was rendered from.
      */
-    public function manualImportCandidates(string $service, string $downloadId): JsonResponse
+    public function manualImportCandidates(ManualImportCandidatesRequest $manualImportCandidatesRequest, string $service, string $downloadId): JsonResponse
     {
-        $client = $this->resolveClient($service);
-        if (! $client instanceof ArrClient) {
-            return new JsonResponse(['error' => 'Unknown service.'], 422);
+        $validated = $manualImportCandidatesRequest->validated();
+        $serviceType = $service === 'radarr' ? ServiceType::Radarr : ServiceType::Sonarr;
+        $connection = $this->resolvePinnedQueueConnection($serviceType, (int) $validated['service_connection_id']);
+
+        if (! $connection instanceof ServiceConnection) {
+            return new JsonResponse(['error' => $this->unavailablePinMessage($serviceType)], 422);
         }
 
         try {
-            $candidates = $client->getManualImport(['downloadId' => $downloadId]);
+            $candidates = $this->clientFor($service, $connection)->getManualImport(['downloadId' => $downloadId]);
         } catch (RequestException|ConnectionException $throwable) {
             return new JsonResponse(['error' => UpstreamErrorText::sanitize($throwable->getMessage())], 502);
         }
@@ -287,33 +297,35 @@ class ActivityController extends Controller
     /**
      * Trigger the ManualImport command. We re-fetch candidates server-side
      * so the caller cannot inject paths or rewrite the foreign keys —
-     * frontend only supplies the downloadId we already showed it.
+     * frontend only supplies the downloadId we already showed it, and the
+     * connection its row was rendered from.
      */
-    public function executeManualImport(Request $request, string $service): RedirectResponse
+    public function executeManualImport(ExecuteManualImportRequest $executeManualImportRequest, string $service, ManualImportResolver $manualImportResolver): RedirectResponse
     {
-        $downloadId = (string) $request->input('download_id');
-        if ($downloadId === '') {
-            return $this->flashAndBack('error', __('Missing downloadId.'));
+        $validated = $executeManualImportRequest->validated();
+        $downloadId = (string) $validated['download_id'];
+        $serviceType = $service === 'radarr' ? ServiceType::Radarr : ServiceType::Sonarr;
+        $connection = $this->resolvePinnedQueueConnection($serviceType, (int) $validated['service_connection_id']);
+
+        if (! $connection instanceof ServiceConnection) {
+            return $this->flashAndBack('error', $this->unavailablePinMessage($serviceType));
         }
 
-        $client = $this->resolveClient($service);
-        if (! $client instanceof ArrClient) {
-            return $this->flashAndBack('error', __('Unknown service.'));
-        }
+        $arrClient = $this->clientFor($service, $connection);
 
         try {
-            $candidates = $client->getManualImport(['downloadId' => $downloadId]);
+            $candidates = $arrClient->getManualImport(['downloadId' => $downloadId]);
         } catch (RequestException|ConnectionException $throwable) {
             return $this->flashAndBack('error', __('Could not enumerate import candidates: :msg', ['msg' => UpstreamErrorText::sanitize($throwable->getMessage())]));
         }
 
-        $files = resolve(ManualImportResolver::class)->toImportPayload($candidates, $service, $downloadId);
+        $files = $manualImportResolver->toImportPayload($candidates, $service, $downloadId);
         if ($files === []) {
             return $this->flashAndBack('error', __('Sonarr/Radarr returned no importable files for this download.'));
         }
 
         try {
-            $client->runCommand('ManualImport', [
+            $arrClient->runCommand('ManualImport', [
                 'files' => $files,
                 'importMode' => 'auto',
             ]);
@@ -373,24 +385,6 @@ class ActivityController extends Controller
             'movie_title' => $candidate['movie']['title'] ?? null,
             'movie_year' => $candidate['movie']['year'] ?? null,
         ];
-    }
-
-    private function resolveClient(string $service): ?ArrClient
-    {
-        $connection = $this->resolveConnection($service);
-
-        return $connection instanceof ServiceConnection ? $this->clientFor($service, $connection) : null;
-    }
-
-    private function resolveConnection(string $service): ?ServiceConnection
-    {
-        $type = match ($service) {
-            'sonarr' => ServiceType::Sonarr,
-            'radarr' => ServiceType::Radarr,
-            default => null,
-        };
-
-        return $type === null ? null : $this->safeResolve($type);
     }
 
     /**

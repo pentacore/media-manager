@@ -5,6 +5,8 @@ declare(strict_types=1);
 use App\Models\ActivityLog;
 use App\Models\ServiceConnection;
 use App\Models\User;
+use App\Services\Library\InterventionCounter;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Sleep;
 
@@ -12,6 +14,8 @@ beforeEach(function (): void {
     config()->set('inertia.ssr.enabled', false);
     config()->set('inertia.testing.ensure_pages_exist', false);
     Http::preventStrayRequests();
+    // The shared nav badge would otherwise walk both arr queues on every request.
+    Cache::put(InterventionCounter::CACHE_KEY, 0, 600);
 });
 
 test('guests are redirected to login from the activity queue', function (): void {
@@ -131,7 +135,7 @@ test('queue surfaces errors per service when an upstream call fails', function (
 });
 
 test('admin can force-grab a delayed Sonarr queue item', function (): void {
-    ServiceConnection::factory()->sonarr()->create([
+    $connection = ServiceConnection::factory()->sonarr()->create([
         'url' => 'http://sonarr.local:8989',
     ]);
 
@@ -143,7 +147,7 @@ test('admin can force-grab a delayed Sonarr queue item', function (): void {
 
     $this->actingAs($admin)
         ->from(route('media.library.activity.queue'))
-        ->post(route('media.library.activity.queue.grab', ['service' => 'sonarr', 'id' => 55]))
+        ->post(route('media.library.activity.queue.grab', ['service' => 'sonarr', 'id' => 55]), ['service_connection_id' => $connection->id])
         ->assertRedirect(route('media.library.activity.queue'))
         ->assertSessionHas('inertia.flash_data.toast.type', 'success');
 
@@ -296,7 +300,7 @@ test('a queue removal without a pin is a validation error', function (): void {
 });
 
 test('admin can list manual import candidates for a Sonarr download', function (): void {
-    ServiceConnection::factory()->sonarr()->create([
+    $connection = ServiceConnection::factory()->sonarr()->create([
         'url' => 'http://sonarr.local:8989',
     ]);
 
@@ -325,6 +329,7 @@ test('admin can list manual import candidates for a Sonarr download', function (
         ->getJson(route('media.library.activity.manual-import.candidates', [
             'service' => 'sonarr',
             'downloadId' => 'ABC123',
+            'service_connection_id' => $connection->id,
         ]))
         ->assertOk()
         ->assertJsonPath('candidates.0.series_title', 'Severance')
@@ -333,7 +338,7 @@ test('admin can list manual import candidates for a Sonarr download', function (
 });
 
 test('admin can execute a Sonarr manual import end-to-end', function (): void {
-    ServiceConnection::factory()->sonarr()->create([
+    $connection = ServiceConnection::factory()->sonarr()->create([
         'url' => 'http://sonarr.local:8989',
     ]);
 
@@ -359,6 +364,7 @@ test('admin can execute a Sonarr manual import end-to-end', function (): void {
         ->from(route('media.library.activity.queue'))
         ->post(route('media.library.activity.manual-import.execute', ['service' => 'sonarr']), [
             'download_id' => 'ABC123',
+            'service_connection_id' => $connection->id,
         ])
         ->assertRedirect(route('media.library.activity.queue'))
         ->assertSessionHas('inertia.flash_data.toast.type', 'success');
@@ -373,7 +379,7 @@ test('admin can execute a Sonarr manual import end-to-end', function (): void {
 });
 
 test('manual import drops candidates without a foreign key', function (): void {
-    ServiceConnection::factory()->radarr()->create([
+    $connection = ServiceConnection::factory()->radarr()->create([
         'url' => 'http://radarr.local:7878',
     ]);
 
@@ -395,6 +401,7 @@ test('manual import drops candidates without a foreign key', function (): void {
         ->from(route('media.library.activity.queue'))
         ->post(route('media.library.activity.manual-import.execute', ['service' => 'radarr']), [
             'download_id' => 'XYZ',
+            'service_connection_id' => $connection->id,
         ])
         ->assertRedirect(route('media.library.activity.queue'))
         ->assertSessionHas('inertia.flash_data.toast.type', 'error');
@@ -557,12 +564,12 @@ test('malformed queue status messages render as an empty or trimmed list, never 
 ]);
 
 test('a refused force grab reports the reason without paths', function (): void {
-    ServiceConnection::factory()->sonarr()->create(['url' => 'http://sonarr.local:8989']);
+    $connection = ServiceConnection::factory()->sonarr()->create(['url' => 'http://sonarr.local:8989']);
     Http::fake(['sonarr.local:8989/api/v3/queue/grab/55' => Http::response('Cannot read /data/torrents/Severance.S02E01', 400)]);
 
     $this->actingAs(User::factory()->admin()->create())
         ->from(route('media.library.activity.queue'))
-        ->post(route('media.library.activity.queue.grab', ['service' => 'sonarr', 'id' => 55]))
+        ->post(route('media.library.activity.queue.grab', ['service' => 'sonarr', 'id' => 55]), ['service_connection_id' => $connection->id])
         ->assertSessionHas('inertia.flash_data.toast.type', 'error');
 
     expect((string) session('inertia.flash_data.toast.message'))
@@ -572,12 +579,12 @@ test('a refused force grab reports the reason without paths', function (): void 
 });
 
 test('manual import failures never echo upstream paths', function (): void {
-    ServiceConnection::factory()->sonarr()->create(['url' => 'http://sonarr.local:8989']);
+    $connection = ServiceConnection::factory()->sonarr()->create(['url' => 'http://sonarr.local:8989']);
     Http::fake(['sonarr.local:8989/api/v3/manualimport*' => Http::response('Folder /downloads/complete/ABC123 is not readable', 400)]);
     $admin = User::factory()->admin()->create();
 
     $json = $this->actingAs($admin)
-        ->getJson(route('media.library.activity.manual-import.candidates', ['service' => 'sonarr', 'downloadId' => 'ABC123']))
+        ->getJson(route('media.library.activity.manual-import.candidates', ['service' => 'sonarr', 'downloadId' => 'ABC123', 'service_connection_id' => $connection->id]))
         ->assertStatus(502)
         ->json('error');
 
@@ -585,7 +592,7 @@ test('manual import failures never echo upstream paths', function (): void {
 
     $this->actingAs($admin)
         ->from(route('media.library.activity.queue'))
-        ->post(route('media.library.activity.manual-import.execute', ['service' => 'sonarr']), ['download_id' => 'ABC123'])
+        ->post(route('media.library.activity.manual-import.execute', ['service' => 'sonarr']), ['download_id' => 'ABC123', 'service_connection_id' => $connection->id])
         ->assertSessionHas('inertia.flash_data.toast.type', 'error');
 
     expect((string) session('inertia.flash_data.toast.message'))
@@ -594,7 +601,7 @@ test('manual import failures never echo upstream paths', function (): void {
 });
 
 test('a failed manual import command never echoes upstream paths', function (): void {
-    ServiceConnection::factory()->sonarr()->create(['url' => 'http://sonarr.local:8989']);
+    $connection = ServiceConnection::factory()->sonarr()->create(['url' => 'http://sonarr.local:8989']);
     Http::fake([
         'sonarr.local:8989/api/v3/manualimport*' => Http::response([[
             'path' => '/downloads/Show.S01E01.mkv',
@@ -609,11 +616,98 @@ test('a failed manual import command never echoes upstream paths', function (): 
 
     $this->actingAs(User::factory()->admin()->create())
         ->from(route('media.library.activity.queue'))
-        ->post(route('media.library.activity.manual-import.execute', ['service' => 'sonarr']), ['download_id' => 'ABC123'])
+        ->post(route('media.library.activity.manual-import.execute', ['service' => 'sonarr']), ['download_id' => 'ABC123', 'service_connection_id' => $connection->id])
         ->assertSessionHas('inertia.flash_data.toast.type', 'error');
 
     expect((string) session('inertia.flash_data.toast.message'))
         ->toStartWith('Manual import failed:')
         ->not->toContain('/downloads/')
         ->not->toContain('/tv/');
+});
+
+test('a force grab and a manual import act on the connection the rows came from, not the active one', function (): void {
+    ServiceConnection::factory()->sonarr()->create(['url' => 'http://sonarr.local:8989']);
+    $secondSonarr = ServiceConnection::factory()->sonarr()->create(['url' => 'http://sonarr-4k.local:8989']);
+    Http::fake([
+        'sonarr-4k.local:8989/api/v3/queue/grab/55' => Http::response(['id' => 55]),
+        'sonarr-4k.local:8989/api/v3/manualimport*' => Http::response([[
+            'path' => '/downloads/Show.S01E01.mkv',
+            'series' => ['id' => 12, 'title' => 'Severance'],
+            'episodes' => [['id' => 555, 'seasonNumber' => 1, 'episodeNumber' => 1]],
+            'quality' => ['quality' => ['id' => 4]],
+            'languages' => [['id' => 1]],
+            'rejections' => [],
+        ]]),
+        'sonarr-4k.local:8989/api/v3/command' => Http::response(['id' => 99]),
+    ]);
+    $admin = User::factory()->admin()->create();
+
+    $this->actingAs($admin)
+        ->from(route('media.library.activity.queue'))
+        ->post(route('media.library.activity.queue.grab', ['service' => 'sonarr', 'id' => 55]), ['service_connection_id' => $secondSonarr->id])
+        ->assertSessionHas('inertia.flash_data.toast.type', 'success');
+
+    $this->actingAs($admin)
+        ->getJson(route('media.library.activity.manual-import.candidates', ['service' => 'sonarr', 'downloadId' => 'ABC123', 'service_connection_id' => $secondSonarr->id]))
+        ->assertOk()
+        ->assertJsonPath('candidates.0.series_title', 'Severance');
+
+    $this->actingAs($admin)
+        ->from(route('media.library.activity.queue'))
+        ->post(route('media.library.activity.manual-import.execute', ['service' => 'sonarr']), ['download_id' => 'ABC123', 'service_connection_id' => $secondSonarr->id])
+        ->assertSessionHas('inertia.flash_data.toast.type', 'success');
+
+    // Every request went to the pinned instance; nothing reached sonarr.local.
+    Http::assertNotSent(fn ($request): bool => str_contains((string) $request->url(), '//sonarr.local:8989'));
+    Http::assertSent(fn ($request): bool => $request->method() === 'POST' && str_ends_with((string) $request->url(), 'sonarr-4k.local:8989/api/v3/command'));
+});
+
+test('a force grab or manual import refuses a pin that is gone, deactivated or another service and sends nothing', function (int $pinnedConnectionId): void {
+    ServiceConnection::factory()->sonarr()->create(['url' => 'http://sonarr.local:8989']);
+    Http::fake(['sonarr.local:8989/api/v3/*' => Http::response([])]);
+    $admin = User::factory()->admin()->create();
+    $refusal = 'That Sonarr connection is unavailable — refresh and try again.';
+
+    $this->actingAs($admin)
+        ->from(route('media.library.activity.queue'))
+        ->post(route('media.library.activity.queue.grab', ['service' => 'sonarr', 'id' => 55]), ['service_connection_id' => $pinnedConnectionId])
+        ->assertRedirect(route('media.library.activity.queue'))
+        ->assertSessionHas('inertia.flash_data.toast', ['type' => 'error', 'message' => $refusal]);
+
+    $this->actingAs($admin)
+        ->getJson(route('media.library.activity.manual-import.candidates', ['service' => 'sonarr', 'downloadId' => 'ABC123', 'service_connection_id' => $pinnedConnectionId]))
+        ->assertUnprocessable()
+        ->assertJsonPath('error', $refusal);
+
+    $this->actingAs($admin)
+        ->from(route('media.library.activity.queue'))
+        ->post(route('media.library.activity.manual-import.execute', ['service' => 'sonarr']), ['download_id' => 'ABC123', 'service_connection_id' => $pinnedConnectionId])
+        ->assertSessionHas('inertia.flash_data.toast', ['type' => 'error', 'message' => $refusal]);
+
+    Http::assertNothingSent();
+})->with([
+    'deleted' => [fn (): int => 999_999],
+    'deactivated' => [fn (): int => ServiceConnection::factory()->sonarr()->inactive()->create(['url' => 'http://sonarr-old.local:8989'])->id],
+    'another service' => [fn (): int => ServiceConnection::factory()->radarr()->create(['url' => 'http://radarr.local:7878'])->id],
+]);
+
+test('a force grab or manual import without a pin, or a manual import without a download id, is a validation error', function (): void {
+    ServiceConnection::factory()->sonarr()->create(['url' => 'http://sonarr.local:8989']);
+    Http::fake(['sonarr.local:8989/api/v3/*' => Http::response([])]);
+    $admin = User::factory()->admin()->create();
+
+    $this->actingAs($admin)
+        ->post(route('media.library.activity.queue.grab', ['service' => 'sonarr', 'id' => 55]))
+        ->assertSessionHasErrors('service_connection_id');
+
+    $this->actingAs($admin)
+        ->getJson(route('media.library.activity.manual-import.candidates', ['service' => 'sonarr', 'downloadId' => 'ABC123']))
+        ->assertUnprocessable()
+        ->assertJsonValidationErrors('service_connection_id');
+
+    $this->actingAs($admin)
+        ->post(route('media.library.activity.manual-import.execute', ['service' => 'sonarr']), [])
+        ->assertSessionHasErrors(['download_id', 'service_connection_id']);
+
+    Http::assertNothingSent();
 });
