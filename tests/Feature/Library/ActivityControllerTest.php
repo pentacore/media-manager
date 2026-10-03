@@ -485,6 +485,18 @@ test('a failed queue load names the service without echoing the upstream respons
                 ->where('queue.errors', ['Sonarr is unreachable right now — its queue could not be loaded.'])));
 });
 
+test('a Sonarr queue behind a login page is reported as an outage, not an empty queue', function (): void {
+    ServiceConnection::factory()->sonarr()->create(['url' => 'http://sonarr.local:8989', 'api_key' => 'k']);
+    Http::fake(['sonarr.local:8989/*' => Http::response('<html><body>Sign in</body></html>', 200, ['Content-Type' => 'text/html'])]);
+
+    $this->actingAs(User::factory()->admin()->create())
+        ->get(route('media.library.activity.queue'))
+        ->assertInertia(fn ($page) => $page
+            ->loadDeferredProps('default', fn ($reload) => $reload
+                ->where('queue.rows', [])
+                ->where('queue.errors', ['Sonarr is unreachable right now — its queue could not be loaded.'])));
+});
+
 test('queue status messages and error text keep their words but lose paths', function (): void {
     ServiceConnection::factory()->sonarr()->create(['url' => 'http://sonarr.local:8989']);
 

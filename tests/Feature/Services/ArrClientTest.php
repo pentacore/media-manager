@@ -1,6 +1,8 @@
 <?php
 
 use App\Models\ServiceConnection;
+use App\Services\Arr\ArrUnexpectedResponse;
+use App\Services\Radarr\RadarrClient;
 use App\Services\Sonarr\SonarrClient;
 use Illuminate\Http\Client\Request;
 use Illuminate\Http\Client\RequestException;
@@ -199,4 +201,52 @@ test('grabRelease is not retried on a server error (single non-idempotent POST)'
     }
 
     Http::assertSentCount(1);
+});
+
+test('a 200 read whose body is not JSON data is an upstream failure, not an empty result, and is not cached', function (string $service, string $method, array $arguments, string $path, string $body): void {
+    $host = $service === 'sonarr' ? 'sonarr.local:8989' : 'radarr.local:7878';
+    $connection = $service === 'sonarr'
+        ? $this->connection
+        : ServiceConnection::factory()->radarr()->create(['url' => 'http://radarr.local:7878', 'api_key' => 'k']);
+    Http::fake([$host.$path => Http::response($body, 200, ['Content-Type' => str_starts_with($body, '<') ? 'text/html' : 'application/json'])]);
+    $client = $service === 'sonarr' ? new SonarrClient($connection) : new RadarrClient($connection);
+
+    expect(fn (): array => $client->{$method}(...$arguments))
+        ->toThrow(ArrUnexpectedResponse::class, sprintf('%s answered with a body that is not JSON data.', ucfirst($service)))
+        ->and(fn (): array => $client->{$method}(...$arguments))
+        ->toThrow(ArrUnexpectedResponse::class);
+
+    // Both calls went upstream: the failure never entered the cache.
+    Http::assertSentCount(2);
+})->with([
+    'sonarr series list, login page' => ['sonarr', 'getSeries', [], '/api/v3/series', '<html><body>Sign in</body></html>'],
+    'sonarr series, scalar' => ['sonarr', 'getSeriesById', [42], '/api/v3/series/42', '42'],
+    'sonarr episodes, login page' => ['sonarr', 'getEpisodesBySeries', [42], '/api/v3/episode*', '<html>Sign in</html>'],
+    'sonarr lookup, json string' => ['sonarr', 'searchSeries', ['dune'], '/api/v3/series/lookup*', '"just a string"'],
+    'sonarr quality profiles, login page' => ['sonarr', 'getQualityProfiles', [], '/api/v3/qualityprofile', '<html>Sign in</html>'],
+    'sonarr root folders, scalar' => ['sonarr', 'getRootFolders', [], '/api/v3/rootfolder', 'true'],
+    'sonarr queue, login page' => ['sonarr', 'getQueue', [[]], '/api/v3/queue*', '<html>Sign in</html>'],
+    'sonarr history, login page' => ['sonarr', 'getHistory', [[]], '/api/v3/history*', '<html>Sign in</html>'],
+    'sonarr manual import, scalar' => ['sonarr', 'getManualImport', [['downloadId' => 'd']], '/api/v3/manualimport*', '0'],
+    'sonarr system status, login page' => ['sonarr', 'getSystemStatus', [], '/api/v3/system/status', '<html>Sign in</html>'],
+    'radarr movies, login page' => ['radarr', 'getMovies', [], '/api/v3/movie', '<html>Sign in</html>'],
+    'radarr movie, scalar' => ['radarr', 'getMovieById', [7], '/api/v3/movie/7', '42'],
+    'radarr lookup, login page' => ['radarr', 'searchMovies', ['dune'], '/api/v3/movie/lookup*', '<html>Sign in</html>'],
+    'radarr movie files, scalar' => ['radarr', 'getMovieFiles', [7], '/api/v3/moviefile*', '1'],
+]);
+
+test('the not-JSON failure is a RequestException on the 200 response and never quotes the body', function (): void {
+    Http::fake(['sonarr.local:8989/api/v3/series' => Http::response('<html>Sign in at /sso/login</html>', 200, ['Content-Type' => 'text/html'])]);
+
+    expect(fn (): array => new SonarrClient($this->connection)->getSeries())->toThrow(function (ArrUnexpectedResponse $arrUnexpectedResponse): void {
+        expect($arrUnexpectedResponse)->toBeInstanceOf(RequestException::class)
+            ->and($arrUnexpectedResponse->response->status())->toBe(200)
+            ->and($arrUnexpectedResponse->getMessage())->toBe('Sonarr answered with a body that is not JSON data.');
+    });
+});
+
+test('an object-shaped list body still reads as data, as in Whisparr', function (): void {
+    Http::fake(['sonarr.local:8989/api/v3/qualityprofile' => Http::response(['message' => 'Unexpected'])]);
+
+    expect(new SonarrClient($this->connection)->getQualityProfiles())->toBe(['message' => 'Unexpected']);
 });

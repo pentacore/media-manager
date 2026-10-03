@@ -274,3 +274,13 @@ test('writes a ServiceMetric row on connection failure with null latency', funct
     expect($metric->latency_ms)->toBeNull();
     expect($metric->message)->toContain('Connection');
 });
+
+test('a Sonarr answering its status with a login page is unhealthy, not healthy', function (): void {
+    $connection = ServiceConnection::factory()->sonarr()->create(['url' => 'http://sonarr.local:8989', 'health_status' => HealthStatus::Healthy]);
+    Http::fake(['sonarr.local:8989/*' => Http::response('<html><body>Sign in</body></html>', 200, ['Content-Type' => 'text/html'])]);
+
+    new PingServiceHealth($connection)->handle();
+
+    expect($connection->fresh()->health_status)->toBe(HealthStatus::Unhealthy)
+        ->and($connection->fresh()->health_message)->toStartWith('HTTP 200');
+});

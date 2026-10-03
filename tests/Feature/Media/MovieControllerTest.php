@@ -158,6 +158,23 @@ test('movies index reports an outage instead of an empty library', function (int
     'bad api key' => [401, 'Radarr refused the request — check the connection settings.'],
 ]);
 
+test('a Radarr behind a login page is an outage on the movie lists, never an empty library', function (): void {
+    Http::fake(['radarr.local:7878/*' => Http::response('<html><body>Sign in</body></html>', 200, ['Content-Type' => 'text/html'])]);
+
+    $response = $this->actingAs(User::factory()->member()->create())
+        ->withHeaders([
+            'X-Inertia' => 'true',
+            'X-Inertia-Version' => inertiaVersion(),
+            'X-Inertia-Partial-Component' => 'Radarr/Movies/Index',
+            'X-Inertia-Partial-Data' => 'movies,qualityProfiles',
+        ])
+        ->get(route('media.movies.index'))
+        ->assertOk();
+
+    expect($response->json('props.movies'))->toBe(['items' => [], 'error' => 'Radarr is unreachable right now.'])
+        ->and($response->json('props.qualityProfiles'))->toBe(['items' => [], 'error' => 'Radarr is unreachable right now.']);
+});
+
 test('members can view a single movie', function (): void {
     $member = User::factory()->member()->create();
 

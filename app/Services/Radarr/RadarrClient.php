@@ -57,7 +57,7 @@ class RadarrClient extends ArrClient implements Warmable
      */
     public function fetchMovieById(int $id): array
     {
-        return $this->buildClient()->get(sprintf('/api/%s/movie/%d', $this->apiVersion, $id))->throw()->json() ?? [];
+        return $this->jsonArray($this->buildClient()->get(sprintf('/api/%s/movie/%d', $this->apiVersion, $id))->throw());
     }
 
     /**
@@ -101,7 +101,7 @@ class RadarrClient extends ArrClient implements Warmable
     {
         return $this->cache()->rememberList(
             'search:'.md5($query),
-            fn (): array => $this->buildClient()->get(sprintf('/api/%s/movie/lookup', $this->apiVersion), ['term' => $query])->throw()->json() ?? [],
+            fn (): array => $this->jsonArray($this->buildClient()->get(sprintf('/api/%s/movie/lookup', $this->apiVersion), ['term' => $query])->throw()),
         );
     }
 
@@ -185,10 +185,9 @@ class RadarrClient extends ArrClient implements Warmable
      */
     public function getMovieFiles(int $movieId): array
     {
-        return $this->buildClient()
+        return $this->jsonArray($this->buildClient()
             ->get(sprintf('/api/%s/moviefile', $this->apiVersion), ['movieId' => $movieId])
-            ->throw()
-            ->json() ?? [];
+            ->throw());
     }
 
     /**
@@ -198,10 +197,9 @@ class RadarrClient extends ArrClient implements Warmable
      */
     public function getMovieFileById(int $movieFileId): array
     {
-        return $this->buildClient()
+        return $this->jsonArray($this->buildClient()
             ->get(sprintf('/api/%s/moviefile/%d', $this->apiVersion, $movieFileId))
-            ->throw()
-            ->json() ?? [];
+            ->throw());
     }
 
     /**
@@ -237,7 +235,7 @@ class RadarrClient extends ArrClient implements Warmable
      */
     private function fetchMovies(): array
     {
-        return $this->buildClient()->get(sprintf('/api/%s/movie', $this->apiVersion))->throw()->json() ?? [];
+        return $this->jsonArray($this->buildClient()->get(sprintf('/api/%s/movie', $this->apiVersion))->throw());
     }
 
     private function cache(): RadarrCache
