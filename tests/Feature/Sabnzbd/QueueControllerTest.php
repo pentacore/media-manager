@@ -8,6 +8,7 @@ use App\Models\User;
 use App\Services\Sabnzbd\SabnzbdDownloadCounter;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Sleep;
 
 beforeEach(function (): void {
     config()->set('inertia.ssr.enabled', false);
@@ -189,4 +190,35 @@ test('reprioritize accepts valid priority and writes activity', function (): voi
 
     $activityLog = ActivityLog::query()->where('action', 'sabnzbd.slot.reprioritized')->firstOrFail();
     expect($activityLog->metadata['priority'])->toBe(1);
+});
+
+test('a queue page SABnzbd refuses shows the refusal instead of empty lists', function (mixed $body): void {
+    ServiceConnection::factory()->sabnzbd()->create(['url' => 'http://sab.local:8080', 'api_key' => 'wrong-key']);
+    Http::fake(['sab.local:8080/api*' => Http::response($body, 200, is_string($body) ? ['Content-Type' => 'text/html'] : [])]);
+
+    $this->actingAs($this->user)
+        ->get(route('sabnzbd.queue.index'))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->component('Sabnzbd/Queue/Index')
+            ->where('configured', true)
+            ->where('queue', [])
+            ->where('history.slots', [])
+            ->where('error', 'SABnzbd refused the request — check the connection settings.'));
+})->with([
+    'wrong api key' => [['status' => false, 'error' => 'API Key Incorrect']],
+    'login page' => ['<html><body>Sign in</body></html>'],
+    'queue section is not an object' => [['queue' => 'busy']],
+    'no queue section' => [['version' => '4.2.0']],
+]);
+
+test('a queue page SABnzbd cannot be reached for still says it could not reach SABnzbd', function (): void {
+    Sleep::fake();
+    ServiceConnection::factory()->sabnzbd()->create(['url' => 'http://sab.local:8080', 'api_key' => 'k']);
+    Http::fake(['sab.local:8080/api*' => Http::response('Service Unavailable', 503)]);
+
+    $this->actingAs($this->user)
+        ->get(route('sabnzbd.queue.index'))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page->where('error', 'Could not reach SABnzbd.'));
 });

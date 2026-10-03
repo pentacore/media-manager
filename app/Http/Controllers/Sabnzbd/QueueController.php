@@ -17,6 +17,7 @@ use App\Services\Actions\BulkItemOutcome;
 use App\Services\Actions\BulkRunner;
 use App\Services\Audit\AuditLogger;
 use App\Services\Sabnzbd\SabnzbdClient;
+use App\Services\Sabnzbd\SabnzbdRefused;
 use App\Services\Sabnzbd\SabnzbdSlotOperator;
 use App\Services\Sabnzbd\SabnzbdSlotRefused;
 use App\Services\ServiceClientFactory;
@@ -75,16 +76,29 @@ class QueueController extends Controller
                 'paused' => false,
                 'error' => null,
             ]);
+        } catch (SabnzbdRefused) {
+            // HTTP 200 that is a refusal (a wrong API key) or not SABnzbd's
+            // JSON at all (a proxy login page). Caught before its parent.
+            return $this->unavailablePage($historyPage, __('SABnzbd refused the request — check the connection settings.'));
         } catch (RequestException|ConnectionException) {
-            return Inertia::render('Sabnzbd/Queue/Index', [
-                'configured' => true,
-                'connection' => null,
-                'queue' => [],
-                'history' => $this->presentHistory([], $historyPage),
-                'paused' => false,
-                'error' => 'Could not reach SABnzbd.',
-            ]);
+            return $this->unavailablePage($historyPage, __('Could not reach SABnzbd.'));
         }
+    }
+
+    /**
+     * A configured SABnzbd the page could not read: empty lists with the
+     * reason in `error`, which the page renders in their place.
+     */
+    private function unavailablePage(int $historyPage, string $error): Response
+    {
+        return Inertia::render('Sabnzbd/Queue/Index', [
+            'configured' => true,
+            'connection' => null,
+            'queue' => [],
+            'history' => $this->presentHistory([], $historyPage),
+            'paused' => false,
+            'error' => $error,
+        ]);
     }
 
     public function pauseQueue(): RedirectResponse
