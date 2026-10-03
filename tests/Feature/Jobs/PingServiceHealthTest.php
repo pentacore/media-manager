@@ -13,6 +13,7 @@ use Illuminate\Http\Client\Request;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Sleep;
 
 beforeEach(function (): void {
     Http::preventStrayRequests();
@@ -283,4 +284,36 @@ test('a Sonarr answering its status with a login page is unhealthy, not healthy'
 
     expect($connection->fresh()->health_status)->toBe(HealthStatus::Unhealthy)
         ->and($connection->fresh()->health_message)->toStartWith('HTTP 200');
+});
+
+test('a stored and broadcast health message never carries an upstream path', function (): void {
+    Sleep::fake();
+    $connection = ServiceConnection::factory()->sonarr()->create(['url' => 'http://sonarr.local:8989', 'health_status' => HealthStatus::Healthy]);
+    Http::fake(['sonarr.local:8989/*' => Http::response('Database at /config/sonarr.db is locked', 500)]);
+
+    new PingServiceHealth($connection)->handle();
+
+    expect($connection->fresh()->health_message)->toBe('HTTP 500: Database at [redacted path] is locked')
+        ->and(ServiceMetric::query()->sole()->message)->toBe('HTTP 500: Database at [redacted path] is locked');
+    Event::assertDispatched(fn (ServiceHealthChanged $serviceHealthChanged): bool => $serviceHealthChanged->broadcastWith()['message'] === 'HTTP 500: Database at [redacted path] is locked');
+});
+
+test('a connection failure naming a Windows path stores it redacted', function (): void {
+    Sleep::fake();
+    $connection = ServiceConnection::factory()->sonarr()->create(['url' => 'http://sonarr.local:8989', 'health_status' => HealthStatus::Healthy]);
+    Http::fake(['sonarr.local:8989/*' => fn () => throw new ConnectionException('Could not open C:\ProgramData\Sonarr\sonarr.db')]);
+
+    new PingServiceHealth($connection)->handle();
+
+    expect($connection->fresh()->health_message)->toBe('Connection failed: Could not open [redacted path]');
+});
+
+test('an HTML error page is stored as its text, not its markup', function (): void {
+    Sleep::fake();
+    $connection = ServiceConnection::factory()->radarr()->create(['url' => 'http://radarr.local:7878', 'health_status' => HealthStatus::Healthy]);
+    Http::fake(['radarr.local:7878/*' => Http::response('<html><body><h1>502 Bad Gateway</h1></body></html>', 502)]);
+
+    new PingServiceHealth($connection)->handle();
+
+    expect($connection->fresh()->health_message)->toBe('HTTP 502: 502 Bad Gateway');
 });

@@ -10,7 +10,7 @@ use App\Events\ServiceHealthChanged;
 use App\Models\ServiceConnection;
 use App\Models\ServiceMetric;
 use App\Services\ServiceClientFactory;
-use App\Support\UrlQueryRedactor;
+use App\Support\UpstreamErrorText;
 use Illuminate\Bus\Batchable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
@@ -93,33 +93,33 @@ class PingServiceHealth implements ShouldQueue
     }
 
     /**
-     * The result is persisted, broadcast to every member, and echoed by the
-     * scheduler — exception messages embed the full request URI, whose query
-     * string can carry credentials (SABnzbd's mandatory `apikey`), so every
-     * branch is redacted before leaving this method.
+     * The result is persisted, broadcast to every manage-library user (via
+     * ServiceHealthChanged) and echoed by the scheduler. Exception messages
+     * embed the full request URI, whose query string can carry credentials
+     * (SABnzbd's mandatory `apikey`), and upstream bodies quote local paths,
+     * so every branch goes through UpstreamErrorText::sanitize(). Response
+     * snippets lose their HTML tags first so an error page stays readable.
      */
     private function formatFailureReason(Throwable $throwable): string
     {
         if ($throwable instanceof RequestException) {
-            $body = trim((string) $throwable->response->body());
-            $snippet = Str::of($body)
+            $snippet = Str::of(strip_tags(trim((string) $throwable->response->body())))
                 ->replaceMatches('/\s+/', ' ')
+                ->trim()
                 ->limit(160, '…')
                 ->toString();
 
-            return Str::limit(
-                UrlQueryRedactor::redact(
-                    sprintf('HTTP %d%s', $throwable->response->status(), $snippet === '' ? '' : ': '.$snippet),
-                ),
+            return UpstreamErrorText::sanitize(
+                sprintf('HTTP %d%s', $throwable->response->status(), $snippet === '' ? '' : ': '.$snippet),
                 255,
             );
         }
 
         if ($throwable instanceof ConnectionException) {
-            return Str::limit(UrlQueryRedactor::redact('Connection failed: '.$throwable->getMessage()), 255);
+            return UpstreamErrorText::sanitize(sprintf('Connection failed: %s', $throwable->getMessage()), 255);
         }
 
-        return Str::limit(UrlQueryRedactor::redact(class_basename($throwable).': '.$throwable->getMessage()), 255);
+        return UpstreamErrorText::sanitize(sprintf('%s: %s', class_basename($throwable), $throwable->getMessage()), 255);
     }
 
     /**
