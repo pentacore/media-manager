@@ -51,6 +51,10 @@ const primary = computed<TemplateAction>(() =>
 watch(
     () => props.template,
     (template) => {
+        if (http.processing) {
+            http.cancel();
+        }
+
         failure.value = null;
         http.clearErrors();
         values.value = Object.fromEntries(
@@ -74,6 +78,28 @@ function fieldError(name: string): string | undefined {
     return (http.errors as Record<string, string | undefined>)[
         `values.${name}`
     ];
+}
+
+/**
+ * A 422 whose keys match no rendered field (or the form-level `values` key)
+ * means the template changed after the dialog opened, e.g. a variable was
+ * added. Field errors would land nowhere, so show the first message on the
+ * form and reload the list so a reopen picks up the new variables.
+ */
+function unmatchedErrorMessage(
+    errors: Record<string, string | undefined>,
+): string | null {
+    const known = new Set([
+        'values',
+        ...(props.template?.variables ?? []).map((v) => `values.${v.name}`),
+    ]);
+    const keys = Object.keys(errors);
+
+    if (keys.length === 0 || keys.some((key) => known.has(key))) {
+        return null;
+    }
+
+    return errors[keys[0]] ?? 'This template changed — close and reopen it.';
 }
 
 function payload(): Record<string, string | number | null> {
@@ -103,21 +129,47 @@ function submit(action: TemplateAction): void {
     failure.value = null;
     http.values = payload();
 
-    http.post(ChatTemplateRenderController.url(template.id), {
+    const submittedId = template.id;
+    // The dialog was closed (Escape, overlay) or switched to another template
+    // while the request was in flight: a cancelled Send must not still send.
+    const isStale = (): boolean => props.template?.id !== submittedId;
+
+    http.post(ChatTemplateRenderController.url(submittedId), {
         onSuccess: (response) => {
             void refreshTemplates();
+
+            if (isStale()) {
+                return;
+            }
+
             emit('rendered', response.text, action);
         },
-        onError: () => {
-            failure.value =
-                (http.errors as Record<string, string | undefined>).values ??
-                null;
+        onError: (errors) => {
+            if (isStale()) {
+                return;
+            }
+
+            const fieldErrors = errors as Record<string, string | undefined>;
+            const unmatched = unmatchedErrorMessage(fieldErrors);
+
+            if (unmatched !== null) {
+                failure.value = unmatched;
+                void refreshTemplates();
+
+                return;
+            }
+
+            failure.value = fieldErrors.values ?? null;
         },
         onHttpException: () => {
-            failure.value = 'The template could not be filled in.';
+            if (!isStale()) {
+                failure.value = 'The template could not be filled in.';
+            }
         },
         onNetworkError: () => {
-            failure.value = 'Could not reach the server. Try again.';
+            if (!isStale()) {
+                failure.value = 'Could not reach the server. Try again.';
+            }
         },
     }).catch(() => {
         // Every failure is surfaced through the callbacks above.
