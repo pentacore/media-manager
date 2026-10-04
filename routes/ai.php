@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use App\Http\Controllers\AI\ChatAttachmentController;
 use App\Http\Controllers\AI\ChatController;
+use App\Http\Controllers\AI\ChatTemplateController;
 use App\Http\Controllers\AI\ConversationController;
 use Illuminate\Support\Facades\Route;
 
@@ -25,4 +26,20 @@ Route::middleware(['auth', 'verified', 'password.set', 'role:admin', 'ai.enabled
         Route::patch('conversations/{conversation}', [ConversationController::class, 'rename'])
             ->whereUuid('conversation')
             ->name('conversations.rename');
+
+        Route::get('templates', [ChatTemplateController::class, 'index'])->name('templates.index');
+        Route::get('templates/create', [ChatTemplateController::class, 'create'])->name('templates.create');
+        Route::post('templates', [ChatTemplateController::class, 'store'])->name('templates.store');
+        Route::get('templates/{chatTemplate}/edit', [ChatTemplateController::class, 'edit'])
+            ->whereNumber('chatTemplate')
+            ->name('templates.edit');
+        Route::patch('templates/{chatTemplate}', [ChatTemplateController::class, 'update'])
+            ->whereNumber('chatTemplate')
+            ->name('templates.update');
+        Route::delete('templates/{chatTemplate}', [ChatTemplateController::class, 'destroy'])
+            ->whereNumber('chatTemplate')
+            ->name('templates.destroy');
+        Route::patch('templates/{chatTemplate}/pin', [ChatTemplateController::class, 'pin'])
+            ->whereNumber('chatTemplate')
+            ->name('templates.pin');
     });
