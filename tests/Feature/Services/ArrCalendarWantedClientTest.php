@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use App\Models\ServiceConnection;
+use App\Services\Arr\ArrUnexpectedResponse;
 use App\Services\Radarr\RadarrClient;
 use App\Services\Sonarr\SonarrClient;
 use Carbon\CarbonImmutable;
@@ -76,9 +77,16 @@ test('wanted records with a null or scalar entry are dropped while the paginatio
     expect($client->getWanted('missing', 1, 20, true))->toBe(['page' => 1, 'totalRecords' => 2, 'records' => [['id' => 1]]]);
 });
 
-test('a non-array wanted body returns the empty shape without throwing', function (): void {
+test('a wanted body that is not JSON data is an upstream failure, not an empty list', function (): void {
     $client = new SonarrClient(ServiceConnection::factory()->sonarr()->create(['url' => 'http://sonarr.local:8989']));
     Http::fake(['sonarr.local:8989/api/v3/wanted/*' => Http::response('oops')]);
 
-    expect($client->getWanted('missing', 1, 20, true))->toBe([]);
+    expect(fn (): array => $client->getWanted('missing', 1, 20, true))->toThrow(ArrUnexpectedResponse::class);
+});
+
+test('a calendar body that is not JSON data is an upstream failure, not an empty calendar', function (): void {
+    $client = new SonarrClient(ServiceConnection::factory()->sonarr()->create(['url' => 'http://sonarr.local:8989']));
+    Http::fake(['sonarr.local:8989/api/v3/calendar*' => Http::response('<html>Sign in</html>', 200, ['Content-Type' => 'text/html'])]);
+
+    expect(fn (): array => $client->getCalendar(CarbonImmutable::now(), CarbonImmutable::now()))->toThrow(ArrUnexpectedResponse::class);
 });

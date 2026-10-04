@@ -6,6 +6,7 @@ namespace App\Settings;
 
 use App\Models\AppSetting;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
 
 class AppSettings
 {
@@ -34,12 +35,28 @@ class AppSettings
         }
 
         AppSetting::updateOrCreate(['key' => $key], ['value' => $value]);
-        Cache::forget(self::CACHE_PREFIX.$key);
+        $this->forgetCached($key);
     }
 
     public function forget(string $key): void
     {
         AppSetting::where('key', $key)->delete();
-        Cache::forget(self::CACHE_PREFIX.$key);
+        $this->forgetCached($key);
+    }
+
+    /**
+     * Inside a transaction a read can cache the uncommitted value (the save
+     * reading its own write) or, on another worker, the old committed one.
+     * Forget the key now, again once the write commits, and again if it rolls
+     * back, so neither outlives the transaction. Outside a transaction the
+     * after-commit forget runs at once and the rollback one never does.
+     */
+    private function forgetCached(string $key): void
+    {
+        $cacheKey = self::CACHE_PREFIX.$key;
+
+        Cache::forget($cacheKey);
+        DB::afterCommit(static fn (): bool => Cache::forget($cacheKey));
+        DB::afterRollBack(static fn (): bool => Cache::forget($cacheKey));
     }
 }

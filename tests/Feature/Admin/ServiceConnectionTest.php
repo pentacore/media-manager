@@ -1210,3 +1210,14 @@ test('a failed connection test explains itself without echoing upstream paths', 
         ->toContain('[redacted path]')
         ->not->toContain('/config/sonarr.db');
 });
+
+test('a connection test against a login page fails instead of reporting success', function (): void {
+    Http::preventStrayRequests();
+    Http::fake(['sonarr.local:8989/*' => Http::response('<html><body>Sign in</body></html>', 200, ['Content-Type' => 'text/html'])]);
+
+    $this->actingAs(User::factory()->admin()->create())
+        ->postJson(route('admin.connections.test'), ['type' => 'sonarr', 'url' => 'http://sonarr.local:8989', 'api_key' => 'k'])
+        ->assertUnprocessable()
+        ->assertJsonPath('success', false)
+        ->assertJsonPath('message', 'Connection failed: Sonarr answered with a body that is not JSON data.');
+});

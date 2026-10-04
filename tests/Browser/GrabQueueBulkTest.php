@@ -29,6 +29,14 @@ function fakeGrabQueueBrowser(): void
             ? Http::response('', 200)
             : Http::response(['records' => [grabQueueBrowserRecord(41, 'Severance'), grabQueueBrowserRecord(42, 'Andor')]]),
         'sonarr.local:8989/api/v3/history*' => Http::response(['records' => [], 'totalRecords' => 0]),
+        'sonarr.local:8989/api/v3/manualimport*' => Http::response([[
+            'path' => '/downloads/Severance.S01E01.mkv', 'name' => 'Severance.S01E01', 'size' => 1_000_000_000,
+            'series' => ['id' => 12, 'title' => 'Severance'], 'seasonNumber' => 1,
+            'episodes' => [['id' => 555, 'seasonNumber' => 1, 'episodeNumber' => 1, 'title' => 'Pilot']],
+            'quality' => ['quality' => ['id' => 4, 'name' => 'WEBDL-1080p']], 'languages' => [['id' => 1, 'name' => 'English']],
+            'releaseGroup' => 'GROUP', 'releaseType' => 'singleEpisode', 'rejections' => [],
+        ]]),
+        'sonarr.local:8989/api/v3/command' => Http::response(['id' => 99]),
     ]);
 }
 
@@ -246,4 +254,77 @@ test('a bulk removal whose connection was deactivated after the page loaded is r
         ->assertSee('That Sonarr connection is unavailable — refresh and try again.');
 
     Http::assertNotSent(fn (Request $request): bool => $request->method() === 'DELETE');
+});
+
+test('an admin force-grabs one queue item from its row menu', function (): void {
+    fakeGrabQueueBrowser();
+    $this->actingAs(User::factory()->admin()->create());
+
+    $webpage = visit(route('media.library.activity.queue', absolute: false))
+        ->assertNoSmoke()
+        ->assertSeeIn('[data-queue-row="sonarr-41"]', 'Severance');
+
+    $webpage->script(grabQueueAcceptConfirmScript());
+    $webpage->click('[data-queue-row="sonarr-41"] [data-queue-row-menu]')
+        ->click('[data-queue-grab]')
+        ->assertSee('Grab triggered.')
+        ->assertNoSmoke();
+
+    Http::assertSent(fn (Request $request): bool => $request->method() === 'POST' && str_ends_with($request->url(), '/api/v3/queue/grab/41'));
+});
+
+test('a force grab whose connection was deactivated after the page loaded is refused and sends nothing', function (): void {
+    fakeGrabQueueBrowser();
+    $this->actingAs(User::factory()->admin()->create());
+
+    $webpage = visit(route('media.library.activity.queue', absolute: false))
+        ->assertNoSmoke()
+        ->assertSeeIn('[data-queue-row="sonarr-41"]', 'Severance');
+
+    // Bypasses the observer on purpose: no health ping, just the state change.
+    ServiceConnection::query()->where('type', 'sonarr')->update(['is_active' => false]);
+
+    $webpage->script(grabQueueAcceptConfirmScript());
+    $webpage->click('[data-queue-row="sonarr-41"] [data-queue-row-menu]')
+        ->click('[data-queue-grab]')
+        ->assertSee('That Sonarr connection is unavailable — refresh and try again.');
+
+    Http::assertNotSent(fn (Request $request): bool => str_contains($request->url(), '/api/v3/queue/grab/'));
+});
+
+test('an admin imports a stuck download from its row menu', function (): void {
+    fakeGrabQueueBrowser();
+    $this->actingAs(User::factory()->admin()->create());
+
+    $webpage = visit(route('media.library.activity.queue', absolute: false))
+        ->assertNoSmoke()
+        ->assertSeeIn('[data-queue-row="sonarr-41"]', 'Severance');
+
+    $webpage->click('[data-queue-row="sonarr-41"] [data-queue-row-menu]')
+        ->click('[data-queue-manual-import]')
+        ->assertSeeIn('[data-manual-import-candidate]', 'Severance · S01E01')
+        ->click('[data-manual-import-submit]')
+        ->assertSee('Manual import queued (1 file(s)).')
+        ->assertNoSmoke();
+
+    Http::assertSent(fn (Request $request): bool => $request->method() === 'GET' && str_contains($request->url(), '/api/v3/manualimport?downloadId=SABnzbd_nzo_41'));
+    Http::assertSent(fn (Request $request): bool => $request->method() === 'POST' && str_ends_with($request->url(), '/api/v3/command') && $request['name'] === 'ManualImport');
+});
+
+test('a manual import whose connection was deactivated after the page loaded shows the refusal in the dialog and sends nothing', function (): void {
+    fakeGrabQueueBrowser();
+    $this->actingAs(User::factory()->admin()->create());
+
+    $webpage = visit(route('media.library.activity.queue', absolute: false))
+        ->assertNoSmoke()
+        ->assertSeeIn('[data-queue-row="sonarr-41"]', 'Severance');
+
+    ServiceConnection::query()->where('type', 'sonarr')->update(['is_active' => false]);
+
+    $webpage->click('[data-queue-row="sonarr-41"] [data-queue-row-menu]')
+        ->click('[data-queue-manual-import]')
+        ->assertSeeIn('[data-manual-import-error]', 'That Sonarr connection is unavailable — refresh and try again.')
+        ->assertMissing('[data-manual-import-candidate]');
+
+    Http::assertNotSent(fn (Request $request): bool => str_contains($request->url(), '/api/v3/manualimport'));
 });

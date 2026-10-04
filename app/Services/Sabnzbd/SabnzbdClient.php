@@ -9,6 +9,7 @@ use App\Support\UrlQueryRedactor;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\PendingRequest;
 use Illuminate\Http\Client\RequestException;
+use Illuminate\Http\Client\Response;
 use Illuminate\Support\Facades\Http;
 use Throwable;
 
@@ -52,6 +53,10 @@ class SabnzbdClient
     }
 
     /**
+     * A write. SABnzbd answers a refused write with HTTP 200 and `status:
+     * false`, which the bool-returning callers read; a body that is not a JSON
+     * object reads as that refusal too.
+     *
      * @param  array<string, mixed>  $extra
      * @return array<string, mixed>
      *
@@ -59,51 +64,92 @@ class SabnzbdClient
      */
     private function request(array $extra): array
     {
+        $body = $this->send($extra)->json();
+
+        return is_array($body) ? $body : [];
+    }
+
+    /**
+     * A read. A refusal (`status: false`, an `error`) or a body that is not
+     * a JSON object — or, with $section, whose section is not one — throws
+     * instead of reading as an empty queue or history.
+     *
+     * @param  array<string, mixed>  $extra
+     * @return array<string, mixed>
+     *
+     * @throws SabnzbdRefused|RequestException|ConnectionException
+     */
+    private function read(array $extra, ?string $section = null): array
+    {
+        $response = $this->send($extra);
+        $body = $response->json();
+
+        throw_unless(is_array($body), SabnzbdRefused::class, $response, 'SABnzbd answered with a body that is not JSON data.');
+
+        // fullstatus answers {"status": {...}}: only a literal false is a refusal.
+        throw_if(($body['status'] ?? null) === false || (is_string($body['error'] ?? null) && trim($body['error']) !== ''), SabnzbdRefused::class, $response, 'SABnzbd refused the request.');
+
+        if ($section === null) {
+            return $body;
+        }
+
+        if (! is_array($body[$section] ?? null)) {
+            throw new SabnzbdRefused($response, sprintf('SABnzbd answered without a %s section.', $section));
+        }
+
+        return $body[$section];
+    }
+
+    /**
+     * @param  array<string, mixed>  $extra
+     *
+     * @throws RequestException|ConnectionException
+     */
+    private function send(array $extra): Response
+    {
         $params = array_merge(['output' => 'json', 'apikey' => $this->connection->api_key], $extra);
 
-        return $this->buildClient()->get('/api', $params)->throw()->json() ?? [];
+        return $this->buildClient()->get('/api', $params)->throw();
     }
 
     /**
      * @return array<string, mixed>
      *
-     * @throws RequestException|ConnectionException
+     * @throws SabnzbdRefused|RequestException|ConnectionException
      */
     public function getVersion(): array
     {
-        return $this->request(['mode' => 'version']);
+        return $this->read(['mode' => 'version']);
     }
 
     /**
      * @return array<string, mixed>
      *
-     * @throws RequestException|ConnectionException
+     * @throws SabnzbdRefused|RequestException|ConnectionException
      */
     public function getFullStatus(): array
     {
-        return $this->request(['mode' => 'fullstatus']);
+        return $this->read(['mode' => 'fullstatus']);
     }
 
     /**
      * @return array<string, mixed>
      *
-     * @throws RequestException|ConnectionException
+     * @throws SabnzbdRefused|RequestException|ConnectionException
      */
     public function getQueue(int $start = 0, int $limit = 50): array
     {
-        $payload = $this->request([
+        return $this->read([
             'mode' => 'queue',
             'start' => $start,
             'limit' => $limit,
-        ]);
-
-        return $payload['queue'] ?? [];
+        ], 'queue');
     }
 
     /**
      * @return array<string, mixed>
      *
-     * @throws RequestException|ConnectionException
+     * @throws SabnzbdRefused|RequestException|ConnectionException
      */
     public function getHistory(int $start = 0, int $limit = 50, ?int $sinceUnix = null): array
     {
@@ -117,9 +163,7 @@ class SabnzbdClient
             $params['last_history_update'] = $sinceUnix;
         }
 
-        $payload = $this->request($params);
-
-        return $payload['history'] ?? [];
+        return $this->read($params, 'history');
     }
 
     /**
@@ -163,16 +207,23 @@ class SabnzbdClient
     }
 
     /**
+     * SABnzbd answers a priority change with the job's new queue position,
+     * `-1` when it has no job with that id — not a status flag. A refusal
+     * (`status: false`) carries no position either.
+     *
      * @throws RequestException|ConnectionException
      */
     public function changePriority(string $nzoId, int $priority): bool
     {
-        return (bool) ($this->request([
+        $body = $this->request([
             'mode' => 'queue',
             'name' => 'priority',
             'value' => $nzoId,
             'value2' => $priority,
-        ])['status'] ?? false);
+        ]);
+        $position = $body['position'] ?? null;
+
+        return (is_numeric($position) && (int) $position >= 0) || ($body['status'] ?? null) === true;
     }
 
     /**
@@ -181,7 +232,7 @@ class SabnzbdClient
      *
      * @return array<int, array{path: ?string, label: ?string, freeSpace: ?int, totalSpace: ?int}>
      *
-     * @throws RequestException|ConnectionException
+     * @throws SabnzbdRefused|RequestException|ConnectionException
      */
     public function getDiskSpace(): array
     {

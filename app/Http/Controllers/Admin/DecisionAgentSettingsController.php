@@ -13,6 +13,7 @@ use App\Services\Audit\AuditLogger;
 use App\Services\Audit\SettingsSnapshot;
 use App\Settings\DecisionAgentSettings;
 use Illuminate\Http\RedirectResponse;
+use Illuminate\Support\Facades\DB;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -47,21 +48,23 @@ class DecisionAgentSettingsController extends Controller
         $before = $settingsSnapshot->capture(SettingsGroup::DecisionAgent);
         $validated = $updateDecisionAgentSettingsRequest->validated();
 
-        $decisionAgentSettings->setEnabled((bool) $validated['enabled']);
-        $decisionAgentSettings->setModel($validated['model']);
+        DB::transaction(function () use ($decisionAgentSettings, $settingsSnapshot, $auditLogger, $before, $validated): void {
+            $decisionAgentSettings->setEnabled((bool) $validated['enabled']);
+            $decisionAgentSettings->setModel($validated['model']);
 
-        if (array_key_exists('model_provider', $validated)) {
-            $decisionAgentSettings->setModelProvider($validated['model_provider']);
-        }
+            if (array_key_exists('model_provider', $validated)) {
+                $decisionAgentSettings->setModelProvider($validated['model_provider']);
+            }
 
-        $decisionAgentSettings->setEventAllowlist($validated['event_allowlist'] ?? []);
-        $decisionAgentSettings->setAllowManualImport((bool) $validated['allow_manual_import']);
-        $decisionAgentSettings->setNotifyOnSuggest((bool) $validated['notify_on_suggest']);
-        $decisionAgentSettings->setNotifyOnAct((bool) $validated['notify_on_act']);
-        $decisionAgentSettings->setMaxActionsPerRun((int) $validated['max_actions_per_run']);
-        $decisionAgentSettings->setReasoning(AiReasoningLevel::from($validated['reasoning_level']));
+            $decisionAgentSettings->setEventAllowlist($validated['event_allowlist'] ?? []);
+            $decisionAgentSettings->setAllowManualImport((bool) $validated['allow_manual_import']);
+            $decisionAgentSettings->setNotifyOnSuggest((bool) $validated['notify_on_suggest']);
+            $decisionAgentSettings->setNotifyOnAct((bool) $validated['notify_on_act']);
+            $decisionAgentSettings->setMaxActionsPerRun((int) $validated['max_actions_per_run']);
+            $decisionAgentSettings->setReasoning(AiReasoningLevel::from($validated['reasoning_level']));
 
-        $auditLogger->settingsUpdated(SettingsGroup::DecisionAgent, $before, $settingsSnapshot->capture(SettingsGroup::DecisionAgent));
+            $auditLogger->settingsUpdated(SettingsGroup::DecisionAgent, $before, $settingsSnapshot->capture(SettingsGroup::DecisionAgent));
+        });
 
         Inertia::flash('toast', ['type' => 'success', 'message' => __('Decision agent settings updated.')]);
 

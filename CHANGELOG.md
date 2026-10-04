@@ -1,3 +1,24 @@
+## [1.32.1](https://github.com/pentacore/media-manager/compare/v1.32.0...v1.32.1) (2026-10-04)
+
+
+### Bug Fixes
+
+* **actions:** retry a 200-that-isn't-JSON upstream read instead of failing it permanently ([cbcdbee](https://github.com/pentacore/media-manager/commit/cbcdbee6077590057150d0b986773c4ed21144a5))
+* **ai:** sanitize stored agent failure summaries and usage error messages ([16d9b32](https://github.com/pentacore/media-manager/commit/16d9b322eeb4a58a0addcde075a9789a79a10c46))
+* **arr:** treat a 200 read that is not JSON data as an outage, not an empty list ([09deb58](https://github.com/pentacore/media-manager/commit/09deb581191fb37336726552ef8c59fb1e412222))
+* **audit:** record action-rule changes and AI usage price assignments ([730cb17](https://github.com/pentacore/media-manager/commit/730cb17ec28a8e4fc2745743ce8d0f703a8b5847))
+* **audit:** record Emby account links and imports ([2d23255](https://github.com/pentacore/media-manager/commit/2d2325550c5c9f685996eadd5326b744d83e2562))
+* **chat:** match a stored attachment name literally in the orphan sweep ([7e23de3](https://github.com/pentacore/media-manager/commit/7e23de355a52ddecac64af2f1e544c45f8fba930))
+* **health:** sanitize the stored and broadcast health message ([52d002c](https://github.com/pentacore/media-manager/commit/52d002cd3c6583e21625eaed20c8b84084863174))
+* **jobs:** give every queued job a timeout below the worker's and prune uploads on maintenance ([1db764d](https://github.com/pentacore/media-manager/commit/1db764dfcc1bdd472ec1ec89d2f1a73c21c619d3))
+* **library:** pin Grab-queue force grab and manual import to the rows' connection ([f242778](https://github.com/pentacore/media-manager/commit/f242778d5ef938438d62a191ae6d55ec6408170b))
+* **sabnzbd:** honour the queue position SABnzbd returns for a priority change ([721df9d](https://github.com/pentacore/media-manager/commit/721df9d90a6c7c9dc33a4413d3d9ee8bba474e32))
+* **sabnzbd:** treat a refused or non-JSON read as a failure, not an empty queue ([ae7f7a9](https://github.com/pentacore/media-manager/commit/ae7f7a9a0aefaac75d136e1efaa154c0ff7432f2))
+* **settings:** save pools, model prices and notification destinations with their audit row ([3983bcc](https://github.com/pentacore/media-manager/commit/3983bcc3d99fe4696ec5a9dc999c4165b4fed81e))
+* **settings:** save settings and their audit row in one transaction ([ef6fbba](https://github.com/pentacore/media-manager/commit/ef6fbbaac134b9e7f92a5f648807c47e21ac5393))
+* **subtitles:** never prune an upload row whose file is still staged ([ef4b8be](https://github.com/pentacore/media-manager/commit/ef4b8be57bb7948ca0b87dad541d20b2a5c7b100))
+* **users:** audit an invite before its email and report a failed send ([cdbb9cd](https://github.com/pentacore/media-manager/commit/cdbb9cdabe1fc70f9aab3a601380a4fb4fe1879d))
+
 # [1.32.0](https://github.com/pentacore/media-manager/compare/v1.31.3...v1.32.0) (2026-10-02)
 
 

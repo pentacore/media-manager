@@ -17,11 +17,12 @@ use App\Services\Audit\AuditLogger;
 use App\Services\Emby\EmbyUserDirectory;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
-use Illuminate\Database\QueryException;
+use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\RequestException;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -43,7 +44,7 @@ class UserLinkController extends Controller
         ]);
     }
 
-    public function store(StoreUserLinkRequest $storeUserLinkRequest): RedirectResponse
+    public function store(StoreUserLinkRequest $storeUserLinkRequest, AuditLogger $auditLogger): RedirectResponse
     {
         $user = $storeUserLinkRequest->user();
 
@@ -96,13 +97,23 @@ class UserLinkController extends Controller
 
         // Rely on the database unique constraint on emby_user_id as a second
         // line of defence against races between the check-exists and insert.
+        // The link and its audit row commit together.
         try {
-            EmbyUserLink::create([
-                'user_id' => $user->id,
-                'emby_user_id' => $embyUserId,
-                'emby_username' => $embyUsername,
-            ]);
-        } catch (QueryException) {
+            DB::transaction(function () use ($user, $embyUserId, $embyUsername, $auditLogger): void {
+                $embyUserLink = EmbyUserLink::create([
+                    'user_id' => $user->id,
+                    'emby_user_id' => $embyUserId,
+                    'emby_username' => $embyUsername,
+                ]);
+
+                $auditLogger->record(
+                    'emby.user_linked',
+                    $embyUserLink,
+                    sprintf('Linked Emby user "%s" to %s.', $embyUsername, $user->name),
+                    context: ['emby_user_id' => $embyUserId, 'user_id' => $user->id, 'source' => 'credentials'],
+                );
+            });
+        } catch (UniqueConstraintViolationException) {
             Inertia::flash('toast', ['type' => 'error', 'message' => __('That Emby account is already linked to another user.')]);
 
             return back();
@@ -117,7 +128,7 @@ class UserLinkController extends Controller
      * Admin link from the Emby users list: no Emby password needed, the
      * picked id must still be in the (cached) directory.
      */
-    public function storeFromDirectory(LinkDirectoryUserRequest $linkDirectoryUserRequest, EmbyUserDirectory $embyUserDirectory): RedirectResponse
+    public function storeFromDirectory(LinkDirectoryUserRequest $linkDirectoryUserRequest, EmbyUserDirectory $embyUserDirectory, AuditLogger $auditLogger): RedirectResponse
     {
         $validated = $linkDirectoryUserRequest->validated();
         $user = User::query()->findOrFail((int) $validated['user_id']);
@@ -151,12 +162,21 @@ class UserLinkController extends Controller
         }
 
         try {
-            EmbyUserLink::create([
-                'user_id' => $user->id,
-                'emby_user_id' => $embyUser['id'],
-                'emby_username' => $embyUser['name'],
-            ]);
-        } catch (QueryException) {
+            DB::transaction(function () use ($user, $embyUser, $auditLogger): void {
+                $embyUserLink = EmbyUserLink::create([
+                    'user_id' => $user->id,
+                    'emby_user_id' => $embyUser['id'],
+                    'emby_username' => $embyUser['name'],
+                ]);
+
+                $auditLogger->record(
+                    'emby.user_linked',
+                    $embyUserLink,
+                    sprintf('Linked Emby user "%s" to %s.', $embyUser['name'], $user->name),
+                    context: ['emby_user_id' => $embyUser['id'], 'user_id' => $user->id, 'source' => 'directory'],
+                );
+            });
+        } catch (UniqueConstraintViolationException) {
             Inertia::flash('toast', ['type' => 'error', 'message' => __('That Emby account is already linked to another user.')]);
 
             return back();

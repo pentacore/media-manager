@@ -26,7 +26,7 @@ use Throwable;
  * instances interleaving upserts with each other's delete-what-wasn't-seen
  * prunes — the schedule's withoutOverlapping() only guards the dispatch. Runs
  * on the maintenance lane (drained by the queue-ai worker): a full Sonarr and
- * Radarr walk with a 300s timeout would otherwise pin the general worker
+ * Radarr walk with a 270s timeout (below the worker's 300s) would otherwise pin the general worker
  * behind webhooks and approved actions.
  */
 #[Queue(QueueLane::Maintenance)]
@@ -39,7 +39,7 @@ class ReconcileSearchIndex implements ShouldBeUnique, ShouldQueue
 
     public int $backoff = 60;
 
-    public int $timeout = 300;
+    public int $timeout = 270;
 
     public function handle(SeriesIndexer $seriesIndexer, MovieIndexer $movieIndexer): void
     {

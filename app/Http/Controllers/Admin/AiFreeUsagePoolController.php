@@ -12,21 +12,24 @@ use App\Models\AiFreeUsagePool;
 use App\Services\Audit\AuditChanges;
 use App\Services\Audit\AuditLogger;
 use Illuminate\Http\RedirectResponse;
+use Illuminate\Support\Facades\DB;
 use Inertia\Inertia;
 
 class AiFreeUsagePoolController extends Controller
 {
     public function store(StoreAiFreeUsagePoolRequest $storeAiFreeUsagePoolRequest, AuditLogger $auditLogger): RedirectResponse
     {
-        $aiFreeUsagePool = AiFreeUsagePool::create($storeAiFreeUsagePoolRequest->validated());
+        DB::transaction(function () use ($storeAiFreeUsagePoolRequest, $auditLogger): void {
+            $aiFreeUsagePool = AiFreeUsagePool::create($storeAiFreeUsagePoolRequest->validated());
 
-        $auditLogger->settingsUpdated(
-            SettingsGroup::AiFreeUsagePools,
-            [],
-            AuditChanges::snapshot($aiFreeUsagePool->refresh()),
-            ['operation' => 'created', 'record_id' => $aiFreeUsagePool->id],
-            sprintf('Added AI free usage pool "%s".', $aiFreeUsagePool->name),
-        );
+            $auditLogger->settingsUpdated(
+                SettingsGroup::AiFreeUsagePools,
+                [],
+                AuditChanges::snapshot($aiFreeUsagePool->refresh()),
+                ['operation' => 'created', 'record_id' => $aiFreeUsagePool->id],
+                sprintf('Added AI free usage pool "%s".', $aiFreeUsagePool->name),
+            );
+        });
 
         Inertia::flash('toast', ['type' => 'success', 'message' => __('Free usage pool added.')]);
 
@@ -37,15 +40,17 @@ class AiFreeUsagePoolController extends Controller
     {
         $before = AuditChanges::snapshot($aiFreeUsagePool);
 
-        $aiFreeUsagePool->update($updateAiFreeUsagePoolRequest->validated());
+        DB::transaction(function () use ($updateAiFreeUsagePoolRequest, $aiFreeUsagePool, $auditLogger, $before): void {
+            $aiFreeUsagePool->update($updateAiFreeUsagePoolRequest->validated());
 
-        $auditLogger->settingsUpdated(
-            SettingsGroup::AiFreeUsagePools,
-            $before,
-            AuditChanges::snapshot($aiFreeUsagePool),
-            ['operation' => 'updated', 'record_id' => $aiFreeUsagePool->id],
-            sprintf('Updated AI free usage pool "%s".', $aiFreeUsagePool->name),
-        );
+            $auditLogger->settingsUpdated(
+                SettingsGroup::AiFreeUsagePools,
+                $before,
+                AuditChanges::snapshot($aiFreeUsagePool),
+                ['operation' => 'updated', 'record_id' => $aiFreeUsagePool->id],
+                sprintf('Updated AI free usage pool "%s".', $aiFreeUsagePool->name),
+            );
+        });
 
         Inertia::flash('toast', ['type' => 'success', 'message' => __('Free usage pool updated.')]);
 
@@ -56,15 +61,17 @@ class AiFreeUsagePoolController extends Controller
     {
         $before = AuditChanges::snapshot($aiFreeUsagePool);
 
-        $aiFreeUsagePool->delete();
+        DB::transaction(function () use ($aiFreeUsagePool, $auditLogger, $before): void {
+            $aiFreeUsagePool->delete();
 
-        $auditLogger->settingsUpdated(
-            SettingsGroup::AiFreeUsagePools,
-            $before,
-            [],
-            ['operation' => 'deleted', 'record_id' => $aiFreeUsagePool->id],
-            sprintf('Removed AI free usage pool "%s".', $aiFreeUsagePool->name),
-        );
+            $auditLogger->settingsUpdated(
+                SettingsGroup::AiFreeUsagePools,
+                $before,
+                [],
+                ['operation' => 'deleted', 'record_id' => $aiFreeUsagePool->id],
+                sprintf('Removed AI free usage pool "%s".', $aiFreeUsagePool->name),
+            );
+        });
 
         Inertia::flash('toast', ['type' => 'success', 'message' => __('Free usage pool removed.')]);
 

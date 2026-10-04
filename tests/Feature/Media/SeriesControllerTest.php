@@ -155,6 +155,31 @@ test('series show redirects when series fetch fails', function (): void {
         ->assertRedirect(route('dashboard'));
 });
 
+test('a Sonarr behind a login page is an outage on the series lists, never an empty library, and is not cached', function (): void {
+    Http::fake(['sonarr.local:8989/*' => Http::response('<html><body>Sign in</body></html>', 200, ['Content-Type' => 'text/html'])]);
+    $member = User::factory()->member()->create();
+    $loadIndex = fn () => $this->actingAs($member)
+        ->get(route('media.series.index'))
+        ->assertInertia(fn ($page) => $page
+            ->reloadOnly(['series', 'qualityProfiles'], fn ($reload) => $reload
+                ->where('series', ['items' => [], 'error' => 'Sonarr is unreachable right now.'])
+                ->where('qualityProfiles', ['items' => [], 'error' => 'Sonarr is unreachable right now.'])));
+
+    $loadIndex();
+    $loadIndex();
+
+    expect(collect(Http::recorded())->filter(fn (array $pair): bool => str_ends_with($pair[0]->url(), '/api/v3/series'))->count())->toBe(2);
+});
+
+test('a series page behind a login page redirects with the connection failure instead of rendering an empty series', function (): void {
+    Http::fake(['sonarr.local:8989/*' => Http::response('<html><body>Sign in</body></html>', 200, ['Content-Type' => 'text/html'])]);
+
+    $this->actingAs(User::factory()->member()->create())
+        ->get(route('media.series.show', ['id' => 1]))
+        ->assertRedirect(route('dashboard'))
+        ->assertSessionHas('inertia.flash_data.toast.message', 'Failed to connect to Sonarr.');
+});
+
 test('members can view create form shell with connection url', function (): void {
     $member = User::factory()->member()->create();
 

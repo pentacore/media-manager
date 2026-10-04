@@ -281,7 +281,7 @@ function forceGrab(row: QueueRow): void {
             service: row.service,
             id: row.id,
         }),
-        {},
+        { service_connection_id: row.service_connection_id },
         {
             preserveScroll: true,
             onSuccess: () => router.reload({ only: ['queue'] }),
@@ -342,10 +342,13 @@ function openManualImport(row: QueueRow): void {
     importLoading.value = true;
 
     fetch(
-        LibraryActivityController.manualImportCandidates.url({
-            service: row.service,
-            downloadId: row.download_id,
-        }),
+        LibraryActivityController.manualImportCandidates.url(
+            {
+                service: row.service,
+                downloadId: row.download_id,
+            },
+            { query: { service_connection_id: row.service_connection_id } },
+        ),
         { headers: { Accept: 'application/json' }, credentials: 'same-origin' },
     )
         .then(async (response) => {
@@ -391,7 +394,10 @@ function submitManualImport(): void {
         LibraryActivityController.executeManualImport.url({
             service: row.service,
         }),
-        { download_id: row.download_id },
+        {
+            download_id: row.download_id,
+            service_connection_id: row.service_connection_id,
+        },
         {
             preserveScroll: true,
             onSuccess: () => {
@@ -938,11 +944,13 @@ async function runQueueBulk(): Promise<void> {
                                                     >
                                                     <DropdownMenuSeparator />
                                                     <DropdownMenuItem
+                                                        data-queue-grab
                                                         @select="forceGrab(row)"
                                                     >
                                                         Force grab now
                                                     </DropdownMenuItem>
                                                     <DropdownMenuItem
+                                                        data-queue-manual-import
                                                         :disabled="
                                                             !row.download_id
                                                         "
@@ -1256,6 +1264,7 @@ async function runQueueBulk(): Promise<void> {
                 </div>
                 <div
                     v-else-if="importError"
+                    data-manual-import-error
                     class="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-[12px] text-destructive"
                 >
                     {{ importError }}
@@ -1271,6 +1280,7 @@ async function runQueueBulk(): Promise<void> {
                     <div
                         v-for="(candidate, idx) in importCandidates"
                         :key="idx"
+                        data-manual-import-candidate
                         class="rounded-md border border-border bg-card p-3"
                     >
                         <div class="text-[13px] font-medium">
@@ -1316,6 +1326,7 @@ async function runQueueBulk(): Promise<void> {
                         Cancel
                     </Button>
                     <Button
+                        data-manual-import-submit
                         :disabled="
                             importSubmitting ||
                             importLoading ||

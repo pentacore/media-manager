@@ -21,6 +21,7 @@ use App\Settings\AiSettings;
 use App\Settings\OpenRouterSettings;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -217,77 +218,80 @@ class AiSettingsController extends Controller
         $before = $settingsSnapshot->capture(SettingsGroup::Ai);
         $validated = $updateAiSettingsRequest->validated();
 
-        $aiSettings->setMode(AiMode::from($validated['mode']));
-        $aiSettings->setModel($validated['model']);
-        $aiSettings->setTitleModel($validated['title_model']);
-        $aiSettings->setSoftBudgetUsd(
-            isset($validated['soft_budget_usd']) ? (float) $validated['soft_budget_usd'] : null,
-        );
-        $aiSettings->setHardBudgetUsd(
-            isset($validated['hard_budget_usd']) ? (float) $validated['hard_budget_usd'] : null,
-        );
-        $aiSettings->setAdvisorReasoningLevel(AiReasoningLevel::from($validated['advisor_reasoning_level']));
-        $aiSettings->setChatTimeout(
-            isset($validated['chat_timeout']) ? (int) $validated['chat_timeout'] : null,
-        );
-        $currentFailoverProvider = $aiSettings->failoverProvider();
-        $newFailoverProvider = empty($validated['failover_provider']) ? null : Lab::tryFrom($validated['failover_provider']);
+        // Every setter write and the audit row commit together.
+        DB::transaction(function () use ($aiSettings, $openRouterSettings, $settingsSnapshot, $auditLogger, $before, $validated): void {
+            $aiSettings->setMode(AiMode::from($validated['mode']));
+            $aiSettings->setModel($validated['model']);
+            $aiSettings->setTitleModel($validated['title_model']);
+            $aiSettings->setSoftBudgetUsd(
+                isset($validated['soft_budget_usd']) ? (float) $validated['soft_budget_usd'] : null,
+            );
+            $aiSettings->setHardBudgetUsd(
+                isset($validated['hard_budget_usd']) ? (float) $validated['hard_budget_usd'] : null,
+            );
+            $aiSettings->setAdvisorReasoningLevel(AiReasoningLevel::from($validated['advisor_reasoning_level']));
+            $aiSettings->setChatTimeout(
+                isset($validated['chat_timeout']) ? (int) $validated['chat_timeout'] : null,
+            );
+            $currentFailoverProvider = $aiSettings->failoverProvider();
+            $newFailoverProvider = empty($validated['failover_provider']) ? null : Lab::tryFrom($validated['failover_provider']);
 
-        $aiSettings->setFailoverProvider($newFailoverProvider);
+            $aiSettings->setFailoverProvider($newFailoverProvider);
 
-        // A stale model id must never survive a failover provider change: it
-        // was validated against the old provider's catalog, not the new
-        // one's. Clear it unless the same request submits a fresh one, and
-        // always clear it when failover is turned off.
-        if ($newFailoverProvider === null) {
-            $aiSettings->setFailoverModel(null);
-        } elseif (array_key_exists('failover_model', $validated)) {
-            $aiSettings->setFailoverModel($validated['failover_model']);
-        } elseif ($currentFailoverProvider?->value !== $newFailoverProvider->value) {
-            $aiSettings->setFailoverModel(null);
-        }
+            // A stale model id must never survive a failover provider change: it
+            // was validated against the old provider's catalog, not the new
+            // one's. Clear it unless the same request submits a fresh one, and
+            // always clear it when failover is turned off.
+            if ($newFailoverProvider === null) {
+                $aiSettings->setFailoverModel(null);
+            } elseif (array_key_exists('failover_model', $validated)) {
+                $aiSettings->setFailoverModel($validated['failover_model']);
+            } elseif ($currentFailoverProvider?->value !== $newFailoverProvider->value) {
+                $aiSettings->setFailoverModel(null);
+            }
 
-        $aiSettings->setModelsDevPricingEnabled(
-            array_key_exists('models_dev_pricing_enabled', $validated)
-                ? (bool) $validated['models_dev_pricing_enabled']
-                : null,
-        );
-        $aiSettings->setOpenRouterPricingEnabled(
-            array_key_exists('openrouter_pricing_enabled', $validated) ? (bool) $validated['openrouter_pricing_enabled'] : null,
-        );
-        $aiSettings->setLiteLlmPricingEnabled(
-            array_key_exists('litellm_pricing_enabled', $validated) ? (bool) $validated['litellm_pricing_enabled'] : null,
-        );
-        $aiSettings->setXaiPricingEnabled(
-            array_key_exists('xai_pricing_enabled', $validated) ? (bool) $validated['xai_pricing_enabled'] : null,
-        );
-        $aiSettings->setIgnoredPricingProviders($validated['ignored_pricing_providers'] ?? []);
+            $aiSettings->setModelsDevPricingEnabled(
+                array_key_exists('models_dev_pricing_enabled', $validated)
+                    ? (bool) $validated['models_dev_pricing_enabled']
+                    : null,
+            );
+            $aiSettings->setOpenRouterPricingEnabled(
+                array_key_exists('openrouter_pricing_enabled', $validated) ? (bool) $validated['openrouter_pricing_enabled'] : null,
+            );
+            $aiSettings->setLiteLlmPricingEnabled(
+                array_key_exists('litellm_pricing_enabled', $validated) ? (bool) $validated['litellm_pricing_enabled'] : null,
+            );
+            $aiSettings->setXaiPricingEnabled(
+                array_key_exists('xai_pricing_enabled', $validated) ? (bool) $validated['xai_pricing_enabled'] : null,
+            );
+            $aiSettings->setIgnoredPricingProviders($validated['ignored_pricing_providers'] ?? []);
 
-        // Absent means "not submitted" (leave the saved list alone); the page
-        // always submits it, as an empty list when every box is unchecked.
-        if (array_key_exists('auto_create_pricing_providers', $validated)) {
-            $aiSettings->setAutoCreatePricingProviders($validated['auto_create_pricing_providers']);
-        }
+            // Absent means "not submitted" (leave the saved list alone); the page
+            // always submits it, as an empty list when every box is unchecked.
+            if (array_key_exists('auto_create_pricing_providers', $validated)) {
+                $aiSettings->setAutoCreatePricingProviders($validated['auto_create_pricing_providers']);
+            }
 
-        $aiSettings->setRateLimitsEnforced(
-            array_key_exists('rate_limits_enforced', $validated)
-                ? (bool) $validated['rate_limits_enforced']
-                : null,
-        );
+            $aiSettings->setRateLimitsEnforced(
+                array_key_exists('rate_limits_enforced', $validated)
+                    ? (bool) $validated['rate_limits_enforced']
+                    : null,
+            );
 
-        $this->updateClassificationSettings($aiSettings, $validated);
-        $this->updateModelProviders($aiSettings, $validated);
-        $this->updateOpenRouterSettings($openRouterSettings, $validated);
+            $this->updateClassificationSettings($aiSettings, $validated);
+            $this->updateModelProviders($aiSettings, $validated);
+            $this->updateOpenRouterSettings($openRouterSettings, $validated);
 
-        if (array_key_exists('embeddings_provider', $validated)) {
-            $aiSettings->setEmbeddingsProvider($validated['embeddings_provider']);
-        }
+            if (array_key_exists('embeddings_provider', $validated)) {
+                $aiSettings->setEmbeddingsProvider($validated['embeddings_provider']);
+            }
 
-        if (array_key_exists('embeddings_model', $validated)) {
-            $aiSettings->setEmbeddingsModel($validated['embeddings_model']);
-        }
+            if (array_key_exists('embeddings_model', $validated)) {
+                $aiSettings->setEmbeddingsModel($validated['embeddings_model']);
+            }
 
-        $auditLogger->settingsUpdated(SettingsGroup::Ai, $before, $settingsSnapshot->capture(SettingsGroup::Ai));
+            $auditLogger->settingsUpdated(SettingsGroup::Ai, $before, $settingsSnapshot->capture(SettingsGroup::Ai));
+        });
 
         Inertia::flash('toast', ['type' => 'success', 'message' => __('AI settings updated.')]);
 

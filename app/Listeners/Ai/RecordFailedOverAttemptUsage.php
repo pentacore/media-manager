@@ -9,8 +9,8 @@ use App\Enums\AiUsageKind;
 use App\Services\AiUsage\RunUsageAccumulator;
 use App\Services\AiUsage\UsageColumns;
 use App\Services\AiUsage\UsageRecordWriter;
+use App\Support\UpstreamErrorText;
 use Illuminate\Support\Facades\Auth;
-use Illuminate\Support\Str;
 use Laravel\Ai\Events\AgentFailedOver;
 use Laravel\Ai\Gateway\ParentInvocation;
 
@@ -44,7 +44,7 @@ class RecordFailedOverAttemptUsage
                 'parent_invocation_id' => ParentInvocation::current()[0] ?? null,
                 'user_id' => resolve(AiRunAttribution::class)->user()?->id ?? Auth::id(),
                 'status' => 'failed',
-                'error_message' => Str::limit($agentFailedOver->exception->getMessage(), 2000),
+                'error_message' => UpstreamErrorText::sanitize($agentFailedOver->exception->getMessage(), 2000),
             ]);
         }
 

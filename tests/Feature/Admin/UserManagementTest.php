@@ -2,9 +2,13 @@
 
 use App\Enums\UserRole;
 use App\Mail\UserInvitation;
+use App\Models\ActivityLog;
 use App\Models\User;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\URL;
+use Symfony\Component\Mailer\Exception\TransportException;
+use Symfony\Component\Mailer\SentMessage;
+use Symfony\Component\Mailer\Transport\AbstractTransport;
 
 test('guests cannot access user management', function (): void {
     $this->get(route('admin.users.index'))
@@ -281,4 +285,43 @@ test('users without password are redirected to set password', function (): void 
     $this->actingAs($user)
         ->get(route('dashboard'))
         ->assertRedirect(route('auth.set-password'));
+});
+
+/**
+ * Point the default mailer at a transport that always fails, as an SMTP
+ * server that is down would.
+ */
+function userManagementFailingMailer(): void
+{
+    Mail::extend('failing', fn (): AbstractTransport => new class extends AbstractTransport
+    {
+        protected function doSend(SentMessage $message): void
+        {
+            throw new TransportException('Connection to mail.example:587 refused.');
+        }
+
+        public function __toString(): string
+        {
+            return 'failing://';
+        }
+    });
+    config()->set('mail.mailers.failing', ['transport' => 'failing']);
+    config()->set('mail.default', 'failing');
+}
+
+test('an invite whose email cannot be sent keeps the audited account and tells the admin', function (): void {
+    userManagementFailingMailer();
+    $admin = User::factory()->admin()->create();
+
+    $this->actingAs($admin)
+        ->post(route('admin.users.store'), ['name' => 'Ivy', 'email' => 'ivy@example.com', 'role' => 'member'])
+        ->assertRedirect(route('admin.users.index'))
+        ->assertSessionHas('inertia.flash_data.toast', [
+            'type' => 'error',
+            'message' => 'Created ivy@example.com, but the invitation email could not be sent. Delete the user and invite them again once mail works.',
+        ]);
+
+    $user = User::query()->where('email', 'ivy@example.com')->sole();
+
+    expect(ActivityLog::query()->where('action', 'invite.created')->where('subject_id', $user->id)->exists())->toBeTrue();
 });
