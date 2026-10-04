@@ -2,6 +2,9 @@
 
 declare(strict_types=1);
 
+use App\Http\Controllers\Media\AnimeController;
+use App\Http\Controllers\Media\DiscoverController;
+use App\Http\Controllers\Media\FlashesRequestOutcome;
 use App\Jobs\SyncAnimeMappingJob;
 use App\Models\AnimeIdMap;
 use App\Models\ServiceConnection;
@@ -707,4 +710,20 @@ test('confirmMatch fails when no anime id is supplied', function (): void {
         ->assertSessionHas('inertia.flash_data.toast.type', 'error');
 
     $this->assertDatabaseCount('anime_id_maps', 0);
+});
+
+test('a failed anime request flashes the error toast and the whole failed outcome', function (): void {
+    fakeAnimeSeerr(['seerr.local:5055/api/v1/request' => Http::response(['message' => 'nope'], 500)]);
+
+    $this->actingAs(User::factory()->member()->create())
+        ->from(route('media.anime.index'))
+        ->post(route('media.anime.request'), ['tmdbId' => 1396, 'mediaType' => 'tv', 'userId' => 42])
+        ->assertRedirect(route('media.anime.index'))
+        ->assertSessionHas('inertia.flash_data.toast', ['type' => 'error', 'message' => 'Failed to submit request.'])
+        ->assertSessionHas('inertia.flash_data.requestOutcome', ['ok' => false, 'tmdbId' => 1396, 'mediaType' => 'tv']);
+});
+
+test('the anime and discover pages flash request outcomes through one shared trait', function (): void {
+    expect(class_uses(AnimeController::class))->toContain(FlashesRequestOutcome::class)
+        ->and(class_uses(DiscoverController::class))->toContain(FlashesRequestOutcome::class);
 });
