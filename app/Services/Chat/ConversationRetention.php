@@ -108,7 +108,8 @@ final readonly class ConversationRetention
     private function isReferencedByAStoredMessage(ChatAttachment $chatAttachment): bool
     {
         return DB::table('agent_conversation_messages')
-            ->where('attachments', 'like', sprintf('%%%s%%', basename($chatAttachment->path)))
+            // `_` and `%` are LIKE wildcards; a name must match itself only.
+            ->where('attachments', 'like', sprintf('%%%s%%', addcslashes(basename($chatAttachment->path), '\\%_')))
             ->exists();
     }
 
