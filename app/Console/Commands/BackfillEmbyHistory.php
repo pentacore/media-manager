@@ -16,7 +16,6 @@ use Illuminate\Console\Attributes\Description;
 use Illuminate\Console\Attributes\Signature;
 use Illuminate\Console\Command;
 use Illuminate\Database\Eloquent\Collection;
-use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\RequestException;
 use Illuminate\Support\Facades\Log;
@@ -32,9 +31,9 @@ class BackfillEmbyHistory extends Command
 {
     public function handle(): int
     {
-        try {
-            $connection = ServiceConnection::resolveActive(ServiceType::Emby);
-        } catch (ModelNotFoundException) {
+        $connection = ServiceConnection::findActive(ServiceType::Emby);
+
+        if (! $connection instanceof ServiceConnection) {
             $this->error('No active Emby connection configured.');
 
             return self::FAILURE;
