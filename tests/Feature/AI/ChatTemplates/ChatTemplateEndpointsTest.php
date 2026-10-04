@@ -88,11 +88,12 @@ test('preview rejects a malformed request', function (): void {
 });
 
 test('render fills the template, ignores unknown values and stamps last use', function (): void {
-    $this->travelTo(CarbonImmutable::parse('2026-10-04 10:00:00'));
+    $this->travelTo(CarbonImmutable::parse('2026-10-01 08:00:00'));
     $sonarr = ServiceConnection::factory()->sonarr()->create();
     IndexedSeries::factory()->create(['service_connection_id' => $sonarr->id, 'sonarr_id' => 42, 'title' => 'Frieren', 'year' => 2023]);
     $admin = User::factory()->admin()->create();
     $chatTemplate = ChatTemplate::factory()->for($admin)->subtitleCheck()->create();
+    $this->travelTo(CarbonImmutable::parse('2026-10-04 10:00:00'));
 
     $this->actingAs($admin)
         ->postJson(route('ai.templates.render', $chatTemplate), [
@@ -101,7 +102,10 @@ test('render fills the template, ignores unknown values and stamps last use', fu
         ->assertOk()
         ->assertJsonPath('text', 'Check Frieren (2023) S1E7 for subtitles');
 
-    expect($chatTemplate->fresh()->last_used_at?->toIso8601String())->toBe('2026-10-04T10:00:00+00:00');
+    $fresh = $chatTemplate->fresh();
+
+    expect($fresh->last_used_at?->toIso8601String())->toBe('2026-10-04T10:00:00+00:00')
+        ->and($fresh->updated_at?->toIso8601String())->toBe('2026-10-01T08:00:00+00:00');
 });
 
 test('render rejects bad values on their field', function (array $values, string $field): void {

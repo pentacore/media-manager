@@ -10,6 +10,10 @@ use App\Models\ChatTemplate;
 use App\Services\Chat\ChatTemplateRenderer;
 use Illuminate\Http\JsonResponse;
 
+/**
+ * Fills a saved template and stamps its last use. Using a template is not an
+ * edit, so the stamp leaves updated_at alone.
+ */
 class ChatTemplateRenderController extends Controller
 {
     public function __invoke(
@@ -21,7 +25,9 @@ class ChatTemplateRenderController extends Controller
 
         $text = $chatTemplateRenderer->render($chatTemplate, $validated['values'] ?? []);
 
-        $chatTemplate->forceFill(['last_used_at' => now()])->save();
+        ChatTemplate::withoutTimestamps(
+            static fn (): bool => $chatTemplate->forceFill(['last_used_at' => now()])->save(),
+        );
 
         return response()->json(['text' => $text]);
     }
