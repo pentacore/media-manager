@@ -241,3 +241,16 @@ function bindRemovalContextForEvent(WebhookEvent $webhookEvent): void
         originConnectionId: $webhookEvent->service_connection_id,
     ));
 }
+
+test("a non-string argument is refused in the tool's own words", function (array $arguments, string $field, string $message): void {
+    $result = json_decode((new RemoveStuckDownloadTool)->handle(new Request($arguments)), true);
+
+    expect($result['queued'])->toBeFalse()
+        ->and($result['reason'])->toBe('invalid_arguments')
+        ->and($result['errors'][$field][0])->toBe($message);
+    expect(ActionRequest::count())->toBe(0);
+})->with([
+    'a numeric service' => [['service' => 5, 'download_id' => 'dl-1', 'reason' => 'x'], 'service', 'service must be "sonarr" or "radarr".'],
+    'a list as the download id' => [['service' => 'sonarr', 'download_id' => ['dl-1'], 'reason' => 'x'], 'download_id', 'download_id must be a string.'],
+    'a list as the reason' => [['service' => 'sonarr', 'download_id' => 'dl-1', 'reason' => ['x']], 'reason', 'reason must be a short plain-text explanation for the human approver.'],
+]);

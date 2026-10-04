@@ -64,9 +64,12 @@ class RemoveStuckDownloadTool extends DecisionTool
             'reason' => ['required', 'string'],
         ], [
             'service.required' => 'service must be "sonarr" or "radarr".',
+            'service.string' => 'service must be "sonarr" or "radarr".',
             'service.regex' => 'service must be "sonarr" or "radarr".',
             'download_id.required' => 'download_id is required.',
+            'download_id.string' => 'download_id must be a string.',
             'reason.required' => 'A short reason is required so the human approver understands why.',
+            'reason.string' => 'reason must be a short plain-text explanation for the human approver.',
         ]);
         $args = $request->toArray();
         $service = mb_strtolower((string) $validated['service']);

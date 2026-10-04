@@ -511,3 +511,18 @@ test('a trimmed event snapshot still pins the proposal to the originating connec
         ->and($actionRequest->payload['service_connection_id'])->toBe($origin->id)
         ->and($actionRequest->title)->toContain('Severance');
 });
+
+test("a non-string rationale is refused in the tool's own words", function (): void {
+    ActionTypeConfig::factory()->create(['type' => 'emby_library_scan', 'requires_approval' => false, 'is_enabled' => true]);
+    bindDecisionContext();
+
+    $result = json_decode((new ProposeActionTool)->handle(new Request([
+        'type' => 'emby_library_scan',
+        'target_service' => 'emby',
+        'rationale' => ['scan it'],
+    ])), true);
+
+    expect($result['queued'])->toBeFalse()
+        ->and($result['reason'])->toBe('invalid_arguments')
+        ->and($result['errors']['rationale'][0])->toBe('rationale must be plain-English text so a human can understand the proposal.');
+});

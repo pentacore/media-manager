@@ -93,3 +93,15 @@ test('the inspection describes itself without naming an acting tool only one cal
         ->not->toContain('ResolveManualImportTool')
         ->not->toContain('RemoveStuckDownloadTool');
 });
+
+test("a non-string argument is refused in the tool's own words", function (array $arguments, string $field, string $message): void {
+    $result = json_decode((new InspectStuckImportTool)->handle(new Request($arguments)), true);
+
+    expect($result['ok'])->toBeFalse()
+        ->and($result['reason'])->toBe('invalid_arguments')
+        ->and($result['errors'][$field][0])->toBe($message);
+    Http::assertNothingSent();
+})->with([
+    'a numeric service' => [['service' => 5, 'download_id' => 'dl-1'], 'service', 'service must be "sonarr" or "radarr".'],
+    'a list as the download id' => [['service' => 'sonarr', 'download_id' => ['dl-1']], 'download_id', 'download_id must be a string (from the event payload).'],
+]);
