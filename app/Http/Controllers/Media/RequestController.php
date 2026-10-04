@@ -10,12 +10,11 @@ use App\Http\Controllers\Controller;
 use App\Jobs\ClearSeerrRequests;
 use App\Models\ServiceConnection;
 use App\Services\Arr\ArrClient;
-use App\Services\Radarr\RadarrClient;
+use App\Services\Arr\ArrConnections;
 use App\Services\Seerr\SeerrClient;
 use App\Services\Seerr\SeerrRequestBusy;
 use App\Services\Seerr\SeerrRequestLock;
 use App\Services\Seerr\SeerrTitleResolver;
-use App\Services\Sonarr\SonarrClient;
 use App\Support\UpstreamErrorText;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Http\Client\ConnectionException;
@@ -140,7 +139,7 @@ class RequestController extends Controller
      * expose its own /service config endpoint we can use, so we read
      * profile lists straight from the *arr that owns the media.
      */
-    public function editOptions(int $id): JsonResponse
+    public function editOptions(int $id, ArrConnections $arrConnections): JsonResponse
     {
         try {
             $connection = ServiceConnection::resolveActive(ServiceType::Seerr);
@@ -155,7 +154,7 @@ class RequestController extends Controller
         }
 
         $mediaType = (string) ($request['media']['mediaType'] ?? $request['type'] ?? '');
-        $arrClient = $this->resolveArrFor($mediaType);
+        $arrClient = $this->resolveArrFor($mediaType, $arrConnections);
         if (! $arrClient instanceof ArrClient) {
             return new JsonResponse(['error' => 'no_arr_for_media_type'], 422);
         }
@@ -262,7 +261,7 @@ class RequestController extends Controller
         return back();
     }
 
-    private function resolveArrFor(string $mediaType): ?ArrClient
+    private function resolveArrFor(string $mediaType, ArrConnections $arrConnections): ?ArrClient
     {
         $arrType = match ($mediaType) {
             'tv' => ServiceType::Sonarr,
@@ -270,19 +269,7 @@ class RequestController extends Controller
             default => null,
         };
 
-        if ($arrType === null) {
-            return null;
-        }
-
-        try {
-            $connection = ServiceConnection::resolveActive($arrType);
-        } catch (ModelNotFoundException) {
-            return null;
-        }
-
-        return $arrType === ServiceType::Sonarr
-            ? new SonarrClient($connection)
-            : new RadarrClient($connection);
+        return $arrType === null ? null : $arrConnections->activeClient($arrType);
     }
 
     /** Statuses the bulk-clear UI is allowed to target. */

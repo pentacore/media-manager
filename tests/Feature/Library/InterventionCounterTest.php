@@ -117,3 +117,15 @@ test('get returns the cached value', function (): void {
 
     expect(resolve(InterventionCounter::class)->get())->toBe(7);
 });
+
+test('a deactivated connection is neither asked nor counted', function (): void {
+    ServiceConnection::factory()->sonarr()->inactive()->create(['url' => 'http://sonarr.fake:8989']);
+    ServiceConnection::factory()->radarr()->create(['url' => 'http://radarr.fake:7878']);
+    Http::fake(['radarr.fake:7878/api/v3/queue*' => Http::response(['records' => [
+        ['trackedDownloadStatus' => 'warning', 'trackedDownloadState' => 'importBlocked'],
+    ]])]);
+    Event::fake([LibraryInterventionChanged::class]);
+
+    expect(resolve(InterventionCounter::class)->recompute())->toBe(1);
+    Http::assertSentCount(1);
+});

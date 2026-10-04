@@ -672,6 +672,21 @@ test('admin can fetch edit options for a TV request from Sonarr', function (): v
         ->assertJsonPath('root_folders.0.path', '/tv');
 });
 
+test("edit options say so when no active arr serves the request's media type", function (array $request): void {
+    ServiceConnection::factory()->radarr()->inactive()->create(['url' => 'http://radarr.local:7878']);
+    Http::fake(['seerr.local:5055/api/v1/request/42' => Http::response(['id' => 42, ...$request])]);
+
+    $this->actingAs(User::factory()->admin()->create())
+        ->getJson(route('media.requests.edit-options', 42))
+        ->assertUnprocessable()
+        ->assertJsonPath('error', 'no_arr_for_media_type');
+
+    Http::assertNotSent(fn ($sent): bool => str_contains($sent->url(), 'radarr'));
+})->with([
+    'a movie with Radarr deactivated' => [['media' => ['id' => 100, 'mediaType' => 'movie']]],
+    'an unknown media type' => [['type' => 'music']],
+]);
+
 test('admin can update a request and the PUT carries the merged body', function (): void {
     $admin = User::factory()->admin()->create();
 

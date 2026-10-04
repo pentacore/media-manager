@@ -430,13 +430,13 @@ class ActivityController extends Controller
         $errors = [];
         $services = [];
 
-        $sonarr = $this->safeResolve(ServiceType::Sonarr);
+        $sonarr = ServiceConnection::findActive(ServiceType::Sonarr);
         $services['sonarr'] = $sonarr instanceof ServiceConnection;
         if ($sonarr instanceof ServiceConnection) {
             $rows = [...$rows, ...$this->fetchSonarr($sonarr, $errors)];
         }
 
-        $radarr = $this->safeResolve(ServiceType::Radarr);
+        $radarr = ServiceConnection::findActive(ServiceType::Radarr);
         $services['radarr'] = $radarr instanceof ServiceConnection;
         if ($radarr instanceof ServiceConnection) {
             $rows = [...$rows, ...$this->fetchRadarr($radarr, $errors)];
@@ -456,7 +456,7 @@ class ActivityController extends Controller
     private function loadHistory(string $service, int $page, GrabbedHistoryCache $grabbedHistoryCache): array
     {
         $serviceType = $service === 'radarr' ? ServiceType::Radarr : ServiceType::Sonarr;
-        $connection = $this->safeResolve($serviceType);
+        $connection = ServiceConnection::findActive($serviceType);
 
         $result = [
             'service' => $service,
@@ -570,15 +570,6 @@ class ActivityController extends Controller
             'download_client' => $record['downloadClient'] ?? null,
             'date' => $record['date'] ?? null,
         ];
-    }
-
-    private function safeResolve(ServiceType $serviceType): ?ServiceConnection
-    {
-        try {
-            return ServiceConnection::resolveActive($serviceType);
-        } catch (ModelNotFoundException) {
-            return null;
-        }
     }
 
     /**
