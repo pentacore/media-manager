@@ -28,7 +28,7 @@ function chatTemplatePayload(array $overrides = []): array
     ], $overrides);
 }
 
-test('the index lists only the current user\'s templates, pinned first', function (): void {
+test("the index lists only the current user's templates, pinned first", function (): void {
     $admin = User::factory()->admin()->create();
     ChatTemplate::factory()->for($admin)->create(['name' => 'Alpha']);
     ChatTemplate::factory()->for($admin)->pinned()->create(['name' => 'Zulu']);

@@ -13,9 +13,9 @@ use App\Enums\ChatTemplateVariableType;
  * and the variables together. Also used by the live preview, so the editor
  * shows the same problems a save would.
  */
-final class ChatTemplateDefinition
+final readonly class ChatTemplateDefinition
 {
-    public function __construct(private readonly ChatTemplateParser $chatTemplateParser) {}
+    public function __construct(private ChatTemplateParser $chatTemplateParser) {}
 
     /**
      * @param  array<int, mixed>  $variables
@@ -86,14 +86,14 @@ final class ChatTemplateDefinition
     public function normalize(array $variables): array
     {
         return array_values(array_map(function (array $variable): array {
-            $type = ChatTemplateVariableType::from((string) $variable['type']);
+            $chatTemplateVariableType = ChatTemplateVariableType::from((string) $variable['type']);
 
             return [
                 'name' => (string) $variable['name'],
                 'label' => trim((string) $variable['label']),
-                'type' => $type->value,
-                'default' => $type->supportsDefault() ? $this->cleanDefault($variable['default'] ?? null) : null,
-                'options' => $type->requiresOptions() ? $this->cleanOptions($variable['options'] ?? null) : null,
+                'type' => $chatTemplateVariableType->value,
+                'default' => $chatTemplateVariableType->supportsDefault() ? $this->cleanDefault($variable['default'] ?? null) : null,
+                'options' => $chatTemplateVariableType->requiresOptions() ? $this->cleanOptions($variable['options'] ?? null) : null,
             ];
         }, $variables));
     }

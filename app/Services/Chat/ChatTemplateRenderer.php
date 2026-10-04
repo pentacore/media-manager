@@ -6,6 +6,7 @@ namespace App\Services\Chat;
 
 use App\Enums\ChatTemplateVariableType;
 use App\Models\ChatTemplate;
+use App\Models\ServiceConnection;
 use Illuminate\Validation\ValidationException;
 
 /**
@@ -14,13 +15,13 @@ use Illuminate\Validation\ValidationException;
  * resolves library ids; preview() renders an unsaved editor draft with
  * defaults or placeholders and never touches the library.
  */
-final class ChatTemplateRenderer
+final readonly class ChatTemplateRenderer
 {
     public const int MAX_LENGTH = 4000;
 
     public function __construct(
-        private readonly ChatTemplateParser $chatTemplateParser,
-        private readonly ChatTemplateLibrary $chatTemplateLibrary,
+        private ChatTemplateParser $chatTemplateParser,
+        private ChatTemplateLibrary $chatTemplateLibrary,
     ) {}
 
     /**
@@ -46,7 +47,7 @@ final class ChatTemplateRenderer
                 continue;
             }
 
-            if ($this->chatTemplateLibrary->activeConnection($type) === null) {
+            if (! $this->chatTemplateLibrary->activeConnection($type) instanceof ServiceConnection) {
                 $errors[sprintf('values.%s', $name)] = $type === ChatTemplateVariableType::Series ? 'Sonarr is not connected.' : 'Radarr is not connected.';
 
                 continue;

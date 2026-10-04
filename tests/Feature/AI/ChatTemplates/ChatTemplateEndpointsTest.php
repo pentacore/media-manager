@@ -161,7 +161,7 @@ test('render of a template without variables accepts an empty values object', fu
         ->assertJsonPath('text', 'Check Sonarr and Radarr for stuck downloads');
 });
 
-test('another admin\'s template cannot be rendered', function (): void {
+test("another admin's template cannot be rendered", function (): void {
     $chatTemplate = ChatTemplate::factory()->create();
 
     $this->actingAs(User::factory()->admin()->create())

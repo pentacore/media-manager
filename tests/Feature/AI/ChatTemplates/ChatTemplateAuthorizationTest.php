@@ -25,7 +25,7 @@ test('templates are unavailable while AI is disabled', function (): void {
         ->assertNotFound();
 });
 
-test('another admin\'s template is not found', function (string $method, string $routeName): void {
+test("another admin's template is not found", function (string $method, string $routeName): void {
     $chatTemplate = ChatTemplate::factory()->create(['name' => 'Theirs']);
 
     $this->actingAs(User::factory()->admin()->create())

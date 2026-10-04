@@ -12,45 +12,45 @@ function parseChatTemplate(string $body): ParsedChatTemplate
 }
 
 test('a body without tokens is one literal segment', function (): void {
-    $parsed = parseChatTemplate('Check Sonarr and Radarr for stuck downloads');
+    $parsedChatTemplate = parseChatTemplate('Check Sonarr and Radarr for stuck downloads');
 
-    expect($parsed->segments)->toBe(['Check Sonarr and Radarr for stuck downloads'])
-        ->and($parsed->names())->toBe([])
-        ->and($parsed->isValid())->toBeTrue();
+    expect($parsedChatTemplate->segments)->toBe(['Check Sonarr and Radarr for stuck downloads'])
+        ->and($parsedChatTemplate->names())->toBe([])
+        ->and($parsedChatTemplate->isValid())->toBeTrue();
 });
 
 test('tokens split the body and keep their parts in written order', function (): void {
-    $parsed = parseChatTemplate('Check {{anime:id,title}} S{{season}}E{{episode}}');
+    $parsedChatTemplate = parseChatTemplate('Check {{anime:id,title}} S{{season}}E{{episode}}');
 
-    expect($parsed->isValid())->toBeTrue()
-        ->and($parsed->segments[0])->toBe('Check ')
-        ->and($parsed->segments[1])->toEqual(new ChatTemplateToken('anime', ['id', 'title'], '{{anime:id,title}}'))
-        ->and($parsed->segments[2])->toBe(' S')
-        ->and($parsed->segments[3])->toEqual(new ChatTemplateToken('season', [], '{{season}}'))
-        ->and($parsed->names())->toBe(['anime', 'season', 'episode']);
+    expect($parsedChatTemplate->isValid())->toBeTrue()
+        ->and($parsedChatTemplate->segments[0])->toBe('Check ')
+        ->and($parsedChatTemplate->segments[1])->toEqual(new ChatTemplateToken('anime', ['id', 'title'], '{{anime:id,title}}'))
+        ->and($parsedChatTemplate->segments[2])->toBe(' S')
+        ->and($parsedChatTemplate->segments[3])->toEqual(new ChatTemplateToken('season', [], '{{season}}'))
+        ->and($parsedChatTemplate->names())->toBe(['anime', 'season', 'episode']);
 });
 
 test('a repeated name is one variable but every occurrence is a token', function (): void {
-    $parsed = parseChatTemplate('{{anime:title}} again: {{anime:id}}');
+    $parsedChatTemplate = parseChatTemplate('{{anime:title}} again: {{anime:id}}');
 
-    expect($parsed->names())->toBe(['anime'])
-        ->and($parsed->tokens())->toHaveCount(2)
-        ->and($parsed->tokens()[1]->parts)->toBe(['id']);
+    expect($parsedChatTemplate->names())->toBe(['anime'])
+        ->and($parsedChatTemplate->tokens())->toHaveCount(2)
+        ->and($parsedChatTemplate->tokens()[1]->parts)->toBe(['id']);
 });
 
 test('multibyte literal text is preserved around tokens', function (): void {
-    $parsed = parseChatTemplate('Frieren — {{x}} ✓');
+    $parsedChatTemplate = parseChatTemplate('Frieren — {{x}} ✓');
 
-    expect($parsed->segments)->toEqual(['Frieren — ', new ChatTemplateToken('x', [], '{{x}}'), ' ✓']);
+    expect($parsedChatTemplate->segments)->toEqual(['Frieren — ', new ChatTemplateToken('x', [], '{{x}}'), ' ✓']);
 });
 
 test('malformed placeholders are reported and kept as literal text', function (string $body, string $messageFragment): void {
-    $parsed = parseChatTemplate($body);
+    $parsedChatTemplate = parseChatTemplate($body);
 
-    expect($parsed->isValid())->toBeFalse()
-        ->and($parsed->tokens())->toBe([])
-        ->and(implode(' ', $parsed->errors))->toContain($messageFragment)
-        ->and(implode('', $parsed->segments))->toBe($body);
+    expect($parsedChatTemplate->isValid())->toBeFalse()
+        ->and($parsedChatTemplate->tokens())->toBe([])
+        ->and(implode(' ', $parsedChatTemplate->errors))->toContain($messageFragment)
+        ->and(implode('', $parsedChatTemplate->segments))->toBe($body);
 })->with([
     'spaces inside braces' => ['Check {{ anime }}', 'is not a valid placeholder'],
     'uppercase name' => ['{{Anime}}', 'is not a valid placeholder'],
