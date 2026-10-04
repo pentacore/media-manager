@@ -5,13 +5,23 @@ declare(strict_types=1);
 namespace App\Jobs;
 
 use App\Enums\ActionRequestStatus;
+use App\Enums\QueueLane;
 use App\Models\SubtitleUpload;
 use Illuminate\Contracts\Database\Query\Builder;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
+use Illuminate\Queue\Attributes\Queue;
+use Illuminate\Queue\Attributes\Timeout;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Storage;
 
+/**
+ * Hourly retention sweep of staged subtitle uploads. Maintenance lane: a
+ * large backlog of file deletes must not hold the general worker behind
+ * webhooks and approved actions.
+ */
+#[Queue(QueueLane::Maintenance)]
+#[Timeout(270)]
 final class PruneSubtitleUploads implements ShouldQueue
 {
     use Queueable;

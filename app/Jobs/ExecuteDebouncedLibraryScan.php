@@ -11,6 +11,7 @@ use Carbon\CarbonImmutable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
 use Illuminate\Queue\Attributes\Queue;
+use Illuminate\Queue\Attributes\Timeout;
 use Illuminate\Queue\Attributes\Tries;
 
 /**
@@ -22,6 +23,7 @@ use Illuminate\Queue\Attributes\Tries;
  * gates, so a default-lane backlog cannot stretch the quiet window.
  */
 #[Queue(QueueLane::Actions)]
+#[Timeout(30)]
 #[Tries(1)]
 final class ExecuteDebouncedLibraryScan implements ShouldQueue
 {

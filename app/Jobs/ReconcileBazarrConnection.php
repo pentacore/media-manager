@@ -20,6 +20,12 @@ use Illuminate\Support\Facades\Log;
 use RuntimeException;
 use Throwable;
 
+/**
+ * Re-reads one Bazarr connection's subtitle state. Deliberately on the
+ * default lane, not Maintenance: it runs right after a Bazarr webhook or a
+ * user's reconcile, and the queue-ai worker drains AI jobs first, which
+ * could leave the subtitle pages stale for minutes.
+ */
 #[Timeout(120)]
 #[Tries(4)]
 #[UniqueFor(300)]

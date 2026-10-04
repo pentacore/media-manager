@@ -30,7 +30,7 @@ use Throwable;
  * mappings. ShouldBeUnique + a timeout below the queue `retry_after` prevent a
  * second worker from reserving this destructive job while it is still running.
  * Runs on the maintenance lane (drained by the queue-ai worker): the dataset
- * fetch plus parse can hold the worker for up to 300s.
+ * fetch plus parse can hold the worker for up to 270s.
  *
  * @see https://github.com/Fribb/anime-lists
  */
@@ -45,10 +45,11 @@ class SyncAnimeMappingJob implements ShouldBeUnique, ShouldQueue
     public int $backoff = 120;
 
     /**
-     * Kept below the smallest queue `retry_after` (330s) so a second worker
-     * cannot reserve and re-run this destructive refresh mid-flight.
+     * Kept below the workers' --timeout (300s) and so below the smallest
+     * queue `retry_after` (330s): a second worker cannot reserve and re-run
+     * this destructive refresh mid-flight.
      */
-    public int $timeout = 300;
+    public int $timeout = 270;
 
     /**
      * Minimum credible mappable-row count. A parsed dataset below this is

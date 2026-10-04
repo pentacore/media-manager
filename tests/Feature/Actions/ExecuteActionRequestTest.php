@@ -415,7 +415,7 @@ test('job has timeout and unique-for duration', function (): void {
     $job = new ExecuteActionRequest($request);
     $reflection = new ReflectionClass($job);
 
-    expect($reflection->getAttributes(Timeout::class)[0]->newInstance()->timeout)->toBe(300)
+    expect($reflection->getAttributes(Timeout::class)[0]->newInstance()->timeout)->toBe(270)
         ->and($reflection->getAttributes(UniqueFor::class)[0]->newInstance()->uniqueFor)->toBe(3600);
 });
 

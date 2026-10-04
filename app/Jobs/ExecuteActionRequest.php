@@ -34,7 +34,7 @@ use Illuminate\Support\Facades\Log;
 use Throwable;
 
 #[Queue(QueueLane::Actions)]
-#[Timeout(300)]
+#[Timeout(270)]
 #[UniqueFor(3600)]
 class ExecuteActionRequest implements ShouldBeUnique, ShouldQueue
 {

@@ -10,6 +10,8 @@ use App\Jobs\EmbedLibraryItem;
 use App\Jobs\ExecuteActionRequest;
 use App\Jobs\ExecuteDebouncedLibraryScan;
 use App\Jobs\ProcessWebhookEvent;
+use App\Jobs\PruneSubtitleUploads;
+use App\Jobs\ReconcileBazarrConnection;
 use App\Jobs\ReconcileSearchIndex;
 use App\Jobs\RefreshAiPricesJob;
 use App\Jobs\RunDecisionAgent;
@@ -43,12 +45,14 @@ test('each job is pushed onto its lane', function (Closure $makeJob, QueueLane $
     'bulk seerr request clear' => [fn (): ClearSeerrRequests => new ClearSeerrRequests(1, 'pending', [1, 2, 3], null), QueueLane::Maintenance],
     'search index reconcile' => [fn (): ReconcileSearchIndex => new ReconcileSearchIndex, QueueLane::Maintenance],
     'anime mapping sync' => [fn (): SyncAnimeMappingJob => new SyncAnimeMappingJob, QueueLane::Maintenance],
+    'subtitle upload prune' => [fn (): PruneSubtitleUploads => new PruneSubtitleUploads, QueueLane::Maintenance],
 ]);
 
 test('jobs that neither execute actions, process webhooks nor call a model stay on the default lane', function (string $jobClass): void {
     expect(new ReflectionClass($jobClass)->getAttributes(QueueAttribute::class))->toBe([]);
 })->with([
     'dashboard stats rebroadcast' => [BroadcastDashboardStats::class],
+    'bazarr connection reconcile (a user waits on it after a Bazarr webhook)' => [ReconcileBazarrConnection::class],
 ]);
 
 test('every queued job either stays on the default lane or names a known lane', function (): void {

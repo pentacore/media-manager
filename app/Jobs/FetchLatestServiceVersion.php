@@ -29,6 +29,12 @@ class FetchLatestServiceVersion implements ShouldQueue
 
     public int $backoff = 30;
 
+    /**
+     * Below the workers' --timeout (300s) and redis retry_after (330s); no
+     * tighter bound is known for this job.
+     */
+    public int $timeout = 270;
+
     public const array REPO_MAP = [
         'sonarr' => 'Sonarr/Sonarr',
         'radarr' => 'Radarr/Radarr',
