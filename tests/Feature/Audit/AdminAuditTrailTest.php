@@ -7,6 +7,8 @@ use App\Enums\UserRole;
 use App\Models\ActionRequest;
 use App\Models\ActionTypeConfig;
 use App\Models\ActivityLog;
+use App\Models\AiModelPrice;
+use App\Models\AiUsageRecord;
 use App\Models\BazarrServiceLink;
 use App\Models\EmbyUserLink;
 use App\Models\ServiceConnection;
@@ -303,4 +305,58 @@ test('an Emby import that creates accounts records one summary row, and one that
         ->and($activityLog->service_connection_id)->toBe($emby->id)
         ->and($activityLog->description)->toBe('Imported 1 Emby user(s), skipped 1.')
         ->and($activityLog->metadata['context'])->toBe(['created' => 1, 'skipped' => 1, 'user_ids' => [$user->id]]);
+});
+
+test('an action rule change records what changed and a repeat save records nothing', function (): void {
+    $admin = User::factory()->admin()->create();
+    $actionTypeConfig = ActionTypeConfig::factory()->create(['type' => 'delete_series', 'label' => 'Delete series', 'requires_approval' => true, 'is_enabled' => true]);
+
+    $this->actingAs($admin)->patch(route('actions.rules.update', $actionTypeConfig), ['requires_approval' => false, 'is_enabled' => true])->assertRedirect();
+    $this->actingAs($admin)->patch(route('actions.rules.update', $actionTypeConfig), ['requires_approval' => false, 'is_enabled' => true])->assertRedirect();
+
+    $activityLog = adminAuditRow('action_rule.updated');
+
+    expect($activityLog->user_id)->toBe($admin->id)
+        ->and($activityLog->subject_id)->toBe($actionTypeConfig->id)
+        ->and($activityLog->description)->toBe('Updated the "Delete series" action rule.')
+        ->and($activityLog->metadata['changes'])->toBe(['requires_approval' => ['from' => true, 'to' => false]]);
+});
+
+test('assigning a catalog price to an AI usage row records the prices it set', function (): void {
+    $admin = User::factory()->admin()->create();
+    AiModelPrice::factory()->create(['provider' => 'anthropic', 'model' => 'claude-haiku-4-5', 'input_per_mtok' => 1, 'output_per_mtok' => 5, 'cache_read_per_mtok' => 0.1, 'cache_write_per_mtok' => 1.25, 'reasoning_per_mtok' => 0]);
+    $aiUsageRecord = AiUsageRecord::factory()->create(['provider' => 'anthropic', 'model' => 'claude-haiku-4-5']);
+
+    $this->actingAs($admin)
+        ->post(route('admin.ai-usage.assign-price', $aiUsageRecord), ['provider' => 'anthropic', 'model' => 'claude-haiku-4-5'])
+        ->assertRedirect();
+
+    $activityLog = adminAuditRow('ai_usage.price_assigned');
+    $changes = $activityLog->metadata['changes'];
+
+    expect($activityLog->user_id)->toBe($admin->id)
+        ->and($activityLog->subject_id)->toBe($aiUsageRecord->id)
+        ->and($activityLog->description)->toBe(sprintf('Assigned the anthropic/claude-haiku-4-5 price to AI usage record %d.', $aiUsageRecord->id))
+        ->and($activityLog->metadata['context'])->toBe(['provider' => 'anthropic', 'model' => 'claude-haiku-4-5', 'invocation_id' => $aiUsageRecord->invocation_id])
+        ->and($changes['price_source']['to'])->toBe('assigned')
+        ->and((float) $changes['output_per_mtok']['to'])->toBe(5.0);
+});
+
+test('a rule change or price assignment whose audit row cannot be written is not kept', function (): void {
+    $admin = User::factory()->admin()->create();
+    $actionTypeConfig = ActionTypeConfig::factory()->create(['requires_approval' => true, 'is_enabled' => true]);
+    AiModelPrice::factory()->create(['provider' => 'anthropic', 'model' => 'claude-haiku-4-5', 'input_per_mtok' => 1, 'output_per_mtok' => 5]);
+    $aiUsageRecord = AiUsageRecord::factory()->create(['provider' => 'anthropic', 'model' => 'claude-haiku-4-5']);
+    ActivityLog::creating(static function (ActivityLog $activityLog): void {
+        throw_if($activityLog->category === ActivityLogCategory::Audit, RuntimeException::class, 'audit store unavailable');
+    });
+    $this->withoutExceptionHandling()->actingAs($admin);
+
+    expect(fn () => $this->patch(route('actions.rules.update', $actionTypeConfig), ['requires_approval' => false, 'is_enabled' => true]))
+        ->toThrow(RuntimeException::class, 'audit store unavailable')
+        ->and(fn () => $this->post(route('admin.ai-usage.assign-price', $aiUsageRecord), ['provider' => 'anthropic', 'model' => 'claude-haiku-4-5']))
+        ->toThrow(RuntimeException::class, 'audit store unavailable');
+
+    expect($actionTypeConfig->fresh()->requires_approval)->toBeTrue()
+        ->and($aiUsageRecord->fresh()->price_source)->not->toBe('assigned');
 });
