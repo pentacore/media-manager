@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use App\Enums\ActivityLogCategory;
 use App\Enums\UserRole;
 use App\Models\ActionRequest;
 use App\Models\ActionTypeConfig;
@@ -226,4 +227,80 @@ test('a refused role change writes no audit row', function (): void {
 
     expect(ActivityLog::query()->where('action', 'user.role_changed')->exists())->toBeFalse()
         ->and($admin->fresh()->role)->toBe(UserRole::Admin);
+});
+
+test('a member linking their own Emby account by password records the link', function (): void {
+    ServiceConnection::factory()->emby()->create(['url' => 'http://emby.local:8096', 'api_key' => 'k']);
+    $viewer = User::factory()->create(['name' => 'Vic']);
+    Http::fake(['emby.local:8096/Users/AuthenticateByName' => Http::response(['User' => ['Id' => 'emby-7', 'Name' => 'vic-emby'], 'AccessToken' => 't'])]);
+
+    $this->actingAs($viewer)->post(route('emby.links.store'), ['emby_username' => 'vic-emby', 'password' => 'secret'])->assertRedirect();
+
+    $embyUserLink = EmbyUserLink::query()->sole();
+    $activityLog = adminAuditRow('emby.user_linked');
+
+    expect($activityLog->user_id)->toBe($viewer->id)
+        ->and($activityLog->subject_type)->toBe($embyUserLink->getMorphClass())
+        ->and($activityLog->subject_id)->toBe($embyUserLink->id)
+        ->and($activityLog->description)->toBe('Linked Emby user "vic-emby" to Vic.')
+        ->and($activityLog->metadata['context'])->toBe(['emby_user_id' => 'emby-7', 'user_id' => $viewer->id, 'source' => 'credentials'])
+        ->and(json_encode($activityLog->metadata))->not->toContain('secret');
+});
+
+test('an admin link from the Emby directory and by username are recorded with their source', function (): void {
+    ServiceConnection::factory()->emby()->create(['url' => 'http://emby.local:8096', 'api_key' => 'k']);
+    $admin = User::factory()->admin()->create();
+    $bobby = User::factory()->create(['name' => 'Bobby']);
+    $carla = User::factory()->create(['name' => 'Carla']);
+    Http::fake(['emby.local:8096/Users' => Http::response([
+        ['Id' => 'emby-2', 'Name' => 'bob', 'LastActivityDate' => null, 'Policy' => ['IsAdministrator' => false]],
+        ['Id' => 'emby-3', 'Name' => 'carla', 'LastActivityDate' => null, 'Policy' => ['IsAdministrator' => false]],
+    ])]);
+
+    $this->actingAs($admin)->post(route('emby.links.directory.store'), ['user_id' => $bobby->id, 'emby_user_id' => 'emby-2'])->assertRedirect();
+    $this->actingAs($admin)->post(route('admin.users.link-emby', $carla), ['emby_username' => 'carla'])->assertRedirect();
+
+    $rows = ActivityLog::query()->where('action', 'emby.user_linked')->orderBy('id')->get();
+
+    expect($rows)->toHaveCount(2)
+        ->and($rows->every(fn (ActivityLog $activityLog): bool => $activityLog->isAudit() && $activityLog->user_id === $admin->id))->toBeTrue()
+        ->and($rows[0]->description)->toBe('Linked Emby user "bob" to Bobby.')
+        ->and($rows[0]->metadata['context'])->toBe(['emby_user_id' => 'emby-2', 'user_id' => $bobby->id, 'source' => 'directory'])
+        ->and($rows[1]->description)->toBe('Linked Emby user "carla" to Carla.')
+        ->and($rows[1]->metadata['context'])->toBe(['emby_user_id' => 'emby-3', 'user_id' => $carla->id, 'source' => 'username']);
+});
+
+test('a link whose audit row cannot be written is not kept', function (): void {
+    ServiceConnection::factory()->emby()->create(['url' => 'http://emby.local:8096', 'api_key' => 'k']);
+    $viewer = User::factory()->create();
+    Http::fake(['emby.local:8096/Users/AuthenticateByName' => Http::response(['User' => ['Id' => 'emby-7', 'Name' => 'vic-emby'], 'AccessToken' => 't'])]);
+    ActivityLog::creating(static function (ActivityLog $activityLog): void {
+        throw_if($activityLog->category === ActivityLogCategory::Audit, RuntimeException::class, 'audit store unavailable');
+    });
+
+    expect(fn () => $this->withoutExceptionHandling()->actingAs($viewer)->post(route('emby.links.store'), ['emby_username' => 'vic-emby', 'password' => 'secret']))
+        ->toThrow(RuntimeException::class, 'audit store unavailable');
+
+    expect(EmbyUserLink::query()->count())->toBe(0);
+});
+
+test('an Emby import that creates accounts records one summary row, and one that creates none records nothing', function (): void {
+    $emby = ServiceConnection::factory()->emby()->create(['url' => 'http://emby.local:8096', 'api_key' => 'k']);
+    $admin = User::factory()->admin()->create();
+    EmbyUserLink::factory()->create(['emby_user_id' => 'emby-1', 'emby_username' => 'already']);
+    Http::fake(['emby.local:8096/Users' => Http::response([
+        ['Id' => 'emby-1', 'Name' => 'already'],
+        ['Id' => 'emby-9', 'Name' => 'Newcomer'],
+    ])]);
+
+    $this->actingAs($admin)->post(route('admin.users.import-from-emby'))->assertRedirect();
+    $this->actingAs($admin)->post(route('admin.users.import-from-emby'))->assertRedirect();
+
+    $user = User::query()->where('email', 'emby+newcomer@local.invalid')->sole();
+    $activityLog = adminAuditRow('emby.users_imported');
+
+    expect($activityLog->user_id)->toBe($admin->id)
+        ->and($activityLog->service_connection_id)->toBe($emby->id)
+        ->and($activityLog->description)->toBe('Imported 1 Emby user(s), skipped 1.')
+        ->and($activityLog->metadata['context'])->toBe(['created' => 1, 'skipped' => 1, 'user_ids' => [$user->id]]);
 });
