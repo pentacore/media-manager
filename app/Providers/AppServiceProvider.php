@@ -12,6 +12,7 @@ use App\Events\WebhookReceived;
 use App\Jobs\ReconcileBazarrConnection;
 use App\Listeners\RebroadcastDashboardStats;
 use App\Listeners\RunDecisionAgentForWebhook;
+use App\Services\Whisparr\WhisparrItemIndex;
 use App\Settings\AiSettings;
 use App\Settings\AppSettings;
 use App\Settings\DecisionAgentSettings;
@@ -44,6 +45,10 @@ class AppServiceProvider extends ServiceProvider
         // override (withMode()); under Octane a singleton would leak one
         // request's override into every later request served by the worker.
         $this->app->scoped(AiSettings::class);
+        // Scoped, not singleton: WhisparrItemIndex keeps one request's (or
+        // queued job's) read of the cached Whisparr library list; under
+        // Octane a singleton would serve that list to every later request.
+        $this->app->scoped(WhisparrItemIndex::class);
         $this->app->singleton(DecisionAgentSettings::class);
 
         // Telescope is a require-dev package; the wrapper provider extends

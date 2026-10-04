@@ -8,6 +8,7 @@ use App\Models\ServiceConnection;
 use App\Services\Actions\ActionDescriber;
 use App\Services\Actions\UndescribableAction;
 use Illuminate\Http\Client\Request;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
 
 beforeEach(function (): void {
@@ -494,3 +495,35 @@ test('the Whisparr describer arms abort when the pin names a connection of anoth
     'whisparr_monitor_item' => ['whisparr_monitor_item', ['whisparr_item_id' => 11]],
     'whisparr_set_quality_profile' => ['whisparr_set_quality_profile', ['whisparr_item_id' => 11, 'quality_profile_id' => 2]],
 ]);
+
+test('describing a bulk of Whisparr items reads the library list once per request, even when its cache entry goes', function (): void {
+    $whisparr = ServiceConnection::factory()->whisparr()->create(['url' => 'http://whisparr.local:6969', 'name' => 'Whisparr']);
+    Http::fake(['whisparr.local:6969/api/v3/movie' => Http::response([
+        ['id' => 11, 'title' => 'Aurora Scene', 'year' => 2024],
+        ['id' => 12, 'title' => 'Borealis Scene', 'year' => 2023],
+    ])]);
+
+    $first = resolve(ActionDescriber::class)->describe('whisparr_search', ['whisparr_item_id' => 11, 'service_connection_id' => $whisparr->id]);
+    // Something else busts the Whisparr cache between two items of the bulk.
+    Cache::store('array')->flush();
+    $second = resolve(ActionDescriber::class)->describe('whisparr_search', ['whisparr_item_id' => 12, 'service_connection_id' => $whisparr->id]);
+
+    expect($first->title)->toBe('Search for item "Aurora Scene (2024)"')
+        ->and($second->title)->toBe('Search for item "Borealis Scene (2023)"');
+    Http::assertSentCount(1);
+});
+
+test('a later request reads the Whisparr library list again', function (): void {
+    $whisparr = ServiceConnection::factory()->whisparr()->create(['url' => 'http://whisparr.local:6969', 'name' => 'Whisparr']);
+    Http::fake(['whisparr.local:6969/api/v3/movie' => Http::response([
+        ['id' => 11, 'title' => 'Aurora Scene', 'year' => 2024],
+    ])]);
+
+    resolve(ActionDescriber::class)->describe('whisparr_search', ['whisparr_item_id' => 11, 'service_connection_id' => $whisparr->id]);
+    // A new Octane request (or queued job) starts with fresh scoped instances.
+    app()->forgetScopedInstances();
+    Cache::store('array')->flush();
+    resolve(ActionDescriber::class)->describe('whisparr_search', ['whisparr_item_id' => 11, 'service_connection_id' => $whisparr->id]);
+
+    Http::assertSentCount(2);
+});
