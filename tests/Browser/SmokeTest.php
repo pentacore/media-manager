@@ -413,6 +413,8 @@ function browserSmokeExcludedRouteNames(): array
         'admin.ai-usage.export',
         'ai.chat.pending-workflow',
         'ai.conversations.index',
+        'ai.templates.options',
+        'ai.templates.library',
         'media.search.instant',
         'media.replacement.inspect',
         'media.replacement.candidates',

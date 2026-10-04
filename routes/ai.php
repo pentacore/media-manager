@@ -5,6 +5,10 @@ declare(strict_types=1);
 use App\Http\Controllers\AI\ChatAttachmentController;
 use App\Http\Controllers\AI\ChatController;
 use App\Http\Controllers\AI\ChatTemplateController;
+use App\Http\Controllers\AI\ChatTemplateLibraryController;
+use App\Http\Controllers\AI\ChatTemplateOptionsController;
+use App\Http\Controllers\AI\ChatTemplatePreviewController;
+use App\Http\Controllers\AI\ChatTemplateRenderController;
 use App\Http\Controllers\AI\ConversationController;
 use Illuminate\Support\Facades\Route;
 
@@ -30,6 +34,9 @@ Route::middleware(['auth', 'verified', 'password.set', 'role:admin', 'ai.enabled
         Route::get('templates', [ChatTemplateController::class, 'index'])->name('templates.index');
         Route::get('templates/create', [ChatTemplateController::class, 'create'])->name('templates.create');
         Route::post('templates', [ChatTemplateController::class, 'store'])->name('templates.store');
+        Route::get('templates/options', ChatTemplateOptionsController::class)->name('templates.options');
+        Route::get('templates/library', ChatTemplateLibraryController::class)->name('templates.library');
+        Route::post('templates/preview', ChatTemplatePreviewController::class)->name('templates.preview');
         Route::get('templates/{chatTemplate}/edit', [ChatTemplateController::class, 'edit'])
             ->whereNumber('chatTemplate')
             ->name('templates.edit');
@@ -42,4 +49,7 @@ Route::middleware(['auth', 'verified', 'password.set', 'role:admin', 'ai.enabled
         Route::patch('templates/{chatTemplate}/pin', [ChatTemplateController::class, 'pin'])
             ->whereNumber('chatTemplate')
             ->name('templates.pin');
+        Route::post('templates/{chatTemplate}/render', ChatTemplateRenderController::class)
+            ->whereNumber('chatTemplate')
+            ->name('templates.render');
     });
