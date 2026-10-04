@@ -91,3 +91,16 @@ test('a successful run discards its accumulator entry', function (): void {
     expect(resolve(RunUsageAccumulator::class)->usage($agentResponse->invocationId))->toBeNull()
         ->and(AiUsageRecord::where('invocation_id', $agentResponse->invocationId)->value('status'))->toBe('success');
 });
+
+test('a failed run stores its error message without upstream paths or credentials', function (): void {
+    resolve(RunUsageAccumulator::class)->add('inv-redact', 'openai', 'gpt-5-mini', new TextUsage(10, 5));
+
+    (new RecordFailedAgentRun)->handle(new AgentFailed(
+        'inv-redact',
+        makeFailedRunPrompt(new DecisionAgent),
+        new RuntimeException('read /etc/ai/key.json from https://gw.example/v1?token=abc123'),
+    ));
+
+    expect(AiUsageRecord::where('invocation_id', 'inv-redact')->sole()->error_message)
+        ->toBe('read [redacted path] from https://gw.example/v1?[redacted]');
+});

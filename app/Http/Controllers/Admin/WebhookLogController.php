@@ -17,6 +17,7 @@ use App\Settings\WebhookSettings;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -105,9 +106,11 @@ class WebhookLogController extends Controller
             'capture_enabled' => ['required', 'boolean'],
         ]);
 
-        $webhookSettings->setCaptureEnabled((bool) $validated['capture_enabled']);
+        DB::transaction(function () use ($webhookSettings, $settingsSnapshot, $auditLogger, $before, $validated): void {
+            $webhookSettings->setCaptureEnabled((bool) $validated['capture_enabled']);
 
-        $auditLogger->settingsUpdated(SettingsGroup::Webhooks, $before, $settingsSnapshot->capture(SettingsGroup::Webhooks));
+            $auditLogger->settingsUpdated(SettingsGroup::Webhooks, $before, $settingsSnapshot->capture(SettingsGroup::Webhooks));
+        });
 
         Inertia::flash('toast', [
             'type' => 'success',

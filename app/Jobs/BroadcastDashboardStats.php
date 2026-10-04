@@ -7,6 +7,7 @@ namespace App\Jobs;
 use App\Services\Dashboard\DashboardStatsService;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
+use Illuminate\Queue\Attributes\Timeout;
 use Illuminate\Queue\Attributes\Tries;
 use Illuminate\Support\Facades\Cache;
 
@@ -17,6 +18,7 @@ use Illuminate\Support\Facades\Cache;
  * event after the forget schedules the next run: the trailing update of a
  * burst is never dropped.
  */
+#[Timeout(30)]
 #[Tries(1)]
 final class BroadcastDashboardStats implements ShouldQueue
 {

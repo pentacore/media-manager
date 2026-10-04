@@ -248,3 +248,23 @@ test('a stopped run for a trimmed event still records a Failed decision', functi
         ->status->toBe(AgentDecisionStatus::Failed)
         ->summary->toBe('Agent run stopped by the worker: no reason given.');
 });
+
+test('a failed agent run stores its error without upstream paths or credentials', function (): void {
+    DecisionAgent::fake(fn () => throw new RuntimeException('Provider said: cannot read /srv/keys/openai.key via https://api.example/v1?key=sk-live-123'));
+    $event = WebhookEvent::factory()->create();
+
+    runJob($event->id);
+
+    expect(AgentDecision::query()->where('webhook_event_id', $event->id)->sole())
+        ->status->toBe(AgentDecisionStatus::Failed)
+        ->summary->toBe('Agent run failed: Provider said: cannot read [redacted path] via https://api.example/v1?[redacted]');
+});
+
+test('a run the worker stops stores the reason without upstream paths', function (): void {
+    $event = WebhookEvent::factory()->create();
+
+    new RunDecisionAgent($event->id, 'sonarr', 'Grab', [])->failed(new RuntimeException('cURL error 28 reading /var/lib/sonarr/sonarr.db'));
+
+    expect(AgentDecision::query()->where('webhook_event_id', $event->id)->sole()->summary)
+        ->toBe('Agent run stopped by the worker: cURL error 28 reading [redacted path]');
+});

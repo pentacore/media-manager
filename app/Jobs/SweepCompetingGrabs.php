@@ -44,6 +44,12 @@ class SweepCompetingGrabs implements ShouldQueue
      */
     public int $backoff = 30;
 
+    /**
+     * Below the workers' --timeout (300s) and redis retry_after (330s); no
+     * tighter bound is known for this job.
+     */
+    public int $timeout = 270;
+
     public function __construct(
         public int $attemptId,
         public int $pass = 0,

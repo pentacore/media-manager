@@ -154,3 +154,18 @@ test('model:prune removes old finished price refresh runs and keeps running ones
     expect(AiPriceRefreshRun::query()->orderBy('id')->pluck('id')->all())->toBe([$oldRunning->id, $recentFinished->id])
         ->and(AiPriceRefreshRun::query()->whereKey($oldFinished->id)->exists())->toBeFalse();
 });
+
+test('pruning a case directly never deletes an upload whose file is still staged', function (): void {
+    $resolved = SubtitleCase::factory()->create(['status' => SubtitleCaseStatus::Resolved, 'resolved_at' => now()->subDays(200)]);
+    $attempt = SubtitleCaseAttempt::factory()->create(['subtitle_case_id' => $resolved->id]);
+    $cleaned = SubtitleUpload::factory()->create(['subtitle_case_id' => $resolved->id, 'cleaned_up_at' => now()->subDay()]);
+    $staged = SubtitleUpload::factory()->create(['subtitle_case_id' => $resolved->id, 'cleaned_up_at' => null]);
+
+    expect(fn (): ?bool => $resolved->prune())->toThrow(RuntimeException::class, 'still has a staged upload file');
+
+    // The whole prune rolled back: nothing about the case is gone.
+    $this->assertModelExists($resolved);
+    $this->assertModelExists($attempt);
+    $this->assertModelExists($cleaned);
+    $this->assertModelExists($staged);
+});

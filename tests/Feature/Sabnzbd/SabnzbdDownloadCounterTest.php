@@ -79,3 +79,11 @@ test('get returns the cached value', function (): void {
 
     expect(resolve(SabnzbdDownloadCounter::class)->get())->toBe(['queued' => 5, 'completed' => 2]);
 });
+
+test('a SABnzbd that refuses the reads leaves the badge counts at zero instead of failing', function (): void {
+    Http::preventStrayRequests();
+    ServiceConnection::factory()->sabnzbd()->create(['url' => 'http://sab-refusing.local:8080', 'api_key' => 'wrong-key']);
+    Http::fake(['sab-refusing.local:8080/api*' => Http::response(['status' => false, 'error' => 'API Key Incorrect'])]);
+
+    expect(resolve(SabnzbdDownloadCounter::class)->recompute())->toBe(['queued' => 0, 'completed' => 0]);
+});

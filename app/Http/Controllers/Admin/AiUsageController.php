@@ -7,15 +7,19 @@ namespace App\Http\Controllers\Admin;
 use App\Enums\AiUsageKind;
 use App\Enums\TimeWindow;
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Admin\AssignAiUsagePriceRequest;
 use App\Models\AiModelPrice;
 use App\Models\AiUsageRecord;
 use App\Services\AiBudget\UnpricedModelDetector;
 use App\Services\AiUsage\AiUsageReporting;
 use App\Services\AiUsage\Scenario;
+use App\Services\Audit\AuditChanges;
+use App\Services\Audit\AuditLogger;
 use App\Settings\AiSettings;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Inertia\Inertia;
 use Inertia\Response;
 use Symfony\Component\HttpFoundation\StreamedResponse;
@@ -90,26 +94,37 @@ class AiUsageController extends Controller
      * price_source flips to 'assigned' so the cost expression uses them
      * instead of (or in addition to) the live catalog match.
      */
-    public function assignPrice(Request $request, AiUsageRecord $aiUsageRecord): RedirectResponse
+    public function assignPrice(AssignAiUsagePriceRequest $assignAiUsagePriceRequest, AiUsageRecord $aiUsageRecord, AuditLogger $auditLogger): RedirectResponse
     {
-        $validated = $request->validate([
-            'provider' => ['required', 'string'],
-            'model' => ['required', 'string'],
-        ]);
+        $validated = $assignAiUsagePriceRequest->validated();
 
         $aiModelPrice = AiModelPrice::query()
             ->where('provider', $validated['provider'])
             ->where('model', $validated['model'])
             ->firstOrFail();
 
-        $aiUsageRecord->update([
-            'input_per_mtok' => $aiModelPrice->input_per_mtok,
-            'output_per_mtok' => $aiModelPrice->output_per_mtok,
-            'cache_read_per_mtok' => $aiModelPrice->cache_read_per_mtok,
-            'cache_write_per_mtok' => $aiModelPrice->cache_write_per_mtok,
-            'reasoning_per_mtok' => $aiModelPrice->reasoning_per_mtok,
-            'price_source' => 'assigned',
-        ]);
+        $priceFields = ['input_per_mtok', 'output_per_mtok', 'cache_read_per_mtok', 'cache_write_per_mtok', 'reasoning_per_mtok', 'price_source'];
+        $before = $aiUsageRecord->only($priceFields);
+
+        // The new prices and their audit row commit together.
+        DB::transaction(function () use ($aiUsageRecord, $aiModelPrice, $priceFields, $before, $auditLogger): void {
+            $aiUsageRecord->update([
+                'input_per_mtok' => $aiModelPrice->input_per_mtok,
+                'output_per_mtok' => $aiModelPrice->output_per_mtok,
+                'cache_read_per_mtok' => $aiModelPrice->cache_read_per_mtok,
+                'cache_write_per_mtok' => $aiModelPrice->cache_write_per_mtok,
+                'reasoning_per_mtok' => $aiModelPrice->reasoning_per_mtok,
+                'price_source' => 'assigned',
+            ]);
+
+            $auditLogger->record(
+                'ai_usage.price_assigned',
+                $aiUsageRecord,
+                sprintf('Assigned the %s/%s price to AI usage record %d.', $aiModelPrice->provider, $aiModelPrice->model, $aiUsageRecord->id),
+                AuditChanges::between($before, $aiUsageRecord->only($priceFields)),
+                ['provider' => $aiModelPrice->provider, 'model' => $aiModelPrice->model, 'invocation_id' => $aiUsageRecord->invocation_id],
+            );
+        });
 
         Inertia::flash('toast', [
             'type' => 'success',

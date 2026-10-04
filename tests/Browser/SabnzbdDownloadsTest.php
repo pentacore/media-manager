@@ -176,3 +176,16 @@ test('a double-clicked retry posts once', function (): void {
 
     expect(collect(Http::recorded())->filter(fn (array $pair): bool => (sabnzbdDownloadsQuery($pair[0])['mode'] ?? null) === 'retry'))->toHaveCount(1);
 });
+
+test('a SABnzbd that refuses the page load says so instead of showing empty lists', function (): void {
+    // A distinct host so this fake wins outright over the beforeEach's
+    // sab.local stub (Http::fake matches the first-registered pattern).
+    ServiceConnection::query()->where('type', 'sabnzbd')->update(['url' => 'http://sab-refusing.local:8080']);
+    Http::fake(['sab-refusing.local:8080/api*' => Http::response(['status' => false, 'error' => 'API Key Incorrect'])]);
+    $this->actingAs(User::factory()->member()->create());
+
+    visit(route('sabnzbd.queue.index', absolute: false))
+        ->assertNoSmoke()
+        ->assertSeeIn('[data-sabnzbd-error]', 'SABnzbd refused the request — check the connection settings.')
+        ->assertMissing('[data-sabnzbd-history]');
+});

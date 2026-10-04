@@ -24,6 +24,12 @@ class EmbedLibraryItem implements ShouldQueue
     public int $tries = 2;
 
     /**
+     * Below the workers' --timeout (300s) and redis retry_after (330s); no
+     * tighter bound is known for this job.
+     */
+    public int $timeout = 270;
+
+    /**
      * @param  class-string<IndexedMovie|IndexedSeries>  $modelClass
      */
     public function __construct(

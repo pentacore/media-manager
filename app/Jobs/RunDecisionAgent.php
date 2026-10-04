@@ -19,6 +19,7 @@ use App\Services\AiBudget\AiBudgetGuard;
 use App\Services\Notifications\AdminNotifier;
 use App\Settings\AiSettings;
 use App\Settings\DecisionAgentSettings;
+use App\Support\UpstreamErrorText;
 use Illuminate\Contracts\Queue\ShouldBeUnique;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
@@ -154,7 +155,7 @@ class RunDecisionAgent implements ShouldBeUnique, ShouldQueue
                 'exception' => $throwable::class,
                 'message' => $throwable->getMessage(),
             ]);
-            $this->record($webhookEventId, AgentDecisionStatus::Failed, 'Agent run failed: '.$throwable->getMessage(), $decisionRunContext);
+            $this->record($webhookEventId, AgentDecisionStatus::Failed, sprintf('Agent run failed: %s', UpstreamErrorText::sanitize($throwable->getMessage(), 2000)), $decisionRunContext);
 
             return;
         } finally {
@@ -198,7 +199,7 @@ class RunDecisionAgent implements ShouldBeUnique, ShouldQueue
             'service' => $this->service,
             'event_type' => $this->eventType,
             'status' => AgentDecisionStatus::Failed,
-            'summary' => Str::limit('Agent run stopped by the worker: '.($reason !== '' ? $reason : 'no reason given.'), 4000, ''),
+            'summary' => Str::limit(sprintf('Agent run stopped by the worker: %s', $reason !== '' ? UpstreamErrorText::sanitize($reason, 2000) : 'no reason given.'), 4000, ''),
             'actions_count' => count($actionRequestIds),
             'action_request_ids' => $actionRequestIds,
         ];
