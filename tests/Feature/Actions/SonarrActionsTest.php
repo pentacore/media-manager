@@ -470,7 +470,7 @@ test('each Sonarr library write returns exactly its result', function (string $t
     'quality profile' => ['set_series_quality_profile', ['series_id' => 42, 'quality_profile_id' => 7], ['sonarr_series_id' => 42, 'quality_profile_id' => 7]],
 ]);
 
-test('a request meant for Radarr is refused in the Sonarr executor\'s words, and nothing is sent', function (string $type, array $payload, string $message): void {
+test("a request meant for Radarr is refused in the Sonarr executor's words, and nothing is sent", function (string $type, array $payload, string $message): void {
     expect(fn (): array => (new SonarrActions)->execute(ActionRequest::factory()->create(['type' => $type, 'payload' => $payload])))
         ->toThrow(function (InvalidArgumentException $invalidArgumentException) use ($message): void {
             expect($invalidArgumentException->getMessage())->toBe($message);
