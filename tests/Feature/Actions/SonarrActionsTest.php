@@ -403,3 +403,19 @@ test('an episode search without its series is refused', function (): void {
 
     Http::assertNothingSent();
 });
+
+test('a malformed Sonarr id says whether it is missing or invalid, and nothing is sent', function (string $type, array $payload, string $message): void {
+    expect(fn (): array => (new SonarrActions)->execute(ActionRequest::factory()->create(['type' => $type, 'payload' => $payload])))
+        ->toThrow(function (InvalidArgumentException $invalidArgumentException) use ($message): void {
+            expect($invalidArgumentException->getMessage())->toBe($message);
+        });
+
+    Http::assertNothingSent();
+})->with([
+    'delete without an id' => ['delete_series', [], 'sonarr_series_id is required'],
+    'delete with a non-numeric id' => ['delete_series', ['sonarr_series_id' => 'abc'], 'sonarr_series_id must be a positive integer'],
+    'add with a zero tvdb id' => ['add_series', ['tvdb_id' => 0], 'tvdb_id must be a positive integer'],
+    'monitor without a series' => ['monitor_series', ['monitored' => false], 'series_id is required'],
+    'profile with a negative profile' => ['set_series_quality_profile', ['series_id' => 42, 'quality_profile_id' => -3], 'quality_profile_id must be a positive integer'],
+    'episodes with a non-numeric series' => ['monitor_episodes', ['series_id' => 'x', 'episode_ids' => [70]], 'series_id must be a positive integer'],
+]);

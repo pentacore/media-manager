@@ -14,6 +14,7 @@ use App\Services\Arr\ReleaseGrabber;
 use App\Services\Arr\SearchCommandRunner;
 use App\Services\MediaReplacement\PendingReplacementGuard;
 use App\Services\MediaReplacement\ReplacementInFlight;
+use App\Support\PayloadInt;
 use Illuminate\Support\Facades\Log;
 use InvalidArgumentException;
 use Throwable;
@@ -54,9 +55,7 @@ class SonarrActions implements ActionExecutor
     private function deleteSeries(ActionRequest $actionRequest): array
     {
         $payload = $actionRequest->payload;
-        $seriesId = (int) ($payload['sonarr_series_id'] ?? 0);
-
-        throw_if($seriesId <= 0, InvalidArgumentException::class, 'sonarr_series_id is required');
+        $seriesId = PayloadInt::required($payload, 'sonarr_series_id');
 
         $deleteFiles = (bool) ($payload['delete_files'] ?? false);
 
@@ -76,9 +75,7 @@ class SonarrActions implements ActionExecutor
     private function addSeries(ActionRequest $actionRequest): array
     {
         $payload = $actionRequest->payload;
-        $tvdbId = (int) ($payload['tvdb_id'] ?? 0);
-
-        throw_if($tvdbId <= 0, InvalidArgumentException::class, 'tvdb_id is required');
+        $tvdbId = PayloadInt::required($payload, 'tvdb_id');
 
         $serviceConnection = ServiceConnection::resolvePinned($payload, ServiceType::Sonarr);
         $sonarrClient = new SonarrClient($serviceConnection);
@@ -113,9 +110,7 @@ class SonarrActions implements ActionExecutor
     private function monitorSeries(ActionRequest $actionRequest): array
     {
         $payload = $actionRequest->payload;
-        $seriesId = (int) ($payload['series_id'] ?? 0);
-
-        throw_if($seriesId <= 0, InvalidArgumentException::class, 'series_id is required');
+        $seriesId = PayloadInt::required($payload, 'series_id');
 
         $monitored = (bool) ($payload['monitored'] ?? true);
 
@@ -141,11 +136,8 @@ class SonarrActions implements ActionExecutor
     private function setSeriesQualityProfile(ActionRequest $actionRequest): array
     {
         $payload = $actionRequest->payload;
-        $seriesId = (int) ($payload['series_id'] ?? 0);
-        $qualityProfileId = (int) ($payload['quality_profile_id'] ?? 0);
-
-        throw_if($seriesId <= 0, InvalidArgumentException::class, 'series_id is required');
-        throw_if($qualityProfileId <= 0, InvalidArgumentException::class, 'quality_profile_id is required');
+        $seriesId = PayloadInt::required($payload, 'series_id');
+        $qualityProfileId = PayloadInt::required($payload, 'quality_profile_id');
 
         $serviceConnection = ServiceConnection::resolvePinned($payload, ServiceType::Sonarr);
         $sonarrClient = new SonarrClient($serviceConnection);
@@ -166,11 +158,10 @@ class SonarrActions implements ActionExecutor
     private function monitorEpisodes(ActionRequest $actionRequest): array
     {
         $payload = $actionRequest->payload;
-        $seriesId = (int) ($payload['series_id'] ?? 0);
+        $seriesId = PayloadInt::required($payload, 'series_id');
         $episodeIds = $this->episodeIds($payload);
         $seasonNumber = isset($payload['season_number']) ? (int) $payload['season_number'] : null;
 
-        throw_if($seriesId <= 0, InvalidArgumentException::class, 'series_id is required');
         throw_if($episodeIds === [], InvalidArgumentException::class, 'episode_ids is required');
 
         $monitored = (bool) ($payload['monitored'] ?? true);

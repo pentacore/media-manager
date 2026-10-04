@@ -177,3 +177,19 @@ test('a movie write starts from what Radarr holds now, not from a cached snapsho
     'monitoring keeps a profile changed in Radarr' => ['monitor_movie', ['movie_id' => 42, 'monitored' => false], ['qualityProfileId' => 4], ['monitored' => false, 'qualityProfileId' => 4]],
     'a profile change keeps monitoring changed in Radarr' => ['set_movie_quality_profile', ['movie_id' => 42, 'quality_profile_id' => 7], ['monitored' => false], ['monitored' => false, 'qualityProfileId' => 7]],
 ]);
+
+test('a malformed Radarr id says whether it is missing or invalid, and nothing is sent', function (string $type, array $payload, string $message): void {
+    expect(fn (): array => (new RadarrActions)->execute(ActionRequest::factory()->create(['type' => $type, 'payload' => $payload])))
+        ->toThrow(function (InvalidArgumentException $invalidArgumentException) use ($message): void {
+            expect($invalidArgumentException->getMessage())->toBe($message);
+        });
+
+    Http::assertNothingSent();
+})->with([
+    'delete without an id' => ['delete_movie', [], 'radarr_movie_id is required'],
+    'delete with a non-numeric id' => ['delete_movie', ['radarr_movie_id' => 'abc'], 'radarr_movie_id must be a positive integer'],
+    'add with a zero tmdb id' => ['add_movie', ['tmdb_id' => 0], 'tmdb_id must be a positive integer'],
+    'monitor without a movie' => ['monitor_movie', ['monitored' => false], 'movie_id is required'],
+    'profile without a profile' => ['set_movie_quality_profile', ['movie_id' => 42], 'quality_profile_id is required'],
+    'profile with a negative profile' => ['set_movie_quality_profile', ['movie_id' => 42, 'quality_profile_id' => -3], 'quality_profile_id must be a positive integer'],
+]);

@@ -14,6 +14,7 @@ use App\Services\Arr\ReleaseGrabber;
 use App\Services\Arr\SearchCommandRunner;
 use App\Services\MediaReplacement\PendingReplacementGuard;
 use App\Services\MediaReplacement\ReplacementInFlight;
+use App\Support\PayloadInt;
 use Illuminate\Support\Facades\Log;
 use InvalidArgumentException;
 use Throwable;
@@ -52,9 +53,7 @@ class RadarrActions implements ActionExecutor
     private function deleteMovie(ActionRequest $actionRequest): array
     {
         $payload = $actionRequest->payload;
-        $movieId = (int) ($payload['radarr_movie_id'] ?? 0);
-
-        throw_if($movieId <= 0, InvalidArgumentException::class, 'radarr_movie_id is required');
+        $movieId = PayloadInt::required($payload, 'radarr_movie_id');
 
         $deleteFiles = (bool) ($payload['delete_files'] ?? false);
 
@@ -74,9 +73,7 @@ class RadarrActions implements ActionExecutor
     private function addMovie(ActionRequest $actionRequest): array
     {
         $payload = $actionRequest->payload;
-        $tmdbId = (int) ($payload['tmdb_id'] ?? 0);
-
-        throw_if($tmdbId <= 0, InvalidArgumentException::class, 'tmdb_id is required');
+        $tmdbId = PayloadInt::required($payload, 'tmdb_id');
 
         $serviceConnection = ServiceConnection::resolvePinned($payload, ServiceType::Radarr);
         $radarrClient = new RadarrClient($serviceConnection);
@@ -110,9 +107,7 @@ class RadarrActions implements ActionExecutor
     private function monitorMovie(ActionRequest $actionRequest): array
     {
         $payload = $actionRequest->payload;
-        $movieId = (int) ($payload['movie_id'] ?? 0);
-
-        throw_if($movieId <= 0, InvalidArgumentException::class, 'movie_id is required');
+        $movieId = PayloadInt::required($payload, 'movie_id');
 
         $monitored = (bool) ($payload['monitored'] ?? true);
 
@@ -138,11 +133,8 @@ class RadarrActions implements ActionExecutor
     private function setMovieQualityProfile(ActionRequest $actionRequest): array
     {
         $payload = $actionRequest->payload;
-        $movieId = (int) ($payload['movie_id'] ?? 0);
-        $qualityProfileId = (int) ($payload['quality_profile_id'] ?? 0);
-
-        throw_if($movieId <= 0, InvalidArgumentException::class, 'movie_id is required');
-        throw_if($qualityProfileId <= 0, InvalidArgumentException::class, 'quality_profile_id is required');
+        $movieId = PayloadInt::required($payload, 'movie_id');
+        $qualityProfileId = PayloadInt::required($payload, 'quality_profile_id');
 
         $serviceConnection = ServiceConnection::resolvePinned($payload, ServiceType::Radarr);
         $radarrClient = new RadarrClient($serviceConnection);
