@@ -360,3 +360,17 @@ test('a rule change or price assignment whose audit row cannot be written is not
     expect($actionTypeConfig->fresh()->requires_approval)->toBeTrue()
         ->and($aiUsageRecord->fresh()->price_source)->not->toBe('assigned');
 });
+
+test('an invite whose audit row cannot be written creates no account and sends no email', function (): void {
+    Mail::fake();
+    $admin = User::factory()->admin()->create();
+    ActivityLog::creating(static function (ActivityLog $activityLog): void {
+        throw_if($activityLog->category === ActivityLogCategory::Audit, RuntimeException::class, 'audit store unavailable');
+    });
+
+    expect(fn () => $this->withoutExceptionHandling()->actingAs($admin)->post(route('admin.users.store'), ['name' => 'Ivy', 'email' => 'ivy@example.com', 'role' => 'member']))
+        ->toThrow(RuntimeException::class, 'audit store unavailable');
+
+    expect(User::query()->where('email', 'ivy@example.com')->exists())->toBeFalse();
+    Mail::assertNothingSent();
+});
