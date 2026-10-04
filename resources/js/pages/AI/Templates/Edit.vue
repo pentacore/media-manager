@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { Head, Link, useForm } from '@inertiajs/vue3';
 import { useDebounceFn } from '@vueuse/core';
-import { ref, watch } from 'vue';
+import { onMounted, ref, watch } from 'vue';
 import AIChatController from '@/actions/App/Http/Controllers/AI/ChatController';
 import ChatTemplateController from '@/actions/App/Http/Controllers/AI/ChatTemplateController';
 import ChatTemplatePreviewController from '@/actions/App/Http/Controllers/AI/ChatTemplatePreviewController';
@@ -134,8 +134,14 @@ watch(
     () => {
         void refreshPreview();
     },
-    { deep: true, immediate: true },
+    { deep: true },
 );
+
+// The first preview waits for the browser: during SSR setup the fetch has no
+// server to reach and would only fail.
+onMounted(() => {
+    void refreshPreview();
+});
 
 function save(): void {
     if (props.template) {
