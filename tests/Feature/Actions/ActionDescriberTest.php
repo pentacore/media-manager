@@ -503,13 +503,13 @@ test('describing a bulk of Whisparr items reads the library list once per reques
         ['id' => 12, 'title' => 'Borealis Scene', 'year' => 2023],
     ])]);
 
-    $first = resolve(ActionDescriber::class)->describe('whisparr_search', ['whisparr_item_id' => 11, 'service_connection_id' => $whisparr->id]);
+    $firstTitle = resolve(ActionDescriber::class)->describe('whisparr_search', ['whisparr_item_id' => 11, 'service_connection_id' => $whisparr->id])->title;
     // Something else busts the Whisparr cache between two items of the bulk.
     Cache::store('array')->flush();
-    $second = resolve(ActionDescriber::class)->describe('whisparr_search', ['whisparr_item_id' => 12, 'service_connection_id' => $whisparr->id]);
+    $secondTitle = resolve(ActionDescriber::class)->describe('whisparr_search', ['whisparr_item_id' => 12, 'service_connection_id' => $whisparr->id])->title;
 
-    expect($first->title)->toBe('Search for item "Aurora Scene (2024)"')
-        ->and($second->title)->toBe('Search for item "Borealis Scene (2023)"');
+    expect($firstTitle)->toBe('Search for item "Aurora Scene (2024)"')
+        ->and($secondTitle)->toBe('Search for item "Borealis Scene (2023)"');
     Http::assertSentCount(1);
 });
 
