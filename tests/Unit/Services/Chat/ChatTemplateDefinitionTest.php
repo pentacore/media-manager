@@ -41,8 +41,14 @@ test('inconsistent definitions report the offending field', function (string $bo
     'choice with one option' => ['{{q}}', [chatTemplateVariable('q', 'choice', ['options' => ['a', 'a', '']])], 'variables.0.options', 'at least two different options'],
     'default on a series' => ['{{q}}', [chatTemplateVariable('q', 'series', ['default' => 'Frieren'])], 'variables.0.default', 'cannot have a default'],
     'non-integer number default' => ['{{q}}', [chatTemplateVariable('q', 'number', ['default' => 'two'])], 'variables.0.default', 'whole number'],
+    'negative number default' => ['{{q}}', [chatTemplateVariable('q', 'number', ['default' => '-1'])], 'variables.0.default', 'whole number between 0 and 100000'],
+    'number default above the maximum' => ['{{q}}', [chatTemplateVariable('q', 'number', ['default' => '100001'])], 'variables.0.default', 'whole number between 0 and 100000'],
     'choice default outside options' => ['{{q}}', [chatTemplateVariable('q', 'choice', ['options' => ['a', 'b'], 'default' => 'c'])], 'variables.0.default', 'one of the options'],
 ]);
+
+test('number defaults at the fill-time bounds are accepted', function (string $default): void {
+    expect(chatTemplateDefinition()->errors('{{q}}', [chatTemplateVariable('q', 'number', ['default' => $default])]))->toBe([]);
+})->with(['minimum' => '0', 'maximum' => '100000']);
 
 test('normalisation trims, dedupes and drops settings a type does not use', function (): void {
     expect(chatTemplateDefinition()->normalize([

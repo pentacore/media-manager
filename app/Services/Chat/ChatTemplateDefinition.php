@@ -122,13 +122,29 @@ final readonly class ChatTemplateDefinition
 
         if (! $chatTemplateVariableType->supportsDefault()) {
             $errors['default'] = 'Series and movie variables cannot have a default.';
-        } elseif ($chatTemplateVariableType === ChatTemplateVariableType::Number && filter_var($default, FILTER_VALIDATE_INT) === false) {
-            $errors['default'] = 'The default must be a whole number.';
+        } elseif ($chatTemplateVariableType === ChatTemplateVariableType::Number && ! $this->isNumberInRange($default)) {
+            $errors['default'] = sprintf(
+                'The default must be a whole number between %d and %d.',
+                ChatTemplateRenderer::MIN_NUMBER,
+                ChatTemplateRenderer::MAX_NUMBER,
+            );
         } elseif ($chatTemplateVariableType->requiresOptions() && ! in_array($default, $options, true)) {
             $errors['default'] = 'The default must be one of the options.';
         }
 
         return $errors;
+    }
+
+    /**
+     * The same bounds RenderChatTemplateRequest applies at fill time, so a
+     * saved default is always a value the fill dialog can send.
+     */
+    private function isNumberInRange(string $default): bool
+    {
+        return filter_var($default, FILTER_VALIDATE_INT, ['options' => [
+            'min_range' => ChatTemplateRenderer::MIN_NUMBER,
+            'max_range' => ChatTemplateRenderer::MAX_NUMBER,
+        ]]) !== false;
     }
 
     private function cleanDefault(mixed $default): ?string

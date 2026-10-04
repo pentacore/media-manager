@@ -7,6 +7,7 @@ namespace App\Http\Requests\AI;
 use App\Enums\ChatTemplateVariableType;
 use App\Models\ChatTemplate;
 use App\Models\User;
+use App\Services\Chat\ChatTemplateRenderer;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
@@ -37,7 +38,7 @@ class RenderChatTemplateRequest extends FormRequest
         foreach ($this->chatTemplate()->variables as $variable) {
             $rules[sprintf('values.%s', $variable['name'])] = match (ChatTemplateVariableType::from($variable['type'])) {
                 ChatTemplateVariableType::Text => ['required', 'string', 'max:500'],
-                ChatTemplateVariableType::Number => ['required', 'integer', 'min:0', 'max:100000'],
+                ChatTemplateVariableType::Number => ['required', 'integer', sprintf('min:%d', ChatTemplateRenderer::MIN_NUMBER), sprintf('max:%d', ChatTemplateRenderer::MAX_NUMBER)],
                 ChatTemplateVariableType::Choice => ['required', 'string', Rule::in($variable['options'] ?? [])],
                 ChatTemplateVariableType::Series, ChatTemplateVariableType::Movie => ['required', 'integer', 'min:1'],
             };

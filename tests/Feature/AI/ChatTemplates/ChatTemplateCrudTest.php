@@ -94,6 +94,7 @@ test('invalid definitions are rejected on the offending field', function (array 
     'default on a series' => [['body' => '{{q}}', 'variables' => [['name' => 'q', 'label' => 'Q', 'type' => 'series', 'default' => 'Frieren']]], 'variables.0.default'],
     'choice default outside options' => [['body' => '{{q}}', 'variables' => [['name' => 'q', 'label' => 'Q', 'type' => 'choice', 'options' => ['a', 'b'], 'default' => 'c']]], 'variables.0.default'],
     'non-integer number default' => [['body' => '{{q}}', 'variables' => [['name' => 'q', 'label' => 'Q', 'type' => 'number', 'default' => 'two']]], 'variables.0.default'],
+    'negative number default' => [['body' => '{{q}}', 'variables' => [['name' => 'q', 'label' => 'Q', 'type' => 'number', 'default' => '-5']]], 'variables.0.default'],
     'bad variable name' => [['body' => '{{q}}', 'variables' => [['name' => 'Q', 'label' => 'Q', 'type' => 'text']]], 'variables.0.name'],
     'unknown type' => [['body' => '{{q}}', 'variables' => [['name' => 'q', 'label' => 'Q', 'type' => 'episode']]], 'variables.0.type'],
     'duplicate variable' => [['body' => '{{q}}', 'variables' => [['name' => 'q', 'label' => 'Q', 'type' => 'text'], ['name' => 'q', 'label' => 'Q2', 'type' => 'text']]], 'variables.1.name'],

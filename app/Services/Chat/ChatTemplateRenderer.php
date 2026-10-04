@@ -19,6 +19,12 @@ final readonly class ChatTemplateRenderer
 {
     public const int MAX_LENGTH = 4000;
 
+    /** Smallest value a number variable accepts, as a fill-in value or a default. */
+    public const int MIN_NUMBER = 0;
+
+    /** Largest value a number variable accepts, as a fill-in value or a default. */
+    public const int MAX_NUMBER = 100000;
+
     public function __construct(
         private ChatTemplateParser $chatTemplateParser,
         private ChatTemplateLibrary $chatTemplateLibrary,
