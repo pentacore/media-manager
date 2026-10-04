@@ -268,3 +268,46 @@ test('a run the worker stops stores the reason without upstream paths', function
     expect(AgentDecision::query()->where('webhook_event_id', $event->id)->sole()->summary)
         ->toBe('Agent run stopped by the worker: cURL error 28 reading [redacted path]');
 });
+
+test('a summary longer than the decision budget is cut to 4000 characters without an ellipsis', function (): void {
+    DecisionAgent::fake([str_repeat('a', 5000)]);
+    $event = WebhookEvent::factory()->create();
+
+    runJob($event->id);
+
+    expect(AgentDecision::query()->where('webhook_event_id', $event->id)->sole()->summary)->toBe(str_repeat('a', 4000));
+});
+
+test('a run for a trimmed event records its decision without an event link', function (): void {
+    $this->mock(AiBudgetGuard::class)
+        ->shouldReceive('enforce')
+        ->andThrow(new AiBudgetExceededException(10.0, 5.0));
+
+    runJob(987654);
+
+    expect(AgentDecision::query()->sole())
+        ->webhook_event_id->toBeNull()
+        ->status->toBe(AgentDecisionStatus::Failed)
+        ->actions_count->toBe(0)
+        ->action_request_ids->toBe([]);
+});
+
+test('a run\'s own outcome replaces a decision row written for the same event while it ran', function (): void {
+    $event = WebhookEvent::factory()->create();
+    DecisionAgent::fake(function () use ($event): string {
+        AgentDecision::factory()->create([
+            'webhook_event_id' => $event->id,
+            'status' => AgentDecisionStatus::Failed,
+            'summary' => 'Written meanwhile.',
+        ]);
+
+        return 'Nothing to do.';
+    });
+
+    runJob($event->id);
+
+    expect(AgentDecision::query()->where('webhook_event_id', $event->id)->sole())
+        ->status->toBe(AgentDecisionStatus::NoAction)
+        ->summary->toBe('Nothing to do.')
+        ->actions_count->toBe(0);
+});
