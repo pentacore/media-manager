@@ -1,3 +1,7 @@
+export { default as ChatTemplateChips } from './ChatTemplateChips.vue';
+export { default as ChatTemplateFillDialog } from './ChatTemplateFillDialog.vue';
+export { default as ChatTemplatePicker } from './ChatTemplatePicker.vue';
+export { default as LibraryTitleCombobox } from './LibraryTitleCombobox.vue';
 export { default as TemplatePreview } from './TemplatePreview.vue';
 export { default as VariableRow } from './VariableRow.vue';
 export * from './tokens';

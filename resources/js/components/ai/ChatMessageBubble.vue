@@ -1,6 +1,9 @@
 <script setup lang="ts">
+import { Link } from '@inertiajs/vue3';
 import { Sparkles } from '@lucide/vue';
+import ChatTemplateController from '@/actions/App/Http/Controllers/AI/ChatTemplateController';
 import { InitialsAvatar } from '@/components/mm';
+import { useAiChat } from '@/composables/useAiChat';
 import { useMarkdown } from '@/composables/useMarkdown';
 import { cn } from '@/lib/utils';
 import AttachmentChips from './AttachmentChips.vue';
@@ -24,6 +27,11 @@ const emit = defineEmits<{
 }>();
 
 const { render: renderMarkdown } = useMarkdown();
+
+const { closeChat } = useAiChat();
+
+/** Server cap for a template body. */
+const MAX_TEMPLATE_BODY = 4000;
 </script>
 
 <template>
@@ -95,6 +103,20 @@ const { render: renderMarkdown } = useMarkdown();
                 class="mm-markdown text-[14px] leading-relaxed"
                 v-html="renderMarkdown(message.text)"
             />
+            <Link
+                v-if="message.role === 'user' && message.text"
+                :href="
+                    ChatTemplateController.create.url({
+                        query: {
+                            body: message.text.slice(0, MAX_TEMPLATE_BODY),
+                        },
+                    })
+                "
+                class="mt-1 inline-block text-[11.5px] text-muted-foreground hover:text-foreground"
+                data-save-as-template
+                @click="closeChat()"
+                >Save as template</Link
+            >
             <p
                 v-if="message.stopped"
                 class="text-[12px] text-muted-foreground"
