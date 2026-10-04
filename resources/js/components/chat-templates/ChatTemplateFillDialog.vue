@@ -123,6 +123,43 @@ function submit(action: TemplateAction): void {
         // Every failure is surfaced through the callbacks above.
     });
 }
+
+/**
+ * Run the primary action. While a chat turn is in flight a primary Send
+ * falls back to Insert, the same as the panel does for rendered text.
+ */
+function submitPrimary(): void {
+    submit(
+        primary.value === 'send' && props.sending ? 'insert' : primary.value,
+    );
+}
+
+/**
+ * Enter runs the primary action from any text field. The form has no submit
+ * button, so implicit submission can't be relied on. Enter is left alone in a
+ * <select>, on buttons and while an IME is composing, and is swallowed in the
+ * library search so an unpicked title is never submitted.
+ */
+function onEnter(event: KeyboardEvent): void {
+    const target = event.target;
+
+    if (
+        event.isComposing ||
+        !(target instanceof HTMLElement) ||
+        target instanceof HTMLSelectElement ||
+        target instanceof HTMLButtonElement
+    ) {
+        return;
+    }
+
+    event.preventDefault();
+
+    if (target.hasAttribute('data-library-search')) {
+        return;
+    }
+
+    submitPrimary();
+}
 </script>
 
 <template>
@@ -141,7 +178,11 @@ function submit(action: TemplateAction): void {
                 <DialogTitle>{{ template.name }}</DialogTitle>
                 <DialogDescription>Fill in the blanks.</DialogDescription>
             </DialogHeader>
-            <form class="grid gap-4" @submit.prevent="submit(primary)">
+            <form
+                class="grid gap-4"
+                @submit.prevent="submitPrimary"
+                @keydown.enter="onEnter"
+            >
                 <!-- A library picker holds several buttons, so it can't sit in a
                      <label>: clicking its text would activate the first one. -->
                 <component

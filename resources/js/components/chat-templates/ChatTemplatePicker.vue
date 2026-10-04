@@ -10,6 +10,7 @@ import {
     PopoverContent,
     PopoverTrigger,
 } from '@/components/ui/popover';
+import { useAiChat } from '@/composables/useAiChat';
 import { useChatTemplates } from '@/composables/useChatTemplates';
 import type { ChatTemplate } from './types';
 
@@ -24,6 +25,8 @@ const {
     ensureTemplatesLoaded,
     refreshTemplates,
 } = useChatTemplates();
+
+const { closeChat } = useAiChat();
 
 const open = ref(false);
 const filter = ref('');
@@ -114,6 +117,7 @@ function pick(template: ChatTemplate): void {
                 :href="ChatTemplateController.index.url()"
                 class="mt-2 block border-t border-border px-2 pt-2 text-[12.5px] text-muted-foreground hover:text-foreground"
                 data-template-manage
+                @click="closeChat()"
                 >Manage templates…</Link
             >
         </PopoverContent>

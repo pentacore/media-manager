@@ -2,6 +2,7 @@
 import { Link } from '@inertiajs/vue3';
 import { onMounted } from 'vue';
 import ChatTemplateController from '@/actions/App/Http/Controllers/AI/ChatTemplateController';
+import { useAiChat } from '@/composables/useAiChat';
 import { useChatTemplates } from '@/composables/useChatTemplates';
 import type { ChatTemplate } from './types';
 
@@ -16,6 +17,8 @@ const {
     ensureTemplatesLoaded,
     refreshTemplates,
 } = useChatTemplates();
+
+const { closeChat } = useAiChat();
 
 onMounted(() => {
     // The list is shared across pages, so revalidate it when the empty
@@ -41,6 +44,7 @@ onMounted(() => {
             :href="ChatTemplateController.index.url()"
             class="text-[12.5px] text-muted-foreground hover:text-foreground"
             data-template-hint
+            @click="closeChat()"
             >Save prompts you reuse as templates →</Link
         >
     </div>

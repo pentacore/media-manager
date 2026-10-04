@@ -165,3 +165,25 @@ test('save as template opens the editor with the sent message', function (): voi
         ->click('[data-save-as-template]')
         ->assertValue('[data-template-body]', 'Check the anime queue');
 });
+
+test('enter in a fill dialog field runs the primary action', function (): void {
+    MediaAgent::fake(['should not be used']);
+    $sonarr = ServiceConnection::factory()->sonarr()->create();
+    IndexedSeries::factory()->create(['service_connection_id' => $sonarr->id, 'sonarr_id' => 42, 'title' => 'Frieren', 'year' => 2023]);
+    $admin = User::factory()->admin()->create();
+    $chatTemplate = ChatTemplate::factory()->for($admin)->subtitleCheck()->create();
+    $this->actingAs($admin);
+
+    visit('/ai/chat')
+        ->assertNoSmoke()
+        ->click('[data-template-picker]')
+        ->click(sprintf('[data-template-option="%d"]', $chatTemplate->id))
+        ->type('[data-library-search]', 'frie')
+        ->click('[data-library-option="42"]')
+        ->assertSeeIn('[data-library-selected]', 'Frieren')
+        ->fill('[data-template-field="season"]', '1')
+        ->fill('[data-template-field="episode"]', '7')
+        ->keys('[data-template-field="episode"]', 'Enter')
+        ->assertValue('[data-chat-input]', 'Check Frieren (2023) S1E7 for subtitles')
+        ->assertDontSeeIn('[data-chat-thread]', 'should not be used');
+});
