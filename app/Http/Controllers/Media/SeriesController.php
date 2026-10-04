@@ -12,14 +12,12 @@ use App\Services\Actions\ManualActionOutcome;
 use App\Services\Library\LibraryActionRequester;
 use App\Services\Sonarr\SonarrClient;
 use App\Support\Abilities;
-use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\RequestException;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
-use Override;
 
 class SeriesController extends BaseArrController
 {
@@ -138,10 +136,13 @@ class SeriesController extends BaseArrController
 
     public function store(StoreSeriesRequest $storeSeriesRequest): RedirectResponse
     {
+        $connection = $this->resolveConnection();
+        if ($connection instanceof RedirectResponse) {
+            return $connection;
+        }
+
         try {
-            $this->client()->addSeries($storeSeriesRequest->validated());
-        } catch (ModelNotFoundException) {
-            return $this->noConnectionRedirect();
+            $this->buildClient($connection)->addSeries($storeSeriesRequest->validated());
         } catch (RequestException|ConnectionException) {
             Inertia::flash('toast', ['type' => 'error', 'message' => __('Failed to add series.')]);
 
@@ -184,17 +185,6 @@ class SeriesController extends BaseArrController
     protected function buildClient(ServiceConnection $serviceConnection): SonarrClient
     {
         return new SonarrClient($serviceConnection);
-    }
-
-    #[Override]
-    protected function client(): SonarrClient
-    {
-        return $this->buildClient(ServiceConnection::resolveActive($this->serviceType()));
-    }
-
-    protected function noConnectionMessage(): string
-    {
-        return __('No active Sonarr connection configured.');
     }
 
     protected function connectionFailedMessage(): string
