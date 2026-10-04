@@ -79,7 +79,7 @@ test('a Health warning is logged with its own message and notifies the admins', 
         && $serviceWarning->level === 'warning');
 })->with(arrHousekeepingCases());
 
-test('a Health error without a type or message falls back to the service\'s generic wording', function (string $handlerClass, string $slug, string $label): void {
+test("a Health error without a type or message falls back to the service's generic wording", function (string $handlerClass, string $slug, string $label): void {
     $admin = User::factory()->admin()->create();
     $webhookEvent = arrHousekeepingEvent($slug, 'Health', ['level' => 'error']);
 

@@ -54,6 +54,7 @@ test('each per-connection cache takes its bucket lifetimes from the shared cache
     $misses->list = 0;
     $misses->entity = 0;
     $misses->metadata = 0;
+
     $read = function () use ($cache, $misses): void {
         $cache->rememberList('list', function () use ($misses): array {
             $misses->list++;

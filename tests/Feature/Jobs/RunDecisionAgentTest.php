@@ -292,7 +292,7 @@ test('a run for a trimmed event records its decision without an event link', fun
         ->action_request_ids->toBe([]);
 });
 
-test('a run\'s own outcome replaces a decision row written for the same event while it ran', function (): void {
+test("a run's own outcome replaces a decision row written for the same event while it ran", function (): void {
     $event = WebhookEvent::factory()->create();
     DecisionAgent::fake(function () use ($event): string {
         AgentDecision::factory()->create([
