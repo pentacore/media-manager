@@ -34,6 +34,17 @@ test('an admin creates a template with live variable rows and preview', function
     expect($admin->chatTemplates()->sole()->variables[0]['type'])->toBe('series');
 });
 
+test('an admin opens an existing template in the editor', function (): void {
+    $admin = User::factory()->admin()->create();
+    $chatTemplate = ChatTemplate::factory()->for($admin)->subtitleCheck()->create(['name' => 'Subtitle check']);
+    $this->actingAs($admin);
+
+    visit(route('ai.templates.edit', $chatTemplate, absolute: false))
+        ->assertNoSmoke()
+        ->assertValue('[data-template-name]', 'Subtitle check')
+        ->assertVisible('[data-variable-row="anime"]');
+});
+
 test('variable settings survive removing and re-adding a token', function (): void {
     $this->actingAs(User::factory()->admin()->create());
 
@@ -65,7 +76,7 @@ test('grammar errors show in the live preview and on save', function (): void {
 
 test('the list shows templates and pins them', function (): void {
     $admin = User::factory()->admin()->create();
-    $chatTemplate = ChatTemplate::factory()->for($admin)->create(['name' => 'Stuck downloads']);
+    $chatTemplate = ChatTemplate::factory()->for($admin)->create(['name' => 'Stuck downloads', 'body' => 'Look for anything stalled in the queues']);
     $this->actingAs($admin);
 
     visit(route('ai.templates.index', absolute: false))
@@ -186,4 +197,32 @@ test('enter in a fill dialog field runs the primary action', function (): void {
         ->keys('[data-template-field="episode"]', 'Enter')
         ->assertValue('[data-chat-input]', 'Check Frieren (2023) S1E7 for subtitles')
         ->assertDontSeeIn('[data-chat-thread]', 'should not be used');
+});
+
+test('the fill dialog explains a template that changed after it opened', function (): void {
+    MediaAgent::fake(['should not be used']);
+    $admin = User::factory()->admin()->create();
+    $chatTemplate = ChatTemplate::factory()->for($admin)->withBody('Find subtitles for {{what}}', [
+        ['name' => 'what', 'label' => 'What', 'type' => 'text', 'default' => null, 'options' => null],
+    ])->create();
+    $this->actingAs($admin);
+
+    $webpage = visit('/ai/chat')
+        ->assertNoSmoke()
+        ->click('[data-template-picker]')
+        ->click(sprintf('[data-template-option="%d"]', $chatTemplate->id))
+        ->assertVisible('[data-template-fill-dialog]');
+
+    $chatTemplate->update([
+        'body' => 'Find {{lang}} subtitles for {{what}}',
+        'variables' => [
+            ['name' => 'lang', 'label' => 'Language', 'type' => 'text', 'default' => null, 'options' => null],
+            ...$chatTemplate->variables,
+        ],
+    ]);
+
+    $webpage->fill('[data-template-field="what"]', 'Dune')
+        ->click('[data-template-insert]')
+        ->assertSeeIn('[data-template-fill-error]', 'Language')
+        ->assertValue('[data-chat-input]', '');
 });
