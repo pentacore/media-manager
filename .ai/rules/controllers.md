@@ -34,3 +34,6 @@ Controllers for the same upstream service extend a shared abstract base (e.g. `B
 
 ## Never echo raw upstream error text
 Every upstream error text that reaches a toast, JSON body, validation error or stored display field goes through `App\Support\UpstreamErrorText::sanitize()` (on the same line as `->getMessage()`) or becomes a fixed sentence. Raw messages may only appear in `Log::` contexts. `tests/Unit/Architecture/UpstreamErrorEchoArchTest.php` enforces it; add to its reviewed list only app-authored text.
+
+## Optional connections: findActive(), never a caught resolveActive()
+Look up a connection that may legitimately be missing with `ServiceConnection::findActive($type)` and branch on null; never wrap `ServiceConnection::resolveActive()` in `catch (ModelNotFoundException)` (`tests/Unit/Architecture/ConnectionLookupArchTest.php` fails on it). Refuse with `$this->noActiveConnectionRedirect($type)` (dashboard) or `$this->noActiveConnectionRedirect($type, back())` for the standard "No active :service connection configured." toast; keep a page's own wording only where it already differs. For the primary Sonarr/Radarr client use `App\Services\Arr\ArrConnections`. `resolveActive()` stays for executors, AI tools and `ServiceClientFactory`, where a missing connection is an error.
