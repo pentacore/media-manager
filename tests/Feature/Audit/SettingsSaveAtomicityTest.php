@@ -3,8 +3,13 @@
 declare(strict_types=1);
 
 use App\Enums\ActivityLogCategory;
+use App\Enums\RateLimitMetric;
+use App\Enums\RateLimitPeriod;
 use App\Models\ActivityLog;
+use App\Models\AiFreeUsagePool;
+use App\Models\AiModelPrice;
 use App\Models\AppSetting;
+use App\Models\NotificationDestination;
 use App\Models\User;
 use App\Settings\BazarrAutomationSettings;
 use Illuminate\Support\Facades\Cache;
@@ -87,3 +92,52 @@ test('a settings save whose audit row cannot be written keeps every earlier sett
     }],
     'webhook capture' => ['admin.webhook-log.update-settings', fn (): array => ['capture_enabled' => false]],
 ]);
+
+test('a free usage pool create, update or delete whose audit row cannot be written changes nothing', function (): void {
+    $admin = User::factory()->admin()->create();
+    $pool = AiFreeUsagePool::factory()->unified(500_000)->create(['name' => 'Gemini free tier']);
+    $payload = ['name' => 'Groq free', 'period' => 'daily', 'unified' => true, 'free_total_tokens' => 1000, 'overflow_behavior' => 'fit_or_paid'];
+    settingsAtomicityFailAudits();
+    $this->withoutExceptionHandling()->actingAs($admin);
+
+    expect(fn () => $this->post(route('admin.ai-free-usage-pools.store'), $payload))->toThrow(RuntimeException::class, 'audit store unavailable')
+        ->and(fn () => $this->put(route('admin.ai-free-usage-pools.update', $pool), $payload))->toThrow(RuntimeException::class, 'audit store unavailable')
+        ->and(fn () => $this->delete(route('admin.ai-free-usage-pools.destroy', $pool)))->toThrow(RuntimeException::class, 'audit store unavailable');
+
+    expect(AiFreeUsagePool::query()->pluck('name')->all())->toBe(['Gemini free tier']);
+});
+
+test('a model price create, update or delete whose audit row cannot be written changes nothing, rate limits included', function (): void {
+    $admin = User::factory()->admin()->create();
+    $price = AiModelPrice::factory()->create(['provider' => 'openai', 'model' => 'gpt-atomic', 'input_per_mtok' => 1.25]);
+    $price->rateLimits()->create(['metric' => RateLimitMetric::Requests, 'period' => RateLimitPeriod::Minute, 'limit_value' => 60]);
+    settingsAtomicityFailAudits();
+    $this->withoutExceptionHandling()->actingAs($admin);
+
+    expect(fn () => $this->post(route('admin.ai-prices.store'), [
+        'provider' => 'openai', 'model' => 'gpt-atomic-new', 'input_per_mtok' => 1, 'output_per_mtok' => 5,
+        'cache_read_per_mtok' => 0, 'cache_write_per_mtok' => 0, 'reasoning_per_mtok' => 0,
+    ]))->toThrow(RuntimeException::class, 'audit store unavailable')
+        ->and(fn () => $this->put(route('admin.ai-prices.update', $price), [
+            'input_per_mtok' => 2.5, 'output_per_mtok' => 5, 'cache_read_per_mtok' => 0, 'cache_write_per_mtok' => 0, 'reasoning_per_mtok' => 0,
+        ]))->toThrow(RuntimeException::class, 'audit store unavailable')
+        ->and(fn () => $this->delete(route('admin.ai-prices.destroy', $price)))->toThrow(RuntimeException::class, 'audit store unavailable');
+
+    expect(AiModelPrice::query()->pluck('model')->all())->toBe(['gpt-atomic'])
+        ->and((float) $price->fresh()->input_per_mtok)->toBe(1.25)
+        ->and($price->fresh()->rateLimits()->count())->toBe(1);
+});
+
+test('a notification destination create, update or delete whose audit row cannot be written changes nothing', function (): void {
+    $admin = User::factory()->admin()->create();
+    $notificationDestination = NotificationDestination::factory()->create(['label' => 'Ops channel']);
+    $payload = ['channel' => 'discord', 'label' => 'Ops alerts', 'is_enabled' => '1', 'min_severity' => 'warning', 'config' => ['url' => 'https://discord.com/api/webhooks/1/abc']];
+    settingsAtomicityFailAudits();
+    $this->withoutExceptionHandling()->actingAs($admin);
+
+    expect(fn () => $this->post(route('admin.notification-destinations.store'), $payload))->toThrow(RuntimeException::class, 'audit store unavailable')
+        ->and(fn () => $this->put(route('admin.notification-destinations.update', $notificationDestination), $payload))->toThrow(RuntimeException::class, 'audit store unavailable')
+        ->and(fn () => $this->delete(route('admin.notification-destinations.destroy', $notificationDestination)))->toThrow(RuntimeException::class, 'audit store unavailable');
+
+    expect(NotificationDestination::query()->pluck('label')->all())->toBe(['Ops channel']);
+});

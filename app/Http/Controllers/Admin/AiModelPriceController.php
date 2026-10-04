@@ -104,16 +104,18 @@ class AiModelPriceController extends Controller
             }
         }
 
-        $aiModelPrice = AiModelPrice::create($validated);
-        $aiModelPrice->rateLimits()->createMany($rateLimits);
+        DB::transaction(function () use ($validated, $rateLimits, $auditLogger): void {
+            $aiModelPrice = AiModelPrice::create($validated);
+            $aiModelPrice->rateLimits()->createMany($rateLimits);
 
-        $auditLogger->settingsUpdated(
-            SettingsGroup::AiModelPrices,
-            [],
-            $this->auditSnapshot($aiModelPrice->refresh()),
-            ['operation' => 'created', 'record_id' => $aiModelPrice->id],
-            sprintf('Added the AI model price for %s/%s.', $aiModelPrice->provider, $aiModelPrice->model),
-        );
+            $auditLogger->settingsUpdated(
+                SettingsGroup::AiModelPrices,
+                [],
+                $this->auditSnapshot($aiModelPrice->refresh()),
+                ['operation' => 'created', 'record_id' => $aiModelPrice->id],
+                sprintf('Added the AI model price for %s/%s.', $aiModelPrice->provider, $aiModelPrice->model),
+            );
+        });
 
         Inertia::flash('toast', [
             'type' => 'success',
@@ -151,17 +153,19 @@ class AiModelPriceController extends Controller
             $validated['is_price_locked'] = true;
         }
 
-        $aiModelPrice->update($validated);
-        $aiModelPrice->rateLimits()->delete();
-        $aiModelPrice->rateLimits()->createMany($rateLimits);
+        DB::transaction(function () use ($aiModelPrice, $validated, $rateLimits, $auditLogger, $before): void {
+            $aiModelPrice->update($validated);
+            $aiModelPrice->rateLimits()->delete();
+            $aiModelPrice->rateLimits()->createMany($rateLimits);
 
-        $auditLogger->settingsUpdated(
-            SettingsGroup::AiModelPrices,
-            $before,
-            $this->auditSnapshot($aiModelPrice),
-            ['operation' => 'updated', 'record_id' => $aiModelPrice->id],
-            sprintf('Updated the AI model price for %s/%s.', $aiModelPrice->provider, $aiModelPrice->model),
-        );
+            $auditLogger->settingsUpdated(
+                SettingsGroup::AiModelPrices,
+                $before,
+                $this->auditSnapshot($aiModelPrice),
+                ['operation' => 'updated', 'record_id' => $aiModelPrice->id],
+                sprintf('Updated the AI model price for %s/%s.', $aiModelPrice->provider, $aiModelPrice->model),
+            );
+        });
 
         Inertia::flash('toast', ['type' => 'success', 'message' => __('Model price updated.')]);
 
@@ -172,15 +176,17 @@ class AiModelPriceController extends Controller
     {
         $before = $this->auditSnapshot($aiModelPrice);
 
-        $aiModelPrice->delete();
+        DB::transaction(function () use ($aiModelPrice, $auditLogger, $before): void {
+            $aiModelPrice->delete();
 
-        $auditLogger->settingsUpdated(
-            SettingsGroup::AiModelPrices,
-            $before,
-            [],
-            ['operation' => 'deleted', 'record_id' => $aiModelPrice->id],
-            sprintf('Removed the AI model price for %s/%s.', $aiModelPrice->provider, $aiModelPrice->model),
-        );
+            $auditLogger->settingsUpdated(
+                SettingsGroup::AiModelPrices,
+                $before,
+                [],
+                ['operation' => 'deleted', 'record_id' => $aiModelPrice->id],
+                sprintf('Removed the AI model price for %s/%s.', $aiModelPrice->provider, $aiModelPrice->model),
+            );
+        });
 
         Inertia::flash('toast', ['type' => 'success', 'message' => __('Model price removed.')]);
 
