@@ -25,11 +25,9 @@ class EmbyAuthController extends Controller
 {
     public function store(EmbyLoginRequest $embyLoginRequest, CreateUserWithBootstrapRole $createUserWithBootstrapRole): RedirectResponse
     {
-        $connection = ServiceConnection::where('type', ServiceType::Emby)
-            ->where('is_active', true)
-            ->first();
+        $connection = ServiceConnection::findActive(ServiceType::Emby);
 
-        if (! $connection) {
+        if (! $connection instanceof ServiceConnection) {
             return to_route('login')->withErrors(['username' => __('Emby authentication is not available.')]);
         }
 

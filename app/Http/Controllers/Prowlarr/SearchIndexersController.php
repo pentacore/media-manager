@@ -22,13 +22,9 @@ class SearchIndexersController extends Controller
     {
         $query = trim((string) $request->query('q', ''));
 
-        $connection = ServiceConnection::query()
-            ->where('type', ServiceType::Prowlarr)
-            ->where('is_active', true)
-            ->orderBy('id')
-            ->first();
+        $connection = ServiceConnection::findActive(ServiceType::Prowlarr);
 
-        if ($connection === null) {
+        if (! $connection instanceof ServiceConnection) {
             return Inertia::render('Prowlarr/Search', [
                 'query' => $query,
                 'results' => [],
