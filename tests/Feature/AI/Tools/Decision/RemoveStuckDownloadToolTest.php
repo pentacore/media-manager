@@ -253,4 +253,5 @@ test("a non-string argument is refused in the tool's own words", function (array
     'a numeric service' => [['service' => 5, 'download_id' => 'dl-1', 'reason' => 'x'], 'service', 'service must be "sonarr" or "radarr".'],
     'a list as the download id' => [['service' => 'sonarr', 'download_id' => ['dl-1'], 'reason' => 'x'], 'download_id', 'download_id must be a string.'],
     'a list as the reason' => [['service' => 'sonarr', 'download_id' => 'dl-1', 'reason' => ['x']], 'reason', 'reason must be a short plain-text explanation for the human approver.'],
+    'a boolean as the reason' => [['service' => 'sonarr', 'download_id' => 'dl-1', 'reason' => true], 'reason', 'reason must be a short plain-text explanation for the human approver.'],
 ]);

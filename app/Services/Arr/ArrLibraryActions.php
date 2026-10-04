@@ -50,7 +50,7 @@ abstract class ArrLibraryActions implements ActionExecutor
     /** The item noun in action types and messages: "series" or "movie". */
     abstract protected function itemNoun(): string;
 
-    /** The delete payload's id key, also every result's id key ("sonarr_series_id"). */
+    /** The delete payload's id key, also every library-write result's id key ("sonarr_series_id"). */
     abstract protected function libraryIdKey(): string;
 
     /** The monitor/profile payload's id key ("series_id"). */

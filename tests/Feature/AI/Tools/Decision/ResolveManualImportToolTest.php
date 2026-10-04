@@ -212,4 +212,5 @@ test("a non-string argument is refused in the tool's own words", function (array
 })->with([
     'a numeric service' => [['service' => 5, 'download_id' => 'dl-1'], 'service', 'service must be "sonarr" or "radarr".'],
     'a list as the download id' => [['service' => 'sonarr', 'download_id' => ['dl-1']], 'download_id', 'download_id must be a string (take it from the event payload).'],
+    'a boolean as the download id' => [['service' => 'sonarr', 'download_id' => true], 'download_id', 'download_id must be a string (take it from the event payload).'],
 ]);
