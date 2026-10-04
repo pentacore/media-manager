@@ -5,6 +5,7 @@ declare(strict_types=1);
 use App\Models\AppSetting;
 use App\Settings\AppSettings;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
 
 beforeEach(function (): void {
     Cache::flush();
@@ -62,4 +63,32 @@ test('manually inserted rows are returned by get', function (): void {
     Cache::flush();
 
     expect(resolve(AppSettings::class)->get('manual'))->toBe('direct');
+});
+
+test('a value read back inside a rolled-back save is not served from the cache afterwards', function (): void {
+    $appSettings = resolve(AppSettings::class);
+    $appSettings->set('greeting', 'hello');
+
+    expect(fn () => DB::transaction(function () use ($appSettings): void {
+        $appSettings->set('greeting', 'world');
+        // A getter inside the save caches the uncommitted value.
+        expect($appSettings->get('greeting'))->toBe('world');
+
+        throw new RuntimeException('roll back');
+    }))->toThrow(RuntimeException::class, 'roll back');
+
+    expect($appSettings->get('greeting'))->toBe('hello');
+});
+
+test('an old value another reader cached while the save was open is evicted when it commits', function (): void {
+    $appSettings = resolve(AppSettings::class);
+    $appSettings->set('greeting', 'hello');
+
+    DB::transaction(function () use ($appSettings): void {
+        $appSettings->set('greeting', 'world');
+        // Another worker, still seeing the committed row, caches it.
+        Cache::put('app_settings:greeting', 'hello', 60);
+    });
+
+    expect($appSettings->get('greeting'))->toBe('world');
 });

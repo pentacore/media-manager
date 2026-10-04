@@ -58,7 +58,7 @@ class SonarrClient extends ArrClient implements Warmable
      */
     public function fetchSeriesById(int $id): array
     {
-        return $this->buildClient()->get(sprintf('/api/%s/series/%d', $this->apiVersion, $id))->throw()->json() ?? [];
+        return $this->jsonArray($this->buildClient()->get(sprintf('/api/%s/series/%d', $this->apiVersion, $id))->throw());
     }
 
     /**
@@ -102,7 +102,7 @@ class SonarrClient extends ArrClient implements Warmable
     {
         return $this->cache()->rememberList(
             'search:'.md5($query),
-            fn (): array => $this->buildClient()->get(sprintf('/api/%s/series/lookup', $this->apiVersion), ['term' => $query])->throw()->json() ?? [],
+            fn (): array => $this->jsonArray($this->buildClient()->get(sprintf('/api/%s/series/lookup', $this->apiVersion), ['term' => $query])->throw()),
         );
     }
 
@@ -129,10 +129,9 @@ class SonarrClient extends ArrClient implements Warmable
      */
     public function fetchEpisodesBySeries(int $seriesId): array
     {
-        return $this->buildClient()
+        return $this->jsonArray($this->buildClient()
             ->get(sprintf('/api/%s/episode', $this->apiVersion), ['seriesId' => $seriesId])
-            ->throw()
-            ->json() ?? [];
+            ->throw());
     }
 
     /**
@@ -273,10 +272,9 @@ class SonarrClient extends ArrClient implements Warmable
      */
     public function getEpisodeFiles(int $seriesId): array
     {
-        return $this->buildClient()
+        return $this->jsonArray($this->buildClient()
             ->get(sprintf('/api/%s/episodefile', $this->apiVersion), ['seriesId' => $seriesId])
-            ->throw()
-            ->json() ?? [];
+            ->throw());
     }
 
     /**
@@ -286,10 +284,9 @@ class SonarrClient extends ArrClient implements Warmable
      */
     public function getEpisodeFileById(int $episodeFileId): array
     {
-        return $this->buildClient()
+        return $this->jsonArray($this->buildClient()
             ->get(sprintf('/api/%s/episodefile/%d', $this->apiVersion, $episodeFileId))
-            ->throw()
-            ->json() ?? [];
+            ->throw());
     }
 
     /**
@@ -327,7 +324,7 @@ class SonarrClient extends ArrClient implements Warmable
      */
     private function fetchSeries(): array
     {
-        return $this->buildClient()->get(sprintf('/api/%s/series', $this->apiVersion))->throw()->json() ?? [];
+        return $this->jsonArray($this->buildClient()->get(sprintf('/api/%s/series', $this->apiVersion))->throw());
     }
 
     private function cache(): SonarrCache

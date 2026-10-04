@@ -48,6 +48,12 @@ class AuditImportedSubtitles implements ShouldQueue
     public int $backoff = 30;
 
     /**
+     * Below the workers' --timeout (300s) and redis retry_after (330s); no
+     * tighter bound is known for this job.
+     */
+    public int $timeout = 270;
+
+    /**
      * @param  array<string, mixed>  $payload
      */
     public function __construct(

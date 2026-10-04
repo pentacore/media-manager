@@ -73,3 +73,12 @@ test('when every provider fails each attempt is priced at its own model', functi
         ->prompt_tokens->toBe(3000)
         ->completion_tokens->toBe(600);
 });
+
+test('an abandoned provider attempt stores its error without upstream paths or credentials', function (): void {
+    resolve(RunUsageAccumulator::class)->add('inv-redact', 'anthropic', 'claude-sonnet-4-5', new TextUsage(100, 10));
+
+    event(new AgentFailedOver('inv-redact', new DecisionAgent, Ai::textProvider('anthropic'), 'claude-sonnet-4-5', new ProviderOverloadedException('overloaded at /srv/gateway/queue via https://gw.example/v1?key=sk-1')));
+
+    expect(AiUsageRecord::where('provider', 'anthropic')->sole()->error_message)
+        ->toBe('overloaded at [redacted path] via https://gw.example/v1?[redacted]');
+});

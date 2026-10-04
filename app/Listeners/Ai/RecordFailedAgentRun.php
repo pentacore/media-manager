@@ -10,8 +10,8 @@ use App\Services\AiUsage\RunUsageAccumulator;
 use App\Services\AiUsage\UsageColumns;
 use App\Services\AiUsage\UsageRecordWriter;
 use App\Services\AiUsage\UsageText;
+use App\Support\UpstreamErrorText;
 use Illuminate\Support\Facades\Auth;
-use Illuminate\Support\Str;
 use Laravel\Ai\Events\AgentFailed;
 use Laravel\Ai\Responses\Data\TextUsage;
 
@@ -38,7 +38,7 @@ class RecordFailedAgentRun
             'parent_invocation_id' => $agentPrompt->parentInvocationId ?? null,
             'user_id' => resolve(AiRunAttribution::class)->user()?->id ?? Auth::id(),
             'status' => 'failed',
-            'error_message' => Str::limit($agentFailed->exception->getMessage(), 2000),
+            'error_message' => UpstreamErrorText::sanitize($agentFailed->exception->getMessage(), 2000),
         ]);
 
         $runUsageAccumulator->forget($invocationId);

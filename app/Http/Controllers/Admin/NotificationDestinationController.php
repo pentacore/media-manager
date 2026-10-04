@@ -16,6 +16,7 @@ use App\Services\Audit\AuditLogger;
 use App\Services\Notifications\PushFailureMessage;
 use App\Services\Notifications\PushMessage;
 use Illuminate\Http\RedirectResponse;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
@@ -53,21 +54,23 @@ class NotificationDestinationController extends Controller
     {
         $validated = $storeNotificationDestinationRequest->validated();
 
-        $notificationDestination = NotificationDestination::create([
-            'channel' => $validated['channel'],
-            'label' => $validated['label'],
-            'is_enabled' => (bool) ($validated['is_enabled'] ?? true),
-            'min_severity' => $validated['min_severity'],
-            'config' => $this->cleanConfig(PushChannelType::from($validated['channel']), $validated['config']),
-        ]);
+        DB::transaction(function () use ($validated, $auditLogger): void {
+            $notificationDestination = NotificationDestination::create([
+                'channel' => $validated['channel'],
+                'label' => $validated['label'],
+                'is_enabled' => (bool) ($validated['is_enabled'] ?? true),
+                'min_severity' => $validated['min_severity'],
+                'config' => $this->cleanConfig(PushChannelType::from($validated['channel']), $validated['config']),
+            ]);
 
-        $auditLogger->settingsUpdated(
-            SettingsGroup::NotificationDestinations,
-            [],
-            $this->auditSnapshot($notificationDestination),
-            ['operation' => 'created', 'record_id' => $notificationDestination->id],
-            sprintf('Added notification destination "%s".', $notificationDestination->label),
-        );
+            $auditLogger->settingsUpdated(
+                SettingsGroup::NotificationDestinations,
+                [],
+                $this->auditSnapshot($notificationDestination),
+                ['operation' => 'created', 'record_id' => $notificationDestination->id],
+                sprintf('Added notification destination "%s".', $notificationDestination->label),
+            );
+        });
 
         Inertia::flash('toast', ['type' => 'success', 'message' => __('Notification destination added.')]);
 
@@ -99,21 +102,23 @@ class NotificationDestinationController extends Controller
             $config['secret'] = $notificationDestination->config['secret'] ?? null;
         }
 
-        $notificationDestination->update([
-            'channel' => $pushChannelType,
-            'label' => $validated['label'],
-            'is_enabled' => (bool) ($validated['is_enabled'] ?? true),
-            'min_severity' => $validated['min_severity'],
-            'config' => $config,
-        ]);
+        DB::transaction(function () use ($notificationDestination, $pushChannelType, $validated, $config, $auditLogger, $before): void {
+            $notificationDestination->update([
+                'channel' => $pushChannelType,
+                'label' => $validated['label'],
+                'is_enabled' => (bool) ($validated['is_enabled'] ?? true),
+                'min_severity' => $validated['min_severity'],
+                'config' => $config,
+            ]);
 
-        $auditLogger->settingsUpdated(
-            SettingsGroup::NotificationDestinations,
-            $before,
-            $this->auditSnapshot($notificationDestination),
-            ['operation' => 'updated', 'record_id' => $notificationDestination->id],
-            sprintf('Updated notification destination "%s".', $notificationDestination->label),
-        );
+            $auditLogger->settingsUpdated(
+                SettingsGroup::NotificationDestinations,
+                $before,
+                $this->auditSnapshot($notificationDestination),
+                ['operation' => 'updated', 'record_id' => $notificationDestination->id],
+                sprintf('Updated notification destination "%s".', $notificationDestination->label),
+            );
+        });
 
         Inertia::flash('toast', ['type' => 'success', 'message' => __('Notification destination updated.')]);
 
@@ -124,15 +129,17 @@ class NotificationDestinationController extends Controller
     {
         $before = $this->auditSnapshot($notificationDestination);
 
-        $notificationDestination->delete();
+        DB::transaction(function () use ($notificationDestination, $auditLogger, $before): void {
+            $notificationDestination->delete();
 
-        $auditLogger->settingsUpdated(
-            SettingsGroup::NotificationDestinations,
-            $before,
-            [],
-            ['operation' => 'deleted', 'record_id' => $notificationDestination->id],
-            sprintf('Removed notification destination "%s".', $notificationDestination->label),
-        );
+            $auditLogger->settingsUpdated(
+                SettingsGroup::NotificationDestinations,
+                $before,
+                [],
+                ['operation' => 'deleted', 'record_id' => $notificationDestination->id],
+                sprintf('Removed notification destination "%s".', $notificationDestination->label),
+            );
+        });
 
         Inertia::flash('toast', ['type' => 'success', 'message' => __('Notification destination removed.')]);
 

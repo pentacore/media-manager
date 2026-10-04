@@ -7,15 +7,17 @@ namespace App\Http\Controllers\Admin;
 use App\Enums\ServiceType;
 use App\Enums\UserRole;
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Admin\LinkEmbyAccountRequest;
 use App\Models\EmbyUserLink;
 use App\Models\ServiceConnection;
 use App\Models\User;
+use App\Services\Audit\AuditLogger;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Database\QueryException;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\RequestException;
 use Illuminate\Http\RedirectResponse;
-use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Inertia\Inertia;
 
@@ -31,11 +33,9 @@ class EmbyLinkController extends Controller
      * Link an existing app user to an Emby account by username. Looks
      * up the matching Emby user via /Users (admin-credential token).
      */
-    public function link(Request $request, User $user): RedirectResponse
+    public function link(LinkEmbyAccountRequest $linkEmbyAccountRequest, User $user, AuditLogger $auditLogger): RedirectResponse
     {
-        $validated = $request->validate([
-            'emby_username' => ['required', 'string', 'max:200'],
-        ]);
+        $validated = $linkEmbyAccountRequest->validated();
 
         try {
             $connection = ServiceConnection::resolveActive(ServiceType::Emby);
@@ -60,11 +60,20 @@ class EmbyLinkController extends Controller
         }
 
         try {
-            EmbyUserLink::create([
-                'user_id' => $user->id,
-                'emby_user_id' => $match['id'],
-                'emby_username' => $match['username'],
-            ]);
+            DB::transaction(function () use ($user, $match, $auditLogger): void {
+                $embyUserLink = EmbyUserLink::create([
+                    'user_id' => $user->id,
+                    'emby_user_id' => $match['id'],
+                    'emby_username' => $match['username'],
+                ]);
+
+                $auditLogger->record(
+                    'emby.user_linked',
+                    $embyUserLink,
+                    sprintf('Linked Emby user "%s" to %s.', $match['username'], $user->name),
+                    context: ['emby_user_id' => $match['id'], 'user_id' => $user->id, 'source' => 'username'],
+                );
+            });
         } catch (QueryException) {
             Inertia::flash('toast', ['type' => 'error', 'message' => __('Failed to link Emby account.')]);
 
@@ -85,7 +94,7 @@ class EmbyLinkController extends Controller
      * a matching link or a duplicate email. Idempotent — re-running it
      * only adds new arrivals.
      */
-    public function import(Request $request): RedirectResponse
+    public function import(AuditLogger $auditLogger): RedirectResponse
     {
         try {
             $connection = ServiceConnection::resolveActive(ServiceType::Emby);
@@ -105,6 +114,7 @@ class EmbyLinkController extends Controller
 
         $linkedEmbyIds = EmbyUserLink::query()->pluck('emby_user_id')->all();
         $created = 0;
+        $createdUserIds = [];
         $skipped = 0;
 
         foreach ($embyUsers as $embyUser) {
@@ -147,9 +157,21 @@ class EmbyLinkController extends Controller
                     'emby_username' => $embyName,
                 ]);
                 $created++;
+                $createdUserIds[] = $user->id;
             } catch (QueryException) {
                 $skipped++;
             }
+        }
+
+        // One summary row; not one transaction with the loop, whose per-link
+        // QueryException catch would otherwise abort it for every later row.
+        if ($created > 0) {
+            $auditLogger->record(
+                'emby.users_imported',
+                $connection,
+                sprintf('Imported %d Emby user(s), skipped %d.', $created, $skipped),
+                context: ['created' => $created, 'skipped' => $skipped, 'user_ids' => $createdUserIds],
+            );
         }
 
         Inertia::flash('toast', [

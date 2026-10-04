@@ -9,6 +9,7 @@ use Carbon\CarbonImmutable;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\PendingRequest;
 use Illuminate\Http\Client\RequestException;
+use Illuminate\Http\Client\Response;
 use Illuminate\Support\Facades\Http;
 use InvalidArgumentException;
 use Throwable;
@@ -46,13 +47,35 @@ abstract class ArrClient
     }
 
     /**
+     * The decoded body of a read. A 200 whose body is not JSON data — an SSO
+     * or reverse-proxy login page, an HTML error page, a bare scalar — is an
+     * upstream failure, never an empty result; thrown inside a cache closure
+     * it is never cached either. An object-shaped body passes: callers keep
+     * their own handling for it, as in WhisparrClient.
+     *
+     * @return array<array-key, mixed>
+     *
+     * @throws ArrUnexpectedResponse
+     */
+    protected function jsonArray(Response $response): array
+    {
+        $body = $response->json();
+
+        if (! is_array($body)) {
+            throw new ArrUnexpectedResponse($response, $this->connection->type->label());
+        }
+
+        return $body;
+    }
+
+    /**
      * @return array<string, mixed>
      *
      * @throws RequestException|ConnectionException
      */
     public function getSystemStatus(): array
     {
-        return $this->buildClient()->get(sprintf('/api/%s/system/status', $this->apiVersion))->throw()->json() ?? [];
+        return $this->jsonArray($this->buildClient()->get(sprintf('/api/%s/system/status', $this->apiVersion))->throw());
     }
 
     /**
@@ -62,7 +85,7 @@ abstract class ArrClient
      */
     public function getQualityProfiles(): array
     {
-        return $this->buildClient()->get(sprintf('/api/%s/qualityprofile', $this->apiVersion))->throw()->json() ?? [];
+        return $this->jsonArray($this->buildClient()->get(sprintf('/api/%s/qualityprofile', $this->apiVersion))->throw());
     }
 
     /**
@@ -76,10 +99,7 @@ abstract class ArrClient
      */
     public function getTags(): array
     {
-        return $this->buildClient()
-            ->get(sprintf('/api/%s/tag', $this->apiVersion))
-            ->throw()
-            ->json() ?? [];
+        return $this->jsonArray($this->buildClient()->get(sprintf('/api/%s/tag', $this->apiVersion))->throw());
     }
 
     /**
@@ -89,7 +109,7 @@ abstract class ArrClient
      */
     public function getRootFolders(): array
     {
-        return $this->buildClient()->get(sprintf('/api/%s/rootfolder', $this->apiVersion))->throw()->json() ?? [];
+        return $this->jsonArray($this->buildClient()->get(sprintf('/api/%s/rootfolder', $this->apiVersion))->throw());
     }
 
     /**
@@ -99,7 +119,7 @@ abstract class ArrClient
      */
     public function getDiskSpace(): array
     {
-        return $this->buildClient()->get(sprintf('/api/%s/diskspace', $this->apiVersion))->throw()->json() ?? [];
+        return $this->jsonArray($this->buildClient()->get(sprintf('/api/%s/diskspace', $this->apiVersion))->throw());
     }
 
     /**
@@ -126,19 +146,19 @@ abstract class ArrClient
      */
     public function getCalendar(CarbonImmutable $start, CarbonImmutable $end, bool $withRetry = true): array
     {
-        $body = $this->buildClient($withRetry)->get(sprintf('/api/%s/calendar', $this->apiVersion), [
+        $body = $this->jsonArray($this->buildClient($withRetry)->get(sprintf('/api/%s/calendar', $this->apiVersion), [
             'start' => $start->toIso8601ZuluString(),
             'end' => $end->toIso8601ZuluString(),
             'unmonitored' => 'true',
             ...$this->calendarQuery(),
-        ])->throw()->json();
+        ])->throw());
 
         // Upstream is expected to return a JSON array of episode/movie
-        // objects, but `json()` only decodes — it doesn't enforce the shape.
-        // A non-array body (e.g. an object-shaped error payload) or a
-        // non-array entry inside the list is dropped here, at the boundary,
-        // so callers can trust the declared list<array<...>> shape.
-        return is_array($body) ? array_values(array_filter($body, is_array(...))) : [];
+        // objects. A body that is not JSON data has already thrown; an
+        // object-shaped body (an error payload) or a non-array entry is
+        // dropped here, at the boundary, so callers can trust the declared
+        // list<array<...>> shape.
+        return array_values(array_filter($body, is_array(...)));
     }
 
     /**
@@ -154,17 +174,13 @@ abstract class ArrClient
     {
         throw_unless(in_array($list, ['missing', 'cutoff'], true), InvalidArgumentException::class, sprintf('Unknown wanted list "%s".', $list));
 
-        $body = $this->buildClient($withRetry)->get(sprintf('/api/%s/wanted/%s', $this->apiVersion, $list), [
+        $body = $this->jsonArray($this->buildClient($withRetry)->get(sprintf('/api/%s/wanted/%s', $this->apiVersion, $list), [
             'page' => $page,
             'pageSize' => $pageSize,
             'sortDirection' => 'descending',
             'monitored' => $monitored ? 'true' : 'false',
             ...$this->wantedQuery(),
-        ])->throw()->json();
-
-        if (! is_array($body)) {
-            return [];
-        }
+        ])->throw());
 
         // Same boundary sanitisation as getCalendar(): keep the pagination
         // keys as-is, drop non-array records so callers can trust the
@@ -205,10 +221,9 @@ abstract class ArrClient
      */
     public function getQueue(array $params = []): array
     {
-        return $this->buildClient()
+        return $this->jsonArray($this->buildClient()
             ->get(sprintf('/api/%s/queue', $this->apiVersion), $params)
-            ->throw()
-            ->json() ?? [];
+            ->throw());
     }
 
     /**
@@ -221,10 +236,9 @@ abstract class ArrClient
      */
     public function getHistory(array $params = []): array
     {
-        return $this->buildClient()
+        return $this->jsonArray($this->buildClient()
             ->get(sprintf('/api/%s/history', $this->apiVersion), $params)
-            ->throw()
-            ->json() ?? [];
+            ->throw());
     }
 
     /**
@@ -240,10 +254,9 @@ abstract class ArrClient
      */
     public function getManualImport(array $params): array
     {
-        return $this->buildClient()
+        return $this->jsonArray($this->buildClient()
             ->get(sprintf('/api/%s/manualimport', $this->apiVersion), $params)
-            ->throw()
-            ->json() ?? [];
+            ->throw());
     }
 
     /**
@@ -307,11 +320,10 @@ abstract class ArrClient
      */
     public function getReleases(array $params): array
     {
-        return $this->buildClient(withRetry: false)
+        return $this->jsonArray($this->buildClient(withRetry: false)
             ->timeout(120)
             ->get(sprintf('/api/%s/release', $this->apiVersion), $params)
-            ->throw()
-            ->json() ?? [];
+            ->throw());
     }
 
     /**
@@ -354,10 +366,9 @@ abstract class ArrClient
      */
     public function getNotifications(): array
     {
-        return $this->buildClient()
+        return $this->jsonArray($this->buildClient()
             ->get(sprintf('/api/%s/notification', $this->apiVersion))
-            ->throw()
-            ->json() ?? [];
+            ->throw());
     }
 
     /**

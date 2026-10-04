@@ -22,6 +22,7 @@ use Illuminate\Support\Facades\DB;
 use InvalidArgumentException;
 use JsonException;
 use Override;
+use RuntimeException;
 
 /**
  * @property int $id
@@ -230,9 +231,22 @@ class SubtitleCase extends Model
         });
     }
 
+    /**
+     * Only upload rows whose staged file PruneSubtitleUploads already removed
+     * may go: deleting an uncleaned row would orphan its file on disk with
+     * nothing left to clean it up. prunable() already excludes such cases;
+     * this guards a direct prune() too, and the throw rolls back prune()'s
+     * transaction.
+     */
     protected function pruning(): void
     {
         $this->attempts()->delete();
-        $this->uploads()->delete();
+        $this->uploads()->whereNotNull('cleaned_up_at')->delete();
+
+        throw_if(
+            $this->uploads()->exists(),
+            RuntimeException::class,
+            sprintf('Subtitle case %d still has a staged upload file; PruneSubtitleUploads must clean it up first.', $this->id),
+        );
     }
 }

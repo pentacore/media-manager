@@ -14,6 +14,7 @@ use App\Services\Audit\AuditLogger;
 use App\Services\Audit\SettingsSnapshot;
 use App\Settings\MediaReplacementSettings;
 use Illuminate\Http\RedirectResponse;
+use Illuminate\Support\Facades\DB;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -49,11 +50,13 @@ class MediaReplacementSettingsController extends Controller
         $before = $settingsSnapshot->capture(SettingsGroup::MediaReplacement);
         $validated = $updateMediaReplacementSettingsRequest->validated();
 
-        $mediaReplacementConfiguration = $validated['media_replacement'];
-        $mediaReplacementConfiguration['sonarr_root_folders'] = $mediaReplacementSettings->sonarrRootFolders();
-        $mediaReplacementSettings->setConfiguration($mediaReplacementConfiguration);
+        DB::transaction(function () use ($mediaReplacementSettings, $settingsSnapshot, $auditLogger, $before, $validated): void {
+            $mediaReplacementConfiguration = $validated['media_replacement'];
+            $mediaReplacementConfiguration['sonarr_root_folders'] = $mediaReplacementSettings->sonarrRootFolders();
+            $mediaReplacementSettings->setConfiguration($mediaReplacementConfiguration);
 
-        $auditLogger->settingsUpdated(SettingsGroup::MediaReplacement, $before, $settingsSnapshot->capture(SettingsGroup::MediaReplacement));
+            $auditLogger->settingsUpdated(SettingsGroup::MediaReplacement, $before, $settingsSnapshot->capture(SettingsGroup::MediaReplacement));
+        });
 
         Inertia::flash('toast', ['type' => 'success', 'message' => __('Media replacement settings updated.')]);
 

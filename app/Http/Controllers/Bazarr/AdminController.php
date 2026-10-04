@@ -18,6 +18,7 @@ use App\Services\Bazarr\BazarrSettingsAdapter;
 use App\Settings\BazarrAutomationSettings;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -56,23 +57,25 @@ final class AdminController extends BazarrController
         $before = $settingsSnapshot->capture(SettingsGroup::BazarrAutomation);
         $configuration = $automationSettingsRequest->validated('automation');
         $previous = $bazarrAutomationSettings->configuration();
-        $bazarrAutomationSettings->setConfiguration($configuration);
-        $current = $bazarrAutomationSettings->configuration();
-        $changedKeys = array_keys(array_filter(
-            $current,
-            static fn (mixed $value, string $key): bool => ($previous[$key] ?? null) !== $value,
-            ARRAY_FILTER_USE_BOTH,
-        ));
-        sort($changedKeys);
+        DB::transaction(function () use ($automationSettingsRequest, $bazarrAutomationSettings, $settingsSnapshot, $auditLogger, $before, $configuration, $previous): void {
+            $bazarrAutomationSettings->setConfiguration($configuration);
+            $current = $bazarrAutomationSettings->configuration();
+            $changedKeys = array_keys(array_filter(
+                $current,
+                static fn (mixed $value, string $key): bool => ($previous[$key] ?? null) !== $value,
+                ARRAY_FILTER_USE_BOTH,
+            ));
+            sort($changedKeys);
 
-        ActivityLog::create([
-            'user_id' => $automationSettingsRequest->user()?->id,
-            'action' => 'bazarr.automation.updated',
-            'description' => 'Updated Bazarr automation settings.',
-            'metadata' => ['changed_keys' => $changedKeys],
-        ]);
+            ActivityLog::create([
+                'user_id' => $automationSettingsRequest->user()?->id,
+                'action' => 'bazarr.automation.updated',
+                'description' => 'Updated Bazarr automation settings.',
+                'metadata' => ['changed_keys' => $changedKeys],
+            ]);
 
-        $auditLogger->settingsUpdated(SettingsGroup::BazarrAutomation, $before, $settingsSnapshot->capture(SettingsGroup::BazarrAutomation));
+            $auditLogger->settingsUpdated(SettingsGroup::BazarrAutomation, $before, $settingsSnapshot->capture(SettingsGroup::BazarrAutomation));
+        });
 
         Inertia::flash('toast', ['type' => 'success', 'message' => __('Bazarr automation updated.')]);
 

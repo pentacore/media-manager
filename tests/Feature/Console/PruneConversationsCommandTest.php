@@ -100,3 +100,19 @@ test('conversation pruning is scheduled nightly', function (): void {
         ->and($event->expression)->toBe('15 3 * * *')
         ->and($event->expiresAt)->toBe(60);
 });
+
+test('a stored message naming another file that only matches as a LIKE wildcard does not keep an orphaned attachment', function (): void {
+    $user = User::factory()->admin()->create();
+    $conversationId = pruneConversationsConversation($user, now());
+    $wildcardNamed = ChatAttachment::factory()->create(['user_id' => $user->id, 'conversation_id' => null, 'path' => 'chat-attachments/scan_1.png']);
+    ChatAttachment::query()->whereKey($wildcardNamed->id)->update(['created_at' => now()->subDays(2)]);
+    // "scanX1.png" matches an unescaped LIKE '%scan_1.png%': `_` is a one-character wildcard.
+    pruneConversationsMessage($conversationId, $user, json_encode([['type' => 'stored-image', 'path' => 'chat-attachments/scanX1.png', 'disk' => 'local']]));
+
+    $this->artisan('ai:prune-conversations')
+        ->expectsOutputToContain('swept 1 orphaned attachment(s)')
+        ->assertSuccessful();
+
+    expect(ChatAttachment::query()->whereKey($wildcardNamed->id)->exists())->toBeFalse()
+        ->and(Storage::disk('local')->exists('chat-attachments/scan_1.png'))->toBeFalse();
+});

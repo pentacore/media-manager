@@ -34,7 +34,7 @@ use Illuminate\Support\Facades\Log;
 use Throwable;
 
 #[Queue(QueueLane::Actions)]
-#[Timeout(300)]
+#[Timeout(270)]
 #[UniqueFor(3600)]
 class ExecuteActionRequest implements ShouldBeUnique, ShouldQueue
 {
@@ -152,13 +152,15 @@ class ExecuteActionRequest implements ShouldBeUnique, ShouldQueue
 
             return;
         } catch (ConnectionException|RequestException $exception) {
-            // Only genuinely transient failures retry: connection loss and
-            // upstream 5xx. A 4xx is deterministic (deleting an
+            // Only a deterministic 4xx is permanent (deleting an
             // already-removed series will 404 on every attempt) — retrying
             // it three times with backoff just delayed the Failed state and
-            // mislabeled it retries_exhausted.
-            $transient = $exception instanceof ConnectionException
-                || $exception->response->serverError();
+            // mislabeled it retries_exhausted. Everything else retries:
+            // connection loss, upstream 5xx, and a 200 that isn't usable
+            // data (ArrUnexpectedResponse/SabnzbdRefused) — the same policy
+            // as BaseArrController::upstreamFailureMessage(), which treats
+            // anything short of a clientError() as an outage, not a refusal.
+            $transient = ! $exception instanceof RequestException || ! $exception->response->clientError();
 
             if (! $transient) {
                 $this->markFailed([

@@ -14,10 +14,13 @@ use App\Mail\UserInvitation;
 use App\Models\User;
 use App\Services\Audit\AuditLogger;
 use Illuminate\Http\RedirectResponse;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\URL;
 use Inertia\Inertia;
 use Inertia\Response;
+use Symfony\Component\Mailer\Exception\TransportExceptionInterface;
 
 class UserController extends Controller
 {
@@ -50,31 +53,55 @@ class UserController extends Controller
     public function store(CreateUserRequest $createUserRequest, AuditLogger $auditLogger): RedirectResponse
     {
         $fields = ['name', 'email', 'role'];
+        $sendInvite = ! $createUserRequest->boolean('set_password');
 
-        if ($createUserRequest->boolean('set_password')) {
+        if (! $sendInvite) {
             $fields[] = 'password';
         }
 
-        $user = User::create($createUserRequest->safe()->only($fields));
-        $user->forceFill(['email_verified_at' => now()])->save();
+        // The account and its audit row commit together, before any email:
+        // a mail failure can no longer leave an account nobody audited.
+        $user = DB::transaction(function () use ($createUserRequest, $fields, $sendInvite, $auditLogger): User {
+            $user = User::create($createUserRequest->safe()->only($fields));
+            $user->forceFill(['email_verified_at' => now()])->save();
 
-        if (! $createUserRequest->boolean('set_password')) {
-            $inviteUrl = URL::temporarySignedRoute(
-                'auth.invite.accept',
-                now()->addHours(48),
-                ['user' => $user->id],
+            $auditLogger->record(
+                $sendInvite ? 'invite.created' : 'user.created',
+                $user,
+                sprintf($sendInvite ? 'Invited %s <%s> as %s.' : 'Created %s <%s> as %s.', $user->name, $user->email, $user->role->label()),
+                context: ['role' => $user->role->value],
             );
 
-            Mail::to($user)->send(new UserInvitation($user, $inviteUrl));
+            return $user;
+        });
 
-            $auditLogger->record('invite.created', $user, sprintf('Invited %s <%s> as %s.', $user->name, $user->email, $user->role->label()), context: ['role' => $user->role->value]);
-
-            Inertia::flash('toast', ['type' => 'success', 'message' => __('Invitation sent to :email.', ['email' => $user->email])]);
-        } else {
-            $auditLogger->record('user.created', $user, sprintf('Created %s <%s> as %s.', $user->name, $user->email, $user->role->label()), context: ['role' => $user->role->value]);
-
+        if (! $sendInvite) {
             Inertia::flash('toast', ['type' => 'success', 'message' => __('User created.')]);
+
+            return to_route('admin.users.index');
         }
+
+        $inviteUrl = URL::temporarySignedRoute(
+            'auth.invite.accept',
+            now()->addHours(48),
+            ['user' => $user->id],
+        );
+
+        try {
+            Mail::to($user)->send(new UserInvitation($user, $inviteUrl));
+        } catch (TransportExceptionInterface $transportException) {
+            Log::warning('The invitation email could not be sent.', [
+                'user_id' => $user->id,
+                'exception' => $transportException::class,
+                'message' => $transportException->getMessage(),
+            ]);
+
+            Inertia::flash('toast', ['type' => 'error', 'message' => __('Created :email, but the invitation email could not be sent. Delete the user and invite them again once mail works.', ['email' => $user->email])]);
+
+            return to_route('admin.users.index');
+        }
+
+        Inertia::flash('toast', ['type' => 'success', 'message' => __('Invitation sent to :email.', ['email' => $user->email])]);
 
         return to_route('admin.users.index');
     }
