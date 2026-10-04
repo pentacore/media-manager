@@ -11,7 +11,6 @@ use App\Models\ActionRequest;
 use App\Models\ActivityLog;
 use App\Models\ServiceConnection;
 use App\Services\Emby\EmbyLibraryScanScheduler;
-use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -26,12 +25,10 @@ class LibraryRefreshController extends Controller
 {
     public function __invoke(Request $request, EmbyLibraryScanScheduler $embyLibraryScanScheduler): RedirectResponse
     {
-        try {
-            $connection = ServiceConnection::resolveActive(ServiceType::Emby);
-        } catch (ModelNotFoundException) {
-            Inertia::flash('toast', ['type' => 'error', 'message' => __('No active Emby connection configured.')]);
+        $connection = ServiceConnection::findActive(ServiceType::Emby);
 
-            return back();
+        if (! $connection instanceof ServiceConnection) {
+            return $this->noActiveConnectionRedirect(ServiceType::Emby, back());
         }
 
         $refresh = $embyLibraryScanScheduler->foldOrDispatchManual(

@@ -16,7 +16,6 @@ use App\Models\User;
 use App\Services\Audit\AuditLogger;
 use App\Services\Emby\EmbyUserDirectory;
 use Illuminate\Database\Eloquent\Collection;
-use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\RequestException;
@@ -48,12 +47,10 @@ class UserLinkController extends Controller
     {
         $user = $storeUserLinkRequest->user();
 
-        try {
-            $connection = ServiceConnection::resolveActive(ServiceType::Emby);
-        } catch (ModelNotFoundException) {
-            Inertia::flash('toast', ['type' => 'error', 'message' => __('No active Emby connection configured.')]);
+        $connection = ServiceConnection::findActive(ServiceType::Emby);
 
-            return back();
+        if (! $connection instanceof ServiceConnection) {
+            return $this->noActiveConnectionRedirect(ServiceType::Emby, back());
         }
 
         try {
@@ -133,12 +130,10 @@ class UserLinkController extends Controller
         $validated = $linkDirectoryUserRequest->validated();
         $user = User::query()->findOrFail((int) $validated['user_id']);
 
-        try {
-            $connection = ServiceConnection::resolveActive(ServiceType::Emby);
-        } catch (ModelNotFoundException) {
-            Inertia::flash('toast', ['type' => 'error', 'message' => __('No active Emby connection configured.')]);
+        $connection = ServiceConnection::findActive(ServiceType::Emby);
 
-            return back();
+        if (! $connection instanceof ServiceConnection) {
+            return $this->noActiveConnectionRedirect(ServiceType::Emby, back());
         }
 
         try {
@@ -193,9 +188,9 @@ class UserLinkController extends Controller
      */
     private function directory(EmbyUserDirectory $embyUserDirectory, Collection $links): array
     {
-        try {
-            $connection = ServiceConnection::resolveActive(ServiceType::Emby);
-        } catch (ModelNotFoundException) {
+        $connection = ServiceConnection::findActive(ServiceType::Emby);
+
+        if (! $connection instanceof ServiceConnection) {
             return ['users' => [], 'error' => __('No active Emby connection is configured.')];
         }
 
