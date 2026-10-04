@@ -13,7 +13,6 @@ use App\Services\Seerr\SeerrTitlePresenter;
 use App\Services\Seerr\SeerrUserResolver;
 use App\Support\UpstreamErrorText;
 use Closure;
-use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\RequestException;
 use Illuminate\Http\JsonResponse;
@@ -39,7 +38,7 @@ class DiscoverController extends Controller
 
     public function index(Request $request, SeerrTitlePresenter $seerrTitlePresenter, SeerrUserResolver $seerrUserResolver): Response
     {
-        $connection = $this->seerrConnection();
+        $connection = ServiceConnection::findActive(ServiceType::Seerr);
 
         if (! $connection instanceof ServiceConnection) {
             return Inertia::render('Discover/Index', ['seerr' => ['connected' => false]]);
@@ -60,7 +59,7 @@ class DiscoverController extends Controller
 
     public function title(string $mediaType, int $tmdbId, SeerrTitlePresenter $seerrTitlePresenter): JsonResponse
     {
-        $connection = $this->seerrConnection();
+        $connection = ServiceConnection::findActive(ServiceType::Seerr);
 
         if (! $connection instanceof ServiceConnection) {
             return response()->json(['message' => __('No active Seerr connection configured.')], 422);
@@ -95,7 +94,7 @@ class DiscoverController extends Controller
         $tmdbId = (int) $validated['tmdbId'];
         $mediaType = (string) $validated['mediaType'];
         $user = $discoverMediaRequest->user();
-        $connection = $this->seerrConnection();
+        $connection = ServiceConnection::findActive(ServiceType::Seerr);
 
         if (! $connection instanceof ServiceConnection) {
             return $this->outcome(false, $tmdbId, $mediaType, 'error', __('No active Seerr connection configured.'));
@@ -133,15 +132,6 @@ class DiscoverController extends Controller
         }
 
         return $this->outcome(true, $tmdbId, $mediaType, 'success', __('Request submitted.'));
-    }
-
-    private function seerrConnection(): ?ServiceConnection
-    {
-        try {
-            return ServiceConnection::resolveActive(ServiceType::Seerr);
-        } catch (ModelNotFoundException) {
-            return null;
-        }
     }
 
     /**

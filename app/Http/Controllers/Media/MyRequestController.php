@@ -14,7 +14,6 @@ use App\Services\Seerr\SeerrRequestBusy;
 use App\Services\Seerr\SeerrRequestLock;
 use App\Services\Seerr\SeerrTitleResolver;
 use App\Services\Seerr\SeerrUserResolver;
-use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\RequestException;
 use Illuminate\Http\RedirectResponse;
@@ -36,7 +35,7 @@ class MyRequestController extends Controller
     public function index(Request $request, SeerrUserResolver $seerrUserResolver, SeerrTitleResolver $seerrTitleResolver): Response
     {
         $page = max(1, (int) $request->query('page', 1));
-        $connection = $this->seerrConnection();
+        $connection = ServiceConnection::findActive(ServiceType::Seerr);
 
         if (! $connection instanceof ServiceConnection) {
             return Inertia::render('Seerr/MyRequests', ['seerr' => ['connected' => false], 'filters' => ['page' => $page]]);
@@ -53,12 +52,10 @@ class MyRequestController extends Controller
 
     public function destroy(int $id, Request $request, SeerrUserResolver $seerrUserResolver, SeerrRequestLock $seerrRequestLock): RedirectResponse
     {
-        $connection = $this->seerrConnection();
+        $connection = ServiceConnection::findActive(ServiceType::Seerr);
 
         if (! $connection instanceof ServiceConnection) {
-            Inertia::flash('toast', ['type' => 'error', 'message' => __('No active Seerr connection configured.')]);
-
-            return back();
+            return $this->noActiveConnectionRedirect(ServiceType::Seerr, back());
         }
 
         try {
@@ -191,14 +188,5 @@ class MyRequestController extends Controller
             'requested_at' => is_string($row['createdAt'] ?? null) ? $row['createdAt'] : null,
             'can_cancel' => $requestStatus === self::PENDING,
         ];
-    }
-
-    private function seerrConnection(): ?ServiceConnection
-    {
-        try {
-            return ServiceConnection::resolveActive(ServiceType::Seerr);
-        } catch (ModelNotFoundException) {
-            return null;
-        }
     }
 }

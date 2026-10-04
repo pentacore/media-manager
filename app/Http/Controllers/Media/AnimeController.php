@@ -21,7 +21,6 @@ use App\Services\Anime\SeasonalAnimeEntry;
 use App\Services\Anime\SeasonalAnimeSource;
 use App\Services\Seerr\SeerrClient;
 use App\Services\Seerr\SeerrUserResolver;
-use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\RequestException;
 use Illuminate\Http\RedirectResponse;
@@ -41,10 +40,10 @@ class AnimeController extends Controller
      */
     public function index(Request $request, SeerrUserResolver $seerrUserResolver): Response|RedirectResponse
     {
-        try {
-            $connection = ServiceConnection::resolveActive(ServiceType::Seerr);
-        } catch (ModelNotFoundException) {
-            return $this->noConnectionRedirect();
+        $connection = ServiceConnection::findActive(ServiceType::Seerr);
+
+        if (! $connection instanceof ServiceConnection) {
+            return $this->noActiveConnectionRedirect(ServiceType::Seerr);
         }
 
         // Self-bootstrap on a fresh deployment: the table is otherwise only
@@ -94,10 +93,10 @@ class AnimeController extends Controller
         $tmdbId = (int) $validated['tmdbId'];
         $mediaType = (string) $validated['mediaType'];
 
-        try {
-            $connection = ServiceConnection::resolveActive(ServiceType::Seerr);
-        } catch (ModelNotFoundException) {
-            return $this->noConnectionRedirect();
+        $connection = ServiceConnection::findActive(ServiceType::Seerr);
+
+        if (! $connection instanceof ServiceConnection) {
+            return $this->noActiveConnectionRedirect(ServiceType::Seerr);
         }
 
         $context = $seerrUserResolver->requestingContext($connection, $request->user());
@@ -134,11 +133,14 @@ class AnimeController extends Controller
             'title' => ['required', 'string', 'max:255'],
         ]);
 
+        $connection = ServiceConnection::findActive(ServiceType::Seerr);
+
+        if (! $connection instanceof ServiceConnection) {
+            return $this->noActiveConnectionRedirect(ServiceType::Seerr);
+        }
+
         try {
-            $connection = ServiceConnection::resolveActive(ServiceType::Seerr);
             $results = new SeerrClient($connection)->search($validated['title']);
-        } catch (ModelNotFoundException) {
-            return $this->noConnectionRedirect();
         } catch (RequestException|ConnectionException) {
             Inertia::flash('toast', ['type' => 'error', 'message' => __('Search failed.')]);
 
@@ -423,13 +425,6 @@ class AnimeController extends Controller
         $current = AnimeSeason::forMonth($now->month);
 
         return $year < $now->year || ($year === $now->year && $animeSeason->startMonth() < $current->startMonth());
-    }
-
-    private function noConnectionRedirect(): RedirectResponse
-    {
-        Inertia::flash('toast', ['type' => 'error', 'message' => __('No active Seerr connection configured.')]);
-
-        return to_route('dashboard');
     }
 
     private function outcome(bool $ok, int $tmdbId, string $mediaType, string $type, string $message): RedirectResponse
