@@ -8,16 +8,15 @@ use App\Cache\Services\RadarrCache;
 use App\Enums\WebhookHandlingStatus;
 use App\Jobs\AuditImportedSubtitles;
 use App\Models\WebhookEvent;
-use App\Notifications\ServiceWarning;
 use App\Services\Actions\ActionDescriber;
 use App\Services\Emby\EmbyLibraryScanScheduler;
 use App\Services\Library\InterventionCounter;
 use App\Services\MediaReplacement\MediaReplacementTracker;
 use App\Services\Notifications\AdminNotifier;
 use App\Services\Search\MovieIndexer;
-use App\Services\Webhook\AbstractWebhookHandler;
+use App\Services\Webhook\AbstractArrWebhookHandler;
 
-class RadarrWebhookHandler extends AbstractWebhookHandler
+class RadarrWebhookHandler extends AbstractArrWebhookHandler
 {
     public function __construct(
         private readonly MovieIndexer $movieIndexer,
@@ -30,6 +29,11 @@ class RadarrWebhookHandler extends AbstractWebhookHandler
     protected function serviceSlug(): string
     {
         return 'radarr';
+    }
+
+    protected function adminNotifier(): AdminNotifier
+    {
+        return $this->adminNotifier;
     }
 
     public function handle(WebhookEvent $webhookEvent): WebhookHandlingStatus
@@ -59,22 +63,6 @@ class RadarrWebhookHandler extends AbstractWebhookHandler
         }
 
         return $status;
-    }
-
-    /**
-     * @param  array<string, mixed>  $payload
-     */
-    private function handleTest(WebhookEvent $webhookEvent, array $payload): void
-    {
-        $this->logActivity(
-            $webhookEvent,
-            'test',
-            'Radarr webhook test received.',
-            metadata: [
-                'instance_name' => $payload['instanceName'] ?? null,
-                'application_url' => $payload['applicationUrl'] ?? null,
-            ],
-        );
     }
 
     /**
@@ -280,60 +268,5 @@ class RadarrWebhookHandler extends AbstractWebhookHandler
         // immediately — without this it would only update on the next
         // scheduled poll (5 min) or page reload.
         resolve(InterventionCounter::class)->recompute();
-    }
-
-    /**
-     * @param  array<string, mixed>  $payload
-     */
-    private function handleHealth(WebhookEvent $webhookEvent, array $payload, string $kind): void
-    {
-        $message = (string) ($payload['message'] ?? 'Unknown health event');
-        $level = (string) ($payload['level'] ?? 'ok');
-
-        $this->logActivity(
-            $webhookEvent,
-            $kind,
-            $message,
-            metadata: [
-                'level' => $payload['level'] ?? null,
-                'type' => $payload['type'] ?? null,
-                'wiki_url' => $payload['wikiUrl'] ?? null,
-            ],
-        );
-
-        if ($kind !== 'health' || ! in_array($level, ['warning', 'error'], true)) {
-            return;
-        }
-
-        $this->adminNotifier->send(new ServiceWarning(
-            service: 'radarr',
-            title: (string) ($payload['type'] ?? 'Radarr health'),
-            message: $message,
-            level: $level,
-        ));
-    }
-
-    /**
-     * @param  array<string, mixed>  $payload
-     */
-    private function handleApplicationUpdate(WebhookEvent $webhookEvent, array $payload): void
-    {
-        $previousVersion = $payload['previousVersion'] ?? null;
-        $newVersion = $payload['newVersion'] ?? null;
-
-        $this->logActivity(
-            $webhookEvent,
-            'updated',
-            sprintf(
-                'Radarr updated from %s to %s.',
-                $previousVersion ?? 'unknown',
-                $newVersion ?? 'unknown',
-            ),
-            metadata: [
-                'previous_version' => $previousVersion,
-                'new_version' => $newVersion,
-                'message' => $payload['message'] ?? null,
-            ],
-        );
     }
 }
