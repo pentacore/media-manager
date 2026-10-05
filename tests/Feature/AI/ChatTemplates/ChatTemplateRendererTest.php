@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use App\Enums\ChatTemplatePreviewMode;
 use App\Models\ChatTemplate;
 use App\Models\IndexedMovie;
 use App\Models\IndexedSeries;
@@ -83,28 +84,74 @@ test('a result over 4000 characters is rejected, counting characters not bytes',
         ]);
 });
 
-test('preview shows defaults as text and everything else as placeholders', function (): void {
+test('example preview fills every token with a sample value', function (): void {
+    expect(resolve(ChatTemplateRenderer::class)->preview('Check {{anime:title,year}} S{{season}}E{{episode}} in {{lang}}', [
+        rendererVariable('anime', 'series'),
+        rendererVariable('season', 'number', ['default' => '3']),
+        rendererVariable('episode', 'number', ['label' => '']),
+    ], ChatTemplatePreviewMode::Example))->toBe([
+        ['kind' => 'text', 'value' => 'Check '],
+        ['kind' => 'placeholder', 'value' => 'The Show (2020)'],
+        ['kind' => 'text', 'value' => ' S'],
+        ['kind' => 'placeholder', 'value' => '3'],
+        ['kind' => 'text', 'value' => 'E'],
+        ['kind' => 'placeholder', 'value' => '1'],
+        ['kind' => 'text', 'value' => ' in '],
+        ['kind' => 'placeholder', 'value' => '[lang]'],
+    ]);
+});
+
+test('example preview formats series and movie samples with the real parts formatter', function (string $body, string $type, string $expected): void {
+    expect(resolve(ChatTemplateRenderer::class)->preview($body, [rendererVariable('pick', $type)], ChatTemplatePreviewMode::Example))
+        ->toBe([['kind' => 'placeholder', 'value' => $expected]]);
+})->with([
+    'series without parts' => ['{{pick}}', 'series', 'The Show'],
+    'series title and year' => ['{{pick:title,year}}', 'series', 'The Show (2020)'],
+    'series id' => ['{{pick:id}}', 'series', '(Sonarr series id 1234)'],
+    'series title, year and id' => ['{{pick:title,year,id}}', 'series', 'The Show (2020) (Sonarr series id 1234)'],
+    'movie id' => ['{{pick:id}}', 'movie', '(Radarr movie id 1234)'],
+]);
+
+test('example preview falls back for number, choice and text variables', function (array $overrides, string $type, string $expected): void {
+    expect(resolve(ChatTemplateRenderer::class)->preview('{{pick}}', [rendererVariable('pick', $type, $overrides)], ChatTemplatePreviewMode::Example))
+        ->toBe([['kind' => 'placeholder', 'value' => $expected]]);
+})->with([
+    'number default' => [['default' => '12'], 'number', '12'],
+    'number without default' => [[], 'number', '1'],
+    'choice default' => [['default' => 'Swedish', 'options' => ['English', 'Swedish']], 'choice', 'Swedish'],
+    'choice first non-empty option' => [['options' => ['  ', 'English', 'Swedish']], 'choice', 'English'],
+    'choice without options' => [['options' => []], 'choice', '[Pick]'],
+    'text default' => [['default' => ' Dune '], 'text', 'Dune'],
+    'text without default' => [[], 'text', '[Pick]'],
+]);
+
+test('names preview shows every token as its label, ignoring defaults', function (): void {
     expect(resolve(ChatTemplateRenderer::class)->preview('Check {{anime:title,year}} S{{season}}E{{episode}} in {{lang}}', [
         rendererVariable('anime', 'series'),
         rendererVariable('season', 'number', ['default' => '1']),
         rendererVariable('episode', 'number', ['label' => '']),
-    ]))->toBe([
+    ], ChatTemplatePreviewMode::Names))->toBe([
         ['kind' => 'text', 'value' => 'Check '],
         ['kind' => 'placeholder', 'value' => '[Anime: title, year]'],
-        ['kind' => 'text', 'value' => ' S1E'],
+        ['kind' => 'text', 'value' => ' S'],
+        ['kind' => 'placeholder', 'value' => '[Season]'],
+        ['kind' => 'text', 'value' => 'E'],
         ['kind' => 'placeholder', 'value' => '[episode]'],
         ['kind' => 'text', 'value' => ' in '],
         ['kind' => 'placeholder', 'value' => '[lang]'],
     ]);
 });
 
-test('preview keeps malformed placeholders as literal text and never reads the library', function (): void {
+test('preview keeps malformed placeholders as literal text and never reads the library', function (ChatTemplatePreviewMode $chatTemplatePreviewMode, string $expected): void {
     DB::enableQueryLog();
 
-    $segments = resolve(ChatTemplateRenderer::class)->preview('{{Bad}} and {{show:id}}', [rendererVariable('show', 'series')]);
+    $segments = resolve(ChatTemplateRenderer::class)->preview('{{Bad}} and {{show:id}}', [rendererVariable('show', 'series')], $chatTemplatePreviewMode);
 
     expect($segments)->toBe([
         ['kind' => 'text', 'value' => '{{Bad}} and '],
-        ['kind' => 'placeholder', 'value' => '[Show: id]'],
+        ['kind' => 'placeholder', 'value' => $expected],
     ])->and(DB::getQueryLog())->toBe([]);
-});
+})->with([
+    'example' => [ChatTemplatePreviewMode::Example, '(Sonarr series id 1234)'],
+    'names' => [ChatTemplatePreviewMode::Names, '[Show: id]'],
+]);

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Http\Requests\AI;
 
+use App\Enums\ChatTemplatePreviewMode;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
 
@@ -22,6 +23,7 @@ class PreviewChatTemplateRequest extends FormRequest
             'body' => ['nullable', 'string', 'max:20000'],
             'variables' => ['present', 'array', 'max:50'],
             'variables.*' => ['array'],
+            'mode' => ['nullable', 'string', ChatTemplatePreviewMode::validationRule()],
         ];
     }
 }
