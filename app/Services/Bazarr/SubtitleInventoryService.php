@@ -5,25 +5,19 @@ declare(strict_types=1);
 namespace App\Services\Bazarr;
 
 use App\Enums\BazarrServiceRole;
-use App\Enums\MediaReplacementScope;
 use App\Enums\ServiceType;
 use App\Http\Resources\Bazarr\SubtitleHistoryResource;
 use App\Http\Resources\Bazarr\SubtitleItemResource;
 use App\Models\ServiceConnection;
 use App\Models\SubtitleCase;
-use App\Services\MediaReplacement\LanguageNormalizer;
-use App\Services\MediaReplacement\SonarrMediaScopeResolver;
 use App\Services\Radarr\RadarrClient;
 use App\Services\ServiceClientFactory;
 use App\Services\Sonarr\SonarrClient;
-use App\Settings\MediaReplacementSettings;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\RequestException;
-use Illuminate\Support\Arr;
 use Illuminate\Support\Str;
 use InvalidArgumentException;
-use JsonException;
 use UnexpectedValueException;
 
 final class SubtitleInventoryService
@@ -44,11 +38,8 @@ final class SubtitleInventoryService
 
     public function __construct(
         private readonly ServiceClientFactory $serviceClientFactory,
-        private readonly MediaReplacementSettings $mediaReplacementSettings,
-        private readonly LanguageNormalizer $languageNormalizer,
-        private readonly SonarrMediaScopeResolver $sonarrMediaScopeResolver,
-        private readonly BazarrMediaFingerprint $bazarrMediaFingerprint,
-        private readonly BazarrSubtitleFingerprint $bazarrSubtitleFingerprint,
+        private readonly SubtitleInventoryConnections $subtitleInventoryConnections,
+        private readonly SubtitleItemMapper $subtitleItemMapper,
         private readonly SubtitleCaseFingerprint $subtitleCaseFingerprint,
     ) {}
 
@@ -64,9 +55,9 @@ final class SubtitleInventoryService
     ): array {
         $this->validatePagination($page, $perPage);
 
-        $bazarrClient = $this->bazarrClient($serviceConnection);
-        $sonarr = $this->activeMappedConnection($serviceConnection, BazarrServiceRole::Sonarr);
-        $radarr = $this->activeMappedConnection($serviceConnection, BazarrServiceRole::Radarr);
+        $bazarrClient = $this->subtitleInventoryConnections->bazarrClient($serviceConnection);
+        $sonarr = $this->subtitleInventoryConnections->activeMapped($serviceConnection, BazarrServiceRole::Sonarr);
+        $radarr = $this->subtitleInventoryConnections->activeMapped($serviceConnection, BazarrServiceRole::Radarr);
 
         // Discovery walks the whole mapped library, and a reconciliation cycle asks
         // for successive pages through this same instance. Rebuilding the catalog
@@ -173,7 +164,7 @@ final class SubtitleInventoryService
             return null;
         }
 
-        $mediaId = $this->positiveInteger($subtitleCase->media_type === 'episode'
+        $mediaId = $this->subtitleItemMapper->positiveInteger($subtitleCase->media_type === 'episode'
             ? ($subtitleCase->target_ids['episode_id'] ?? null)
             : ($subtitleCase->target_ids['radarr_id'] ?? null));
 
@@ -203,7 +194,7 @@ final class SubtitleInventoryService
             return null;
         }
 
-        $bazarrClient = $this->bazarrClient($serviceConnection);
+        $bazarrClient = $this->subtitleInventoryConnections->bazarrClient($serviceConnection);
 
         $identity = $mediaType === 'episode'
             ? $this->episodeCandidateFor($mediaId, $serviceConnection, $bazarrClient)
@@ -226,20 +217,20 @@ final class SubtitleInventoryService
         ServiceConnection $bazarr,
         BazarrClient $bazarrClient,
     ): ?array {
-        $sonarr = $this->activeMappedConnection($bazarr, BazarrServiceRole::Sonarr);
+        $sonarr = $this->subtitleInventoryConnections->activeMapped($bazarr, BazarrServiceRole::Sonarr);
 
         if (! $sonarr instanceof ServiceConnection) {
             return null;
         }
 
         $episode = collect($bazarrClient->getEpisodes(episodeIds: [$episodeId])['data'])
-            ->first(fn (array $candidate): bool => $this->positiveInteger($candidate['sonarrEpisodeId'] ?? null) === $episodeId);
+            ->first(fn (array $candidate): bool => $this->subtitleItemMapper->positiveInteger($candidate['sonarrEpisodeId'] ?? null) === $episodeId);
 
         if (! is_array($episode)) {
             return null;
         }
 
-        $seriesId = $this->positiveInteger($episode['sonarrSeriesId'] ?? null);
+        $seriesId = $this->subtitleItemMapper->positiveInteger($episode['sonarrSeriesId'] ?? null);
 
         if ($seriesId === null) {
             return null;
@@ -251,7 +242,7 @@ final class SubtitleInventoryService
             return null;
         }
 
-        $item = $this->episodeItem($episode, $sonarrClient->getSeriesById($seriesId), $sonarr);
+        $item = $this->subtitleItemMapper->episodeItem($episode, $sonarrClient->getSeriesById($seriesId), $sonarr);
 
         if ($item === null) {
             return null;
@@ -268,7 +259,7 @@ final class SubtitleInventoryService
         ServiceConnection $bazarr,
         BazarrClient $bazarrClient,
     ): ?array {
-        $radarr = $this->activeMappedConnection($bazarr, BazarrServiceRole::Radarr);
+        $radarr = $this->subtitleInventoryConnections->activeMapped($bazarr, BazarrServiceRole::Radarr);
 
         if (! $radarr instanceof ServiceConnection) {
             return null;
@@ -280,7 +271,7 @@ final class SubtitleInventoryService
             return null;
         }
 
-        $item = $this->movieItem($movie);
+        $item = $this->subtitleItemMapper->movieItem($movie);
 
         if ($item === null) {
             return null;
@@ -312,7 +303,7 @@ final class SubtitleInventoryService
             $moviePage = $bazarrClient->getMovies(start: $start, length: self::MAX_PER_PAGE);
             $batch = $moviePage['data'];
             $movieItems = [...$movieItems, ...array_values(array_filter(array_map(
-                $this->movieItem(...),
+                $this->subtitleItemMapper->movieItem(...),
                 $batch,
             ), static fn (?array $item): bool => is_array($item) && $item['missing_languages'] !== []))];
             $start += count($batch);
@@ -333,7 +324,7 @@ final class SubtitleInventoryService
      */
     public function overview(ServiceConnection $serviceConnection): array
     {
-        $bazarrClient = $this->bazarrClient($serviceConnection);
+        $bazarrClient = $this->subtitleInventoryConnections->bazarrClient($serviceConnection);
         $episodeTotal = 0;
         $movieTotal = 0;
         $healthIssueCount = 0;
@@ -388,11 +379,11 @@ final class SubtitleInventoryService
     ): array {
         $this->validatePagination($page, $perPage);
 
-        $bazarrClient = $this->bazarrClient($serviceConnection);
+        $bazarrClient = $this->subtitleInventoryConnections->bazarrClient($serviceConnection);
         $items = [];
         $errors = [];
 
-        $sonarr = $this->activeMappedConnection($serviceConnection, BazarrServiceRole::Sonarr);
+        $sonarr = $this->subtitleInventoryConnections->activeMapped($serviceConnection, BazarrServiceRole::Sonarr);
 
         if (! $sonarr instanceof ServiceConnection) {
             $errors[] = 'The mapped Sonarr connection is missing or inactive.';
@@ -407,7 +398,7 @@ final class SubtitleInventoryService
             }
         }
 
-        $radarr = $this->activeMappedConnection($serviceConnection, BazarrServiceRole::Radarr);
+        $radarr = $this->subtitleInventoryConnections->activeMapped($serviceConnection, BazarrServiceRole::Radarr);
 
         if (! $radarr instanceof ServiceConnection) {
             $errors[] = 'The mapped Radarr connection is missing or inactive.';
@@ -422,7 +413,7 @@ final class SubtitleInventoryService
                 $items = [
                     ...$items,
                     ...array_values(array_filter(array_map(
-                        $this->movieItem(...),
+                        $this->subtitleItemMapper->movieItem(...),
                         $this->allUpstreamPages(
                             fn (int $offset): array => $bazarrClient->getMovies(
                                 start: $offset,
@@ -472,7 +463,7 @@ final class SubtitleInventoryService
     ): array {
         $this->validatePagination($page, $perPage);
 
-        $bazarrClient = $this->bazarrClient($serviceConnection);
+        $bazarrClient = $this->subtitleInventoryConnections->bazarrClient($serviceConnection);
         $offset = ($page - 1) * $perPage;
         $episodeItems = [];
         $movieItems = [];
@@ -492,7 +483,7 @@ final class SubtitleInventoryService
 
         $sonarr = $mediaTypeFilter === 'movie'
             ? null
-            : $this->activeMappedConnection($serviceConnection, BazarrServiceRole::Sonarr);
+            : $this->subtitleInventoryConnections->activeMapped($serviceConnection, BazarrServiceRole::Sonarr);
 
         if ($mediaTypeFilter !== 'movie' && ! $sonarr instanceof ServiceConnection) {
             $errors[] = 'The mapped Sonarr connection is missing or inactive.';
@@ -502,18 +493,18 @@ final class SubtitleInventoryService
                 throw_unless($sonarrClient instanceof SonarrClient, InvalidArgumentException::class, 'The mapped Sonarr connection is invalid.');
 
                 $seriesById = collect($sonarrClient->getSeries())
-                    ->filter(fn (mixed $series): bool => is_array($series) && $this->positiveInteger($series['id'] ?? null) !== null)
+                    ->filter(fn (mixed $series): bool => is_array($series) && $this->subtitleItemMapper->positiveInteger($series['id'] ?? null) !== null)
                     ->keyBy(fn (array $series): int => (int) $series['id']);
 
                 foreach ($this->wantedEpisodePages($bazarrClient, $paginateLocally ? null : $offset, $perPage, $episodeTotal) as $episode) {
-                    $seriesId = $this->positiveInteger($episode['sonarrSeriesId'] ?? null);
+                    $seriesId = $this->subtitleItemMapper->positiveInteger($episode['sonarrSeriesId'] ?? null);
                     $series = $seriesId === null ? null : $seriesById->get($seriesId);
 
                     if (! is_array($series)) {
                         continue;
                     }
 
-                    $item = $this->episodeItem($episode, $series, $sonarr);
+                    $item = $this->subtitleItemMapper->episodeItem($episode, $series, $sonarr);
 
                     if ($item !== null) {
                         $episodeItems[] = $item;
@@ -526,7 +517,7 @@ final class SubtitleInventoryService
 
         $radarr = $mediaTypeFilter === 'episode'
             ? null
-            : $this->activeMappedConnection($serviceConnection, BazarrServiceRole::Radarr);
+            : $this->subtitleInventoryConnections->activeMapped($serviceConnection, BazarrServiceRole::Radarr);
 
         if ($mediaTypeFilter !== 'episode' && ! $radarr instanceof ServiceConnection) {
             $errors[] = 'The mapped Radarr connection is missing or inactive.';
@@ -542,7 +533,7 @@ final class SubtitleInventoryService
                     $paginateLocally ? $perPage : max(1, $window['movie']['length']),
                     $movieTotal,
                 ) as $movie) {
-                    $item = $this->movieItem($movie);
+                    $item = $this->subtitleItemMapper->movieItem($movie);
 
                     if ($item !== null) {
                         $movieItems[] = $item;
@@ -658,7 +649,7 @@ final class SubtitleInventoryService
     ): array {
         $this->validatePagination($page, $perPage);
 
-        $bazarrClient = $this->bazarrClient($serviceConnection);
+        $bazarrClient = $this->subtitleInventoryConnections->bazarrClient($serviceConnection);
         $offset = ($page - 1) * $perPage;
         $episodeItems = [];
         $movieItems = [];
@@ -678,12 +669,12 @@ final class SubtitleInventoryService
         $paginateLocally = $this->requiresLocalPagination($filters);
 
         if ($mediaTypeFilter !== 'movie') {
-            if (! $this->activeMappedConnection($serviceConnection, BazarrServiceRole::Sonarr) instanceof ServiceConnection) {
+            if (! $this->subtitleInventoryConnections->activeMapped($serviceConnection, BazarrServiceRole::Sonarr) instanceof ServiceConnection) {
                 $errors[] = 'The mapped Sonarr connection is missing or inactive.';
             } else {
                 try {
                     $episodeItems = array_values(array_filter(array_map(
-                        fn (array $history): ?array => $this->historyItem($history, 'episode'),
+                        fn (array $history): ?array => $this->subtitleItemMapper->historyItem($history, 'episode'),
                         $paginateLocally
                             ? $this->allUpstreamPages(
                                 fn (int $readOffset): array => $bazarrClient->getEpisodeHistory($readOffset, self::MAX_PER_PAGE),
@@ -703,13 +694,13 @@ final class SubtitleInventoryService
         }
 
         if ($mediaTypeFilter !== 'episode') {
-            if (! $this->activeMappedConnection($serviceConnection, BazarrServiceRole::Radarr) instanceof ServiceConnection) {
+            if (! $this->subtitleInventoryConnections->activeMapped($serviceConnection, BazarrServiceRole::Radarr) instanceof ServiceConnection) {
                 $errors[] = 'The mapped Radarr connection is missing or inactive.';
             } else {
                 try {
                     $window = $this->mergedWindow($offset, $perPage, $episodeTotal);
                     $movieItems = array_values(array_filter(array_map(
-                        fn (array $history): ?array => $this->historyItem($history, 'movie'),
+                        fn (array $history): ?array => $this->subtitleItemMapper->historyItem($history, 'movie'),
                         $paginateLocally
                             ? $this->allUpstreamPages(
                                 fn (int $readOffset): array => $bazarrClient->getMovieHistory($readOffset, self::MAX_PER_PAGE),
@@ -778,7 +769,7 @@ final class SubtitleInventoryService
         throw_unless(in_array($mediaType, ['episode', 'movie'], true), InvalidArgumentException::class, 'Media type must be episode or movie.');
         throw_if($mediaId <= 0, InvalidArgumentException::class, 'Media ID must be positive.');
 
-        $bazarrClient = $this->bazarrClient($serviceConnection);
+        $bazarrClient = $this->subtitleInventoryConnections->bazarrClient($serviceConnection);
 
         if ($mediaType === 'episode') {
             return $this->inspectEpisode($serviceConnection, $bazarrClient, $mediaId);
@@ -800,28 +791,28 @@ final class SubtitleInventoryService
         BazarrClient $bazarrClient,
         int $episodeId,
     ): array {
-        $sonarr = $this->activeMappedConnection($serviceConnection, BazarrServiceRole::Sonarr);
+        $sonarr = $this->subtitleInventoryConnections->activeMapped($serviceConnection, BazarrServiceRole::Sonarr);
 
         throw_if(! $sonarr instanceof ServiceConnection, ModelNotFoundException::class, 'The mapped Sonarr connection is missing or inactive.');
 
         $episode = collect($bazarrClient->getEpisodes(episodeIds: [$episodeId])['data'])
-            ->first(fn (array $candidate): bool => $this->positiveInteger($candidate['sonarrEpisodeId'] ?? null) === $episodeId);
+            ->first(fn (array $candidate): bool => $this->subtitleItemMapper->positiveInteger($candidate['sonarrEpisodeId'] ?? null) === $episodeId);
 
         throw_unless(is_array($episode), ModelNotFoundException::class, 'The requested Bazarr episode was not found.');
 
-        $seriesId = $this->positiveInteger($episode['sonarrSeriesId'] ?? null);
+        $seriesId = $this->subtitleItemMapper->positiveInteger($episode['sonarrSeriesId'] ?? null);
 
         throw_if($seriesId === null, UnexpectedValueException::class, 'The requested Bazarr episode is missing its Sonarr series ID.');
 
         $sonarrClient = $this->serviceClientFactory->make($sonarr);
         throw_unless($sonarrClient instanceof SonarrClient, InvalidArgumentException::class, 'The mapped Sonarr connection is invalid.');
 
-        $item = $this->episodeItem($episode, $sonarrClient->getSeriesById($seriesId), $sonarr);
+        $item = $this->subtitleItemMapper->episodeItem($episode, $sonarrClient->getSeriesById($seriesId), $sonarr);
 
         throw_if($item === null, UnexpectedValueException::class, 'The requested Bazarr episode could not be projected.');
 
         $history = array_values(array_filter(array_map(
-            fn (array $history): ?array => $this->historyItem($history, 'episode'),
+            fn (array $history): ?array => $this->subtitleItemMapper->historyItem($history, 'episode'),
             $bazarrClient->getEpisodeHistory(length: 10, episodeId: $episodeId)['data'],
         )));
 
@@ -850,7 +841,7 @@ final class SubtitleInventoryService
         int $radarrId,
     ): array {
         throw_if(
-            ! $this->activeMappedConnection($serviceConnection, BazarrServiceRole::Radarr) instanceof ServiceConnection,
+            ! $this->subtitleInventoryConnections->activeMapped($serviceConnection, BazarrServiceRole::Radarr) instanceof ServiceConnection,
             ModelNotFoundException::class,
             'The mapped Radarr connection is missing or inactive.',
         );
@@ -859,12 +850,12 @@ final class SubtitleInventoryService
 
         throw_unless(is_array($movie), ModelNotFoundException::class, 'The requested Bazarr movie was not found.');
 
-        $item = $this->movieItem($movie);
+        $item = $this->subtitleItemMapper->movieItem($movie);
 
         throw_if($item === null, UnexpectedValueException::class, 'The requested Bazarr movie could not be projected.');
 
         $history = array_values(array_filter(array_map(
-            fn (array $history): ?array => $this->historyItem($history, 'movie'),
+            fn (array $history): ?array => $this->subtitleItemMapper->historyItem($history, 'movie'),
             $bazarrClient->getMovieHistory(length: 10, radarrId: $radarrId)['data'],
         )));
 
@@ -889,7 +880,7 @@ final class SubtitleInventoryService
         throw_unless($sonarrClient instanceof SonarrClient, InvalidArgumentException::class, 'The mapped Sonarr connection is invalid.');
 
         $seriesById = collect($sonarrClient->getSeries())
-            ->filter(fn (mixed $series): bool => is_array($series) && $this->positiveInteger($series['id'] ?? null) !== null)
+            ->filter(fn (mixed $series): bool => is_array($series) && $this->subtitleItemMapper->positiveInteger($series['id'] ?? null) !== null)
             ->keyBy(fn (array $series): int => (int) $series['id']);
         $items = [];
 
@@ -897,14 +888,14 @@ final class SubtitleInventoryService
             $episodes = $bazarrClient->getEpisodes(seriesIds: $seriesIds)['data'];
 
             foreach ($episodes as $episode) {
-                $seriesId = $this->positiveInteger($episode['sonarrSeriesId'] ?? null);
+                $seriesId = $this->subtitleItemMapper->positiveInteger($episode['sonarrSeriesId'] ?? null);
                 $series = $seriesId === null ? null : $seriesById->get($seriesId);
 
                 if (! is_array($series)) {
                     continue;
                 }
 
-                $item = $this->episodeItem($episode, $series, $serviceConnection);
+                $item = $this->subtitleItemMapper->episodeItem($episode, $series, $serviceConnection);
 
                 if ($item !== null) {
                     $items[] = $item;
@@ -916,38 +907,6 @@ final class SubtitleInventoryService
     }
 
     /**
-     * @param  array<string, mixed>  $episode
-     * @param  array<string, mixed>  $series
-     * @return array<string, mixed>|null
-     */
-    private function episodeItem(array $episode, array $series, ServiceConnection $serviceConnection): ?array
-    {
-        $mediaId = $this->positiveInteger($episode['sonarrEpisodeId'] ?? null);
-        $seriesId = $this->positiveInteger($episode['sonarrSeriesId'] ?? null);
-        $scope = $this->sonarrMediaScopeResolver->resolve($serviceConnection, $series);
-
-        if ($mediaId === null || $seriesId === null || ! $scope instanceof MediaReplacementScope) {
-            return null;
-        }
-
-        $tracks = $this->subtitleTracks($episode['subtitles'] ?? null, 'episode', $mediaId);
-        $requiredLanguages = $this->mediaReplacementSettings->effectiveLanguages($scope);
-
-        return [
-            'media_type' => 'episode',
-            'media_id' => $mediaId,
-            'series_id' => $seriesId,
-            'target_fingerprint' => $this->bazarrMediaFingerprint->make('episode', $episode),
-            'scope' => $scope->value,
-            'title' => $this->episodeTitle($series, $episode),
-            'subtitle_tracks' => $tracks,
-            'required_languages' => $requiredLanguages,
-            'missing_languages' => $this->missingLanguages($requiredLanguages, $tracks),
-            'monitored' => ($episode['monitored'] ?? true) === true,
-        ];
-    }
-
-    /**
      * @param  array<string, mixed>  $item
      * @return array<string, mixed>|null
      */
@@ -956,24 +915,24 @@ final class SubtitleInventoryService
         ServiceConnection $serviceConnection,
         SonarrClient $sonarrClient,
     ): ?array {
-        $seriesId = $this->positiveInteger($item['series_id'] ?? null);
-        $episodeId = $this->positiveInteger($item['media_id'] ?? null);
+        $seriesId = $this->subtitleItemMapper->positiveInteger($item['series_id'] ?? null);
+        $episodeId = $this->subtitleItemMapper->positiveInteger($item['media_id'] ?? null);
 
         if ($seriesId === null || $episodeId === null) {
             return null;
         }
 
         $episodes = array_values(array_filter($sonarrClient->getEpisodesBySeries($seriesId), is_array(...)));
-        $episode = collect($episodes)->first(fn (array $candidate): bool => $this->positiveInteger($candidate['id'] ?? null) === $episodeId);
-        $fileId = is_array($episode) ? $this->positiveInteger($episode['episodeFileId'] ?? null) : null;
+        $episode = collect($episodes)->first(fn (array $candidate): bool => $this->subtitleItemMapper->positiveInteger($candidate['id'] ?? null) === $episodeId);
+        $fileId = is_array($episode) ? $this->subtitleItemMapper->positiveInteger($episode['episodeFileId'] ?? null) : null;
 
         if ($fileId === null) {
             return null;
         }
 
         $sharingEpisodeIds = array_values(array_filter(array_map(
-            fn (array $candidate): ?int => $this->positiveInteger($candidate['episodeFileId'] ?? null) === $fileId
-                ? $this->positiveInteger($candidate['id'] ?? null)
+            fn (array $candidate): ?int => $this->subtitleItemMapper->positiveInteger($candidate['episodeFileId'] ?? null) === $fileId
+                ? $this->subtitleItemMapper->positiveInteger($candidate['id'] ?? null)
                 : null,
             $episodes,
         )));
@@ -1004,14 +963,14 @@ final class SubtitleInventoryService
         ServiceConnection $serviceConnection,
         RadarrClient $radarrClient,
     ): ?array {
-        $movieId = $this->positiveInteger($item['media_id'] ?? null);
+        $movieId = $this->subtitleItemMapper->positiveInteger($item['media_id'] ?? null);
 
         if ($movieId === null) {
             return null;
         }
 
         $movie = $radarrClient->getMovieById($movieId);
-        $fileId = $this->positiveInteger($movie['movieFileId'] ?? null);
+        $fileId = $this->subtitleItemMapper->positiveInteger($movie['movieFileId'] ?? null);
 
         if ($fileId === null) {
             return null;
@@ -1061,7 +1020,7 @@ final class SubtitleInventoryService
             'display_name' => $item['title'],
             'required_languages' => $requiredLanguages,
             'missing_languages' => is_array($item['missing_languages'] ?? null) ? $item['missing_languages'] : [],
-            'current_subtitles' => $this->currentSubtitleLanguages($item['subtitle_tracks'] ?? []),
+            'current_subtitles' => $this->subtitleItemMapper->currentSubtitleLanguages($item['subtitle_tracks'] ?? []),
             'monitored' => ($item['monitored'] ?? false) === true,
             'file_fingerprint' => $this->subtitleCaseFingerprint->file([
                 'service' => $service,
@@ -1074,157 +1033,6 @@ final class SubtitleInventoryService
             ]),
             'requirements_fingerprint' => $this->subtitleCaseFingerprint->requirements($scope, $requiredLanguages),
         ];
-    }
-
-    /**
-     * @return list<string>
-     */
-    private function currentSubtitleLanguages(mixed $tracks): array
-    {
-        if (! is_array($tracks)) {
-            return [];
-        }
-
-        return $this->languageNormalizer->normalizeMany(array_map(
-            static fn (mixed $track): mixed => is_array($track) ? ($track['language'] ?? null) : null,
-            $tracks,
-        ));
-    }
-
-    /**
-     * @param  array<string, mixed>  $movie
-     * @return array<string, mixed>|null
-     */
-    private function movieItem(array $movie): ?array
-    {
-        $mediaId = $this->positiveInteger($movie['radarrId'] ?? null);
-
-        if ($mediaId === null) {
-            return null;
-        }
-
-        $tracks = $this->subtitleTracks($movie['subtitles'] ?? null, 'movie', $mediaId);
-        $requiredLanguages = $this->mediaReplacementSettings->effectiveLanguages(MediaReplacementScope::Movie);
-
-        return [
-            'media_type' => 'movie',
-            'media_id' => $mediaId,
-            'target_fingerprint' => $this->bazarrMediaFingerprint->make('movie', $movie),
-            'scope' => MediaReplacementScope::Movie->value,
-            'title' => $this->safeText($movie['title'] ?? null, 'Movie '.$mediaId),
-            'subtitle_tracks' => $tracks,
-            'required_languages' => $requiredLanguages,
-            'missing_languages' => $this->missingLanguages($requiredLanguages, $tracks),
-            'monitored' => ($movie['monitored'] ?? true) === true,
-        ];
-    }
-
-    /**
-     * @param  array<string, mixed>  $history
-     * @return array<string, mixed>|null
-     */
-    private function historyItem(array $history, string $mediaType): ?array
-    {
-        $mediaId = $this->positiveInteger(
-            $mediaType === 'episode'
-                ? ($history['sonarrEpisodeId'] ?? null)
-                : ($history['radarrId'] ?? null),
-        );
-
-        if ($mediaId === null) {
-            return null;
-        }
-
-        $languagePayload = $history['language'] ?? null;
-        $language = $this->languageNormalizer->normalize(
-            is_array($languagePayload)
-                ? $this->firstString($languagePayload, ['code3', 'code2', 'name'])
-                : (is_string($languagePayload) ? $languagePayload : null),
-        );
-
-        if ($language === null) {
-            return null;
-        }
-
-        $title = $mediaType === 'episode'
-            ? $this->safeText($history['seriesTitle'] ?? null, 'Series')
-                .' — '.$this->safeText($history['episodeTitle'] ?? null, 'Episode')
-            : $this->safeText($history['title'] ?? null, 'Movie '.$mediaId);
-
-        return [
-            'media_type' => $mediaType,
-            'media_id' => $mediaId,
-            'title' => $title,
-            'language' => $language,
-            'provider' => $this->safeProvider($history['provider'] ?? null),
-            'action' => is_int($history['action'] ?? null) ? $history['action'] : null,
-            'score' => $this->safeText($history['score'] ?? null, ''),
-            'occurred_at' => $this->safeText($history['parsed_timestamp'] ?? $history['timestamp'] ?? null, ''),
-        ];
-    }
-
-    /**
-     * @return list<array{
-     *     fingerprint: string,
-     *     display_name: string,
-     *     language: string,
-     *     kind: 'embedded'|'external',
-     *     forced: bool,
-     *     hearing_impaired: bool
-     * }>
-     */
-    private function subtitleTracks(mixed $tracks, string $mediaType, int $mediaId): array
-    {
-        if (! is_array($tracks)) {
-            return [];
-        }
-
-        $normalizedTracks = [];
-
-        foreach ($tracks as $track) {
-            if (! is_array($track)) {
-                continue;
-            }
-
-            $language = $this->languageNormalizer->normalize(
-                $this->firstString($track, ['code3', 'code2', 'language', 'name']),
-            );
-
-            if ($language === null) {
-                continue;
-            }
-
-            $path = is_string($track['path'] ?? null) ? $track['path'] : null;
-            $kind = $path === null || $this->positiveInteger($track['embedded_track_id'] ?? null) !== null
-                ? 'embedded'
-                : 'external';
-            $displayName = $kind === 'external'
-                ? $this->safeBasename($path, Str::upper($language).' subtitle')
-                : Str::upper($language).' embedded track';
-
-            $normalizedTracks[] = [
-                'fingerprint' => $this->trackFingerprint($mediaType, $mediaId, $track, $displayName),
-                'display_name' => $displayName,
-                'language' => $language,
-                'kind' => $kind,
-                'forced' => ($track['forced'] ?? false) === true,
-                'hearing_impaired' => ($track['hi'] ?? $track['hearing_impaired'] ?? false) === true,
-            ];
-        }
-
-        return $normalizedTracks;
-    }
-
-    /**
-     * @param  list<string>  $requiredLanguages
-     * @param  list<array{language: string}>  $tracks
-     * @return list<string>
-     */
-    private function missingLanguages(array $requiredLanguages, array $tracks): array
-    {
-        $installedLanguages = array_column($tracks, 'language');
-
-        return array_values(array_diff($requiredLanguages, $installedLanguages));
     }
 
     /**
@@ -1319,129 +1127,6 @@ final class SubtitleInventoryService
 
             return $provider === null || Str::lower((string) ($item['provider'] ?? '')) === $provider;
         }));
-    }
-
-    private function bazarrClient(ServiceConnection $serviceConnection): BazarrClient
-    {
-        throw_unless($serviceConnection->type === ServiceType::Bazarr, InvalidArgumentException::class, 'Subtitle inventory requires a Bazarr connection.');
-
-        $client = $this->serviceClientFactory->make($serviceConnection);
-
-        throw_unless($client instanceof BazarrClient, InvalidArgumentException::class, 'Subtitle inventory requires a Bazarr client.');
-
-        return $client;
-    }
-
-    private function activeMappedConnection(
-        ServiceConnection $serviceConnection,
-        BazarrServiceRole $bazarrServiceRole,
-    ): ?ServiceConnection {
-        $connection = $serviceConnection->mappedConnection($bazarrServiceRole);
-
-        if (! $connection instanceof ServiceConnection
-            || ! $connection->is_active
-            || $connection->type !== $bazarrServiceRole->serviceType()) {
-            return null;
-        }
-
-        return $connection;
-    }
-
-    /**
-     * @param  array<string, mixed>  $series
-     * @param  array<string, mixed>  $episode
-     */
-    private function episodeTitle(array $series, array $episode): string
-    {
-        $seriesTitle = $this->safeText($series['title'] ?? null, 'Series');
-        $episodeTitle = $this->safeText($episode['title'] ?? $episode['episodeTitle'] ?? null, 'Episode');
-
-        return $seriesTitle.' — '.$episodeTitle;
-    }
-
-    private function safeText(mixed $value, string $fallback): string
-    {
-        if (! is_string($value) || ! mb_check_encoding($value, 'UTF-8')) {
-            return $fallback;
-        }
-
-        $value = Str::of($value)->squish()->limit(250)->toString();
-
-        return $value === '' ? $fallback : $value;
-    }
-
-    private function safeBasename(?string $path, string $fallback): string
-    {
-        if ($path === null || ! mb_check_encoding($path, 'UTF-8')) {
-            return $fallback;
-        }
-
-        $basename = Str::afterLast(str_replace('\\', '/', $path), '/');
-
-        return $this->safeText($basename, $fallback);
-    }
-
-    private function safeProvider(mixed $provider): ?string
-    {
-        if (! is_string($provider)) {
-            return null;
-        }
-
-        $provider = $this->safeText($provider, '');
-
-        if ($provider === '' || Str::startsWith($provider, ['http://', 'https://'])) {
-            return null;
-        }
-
-        return $provider;
-    }
-
-    /**
-     * @param  array<string, mixed>  $values
-     * @param  list<string>  $keys
-     */
-    private function firstString(array $values, array $keys): ?string
-    {
-        foreach ($keys as $key) {
-            $value = Arr::get($values, $key);
-
-            if (is_string($value)) {
-                return $value;
-            }
-        }
-
-        return null;
-    }
-
-    /**
-     * @param  array<string, mixed>  $track
-     *
-     * @throws JsonException
-     */
-    private function trackFingerprint(string $mediaType, int $mediaId, array $track, string $displayName): string
-    {
-        return $this->bazarrSubtitleFingerprint->make([
-            'media_type' => $mediaType,
-            'media_id' => $mediaId,
-            'path' => is_string($track['path'] ?? null) ? $track['path'] : null,
-            'language' => $this->firstString($track, ['code3', 'code2', 'language', 'name']),
-            'forced' => ($track['forced'] ?? false) === true,
-            'hearing_impaired' => ($track['hi'] ?? $track['hearing_impaired'] ?? false) === true,
-            'display_name' => $displayName,
-        ]);
-    }
-
-    private function positiveInteger(mixed $value): ?int
-    {
-        if (is_int($value) && $value > 0) {
-            return $value;
-        }
-
-        if (is_string($value) && ctype_digit($value) && (int) $value > 0) {
-            return (int) $value;
-        }
-
-        return null;
     }
 
     private function validatePagination(int $page, int $perPage): void
