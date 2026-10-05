@@ -13,7 +13,7 @@ test('page validation refuses out-of-range pages with the existing messages', fu
     Http::preventStrayRequests();
 
     expect(fn () => resolve(SubtitleLibraryReader::class)->validatePagination($page, $perPage))
-        ->toThrow(InvalidArgumentException::class, $message);
+        ->toThrow(new InvalidArgumentException($message));
 })->with([
     'page zero' => [0, 25, 'Page must be positive.'],
     'per page zero' => [1, 0, 'Per page must be between 1 and 100.'],
@@ -21,7 +21,6 @@ test('page validation refuses out-of-range pages with the existing messages', fu
 ]);
 
 test('page validation accepts the bounds', function (int $perPage): void {
-    resolve(SubtitleLibraryReader::class)->validatePagination(1, $perPage);
-
-    expect(true)->toBeTrue();
+    expect(fn () => resolve(SubtitleLibraryReader::class)->validatePagination(1, $perPage))
+        ->not->toThrow(InvalidArgumentException::class);
 })->with([1, 100]);
