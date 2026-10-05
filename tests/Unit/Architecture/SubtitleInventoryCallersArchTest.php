@@ -2,33 +2,28 @@
 
 declare(strict_types=1);
 
-/**
- * Callers already moved off the temporary SubtitleInventoryService facade to
- * the collaborator they need. Extended task by task during Batch 4e.
- *
- * @return list<string>
- */
-function subtitleInventoryMigratedFiles(): array
-{
-    return [
-        'app/Http/Controllers/Bazarr/OverviewController.php',
-        'app/Http/Controllers/Bazarr/LibraryController.php',
-        'app/Http/Controllers/Bazarr/MissingController.php',
-        'app/Http/Controllers/Bazarr/HistoryController.php',
-        'app/Http/Controllers/Bazarr/OperationController.php',
-        'app/Http/Controllers/Bazarr/SearchController.php',
-        'app/Ai/Tools/Bazarr/InspectSubtitleTool.php',
-        'app/Ai/Tools/Bazarr/SearchSubtitlesTool.php',
-        'app/Ai/Tools/Bazarr/RequestSubtitleOperationTool.php',
-    ];
-}
+use Symfony\Component\Finder\Finder;
 
-test('migrated callers no longer reach the subtitle inventory facade', function (): void {
+/**
+ * Every caller has moved off the temporary SubtitleInventoryService facade to
+ * the collaborator it needs; only the facade's own file may still name it
+ * until Batch 4e deletes it.
+ */
+test('no application file reaches the subtitle inventory facade', function (): void {
     $root = dirname(__DIR__, 3);
-    $offenders = array_values(array_filter(
-        subtitleInventoryMigratedFiles(),
-        static fn (string $path): bool => str_contains((string) file_get_contents($root.'/'.$path), 'SubtitleInventoryService'),
-    ));
+    $offenders = [];
+
+    foreach (Finder::create()->files()->in($root.'/app')->name('*.php') as $finder) {
+        if ($finder->getRelativePathname() === 'Services/Bazarr/SubtitleInventoryService.php') {
+            continue;
+        }
+
+        if (str_contains($finder->getContents(), 'SubtitleInventoryService')) {
+            $offenders[] = $finder->getRelativePathname();
+        }
+    }
+
+    sort($offenders);
 
     expect($offenders)->toBe([]);
 });

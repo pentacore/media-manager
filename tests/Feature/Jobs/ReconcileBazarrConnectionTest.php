@@ -6,7 +6,7 @@ use App\Jobs\ReconcileBazarrConnection;
 use App\Jobs\ReconcileSubtitleCase;
 use App\Models\BazarrServiceLink;
 use App\Models\ServiceConnection;
-use App\Services\Bazarr\SubtitleInventoryService;
+use App\Services\Bazarr\SubtitleCaseCandidates;
 use App\Settings\BazarrAutomationSettings;
 use App\Settings\MediaReplacementSettings;
 use Illuminate\Contracts\Queue\ShouldBeUnique;
@@ -93,7 +93,7 @@ test('disabled automation performs no upstream reads or case dispatches', functi
     Queue::fake([ReconcileSubtitleCase::class]);
 
     new ReconcileBazarrConnection($bazarr->id)->handle(
-        resolve(SubtitleInventoryService::class),
+        resolve(SubtitleCaseCandidates::class),
         resolve(BazarrAutomationSettings::class),
     );
 
@@ -108,7 +108,7 @@ test('missing inactive and wrong type connections are ignored', function (array 
     Queue::fake([ReconcileSubtitleCase::class]);
 
     new ReconcileBazarrConnection($connection->id)->handle(
-        resolve(SubtitleInventoryService::class),
+        resolve(SubtitleCaseCandidates::class),
         resolve(BazarrAutomationSettings::class),
     );
 
@@ -126,7 +126,7 @@ test('an unmapped active Bazarr connection returns without upstream reads', func
     Queue::fake([ReconcileSubtitleCase::class]);
 
     new ReconcileBazarrConnection($bazarr->id)->handle(
-        resolve(SubtitleInventoryService::class),
+        resolve(SubtitleCaseCandidates::class),
         resolve(BazarrAutomationSettings::class),
     );
 
@@ -200,7 +200,7 @@ test('a reconciliation cycle dispatches no more than the configured case cap', f
     Queue::fake([ReconcileSubtitleCase::class]);
 
     new ReconcileBazarrConnection($bazarr->id)->handle(
-        resolve(SubtitleInventoryService::class),
+        resolve(SubtitleCaseCandidates::class),
         resolve(BazarrAutomationSettings::class),
     );
 
@@ -247,7 +247,7 @@ test('a discovery failure retries without silencing the reconciliation interval'
     Queue::fake([ReconcileSubtitleCase::class]);
 
     expect(fn (): mixed => new ReconcileBazarrConnection($serviceConnection->id)->handle(
-        resolve(SubtitleInventoryService::class),
+        resolve(SubtitleCaseCandidates::class),
         resolve(BazarrAutomationSettings::class),
     ))->toThrow(RuntimeException::class);
 
@@ -257,7 +257,7 @@ test('a discovery failure retries without silencing the reconciliation interval'
     $seriesFails = false;
 
     new ReconcileBazarrConnection($serviceConnection->id)->handle(
-        resolve(SubtitleInventoryService::class),
+        resolve(SubtitleCaseCandidates::class),
         resolve(BazarrAutomationSettings::class),
     );
 
@@ -280,7 +280,7 @@ test('a bounded cycle resumes from a continuation cursor and wraps at the stream
     $runCycle = function () use ($serviceConnection): void {
         Cache::forget('bazarr-reconciliation-interval:'.$serviceConnection->id);
         new ReconcileBazarrConnection($serviceConnection->id)->handle(
-            resolve(SubtitleInventoryService::class),
+            resolve(SubtitleCaseCandidates::class),
             resolve(BazarrAutomationSettings::class),
         );
     };

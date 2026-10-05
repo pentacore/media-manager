@@ -18,9 +18,9 @@ use App\Models\SubtitleCaseAttempt;
 use App\Services\Bazarr\BazarrDownloadRequestCreator;
 use App\Services\Bazarr\BazarrSettingsAdapter;
 use App\Services\Bazarr\SubtitleCandidateEligibility;
+use App\Services\Bazarr\SubtitleCaseCandidates;
 use App\Services\Bazarr\SubtitleCaseLifecycle;
 use App\Services\Bazarr\SubtitleCaseReconciler;
-use App\Services\Bazarr\SubtitleInventoryService;
 use App\Settings\BazarrAutomationSettings;
 use App\Settings\MediaReplacementSettings;
 use Illuminate\Database\Eloquent\Collection;
@@ -559,7 +559,7 @@ function targetedEpisodeCaseSetup(array $subtitleTracks, ?callable $episodesHand
 
     // Align the case's identity fingerprints with the live projection so the
     // reconciler matches this exact case.
-    $candidate = resolve(SubtitleInventoryService::class)->caseCandidateFor($case);
+    $candidate = resolve(SubtitleCaseCandidates::class)->caseCandidateFor($case);
     $case->forceFill([
         'file_fingerprint' => $candidate['file_fingerprint'],
         'requirements_fingerprint' => $candidate['requirements_fingerprint'],
@@ -1132,6 +1132,6 @@ function runSubtitleProbe(ReconcileSubtitleCase $reconcileSubtitleCase): void
         resolve(SubtitleCaseLifecycle::class),
         resolve(BazarrAutomationSettings::class),
         resolve(BazarrSettingsAdapter::class),
-        resolve(SubtitleInventoryService::class),
+        resolve(SubtitleCaseCandidates::class),
     );
 }
