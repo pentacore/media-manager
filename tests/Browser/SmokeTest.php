@@ -397,6 +397,8 @@ function browserSmokeAdminRouteNames(): array
         'admin.webhook-log.index',
         'admin.jobs.index',
         'ai.chat',
+        'ai.templates.index',
+        'ai.templates.create',
         'media.whisparr.index',
     ];
 }
@@ -411,6 +413,8 @@ function browserSmokeExcludedRouteNames(): array
         'admin.ai-usage.export',
         'ai.chat.pending-workflow',
         'ai.conversations.index',
+        'ai.templates.options',
+        'ai.templates.library',
         'media.search.instant',
         'media.replacement.inspect',
         'media.replacement.candidates',
