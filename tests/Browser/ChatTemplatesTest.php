@@ -86,6 +86,91 @@ test('the help panel starts collapsed when editing and opens on demand', functio
         ->assertSeeIn('[data-template-help]', 'The assistant gets');
 });
 
+test('the ledger inserts an existing variable at the message cursor', function (): void {
+    $this->actingAs(User::factory()->admin()->create());
+
+    $webpage = visit(route('ai.templates.create', absolute: false))
+        ->assertNoSmoke()
+        ->fill('[data-template-body]', 'Hello {{season}} world')
+        ->assertSeeIn('[data-ledger-variable="season"]', 'Text');
+
+    $webpage->script(chatTemplatesPlaceCaretScript(6));
+
+    $webpage->click('[data-ledger-variable="season"] [data-ledger-insert]')
+        ->assertValue('[data-template-body]', 'Hello {{season}}{{season}} world');
+
+    expect($webpage->script(chatTemplatesCaretScript()))->toBe(['focused' => true, 'caret' => 16]);
+});
+
+test('the ledger appends when the message was never focused', function (): void {
+    $admin = User::factory()->admin()->create();
+    $chatTemplate = ChatTemplate::factory()->for($admin)->withBody('Check {{what}}', [
+        ['name' => 'what', 'label' => 'What', 'type' => 'text', 'default' => null, 'options' => null],
+    ])->create();
+    $this->actingAs($admin);
+
+    visit(route('ai.templates.edit', $chatTemplate, absolute: false))
+        ->assertNoSmoke()
+        ->click('[data-ledger-variable="what"] [data-ledger-insert]')
+        ->assertValue('[data-template-body]', 'Check {{what}}{{what}}');
+});
+
+test('series part chips insert the parts in click order and reset', function (): void {
+    $this->actingAs(User::factory()->admin()->create());
+
+    visit(route('ai.templates.create', absolute: false))
+        ->assertNoSmoke()
+        ->fill('[data-template-body]', 'Check {{anime}} ')
+        ->select('[data-variable-row="anime"] [data-variable-type]', 'series')
+        ->click('[data-ledger-variable="anime"] [data-ledger-part="title"]')
+        ->click('[data-ledger-variable="anime"] [data-ledger-part="year"]')
+        ->click('[data-ledger-variable="anime"] [data-ledger-insert]')
+        ->assertValue('[data-template-body]', 'Check {{anime}} {{anime:title,year}}')
+        ->assertAttribute('[data-ledger-variable="anime"] [data-ledger-part="title"]', 'aria-pressed', 'false');
+});
+
+test('adding a series variable inserts its token with the series type pre-set', function (): void {
+    $this->actingAs(User::factory()->admin()->create());
+
+    visit(route('ai.templates.create', absolute: false))
+        ->assertNoSmoke()
+        ->fill('[data-template-body]', 'Check ')
+        ->click('[data-ledger-add="series"]')
+        ->assertValue('[data-ledger-new-name]', 'anime')
+        ->click('[data-ledger-new-insert]')
+        ->assertValue('[data-template-body]', 'Check {{anime}}')
+        ->assertValue('[data-variable-row="anime"] [data-variable-type]', 'series');
+});
+
+test('a new variable name that is taken shows an error and inserts nothing', function (): void {
+    $this->actingAs(User::factory()->admin()->create());
+
+    visit(route('ai.templates.create', absolute: false))
+        ->assertNoSmoke()
+        ->fill('[data-template-body]', 'Check {{anime}}')
+        ->click('[data-ledger-add="series"]')
+        ->assertValue('[data-ledger-new-name]', 'series')
+        ->fill('[data-ledger-new-name]', 'anime')
+        ->assertSeeIn('[data-ledger-new-error]', 'already has a variable')
+        ->click('[data-ledger-new-insert]')
+        ->assertValue('[data-template-body]', 'Check {{anime}}')
+        ->assertVisible('[data-ledger-new-error]');
+});
+
+test('enter in the new variable name inserts a choice variable', function (): void {
+    $this->actingAs(User::factory()->admin()->create());
+
+    visit(route('ai.templates.create', absolute: false))
+        ->assertNoSmoke()
+        ->fill('[data-template-body]', 'Subtitles in ')
+        ->click('[data-ledger-add="choice"]')
+        ->fill('[data-ledger-new-name]', 'lang')
+        ->keys('[data-ledger-new-name]', 'Enter')
+        ->assertValue('[data-template-body]', 'Subtitles in {{lang}}')
+        ->assertValue('[data-variable-row="lang"] [data-variable-type]', 'choice')
+        ->assertVisible('[data-variable-row="lang"] [data-variable-options]');
+});
+
 test('the preview switches between example values and placeholder names', function (): void {
     $this->actingAs(User::factory()->admin()->create());
 
@@ -274,3 +359,19 @@ test('the fill dialog explains a template that changed after it opened', functio
         ->assertSeeIn('[data-template-fill-error]', 'Language')
         ->assertValue('[data-chat-input]', '');
 });
+
+/**
+ * Focuses the message box with the caret at the given offset.
+ */
+function chatTemplatesPlaceCaretScript(int $offset): string
+{
+    return sprintf("(() => { const el = document.querySelector('[data-template-body]'); el.focus(); el.setSelectionRange(%d, %d); })()", $offset, $offset);
+}
+
+/**
+ * Whether the message box has focus, and where its caret is.
+ */
+function chatTemplatesCaretScript(): string
+{
+    return "(() => { const el = document.querySelector('[data-template-body]'); return { focused: document.activeElement === el, caret: el.selectionStart }; })()";
+}

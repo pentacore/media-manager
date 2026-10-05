@@ -4,6 +4,7 @@ export { default as ChatTemplatePicker } from './ChatTemplatePicker.vue';
 export { default as LibraryTitleCombobox } from './LibraryTitleCombobox.vue';
 export { default as TemplateHelp } from './TemplateHelp.vue';
 export { default as TemplatePreview } from './TemplatePreview.vue';
+export { default as VariableLedger } from './VariableLedger.vue';
 export { default as VariableRow } from './VariableRow.vue';
 export * from './tokens';
 export type * from './types';

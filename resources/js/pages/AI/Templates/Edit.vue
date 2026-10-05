@@ -1,20 +1,24 @@
 <script setup lang="ts">
 import { Head, Link, useForm } from '@inertiajs/vue3';
 import { useDebounceFn } from '@vueuse/core';
-import { onMounted, ref, watch } from 'vue';
+import { nextTick, onMounted, ref, watch } from 'vue';
 import AIChatController from '@/actions/App/Http/Controllers/AI/ChatController';
 import ChatTemplateController from '@/actions/App/Http/Controllers/AI/ChatTemplateController';
 import ChatTemplatePreviewController from '@/actions/App/Http/Controllers/AI/ChatTemplatePreviewController';
 import {
+    buildToken,
     extractTokenNames,
     humanizeVariableName,
+    insertAtSelection,
     TemplateHelp,
     TemplatePreview,
+    VariableLedger,
     VariableRow,
 } from '@/components/chat-templates';
 import type {
     ChatTemplate,
     ChatTemplateVariable,
+    ChatTemplateVariableKind,
     PreviewResponse,
     PreviewSegment,
     VariableTypeOption,
@@ -81,6 +85,41 @@ watch(
     },
     { immediate: true },
 );
+
+const bodyInput = ref<HTMLTextAreaElement | null>(null);
+
+/** Until the message box has had focus its selection means nothing, so inserts append. */
+const bodyWasFocused = ref(false);
+
+async function insertIntoBody(token: string): Promise<void> {
+    const el = bodyInput.value;
+    const atEnd = form.body.length;
+    const { text, caret } = insertAtSelection(
+        form.body,
+        bodyWasFocused.value && el ? el.selectionStart : atEnd,
+        bodyWasFocused.value && el ? el.selectionEnd : atEnd,
+        token,
+    );
+
+    form.body = text;
+
+    await nextTick();
+    el?.focus();
+    el?.setSelectionRange(caret, caret);
+}
+
+/** Seeds the settings the body watcher picks up, so the new row starts with the chosen type. */
+function addVariable(name: string, type: ChatTemplateVariableKind): void {
+    remembered.set(name, {
+        name,
+        label: humanizeVariableName(name),
+        type,
+        default: null,
+        options: type === 'choice' ? [] : null,
+    });
+
+    void insertIntoBody(buildToken(name));
+}
 
 function rowErrors(index: number): Record<string, string | undefined> {
     const errors = form.errors as Record<string, string | undefined>;
@@ -203,18 +242,28 @@ function save(): void {
             <InputError :message="form.errors.name" />
         </label>
 
-        <label class="grid gap-1.5 text-[12.5px] font-medium">
-            Message
-            <textarea
-                v-model="form.body"
-                rows="5"
-                class="rounded-md border border-input bg-background px-3 py-2 font-mono text-[13px]"
-                data-template-body
+        <div class="grid gap-4 lg:grid-cols-[minmax(0,1fr)_280px]">
+            <label class="grid content-start gap-1.5 text-[12.5px] font-medium">
+                Message
+                <textarea
+                    ref="bodyInput"
+                    v-model="form.body"
+                    rows="8"
+                    class="rounded-md border border-input bg-background px-3 py-2 font-mono text-[13px]"
+                    data-template-body
+                    @focus="bodyWasFocused = true"
+                />
+                <span data-template-body-error>
+                    <InputError :message="form.errors.body" />
+                </span>
+            </label>
+            <VariableLedger
+                :variables="form.variables"
+                :types="variableTypes"
+                @insert="insertIntoBody"
+                @add="addVariable"
             />
-            <span data-template-body-error>
-                <InputError :message="form.errors.body" />
-            </span>
-        </label>
+        </div>
 
         <section v-if="form.variables.length > 0" class="grid gap-2">
             <h2 class="text-[13px] font-semibold">Variables</h2>
