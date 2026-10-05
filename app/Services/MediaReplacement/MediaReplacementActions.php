@@ -213,6 +213,9 @@ final readonly class MediaReplacementActions implements ActionExecutor
     }
 
     /**
+     * Leave an attempt whose grab outcome was never recorded for webhooks and
+     * reconciliation to resolve, without re-grabbing.
+     *
      * @return array<string, mixed>
      */
     private function leaveUnrecordedGrabToTracking(MediaReplacementAttempt $mediaReplacementAttempt): array
@@ -273,10 +276,10 @@ final readonly class MediaReplacementActions implements ActionExecutor
         // failure). Resume the remaining destructive steps idempotently. Reopen
         // the status to `downloading` ONLY when it is still an executor-owned
         // state — via a single CONDITIONAL update, so a webhook that
-        // terminalizes the row between the load above and here is never
-        // regressed (a check-then-act update could clobber it). completePostGrab
-        // then finishes the delete/restore either way, without touching a
-        // webhook-produced terminal status.
+        // terminalizes the row between the attempt runReplacement() loaded and
+        // here is never regressed (a check-then-act update could clobber it).
+        // completePostGrab then finishes the delete/restore either way, without
+        // touching a webhook-produced terminal status.
         MediaReplacementAttempt::query()
             ->whereKey($mediaReplacementAttempt->id)
             ->whereNull('cleanup_completed_at')
@@ -298,12 +301,12 @@ final readonly class MediaReplacementActions implements ActionExecutor
                 'acknowledged_by' => null,
             ]);
         // fresh() rather than refresh(): refresh() is findOrFail, and this row can
-        // be pruned between the load above and here — MediaReplacementAttempt is
-        // MassPrunable and model:prune is scheduled, so a long-settled attempt an
-        // operator retries is exactly the shape that vanishes. A pruned row must
-        // fail this one ActionRequest with a stated reason, not an unhandled
-        // ModelNotFoundException. Same treatment the reconcile command already
-        // applies to its own re-read.
+        // be pruned between the attempt runReplacement() loaded and here —
+        // MediaReplacementAttempt is MassPrunable and model:prune is scheduled, so
+        // a long-settled attempt an operator retries is exactly the shape that
+        // vanishes. A pruned row must fail this one ActionRequest with a stated
+        // reason, not an unhandled ModelNotFoundException. Same treatment the
+        // reconcile command already applies to its own re-read.
         $refreshed = $mediaReplacementAttempt->fresh();
 
         throw_unless(
@@ -359,6 +362,9 @@ final readonly class MediaReplacementActions implements ActionExecutor
     }
 
     /**
+     * Bust the connection cache and re-inspect the target, aborting if the
+     * installed files changed since approval.
+     *
      * @param  array<string, mixed>  $storedTarget
      * @return array<string, mixed>
      */

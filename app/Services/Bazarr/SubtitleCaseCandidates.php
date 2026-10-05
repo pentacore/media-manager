@@ -27,7 +27,7 @@ final class SubtitleCaseCandidates
 {
     /**
      * Mapped-library discovery feeds already scanned by this instance, keyed by
-     * Bazarr connection id. One reconciliation cycle resolves the service once and
+     * Bazarr connection id. One reconciliation cycle resolves this projector once and
      * then walks its pages, so this bounds the scan to once per cycle. Deliberately
      * not a shared cache: a cycle must not inherit another cycle's snapshot.
      *
@@ -162,7 +162,7 @@ final class SubtitleCaseCandidates
 
     /**
      * The mapped-library discovery feed for one connection, scanned at most once
-     * per service instance — that is, once per reconciliation cycle.
+     * per instance — that is, once per reconciliation cycle.
      *
      * @return array{0: list<array<string, mixed>>, 1: list<string>}
      */
