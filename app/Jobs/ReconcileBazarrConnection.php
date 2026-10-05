@@ -6,7 +6,7 @@ namespace App\Jobs;
 
 use App\Enums\ServiceType;
 use App\Models\ServiceConnection;
-use App\Services\Bazarr\SubtitleInventoryService;
+use App\Services\Bazarr\SubtitleCaseCandidates;
 use App\Settings\BazarrAutomationSettings;
 use Illuminate\Contracts\Queue\ShouldBeUnique;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -57,7 +57,7 @@ final class ReconcileBazarrConnection implements ShouldBeUnique, ShouldQueue
     }
 
     public function handle(
-        SubtitleInventoryService $subtitleInventoryService,
+        SubtitleCaseCandidates $subtitleCaseCandidates,
         BazarrAutomationSettings $bazarrAutomationSettings,
     ): void {
         if (! $bazarrAutomationSettings->enabled()) {
@@ -87,7 +87,7 @@ final class ReconcileBazarrConnection implements ShouldBeUnique, ShouldQueue
                 return;
             }
 
-            $this->discoverAndDispatch($connection, $subtitleInventoryService, $bazarrAutomationSettings);
+            $this->discoverAndDispatch($connection, $subtitleCaseCandidates, $bazarrAutomationSettings);
 
             Cache::put(
                 'bazarr-reconciliation-interval:'.$connection->id,
@@ -101,7 +101,7 @@ final class ReconcileBazarrConnection implements ShouldBeUnique, ShouldQueue
 
     private function discoverAndDispatch(
         ServiceConnection $connection,
-        SubtitleInventoryService $subtitleInventoryService,
+        SubtitleCaseCandidates $subtitleCaseCandidates,
         BazarrAutomationSettings $bazarrAutomationSettings,
     ): void {
         $maximumCases = $bazarrAutomationSettings->maxCasesPerCycle();
@@ -112,7 +112,7 @@ final class ReconcileBazarrConnection implements ShouldBeUnique, ShouldQueue
         $total = 0;
 
         do {
-            $candidates = $subtitleInventoryService->caseCandidates($connection, $page, $perPage);
+            $candidates = $subtitleCaseCandidates->caseCandidates($connection, $page, $perPage);
 
             // An incomplete read must not advance the cursor or write the interval
             // marker; retrying keeps reconciliation live through a transient outage.

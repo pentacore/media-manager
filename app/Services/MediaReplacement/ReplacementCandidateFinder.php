@@ -28,27 +28,6 @@ final readonly class ReplacementCandidateFinder
     ) {}
 
     /**
-     * Re-run the native search and return the raw release resource whose
-     * fingerprint matches, so an executor can grab exactly the reviewed release.
-     * Returns null when the release is no longer present.
-     *
-     * @param  array<string, mixed>  $target
-     * @return array<string, mixed>|null
-     */
-    public function freshRawRelease(array $target, string $fingerprint, ?ServiceConnection $serviceConnection = null): ?array
-    {
-        $service = mb_strtolower(trim((string) ($target['service'] ?? '')));
-
-        foreach ($this->searchReleases($service, $target, $serviceConnection) as $release) {
-            if (is_array($release) && $this->releaseFingerprint->make($service, $release) === $fingerprint) {
-                return $release;
-            }
-        }
-
-        return null;
-    }
-
-    /**
      * @param  array<string, mixed>  $target
      * @param  array<int, string>|null  $languageOverride
      * @return array{
@@ -67,6 +46,72 @@ final readonly class ReplacementCandidateFinder
         int $limit = 5,
         ?ServiceConnection $serviceConnection = null,
     ): array {
+        return $this->rankedSearch($target, $languageOverride, $limit, $serviceConnection)['found'];
+    }
+
+    /**
+     * One native search answered twice: the shortlist find() returns, plus the
+     * raw release resource whose fingerprint matches, so an executor can
+     * re-check the reviewed release and grab exactly that resource without a
+     * second search (an arr release search can take up to 120 s). raw_release
+     * is null when the search no longer offers the release.
+     *
+     * @param  array<string, mixed>  $target
+     * @param  array<int, string>|null  $languageOverride
+     * @return array{
+     *     found: array{
+     *         target: array<string, mixed>,
+     *         effective_languages: list<string>,
+     *         guidance: array{notes: string},
+     *         candidates: list<array<string, mixed>>,
+     *         excluded: array<string, int>,
+     *         unique_best: bool,
+     *         automatic_candidate: array<string, mixed>|null
+     *     },
+     *     raw_release: array<string, mixed>|null
+     * }
+     */
+    public function findWithRawRelease(
+        array $target,
+        string $fingerprint,
+        ?array $languageOverride = null,
+        int $limit = 5,
+        ?ServiceConnection $serviceConnection = null,
+    ): array {
+        $search = $this->rankedSearch($target, $languageOverride, $limit, $serviceConnection);
+
+        return [
+            'found' => $search['found'],
+            'raw_release' => $this->matchingRelease($search['service'], $search['releases'], $fingerprint),
+        ];
+    }
+
+    /**
+     * Run the native search once and rank its rows. The scope and settings are
+     * resolved first, so an invalid target is refused before any request.
+     *
+     * @param  array<string, mixed>  $target
+     * @param  array<int, string>|null  $languageOverride
+     * @return array{
+     *     found: array{
+     *         target: array<string, mixed>,
+     *         effective_languages: list<string>,
+     *         guidance: array{notes: string},
+     *         candidates: list<array<string, mixed>>,
+     *         excluded: array<string, int>,
+     *         unique_best: bool,
+     *         automatic_candidate: array<string, mixed>|null
+     *     },
+     *     service: string,
+     *     releases: array<int, array<string, mixed>>
+     * }
+     */
+    private function rankedSearch(
+        array $target,
+        ?array $languageOverride,
+        int $limit,
+        ?ServiceConnection $serviceConnection,
+    ): array {
         $service = mb_strtolower(trim((string) ($target['service'] ?? '')));
         $scope = MediaReplacementScope::tryFrom((string) ($target['scope'] ?? ''))
             ?? throw new InvalidArgumentException('target scope must be anime, tv, or movie.');
@@ -74,9 +119,10 @@ final readonly class ReplacementCandidateFinder
         $effectiveLanguages = $this->mediaReplacementSettings->effectiveLanguages($scope, $languageOverride);
         $guidance = $this->mediaReplacementSettings->guidance($scope);
         $seasonPackPolicy = $this->mediaReplacementSettings->seasonPackPolicy();
+        $releases = $this->searchReleases($service, $target, $serviceConnection);
 
         $ranked = $this->releaseCandidateRanker->rank(
-            releases: $this->searchReleases($service, $target, $serviceConnection),
+            releases: $releases,
             requiredLanguages: $effectiveLanguages,
             rules: is_array($guidance['rules']) ? $guidance['rules'] : [],
             target: $target,
@@ -85,14 +131,36 @@ final readonly class ReplacementCandidateFinder
         );
 
         return [
-            'target' => $target,
-            'effective_languages' => $effectiveLanguages,
-            'guidance' => ['notes' => $guidance['notes']],
-            'candidates' => $ranked['candidates'],
-            'excluded' => $ranked['excluded'],
-            'unique_best' => $ranked['unique_best'],
-            'automatic_candidate' => $this->automaticCandidate($ranked, $seasonPackPolicy),
+            'found' => [
+                'target' => $target,
+                'effective_languages' => $effectiveLanguages,
+                'guidance' => ['notes' => $guidance['notes']],
+                'candidates' => $ranked['candidates'],
+                'excluded' => $ranked['excluded'],
+                'unique_best' => $ranked['unique_best'],
+                'automatic_candidate' => $this->automaticCandidate($ranked, $seasonPackPolicy),
+            ],
+            'service' => $service,
+            'releases' => $releases,
         ];
+    }
+
+    /**
+     * The raw release resource whose fingerprint matches, from rows already
+     * searched, so an executor grabs exactly the reviewed release.
+     *
+     * @param  array<int, array<string, mixed>>  $releases
+     * @return array<string, mixed>|null
+     */
+    private function matchingRelease(string $service, array $releases, string $fingerprint): ?array
+    {
+        foreach ($releases as $release) {
+            if (is_array($release) && $this->releaseFingerprint->make($service, $release) === $fingerprint) {
+                return $release;
+            }
+        }
+
+        return null;
     }
 
     /**

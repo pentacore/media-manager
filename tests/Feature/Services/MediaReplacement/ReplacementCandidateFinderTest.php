@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use App\Enums\MediaReplacementScope;
 use App\Models\ServiceConnection;
+use App\Services\MediaReplacement\ReleaseFingerprint;
 use App\Services\MediaReplacement\ReplacementCandidateFinder;
 use App\Settings\MediaReplacementSettings;
 use Illuminate\Http\Client\Request;
@@ -299,4 +300,57 @@ test('withholds an automatic candidate when automation is disabled', function ()
 
     expect($result['candidates'])->toHaveCount(1)
         ->and($result['automatic_candidate'])->toBeNull();
+});
+
+test('find with raw release answers the shortlist and the raw row from one release search', function (): void {
+    ServiceConnection::factory()->sonarr()->create([
+        'url' => 'http://sonarr.local:8989', 'api_key' => 'test', 'is_active' => true,
+    ]);
+    configureCrGuarantee();
+
+    Http::fake([
+        'sonarr.local:8989/api/v3/release*' => Http::response([
+            nativeRelease(),
+            nativeRelease(['guid' => 'guid-2', 'title' => 'Other.Anime.S01E01.WEB']),
+        ]),
+    ]);
+
+    $fingerprint = (new ReleaseFingerprint)->make('sonarr', nativeRelease());
+
+    $result = resolve(ReplacementCandidateFinder::class)->findWithRawRelease(sonarrTargetSnapshot(), $fingerprint, null, 10);
+
+    Http::assertSentCount(1);
+
+    expect(array_keys($result))->toBe(['found', 'raw_release'])
+        ->and(array_column($result['found']['candidates'], 'fingerprint'))->toContain($fingerprint)
+        ->and($result['raw_release'])->toBeArray()
+        ->and($result['raw_release']['guid'])->toBe('guid-1')
+        ->and($result['raw_release']['downloadUrl'])->toBe('https://secret.example/download');
+});
+
+test('find with raw release ranks exactly as find does and finds no raw row for an unoffered fingerprint', function (): void {
+    ServiceConnection::factory()->sonarr()->create([
+        'url' => 'http://sonarr.local:8989', 'api_key' => 'test', 'is_active' => true,
+    ]);
+    configureCrGuarantee();
+
+    Http::fake([
+        'sonarr.local:8989/api/v3/release*' => Http::response([nativeRelease()]),
+    ]);
+
+    $replacementCandidateFinder = resolve(ReplacementCandidateFinder::class);
+    $found = $replacementCandidateFinder->find(sonarrTargetSnapshot(), ['English'], 10);
+    $result = $replacementCandidateFinder->findWithRawRelease(sonarrTargetSnapshot(), str_repeat('0', 64), ['English'], 10);
+
+    expect($result['found'])->toBe($found)
+        ->and($result['raw_release'])->toBeNull();
+
+    Http::assertSentCount(2);
+});
+
+test('find with raw release refuses an unknown scope before searching', function (): void {
+    expect(fn (): array => resolve(ReplacementCandidateFinder::class)->findWithRawRelease(sonarrTargetSnapshot(['scope' => 'documentary']), 'fingerprint'))
+        ->toThrow(InvalidArgumentException::class, 'target scope must be anime, tv, or movie.');
+
+    Http::assertNothingSent();
 });

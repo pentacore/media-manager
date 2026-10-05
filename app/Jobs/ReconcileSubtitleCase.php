@@ -18,9 +18,9 @@ use App\Services\Bazarr\BazarrClient;
 use App\Services\Bazarr\BazarrDownloadRequestCreator;
 use App\Services\Bazarr\BazarrSettingsAdapter;
 use App\Services\Bazarr\SubtitleCandidateEligibility;
+use App\Services\Bazarr\SubtitleCaseCandidates;
 use App\Services\Bazarr\SubtitleCaseLifecycle;
 use App\Services\Bazarr\SubtitleCaseReconciler;
-use App\Services\Bazarr\SubtitleInventoryService;
 use App\Settings\BazarrAutomationSettings;
 use DateTimeInterface;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -137,7 +137,7 @@ final class ReconcileSubtitleCase implements ShouldQueue
         SubtitleCaseLifecycle $subtitleCaseLifecycle,
         BazarrAutomationSettings $bazarrAutomationSettings,
         BazarrSettingsAdapter $bazarrSettingsAdapter,
-        SubtitleInventoryService $subtitleInventoryService,
+        SubtitleCaseCandidates $subtitleCaseCandidates,
     ): void {
         $subtitleCase = $this->subtitleCaseId === null
             ? $subtitleCaseReconciler->reconcile($this->candidate)
@@ -157,7 +157,7 @@ final class ReconcileSubtitleCase implements ShouldQueue
                 $subtitleCase,
                 $subtitleCaseReconciler,
                 $subtitleCaseLifecycle,
-                $subtitleInventoryService,
+                $subtitleCaseCandidates,
             );
         }
 
@@ -367,10 +367,10 @@ final class ReconcileSubtitleCase implements ShouldQueue
         SubtitleCase $subtitleCase,
         SubtitleCaseReconciler $subtitleCaseReconciler,
         SubtitleCaseLifecycle $subtitleCaseLifecycle,
-        SubtitleInventoryService $subtitleInventoryService,
+        SubtitleCaseCandidates $subtitleCaseCandidates,
     ): SubtitleCase {
         try {
-            $candidate = $subtitleInventoryService->caseCandidateFor($subtitleCase);
+            $candidate = $subtitleCaseCandidates->caseCandidateFor($subtitleCase);
         } catch (Throwable $throwable) {
             // A failed read says nothing about the subtitle, so it must never be
             // treated as "still missing". Transient failures retry; a definite one

@@ -10,7 +10,7 @@ use App\Http\Requests\Bazarr\SearchRequest;
 use App\Http\Resources\Bazarr\SubtitleCandidateResource;
 use App\Models\ServiceConnection;
 use App\Services\Bazarr\BazarrClient;
-use App\Services\Bazarr\SubtitleInventoryService;
+use App\Services\Bazarr\SubtitleInspector;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Validation\ValidationException;
 
@@ -18,13 +18,13 @@ final class SearchController extends Controller
 {
     public function __invoke(
         SearchRequest $searchRequest,
-        SubtitleInventoryService $subtitleInventoryService,
+        SubtitleInspector $subtitleInspector,
     ): JsonResponse {
         $validated = $searchRequest->validated();
         $connection = $this->connection((int) $validated['connection']);
         $mediaType = (string) $validated['media_type'];
         $mediaId = (int) $validated['media_id'];
-        $inspection = $subtitleInventoryService->inspect($connection, $mediaType, $mediaId);
+        $inspection = $subtitleInspector->inspect($connection, $mediaType, $mediaId);
 
         if (($inspection['item']['target_fingerprint'] ?? null) !== $validated['target_fingerprint']) {
             throw ValidationException::withMessages([
