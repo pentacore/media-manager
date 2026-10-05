@@ -25,3 +25,9 @@ export function humanizeVariableName(name: string): string {
 
     return spaced.charAt(0).toUpperCase() + spaced.slice(1);
 }
+
+/** Worked example shown in the editor help and the empty template list. */
+export const EXAMPLE_TEMPLATE_BODY =
+    'Check {{anime:title,year}} S{{season}}E{{episode}} for subtitles';
+export const EXAMPLE_TEMPLATE_RESULT =
+    'Check Frieren (2023) S1E7 for subtitles';

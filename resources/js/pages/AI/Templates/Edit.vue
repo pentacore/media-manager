@@ -8,6 +8,7 @@ import ChatTemplatePreviewController from '@/actions/App/Http/Controllers/AI/Cha
 import {
     extractTokenNames,
     humanizeVariableName,
+    TemplateHelp,
     TemplatePreview,
     VariableRow,
 } from '@/components/chat-templates';
@@ -19,11 +20,13 @@ import type {
     VariableTypeOption,
 } from '@/components/chat-templates';
 import InputError from '@/components/InputError.vue';
-import { Toggle } from '@/components/mm';
+import { Field, Toggle } from '@/components/mm';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { jsonRequest } from '@/composables/useAiChat';
+import { cn } from '@/lib/utils';
 import { dashboard } from '@/routes';
+import type { ChatTemplatePreviewMode } from '@/typefinder';
 
 const props = defineProps<{
     template: ChatTemplate | null;
@@ -40,10 +43,6 @@ defineOptions({
         ],
     },
 });
-
-/** Token examples live in script: a literal "{{" inside a template interpolation breaks Vue's parser. */
-const SIMPLE_TOKEN = '{{name}}';
-const LIBRARY_TOKEN = '{{anime:title,year,id}}';
 
 const form = useForm({
     name: props.template?.name ?? '',
@@ -100,6 +99,24 @@ function updateVariable(index: number, variable: ChatTemplateVariable): void {
     );
 }
 
+const PREVIEW_MODE_KEY = 'mm.chat-templates.preview-mode';
+const PREVIEW_MODES: { value: ChatTemplatePreviewMode; label: string }[] = [
+    { value: 'example', label: 'Example values' },
+    { value: 'names', label: 'Placeholder names' },
+];
+
+const previewMode = ref<ChatTemplatePreviewMode>('example');
+
+function setPreviewMode(mode: ChatTemplatePreviewMode): void {
+    previewMode.value = mode;
+
+    try {
+        localStorage.setItem(PREVIEW_MODE_KEY, mode);
+    } catch {
+        // localStorage full or disabled — the choice lasts for this visit.
+    }
+}
+
 const previewSegments = ref<PreviewSegment[]>([]);
 const previewErrors = ref<Record<string, string[]>>({});
 const previewFailed = ref(false);
@@ -112,7 +129,11 @@ const refreshPreview = useDebounceFn(async (): Promise<void> => {
         const response = await jsonRequest<PreviewResponse>(
             'POST',
             ChatTemplatePreviewController.url(),
-            { body: form.body, variables: form.variables },
+            {
+                body: form.body,
+                variables: form.variables,
+                mode: previewMode.value,
+            },
         );
 
         if (request !== previewRequest) {
@@ -130,7 +151,7 @@ const refreshPreview = useDebounceFn(async (): Promise<void> => {
 }, 300);
 
 watch(
-    () => [form.body, form.variables],
+    () => [form.body, form.variables, previewMode.value],
     () => {
         void refreshPreview();
     },
@@ -138,8 +159,19 @@ watch(
 );
 
 // The first preview waits for the browser: during SSR setup the fetch has no
-// server to reach and would only fail.
+// server to reach and would only fail. The stored mode is read here too, so
+// the server-rendered markup matches the first client render.
 onMounted(() => {
+    try {
+        const stored = localStorage.getItem(PREVIEW_MODE_KEY);
+
+        if (PREVIEW_MODES.some((mode) => mode.value === stored)) {
+            previewMode.value = stored as ChatTemplatePreviewMode;
+        }
+    } catch {
+        // localStorage disabled — keep example values.
+    }
+
     void refreshPreview();
 });
 
@@ -158,17 +190,11 @@ function save(): void {
     <Head :title="template ? 'Edit template' : 'New template'" />
 
     <form class="max-w-[900px] space-y-6 p-6" @submit.prevent="save">
-        <div>
+        <div class="grid gap-3">
             <h1 class="text-[20px] font-semibold">
                 {{ template ? 'Edit template' : 'New template' }}
             </h1>
-            <p class="mt-1 text-[12.5px] text-muted-foreground">
-                Write the message once and mark the parts that change with
-                <code>{{ SIMPLE_TOKEN }}</code
-                >. Series and movie variables can pick parts:
-                <code>{{ LIBRARY_TOKEN }}</code
-                >.
-            </p>
+            <TemplateHelp :default-open="template === null" />
         </div>
 
         <label class="grid gap-1.5 text-[12.5px] font-medium">
@@ -203,7 +229,33 @@ function save(): void {
         </section>
 
         <section class="grid gap-2">
-            <h2 class="text-[13px] font-semibold">Preview</h2>
+            <div class="flex flex-wrap items-center justify-between gap-2">
+                <h2 class="text-[13px] font-semibold">Preview</h2>
+                <div
+                    class="flex items-center gap-0.5 rounded-md border border-border bg-bg-elev p-0.5"
+                    role="group"
+                    aria-label="Preview shows"
+                >
+                    <button
+                        v-for="mode in PREVIEW_MODES"
+                        :key="mode.value"
+                        type="button"
+                        :aria-pressed="previewMode === mode.value"
+                        :class="
+                            cn(
+                                'inline-flex h-6 items-center rounded px-2 text-xs font-medium whitespace-nowrap transition-colors',
+                                previewMode === mode.value
+                                    ? 'bg-accent text-accent-foreground'
+                                    : 'text-muted-foreground hover:bg-bg-hover hover:text-foreground',
+                            )
+                        "
+                        :data-preview-mode="mode.value"
+                        @click="setPreviewMode(mode.value)"
+                    >
+                        {{ mode.label }}
+                    </button>
+                </div>
+            </div>
             <TemplatePreview
                 :segments="previewSegments"
                 :errors="previewErrors"
@@ -211,22 +263,21 @@ function save(): void {
             />
         </section>
 
-        <div class="flex flex-wrap gap-6">
-            <div class="grid gap-1 text-[12.5px]" data-template-auto-send>
-                <span class="font-medium">Send right away</span>
-                <Toggle
-                    v-model="form.auto_send"
-                    :label="
-                        form.auto_send
-                            ? 'Send is the default'
-                            : 'Insert is the default'
-                    "
-                />
-            </div>
-            <div class="grid gap-1 text-[12.5px]" data-template-pinned>
-                <span class="font-medium">Show on new chats</span>
+        <div class="grid gap-6 sm:grid-cols-2">
+            <Field
+                label="Send right away"
+                hint="When you pick this template, send it immediately instead of putting it in the message box."
+                data-template-auto-send
+            >
+                <Toggle v-model="form.auto_send" />
+            </Field>
+            <Field
+                label="Show on new chats"
+                hint="Show as a shortcut on an empty chat."
+                data-template-pinned
+            >
                 <Toggle v-model="form.pinned" />
-            </div>
+            </Field>
         </div>
 
         <div class="flex gap-2">

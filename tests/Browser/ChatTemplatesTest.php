@@ -26,7 +26,7 @@ test('an admin creates a template with live variable rows and preview', function
         ->select('[data-variable-row="anime"] [data-variable-type]', 'series')
         ->select('[data-variable-row="season"] [data-variable-type]', 'number')
         ->select('[data-variable-row="episode"] [data-variable-type]', 'number')
-        ->assertSeeIn('[data-template-preview]', '[Anime: title, year]')
+        ->assertSeeIn('[data-template-preview]', 'The Show (2020)')
         ->click('[data-template-save]')
         ->assertSee('Template saved.')
         ->assertSeeIn('[data-template-row]', 'Subtitle check');
@@ -60,6 +60,51 @@ test('variable settings survive removing and re-adding a token', function (): vo
         ->assertValue('[data-variable-row="lang"] [data-variable-options]', "English\nSwedish");
 });
 
+test('the help panel is open on a new template and remembers being closed', function (): void {
+    $this->actingAs(User::factory()->admin()->create());
+
+    visit(route('ai.templates.create', absolute: false))
+        ->assertNoSmoke()
+        ->assertSeeIn('[data-template-help]', 'How templates work')
+        ->assertSeeIn('[data-template-help]', 'The assistant gets')
+        ->click('[data-template-help-toggle]')
+        ->assertDontSeeIn('[data-template-help]', 'The assistant gets')
+        ->refresh()
+        ->assertSeeIn('[data-template-help]', 'How templates work')
+        ->assertDontSeeIn('[data-template-help]', 'The assistant gets');
+});
+
+test('the help panel starts collapsed when editing and opens on demand', function (): void {
+    $admin = User::factory()->admin()->create();
+    $chatTemplate = ChatTemplate::factory()->for($admin)->subtitleCheck()->create();
+    $this->actingAs($admin);
+
+    visit(route('ai.templates.edit', $chatTemplate, absolute: false))
+        ->assertNoSmoke()
+        ->assertDontSeeIn('[data-template-help]', 'The assistant gets')
+        ->click('[data-template-help-toggle]')
+        ->assertSeeIn('[data-template-help]', 'The assistant gets');
+});
+
+test('the preview switches between example values and placeholder names', function (): void {
+    $this->actingAs(User::factory()->admin()->create());
+
+    visit(route('ai.templates.create', absolute: false))
+        ->assertNoSmoke()
+        ->fill('[data-template-body]', 'Check {{anime}}')
+        ->select('[data-variable-row="anime"] [data-variable-type]', 'series')
+        ->assertSeeIn('[data-template-preview]', 'The Show')
+        ->click('[data-preview-mode="names"]')
+        ->assertSeeIn('[data-template-preview]', '[Anime')
+        ->refresh()
+        ->assertAttribute('[data-preview-mode="names"]', 'aria-pressed', 'true')
+        ->fill('[data-template-body]', 'Check {{anime}}')
+        ->select('[data-variable-row="anime"] [data-variable-type]', 'series')
+        ->assertSeeIn('[data-template-preview]', '[Anime')
+        ->click('[data-preview-mode="example"]')
+        ->assertSeeIn('[data-template-preview]', 'The Show');
+});
+
 test('grammar errors show in the live preview and on save', function (): void {
     $this->actingAs(User::factory()->admin()->create());
 
@@ -88,12 +133,15 @@ test('the list shows templates and pins them', function (): void {
     expect($chatTemplate->fresh()->pinned)->toBeTrue();
 });
 
-test('the empty list explains the placeholder syntax', function (): void {
+test('the empty list explains the placeholder syntax and links to the editor', function (): void {
     $this->actingAs(User::factory()->admin()->create());
 
     visit(route('ai.templates.index', absolute: false))
         ->assertNoSmoke()
-        ->assertSeeIn('[data-template-empty]', '{{name:title,year,id}}');
+        ->assertSeeIn('[data-template-empty]', '{{name:title,year,id}}')
+        ->assertSeeIn('[data-template-empty]', 'Check Frieren (2023) S1E7 for subtitles')
+        ->click('[data-template-create-first]')
+        ->assertSeeIn('[data-template-help]', 'How templates work');
 });
 
 test('a pinned auto-send template sends from the empty-state chip', function (): void {
