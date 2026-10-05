@@ -13,7 +13,6 @@ use App\Services\Seerr\SeerrTitlePresenter;
 use App\Services\Seerr\SeerrUserResolver;
 use App\Support\UpstreamErrorText;
 use Closure;
-use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\RequestException;
 use Illuminate\Http\JsonResponse;
@@ -25,6 +24,8 @@ use Inertia\Response;
 
 class DiscoverController extends Controller
 {
+    use FlashesRequestOutcome;
+
     private const int UPCOMING_LIMIT = 20;
 
     /**
@@ -39,7 +40,7 @@ class DiscoverController extends Controller
 
     public function index(Request $request, SeerrTitlePresenter $seerrTitlePresenter, SeerrUserResolver $seerrUserResolver): Response
     {
-        $connection = $this->seerrConnection();
+        $connection = ServiceConnection::findActive(ServiceType::Seerr);
 
         if (! $connection instanceof ServiceConnection) {
             return Inertia::render('Discover/Index', ['seerr' => ['connected' => false]]);
@@ -60,7 +61,7 @@ class DiscoverController extends Controller
 
     public function title(string $mediaType, int $tmdbId, SeerrTitlePresenter $seerrTitlePresenter): JsonResponse
     {
-        $connection = $this->seerrConnection();
+        $connection = ServiceConnection::findActive(ServiceType::Seerr);
 
         if (! $connection instanceof ServiceConnection) {
             return response()->json(['message' => __('No active Seerr connection configured.')], 422);
@@ -95,17 +96,17 @@ class DiscoverController extends Controller
         $tmdbId = (int) $validated['tmdbId'];
         $mediaType = (string) $validated['mediaType'];
         $user = $discoverMediaRequest->user();
-        $connection = $this->seerrConnection();
+        $connection = ServiceConnection::findActive(ServiceType::Seerr);
 
         if (! $connection instanceof ServiceConnection) {
-            return $this->outcome(false, $tmdbId, $mediaType, 'error', __('No active Seerr connection configured.'));
+            return $this->requestOutcome(false, $tmdbId, $mediaType, 'error', __('No active Seerr connection configured.'));
         }
 
         $context = $seerrUserResolver->requestingContext($connection, $user);
         $resolved = $seerrUserResolver->resolveUserId($context, isset($validated['userId']) ? (int) $validated['userId'] : null);
 
         if ($resolved['error'] !== null) {
-            return $this->outcome(false, $tmdbId, $mediaType, 'error', $resolved['error']);
+            return $this->requestOutcome(false, $tmdbId, $mediaType, 'error', $resolved['error']);
         }
 
         $userId = $resolved['userId'];
@@ -120,28 +121,19 @@ class DiscoverController extends Controller
                 $userId,
             );
         } catch (RequestException $requestException) {
-            return $this->outcome(false, $tmdbId, $mediaType, 'error', $this->refusal($requestException));
+            return $this->requestOutcome(false, $tmdbId, $mediaType, 'error', $this->refusal($requestException));
         } catch (ConnectionException) {
             // createRequest never retries: Seerr may have filed it already.
-            return $this->outcome(false, $tmdbId, $mediaType, 'error', __('Seerr did not answer — check My requests before trying again.'));
+            return $this->requestOutcome(false, $tmdbId, $mediaType, 'error', __('Seerr did not answer — check My requests before trying again.'));
         }
 
         // Seerr answers 202 {message} when every chosen season is already
         // requested or available (NoSeasonsAvailableError).
         if (! isset($created['id'])) {
-            return $this->outcome(true, $tmdbId, $mediaType, 'info', __('Everything in this title is already requested or available.'));
+            return $this->requestOutcome(true, $tmdbId, $mediaType, 'info', __('Everything in this title is already requested or available.'));
         }
 
-        return $this->outcome(true, $tmdbId, $mediaType, 'success', __('Request submitted.'));
-    }
-
-    private function seerrConnection(): ?ServiceConnection
-    {
-        try {
-            return ServiceConnection::resolveActive(ServiceType::Seerr);
-        } catch (ModelNotFoundException) {
-            return null;
-        }
+        return $this->requestOutcome(true, $tmdbId, $mediaType, 'success', __('Request submitted.'));
     }
 
     /**
@@ -194,13 +186,5 @@ class DiscoverController extends Controller
             in_array($status, [400, 401], true) => __(self::CONNECTION_REJECTED),
             default => __(self::UNREACHABLE),
         };
-    }
-
-    private function outcome(bool $ok, int $tmdbId, string $mediaType, string $type, string $message): RedirectResponse
-    {
-        Inertia::flash('toast', ['type' => $type, 'message' => $message]);
-        Inertia::flash('requestOutcome', ['ok' => $ok, 'tmdbId' => $tmdbId, 'mediaType' => $mediaType]);
-
-        return back();
     }
 }

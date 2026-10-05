@@ -9,9 +9,11 @@ use App\Services\Arr\SearchCommandFailed;
 use App\Services\MediaReplacement\ReplacementInFlight;
 use App\Services\Radarr\RadarrActions;
 use App\Services\Radarr\RadarrClient;
+use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\Request;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
 
 beforeEach(function (): void {
     Http::preventStrayRequests();
@@ -177,3 +179,109 @@ test('a movie write starts from what Radarr holds now, not from a cached snapsho
     'monitoring keeps a profile changed in Radarr' => ['monitor_movie', ['movie_id' => 42, 'monitored' => false], ['qualityProfileId' => 4], ['monitored' => false, 'qualityProfileId' => 4]],
     'a profile change keeps monitoring changed in Radarr' => ['set_movie_quality_profile', ['movie_id' => 42, 'quality_profile_id' => 7], ['monitored' => false], ['monitored' => false, 'qualityProfileId' => 7]],
 ]);
+
+test('a malformed Radarr id says whether it is missing or invalid, and nothing is sent', function (string $type, array $payload, string $message): void {
+    expect(fn (): array => (new RadarrActions)->execute(ActionRequest::factory()->create(['type' => $type, 'payload' => $payload])))
+        ->toThrow(function (InvalidArgumentException $invalidArgumentException) use ($message): void {
+            expect($invalidArgumentException->getMessage())->toBe($message);
+        });
+
+    Http::assertNothingSent();
+})->with([
+    'delete without an id' => ['delete_movie', [], 'radarr_movie_id is required'],
+    'delete with a non-numeric id' => ['delete_movie', ['radarr_movie_id' => 'abc'], 'radarr_movie_id must be a positive integer'],
+    'add with a zero tmdb id' => ['add_movie', ['tmdb_id' => 0], 'tmdb_id must be a positive integer'],
+    'monitor without a movie' => ['monitor_movie', ['monitored' => false], 'movie_id is required'],
+    'profile without a profile' => ['set_movie_quality_profile', ['movie_id' => 42], 'quality_profile_id is required'],
+    'profile with a negative profile' => ['set_movie_quality_profile', ['movie_id' => 42, 'quality_profile_id' => -3], 'quality_profile_id must be a positive integer'],
+]);
+
+test('add_movie sends the looked-up movie with the chosen options and returns its ids', function (array $options, bool $monitored): void {
+    Http::fake([
+        'radarr.local:7878/api/v3/movie/lookup*' => Http::response([['title' => 'Dune', 'tmdbId' => 438631, 'year' => 2021]]),
+        'radarr.local:7878/api/v3/movie' => Http::response(['id' => 77, 'title' => 'Dune', 'tmdbId' => 438631], 201),
+    ]);
+
+    $result = (new RadarrActions)->execute(ActionRequest::factory()->create([
+        'type' => 'add_movie',
+        'payload' => ['tmdb_id' => 438631, 'quality_profile_id' => 4, 'root_folder_path' => '/movies', ...$options],
+    ]));
+
+    expect($result)->toBe(['radarr_movie_id' => 77, 'title' => 'Dune', 'tmdb_id' => 438631]);
+    Http::assertSent(fn (Request $request): bool => $request->method() === 'GET' && $request['term'] === 'tmdb:438631');
+    Http::assertSent(fn (Request $request): bool => $request->method() === 'POST' && $request->data() === [
+        'title' => 'Dune',
+        'tmdbId' => 438631,
+        'year' => 2021,
+        'qualityProfileId' => 4,
+        'rootFolderPath' => '/movies',
+        'monitored' => $monitored,
+        'addOptions' => ['searchForMovie' => true],
+    ]);
+})->with([
+    'chosen options' => [['monitored' => false, 'season_folder' => false], false],
+    'defaults' => [[], true],
+]);
+
+test('add_movie refuses a tmdb id the Radarr lookup does not know, and adds nothing', function (): void {
+    Http::fake(['radarr.local:7878/api/v3/movie/lookup*' => Http::response([])]);
+
+    expect(fn (): array => (new RadarrActions)->execute(ActionRequest::factory()->create(['type' => 'add_movie', 'payload' => ['tmdb_id' => 5]])))
+        ->toThrow(function (InvalidArgumentException $invalidArgumentException): void {
+            expect($invalidArgumentException->getMessage())->toBe('No movie found in Radarr lookup for tmdb_id 5');
+        });
+
+    Http::assertNotSent(fn (Request $request): bool => $request->method() === 'POST');
+});
+
+test('each Radarr library write returns exactly its result', function (string $type, array $payload, array $expected): void {
+    Http::fake(['radarr.local:7878/api/v3/movie/42*' => Http::response(['id' => 42, 'title' => 'Dune', 'monitored' => true, 'qualityProfileId' => 1])]);
+
+    expect((new RadarrActions)->execute(ActionRequest::factory()->create(['type' => $type, 'payload' => $payload])))->toBe($expected);
+})->with([
+    'delete' => ['delete_movie', ['radarr_movie_id' => 42, 'delete_files' => true], ['radarr_movie_id' => 42, 'delete_files' => true]],
+    'monitor' => ['monitor_movie', ['movie_id' => 42, 'monitored' => false], ['radarr_movie_id' => 42, 'monitored' => false]],
+    'quality profile' => ['set_movie_quality_profile', ['movie_id' => 42, 'quality_profile_id' => 7], ['radarr_movie_id' => 42, 'quality_profile_id' => 7]],
+]);
+
+test("a request meant for Sonarr is refused in the Radarr executor's words, and nothing is sent", function (string $type, array $payload, string $message): void {
+    expect(fn (): array => (new RadarrActions)->execute(ActionRequest::factory()->create(['type' => $type, 'payload' => $payload])))
+        ->toThrow(function (InvalidArgumentException $invalidArgumentException) use ($message): void {
+            expect($invalidArgumentException->getMessage())->toBe($message);
+        });
+
+    Http::assertNothingSent();
+})->with([
+    'a Sonarr action type' => ['delete_series', ['sonarr_series_id' => 1], 'RadarrActions cannot execute type "delete_series"'],
+    'Sonarr-only episode monitoring' => ['monitor_episodes', ['series_id' => 1, 'episode_ids' => [2]], 'RadarrActions cannot execute type "monitor_episodes"'],
+    'a Sonarr search command' => ['search_media', ['service' => 'radarr', 'command' => 'series_search', 'series_id' => 1], 'command is not a Radarr search'],
+]);
+
+test('an approved movie delete against a deactivated pinned connection sends nothing', function (): void {
+    $pinned = ServiceConnection::factory()->radarr()->inactive()->create(['url' => 'http://radarr-4k.local:7878']);
+
+    expect(fn (): array => (new RadarrActions)->execute(ActionRequest::factory()->create([
+        'type' => 'delete_movie',
+        'payload' => ['radarr_movie_id' => 42, 'delete_files' => true, 'service_connection_id' => $pinned->id],
+    ])))->toThrow(ModelNotFoundException::class);
+
+    Http::assertNothingSent();
+});
+
+test('a grab whose cache bust fails is logged under the Radarr executor', function (): void {
+    Http::fake(['radarr.local:7878/api/v3/release' => Http::response([], 200)]);
+    config()->set('mediamanager.cache.store', 'this-store-does-not-exist');
+    $connectionId = radarrActionsConnectionId();
+    Log::spy();
+
+    (new RadarrActions)->execute(ActionRequest::factory()->create([
+        'type' => 'grab_release',
+        'payload' => ['service' => 'radarr', 'movie_id' => 10, 'guid' => 'g-2', 'indexer_id' => 4, 'release' => ['title' => 'x'], 'service_connection_id' => $connectionId],
+    ]));
+
+    Log::shouldHaveReceived('warning')
+        ->withArgs(fn (string $message, array $context): bool => $message === 'RadarrActions: failed to bust the Radarr cache after a successful grab'
+            && $context['guid'] === 'g-2'
+            && $context['service_connection_id'] === $connectionId)
+        ->once();
+});

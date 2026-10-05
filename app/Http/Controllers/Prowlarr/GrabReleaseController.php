@@ -27,11 +27,7 @@ class GrabReleaseController extends Controller
     {
         $validated = $grabIndexerReleaseRequest->validated();
 
-        $connection = ServiceConnection::query()
-            ->where('type', ServiceType::Prowlarr)
-            ->where('is_active', true)
-            ->orderBy('id')
-            ->first();
+        $connection = ServiceConnection::findActive(ServiceType::Prowlarr);
 
         abort_unless($connection instanceof ServiceConnection, 422, 'No active Prowlarr connection is configured.');
 

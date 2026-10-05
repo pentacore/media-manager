@@ -22,20 +22,15 @@ abstract class BaseArrController extends Controller
 
     abstract protected function buildClient(ServiceConnection $serviceConnection): SonarrClient|RadarrClient;
 
-    abstract protected function noConnectionMessage(): string;
-
     abstract protected function connectionFailedMessage(): string;
 
     /**
-     * Resolve the active service connection or short-circuit with a redirect.
+     * Resolve the active service connection or short-circuit with the
+     * standard no-connection redirect.
      */
     protected function resolveConnection(): ServiceConnection|RedirectResponse
     {
-        try {
-            return ServiceConnection::resolveActive($this->serviceType());
-        } catch (ModelNotFoundException) {
-            return $this->noConnectionRedirect();
-        }
+        return ServiceConnection::findActive($this->serviceType()) ?? $this->noActiveConnectionRedirect($this->serviceType());
     }
 
     /**
@@ -98,22 +93,6 @@ abstract class BaseArrController extends Controller
     protected function connectionUrl(ServiceConnection $serviceConnection): array
     {
         return ['url' => $serviceConnection->linkUrl()];
-    }
-
-    /**
-     * Build a fresh client backed by the active connection (used for write operations
-     * where we want the ModelNotFoundException to propagate to the caller).
-     */
-    protected function client(): SonarrClient|RadarrClient
-    {
-        return $this->buildClient(ServiceConnection::resolveActive($this->serviceType()));
-    }
-
-    protected function noConnectionRedirect(): RedirectResponse
-    {
-        Inertia::flash('toast', ['type' => 'error', 'message' => $this->noConnectionMessage()]);
-
-        return to_route('dashboard');
     }
 
     protected function connectionFailedRedirect(): RedirectResponse

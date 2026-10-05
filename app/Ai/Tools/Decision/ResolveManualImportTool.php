@@ -67,8 +67,10 @@ class ResolveManualImportTool extends DecisionTool
             'download_id' => ['required', 'string'],
         ], [
             'service.required' => 'service must be "sonarr" or "radarr".',
+            'service.string' => 'service must be "sonarr" or "radarr".',
             'service.regex' => 'service must be "sonarr" or "radarr".',
             'download_id.required' => 'download_id is required (take it from the event payload).',
+            'download_id.string' => 'download_id must be a string (take it from the event payload).',
         ]);
         $service = mb_strtolower((string) $validated['service']);
         $downloadId = (string) $validated['download_id'];

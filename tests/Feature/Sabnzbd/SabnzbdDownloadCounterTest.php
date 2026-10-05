@@ -87,3 +87,13 @@ test('a SABnzbd that refuses the reads leaves the badge counts at zero instead o
 
     expect(resolve(SabnzbdDownloadCounter::class)->recompute())->toBe(['queued' => 0, 'completed' => 0]);
 });
+
+test('a deactivated SABnzbd connection counts as none: zeros, cached and broadcast, nothing sent', function (): void {
+    ServiceConnection::factory()->sabnzbd()->inactive()->create(['url' => 'http://sab.local:8080']);
+    Event::fake([SabnzbdDownloadCountsChanged::class]);
+
+    expect(resolve(SabnzbdDownloadCounter::class)->recompute())->toBe(['queued' => 0, 'completed' => 0])
+        ->and(Cache::get(SabnzbdDownloadCounter::CACHE_KEY))->toBe(['queued' => 0, 'completed' => 0]);
+    Event::assertDispatched(SabnzbdDownloadCountsChanged::class);
+    Http::assertNothingSent();
+});

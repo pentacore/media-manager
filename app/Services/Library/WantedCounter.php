@@ -5,10 +5,8 @@ declare(strict_types=1);
 namespace App\Services\Library;
 
 use App\Enums\ServiceType;
-use App\Models\ServiceConnection;
-use App\Services\Radarr\RadarrClient;
-use App\Services\Sonarr\SonarrClient;
-use Illuminate\Database\Eloquent\ModelNotFoundException;
+use App\Services\Arr\ArrClient;
+use App\Services\Arr\ArrConnections;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\RequestException;
 use Illuminate\Support\Facades\Cache;
@@ -24,7 +22,7 @@ use Illuminate\Support\Facades\Cache;
  * failure with nothing cached writes a FAILURE_CACHE_TTL entry so page loads
  * never keep waiting on an unreachable upstream.
  */
-final class WantedCounter
+final readonly class WantedCounter
 {
     public const string CACHE_KEY = 'library:wanted-missing-count';
 
@@ -35,6 +33,8 @@ final class WantedCounter
     public const string RECOMPUTE_LOCK_KEY = 'library:wanted-missing-count:recompute';
 
     public const int RECOMPUTE_LOCK_SECONDS = 30;
+
+    public function __construct(private ArrConnections $arrConnections) {}
 
     public function get(): int
     {
@@ -69,13 +69,11 @@ final class WantedCounter
         $anyFailed = false;
 
         foreach ([ServiceType::Sonarr, ServiceType::Radarr] as $serviceType) {
-            try {
-                $connection = ServiceConnection::resolveActive($serviceType);
-            } catch (ModelNotFoundException) {
+            $client = $this->arrConnections->activeClient($serviceType);
+
+            if (! $client instanceof ArrClient) {
                 continue;
             }
-
-            $client = $serviceType === ServiceType::Sonarr ? new SonarrClient($connection) : new RadarrClient($connection);
 
             try {
                 $count += (int) ($client->getWanted('missing', 1, 1, true, withRetry: false)['totalRecords'] ?? 0);

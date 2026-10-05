@@ -299,3 +299,15 @@ test('the request is validated', function (): void {
         ->post(route('media.discover.request'), ['tmdbId' => 'x', 'mediaType' => 'person'])
         ->assertSessionHasErrors(['tmdbId', 'mediaType']);
 });
+
+test('a submitted discover request flashes the success toast and the whole outcome', function (): void {
+    discoverSeerr();
+    fakeDiscoverSeerr();
+
+    $this->actingAs(User::factory()->create(['email' => 'viewer@example.com']))
+        ->from(route('media.discover.index'))
+        ->post(route('media.discover.request'), ['tmdbId' => 95396, 'mediaType' => 'tv', 'seasons' => [2]])
+        ->assertRedirect(route('media.discover.index'))
+        ->assertSessionHas('inertia.flash_data.toast', ['type' => 'success', 'message' => 'Request submitted.'])
+        ->assertSessionHas('inertia.flash_data.requestOutcome', ['ok' => true, 'tmdbId' => 95396, 'mediaType' => 'tv']);
+});

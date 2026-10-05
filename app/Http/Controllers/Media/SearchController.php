@@ -17,7 +17,6 @@ use App\Services\Seerr\SeerrUserResolver;
 use App\Services\Sonarr\SonarrClient;
 use App\Support\Abilities;
 use Carbon\CarbonImmutable;
-use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 use Inertia\Inertia;
@@ -73,7 +72,7 @@ class SearchController extends Controller
         // Prowlarr fan-out when the user explicitly switches to that scope.
         $includeIndexers = ! $seerrOnly && $term !== '' && $scope === 'indexers';
 
-        $seerrConnection = $term === '' ? null : $this->activeConnection(ServiceType::Seerr);
+        $seerrConnection = $term === '' ? null : ServiceConnection::findActive(ServiceType::Seerr);
 
         return Inertia::render('Search', [
             'query' => $term,
@@ -95,15 +94,6 @@ class SearchController extends Controller
                 ? Inertia::defer(fn (): array => $this->searchIndexers($term))
                 : $empty,
         ]);
-    }
-
-    private function activeConnection(ServiceType $serviceType): ?ServiceConnection
-    {
-        try {
-            return ServiceConnection::resolveActive($serviceType);
-        } catch (ModelNotFoundException) {
-            return null;
-        }
     }
 
     /**
@@ -134,7 +124,7 @@ class SearchController extends Controller
      */
     private function externalConnectionUrlFor(ServiceType $serviceType): ?array
     {
-        $externalUrl = $this->activeConnection($serviceType)?->external_url;
+        $externalUrl = ServiceConnection::findActive($serviceType)?->external_url;
 
         return is_string($externalUrl) && $externalUrl !== '' ? ['url' => rtrim($externalUrl, '/')] : null;
     }
@@ -144,7 +134,7 @@ class SearchController extends Controller
      */
     private function connectionUrlFor(ServiceType $serviceType): ?array
     {
-        $connection = $this->activeConnection($serviceType);
+        $connection = ServiceConnection::findActive($serviceType);
 
         return $connection instanceof ServiceConnection ? ['url' => $connection->linkUrl()] : null;
     }
@@ -174,9 +164,9 @@ class SearchController extends Controller
      */
     private function searchSonarrTypesense(string $term): array
     {
-        try {
-            $connection = ServiceConnection::resolveActive(ServiceType::Sonarr);
-        } catch (ModelNotFoundException) {
+        $connection = ServiceConnection::findActive(ServiceType::Sonarr);
+
+        if (! $connection instanceof ServiceConnection) {
             return ['results' => [], 'error' => 'No active Sonarr connection configured.'];
         }
 
@@ -215,9 +205,9 @@ class SearchController extends Controller
      */
     private function searchRadarrTypesense(string $term): array
     {
-        try {
-            $connection = ServiceConnection::resolveActive(ServiceType::Radarr);
-        } catch (ModelNotFoundException) {
+        $connection = ServiceConnection::findActive(ServiceType::Radarr);
+
+        if (! $connection instanceof ServiceConnection) {
             return ['results' => [], 'error' => 'No active Radarr connection configured.'];
         }
 
@@ -258,10 +248,13 @@ class SearchController extends Controller
     private function searchSonarrFallback(string $term): array
     {
         try {
-            $sonarrClient = new SonarrClient(ServiceConnection::resolveActive(ServiceType::Sonarr));
-            $items = $sonarrClient->getSeries();
-        } catch (ModelNotFoundException) {
-            return ['results' => [], 'error' => 'No active Sonarr connection configured.'];
+            $connection = ServiceConnection::findActive(ServiceType::Sonarr);
+
+            if (! $connection instanceof ServiceConnection) {
+                return ['results' => [], 'error' => 'No active Sonarr connection configured.'];
+            }
+
+            $items = new SonarrClient($connection)->getSeries();
         } catch (Throwable $throwable) {
             return $this->serviceFailure('sonarr', $throwable);
         }
@@ -290,10 +283,13 @@ class SearchController extends Controller
     private function searchRadarrFallback(string $term): array
     {
         try {
-            $radarrClient = new RadarrClient(ServiceConnection::resolveActive(ServiceType::Radarr));
-            $items = $radarrClient->getMovies();
-        } catch (ModelNotFoundException) {
-            return ['results' => [], 'error' => 'No active Radarr connection configured.'];
+            $connection = ServiceConnection::findActive(ServiceType::Radarr);
+
+            if (! $connection instanceof ServiceConnection) {
+                return ['results' => [], 'error' => 'No active Radarr connection configured.'];
+            }
+
+            $items = new RadarrClient($connection)->getMovies();
         } catch (Throwable $throwable) {
             return $this->serviceFailure('radarr', $throwable);
         }
@@ -326,7 +322,7 @@ class SearchController extends Controller
      */
     private function searchSeerr(string $term, SeerrTitlePresenter $seerrTitlePresenter): array
     {
-        $connection = $this->activeConnection(ServiceType::Seerr);
+        $connection = ServiceConnection::findActive(ServiceType::Seerr);
 
         if (! $connection instanceof ServiceConnection) {
             return ['results' => [], 'error' => 'No active Seerr connection configured.'];
@@ -353,9 +349,9 @@ class SearchController extends Controller
      */
     private function searchIndexers(string $term): array
     {
-        try {
-            $connection = ServiceConnection::resolveActive(ServiceType::Prowlarr);
-        } catch (ModelNotFoundException) {
+        $connection = ServiceConnection::findActive(ServiceType::Prowlarr);
+
+        if (! $connection instanceof ServiceConnection) {
             return ['results' => [], 'error' => 'No active Prowlarr connection configured.'];
         }
 
