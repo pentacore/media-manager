@@ -11,7 +11,7 @@ use App\Enums\ServiceType;
 use App\Models\ServiceConnection;
 use App\Services\Bazarr\BazarrCapabilityRegistry;
 use App\Services\Bazarr\BazarrClient;
-use App\Services\Bazarr\SubtitleInventoryService;
+use App\Services\Bazarr\SubtitleInspector;
 use App\Services\Bazarr\SubtitleOperationDescriber;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
 use Illuminate\JsonSchema\Types\Type;
@@ -59,7 +59,7 @@ final class RequestSubtitleOperationTool extends BaseTool
         $mediaId = (int) ($arguments['media_id'] ?? 0);
         $operation = (string) $validated['operation'];
 
-        $inspection = resolve(SubtitleInventoryService::class)->inspect($connection, $mediaType, $mediaId);
+        $inspection = resolve(SubtitleInspector::class)->inspect($connection, $mediaType, $mediaId);
         $item = $inspection['item'];
         $bazarrClient = new BazarrClient($connection);
         // The same gate the HTTP controller applies: an Action Rule may auto-execute

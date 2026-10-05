@@ -982,19 +982,7 @@ parameters:
 			message: '#^Call to function is_array\(\) with array\<string, mixed\> will always evaluate to true\.$#'
 			identifier: function.alreadyNarrowedType
 			count: 2
-			path: app/Services/Bazarr/SubtitleInventoryService.php
-
-		-
-			message: '#^Instanceof between App\\Models\\ServiceConnection and App\\Models\\ServiceConnection will always evaluate to true\.$#'
-			identifier: instanceof.alwaysTrue
-			count: 2
-			path: app/Services/Bazarr/SubtitleInventoryService.php
-
-		-
-			message: '#^Method App\\Services\\Bazarr\\SubtitleInventoryService\:\:applyFilters\(\) return type has no value type specified in iterable type array\.$#'
-			identifier: missingType.iterableValue
-			count: 1
-			path: app/Services/Bazarr/SubtitleInventoryService.php
+			path: app/Services/Bazarr/SubtitleLibraryReader.php
 
 		-
 			message: '#^Method App\\Services\\Emby\\EmbyClient\:\:getUserItems\(\) has parameter \$params with no value type specified in iterable type array\.$#'
