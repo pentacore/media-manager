@@ -1,4 +1,7 @@
-import type { ChatTemplateResource } from '@/typefinder';
+import type {
+    ChatTemplatePreviewMode,
+    ChatTemplateResource,
+} from '@/typefinder';
 
 export type ChatTemplate = ChatTemplateResource;
 
@@ -8,6 +11,11 @@ export type ChatTemplateVariableKind = ChatTemplateVariable['type'];
 
 export interface VariableTypeOption {
     value: ChatTemplateVariableKind;
+    label: string;
+}
+
+export interface PreviewModeOption {
+    value: ChatTemplatePreviewMode;
     label: string;
 }
 
