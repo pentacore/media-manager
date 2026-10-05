@@ -15,6 +15,11 @@ function subtitleInventoryMigratedFiles(): array
         'app/Http/Controllers/Bazarr/LibraryController.php',
         'app/Http/Controllers/Bazarr/MissingController.php',
         'app/Http/Controllers/Bazarr/HistoryController.php',
+        'app/Http/Controllers/Bazarr/OperationController.php',
+        'app/Http/Controllers/Bazarr/SearchController.php',
+        'app/Ai/Tools/Bazarr/InspectSubtitleTool.php',
+        'app/Ai/Tools/Bazarr/SearchSubtitlesTool.php',
+        'app/Ai/Tools/Bazarr/RequestSubtitleOperationTool.php',
     ];
 }
 

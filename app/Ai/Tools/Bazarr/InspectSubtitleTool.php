@@ -8,7 +8,7 @@ use App\Ai\Risk;
 use App\Ai\Tools\BaseTool;
 use App\Enums\ServiceType;
 use App\Models\ServiceConnection;
-use App\Services\Bazarr\SubtitleInventoryService;
+use App\Services\Bazarr\SubtitleInspector;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
 use Illuminate\JsonSchema\Types\Type;
 use Laravel\Ai\Tools\Request;
@@ -33,7 +33,7 @@ final class InspectSubtitleTool extends BaseTool
     {
         $arguments = $request->toArray();
 
-        return resolve(SubtitleInventoryService::class)->inspect(
+        return resolve(SubtitleInspector::class)->inspect(
             $this->connection((int) ($arguments['bazarr_connection_id'] ?? 0)),
             (string) ($arguments['media_type'] ?? ''),
             (int) ($arguments['media_id'] ?? 0),
