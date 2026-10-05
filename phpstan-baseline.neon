@@ -985,12 +985,6 @@ parameters:
 			path: app/Services/Bazarr/SubtitleLibraryReader.php
 
 		-
-			message: '#^Instanceof between App\\Models\\ServiceConnection and App\\Models\\ServiceConnection will always evaluate to true\.$#'
-			identifier: instanceof.alwaysTrue
-			count: 2
-			path: app/Services/Bazarr/SubtitleInventoryService.php
-
-		-
 			message: '#^Method App\\Services\\Emby\\EmbyClient\:\:getUserItems\(\) has parameter \$params with no value type specified in iterable type array\.$#'
 			identifier: missingType.iterableValue
 			count: 1
